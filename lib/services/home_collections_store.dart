@@ -41,10 +41,11 @@ class HomeCollectionImportResult {
 /// pipeline (file / URL / paste) and the addon-resolution helpers the board,
 /// the folder browser and the settings pages share.
 ///
-/// Persists an atomic inventory under `home_collections_v1`. Deleted IDs
+/// Persists an atomic inventory under `remote_home_collections_v2`. Deleted IDs
 /// remain as null records until sync journals their deletion. Reads salvage
 /// valid records; ordinary writes reject corruption until explicit reset or
-/// restore. Legacy JSON arrays remain readable.
+/// restore. Legacy `home_collections_v1` arrays/envelopes remain readable and
+/// are retained as an older-build snapshot when the new store is first written.
 class HomeCollectionsStore {
   HomeCollectionsStore({http.Client Function()? httpClientFactory})
     : _httpClientFactory = httpClientFactory ?? http.Client.new;
@@ -57,8 +58,7 @@ class HomeCollectionsStore {
   static const String folderLayoutKey = 'home_collections_folder_layout';
   static const Duration _fetchTimeout = Duration(seconds: 20);
 
-  /// Documents past this are refused before decoding: a collections file is
-  /// a few hundred KB at most, so anything larger is a wrong pick.
+  /// Bound downloaded/imported JSON before decoding, including large packs.
   static const int maxImportBytes = 8 * 1024 * 1024;
 
   final http.Client Function() _httpClientFactory;
@@ -84,7 +84,14 @@ class HomeCollectionsStore {
 
   Future<HomeCollectionInventory> getInventory() async {
     final prefs = await ProfilePreferences.instance();
-    return HomeCollectionInventory.recover(prefs.getString(prefsKey));
+    final inventory = (await HomeCollectionInventory.readAsync(
+      prefs.getString(prefsKey) ??
+          prefs.getString(HomeCollectionInventory.legacyPrefsKey),
+      recover: true,
+    )).inventory;
+    inventory.syncDeferred =
+        prefs.getBool(HomeCollectionInventory.syncDeferredKey) == true;
+    return inventory;
   }
 
   Future<List<HomeCollection>> getCollections() async =>
@@ -104,17 +111,29 @@ class HomeCollectionsStore {
     final prefs = await ProfilePreferences.instance();
     checkSession(session);
     late T result;
-    final saved = await prefs.mutateStringAtomically(prefsKey, (old) {
+    final saved = await prefs.mutateStringAsyncAtomically(prefsKey, (
+      old,
+    ) async {
       checkSession(session);
-      final current = recoverCorruption
-          ? HomeCollectionInventory.recover(old)
-          : HomeCollectionInventory.decode(old);
-      final previousSize = current.definitionBytes;
-      final previousCount = current.liveCount;
+      final decoded = await HomeCollectionInventory.readAsync(
+        old ?? prefs.getString(HomeCollectionInventory.legacyPrefsKey),
+        recover: recoverCorruption,
+      );
+      checkSession(session);
+      final current = decoded.inventory;
+      if (current.hadCorruption && !recoverCorruption) {
+        throw const FormatException(
+          'Recovered collections need to be reset or restored before editing.',
+        );
+      }
+      if (recoverCorruption) current.hadCorruption = false;
+      final previousSize = decoded.size;
+      final previousCount = decoded.count;
       result = update(current);
-      current.validate();
-      final encoded = current.encode();
-      final size = current.definitionBytes;
+      final prepared = await current.prepareAsync();
+      checkSession(session);
+      final encoded = prepared.encoded;
+      final size = prepared.size;
       // Bound live definitions, permitting reductions and visibility changes
       // in an older/merged oversized inventory. Pending deletions are outbox
       // records that sync moves into its separately retained tombstone tier.
@@ -123,7 +142,7 @@ class HomeCollectionsStore {
           (current.liveCount > HomeCollectionInventory.maxRecords &&
               current.liveCount > previousCount)) {
         throw const FormatException(
-          'Collection definitions exceed 128 KiB or 1,024 live collections. Remove a collection or import a smaller file.',
+          'Collection definitions exceed 8 MiB or 1,024 live collections. Remove a collection or import a smaller file.',
         );
       }
       return encoded;
@@ -333,8 +352,11 @@ class HomeCollectionsStore {
     CollectionCatalogSource source,
     List<StremioAddon> installed,
   ) {
+    if (!source.isAddon) return null;
     for (final a in installed) {
-      if ((a.manifestId ?? a.id) == source.addonId &&
+      if (!a.enabled) continue;
+      if (((a.manifestId ?? a.id) == source.addonId ||
+              a.id == source.addonId) &&
           resolveCatalog(source, a) != null) {
         return a;
       }
@@ -347,12 +369,46 @@ class HomeCollectionsStore {
     CollectionCatalogSource source,
     StremioAddon addon,
   ) {
-    for (final c in addon.catalogs) {
-      if (c.id == source.catalogId && c.type == source.type && c.isBrowsable) {
-        return c;
-      }
+    if (!source.isAddon) return null;
+    String normalized(String type) => switch (type.trim().toLowerCase()) {
+      'movies' => 'movie',
+      'tv' || 'show' || 'shows' => 'series',
+      final value => value,
+    };
+    final candidates = addon.catalogs
+        .where((c) => c.id == source.catalogId && c.isBrowsable)
+        .toList();
+    for (final c in candidates) {
+      if (normalized(c.type) == normalized(source.type)) return c;
+    }
+    // Community packs sometimes use All for a catalog with exactly one type.
+    if (normalized(source.type) == 'all' && candidates.length == 1) {
+      return candidates.single;
     }
     return null;
+  }
+
+  static String? sourceIssue(
+    CollectionCatalogSource source,
+    List<StremioAddon> installed,
+  ) {
+    if (source.isNative) return null;
+    if (!source.isAddon) return 'Unsupported provider: ${source.provider}';
+    if (resolveAddon(source, installed) != null) return null;
+    final matches = installed
+        .where(
+          (a) =>
+              (a.manifestId ?? a.id) == source.addonId ||
+              a.id == source.addonId,
+        )
+        .toList();
+    if (matches.isNotEmpty && matches.every((a) => !a.enabled)) {
+      return 'Enable addon ${source.addonId} to load ${source.catalogId}.';
+    }
+    final present = matches.isNotEmpty;
+    return present
+        ? '${source.addonId} is installed, but its configuration has no ${source.type}/${source.catalogId} catalog.'
+        : 'Install addon ${source.addonId} to load ${source.catalogId}.';
   }
 
   /// Home-row keys (`addonId:type:catalogId`) of every catalog an enabled
@@ -392,7 +448,9 @@ class HomeCollectionsStore {
     for (final c in collections) {
       for (final f in c.folders) {
         for (final s in f.sources) {
-          if (resolveAddon(s, installed) == null) out.add(s.addonId);
+          if (s.isAddon && resolveAddon(s, installed) == null) {
+            out.add(s.addonId);
+          }
         }
       }
     }

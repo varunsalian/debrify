@@ -157,6 +157,9 @@ dependency_overrides:
     path: packages/sqflite_android_patched
   media_kit:
     path: packages/media_kit_patched
+  # Await native render-context teardown before libmpv destruction on Apple/Windows.
+  media_kit_video:
+    path: packages/media_kit_video_patched
   # Android TV uses ExoPlayer and is unaffected. Android phones use MediaKit's
   # restricted FFmpeg build, which omits Blu-ray PGS and other bitmap/text
   # subtitle decoders. Release CI fills this package with a pinned patch build.
@@ -219,6 +222,7 @@ flutter:
     - assets/app_icon.png
     - assets/app_icon_foreground.png
     - assets/images/profile_gate_lighthouse.png
+    - assets/images/tmdb-logo.png
     - assets/images/profile_avatars/
     - assets/splash_logo.png
     - assets/config/app_remote_config.json

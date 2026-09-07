@@ -2,6 +2,7 @@ import 'package:debrify/services/profiles/connection_resource_service.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:debrify/models/home_collection.dart';
@@ -25,6 +26,7 @@ import 'package:debrify/services/webdav_sync/webdav_sync_engine.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_engine_state.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_hot_merge.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_hot_models.dart';
+import 'package:debrify/services/webdav_sync/webdav_sync_collection_sections.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_local_adapter.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_library_models.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_runtime.dart';
@@ -107,13 +109,260 @@ void main() {
     return WebDavSyncManifest.fromJson(payload);
   }
 
-  test('corrupt collection inventory cannot stop a multi-profile cycle', () async {
-    local.preferences = {HomeCollectionInventory.prefsKey: '{broken', 'theme': 'dark'};
-    final report = await runFixture(context(profiles: {'profile-circle': 'local-profile', 'profile-two': 'other-profile'}));
-    expect(report.disposition, WebDavSyncCycleDisposition.completed);
-    expect(report.profilesApplied, 2);
-    expect(local.preferences['theme'], 'dark');
-  });
+  test(
+    'corrupt collection inventory cannot stop a multi-profile cycle',
+    () async {
+      local.preferences = {
+        HomeCollectionInventory.prefsKey: '{broken',
+        'theme': 'dark',
+      };
+      final report = await runFixture(
+        context(
+          profiles: {
+            'profile-circle': 'local-profile',
+            'profile-two': 'other-profile',
+          },
+        ),
+      );
+      expect(report.disposition, WebDavSyncCycleDisposition.completed);
+      expect(report.profilesApplied, 2);
+      expect(local.preferences['theme'], 'dark');
+    },
+  );
+
+  test(
+    'own collection shards larger than 4 MiB are not downloaded on every resume tick',
+    () async {
+      final random = Random(71);
+      local.preferences[HomeCollectionInventory.prefsKey] =
+          (HomeCollectionInventory()..put(
+                HomeCollection(
+                  id: 'large',
+                  title: String.fromCharCodes(
+                    List.generate(
+                      6 * 1024 * 1024,
+                      (_) => 33 + random.nextInt(90),
+                    ),
+                  ),
+                ),
+              ))
+              .encode();
+      expect(
+        (await runFixture(context())).disposition,
+        WebDavSyncCycleDisposition.completed,
+      );
+      final manifest = await openManifest('device-a');
+      final shard = manifest.sections.singleWhere(
+        (s) => s.name.startsWith(WebDavSyncCollectionSections.prefix),
+      );
+      expect(shard.size, greaterThan(WebDavSyncSectionCache.byteLimit));
+      expect(
+        (await runFixture(context())).disposition,
+        WebDavSyncCycleDisposition.completed,
+      );
+      int reads() => transport.events
+          .where((e) => e == 'read:section:device-a:${shard.name}')
+          .length;
+      final warmReads = reads();
+      for (var tick = 0; tick < 2; tick++) {
+        local.preferences['resume_tick'] = tick;
+        expect(
+          (await runFixture(context())).disposition,
+          WebDavSyncCycleDisposition.completed,
+        );
+        expect(reads(), warmReads);
+      }
+    },
+  );
+
+  test(
+    'large collections use separate shards and remove obsolete shard references',
+    () async {
+      final inventory = HomeCollectionInventory()
+        ..put(HomeCollection(id: 'a', title: 'a' * (5 * 1024 * 1024)))
+        ..put(HomeCollection(id: 'b', title: 'b' * (5 * 1024 * 1024)));
+      local.preferences[HomeCollectionInventory.prefsKey] = inventory.encode();
+      final first = await runFixture(context());
+      expect(first.disposition, WebDavSyncCycleDisposition.completed);
+      var manifest = await openManifest('device-a');
+      final hot = manifest.section('hot/profile-circle')!;
+      final legacyPayload = await codec.openDocument(
+        key: root.key,
+        encoded: transport.sections['device-a:${hot.contentHash}']!,
+        circleId: root.document.circleId,
+        deviceId: 'device-a',
+        logicalName: hot.name,
+        schemaVersion: hot.schemaVersion,
+        maxBytes: WebDavSyncLimits.maxHotDocumentBytes,
+      );
+      final legacyHot = WebDavSyncHotDocument.fromJson(legacyPayload);
+      expect(
+        legacyHot.watchState.records.keys.any(
+          WebDavSyncCollectionSections.isCollectionRecord,
+        ),
+        false,
+      );
+      expect(
+        legacyHot.scalars.entries.containsKey(HomeCollectionInventory.prefsKey),
+        false,
+      );
+      expect(hot.size, lessThan(WebDavSyncLimits.maxHotDocumentBytes));
+      expect(
+        manifest.sections
+            .where(
+              (s) => s.name.startsWith(WebDavSyncCollectionSections.prefix),
+            )
+            .length,
+        2,
+      );
+
+      final shardReferences = {
+        for (final ref in manifest.sections)
+          if (ref.name.startsWith(WebDavSyncCollectionSections.prefix))
+            ref.name: ref.contentHash,
+      };
+      for (var tick = 0; tick < 3; tick++) {
+        local.preferences['resume_tick'] = tick;
+        final writesBefore = transport.writeCount;
+        expect(
+          (await runFixture(context())).disposition,
+          WebDavSyncCycleDisposition.completed,
+        );
+        final tickManifest = await openManifest('device-a');
+        expect({
+          for (final ref in tickManifest.sections)
+            if (ref.name.startsWith(WebDavSyncCollectionSections.prefix))
+              ref.name: ref.contentHash,
+        }, shardReferences);
+        expect(transport.writeCount - writesBefore, lessThanOrEqualTo(2));
+      }
+
+      final peerLocal = _FakeLocalAdapter({'theme': 'light'});
+      final peer = WebDavSyncEngine(
+        stateRepository: _MemoryStateRepository(),
+        localAdapter: peerLocal,
+        transportFactory: (_) => transport,
+        codec: codec,
+        clock: () => now,
+      );
+      final report = await peer.runCycle(
+        WebDavSyncCycleContext(
+          namespaceId: 'circle:circle-1',
+          deviceId: 'device-b',
+          markerPin: marker,
+          root: root,
+          circleToLocalProfiles: const {'profile-circle': 'local-profile'},
+          circleToLocalResources: const {},
+        ),
+        allowPreActivation: true,
+      );
+      expect(report.disposition, WebDavSyncCycleDisposition.completed);
+      expect(
+        HomeCollectionInventory.decode(
+          peerLocal.preferences[HomeCollectionInventory.prefsKey],
+        ).collections.map((c) => c.id).toSet(),
+        {'a', 'b'},
+      );
+      transport.serverDate = now.add(const Duration(seconds: 2));
+      engine = WebDavSyncEngine(
+        stateRepository: states,
+        localAdapter: local,
+        transportFactory: (_) => transport,
+        codec: codec,
+        clock: () => transport.serverDate!,
+      );
+      inventory.remove('b');
+      local.preferences[HomeCollectionInventory.prefsKey] = inventory.encode();
+      expect(
+        (await runFixture(context())).disposition,
+        WebDavSyncCycleDisposition.completed,
+      );
+      manifest = await openManifest('device-a');
+      expect(manifest.section('collections-v2/profile-circle/0'), isNotNull);
+      expect(manifest.section('collections-v2/profile-circle/1'), isNull);
+    },
+  );
+
+  test(
+    'deferred collections survive interrupted apply and restart without blocking hot updates',
+    () async {
+      final inventory = HomeCollectionInventory()
+        ..put(const HomeCollection(id: 'remote', title: 'Remote collection'));
+      local.preferences[HomeCollectionInventory.prefsKey] = inventory.encode();
+      await runFixture(context());
+      final tv = _DeferringCollectionAdapter({'theme': 'light'});
+      final tvStates = _MemoryStateRepository();
+      WebDavSyncEngine makeTv() => WebDavSyncEngine(
+        stateRepository: tvStates,
+        localAdapter: tv,
+        transportFactory: (_) => transport,
+        codec: codec,
+        clock: () => now,
+      );
+      final tvContext = WebDavSyncCycleContext(
+        namespaceId: 'circle:circle-1',
+        deviceId: 'device-tv',
+        markerPin: marker,
+        root: root,
+        circleToLocalProfiles: const {'profile-circle': 'local-profile'},
+        circleToLocalResources: const {},
+      );
+      tv.failNextApply = true;
+      await expectLater(
+        makeTv().runCycle(tvContext, allowPreActivation: true),
+        throwsStateError,
+      );
+      expect(
+        (await tvStates.load(
+          'circle:circle-1',
+        )).profiles['profile-circle']!.pendingApply,
+        isNotNull,
+      );
+      for (var tick = 0; tick < 3; tick++) {
+        tv.preferences['resume_tick'] = tick;
+        final report = await makeTv().runCycle(
+          tvContext,
+          allowPreActivation: true,
+        );
+        expect(report.disposition, WebDavSyncCycleDisposition.completed);
+        expect(tv.preferences['resume_tick'], tick);
+        expect(tv.preferences[HomeCollectionInventory.prefsKey], isNull);
+        final state = (await tvStates.load(
+          'circle:circle-1',
+        )).profiles['profile-circle']!;
+        expect(state.deferredCollectionLocal, isNotNull);
+        expect(
+          state
+              .baseline!
+              .watchState
+              .records[WebDavSyncRecordKey.homeCollection('remote')]!
+              .value,
+          isNotNull,
+        );
+      }
+      // When the target fits again, previously consumed peer records still apply.
+      tv.defer = false;
+      expect(
+        (await makeTv().runCycle(
+          tvContext,
+          allowPreActivation: true,
+        )).disposition,
+        WebDavSyncCycleDisposition.completed,
+      );
+      expect(
+        HomeCollectionInventory.decode(
+          tv.preferences[HomeCollectionInventory.prefsKey],
+        ).collections.single.id,
+        'remote',
+      );
+      expect(
+        (await tvStates.load(
+          'circle:circle-1',
+        )).profiles['profile-circle']!.deferredCollectionLocal,
+        isNull,
+      );
+    },
+  );
 
   test('collections converge across devices, deletion and restart', () async {
     Map<String, Object?> initial(String id) => {
@@ -149,9 +398,13 @@ void main() {
     Future<void> cycle(WebDavSyncEngine engine, String device) async {
       cycleTime = cycleTime.add(const Duration(seconds: 1));
       transport.serverDate = cycleTime;
-      final report = await engine.runCycle(ctx(device), allowPreActivation: true);
+      final report = await engine.runCycle(
+        ctx(device),
+        allowPreActivation: true,
+      );
       expect(report.disposition, WebDavSyncCycleDisposition.completed);
     }
+
     HomeCollectionInventory inventory(_FakeLocalAdapter adapter) =>
         HomeCollectionInventory.decode(
           adapter.preferences[HomeCollectionInventory.prefsKey],
@@ -164,8 +417,14 @@ void main() {
     await cycle(be, 'device-b');
     await cycle(ae, 'device-a');
     await cycle(be, 'device-b');
-    expect(inventory(a).collections.map((c) => c.id), unorderedEquals(['a', 'b']));
-    expect(inventory(b).collections.map((c) => c.id), unorderedEquals(['a', 'b']));
+    expect(
+      inventory(a).collections.map((c) => c.id),
+      unorderedEquals(['a', 'b']),
+    );
+    expect(
+      inventory(b).collections.map((c) => c.id),
+      unorderedEquals(['a', 'b']),
+    );
 
     // B stays offline while A deletes. Recreate A's engine to exercise its
     // persisted state rather than relying on a merge object's memory.
@@ -176,8 +435,10 @@ void main() {
     };
     await expectLater(cycle(ae, 'device-a'), throwsStateError);
     expect(inventory(a).records.containsKey('a'), false);
-    expect(aStates.state.profiles['profile-circle']!.tombstones,
-      contains(WebDavSyncRecordKey.homeCollection('a')));
+    expect(
+      aStates.state.profiles['profile-circle']!.tombstones,
+      contains(WebDavSyncRecordKey.homeCollection('a')),
+    );
     ae = makeEngine(a, aStates);
     await cycle(ae, 'device-a');
     await cycle(be, 'device-b');
@@ -188,92 +449,110 @@ void main() {
     }
 
     // An explicit later reimport is an edit, so it may restore the record.
-    save(b, inventory(b)..put(const HomeCollection(id: 'a', title: 'Restored')));
+    save(
+      b,
+      inventory(b)..put(const HomeCollection(id: 'a', title: 'Restored')),
+    );
     await cycle(be, 'device-b');
     await cycle(ae, 'device-a');
     expect(inventory(a).records['a']!.title, 'Restored');
     expect(inventory(a).records['b'], isNotNull);
   });
 
-  test('deletion during pending replay survives another crash and reaches peers', () async {
-    Map<String, Object?> initial(String id) => {
-      HomeCollectionInventory.prefsKey: jsonEncode([
-        HomeCollection(id: id, title: id).toJson(),
-      ]),
-    };
-    final a = _FakeLocalAdapter(initial('a'));
-    final b = _FakeLocalAdapter(initial('b'));
-    final aStates = _MemoryStateRepository();
-    final bStates = _MemoryStateRepository();
-    var cycleTime = now;
-    WebDavSyncEngine makeEngine(
-      _FakeLocalAdapter adapter,
-      _MemoryStateRepository repository,
-    ) => WebDavSyncEngine(
-      stateRepository: repository,
-      localAdapter: adapter,
-      transportFactory: (_) => transport,
-      codec: codec,
-      clock: () => cycleTime,
-    );
-    var ae = makeEngine(a, aStates);
-    final be = makeEngine(b, bStates);
-    WebDavSyncCycleContext ctx(String device) => WebDavSyncCycleContext(
-      namespaceId: 'circle:circle-1',
-      deviceId: device,
-      markerPin: marker,
-      root: root,
-      circleToLocalProfiles: const {'profile-circle': 'local-profile'},
-      circleToLocalResources: const {},
-    );
-    Future<void> cycle(WebDavSyncEngine engine, String device) async {
-      cycleTime = cycleTime.add(const Duration(seconds: 1));
-      transport.serverDate = cycleTime;
-      final report = await engine.runCycle(ctx(device), allowPreActivation: true);
-      expect(report.disposition, WebDavSyncCycleDisposition.completed);
-    }
-    HomeCollectionInventory inventory(_FakeLocalAdapter adapter) =>
-        HomeCollectionInventory.decode(
-          adapter.preferences[HomeCollectionInventory.prefsKey],
+  test(
+    'deletion during pending replay survives another crash and reaches peers',
+    () async {
+      Map<String, Object?> initial(String id) => {
+        HomeCollectionInventory.prefsKey: jsonEncode([
+          HomeCollection(id: id, title: id).toJson(),
+        ]),
+      };
+      final a = _FakeLocalAdapter(initial('a'));
+      final b = _FakeLocalAdapter(initial('b'));
+      final aStates = _MemoryStateRepository();
+      final bStates = _MemoryStateRepository();
+      var cycleTime = now;
+      WebDavSyncEngine makeEngine(
+        _FakeLocalAdapter adapter,
+        _MemoryStateRepository repository,
+      ) => WebDavSyncEngine(
+        stateRepository: repository,
+        localAdapter: adapter,
+        transportFactory: (_) => transport,
+        codec: codec,
+        clock: () => cycleTime,
+      );
+      var ae = makeEngine(a, aStates);
+      final be = makeEngine(b, bStates);
+      WebDavSyncCycleContext ctx(String device) => WebDavSyncCycleContext(
+        namespaceId: 'circle:circle-1',
+        deviceId: device,
+        markerPin: marker,
+        root: root,
+        circleToLocalProfiles: const {'profile-circle': 'local-profile'},
+        circleToLocalResources: const {},
+      );
+      Future<void> cycle(WebDavSyncEngine engine, String device) async {
+        cycleTime = cycleTime.add(const Duration(seconds: 1));
+        transport.serverDate = cycleTime;
+        final report = await engine.runCycle(
+          ctx(device),
+          allowPreActivation: true,
         );
-    void save(_FakeLocalAdapter adapter, HomeCollectionInventory value) {
-      adapter.preferences[HomeCollectionInventory.prefsKey] = value.encode();
-    }
+        expect(report.disposition, WebDavSyncCycleDisposition.completed);
+      }
 
-    await cycle(ae, 'device-a');
-    await cycle(be, 'device-b');
-    await cycle(ae, 'device-a');
-    await cycle(be, 'device-b');
-    expect(inventory(a).collections.map((c) => c.id), unorderedEquals(['a', 'b']));
-    expect(inventory(b).collections.map((c) => c.id), unorderedEquals(['a', 'b']));
+      HomeCollectionInventory inventory(_FakeLocalAdapter adapter) =>
+          HomeCollectionInventory.decode(
+            adapter.preferences[HomeCollectionInventory.prefsKey],
+          );
+      void save(_FakeLocalAdapter adapter, HomeCollectionInventory value) {
+        adapter.preferences[HomeCollectionInventory.prefsKey] = value.encode();
+      }
 
-    // Journal a pending target, then delete while that apply is interrupted.
-    a.failNextApply = true;
-    await expectLater(cycle(ae, 'device-a'), throwsStateError);
-    expect(aStates.state.profiles['profile-circle']!.pendingApply, isNotNull);
-    save(a, inventory(a)..remove('b'));
-    a.afterApply = () {
-      a.afterApply = null;
-      throw StateError('crash after replay materializes the new deletion');
-    };
-    ae = makeEngine(a, aStates);
-    await expectLater(cycle(ae, 'device-a'), throwsStateError);
-    expect(a.replayingPendingFlags.last, true);
-    expect(inventory(a).records.containsKey('b'), false);
-    expect(aStates.state.profiles['profile-circle']!.tombstones,
-      contains(WebDavSyncRecordKey.homeCollection('b')));
+      await cycle(ae, 'device-a');
+      await cycle(be, 'device-b');
+      await cycle(ae, 'device-a');
+      await cycle(be, 'device-b');
+      expect(
+        inventory(a).collections.map((c) => c.id),
+        unorderedEquals(['a', 'b']),
+      );
+      expect(
+        inventory(b).collections.map((c) => c.id),
+        unorderedEquals(['a', 'b']),
+      );
 
-    // A second restart must publish the deletion even though its null marker
-    // disappeared during replay. B still holds the live record at this point.
-    ae = makeEngine(a, aStates);
-    await cycle(ae, 'device-a');
-    await cycle(be, 'device-b');
-    await cycle(ae, 'device-a');
-    for (final adapter in [a, b]) {
-      expect(inventory(adapter).collections.map((c) => c.id), ['a']);
-      expect(inventory(adapter).records.containsKey('b'), false);
-    }
-  });
+      // Journal a pending target, then delete while that apply is interrupted.
+      a.failNextApply = true;
+      await expectLater(cycle(ae, 'device-a'), throwsStateError);
+      expect(aStates.state.profiles['profile-circle']!.pendingApply, isNotNull);
+      save(a, inventory(a)..remove('b'));
+      a.afterApply = () {
+        a.afterApply = null;
+        throw StateError('crash after replay materializes the new deletion');
+      };
+      ae = makeEngine(a, aStates);
+      await expectLater(cycle(ae, 'device-a'), throwsStateError);
+      expect(a.replayingPendingFlags.last, true);
+      expect(inventory(a).records.containsKey('b'), false);
+      expect(
+        aStates.state.profiles['profile-circle']!.tombstones,
+        contains(WebDavSyncRecordKey.homeCollection('b')),
+      );
+
+      // A second restart must publish the deletion even though its null marker
+      // disappeared during replay. B still holds the live record at this point.
+      ae = makeEngine(a, aStates);
+      await cycle(ae, 'device-a');
+      await cycle(be, 'device-b');
+      await cycle(ae, 'device-a');
+      for (final adapter in [a, b]) {
+        expect(inventory(adapter).collections.map((c) => c.id), ['a']);
+        expect(inventory(adapter).records.containsKey('b'), false);
+      }
+    },
+  );
 
   for (final malformedEnvelope in [true, false]) {
     test(
@@ -3827,6 +4106,36 @@ void main() {
     );
   });
 
+  test(
+    'large collection shards use a bounded cache without displacing ordinary hot state',
+    () {
+      final cache = WebDavSyncSectionCache();
+      final hot = Object();
+      cache.put('circle:device:hot/profile', hot, 1024);
+      final shard = Object();
+      cache.put(
+        'circle:device:collections-v2/profile/0',
+        shard,
+        8 * 1024 * 1024,
+      );
+      expect(cache.take('circle:device:collections-v2/profile/0'), same(shard));
+      for (var i = 1; i < 20; i++) {
+        cache.put(
+          'circle:device:collections-v2/profile/$i',
+          Object(),
+          8 * 1024 * 1024,
+        );
+      }
+      expect(cache.take('circle:device:hot/profile'), same(hot));
+      expect(
+        cache.byteCount,
+        lessThanOrEqualTo(WebDavSyncSectionCache.collectionByteLimit + 1024),
+      );
+      cache.clear();
+      expect(cache.byteCount, 0);
+    },
+  );
+
   test('section cache stays within its entry and byte budgets', () async {
     final padding = 'x' * (256 * 1024);
     for (var index = 0; index < 20; index++) {
@@ -4907,6 +5216,26 @@ class _FakeLocalAdapter implements WebDavSyncLocalAdapter {
     afterApply?.call();
     return appliedKeysOverride ?? Set<String>.unmodifiable(values.keys);
   }
+}
+
+final class _DeferringCollectionAdapter extends _FakeLocalAdapter
+    implements WebDavSyncCollectionCapacityAdapter {
+  _DeferringCollectionAdapter(super.preferences);
+  bool defer = true;
+
+  @override
+  Future<({Map<String, Object> values, bool collectionsDeferred})>
+  prepareHotApply(
+    WebDavSyncLocalSession session,
+    String localProfileId,
+    Map<String, Object> values,
+  ) async => (
+    values: {...values}
+      ..removeWhere(
+        (key, _) => defer && key == HomeCollectionInventory.prefsKey,
+      ),
+    collectionsDeferred: defer,
+  );
 }
 
 final class _FakeLibraryLocalAdapter extends _FakeLocalAdapter

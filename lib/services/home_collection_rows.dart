@@ -40,7 +40,13 @@ class HomeCollectionSection extends CatalogSection {
 
   /// The folder behind a tile, or null for an item that isn't one of ours.
   /// The folder's animated focus art for [item], when the file carries one.
-  String? focusArtOf(StremioMeta item) => folderOf(item)?.focusGifUrl;
+  String? focusArtOf(StremioMeta item) {
+    final folder = folderOf(item);
+    return folder?.focusGifEnabled == true ? folder?.focusGifUrl : null;
+  }
+
+  double tileAspectOf(StremioMeta item) =>
+      folderOf(item)?.tileShape.aspectRatio ?? tileAspectRatio;
 
   String? focusVideoOf(StremioMeta item) {
     final folder = folderOf(item);
@@ -70,25 +76,36 @@ class HomeCollectionSection extends CatalogSection {
     return -1;
   }
 
-  /// Width / height of the row's tiles. The first folder decides — a Nuvio
-  /// collection is uniform in practice, and one shape per row keeps the rail
-  /// grammar intact.
+  /// Maximum aspect reserves enough room in fixed-cell stage layouts.
+  /// Each card still renders its own folder shape inside that space.
   double get tileAspectRatio => collection.folders.isEmpty
       ? CollectionTileShape.landscape.aspectRatio
-      : collection.folders.first.tileShape.aspectRatio;
+      : collection.folders
+            .map((f) => f.tileShape.aspectRatio)
+            .reduce((a, b) => a > b ? a : b);
 
   bool get landscapeTiles => tileAspectRatio >= 1;
 
   static StremioMeta folderMeta(HomeCollection c, HomeCollectionFolder f) =>
-      StremioMeta(
-        id: HomeCollectionRowIds.folderMetaId(c.id, f.id),
+      CollectionFolderMeta(c, f);
+}
+
+/// Folder-only presentation data travels with the card through every Home layout.
+class CollectionFolderMeta extends StremioMeta {
+  final HomeCollectionFolder folder;
+  CollectionFolderMeta(HomeCollection collection, this.folder)
+    : super(
+        id: HomeCollectionRowIds.folderMetaId(collection.id, folder.id),
         type: 'folder',
-        name: f.title,
-        poster: f.coverImageUrl,
-        background: f.heroBackdropUrl ?? f.coverImageUrl,
-        logo: f.titleLogoUrl,
-        description: f.sources.isEmpty
+        name: folder.title,
+        poster: folder.coverImageUrl,
+        background:
+            folder.heroBackdropUrl ??
+            collection.backdropImageUrl ??
+            folder.coverImageUrl,
+        logo: folder.titleLogoUrl,
+        description: folder.sources.isEmpty
             ? null
-            : '${f.sources.length} catalog${f.sources.length == 1 ? '' : 's'}',
+            : '${folder.sources.length} ${folder.sources.length == 1 ? 'list' : 'lists'}',
       );
 }

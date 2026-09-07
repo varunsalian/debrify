@@ -3,6 +3,7 @@ import 'dart:convert';
 import '../models/home_collection.dart';
 import '../models/stremio_addon.dart';
 import 'collection_catalog_pager.dart';
+import 'collection_native_source_service.dart';
 import 'home_collections_store.dart';
 import 'stremio_service.dart';
 import 'watched_filter.dart';
@@ -16,6 +17,7 @@ class CollectionFolderLoader {
     required List<StremioAddon> installedAddons,
     StremioService? stremio,
     CatalogFetch? fetch,
+    CollectionNativeSourceService? native,
     bool forceRefresh = false,
     bool Function(StremioMeta)? hides,
   }) {
@@ -37,12 +39,26 @@ class CollectionFolderLoader {
         ));
     final resolved = <String>{};
     for (final source in folder.sources) {
+      if (source.isNative) {
+        if (!resolved.add(source.key)) continue;
+        _sources.add(
+          NativeCollectionPager(
+            fetch: (page) => (native ?? CollectionNativeSourceService.instance)
+                .fetch(source, page),
+            hides: hides ?? WatchedFilter.predicate,
+          ),
+        );
+        continue;
+      }
       final addon = HomeCollectionsStore.resolveAddon(source, installedAddons);
       final catalog = addon == null
           ? null
           : HomeCollectionsStore.resolveCatalog(source, addon);
       if (addon == null || catalog == null) {
-        _unresolved.add(source.addonId);
+        _unresolved.add(
+          HomeCollectionsStore.sourceIssue(source, installedAddons) ??
+              source.label,
+        );
         continue;
       }
       final key = jsonEncode([
@@ -65,13 +81,17 @@ class CollectionFolderLoader {
   }
   final HomeCollectionFolder folder;
   static const int maxConcurrent = 4;
-  final List<CollectionCatalogPager> _sources = [];
+  final List<CollectionPager> _sources = [];
   final List<String> _unresolved = [];
   final Set<String> _seen = {};
   bool _stalled = false;
   bool _loading = false;
   int get resolvedSourceCount => _sources.length;
   List<String> get unresolved => List.unmodifiable(_unresolved);
+  List<String> get errors => [
+    for (final s in _sources)
+      if (s.error != null) s.error!,
+  ];
   bool get exhausted => _sources.every((s) => s.exhausted);
   // A source can have an empty/overlapping window while its siblings advance.
   // Only the shared budget exhausting makes no-progress an All-view error.
@@ -94,7 +114,7 @@ class CollectionFolderLoader {
     try {
       // Each source is tried once after failure per user/request, not once for
       // every overlap window of the remaining successful sources.
-      final failed = <CollectionCatalogPager>{};
+      final failed = <CollectionPager>{};
       for (
         var attempt = 0;
         attempt < CollectionCatalogPager.maxEmptyWindows;

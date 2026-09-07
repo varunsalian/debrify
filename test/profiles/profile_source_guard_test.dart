@@ -18,6 +18,8 @@ void main() {
         // Adoption must enumerate and atomically project whole scoped stores;
         // the exact count keeps any additional raw access review-visible.
         'lib/services/webdav_sync/webdav_sync_adoption_operations.dart': 2,
+        // Read-only global tvOS budget planning; writes remain scoped/batched.
+        'lib/services/webdav_sync/webdav_sync_local_adapter.dart': 1,
         // These two perform reviewed whole-store durability/reset operations;
         // neither exposes a generic preference API to feature code.
         'lib/services/profiles/profile_registry.dart': 2,

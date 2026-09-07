@@ -413,6 +413,37 @@ class ProfilePreferences implements SharedPreferences {
     });
   }
 
+  /// Prepare expensive JSON outside the global write barrier, then compare
+  /// the captured value at commit. A racing sync apply causes a fresh draft.
+  Future<bool> mutateStringAsyncAtomically(
+    String key,
+    Future<String> Function(String? current) update,
+  ) {
+    _assertMutationOutsideExclusive();
+    return _atomicStringListMutationLock.synchronized(() async {
+      for (var attempt = 0; ; attempt++) {
+        _assertWritable();
+        final old = _delegate.getString(_physical(key));
+        final next = await update(old);
+        try {
+          return await _write(
+            () => _delegate.setString(_physical(key), next),
+            logicalKey: key,
+            budgetKey: _physical(key),
+            prepareValue: () {
+              if (_delegate.getString(_physical(key)) != old) {
+                throw const ProfilePreferenceMutationConflict();
+              }
+              return next;
+            },
+          );
+        } on ProfilePreferenceMutationConflict {
+          if (attempt >= 3) rethrow;
+        }
+      }
+    });
+  }
+
   /// Serializes a string-list read/modify/write against every scoped instance.
   /// The lock covers the physical profile key, so callers can safely update an
   /// inactive captured profile without racing an active-session mutation.

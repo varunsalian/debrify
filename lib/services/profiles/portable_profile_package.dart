@@ -54,6 +54,8 @@ class PortableProfilePackage {
     'devicePathsAndOsGrants',
     'devicePathsAndGrants',
     'remoteIdentityAndPeers',
+    // Compatibility notice for older readers; current readers restore this data.
+    'collectionsRequireNewerBuild',
     'remotePairings',
     'destinationNameAvatarRolePolicyPinAndEnabledState',
     'pinAttemptCountersAndLockout',
@@ -858,6 +860,11 @@ class PortableProfilePackage {
     if (section is! Map || section['values'] is! Map) {
       throw const FormatException('Sanitized preferences are missing');
     }
+    if (section.containsKey('collectionInventory')) {
+      throw const FormatException(
+        'Sanitized backup contains private collections',
+      );
+    }
     for (final entry in (section['values'] as Map).entries) {
       if (!SanitizedProfilePreferences.allowsEntry(entry.key, entry.value)) {
         throw const FormatException('Sanitized backup contains private data');
@@ -886,6 +893,12 @@ class PortableProfilePackage {
             section['values'] is! Map ||
             section['recordCount'] is! int) {
           throw const FormatException('Invalid profile preference section');
+        }
+        final collections = section['collectionInventory'];
+        if (collections != null &&
+            (collections is! List ||
+                collections.any((part) => part is! String))) {
+          throw const FormatException('Invalid backup collection inventory');
         }
         final values = Map<String, Object?>.from(section['values'] as Map);
         if (section['recordCount'] != values.length) {

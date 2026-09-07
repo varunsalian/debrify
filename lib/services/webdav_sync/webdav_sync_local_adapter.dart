@@ -1,5 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'webdav_sync_collection_capacity.dart';
 import 'package:collection/collection.dart';
 import '../engine/local_engine_storage.dart';
 import '../../utils/app_storage.dart';
@@ -62,6 +64,15 @@ final class WebDavSyncLocalProfileSnapshot {
 final class WebDavSyncMappedProfileUnavailable extends StateError {
   WebDavSyncMappedProfileUnavailable()
     : super('A mapped WebDAV sync profile is unavailable');
+}
+
+abstract interface class WebDavSyncCollectionCapacityAdapter {
+  Future<({Map<String, Object> values, bool collectionsDeferred})>
+  prepareHotApply(
+    WebDavSyncLocalSession session,
+    String localProfileId,
+    Map<String, Object> values,
+  );
 }
 
 abstract interface class WebDavSyncLocalAdapter {
@@ -293,6 +304,7 @@ abstract interface class WebDavSyncTvLibraryLocalAdapter {
 final class ProfileWebDavSyncLocalAdapter
     implements
         WebDavSyncLocalAdapter,
+        WebDavSyncCollectionCapacityAdapter,
         WebDavSyncCircleLocalAdapter,
         WebDavSyncLibraryLocalAdapter,
         WebDavSyncTvLibraryLocalAdapter,
@@ -372,6 +384,31 @@ final class ProfileWebDavSyncLocalAdapter
         mutationToken: mutationToken,
       );
     });
+  }
+
+  @override
+  Future<({Map<String, Object> values, bool collectionsDeferred})>
+  prepareHotApply(
+    WebDavSyncLocalSession session,
+    String localProfileId,
+    Map<String, Object> values,
+  ) async {
+    _validateSession(session);
+    final profile = await registry.getProfile(localProfileId);
+    _validateSession(session);
+    if (profile == null) throw WebDavSyncMappedProfileUnavailable();
+    final scope = ProfileScope(
+      profileId: profile.id,
+      dataGeneration: profile.visibleDataGeneration,
+      sessionEpoch: session.scope.sessionEpoch,
+    );
+    final prefs = await SharedPreferences.getInstance();
+    _validateSession(session);
+    return WebDavSyncCollectionCapacity.plan(
+      prefs,
+      scope.preferencePrefix,
+      values,
+    );
   }
 
   @override

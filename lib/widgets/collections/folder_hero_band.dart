@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../../models/home_collection.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/app_theme_scope.dart';
+import 'collection_focus_art.dart';
 
 /// The folder's backdrop and title logo above its lists. Files without a
 /// dedicated backdrop fall back to the cover art; without a logo the title
@@ -11,18 +12,30 @@ import '../../theme/app_theme_scope.dart';
 class FolderHeroBand extends StatelessWidget {
   final HomeCollectionFolder folder;
   final bool isTelevision;
+  final String? collectionBackdropUrl;
 
   const FolderHeroBand({
     super.key,
     required this.folder,
     this.isTelevision = false,
+    this.collectionBackdropUrl,
   });
 
   @override
   Widget build(BuildContext context) {
-    final backdrop = folder.heroBackdropUrl ?? folder.coverImageUrl;
+    final backdrop =
+        folder.heroBackdropUrl ?? collectionBackdropUrl ?? folder.coverImageUrl;
+    final uri = Uri.tryParse(folder.heroVideoUrl ?? '');
+    final video =
+        uri != null &&
+            (uri.scheme == 'https' || uri.scheme == 'http') &&
+            uri.host.isNotEmpty
+        ? folder.heroVideoUrl
+        : null;
     final logo = folder.titleLogoUrl;
-    if (backdrop == null && logo == null) return const SizedBox.shrink();
+    if (backdrop == null && logo == null && video == null) {
+      return const SizedBox.shrink();
+    }
     final app = AppThemeScope.of(context);
     final bg = app.seeAll.bg;
     final height = (MediaQuery.sizeOf(context).height * 0.18).clamp(
@@ -45,6 +58,7 @@ class FolderHeroBand extends StatelessWidget {
               memCacheWidth: 1280,
               errorWidget: (_, __, ___) => const SizedBox.shrink(),
             ),
+          if (video != null) CollectionFocusArt(videoUrl: video),
           // Fade the still into the page ground so the filter line below
           // reads on a settled surface, and keep the logo's corner legible.
           DecoratedBox(

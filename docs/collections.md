@@ -2,7 +2,7 @@
 
 Debrify imports **collections JSON** files — the format Nuvio and Xperience
 use to describe named groups of "folders", where each folder bundles one or
-more Stremio addon catalogs. Every imported collection becomes a row of folder
+more Stremio addon catalogs, native TMDB sources or public Trakt lists. Every imported collection becomes a row of folder
 tiles on the Home screen; opening a folder browses its catalogs.
 
 ## Importing
@@ -17,12 +17,12 @@ Settings → **Home Screen** → **Collections**:
 
 Imports **merge**: a collection whose `id` already exists is replaced in place
 (keeping its show/hide state); new ids are appended. Tapping a collection
-offers hide-from-Home and delete; "Remove all" is under Danger Zone. Documents
-over 8 MiB are refused. Persisted collection definitions have a 128 KiB
+offers editing, JSON export, hide-from-Home and delete; "Remove all" is under Danger Zone. Documents
+over 8 MiB are refused. Persisted collection definitions have an 8 MiB
 aggregate limit per profile and a maximum of 1,024 live collections. Pending
 deletion records do not consume these definition limits, and changing visibility
 does not grow the measured definition size. An import that would grow beyond
-either limit fails before saving. This leaves space for the profile's other sync data.
+either limit fails before saving. Large inventories are compressed before saving; the device preference budget still applies.
 Profile changes during a picker or download cancel the import; failed storage
 writes are reported as failures.
 
@@ -70,16 +70,19 @@ The parser accepts:
 
 Field notes:
 
-- `catalogSources` and `sources` describe the same catalogs; both are read and
-  de-duplicated. Only `provider: "addon"` sources are used.
-- `tileShape`: `LANDSCAPE` (16:9, default), `PORTRAIT` (2:3) or `SQUARE`.
+- `sources` is read first, preserving mixed-provider order; legacy `catalogSources`
+  are also read and de-duplicated. Providers `addon`, `tmdb` and `trakt` load
+  directly. Unknown providers are retained and reported as unsupported.
+- `tileShape`: `LANDSCAPE` (16:9, default), `PORTRAIT` (2:3) or `SQUARE`,
+  respected per folder even when one row mixes shapes.
+- `coverEmoji`: cover fallback when image artwork is absent or fails.
 - `hideTitle`: draw no text over the cover (the art carries the brand).
 - `focusGifUrl`: animated art played over the tile while it is focused or
-  hovered (`focusGifEnabled` is ignored; community files set the URL without
-  the flag).
+  hovered. `focusGifEnabled` defaults to true when omitted; explicit false
+  disables the GIF.
 - `heroBackdropUrl`, `titleLogoUrl`: the backdrop and logo shown above the
-  folder's lists when it is opened; the cover stands in for a missing
-  backdrop, the title for a missing logo.
+  folder's lists when it is opened. A missing folder backdrop falls back to
+  collection `backdropImageUrl`, then the cover; a missing logo falls back to text.
 - `focusGlowEnabled` (on the collection, default `true`): adds a halo tinted
   from the folder's cover when its tile is focused or hovered. `false` removes
   this extra halo while retaining the theme's normal focus indicator. Supported
@@ -103,8 +106,11 @@ Field notes:
 - `showAllTab`: the folder browser offers an "All" view merging every list.
 - Records without an `id` get a stable one derived from their title, so
   re-importing the same file updates rather than duplicates.
-- Unknown fields (`viewMode`, `heroVideoUrl`, …) are ignored. `heroVideoUrl`
-  describes the opened folder’s hero background, not a tile focus preview.
+- `viewMode`: `TABBED_GRID` selects tabs; `FOLLOW_LAYOUT` selects rows. If
+  omitted, the profile setting applies.
+- `heroVideoUrl`: muted looping video in the opened folder’s hero background,
+  with still-art fallback and the same playback lifecycle/reduced-motion rules
+  as focus previews.
 
 The glow flag follows [Nuvio’s collection model](https://github.com/NuvioMedia/NuvioTV/blob/dev/app/src/main/java/com/nuvio/tv/domain/model/Collection.kt).
 Its artwork-derived appearance follows the same intent as
@@ -114,7 +120,7 @@ community exports; it is distinct from Nuvio’s `heroVideoUrl`.
 
 Existing imported records cannot recover fields that an older build discarded.
 Re-import the original collection JSON to restore its video URLs and any
-explicit `focusGlowEnabled: false` setting. The new fields persist through
+explicit visual preferences and native source definitions. The new fields persist through
 profile storage, sync, re-import, visibility changes and Backup & Restore.
 
 ## Addon resolution
@@ -123,22 +129,55 @@ Each source names an addon by its Stremio manifest id (`addonId`) plus a
 catalog `type` and `catalogId`. On the device the source is resolved against
 the installed catalog addons:
 
-Only an addon whose manifest id equals `addonId` and serves the requested
-browsable catalog is used. Catalog ids are provider-local: another addon's
-`top` or `popular` is not a compatible substitute. A file from a deployment
-with a different manifest id needs its source ids updated to the installed
-provider before those sources can resolve.
+An enabled addon must match the manifest id or installed local id and serve the
+requested browsable catalog. Catalog type aliases (`tv`/`show`/`series` and
+`movie`/`movies`) are normalized. An `all` type resolves only when the catalog id
+has one unambiguous type. Catalog ids are provider-local: another addon's `top`
+or `popular` is not a compatible substitute.
 
-Sources that resolve to nothing are skipped. The settings page and the import
-result dialog list the missing addon ids, and a folder whose sources all fail
-shows an explanatory empty state. Installing the addon is enough; no re-import
-is needed.
+Settings and the folder browser distinguish an absent addon, a disabled addon,
+and an installed addon without the requested catalog. Partial failures remain
+visible alongside working lists. Installing/enabling the matching addon or
+correcting its catalog configuration takes effect without re-importing.
+
+## Native sources
+
+TMDB supports `LIST`, `COLLECTION` (franchise), `COMPANY`, `NETWORK`, `DISCOVER`,
+`PERSON` (cast), and `DIRECTOR` (directing credits). Sources preserve media type,
+filters, sort order, artwork, and pagination. Whole lists, franchises and credits
+are split into 20-title local pages; only the requested page is enriched with
+IMDb identities. Non-original LIST sorting collects all remote catalog pages
+and sorts the complete snapshot before exposing local pages. Original order
+continues loading remote pages on demand. Raw snapshots are reused for subsequent
+pages, and paginated list responses retain their remote cursor across retries. TMDB results resolve to IMDb IDs
+for normal metadata, watched filtering and stream addon lookup; titles without
+an IMDb mapping retain their TMDB IDs. Failed lookups retry when opening a title.
+
+Public Trakt lists use a numeric `traktListId`, movie/TV media type, ascending or
+descending order, and rank, added, title, released, runtime, popularity,
+percentage or votes sorting. Private, deleted or empty remote lists cannot
+supply titles; the browser reports request failures and allows retry.
+
+TMDB builds use `TMDB_READ_ACCESS_TOKEN` from Dart defines. Local configuration
+is in the ignored `.env.local.json`; release workflows inject the GitHub secret.
+TMDB attribution appears in Settings → About. These sources provide metadata;
+playback still uses the app's configured stream providers.
+
+## Creating, editing and exporting
+
+Choose **Create collection**, or open an existing collection's **Edit** action.
+The editor supports collection appearance and layout, folders, artwork, source
+configuration and ordering. Folder and source arrows reorder entries. Save
+persists the draft; cancelling leaves the existing collection unchanged.
+
+**Export JSON** offers clipboard copy or a file saved to a chosen location.
+The export retains addon/native sources and visual settings in the import format.
 
 ## Browsing a folder
 
 Each catalog in a folder is its own **list**. The folder browser has two
-layouts, chosen by the per-profile "Tabbed folders" switch under Settings →
-Home Screen → Collections:
+layouts. Imported `viewMode` takes precedence; otherwise the per-profile
+"Tabbed folders" switch under Settings → Home Screen → Collections applies:
 
 - **Rows** (default): one horizontal rail per list, each with a See All into
   the regular catalog browser (opened on the source's `genre`). Collections
@@ -148,14 +187,14 @@ Home Screen → Collections:
 
 The "All" view pages every list together into one merged, de-duplicated grid
 (round-robin interleaved, bounded fan-out). Items open through the normal
-detail page and Quick Play of the addon that served them.
+detail page and Quick Play.
 
 ## Lists, Home rows and the Home Rows manager
 
 - Every folder appears in **Home Screen → Home Rows** as a group
   ("Streaming › Netflix") with one switch per list. Switched-off lists are
   left out of every folder view. These switches only hide or show; lists are
-  never arranged, since they live inside the folder.
+  arranged through the collection editor.
 - The collection's own Home row (its folder tiles) is a normal row in the
   Collections group there: it can be hidden or dragged anywhere.
 - A catalog claimed by a visible, enabled collection folder is **folder-only**: it no
@@ -167,12 +206,30 @@ detail page and Quick Play of the addon that served them.
 
 ## Persistence and WebDAV sync
 
-The local `home_collections_v1` preference now contains a version-2 inventory:
+Local inventories use `remote_home_collections_v2`; the original
+`home_collections_v1` remains a readable fallback and older-build snapshot.
+Small values contain a version-2 inventory:
 `{ "version": 2, "records": { "collection-id": { … } }, "order": [ … ] }`.
-Existing array preferences are read and upgraded on the next mutation. Legacy
-backup exports remain Nuvio-compatible arrays of present collections.
+Values larger than 64 KiB use a version-3 gzip/base64 envelope. Merged
+inventories exceeding one 32 MiB envelope use version-4 independently bounded
+chunks, so the union of valid imports remains editable. Local import growth
+still stops at 8 MiB. Decompression is bounded per chunk and across the complete
+inventory (520 MiB); encoded chunk containers are capped at 256 MiB. Device
+preference budgets continue to apply, particularly on tvOS.
 
-Mutations read and write within the profile preference mutation barrier. WebDAV
+Collection JSON exports remain Nuvio-compatible arrays. Full profile backups
+put plain version-2 inventories of at most 128 KiB under the legacy key.
+Larger inventories are stored as bounded string chunks in a `collectionInventory`
+extension of the preference section, covered by the package integrity digest.
+Older readers ignore that extension and show a compatibility omission notice;
+they do not restore an oversized legacy value. New readers restore the complete
+inventory from the extension into compact storage. Sanitized shareable settings
+exclude collections through their existing allowlist. Downgrading preserves the new
+store, but an older build only displays its legacy snapshot and cannot use
+native sources or newer visual fields.
+
+Mutations prepare outside the profile preference write barrier and compare the
+captured value again at commit, retrying if a concurrent sync changed it. WebDAV
 sync stores one stamped record per collection ID, with a separate order record.
 Independent imports on different devices merge; simultaneous edits to the same
 collection use the existing sync stamp ordering. Deleting a collection retains
@@ -194,11 +251,28 @@ stop unrelated profiles from syncing.
 Incoming sync changes refresh Home, an open folder, and collection settings.
 Unrelated settings notifications preserve loaded folder pages and TV focus;
 actual folder configuration changes restore focus to the folder control.
-The limit on local growth also allows an older or merged oversized inventory
-to be reduced. The shared WebDAV hot-document limit still applies to the whole
-profile; this feature does not remove that existing aggregate limit. Use the
-updated implementation on each device that edits collections; the original PR's
-array-only store cannot read the upgraded inventory.
+The limit on local growth also allows a merged oversized inventory to be
+reduced. Ordinary WebDAV hot sections keep their original 1 MiB cap.
+Collection definitions and ordering travel in separate `collections-v2` chunks
+(up to 32 MiB each), published through the same atomic manifest. Obsolete chunk
+references are removed when the inventory shrinks. Older builds continue to
+sync ordinary state but do not receive new collection changes. Collection
+records use normal last-writer-wins ordering regardless of serialization version;
+no released build previously synced collections. Unchanged collection chunks
+reuse their existing manifest references, even when resume state changes.
+
+Native source IDs are persisted independently of titles and unknown imported
+fields. Stored and freshly imported sources without an explicit ID share the
+same functional identity calculation; explicit saved IDs are retained. Duplicate
+entries pointing to the same remote list retain
+separate IDs. Previously stored focus GIFs retain the old renderer's animation
+behavior; fresh imports still honor an explicit `focusGifEnabled: false`.
+
+IMDb enrichment uses two workers and a three-second page budget, with its own
+request gate so catalog fetching remains available during an identity outage.
+The cache still coalesces repeated external-ID lookups. Unresolved titles remain
+browsable. Opening one shows progress and Cancel, accepts a replacement
+selection, and falls back after four seconds; obsolete results cannot navigate.
 
 Catalog paging advances by the raw response count, including filtered-out or
 overlapping results. An empty raw catalog response means the end, including
@@ -216,9 +290,11 @@ list and TV focus returns to content when it becomes available.
 | Piece | File |
 |---|---|
 | Schema, parser, row-id grammar | `lib/models/home_collection.dart` |
-| Store (`home_collections_v1`), import (file/URL/paste), addon resolution | `lib/services/home_collections_store.dart` |
+| Store (`remote_home_collections_v2`), import (file/URL/paste), addon resolution | `lib/services/home_collections_store.dart` |
 | Atomic inventory and durable deletions | `lib/models/home_collection_inventory.dart` |
 | Per-catalog raw cursor and retry state | `lib/services/collection_catalog_pager.dart` |
+| Native TMDB/Trakt requests and identity resolution | `lib/services/collection_native_source_service.dart` |
+| Collection/folder/source editor | `lib/screens/collections/collection_editor_screen.dart` |
 | Merged multi-catalog paging | `lib/services/collection_folder_loader.dart` |
 | Home row section (`HomeCollectionSection`) | `lib/services/home_collection_rows.dart` |
 | Folder browser screen | `lib/screens/collections/collection_folder_screen.dart` |
@@ -229,3 +305,32 @@ list and TV focus returns to content when it becomes available.
 | Home Rows manager group | `lib/screens/settings/home_sections_filter_page.dart` |
 | Backup / restore | `lib/services/backup_restore_service.dart` (`homeCollections`) |
 | Tests | `test/home_collections*_test.dart`, `test/collection_catalog_pager_test.dart`, WebDAV engine tests |
+
+On tvOS, incoming collections that exceed the preference storage budget are
+deferred without blocking resume or watched updates. Collection settings shows
+a capacity notice; the existing local collections remain available. The engine
+retains the remote target and a local snapshot across restarts, so unchanged
+local data cannot overwrite pending remote changes. Reducing the shared inventory
+on another device lets collection application resume automatically.
+
+A TMDB list with no sort selected preserves author order and fetches only the
+requested remote page. Explicit sorting gathers the complete list before local
+paging, with a 50-remote-page limit and an instruction to use Original order
+for larger lists. Large inventory encoding, decoding and shard preparation run
+in background isolates. Local edits prepare outside the preference write barrier
+and retry against a fresh value if a concurrent sync changes the inventory.
+
+Upgrade migrations compare normalized collection records on both sides of the
+sync baseline. Storage version markers do not count as edits; unchanged records
+retain both their original wire value and timestamp. An interrupted first apply
+without a baseline or local inventory cannot invent an empty collection order.
+
+Raw TMDB list snapshots are shared by rails and All-view readers. A repeated
+first-page read reuses the snapshot; idle snapshots expire after five minutes.
+Unrelated Home settings refreshes do not cancel an active title selection.
+Collection section caching has a separate 64 MiB budget, so shards larger than
+the ordinary 4 MiB cache can be reused without evicting ordinary hot state.
+
+Recovered backup records retain a corruption marker for the settings notice.
+Restore staging honors the tvOS preference budget and aborts without publishing
+a new generation if the restored data cannot fit.

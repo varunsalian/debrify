@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:math';
+import 'dart:isolate';
 
 import 'package:crypto/crypto.dart';
 
@@ -448,6 +449,7 @@ final class WebDavSyncBuildInput {
     required this.clockOffsetMs,
     required this.serverNowMs,
     this.previous,
+    this.deferredCollectionLocal,
   });
 
   final String circleProfileId;
@@ -459,6 +461,7 @@ final class WebDavSyncBuildInput {
   final int clockOffsetMs;
   final int serverNowMs;
   final WebDavSyncHotDocument? previous;
+  final String? deferredCollectionLocal;
 }
 
 final class WebDavSyncBuiltHotState {
@@ -507,6 +510,7 @@ abstract final class WebDavSyncHotMerge {
 
   static const Set<String> _specialKeys = <String>{
     HomeCollectionInventory.prefsKey,
+    HomeCollectionInventory.legacyPrefsKey,
     playbackPreference,
     continueWatchingPreference,
     finishedMoviesPreference,
@@ -517,10 +521,31 @@ abstract final class WebDavSyncHotMerge {
 
   static const Set<String> _hotLocalOnlyScalarKeys = <String>{
     mdblistSyncCheckpointPreference,
+    HomeCollectionInventory.syncDeferredKey,
   };
 
   /// Preference keys consumed locally by the hot builder but never synced.
   static Set<String> get hotLocalOnlyScalarKeys => _hotLocalOnlyScalarKeys;
+
+  static Future<WebDavSyncBuiltHotState> buildAsync(
+    WebDavSyncBuildInput input,
+  ) => Isolate.run(() => build(input));
+
+  static Future<Map<String, Object>> materializePreferencesAsync({
+    required WebDavSyncHotDocument document,
+    required WebDavSyncIdentityMaps identityMaps,
+    Map<String, Object?> localRichRecords = const {},
+    Map<String, WebDavSyncStampedValue> localPortableRecords = const {},
+    Set<String> protectedPreferenceKeys = const {},
+  }) => Isolate.run(
+    () => materializePreferences(
+      document: document,
+      identityMaps: identityMaps,
+      localRichRecords: localRichRecords,
+      localPortableRecords: localPortableRecords,
+      protectedPreferenceKeys: protectedPreferenceKeys,
+    ),
+  );
 
   static WebDavSyncBuiltHotState build(WebDavSyncBuildInput input) {
     final previous = input.previous;
@@ -649,15 +674,42 @@ abstract final class WebDavSyncHotMerge {
     );
 
     final collectionRaw =
-        input.portablePreferences[HomeCollectionInventory.prefsKey];
-    if (collectionRaw != null) {
+        input.portablePreferences[HomeCollectionInventory.prefsKey] ??
+        input.portablePreferences[HomeCollectionInventory.legacyPrefsKey];
+    if (collectionRaw != null ||
+        (input.deferredCollectionLocal != null && previous != null)) {
       final inventory = HomeCollectionInventory.recover(collectionRaw);
+      final deferred = input.deferredCollectionLocal != null && previous != null
+          ? HomeCollectionInventory.recover(input.deferredCollectionLocal)
+          : null;
+      if (deferred != null) {
+        for (final e in previous!.watchState.records.entries) {
+          if (e.key.startsWith('homecollection/')) {
+            portableRecords[e.key] = e.value.value;
+          }
+        }
+      }
       for (final entry in inventory.records.entries) {
+        if (deferred != null &&
+            deferred.records.containsKey(entry.key) &&
+            _equalJson(
+              deferred.records[entry.key]?.toJson(),
+              entry.value?.toJson(),
+            )) {
+          continue;
+        }
         portableRecords[WebDavSyncRecordKey.homeCollection(entry.key)] = entry
             .value
             ?.toJson();
       }
-      orderKeys[WebDavSyncRecordKey.homeCollectionOrder] = inventory.order;
+      orderKeys[WebDavSyncRecordKey.homeCollectionOrder] =
+          deferred != null && _equalLists(inventory.order, deferred.order)
+          ? (previous!
+                    .watchState
+                    .orders[WebDavSyncRecordKey.homeCollectionOrder]
+                    ?.keys ??
+                inventory.order)
+          : inventory.order;
     }
 
     final wireRecords = <String, WebDavSyncStampedValue>{};
@@ -665,10 +717,17 @@ abstract final class WebDavSyncHotMerge {
       final wireValue = input.identityMaps.toWire(entry.value);
       input.identityMaps.assertContainsNoLocalIds(wireValue);
       final old = previous?.watchState.records[entry.key];
-      final unchanged = old != null && _equalJson(old.value, wireValue);
+      final unchanged =
+          old != null &&
+          (entry.key.startsWith('homecollection/')
+              ? _equalJson(
+                  HomeCollectionInventory.comparableRecord(old.value),
+                  HomeCollectionInventory.comparableRecord(wireValue),
+                )
+              : _equalJson(old.value, wireValue));
       wireRecords[entry.key] = WebDavSyncStampedValue(
         stamp: unchanged ? old.stamp : stamp(intrinsicTimes[entry.key]),
-        value: wireValue,
+        value: unchanged ? old.value : wireValue,
       );
     }
 
@@ -773,14 +832,22 @@ abstract final class WebDavSyncHotMerge {
     // apply, and deletion history no longer fills collection preferences.
     for (final doc in docs) {
       for (final entry in doc.watchState.records.entries) {
-        if (!entry.key.startsWith('homecollection/') || entry.value.value != null) continue;
-        if (suppressDormantLocal && identical(doc, local) &&
+        if (!entry.key.startsWith('homecollection/') ||
+            entry.value.value != null) {
+          continue;
+        }
+        if (suppressDormantLocal &&
+            identical(doc, local) &&
             entry.value.stamp.normalizedTimeMs <= dormantSinceMs) {
           continue;
         }
         final prior = tombstones[entry.key];
-        if (prior == null || _compareStamp(entry.value.stamp, prior.stamp) > 0) {
-          tombstones[entry.key] = WebDavSyncTombstone(key: entry.key, stamp: entry.value.stamp);
+        if (prior == null ||
+            _compareStamp(entry.value.stamp, prior.stamp) > 0) {
+          tombstones[entry.key] = WebDavSyncTombstone(
+            key: entry.key,
+            stamp: entry.value.stamp,
+          );
         }
       }
     }
@@ -821,7 +888,10 @@ abstract final class WebDavSyncHotMerge {
     final records = <String, WebDavSyncStampedValue>{};
     for (final doc in docs) {
       for (final entry in doc.watchState.records.entries) {
-        if (entry.key.startsWith('homecollection/') && entry.value.value == null) continue;
+        if (entry.key.startsWith('homecollection/') &&
+            entry.value.value == null) {
+          continue;
+        }
         if (suppressDormantLocal &&
             identical(doc, local) &&
             entry.value.stamp.normalizedTimeMs <= dormantSinceMs) {
@@ -1123,9 +1193,7 @@ abstract final class WebDavSyncHotMerge {
         'records': collections,
         'order': order,
       });
-      output[HomeCollectionInventory.prefsKey] = WebDavSyncCodec.canonicalJson(
-        inventory.toJson(),
-      );
+      output[HomeCollectionInventory.prefsKey] = inventory.encode();
     }
 
     if (playback.isNotEmpty ||

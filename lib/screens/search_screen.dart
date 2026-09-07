@@ -7172,6 +7172,7 @@ class _SearchScreenState extends State<SearchScreen>
             SpotlightCard(
               image: m.poster,
               fallbackImage: m.background,
+              coverEmoji: section.folderOf(m)?.coverEmoji,
               focusGlowEnabled: section.collection.focusGlowEnabled,
               previewOnKeyboardFocus: true,
               previewBuilder: section.focusArtOf(m) == null && section.focusVideoOf(m) == null
@@ -7181,9 +7182,9 @@ class _SearchScreenState extends State<SearchScreen>
                       videoUrl: section.focusVideoOf(m),
                     ),
               title: m.name,
-              shape: section.tileAspectRatio == 1
+              shape: section.tileAspectOf(m) == 1
                   ? SpotlightCardShape.square
-                  : section.landscapeTiles
+                  : section.tileAspectOf(m) > 1
                   ? SpotlightCardShape.wide
                   : SpotlightCardShape.poster,
               showCaption: !(section.folderOf(m)?.hideTitle ?? false),
@@ -18988,6 +18989,7 @@ class _SearchScreenState extends State<SearchScreen>
                       );
                     }
                     final item = section.items[col];
+                    final itemAspect = collection?.tileAspectOf(item) ?? cellAspect;
                     // Unique per cell AND per SearchScreen instance (Home,
                     // Discover and Search coexist in the tab stack — a shared
                     // tag across them would trip Hero's duplicate-tag assert).
@@ -18997,7 +18999,7 @@ class _SearchScreenState extends State<SearchScreen>
                       padding: const EdgeInsets.symmetric(horizontal: 11),
                       child: Center(
                         child: SizedBox(
-                          width: posterW,
+                          width: collection == null ? posterW : cellH * itemAspect,
                           height: cellH,
                           child: _BoardCell(
                             item: item,
@@ -19006,7 +19008,7 @@ class _SearchScreenState extends State<SearchScreen>
                             column: col,
                             rowNodes: nodes,
                             hasBoundSource: _isBound(item),
-                            aspectRatio: cellAspect,
+                            aspectRatio: itemAspect,
                             artUrl: collection != null
                                 ? item.poster
                                 : _titleArtUrl(item),

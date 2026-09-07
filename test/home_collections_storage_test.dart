@@ -1,4 +1,6 @@
 import 'dart:convert';
+import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:debrify/models/home_collection.dart';
@@ -21,6 +23,167 @@ void main() {
     SharedPreferences.setMockInitialValues({});
   });
   tearDown(ProfilePreferenceBudget.debugReset);
+  test('stored and freshly imported native rows share one identity', () {
+    final inventory = HomeCollectionInventory.decode(
+      jsonEncode([
+        {
+          'id': 'c',
+          'title': 'C',
+          'folders': [
+            {
+              'id': 'f',
+              'title': 'F',
+              'sources': [
+                {
+                  'provider': 'tmdb',
+                  'tmdbSourceType': 'LIST',
+                  'tmdbId': 42,
+                  'title': 'Original',
+                },
+              ],
+            },
+          ],
+        },
+      ]),
+    );
+    expect(inventory.collections.single.serializationVersion, 2);
+    final source = inventory.collections.single.folders.single.sources.single;
+    final fresh = CollectionCatalogSource.fromJson({
+      'provider': 'tmdb',
+      'tmdbSourceType': 'LIST',
+      'tmdbId': 42,
+      'title': 'New title',
+    })!;
+    expect(source.catalogId, fresh.catalogId);
+    final renamed = CollectionCatalogSource.fromJson({
+      ...source.toJson(),
+      'title': 'Renamed',
+    })!;
+    expect(
+      HomeCollectionRowIds.folderList('c', 'f', renamed),
+      HomeCollectionRowIds.folderList('c', 'f', fresh),
+    );
+  });
+
+  test('legacy stored GIFs migrate, but new explicit false survives', () async {
+    final legacy = {
+      'id': 'old',
+      'title': 'Old',
+      'folders': [
+        {
+          'id': 'f',
+          'title': 'F',
+          'focusGifUrl': 'https://example.test/f.gif',
+          'focusGifEnabled': false,
+        },
+      ],
+    };
+    final oldText = jsonEncode([legacy]);
+    SharedPreferences.setMockInitialValues({
+      HomeCollectionInventory.legacyPrefsKey: oldText,
+    });
+    final store = HomeCollectionsStore();
+    expect(
+      (await store.getCollections()).single.folders.single.focusGifEnabled,
+      true,
+    );
+    await store.setEnabled('old', false);
+    expect(
+      (await store.getCollections()).single.folders.single.focusGifEnabled,
+      true,
+    );
+    // Downgrades retain the original readable snapshot, separate from new data.
+    expect(
+      (await SharedPreferences.getInstance()).getString(
+        HomeCollectionInventory.legacyPrefsKey,
+      ),
+      oldText,
+    );
+    await store.importJson(
+      jsonEncode([
+        {...legacy, 'id': 'new'},
+      ]),
+    );
+    expect(
+      (await store.getCollections()).last.folders.single.focusGifEnabled,
+      false,
+    );
+  });
+
+  test('real native pack fits tvOS preferences and survives backup', () async {
+    ProfilePreferenceBudget.debugEnforcedOverride = true;
+    final json = utf8.decode(
+      gzip.decode(
+        File(
+          'test/fixtures/collections/kaptain-native-0.61.json.gz',
+        ).readAsBytesSync(),
+      ),
+    );
+    final store = HomeCollectionsStore();
+    await store.importJson(json);
+    final raw = (await SharedPreferences.getInstance()).getString(
+      HomeCollectionsStore.prefsKey,
+    )!;
+    expect(utf8.encode(raw).length, lessThan(128 * 1024));
+    expect(jsonDecode(raw)['version'], 3);
+    final collections = await store.getCollections();
+    expect(collections.fold<int>(0, (n, c) => n + c.sourceCount), 1755);
+    final backup = await store.exportJson();
+    await store.clear();
+    await store.applyBackup(backup);
+    expect(
+      (await store.getCollections()).fold<int>(0, (n, c) => n + c.sourceCount),
+      1755,
+    );
+  });
+  test('compressed inventory rejects invalid gzip and excessive expansion', () {
+    String wrap(List<int> bytes) => jsonEncode({
+      'version': 3,
+      'encoding': 'gzip-base64',
+      'data': base64Encode(bytes),
+    });
+    expect(
+      () => HomeCollectionInventory.decode(wrap([1, 2, 3])),
+      throwsA(anything),
+    );
+    final oversized = gzip.encode(
+      Uint8List(HomeCollectionInventory.maxEnvelopeBytes + 1),
+    );
+    expect(
+      () => HomeCollectionInventory.decode(wrap(oversized)),
+      throwsA(
+        isA<FormatException>().having(
+          (e) => e.message,
+          'message',
+          contains('32 MiB'),
+        ),
+      ),
+    );
+    final corrupt = gzip.encode(
+      utf8.encode(jsonEncode(HomeCollectionInventory().toJson())),
+    );
+    corrupt[corrupt.length - 8] ^= 0xff;
+    expect(
+      () => HomeCollectionInventory.decode(wrap(corrupt)),
+      throwsA(anything),
+    );
+  });
+
+  test(
+    'compressed corruption remains recoverable but never silently overwritten',
+    () async {
+      SharedPreferences.setMockInitialValues({
+        HomeCollectionsStore.prefsKey: jsonEncode({
+          'version': 3,
+          'encoding': 'gzip-base64',
+          'data': 'broken',
+        }),
+      });
+      final store = HomeCollectionsStore();
+      expect((await store.getInventory()).hadCorruption, true);
+      await expectLater(store.importCollections([c]), throwsFormatException);
+    },
+  );
   test(
     'visual fields survive storage, visibility, reimport and backup restore',
     () async {
@@ -217,7 +380,10 @@ void main() {
   test(
     'visibility changes remain possible on oversized synced definitions',
     () async {
-      final large = HomeCollection(id: 'large', title: 'x' * (140 * 1024));
+      final large = HomeCollection(
+        id: 'large',
+        title: 'x' * (HomeCollectionInventory.maxStoredBytes + 1024),
+      );
       SharedPreferences.setMockInitialValues({
         HomeCollectionsStore.prefsKey: jsonEncode([large.toJson()]),
       });

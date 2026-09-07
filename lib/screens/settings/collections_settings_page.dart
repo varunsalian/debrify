@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../models/home_collection.dart';
 import '../../models/stremio_addon.dart';
@@ -12,6 +13,7 @@ import '../../services/main_page_bridge.dart';
 import '../../services/stremio_service.dart';
 import '../../theme/app_theme_scope.dart';
 import '../../widgets/text_prompt_dialog.dart';
+import '../collections/collection_editor_screen.dart';
 import 'widgets/settings_widgets.dart';
 
 /// Settings › Home Screen › Collections: import Nuvio / Xperience-style
@@ -37,6 +39,7 @@ class _CollectionsSettingsPageState extends State<CollectionsSettingsPage> {
   bool _busy = false;
   bool _refreshPending = false;
   bool _damagedInventory = false;
+  bool _syncDeferred = false;
   int _loadToken = 0;
   String? _loadError;
   List<HomeCollection> _collections = const [];
@@ -75,7 +78,7 @@ class _CollectionsSettingsPageState extends State<CollectionsSettingsPage> {
       final layout = await _store.getFolderLayout();
       List<StremioAddon> addons = const [];
       try {
-        addons = await StremioService.instance.getCatalogAddons();
+        addons = await StremioService.instance.getAddons();
       } catch (_) {
         // Addons only feed the "missing addon" hints; the page works without.
       }
@@ -84,6 +87,7 @@ class _CollectionsSettingsPageState extends State<CollectionsSettingsPage> {
       setState(() {
         _collections = collections;
         _damagedInventory = inventory.hadCorruption;
+        _syncDeferred = inventory.syncDeferred;
         _addons = addons;
         _layout = layout;
         _loading = false;
@@ -108,6 +112,78 @@ class _CollectionsSettingsPageState extends State<CollectionsSettingsPage> {
   }
 
   // ── Import paths ───────────────────────────────────────────────────────
+
+  Future<void> _editCollection([HomeCollection? collection]) async {
+    final session = HomeCollectionsStore.captureSession();
+    final edited = await Navigator.of(context).push<HomeCollection>(
+      MaterialPageRoute(
+        builder: (_) =>
+            CollectionEditorScreen(collection: collection, addons: _addons),
+      ),
+    );
+    if (!mounted || edited == null) return;
+    HomeCollectionsStore.checkSession(session);
+    await _store.importCollections([edited], installedAddons: _addons);
+    MainPageBridge.notifyHomeSettingsChanged();
+    await _load();
+  }
+
+  Future<void> _exportCollection(HomeCollection collection) async {
+    final session = HomeCollectionsStore.captureSession();
+    final text = const JsonEncoder.withIndent(
+      '  ',
+    ).convert([collection.toJson()]);
+    final action = await showDialog<String>(
+      context: context,
+      builder: (context) => Theme(
+        data: settingsPageTheme(context),
+        child: AlertDialog(
+          title: const Text('Export collection'),
+          content: Text(
+            'Share "${collection.title}" as a Nuvio-compatible JSON file.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(context, 'copy'),
+              child: const Text('Copy JSON'),
+            ),
+            TextButton(
+              autofocus: true,
+              onPressed: () => Navigator.pop(context, 'file'),
+              child: const Text('Save file'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (!mounted || action == null) return;
+    HomeCollectionsStore.checkSession(session);
+    if (action == 'copy') {
+      await Clipboard.setData(ClipboardData(text: text));
+    } else {
+      final path = await FilePicker.platform.saveFile(
+        dialogTitle: 'Export collection',
+        fileName:
+            'collection-${collection.id.replaceAll(RegExp(r"[^a-zA-Z0-9_-]"), "_")}.json',
+        type: FileType.custom,
+        allowedExtensions: ['json'],
+        bytes: Uint8List.fromList(utf8.encode(text)),
+      );
+      if (path == null) return;
+    }
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          action == 'copy' ? 'Collection JSON copied.' : 'Collection exported.',
+        ),
+      ),
+    );
+  }
 
   Future<void> _importFromFile() => _guarded(() async {
     final session = HomeCollectionsStore.captureSession();
@@ -215,7 +291,7 @@ class _CollectionsSettingsPageState extends State<CollectionsSettingsPage> {
 
   Future<void> _openCollectionActions(HomeCollection c) async {
     final session = HomeCollectionsStore.captureSession();
-    final unresolved = HomeCollectionsStore.unresolvedAddonIds([c], _addons);
+    final unresolved = _issuesFor(c);
     final action = await showDialog<String>(
       context: context,
       builder: (context) => Theme(
@@ -231,7 +307,7 @@ class _CollectionsSettingsPageState extends State<CollectionsSettingsPage> {
               if (unresolved.isNotEmpty) ...[
                 const SizedBox(height: 12),
                 Text(
-                  'Needs addons that aren\'t installed:\n'
+                  'Sources that need attention:\n'
                   '${unresolved.join('\n')}',
                   style: TextStyle(
                     fontSize: 12,
@@ -250,6 +326,14 @@ class _CollectionsSettingsPageState extends State<CollectionsSettingsPage> {
             ],
           ),
           actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop('edit'),
+              child: const Text('Edit'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop('export'),
+              child: const Text('Export JSON'),
+            ),
             TextButton(
               onPressed: () => Navigator.of(context).pop('delete'),
               child: const Text('Delete'),
@@ -270,6 +354,10 @@ class _CollectionsSettingsPageState extends State<CollectionsSettingsPage> {
     if (!mounted || action == null) return;
     HomeCollectionsStore.checkSession(session);
     switch (action) {
+      case 'edit':
+        await _editCollection(c);
+      case 'export':
+        await _exportCollection(c);
       case 'toggle':
         await _store.setEnabled(c.id, !c.enabled);
         MainPageBridge.notifyHomeSettingsChanged();
@@ -323,12 +411,19 @@ class _CollectionsSettingsPageState extends State<CollectionsSettingsPage> {
 
   // ── Dialog helpers ─────────────────────────────────────────────────────
 
+  Set<String> _issuesFor(HomeCollection c) => {
+    for (final folder in c.folders)
+      for (final source in folder.sources)
+        if (HomeCollectionsStore.sourceIssue(source, _addons) case final issue?)
+          issue,
+  };
+
   String _describe(HomeCollection c) {
     final folders = c.folders.length;
     final sources = c.sourceCount;
     final parts = [
       '$folders folder${folders == 1 ? '' : 's'}',
-      '$sources catalog${sources == 1 ? '' : 's'}',
+      '$sources source${sources == 1 ? '' : 's'}',
       if (c.pinToTop) 'pinned to top',
       if (!c.enabled) 'hidden',
     ];
@@ -336,11 +431,10 @@ class _CollectionsSettingsPageState extends State<CollectionsSettingsPage> {
   }
 
   String _subtitle(HomeCollection c) {
-    final unresolved = HomeCollectionsStore.unresolvedAddonIds([c], _addons);
+    final unresolved = _issuesFor(c);
     final base = _describe(c);
     if (unresolved.isEmpty) return base;
-    return '$base · ${unresolved.length} addon'
-        '${unresolved.length == 1 ? '' : 's'} missing';
+    return '$base · ${unresolved.length} source(s) need attention';
   }
 
   Future<String?> _prompt({
@@ -404,11 +498,11 @@ class _CollectionsSettingsPageState extends State<CollectionsSettingsPage> {
       if (r.replaced.isNotEmpty)
         'Updated: ${r.replaced.map((c) => c.title).join(', ')}',
       '${r.folderCount} folder${r.folderCount == 1 ? '' : 's'} in total.',
-      if (r.unresolvedAddonIds.isNotEmpty)
-        '\nSome folders need addons that aren\'t installed yet:\n'
-            '${r.unresolvedAddonIds.join('\n')}\n\n'
-            'They show on Home but browse empty until the addon (or one '
-            'serving the same catalogs) is installed.',
+      for (final issue in {
+        ...r.added.expand(_issuesFor),
+        ...r.replaced.expand(_issuesFor),
+      })
+        '\n$issue',
     ];
     return showDialog<void>(
       context: context,
@@ -484,6 +578,15 @@ class _CollectionsSettingsPageState extends State<CollectionsSettingsPage> {
                       'folders that bundle addon catalogs into Home rows',
                 ),
                 const SizedBox(height: 24),
+                if (_syncDeferred)
+                  const SettingsSection(
+                    title: 'Collection sync paused',
+                    blurb:
+                        'The shared collections exceed this device’s storage capacity. '
+                        'Resume and watched state still sync. Remove collections on another device '
+                        'to reduce the shared inventory; your current collections are kept here.',
+                    children: [],
+                  ),
                 if (_damagedInventory)
                   SettingsSection(
                     title: 'Damaged collection data',
@@ -503,10 +606,16 @@ class _CollectionsSettingsPageState extends State<CollectionsSettingsPage> {
                 SettingsSection(
                   title: 'Import',
                   blurb:
-                      'A collection file lists folders (Netflix, Action, …) '
-                      'and the addon catalogs behind each. Folders browse '
-                      'through the catalog addons you have installed.',
+                      'Create folders or import a Nuvio collection. Sources '
+                      'can use installed addon catalogs, TMDB, or public Trakt lists.',
                   children: [
+                    SettingsTile(
+                      icon: Icons.create_new_folder_outlined,
+                      title: 'Create collection',
+                      subtitle: 'Choose folders, artwork, and sources',
+                      enabled: !_busy,
+                      onTap: () => _guarded(() => _editCollection()),
+                    ),
                     SettingsTile(
                       icon: Icons.upload_file_rounded,
                       title: 'Import from file',

@@ -1,4 +1,8 @@
 import 'dart:convert';
+import 'dart:math';
+import 'package:debrify/models/home_collection.dart';
+import 'package:debrify/services/profiles/profile_preference_budget.dart';
+import 'package:debrify/models/home_collection_inventory.dart';
 import 'dart:io';
 import 'package:debrify/models/indexer_manager_config.dart';
 import 'package:debrify/models/iptv_playlist.dart';
@@ -203,6 +207,248 @@ void main() {
     await registry.close();
     await temporaryDirectory.delete(recursive: true);
   });
+
+  test(
+    'legacy backup salvages valid collections and restores other preferences',
+    () async {
+      final authorization = await ProfileAuthorizationContext.capture(registry);
+      final package = PortableProfilePackage(
+        mode: 'singleProfile',
+        createdAt: DateTime.utc(2026),
+        profiles: [
+          {
+            'backupId': 'profile-0',
+            'name': 'Backup',
+            'preferencesSection': 'prefs',
+          },
+        ],
+        resources: [],
+        sections: {
+          'prefs': await PortableProfilePackage.buildSection({
+            'app_theme': 'spotlight',
+            HomeCollectionInventory.legacyPrefsKey: jsonEncode({
+              'version': 2,
+              'records': {
+                'valid': {'id': 'valid', 'title': 'Kept'},
+                'bad': 42,
+              },
+              'order': ['valid', 'bad'],
+            }),
+          }),
+        },
+      );
+      await ProfileRestoreCoordinator(
+        registry: registry,
+        cipher: cipher,
+      ).restore(
+        package: package,
+        destinationProfileId: profileId,
+        authorization: authorization,
+      );
+      final prefs = await ProfilePreferences.instance();
+      expect(prefs.getString('app_theme'), 'spotlight');
+      expect(
+        HomeCollectionInventory.decode(
+          prefs.getString(HomeCollectionInventory.prefsKey),
+        ).hadCorruption,
+        true,
+      );
+      expect(
+        HomeCollectionInventory.decode(
+          prefs.getString(HomeCollectionInventory.prefsKey),
+        ).collections.map((c) => c.id),
+        ['valid'],
+      );
+    },
+  );
+
+  test(
+    'oversized backup collections stay out of legacy preferences and restore in full',
+    () async {
+      final random = Random(42);
+      final original = HomeCollectionInventory()
+        ..put(
+          HomeCollection(
+            id: 'large',
+            title: String.fromCharCodes(
+              List.generate(7 * 1024 * 1024, (_) => 33 + random.nextInt(90)),
+            ),
+          ),
+        );
+      final prefs = await ProfilePreferences.instance();
+      await prefs.setString(
+        HomeCollectionInventory.prefsKey,
+        original.encode(),
+      );
+      final authorization = await ProfileAuthorizationContext.capture(registry);
+      final service = ProfilePackageService(
+        registry: registry,
+        resources: ConnectionResourceService(
+          registry: registry,
+          cipher: cipher,
+        ),
+      );
+      final package = await service.exportProfile(
+        context: authorization,
+        scope: ProfileRuntime.capture(),
+        includeSecrets: true,
+        sanitized: false,
+      );
+      final section = package.sections['profile-0-preferences'] as Map;
+      final legacyValues = section['values'] as Map;
+      expect(legacyValues.containsKey(HomeCollectionInventory.prefsKey), false);
+      expect(
+        legacyValues.containsKey(HomeCollectionInventory.legacyPrefsKey),
+        false,
+      );
+      expect(section['collectionInventory'], isA<List>());
+      for (final part in section['collectionInventory'] as List) {
+        expect(
+          utf8.encode(part as String).length,
+          lessThan(PortableProfilePackage.maxStringBytes),
+        );
+      }
+      expect(package.omissions['collectionsRequireNewerBuild'], true);
+      final decoded = await PortableProfilePackage.decodeAuthenticatedMap(
+        await PortableProfilePackage.withIntegrity(package),
+      );
+      await prefs.remove(HomeCollectionInventory.prefsKey);
+      await ProfileRestoreCoordinator(
+        registry: registry,
+        cipher: cipher,
+      ).restore(
+        package: decoded,
+        destinationProfileId: profileId,
+        authorization: authorization,
+      );
+      final restored = await ProfilePreferences.instance();
+      expect(
+        HomeCollectionInventory.decode(
+          restored.getString(HomeCollectionInventory.prefsKey),
+        ).collections.single.title,
+        original.collections.single.title,
+      );
+
+      // Sanitized exports use a strict allowlist: neither collection key nor the
+      // full inventory extension can escape into a shareable package.
+      final shareable = await service.exportProfile(
+        context: await ProfileAuthorizationContext.capture(registry),
+        scope: ProfileRuntime.capture(),
+        includeSecrets: false,
+        sanitized: true,
+      );
+      final shareSection = shareable.sections['profile-0-preferences'] as Map;
+      expect(shareSection.containsKey('collectionInventory'), false);
+      expect(
+        (shareSection['values'] as Map).keys.any(
+          (k) => '$k'.contains('collections'),
+        ),
+        false,
+      );
+      await PortableProfilePackage.decodeAuthenticatedMap(
+        await PortableProfilePackage.withIntegrity(shareable),
+      );
+      final small =
+          (HomeCollectionInventory()
+                ..put(const HomeCollection(id: 'kept', title: 'Kept')))
+              .encode();
+      await restored.setString(HomeCollectionInventory.prefsKey, small);
+      final before = ProfileRuntime.capture();
+      final freshAuthorization = await ProfileAuthorizationContext.capture(
+        registry,
+      );
+      ProfilePreferenceBudget.debugEnforcedOverride = true;
+      try {
+        await expectLater(
+          ProfileRestoreCoordinator(registry: registry, cipher: cipher).restore(
+            package: decoded,
+            destinationProfileId: profileId,
+            authorization: freshAuthorization,
+          ),
+          throwsStateError,
+        );
+        expect(ProfileRuntime.capture(), before);
+        expect(
+          (await ProfilePreferences.instance()).getString(
+            HomeCollectionInventory.prefsKey,
+          ),
+          small,
+        );
+      } finally {
+        ProfilePreferenceBudget.debugReset();
+      }
+    },
+  );
+
+  test(
+    'collection backup is legacy-readable and restores compact rich data',
+    () async {
+      final inventory = HomeCollectionInventory()
+        ..put(
+          HomeCollection.fromJson({
+            'id': 'native',
+            'title': 'Native',
+            'viewMode': 'TABBED_GRID',
+            'folders': [
+              {
+                'id': 'f',
+                'title': 'Folder',
+                'heroVideoUrl': 'https://example.test/hero.mp4',
+                'sources': [
+                  {'provider': 'tmdb', 'tmdbSourceType': 'LIST', 'tmdbId': 42},
+                ],
+              },
+            ],
+          })!,
+        );
+      final prefs = await ProfilePreferences.instance();
+      await prefs.setString(
+        HomeCollectionInventory.prefsKey,
+        inventory.encode(),
+      );
+      final authorization = await ProfileAuthorizationContext.capture(registry);
+      final service = ConnectionResourceService(
+        registry: registry,
+        cipher: cipher,
+      );
+      final package =
+          await ProfilePackageService(
+            registry: registry,
+            resources: service,
+          ).exportProfile(
+            context: authorization,
+            scope: ProfileRuntime.capture(),
+            includeSecrets: true,
+            sanitized: false,
+          );
+      final values =
+          (package.sections['profile-0-preferences'] as Map)['values'] as Map;
+      expect(values.containsKey(HomeCollectionInventory.prefsKey), false);
+      final legacy =
+          jsonDecode(values[HomeCollectionInventory.legacyPrefsKey] as String)
+              as Map;
+      expect(legacy['version'], 2);
+      expect((legacy['records'] as Map).containsKey('native'), true);
+      await ProfileRestoreCoordinator(
+        registry: registry,
+        cipher: cipher,
+      ).restore(
+        package: package,
+        destinationProfileId: profileId,
+        authorization: authorization,
+      );
+      final restoredPrefs = await ProfilePreferences.instance();
+      final restored = HomeCollectionInventory.decode(
+        restoredPrefs.getString(HomeCollectionInventory.prefsKey),
+      );
+      expect(restored.collections.single.sourceCount, 1);
+      expect(restored.collections.single.viewMode, 'TABBED_GRID');
+      expect(
+        restoredPrefs.getString(HomeCollectionInventory.legacyPrefsKey),
+        isNull,
+      );
+    },
+  );
 
   test(
     'restored backup then circle adoption leaves every collection usable',

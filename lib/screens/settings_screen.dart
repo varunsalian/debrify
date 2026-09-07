@@ -1,3 +1,4 @@
+import '../widgets/collections/tmdb_attribution.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io' show File, Platform, exit;
@@ -8301,6 +8302,7 @@ class _SettingsLayout extends StatelessWidget {
                       SettingsRows.github,
                       onTap: () => launchSettingsUrl(SettingsRows.github.url!),
                     ),
+                    const TmdbAttribution(),
                     SettingsInfoTile.spec(
                       SettingsRows.version,
                       value: appVersion,

@@ -130,7 +130,9 @@ class _StremioCardState extends State<_StremioCard>
   Widget build(BuildContext context) {
     final app = AppThemeScope.of(context);
     final item = widget.item;
-    final wide = widget.aspectRatio > 1;
+    final folder = item is CollectionFolderMeta ? item.folder : null;
+    final aspect = folder?.tileShape.aspectRatio ?? widget.aspectRatio;
+    final wide = aspect > 1;
     final poster = widget.artUrl ?? item.poster;
     final isMovie = item.type.toLowerCase() == 'movie';
     final supportsWatched = isMovie || item.type.toLowerCase() == 'series';
@@ -298,7 +300,7 @@ class _StremioCardState extends State<_StremioCard>
       if (_holding) _holdLayer(),
     ];
 
-    final posterCard = CollectionFocusGlow(
+    final artCard = CollectionFocusGlow(
       active: _active,
       enabled: widget.focusGlowEnabled,
       imageUrl: poster,
@@ -306,12 +308,17 @@ class _StremioCardState extends State<_StremioCard>
         active: _active,
         isTelevision: widget.isTelevision,
         ringColor: widget.ringColor,
-        aspectRatio: widget.aspectRatio,
+        aspectRatio: aspect,
         restVeil: widget.restVeil,
         children: layers,
       ),
     );
 
+    final posterCard = folder == null
+        ? artCard
+        : Center(
+            child: AspectRatio(aspectRatio: aspect, child: artCard),
+          );
     return Focus(
       focusNode: widget.focusNode,
       onFocusChange: (f) {
@@ -453,6 +460,8 @@ class _StremioCardState extends State<_StremioCard>
 
   Widget _placeholder(String title) {
     final app = AppThemeScope.of(context);
+    final item = widget.item;
+    final emoji = item is CollectionFolderMeta ? item.folder.coverEmoji : null;
     return Container(
       // Subtle vertical gradient instead of a flat fill: while art loads the
       // tile reads as a designed surface, not a dead rectangle. Static —
@@ -466,7 +475,14 @@ class _StremioCardState extends State<_StremioCard>
         ),
       ),
       alignment: Alignment.center,
-      child: widget.showTitleOverlay
+      child: emoji != null
+          ? Padding(
+              padding: const EdgeInsets.all(16),
+              child: FittedBox(
+                child: Text(emoji, style: const TextStyle(fontSize: 64)),
+              ),
+            )
+          : widget.showTitleOverlay
           ? Padding(
               padding: const EdgeInsets.all(8),
               child: Text(

@@ -7,6 +7,8 @@ import 'webdav_sync_codec.dart';
 abstract final class WebDavSyncLimits {
   static const int maxPeers = 64;
   static const int maxManifestBytes = 256 * 1024;
+  // Preserve the original wire cap for mixed-version circles. Large collection
+  // definitions are published in separately versioned, bounded sections.
   static const int maxHotDocumentBytes = 1024 * 1024;
   static const int maxTombstoneDocumentBytes = 512 * 1024;
   static const int maxGraphDocumentBytes = 256 * 1024 * 1024;

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -24,6 +25,7 @@ import 'package:debrify/services/main_page_bridge.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_ui_refresh.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_hot_merge.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_hot_models.dart';
+import 'package:debrify/services/webdav_sync/webdav_sync_collection_sections.dart';
 import 'package:debrify/widgets/see_all/stremio_dropdown.dart';
 import 'package:debrify/widgets/see_all/see_all_poster_grid.dart';
 
@@ -69,6 +71,257 @@ void main() {
     ProfileRuntime.initializeLegacy();
     ProfilePreferenceBudget.debugReset();
   });
+
+  test(
+    'five independent imports merge beyond 32 MiB and can be deleted',
+    () async {
+      final docs = <WebDavSyncHotDocument>[];
+      for (var i = 0; i < 5; i++) {
+        final inventory = HomeCollectionInventory();
+        inventory.put(
+          HomeCollection(id: 'c$i', title: '$i' * (7 * 1024 * 1024)),
+        );
+        docs.add(
+          hot('device-$i', {
+            HomeCollectionsStore.prefsKey: inventory.encode(),
+            'theme': 'dark',
+          }, 1000 + i),
+        );
+      }
+      final merged = WebDavSyncHotMerge.merge(
+        local: docs.first,
+        peers: docs.skip(1).toList(),
+        tombstoneDocuments: [],
+        nowMs: 2000,
+      ).document;
+      final parts = WebDavSyncCollectionSections.split(merged);
+      expect(parts.length, 6);
+      final received = WebDavSyncHotMerge.merge(
+        local: parts.values.first,
+        peers: parts.values
+            .skip(1)
+            .map(
+              (p) => WebDavSyncHotDocument.fromJson(
+                jsonDecode(jsonEncode(p.toJson())),
+              ),
+            )
+            .toList(),
+        tombstoneDocuments: [],
+        nowMs: 2000,
+      ).document;
+      final values = WebDavSyncHotMerge.materializePreferences(
+        document: received,
+        identityMaps: WebDavSyncIdentityMaps(
+          circleToLocalProfiles: {'profile-circle': 'local-profile'},
+          circleToLocalResources: {},
+        ),
+      );
+      expect(values['theme'], 'dark');
+      expect(
+        jsonDecode(values[HomeCollectionsStore.prefsKey] as String)['version'],
+        4,
+      );
+      final backup = jsonEncode(
+        HomeCollectionInventory.decode(
+          values[HomeCollectionsStore.prefsKey],
+        ).toJson(),
+      );
+      expect(HomeCollectionInventory.decode(backup).collections.length, 5);
+      SharedPreferences.setMockInitialValues(values);
+      final store = HomeCollectionsStore();
+      expect((await store.getCollections()).length, 5);
+      await store.setEnabled('c0', false);
+      await store.remove('c4');
+      expect((await store.getCollections()).length, 4);
+      expect((await store.getInventory()).records['c0']!.enabled, false);
+    },
+  );
+
+  test('newer migrated visibility toggle wins over an older v2 re-import', () {
+    final old = HomeCollection.fromJson({
+      'id': 'same',
+      'title': 'Collection',
+      'debrifyCollectionVersion': 1,
+      'enabled': false,
+    })!;
+    final modern = HomeCollection.fromJson({
+      'id': 'same',
+      'title': 'Collection',
+      'debrifyCollectionVersion': 2,
+      'enabled': true,
+    })!;
+    final local = hot('old-device', {
+      HomeCollectionsStore.prefsKey: (HomeCollectionInventory()..put(old))
+          .encode(),
+    }, 2000);
+    final peer = hot('new-device', {
+      HomeCollectionsStore.prefsKey: (HomeCollectionInventory()..put(modern))
+          .encode(),
+    }, 1000);
+    for (final docs in [
+      [local, peer],
+      [peer, local],
+    ]) {
+      final merged = WebDavSyncHotMerge.merge(
+        local: docs.first,
+        peers: [docs.last],
+        tombstoneDocuments: [],
+        nowMs: 3000,
+      ).document;
+      expect(
+        (merged
+                .watchState
+                .records[WebDavSyncRecordKey.homeCollection('same')]!
+                .value
+            as Map)['enabled'],
+        false,
+      );
+    }
+  });
+
+  test(
+    'two valid 7 MiB imports merge, materialize and remain editable',
+    () async {
+      final left = HomeCollection(id: 'left', title: 'a' * (7 * 1024 * 1024));
+      final right = HomeCollection(id: 'right', title: 'b' * (7 * 1024 * 1024));
+      final documents = <WebDavSyncHotDocument>[];
+      for (final collection in [left, right]) {
+        SharedPreferences.setMockInitialValues({});
+        final store = HomeCollectionsStore();
+        await store.importCollections([collection]);
+        final inventory = await store.getInventory();
+        expect(
+          inventory.definitionBytes,
+          lessThan(HomeCollectionInventory.maxStoredBytes),
+        );
+        documents.add(
+          hot(collection.id, {
+            HomeCollectionsStore.prefsKey: inventory.encode(),
+          }, 1000),
+        );
+      }
+      final merged = WebDavSyncHotMerge.merge(
+        local: documents.first,
+        peers: [documents.last],
+        tombstoneDocuments: [],
+        nowMs: 2000,
+      ).document;
+      final serialized = jsonEncode(merged.toJson());
+      final parts = WebDavSyncCollectionSections.split(merged);
+      expect(parts.length, 3);
+      expect(
+        utf8.encode(jsonEncode(parts['hot/profile-circle']!.toJson())).length,
+        lessThan(WebDavSyncLimits.maxHotDocumentBytes),
+      );
+      for (final part in parts.values) {
+        expect(
+          utf8.encode(jsonEncode(part.toJson())).length,
+          lessThan(WebDavSyncCollectionSections.maxBytes),
+        );
+      }
+      final received = WebDavSyncHotDocument.fromJson(jsonDecode(serialized));
+      final materialized = WebDavSyncHotMerge.materializePreferences(
+        document: received,
+        identityMaps: WebDavSyncIdentityMaps(
+          circleToLocalProfiles: {'profile-circle': 'local-profile'},
+          circleToLocalResources: {},
+        ),
+      );
+      final encoded = materialized[HomeCollectionsStore.prefsKey] as String;
+      expect(jsonDecode(encoded)['version'], 3);
+      final restored = HomeCollectionInventory.decode(encoded);
+      expect(restored.collections.map((c) => c.id).toSet(), {'left', 'right'});
+      expect(restored.records['left']!.title == left.title, true);
+      expect(restored.records['right']!.title == right.title, true);
+      expect(restored.definitionBytes, greaterThan(12 * 1024 * 1024));
+      expect(
+        HomeCollectionInventory.maxEnvelopeBytes,
+        greaterThanOrEqualTo(WebDavSyncLimits.maxHotDocumentBytes),
+      );
+      SharedPreferences.setMockInitialValues({
+        HomeCollectionsStore.prefsKey: encoded,
+      });
+      final store = HomeCollectionsStore();
+      expect((await store.getInventory()).hadCorruption, false);
+      // Sync growth is allowed, but local growth above 8 MiB remains refused.
+      await expectLater(
+        store.importCollections([
+          const HomeCollection(id: 'extra', title: 'Extra'),
+        ]),
+        throwsFormatException,
+      );
+      expect(
+        (await SharedPreferences.getInstance()).getString(
+              HomeCollectionsStore.prefsKey,
+            ) ==
+            encoded,
+        true,
+      );
+      await store.setEnabled('left', false);
+      expect((await store.getInventory()).records['left']!.enabled, false);
+      await store.remove('right');
+      await store.importCollections([
+        const HomeCollection(id: 'extra', title: 'Extra'),
+      ]);
+      expect((await store.getCollections()).map((c) => c.id).toSet(), {
+        'left',
+        'extra',
+      });
+    },
+  );
+
+  test(
+    'real native pack survives sync encoding, merge, and compressed materialization',
+    () async {
+      final pack = HomeCollectionParser.parse(
+        utf8.decode(
+          gzip.decode(
+            File(
+              'test/fixtures/collections/kaptain-native-0.61.json.gz',
+            ).readAsBytesSync(),
+          ),
+        ),
+      );
+      final inventory = HomeCollectionInventory();
+      for (final c in pack) {
+        inventory.put(c);
+      }
+      final remote = hot('remote', {
+        HomeCollectionsStore.prefsKey: inventory.encode(),
+      }, 1000);
+      final encoded = jsonEncode(remote.toJson());
+      expect(
+        utf8.encode(encoded).length,
+        lessThan(WebDavSyncLimits.maxHotDocumentBytes),
+      );
+      final decoded = WebDavSyncHotDocument.fromJson(jsonDecode(encoded));
+      final output = WebDavSyncHotMerge.materializePreferences(
+        document: decoded,
+        identityMaps: WebDavSyncIdentityMaps(
+          circleToLocalProfiles: {'profile-circle': 'local-profile'},
+          circleToLocalResources: {},
+        ),
+      );
+      final local = output[HomeCollectionsStore.prefsKey] as String;
+      expect(jsonDecode(local)['version'], 3);
+      expect(utf8.encode(local).length, lessThan(128 * 1024));
+      final restored = HomeCollectionInventory.decode(local);
+      expect(
+        restored.collections.map((c) => c.toJson()),
+        pack.map((c) => c.toJson()),
+      );
+      final merged = WebDavSyncHotMerge.merge(
+        local: hot('local', {}, 2000),
+        peers: [decoded],
+        tombstoneDocuments: [],
+        nowMs: 2000,
+      );
+      expect(
+        inventoryOf(merged.document).collections.map((c) => c.toJson()),
+        pack.map((c) => c.toJson()),
+      );
+    },
+  );
 
   test(
     'URL import must not write to a different profile after download',
@@ -123,14 +376,57 @@ void main() {
     });
   });
 
+  test('missing catalog must not silently switch providers', () {
+    final wrong = addon(catalog: 'other');
+    final right = addon(id: 'fork');
+    expect(HomeCollectionsStore.resolveAddon(source, [wrong, right]), isNull);
+  });
+
   test(
-    'missing catalog must not silently switch providers',
+    'addon resolution honors local aliases, type aliases and disabled state',
     () {
-      final wrong = addon(catalog: 'other');
-      final right = addon(id: 'fork');
+      final installed = StremioAddon(
+        id: 'local-id',
+        manifestId: 'manifest-id',
+        name: 'Configured addon',
+        manifestUrl: 'https://example.invalid/manifest.json',
+        baseUrl: 'https://example.invalid',
+        resources: ['catalog'],
+        catalogs: const [
+          StremioAddonCatalog(id: 'shows', type: 'series', name: 'Shows'),
+        ],
+      );
+      CollectionCatalogSource ref(String id, String type) =>
+          CollectionCatalogSource(addonId: id, type: type, catalogId: 'shows');
+      for (final id in ['local-id', 'manifest-id']) {
+        for (final type in ['TV', 'show', 'series', 'All']) {
+          expect(
+            HomeCollectionsStore.resolveAddon(ref(id, type), [installed]),
+            same(installed),
+          );
+        }
+      }
+      final disabled = StremioAddon.fromJson({
+        ...installed.toJson(),
+        'enabled': false,
+      });
       expect(
-        HomeCollectionsStore.resolveAddon(source, [wrong, right]),
+        HomeCollectionsStore.resolveAddon(ref('manifest-id', 'TV'), [disabled]),
         isNull,
+      );
+      expect(
+        HomeCollectionsStore.sourceIssue(ref('manifest-id', 'TV'), [disabled]),
+        startsWith('Enable addon'),
+      );
+      expect(
+        HomeCollectionsStore.sourceIssue(ref('missing', 'TV'), [installed]),
+        startsWith('Install addon'),
+      );
+      expect(
+        HomeCollectionsStore.sourceIssue(ref('manifest-id', 'movie'), [
+          installed,
+        ]),
+        contains('configuration has no'),
       );
     },
   );
@@ -511,49 +807,71 @@ void main() {
     });
   });
 
-  test('HTTP 200 with wrongly typed metas remains retryable and is not cached', () async {
-    final a = addon(id: 'malformed-response');
-    final pager = CollectionCatalogPager(
-      addon: a,
-      catalog: a.catalogs.single,
-      fetch: (a, c, {skip = 0, genre, onRawCount}) => StremioService.instance
-          .fetchCatalog(a, c, skip: skip, genre: genre, onRawCount: onRawCount),
-    );
-    await http.runWithClient(
-      () => pager.nextPage(),
-      () => MockClient((_) async => http.Response('{"metas":{}}', 200)),
-    );
-    expect(pager.exhausted, false);
-    expect(pager.error, isNotNull);
-    await http.runWithClient(
-      () => pager.nextPage(),
-      () => MockClient((_) async => http.Response('{"metas":[]}', 200)),
-    );
-    expect(pager.exhausted, true);
-    expect(pager.error, isNull);
-  });
-
-  for (final body in ['{}', '{"metas":null}', '{"metas":[]}']) {
-    test('catalog end response $body exhausts a folder without Retry', () async {
-      StremioService.instance.invalidateCache();
-      final a = addon(id: 'empty-response');
-      var calls = 0;
+  test(
+    'HTTP 200 with wrongly typed metas remains retryable and is not cached',
+    () async {
+      final a = addon(id: 'malformed-response');
       final pager = CollectionCatalogPager(
-        addon: a, catalog: a.catalogs.single,
-        fetch: (a, c, {skip = 0, genre, onRawCount}) => StremioService.instance
-            .fetchCatalog(a, c, skip: skip, genre: genre, onRawCount: onRawCount),
+        addon: a,
+        catalog: a.catalogs.single,
+        fetch: (a, c, {skip = 0, genre, onRawCount}) =>
+            StremioService.instance.fetchCatalog(
+              a,
+              c,
+              skip: skip,
+              genre: genre,
+              onRawCount: onRawCount,
+            ),
       );
-      await http.runWithClient(() async {
-        expect(await pager.nextPage(), isEmpty);
-        expect(await pager.nextPage(), isEmpty);
-      }, () => MockClient((_) async {
-        calls++;
-        return http.Response(body, 200);
-      }));
-      expect(calls, 1);
+      await http.runWithClient(
+        () => pager.nextPage(),
+        () => MockClient((_) async => http.Response('{"metas":{}}', 200)),
+      );
+      expect(pager.exhausted, false);
+      expect(pager.error, isNotNull);
+      await http.runWithClient(
+        () => pager.nextPage(),
+        () => MockClient((_) async => http.Response('{"metas":[]}', 200)),
+      );
       expect(pager.exhausted, true);
       expect(pager.error, isNull);
-    });
+    },
+  );
+
+  for (final body in ['{}', '{"metas":null}', '{"metas":[]}']) {
+    test(
+      'catalog end response $body exhausts a folder without Retry',
+      () async {
+        StremioService.instance.invalidateCache();
+        final a = addon(id: 'empty-response');
+        var calls = 0;
+        final pager = CollectionCatalogPager(
+          addon: a,
+          catalog: a.catalogs.single,
+          fetch: (a, c, {skip = 0, genre, onRawCount}) =>
+              StremioService.instance.fetchCatalog(
+                a,
+                c,
+                skip: skip,
+                genre: genre,
+                onRawCount: onRawCount,
+              ),
+        );
+        await http.runWithClient(
+          () async {
+            expect(await pager.nextPage(), isEmpty);
+            expect(await pager.nextPage(), isEmpty);
+          },
+          () => MockClient((_) async {
+            calls++;
+            return http.Response(body, 200);
+          }),
+        );
+        expect(calls, 1);
+        expect(pager.exhausted, true);
+        expect(pager.error, isNull);
+      },
+    );
   }
 
   test('hidden collection rows and non-Home modes do not claim catalogs', () {
@@ -697,29 +1015,49 @@ void main() {
     },
   );
 
-  test('accepted imports must fit the sync hot-document size budget', () async {
-    final store = HomeCollectionsStore();
-    final large = HomeCollection(
-      id: 'large',
-      title: 'Large',
-      folders: [
-        for (var i = 0; i < 4000; i++)
-          HomeCollectionFolder(
-            id: 'f$i',
-            title: 'Folder $i',
-            sources: [source],
-            coverImageUrl: 'https://example.invalid/art/folder-$i.jpg',
-          ),
-      ],
-    );
-    final input = jsonEncode([large.toJson()]);
-    expect(
-      utf8.encode(input).length,
-      lessThan(HomeCollectionsStore.maxImportBytes),
-    );
-    await expectLater(store.importJson(input), throwsFormatException);
-    expect(await store.getCollections(), isEmpty);
-  });
+  test(
+    'accepted imports use bounded collection sections and a small hot document',
+    () async {
+      final store = HomeCollectionsStore();
+      final large = HomeCollection(
+        id: 'large',
+        title: 'Large',
+        folders: [
+          for (var i = 0; i < 4000; i++)
+            HomeCollectionFolder(
+              id: 'f$i',
+              title: 'Folder $i',
+              sources: [source],
+              coverImageUrl: 'https://example.invalid/art/folder-$i.jpg',
+            ),
+        ],
+      );
+      final input = jsonEncode([large.toJson()]);
+      expect(
+        utf8.encode(input).length,
+        lessThan(HomeCollectionsStore.maxImportBytes),
+      );
+      await store.importJson(input);
+      final inventory = await store.getInventory();
+      expect(inventory.collections.single.folders, hasLength(4000));
+      final document = hot('device-a', {
+        HomeCollectionsStore.prefsKey: inventory.encode(),
+      }, 1000);
+      final bytes = utf8.encode(jsonEncode(document.toJson()));
+      final parts = WebDavSyncCollectionSections.split(document);
+      expect(
+        utf8.encode(jsonEncode(parts['hot/profile-circle']!.toJson())).length,
+        lessThan(WebDavSyncLimits.maxHotDocumentBytes),
+      );
+      expect(bytes.length, lessThan(WebDavSyncCollectionSections.maxBytes));
+      expect(
+        WebDavSyncHotDocument.fromJson(
+          jsonDecode(utf8.decode(bytes)),
+        ).watchState.records,
+        isNotEmpty,
+      );
+    },
+  );
 }
 
 WebDavSyncHotDocument hot(

@@ -306,6 +306,7 @@ final class WebDavSyncPendingActiveProfile {
 final class WebDavSyncProfileEngineState {
   const WebDavSyncProfileEngineState({
     this.baseline,
+    this.deferredCollectionLocal,
     this.pendingApply,
     this.libraryBaseline,
     this.pendingLibraryApply,
@@ -316,6 +317,7 @@ final class WebDavSyncProfileEngineState {
   });
 
   final WebDavSyncHotDocument? baseline;
+  final String? deferredCollectionLocal;
   final WebDavSyncPendingApply? pendingApply;
   final WebDavSyncLibraryDocument? libraryBaseline;
   final WebDavSyncPendingLibraryApply? pendingLibraryApply;
@@ -326,6 +328,8 @@ final class WebDavSyncProfileEngineState {
 
   WebDavSyncProfileEngineState copyWith({
     WebDavSyncHotDocument? baseline,
+    String? deferredCollectionLocal,
+    bool clearDeferredCollectionLocal = false,
     WebDavSyncPendingApply? pendingApply,
     bool clearPendingApply = false,
     WebDavSyncLibraryDocument? libraryBaseline,
@@ -340,6 +344,9 @@ final class WebDavSyncProfileEngineState {
     bool clearLastPushedLibraryDigest = false,
   }) => WebDavSyncProfileEngineState(
     baseline: baseline ?? this.baseline,
+    deferredCollectionLocal: clearDeferredCollectionLocal
+        ? null
+        : (deferredCollectionLocal ?? this.deferredCollectionLocal),
     pendingApply: clearPendingApply
         ? null
         : (pendingApply ?? this.pendingApply),
@@ -361,6 +368,8 @@ final class WebDavSyncProfileEngineState {
 
   Map<String, Object?> toJson() => <String, Object?>{
     if (baseline != null) 'baseline': baseline!.toJson(),
+    if (deferredCollectionLocal != null)
+      'deferredCollectionLocal': deferredCollectionLocal,
     if (pendingApply != null) 'pendingApply': pendingApply!.toJson(),
     if (libraryBaseline != null) 'libraryBaseline': libraryBaseline!.toJson(),
     if (pendingLibraryApply != null)
@@ -410,6 +419,7 @@ final class WebDavSyncProfileEngineState {
     }
 
     return WebDavSyncProfileEngineState(
+      deferredCollectionLocal: json['deferredCollectionLocal'] as String?,
       baseline: json['baseline'] == null
           ? null
           : WebDavSyncHotDocument.fromJson(json['baseline']),

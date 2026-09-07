@@ -390,6 +390,7 @@ class _HomeSectionsFilterPageState extends State<HomeSectionsFilterPage> {
   /// installed addons. Falls back to the raw catalog id when nothing serves
   /// it, so the list can still be switched off deliberately.
   String _folderListLabel(CollectionCatalogSource s) {
+    if (!s.isAddon) return '${s.label} (${s.provider.toUpperCase()})';
     final addons = [for (final e in widget.catalogTree) e.addon];
     final addon = HomeCollectionsStore.resolveAddon(s, addons);
     final catalog = addon == null

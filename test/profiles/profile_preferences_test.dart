@@ -701,6 +701,53 @@ void main() {
     },
   );
 
+  test(
+    'async string preparation releases the barrier and retries a racing sync',
+    () async {
+      final scope = ProfileScope(
+        profileId: 'one',
+        dataGeneration: 1,
+        sessionEpoch: 1,
+      );
+      ProfileRuntime.initializeCommitted(scope);
+      final prefs = await ProfilePreferences.instance();
+      final sync = await ProfilePreferences.forCapturedScope(
+        scope,
+        CapturedProfilePreferenceAccess.syncApply,
+      );
+      final preparing = Completer<void>();
+      final resume = Completer<void>();
+      final seen = <String?>[];
+      final mutation = prefs.mutateStringAsyncAtomically('theme', (
+        current,
+      ) async {
+        seen.add(current);
+        if (seen.length == 1) {
+          preparing.complete();
+          await resume.future;
+        }
+        return '$current-edited';
+      });
+      await preparing.future;
+      try {
+        await ProfilePreferences.captureMutationSnapshot(
+          (_) async {},
+        ).timeout(const Duration(seconds: 1));
+        expect(
+          await sync
+              .applySyncBatch({'theme': 'remote'}, authorizationBarrier: () {})
+              .timeout(const Duration(seconds: 1)),
+          true,
+        );
+      } finally {
+        resume.complete();
+      }
+      expect(await mutation, true);
+      expect(seen, ['blue', 'remote']);
+      expect(prefs.getString('theme'), 'remote-edited');
+    },
+  );
+
   test('snapshot rejects atomic list mutation without deadlocking', () async {
     final scope = ProfileScope(
       profileId: 'one',

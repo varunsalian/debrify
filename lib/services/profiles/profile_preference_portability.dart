@@ -15,6 +15,7 @@ abstract final class ProfilePreferencePortability {
     String key, {
     bool includeCredentialEngineSettings = false,
   }) {
+    if (key == 'remote_home_collections_v2') return true;
     if (key.isEmpty || key.length > 256) return false;
     final credentialShaped = _credentialPattern.hasMatch(key);
     final portableEngineCredential =

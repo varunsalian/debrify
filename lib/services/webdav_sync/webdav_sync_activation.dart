@@ -16,6 +16,7 @@ import 'webdav_sync_engine_state.dart';
 import 'webdav_sync_graph.dart';
 import 'webdav_sync_hot_merge.dart';
 import 'webdav_sync_hot_models.dart';
+import 'webdav_sync_collection_sections.dart';
 import 'webdav_sync_large_section_io.dart';
 import 'webdav_sync_local_adapter.dart';
 import 'webdav_sync_models.dart';
@@ -265,7 +266,7 @@ final class DefaultWebDavSyncSeedSource implements WebDavSyncSeedSource {
       originalTombstones[mapping.key] =
           Map<String, WebDavSyncTombstone>.unmodifiable(prior.tombstones);
       final local = await _localAdapter.readProfile(session, mapping.value);
-      final built = WebDavSyncHotMerge.build(
+      final built = await WebDavSyncHotMerge.buildAsync(
         WebDavSyncBuildInput(
           circleProfileId: mapping.key,
           deviceId: deviceId,
@@ -276,6 +277,7 @@ final class DefaultWebDavSyncSeedSource implements WebDavSyncSeedSource {
           clockOffsetMs: clockOffsetMs,
           serverNowMs: serverNowMs,
           previous: prior.baseline,
+          deferredCollectionLocal: prior.deferredCollectionLocal,
         ),
       );
       final tombstones = _publishableTombstones(
@@ -292,25 +294,30 @@ final class DefaultWebDavSyncSeedSource implements WebDavSyncSeedSource {
       );
       plan.maps.assertContainsNoLocalIds(built.document.toJson());
       plan.maps.assertContainsNoLocalIds(tombstoneDocument.toJson());
-      sections
-        ..add(
+      for (final part in WebDavSyncCollectionSections.split(
+        built.document,
+      ).entries) {
+        sections.add(
           WebDavSyncSeedSection(
-            name: 'hot/${mapping.key}',
+            name: part.key,
             schemaVersion: WebDavSyncHotDocument.schemaVersion,
-            payload: built.document.toJson(),
-            semanticDigest: built.document.semanticDigest,
-            maxBytes: WebDavSyncLimits.maxHotDocumentBytes,
-          ),
-        )
-        ..add(
-          WebDavSyncSeedSection(
-            name: 'tombstones/${mapping.key}',
-            schemaVersion: WebDavSyncTombstoneDocument.schemaVersion,
-            payload: tombstoneDocument.toJson(),
-            semanticDigest: tombstoneDocument.semanticDigest,
-            maxBytes: WebDavSyncLimits.maxTombstoneDocumentBytes,
+            payload: part.value.toJson(),
+            semanticDigest: part.value.semanticDigest,
+            maxBytes: part.key.startsWith(WebDavSyncCollectionSections.prefix)
+                ? WebDavSyncCollectionSections.maxBytes
+                : WebDavSyncLimits.maxHotDocumentBytes,
           ),
         );
+      }
+      sections.add(
+        WebDavSyncSeedSection(
+          name: 'tombstones/${mapping.key}',
+          schemaVersion: WebDavSyncTombstoneDocument.schemaVersion,
+          payload: tombstoneDocument.toJson(),
+          semanticDigest: tombstoneDocument.semanticDigest,
+          maxBytes: WebDavSyncLimits.maxTombstoneDocumentBytes,
+        ),
+      );
       seededStates[mapping.key] = prior.copyWith(
         baseline: built.document,
         tombstones: tombstones,

@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
 
+import '../../models/home_collection_inventory.dart';
+
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../models/profiles/profile_policy.dart';
@@ -138,6 +140,7 @@ class ProfilePackageService {
       sanitized: sanitized,
       includeCredentialEngineSettings: includeSecrets,
     );
+    final preferenceSection = await _backupPreferenceSection(preferences);
     final pinRecord = sanitized ? null : await _exportPinRecord(profile.id);
     final databaseExport = sanitized
         ? null
@@ -249,9 +252,7 @@ class ProfilePackageService {
       ],
       resources: exportedResources,
       sections: <String, dynamic>{
-        'profile-0-preferences': await PortableProfilePackage.buildSection(
-          preferences,
-        ),
+        'profile-0-preferences': preferenceSection,
         if (databaseSnapshots.isNotEmpty)
           'profile-0-databases': await PortableProfilePackage.buildSection(
             databaseSnapshots,
@@ -262,6 +263,8 @@ class ProfilePackageService {
           ),
       },
       omissions: <String, dynamic>{
+        if (preferenceSection.containsKey('collectionInventory'))
+          'collectionsRequireNewerBuild': true,
         'downloadAndRecordingBinaries': true,
         'activeJobsAndSchedules': true,
         'deviceWidePreferencesAndRuntimeState': true,
@@ -397,14 +400,13 @@ class ProfilePackageService {
         sessionEpoch: 0,
       );
       if (includePreferences) {
-        sections['$backupId-preferences'] =
-            await PortableProfilePackage.buildSection(
-              await _exportPreferences(
-                scope,
-                sanitized: false,
-                includeCredentialEngineSettings: true,
-              ),
-            );
+        sections['$backupId-preferences'] = await _backupPreferenceSection(
+          await _exportPreferences(
+            scope,
+            sanitized: false,
+            includeCredentialEngineSettings: true,
+          ),
+        );
       }
       if (includeDatabases) {
         final databaseExport = await ProfileDatabaseSnapshot.export(
@@ -538,6 +540,10 @@ class ProfilePackageService {
       resources: resourceRecords,
       sections: sections,
       omissions: <String, dynamic>{
+        if (sections.values.any(
+          (s) => s is Map && s.containsKey('collectionInventory'),
+        ))
+          'collectionsRequireNewerBuild': true,
         'downloadAndRecordingBinaries': true,
         'activeJobsAndSchedules': true,
         'deviceWidePreferencesAndRuntimeState': true,
@@ -633,6 +639,40 @@ class ProfilePackageService {
       // itself must never fail over it.
       return null;
     }
+  }
+
+  // Legacy readers restore only `values`. Larger collection inventories live
+  // beside that map, covered by the whole package integrity digest, so they
+  // cannot leak into an old client's 1 MiB recurring hot payload.
+  static Future<Map<String, dynamic>> _backupPreferenceSection(
+    Map<String, Object?> source,
+  ) async {
+    final values = Map<String, Object?>.from(source);
+    final saved =
+        values.remove(HomeCollectionInventory.prefsKey) ??
+        values[HomeCollectionInventory.legacyPrefsKey];
+    String? extension;
+    if (saved != null) {
+      final inventory = HomeCollectionInventory.recover(saved);
+      final plain = jsonEncode(inventory.toJson());
+      if (utf8.encode(plain).length <= 128 * 1024) {
+        values[HomeCollectionInventory.legacyPrefsKey] = plain;
+      } else {
+        values.remove(HomeCollectionInventory.legacyPrefsKey);
+        extension = inventory.encode();
+      }
+    }
+    return {
+      ...await PortableProfilePackage.buildSection(values),
+      if (extension != null)
+        'collectionInventory': [
+          for (var start = 0; start < extension.length; start += 512 * 1024)
+            extension.substring(
+              start,
+              (start + 512 * 1024).clamp(0, extension.length),
+            ),
+        ],
+    };
   }
 
   static Future<Map<String, Object?>> _exportPreferences(

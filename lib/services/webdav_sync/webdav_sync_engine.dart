@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:synchronized/synchronized.dart';
 
 import '../../models/profiles/user_profile.dart';
+import '../../models/home_collection_inventory.dart';
 import '../diagnostic_log.dart';
 import '../profiles/profile_preferences.dart';
 import '../profiles/connection_resource_service.dart';
@@ -19,6 +20,7 @@ import 'webdav_sync_engine_state.dart';
 import 'webdav_sync_graph.dart';
 import 'webdav_sync_hot_merge.dart';
 import 'webdav_sync_hot_models.dart';
+import 'webdav_sync_collection_sections.dart';
 import 'webdav_sync_models.dart';
 import 'webdav_sync_local_adapter.dart';
 import 'webdav_sync_large_section_io.dart';
@@ -125,14 +127,30 @@ final class WebDavSyncCycleReport {
 final class WebDavSyncSectionCache {
   static const int entryLimit = 32;
   static const int byteLimit = 4 * 1024 * 1024;
+  static const int collectionByteLimit = 64 * 1024 * 1024;
+  WebDavSyncSectionCache({
+    this.maxBytes = byteLimit,
+    this.partitionCollections = true,
+  });
+  final int maxBytes;
+  final bool partitionCollections;
+  late final _collections = WebDavSyncSectionCache(
+    maxBytes: collectionByteLimit,
+    partitionCollections: false,
+  );
+  bool _isCollection(String key) =>
+      partitionCollections && key.contains(':collections-v2/');
 
   final Map<String, _CachedSection> _entries = <String, _CachedSection>{};
   int _bytes = 0;
 
-  int get entryCount => _entries.length;
-  int get byteCount => _bytes;
+  int get entryCount =>
+      _entries.length + (partitionCollections ? _collections.entryCount : 0);
+  int get byteCount =>
+      _bytes + (partitionCollections ? _collections.byteCount : 0);
 
   Object? take(String key) {
+    if (_isCollection(key)) return _collections.take(key);
     final cached = _entries.remove(key);
     if (cached == null) return null;
     _entries[key] = cached;
@@ -140,15 +158,17 @@ final class WebDavSyncSectionCache {
   }
 
   void remove(String key) {
+    if (_isCollection(key)) return _collections.remove(key);
     final removed = _entries.remove(key);
     if (removed != null) _bytes -= removed.encodedBytes;
   }
 
   void put(String key, Object value, int encodedBytes) {
+    if (_isCollection(key)) return _collections.put(key, value, encodedBytes);
     remove(key);
-    if (encodedBytes <= 0 || encodedBytes > byteLimit) return;
+    if (encodedBytes <= 0 || encodedBytes > maxBytes) return;
     while (_entries.isNotEmpty &&
-        (_entries.length >= entryLimit || _bytes + encodedBytes > byteLimit)) {
+        (_entries.length >= entryLimit || _bytes + encodedBytes > maxBytes)) {
       remove(_entries.keys.first);
     }
     _entries[key] = _CachedSection(value: value, encodedBytes: encodedBytes);
@@ -156,6 +176,7 @@ final class WebDavSyncSectionCache {
   }
 
   void clear() {
+    if (partitionCollections) _collections.clear();
     _entries.clear();
     _bytes = 0;
   }
@@ -949,7 +970,7 @@ final class WebDavSyncEngine
               final currentProfile =
                   state.profiles[entry.key] ??
                   const WebDavSyncProfileEngineState();
-              final built = WebDavSyncHotMerge.build(
+              final built = await WebDavSyncHotMerge.buildAsync(
                 WebDavSyncBuildInput(
                   circleProfileId: entry.key,
                   deviceId: deviceId,
@@ -960,6 +981,8 @@ final class WebDavSyncEngine
                   clockOffsetMs: clockDecision.state.acceptedOffsetMs!,
                   serverNowMs: serverNowMs,
                   previous: currentProfile.baseline,
+                  deferredCollectionLocal:
+                      currentProfile.deferredCollectionLocal,
                 ),
               );
               final localTombstones = _normalizeLocalTombstones(
@@ -992,13 +1015,20 @@ final class WebDavSyncEngine
                 ),
                 serverNowMs: serverNowMs,
               );
-              final values = WebDavSyncHotMerge.materializePreferences(
-                document: replayed.document,
-                identityMaps: identityMaps,
-                localRichRecords: built.localRichRecords,
-                localPortableRecords: built.document.watchState.records,
-                protectedPreferenceKeys: built.protectedPreferenceKeys,
+              final materializedValues =
+                  await WebDavSyncHotMerge.materializePreferencesAsync(
+                    document: replayed.document,
+                    identityMaps: identityMaps,
+                    localRichRecords: built.localRichRecords,
+                    localPortableRecords: built.document.watchState.records,
+                    protectedPreferenceKeys: built.protectedPreferenceKeys,
+                  );
+              final preparation = await _prepareHotApply(
+                session,
+                pending.localProfileId,
+                materializedValues,
               );
+              final values = preparation.values;
               try {
                 replayedCollectionDeletions = {
                   for (final entry in replayed.tombstones.entries)
@@ -1011,17 +1041,25 @@ final class WebDavSyncEngine
                   values,
                   expectedMutationToken: fresh.mutationToken,
                   replayingPending: true,
-                  beforeWrite: () => _stateRepository.update(namespaceId, (current) {
+                  beforeWrite: () => _stateRepository.update(namespaceId, (
+                    current,
+                  ) {
                     final profiles =
                         Map<String, WebDavSyncProfileEngineState>.from(
                           current.profiles,
                         );
-                    final profile = profiles[entry.key] ??
+                    final profile =
+                        profiles[entry.key] ??
                         const WebDavSyncProfileEngineState();
                     // Replay can discover deletions made since the interrupted
                     // apply. Persist them before materialization removes their
                     // local null markers, even if replay itself crashes.
                     profiles[entry.key] = profile.copyWith(
+                      deferredCollectionLocal: preparation.collectionsDeferred
+                          ? _localCollections(fresh)
+                          : null,
+                      clearDeferredCollectionLocal:
+                          !preparation.collectionsDeferred,
                       tombstones: {
                         ...profile.tombstones,
                         ...replayedCollectionDeletions,
@@ -1029,9 +1067,10 @@ final class WebDavSyncEngine
                     );
                     return current.copyWith(
                       profiles:
-                          Map<String, WebDavSyncProfileEngineState>.unmodifiable(
-                            profiles,
-                          ),
+                          Map<
+                            String,
+                            WebDavSyncProfileEngineState
+                          >.unmodifiable(profiles),
                     );
                   }),
                 );
@@ -1515,7 +1554,7 @@ final class WebDavSyncEngine
             );
             continue;
           }
-          final built = WebDavSyncHotMerge.build(
+          final built = await WebDavSyncHotMerge.buildAsync(
             WebDavSyncBuildInput(
               circleProfileId: circleProfileId,
               deviceId: deviceId,
@@ -1526,6 +1565,7 @@ final class WebDavSyncEngine
               clockOffsetMs: clockDecision.state.acceptedOffsetMs!,
               serverNowMs: serverNowMs,
               previous: profileState.baseline,
+              deferredCollectionLocal: profileState.deferredCollectionLocal,
             ),
           );
           final normalizedLocalTombstones = _normalizeLocalTombstones(
@@ -1561,16 +1601,24 @@ final class WebDavSyncEngine
             ),
             serverNowMs: serverNowMs,
           );
-          final values = WebDavSyncHotMerge.materializePreferences(
-            document: merged.document,
-            identityMaps: identityMaps,
-            localRichRecords: built.localRichRecords,
-            localPortableRecords: built.document.watchState.records,
-            protectedPreferenceKeys: built.protectedPreferenceKeys,
+          final materializedValues =
+              await WebDavSyncHotMerge.materializePreferencesAsync(
+                document: merged.document,
+                identityMaps: identityMaps,
+                localRichRecords: built.localRichRecords,
+                localPortableRecords: built.document.watchState.records,
+                protectedPreferenceKeys: built.protectedPreferenceKeys,
+              );
+          final preparation = await _prepareHotApply(
+            session,
+            localProfileId,
+            materializedValues,
           );
+          final values = preparation.values;
           final collectionDeletions = <String, WebDavSyncTombstone>{
             for (final entry in merged.tombstones.entries)
-              if (entry.key.startsWith('homecollection/')) entry.key: entry.value,
+              if (entry.key.startsWith('homecollection/'))
+                entry.key: entry.value,
           };
           final pending = WebDavSyncPendingApply(
             localProfileId: localProfileId,
@@ -1591,6 +1639,10 @@ final class WebDavSyncEngine
                   const WebDavSyncProfileEngineState();
               profiles[circleProfileId] = currentProfile.copyWith(
                 pendingApply: pending,
+                deferredCollectionLocal: preparation.collectionsDeferred
+                    ? _localCollections(localSnapshot)
+                    : null,
+                clearDeferredCollectionLocal: !preparation.collectionsDeferred,
                 // Durably journal converted collection deletions before their
                 // local null markers disappear, including a failed apply/push.
                 tombstones: {
@@ -2434,7 +2486,9 @@ final class WebDavSyncEngine
       logicalName: reference.name,
       schemaVersion: reference.schemaVersion,
       maxBytes: maxBytes,
-      runInBackground: maxBytes == WebDavSyncLimits.maxGraphDocumentBytes,
+      runInBackground:
+          maxBytes == WebDavSyncLimits.maxGraphDocumentBytes ||
+          reference.name.startsWith(WebDavSyncCollectionSections.prefix),
     );
     _cache(cacheKey, payload as Object, reference.size);
     return payload;
@@ -2526,6 +2580,7 @@ final class WebDavSyncEngine
     required _CycleInstrumentation instrumentation,
   }) async {
     WebDavSyncHotDocument? hot;
+    final collectionDocuments = <WebDavSyncHotDocument>[];
     WebDavSyncTombstoneDocument? tombstone;
     WebDavSyncLibraryDocument? library;
     final hotAndTombstoneReferences = <_PeerSectionReference>[];
@@ -2571,6 +2626,51 @@ final class WebDavSyncEngine
           await _markOwnSectionDirty(namespaceId, hotRef.name);
         }
         _diagnostic('Ignored an invalid WebDAV sync hot section', error);
+      }
+    }
+    if (!stale) {
+      for (final ref in manifest.sections.where(
+        (ref) => ref.name.startsWith(
+          '${WebDavSyncCollectionSections.prefix}$circleProfileId/',
+        ),
+      )) {
+        if (ref.schemaVersion != WebDavSyncHotDocument.schemaVersion ||
+            ref.size > WebDavSyncCollectionSections.maxBytes ||
+            _shouldSkipMergedPeerSection(
+              deviceId: deviceId,
+              ownDeviceId: ownDeviceId,
+              reference: ref,
+              hasBaseline: profileState.baseline != null,
+              lastMergedPeerSections: lastMergedPeerSections,
+              instrumentation: instrumentation,
+            )) {
+          continue;
+        }
+        try {
+          final document = await _readHotSection(
+            transport,
+            root,
+            deviceId,
+            ref,
+            circleProfileId,
+            instrumentation,
+          );
+          WebDavSyncCollectionSections.validate(document);
+          collectionDocuments.add(document);
+          if (deviceId != ownDeviceId) {
+            hotAndTombstoneReferences.add(
+              _PeerSectionReference(deviceId: deviceId, reference: ref),
+            );
+          }
+        } on WebDavException catch (error) {
+          if (error.kind != WebDavErrorKind.notFound) rethrow;
+          _diagnostic('Ignored a removed collection sync section', error);
+        } on Exception catch (error) {
+          if (deviceId == ownDeviceId) {
+            await _markOwnSectionDirty(namespaceId, 'hot/$circleProfileId');
+          }
+          _diagnostic('Ignored an invalid collection sync section', error);
+        }
       }
     }
     final tombstoneRef = manifest.section('tombstones/$circleProfileId');
@@ -2659,9 +2759,7 @@ final class WebDavSyncEngine
       }
     }
     return _PeerProfileData(
-      hotDocuments: hot == null
-          ? const <WebDavSyncHotDocument>[]
-          : <WebDavSyncHotDocument>[hot],
+      hotDocuments: [if (hot != null) hot, ...collectionDocuments],
       tombstoneDocuments: tombstone == null
           ? const <WebDavSyncTombstoneDocument>[]
           : <WebDavSyncTombstoneDocument>[tombstone],
@@ -2757,7 +2855,7 @@ final class WebDavSyncEngine
       root: root,
       deviceId: deviceId,
       reference: reference,
-      maxBytes: WebDavSyncLimits.maxHotDocumentBytes,
+      maxBytes: _maxBytesFor(reference.name),
       instrumentation: instrumentation,
     );
     if (payload is! Map || payload['version'] != reference.schemaVersion) {
@@ -2883,6 +2981,31 @@ final class WebDavSyncEngine
         );
       });
 
+  Future<({Map<String, Object> values, bool collectionsDeferred})>
+  _prepareHotApply(
+    WebDavSyncLocalSession session,
+    String profile,
+    Map<String, Object> values,
+  ) async {
+    final adapter = _localAdapter;
+    if (adapter is WebDavSyncCollectionCapacityAdapter) {
+      return (adapter as WebDavSyncCollectionCapacityAdapter).prepareHotApply(
+        session,
+        profile,
+        values,
+      );
+    }
+    return (values: values, collectionsDeferred: false);
+  }
+
+  static String _localCollections(WebDavSyncLocalProfileSnapshot snapshot) =>
+      (snapshot.rawPreferences[HomeCollectionInventory.prefsKey] ??
+              snapshot.rawPreferences[HomeCollectionInventory.legacyPrefsKey] ??
+              '[]')
+          as String;
+
+  final _collectionSections = WebDavSyncCollectionSections();
+
   Future<_PushResult> _pushChanged({
     required WebDavSyncTransport transport,
     required WebDavSyncCycleContext context,
@@ -2900,6 +3023,8 @@ final class WebDavSyncEngine
   }) async {
     final deviceId = context.deviceId!;
     final changed = <_SealedSection>[];
+    final replacedCollectionProfiles = <String>{};
+    final retainedCollectionReferences = <String, WebDavSyncSectionReference>{};
     final librariesToPush = <String, WebDavSyncLibraryDocument>{};
     final published = <String, _PublishedProfile>{};
     final profilesDigest = circle?.profiles.semanticDigest;
@@ -2952,22 +3077,52 @@ final class WebDavSyncEngine
         ),
       );
       final tombstoneDigest = tombstoneDocument.semanticDigest;
+      final hasCollections =
+          entry.value.document.watchState.records.keys.any(
+            WebDavSyncCollectionSections.isCollectionRecord,
+          ) ||
+          entry.value.document.watchState.orders.keys.any(
+            WebDavSyncCollectionSections.isCollectionOrder,
+          );
       if (forceCompressionMigration ||
+          (hasCollections &&
+              state.ownManifest?.section(
+                    '${WebDavSyncCollectionSections.prefix}${entry.key}/0',
+                  ) ==
+                  null) ||
           profileState.lastPushedHotDigest != hotDigest) {
         final phaseStarted = instrumentation.startPhase();
         try {
-          changed.add(
-            await _sealSection(
-              root: root,
-              deviceId: deviceId,
-              name: 'hot/${entry.key}',
-              schemaVersion: WebDavSyncHotDocument.schemaVersion,
-              payload: entry.value.document.toJson(),
-              semanticDigest: hotDigest,
-              updatedAtMs: serverNowMs,
-              maxBytes: WebDavSyncLimits.maxHotDocumentBytes,
-            ),
+          final parts = await _collectionSections.prepare(
+            '${context.namespaceId}/${entry.key}',
+            entry.value.document,
           );
+          replacedCollectionProfiles.add(entry.key);
+          for (final part in parts.entries) {
+            final prior = state.ownManifest?.section(part.key);
+            if (!forceCompressionMigration &&
+                profileState.lastPushedHotDigest != null &&
+                prior != null &&
+                prior.schemaVersion == WebDavSyncHotDocument.schemaVersion &&
+                prior.semanticDigest == part.value.digest) {
+              if (part.key.startsWith(WebDavSyncCollectionSections.prefix)) {
+                retainedCollectionReferences[part.key] = prior;
+              }
+              continue;
+            }
+            changed.add(
+              await _sealSection(
+                root: root,
+                deviceId: deviceId,
+                name: part.key,
+                schemaVersion: WebDavSyncHotDocument.schemaVersion,
+                payload: part.value.document.toJson(),
+                semanticDigest: part.value.digest,
+                updatedAtMs: serverNowMs,
+                maxBytes: _maxBytesFor(part.key),
+              ),
+            );
+          }
         } finally {
           instrumentation.finishPhase(_CyclePhase.seal, phaseStarted);
         }
@@ -3149,9 +3304,15 @@ final class WebDavSyncEngine
       for (final section
           in state.ownManifest?.sections ??
               const <WebDavSyncSectionReference>[])
-        if (section.name != WebDavSyncGraphKind.graph.logicalName)
+        if (section.name != WebDavSyncGraphKind.graph.logicalName &&
+            !replacedCollectionProfiles.any(
+              (profile) => section.name.startsWith(
+                '${WebDavSyncCollectionSections.prefix}$profile/',
+              ),
+            ))
           section.name: section,
       for (final section in changed) section.reference.name: section.reference,
+      ...retainedCollectionReferences,
       ...libraryReferences,
       if (resourceReference != null) resourceReference.name: resourceReference,
     };
@@ -3364,7 +3525,9 @@ final class WebDavSyncEngine
       schemaVersion: schemaVersion,
       payload: payload,
       maxBytes: maxBytes,
-      runInBackground: maxBytes == WebDavSyncLimits.maxGraphDocumentBytes,
+      runInBackground:
+          maxBytes == WebDavSyncLimits.maxGraphDocumentBytes ||
+          name.startsWith(WebDavSyncCollectionSections.prefix),
     );
     return _SealedSection(
       bytes: bytes,
@@ -3593,6 +3756,9 @@ final class WebDavSyncEngine
       '${reference.contentHash}:${reference.size}:${reference.updatedAtMs}:$kind';
 
   static int _maxBytesFor(String name) {
+    if (name.startsWith(WebDavSyncCollectionSections.prefix)) {
+      return WebDavSyncCollectionSections.maxBytes;
+    }
     if (name == 'resources') return WebDavSyncLimits.maxGraphDocumentBytes;
     if (name.startsWith('library/') || name.startsWith('tv-library/')) {
       return WebDavSyncLibraryDocument.maxEncodedBytes;

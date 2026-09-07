@@ -36,6 +36,7 @@ class SpotlightCard {
   /// Used when [image] fails to load. Landscape title cards point this at the
   /// portrait poster because synchronously-derived MetaHub backdrops can 404.
   final String? fallbackImage;
+  final String? coverEmoji;
   final String title;
 
   /// Item count, "LIVE", a genre — whatever this KIND of thing is identified
@@ -76,6 +77,7 @@ class SpotlightCard {
     required this.onOpen,
     this.image,
     this.fallbackImage,
+    this.coverEmoji,
     this.subtitle,
     this.rating,
     this.progress,
@@ -2554,6 +2556,8 @@ class _CardState extends State<_Card> {
                   contained ? 0.10 : 0.045,
                 )!,
               ),
+              if (c.coverEmoji != null)
+                Center(child: Padding(padding: const EdgeInsets.all(20), child: FittedBox(child: Text(c.coverEmoji!, style: const TextStyle(fontSize: 64))))),
               if (url != null && url.isNotEmpty)
                 Padding(
                   // The breathing room around a contained mark keys off the

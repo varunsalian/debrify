@@ -176,7 +176,7 @@ void main() {
       expect(section.folderOf(_meta('tt1')), isNull);
       expect(
         section.focusArtOf(section.items.first),
-        'https://cdn.example/netflix.focus.gif',
+        isNull, // Explicit focusGifEnabled:false is respected.
       );
       expect(section.focusArtOf(section.items[1]), isNull);
       expect(c.folders.first.heroBackdropUrl, endsWith('backdrop.webp'));
@@ -212,37 +212,40 @@ void main() {
       ],
     );
 
-    test('requires manifest identity even when another addon has the catalog', () {
-      const byId = CollectionCatalogSource(
-        addonId: 'com.linvo.cinemeta',
-        type: 'movie',
-        catalogId: 'top',
-      );
-      expect(
-        HomeCollectionsStore.resolveAddon(byId, [fork, cinemeta]),
-        cinemeta,
-      );
+    test(
+      'requires manifest identity even when another addon has the catalog',
+      () {
+        const byId = CollectionCatalogSource(
+          addonId: 'com.linvo.cinemeta',
+          type: 'movie',
+          catalogId: 'top',
+        );
+        expect(
+          HomeCollectionsStore.resolveAddon(byId, [fork, cinemeta]),
+          cinemeta,
+        );
 
-      const byCatalog = CollectionCatalogSource(
-        addonId: 'app.xperience.abc',
-        type: 'movie',
-        catalogId: 'streaming_netflix_movies',
-      );
-      expect(
-        HomeCollectionsStore.resolveAddon(byCatalog, [cinemeta, fork]),
-        isNull,
-      );
+        const byCatalog = CollectionCatalogSource(
+          addonId: 'app.xperience.abc',
+          type: 'movie',
+          catalogId: 'streaming_netflix_movies',
+        );
+        expect(
+          HomeCollectionsStore.resolveAddon(byCatalog, [cinemeta, fork]),
+          isNull,
+        );
 
-      const missing = CollectionCatalogSource(
-        addonId: 'app.xperience.abc',
-        type: 'series',
-        catalogId: 'streaming_netflix_series',
-      );
-      expect(
-        HomeCollectionsStore.resolveAddon(missing, [cinemeta, fork]),
-        isNull,
-      );
-    });
+        const missing = CollectionCatalogSource(
+          addonId: 'app.xperience.abc',
+          type: 'series',
+          catalogId: 'streaming_netflix_series',
+        );
+        expect(
+          HomeCollectionsStore.resolveAddon(missing, [cinemeta, fork]),
+          isNull,
+        );
+      },
+    );
 
     test('unresolvedAddonIds reports only what nothing can serve', () {
       final c = HomeCollectionParser.parse(_xperienceSample).single;
@@ -361,7 +364,7 @@ void main() {
         },
       );
       expect(loader.resolvedSourceCount, 2);
-      expect(loader.unresolved, ['missing.addon']);
+      expect(loader.unresolved, ['Install addon missing.addon to load nope.']);
 
       final first = await loader.nextPage();
       expect(first.map((m) => m.id), ['tt1', 'tt2', 'tt3']);

@@ -1,4 +1,5 @@
 import 'dart:convert';
+import '../utils/canonical_json.dart';
 
 import 'package:crypto/crypto.dart';
 
@@ -83,59 +84,127 @@ enum CollectionTileShape {
   String get storageValue => name.toUpperCase();
 }
 
-/// One addon catalog a folder pulls from.
+/// A Nuvio source. Native fields survive import, backup, and sync unchanged.
+/// The legacy constructor and addon identity remain stable for existing rows.
 class CollectionCatalogSource {
-  /// Stremio manifest id of the addon (`StremioAddon.id`).
   final String addonId;
-
-  /// `movie` / `series` / … — the catalog's type.
   final String type;
-
-  /// `StremioAddonCatalog.id`.
   final String catalogId;
-
-  /// Optional `genre` extra applied to the catalog request.
   final String? genre;
+  final String provider;
+  final String? title;
+  final String? tmdbSourceType;
+  final int? tmdbId;
+  final int? traktListId;
+  final String? sortBy;
+  final String? sortHow;
+  final Map<String, dynamic> filters;
+  final Map<String, dynamic> extra;
 
   const CollectionCatalogSource({
     required this.addonId,
     required this.type,
     required this.catalogId,
     this.genre,
+    this.provider = 'addon',
+    this.title,
+    this.tmdbSourceType,
+    this.tmdbId,
+    this.traktListId,
+    this.sortBy,
+    this.sortHow,
+    this.filters = const {},
+    this.extra = const {},
   });
 
-  /// De-duplication identity (a Nuvio file lists each source twice: under
-  /// `catalogSources` and again under `sources`).
-  String get key => '$addonId|$type|$catalogId|${genre ?? ''}';
+  bool get isAddon => provider == 'addon';
+  bool get isNative => provider == 'tmdb' || provider == 'trakt';
+  String get mediaType => type == 'series' ? 'tv' : 'movie';
+  String get key => isAddon
+      ? '$addonId|$type|$catalogId|${genre ?? ''}'
+      : '$provider|$catalogId';
+  String get label => title ?? (isAddon ? catalogId : provider.toUpperCase());
 
   static CollectionCatalogSource? fromJson(Object? json) {
     if (json is! Map) return null;
-    // `sources` entries carry a `provider`; a non-addon provider (a future
-    // "url"/"trakt" source) is skipped rather than mis-read as an addon.
-    final provider = json['provider'];
-    if (provider is String && provider.isNotEmpty && provider != 'addon') {
-      return null;
+    final raw = Map<String, dynamic>.from(json);
+    final provider = (_str(raw['provider']) ?? 'addon').toLowerCase();
+    if (provider == 'addon') {
+      final addonId = _str(raw['addonId']) ?? _str(raw['addon']);
+      final catalogId = _str(raw['catalogId']) ?? _str(raw['id']);
+      if (addonId == null || catalogId == null) return null;
+      final genre = _str(raw['genre']);
+      return CollectionCatalogSource(
+        addonId: addonId,
+        catalogId: catalogId,
+        type: _str(raw['type']) ?? 'movie',
+        genre: genre?.toLowerCase() == 'none' ? null : genre,
+        title: _str(raw['title']),
+      );
     }
-    final addonId = _str(json['addonId']) ?? _str(json['addon']);
-    final catalogId = _str(json['catalogId']) ?? _str(json['id']);
-    if (addonId == null || catalogId == null) return null;
-    final type = _str(json['type']) ?? 'movie';
-    final genre = _str(json['genre']);
+    final media = (_str(raw['mediaType']) ?? 'MOVIE').toUpperCase();
+    final identity = <String, dynamic>{
+      'provider': provider,
+      'sortBy': _str(raw['sortBy']),
+      'sortHow': _str(raw['sortHow']),
+      'mediaType': media == 'TV' || media == 'SERIES' ? 'TV' : 'MOVIE',
+      if (provider == 'tmdb') ...{
+        'tmdbSourceType': _str(raw['tmdbSourceType'])?.toUpperCase(),
+        'tmdbId': _integer(raw['tmdbId']),
+        'filters': raw['filters'] is Map ? raw['filters'] : <String, dynamic>{},
+      },
+      if (provider == 'trakt') 'traktListId': _integer(raw['traktListId']),
+    };
     return CollectionCatalogSource(
-      addonId: addonId,
-      type: type,
-      catalogId: catalogId,
-      genre: genre,
+      provider: provider,
+      addonId: provider,
+      catalogId:
+          _str(raw['debrifySourceId']) ??
+          HomeCollection.stableId(encodeCanonicalJson(identity)),
+      type: media == 'TV' || media == 'SERIES' ? 'series' : 'movie',
+      title: _str(raw['title']),
+      tmdbSourceType: _str(raw['tmdbSourceType'])?.toUpperCase(),
+      tmdbId: _integer(raw['tmdbId']),
+      traktListId: _integer(raw['traktListId']),
+      sortBy: _str(raw['sortBy']),
+      sortHow: _str(raw['sortHow']),
+      filters: raw['filters'] is Map
+          ? Map<String, dynamic>.unmodifiable(raw['filters'] as Map)
+          : const {},
+      extra: Map<String, dynamic>.unmodifiable(raw),
     );
   }
 
-  Map<String, dynamic> toJson() => {
-    'addonId': addonId,
-    'type': type,
-    'catalogId': catalogId,
-    'genre': genre,
-  };
+  Map<String, dynamic> toJson() => isAddon
+      ? {
+          'addonId': addonId,
+          'type': type,
+          'catalogId': catalogId,
+          'genre': genre,
+          if (title != null) 'title': title,
+        }
+      : {
+          ...extra,
+          'debrifySourceId': catalogId,
+          'provider': provider,
+          if (title != null) 'title': title,
+          'mediaType': type == 'series' ? 'TV' : 'MOVIE',
+          if (provider == 'tmdb') ...{
+            'tmdbSourceType': tmdbSourceType,
+            'tmdbId': tmdbId,
+            'filters': filters,
+          },
+          if (provider == 'trakt') 'traktListId': traktListId,
+          if (sortBy != null) 'sortBy': sortBy,
+          if (sortHow != null) 'sortHow': sortHow,
+        };
 }
+
+int? _integer(Object? value) => value is num
+    ? (value.isFinite && value == value.truncateToDouble()
+          ? value.toInt()
+          : null)
+    : int.tryParse('$value');
 
 /// A folder: a titled, cover-art tile whose contents are the merged catalogs
 /// in [sources].
@@ -149,6 +218,7 @@ class HomeCollectionFolder {
   final String? coverImageUrl;
   final String? coverEmoji;
   final String? heroBackdropUrl;
+  final String? heroVideoUrl;
   final String? titleLogoUrl;
   final String? focusGifUrl;
   final bool focusGifEnabled;
@@ -164,9 +234,10 @@ class HomeCollectionFolder {
     this.coverImageUrl,
     this.coverEmoji,
     this.heroBackdropUrl,
+    this.heroVideoUrl,
     this.titleLogoUrl,
     this.focusGifUrl,
-    this.focusGifEnabled = false,
+    this.focusGifEnabled = true,
     this.focusVideoUrl,
     this.focusVideoEnabled = true,
     this.tileShape = CollectionTileShape.landscape,
@@ -181,6 +252,7 @@ class HomeCollectionFolder {
         coverImageUrl: coverImageUrl,
         coverEmoji: coverEmoji,
         heroBackdropUrl: heroBackdropUrl,
+        heroVideoUrl: heroVideoUrl,
         titleLogoUrl: titleLogoUrl,
         focusGifUrl: focusGifUrl,
         focusGifEnabled: focusGifEnabled,
@@ -203,16 +275,29 @@ class HomeCollectionFolder {
     final sources = <CollectionCatalogSource>[];
     void addAll(Object? list) {
       if (list is! List) return;
+      final localSeen = <String>{};
       for (final raw in list) {
-        final s = CollectionCatalogSource.fromJson(raw);
-        if (s != null && seen.add(s.key)) sources.add(s);
+        final parsed = CollectionCatalogSource.fromJson(raw);
+        if (parsed == null) continue;
+        var s = parsed;
+        if (!s.isAddon) {
+          final baseId = s.catalogId;
+          var ordinal = 0;
+          while (!localSeen.add(s.key)) {
+            s = CollectionCatalogSource.fromJson({
+              ...s.toJson(),
+              'debrifySourceId': '$baseId-${++ordinal}',
+            })!;
+          }
+        }
+        if (seen.add(s.key)) sources.add(s);
       }
     }
 
-    // `catalogSources` is canonical; `sources` duplicates it with a
-    // `provider` field. Reading both tolerates files that carry only one.
-    addAll(json['catalogSources']);
+    // Modern sources preserve the author's mixed-provider order. Legacy
+    // catalogs are appended only when they are not already represented.
     addAll(json['sources']);
+    addAll(json['catalogSources']);
 
     return HomeCollectionFolder(
       id: id,
@@ -222,9 +307,10 @@ class HomeCollectionFolder {
       coverEmoji: _str(json['coverEmoji']),
       heroBackdropUrl:
           _str(json['heroBackdropUrl']) ?? _str(json['backdropImageUrl']),
+      heroVideoUrl: _str(json['heroVideoUrl']),
       titleLogoUrl: _str(json['titleLogoUrl']),
       focusGifUrl: _str(json['focusGifUrl']),
-      focusGifEnabled: json['focusGifEnabled'] == true,
+      focusGifEnabled: json['focusGifEnabled'] != false,
       focusVideoUrl: _str(json['focusVideoUrl']),
       focusVideoEnabled: json['focusVideoEnabled'] != false,
       tileShape: CollectionTileShape.parse(json['tileShape']),
@@ -239,13 +325,21 @@ class HomeCollectionFolder {
     'coverImageUrl': coverImageUrl,
     'coverEmoji': coverEmoji,
     'heroBackdropUrl': heroBackdropUrl,
+    'heroVideoUrl': heroVideoUrl,
     'titleLogoUrl': titleLogoUrl,
     'focusGifUrl': focusGifUrl,
     'focusGifEnabled': focusGifEnabled,
     'focusVideoUrl': focusVideoUrl,
     'focusVideoEnabled': focusVideoEnabled,
     'tileShape': tileShape.storageValue,
-    'catalogSources': [for (final s in sources) s.toJson()],
+    'catalogSources': [
+      for (final s in sources)
+        if (s.isAddon) s.toJson(),
+    ],
+    if (sources.any((s) => !s.isAddon))
+      'sources': [
+        for (final s in sources) {...s.toJson(), 'provider': s.provider},
+      ],
   };
 }
 
@@ -267,6 +361,9 @@ class HomeCollection {
 
   /// Whether the folder browser offers an "All" view merging every list.
   final bool showAllTab;
+
+  /// Imported Nuvio layout; absent values use the profile preference.
+  final String? viewMode;
   final String? backdropImageUrl;
   final List<HomeCollectionFolder> folders;
 
@@ -275,6 +372,8 @@ class HomeCollection {
 
   /// Local state: when this collection was last imported, epoch ms.
   final int? importedAtMs;
+  // Storage provenance for migration only; sync conflicts use normal LWW.
+  final int serializationVersion;
 
   const HomeCollection({
     required this.id,
@@ -282,10 +381,12 @@ class HomeCollection {
     this.pinToTop = false,
     this.focusGlowEnabled = true,
     this.showAllTab = true,
+    this.viewMode,
     this.backdropImageUrl,
     this.folders = const [],
     this.enabled = true,
     this.importedAtMs,
+    this.serializationVersion = 2,
   });
 
   String get rowId => HomeCollectionRowIds.collection(id);
@@ -298,10 +399,12 @@ class HomeCollection {
     pinToTop: pinToTop,
     focusGlowEnabled: focusGlowEnabled,
     showAllTab: showAllTab,
+    viewMode: viewMode,
     backdropImageUrl: backdropImageUrl,
     folders: folders,
     enabled: enabled ?? this.enabled,
     importedAtMs: importedAtMs ?? this.importedAtMs,
+    serializationVersion: serializationVersion,
   );
 
   static HomeCollection? fromJson(Object? json) {
@@ -325,10 +428,12 @@ class HomeCollection {
       pinToTop: json['pinToTop'] == true,
       focusGlowEnabled: json['focusGlowEnabled'] != false,
       showAllTab: json['showAllTab'] != false,
+      viewMode: _str(json['viewMode']),
       backdropImageUrl: _str(json['backdropImageUrl']),
       folders: folders,
       enabled: json['enabled'] != false,
       importedAtMs: importedAt is num ? importedAt.toInt() : null,
+      serializationVersion: json['debrifyCollectionVersion'] == 1 ? 1 : 2,
     );
   }
 
@@ -337,9 +442,12 @@ class HomeCollection {
   Map<String, dynamic> toJson() => {
     'id': id,
     'title': title,
+    'debrifyCollectionVersion': serializationVersion,
+    'debrifyVisualVersion': 2,
     'pinToTop': pinToTop,
     'focusGlowEnabled': focusGlowEnabled,
     'showAllTab': showAllTab,
+    if (viewMode != null) 'viewMode': viewMode,
     'backdropImageUrl': backdropImageUrl,
     'folders': [for (final f in folders) f.toJson()],
     'enabled': enabled,

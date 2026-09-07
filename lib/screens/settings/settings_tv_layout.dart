@@ -1,3 +1,4 @@
+import '../../widgets/collections/tmdb_attribution.dart';
 import 'package:flutter/material.dart';
 import '../../utils/tv_reveal.dart';
 import 'package:flutter/services.dart';
@@ -1338,6 +1339,7 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
                         )
                       : null,
                 ),
+                const TmdbAttribution(),
                 SettingsInfoTile.spec(
                   SettingsRows.version,
                   value: widget.appVersion,

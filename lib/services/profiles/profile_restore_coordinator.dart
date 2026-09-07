@@ -2,6 +2,8 @@ import '../local_validation_diagnostics.dart';
 import 'dart:convert';
 import 'dart:math';
 
+import '../../models/home_collection_inventory.dart';
+
 import '../../models/profiles/connection_resource.dart';
 import '../../models/profiles/profile_avatar.dart';
 import '../../models/profiles/profile_policy.dart';
@@ -144,7 +146,7 @@ class ProfileRestoreCoordinator {
       final values = _normalizePreferenceValues(
         sectionId == null
             ? const <String, Object?>{}
-            : section!['values'] as Map,
+            : _preferencesWithCollections(section! as Map),
         resourceIds: restoreResourceIds.bySourceId,
         includeCredentialEngineSettings: true,
         rejectDisallowedKeys:
@@ -648,7 +650,7 @@ class ProfileRestoreCoordinator {
       throw const FormatException('Profile preference section is missing');
     }
     final values = _normalizePreferenceValues(
-      section['values'] as Map,
+      _preferencesWithCollections(section),
       resourceIds: restoreResourceIds.bySourceId,
       includeCredentialEngineSettings: package.mode != 'sanitizedSettings',
       rejectDisallowedKeys:
@@ -1216,6 +1218,19 @@ class ProfileRestoreCoordinator {
     );
   }
 
+  static Map _preferencesWithCollections(Map section) {
+    final extension = section['collectionInventory'];
+    if (extension != null &&
+        (extension is! List || extension.any((part) => part is! String))) {
+      throw const FormatException('Invalid backup collection inventory');
+    }
+    return {
+      ...section['values'] as Map,
+      if (extension != null)
+        HomeCollectionInventory.legacyPrefsKey: (extension as List).join(),
+    };
+  }
+
   static Map<String, Object?> _normalizePreferenceValues(
     Map source, {
     Map<String, String> resourceIds = const <String, String>{},
@@ -1242,6 +1257,16 @@ class ProfileRestoreCoordinator {
         continue;
       }
       Object? value = entry.value;
+      if (key == HomeCollectionInventory.legacyPrefsKey) {
+        // Backups expose plain v2 JSON to legacy readers. New builds restore
+        // it directly into their compressed store, avoiding a large duplicate
+        // preference that would exhaust the tvOS defaults budget.
+        if (!source.containsKey(HomeCollectionInventory.prefsKey)) {
+          result[HomeCollectionInventory.prefsKey] =
+              HomeCollectionInventory.recover(value).encode();
+        }
+        continue;
+      }
       if (value is List) {
         if (value.any((item) => item is! String)) {
           throw FormatException('Invalid string list preference $key');

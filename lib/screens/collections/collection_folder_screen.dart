@@ -17,6 +17,7 @@ import '../../services/stremio_service.dart';
 import '../../theme/app_theme_scope.dart';
 import '../../utils/home_rail_metrics.dart';
 import '../../widgets/collections/folder_hero_band.dart';
+import '../../services/collection_native_source_service.dart';
 import '../../widgets/collections/rail_see_all_pill.dart';
 import '../../widgets/home/row_tag_pill.dart';
 import '../../widgets/see_all/discover_shelf_scope.dart';
@@ -56,6 +57,8 @@ class CollectionFolderScreen extends StatefulWidget {
   final void Function(StremioMeta item)? onItemFocused;
   final bool Function(StremioMeta item)? isBound;
   final bool isTelevision;
+  final CollectionNativeSourceService? nativeSources;
+  final String? sourceKey;
 
   const CollectionFolderScreen({
     super.key,
@@ -66,6 +69,8 @@ class CollectionFolderScreen extends StatefulWidget {
     this.onItemFocused,
     this.isBound,
     this.isTelevision = false,
+    this.nativeSources,
+    this.sourceKey,
   });
 
   @override
@@ -86,10 +91,18 @@ class _Rail {
     required this.addon,
     required this.catalog,
     required StremioService stremio,
+    required CollectionNativeSourceService native,
   }) {
+    if (source.isNative) {
+      pager = NativeCollectionPager(
+        fetch: (page) => native.fetch(source, page),
+        hides: WatchedFilter.predicate,
+      );
+      return;
+    }
     pager = CollectionCatalogPager(
-      addon: addon,
-      catalog: catalog,
+      addon: addon!,
+      catalog: catalog!,
       genre: source.genre,
       hides: WatchedFilter.predicate,
       fetch: (a, c, {skip = 0, genre, onRawCount}) {
@@ -106,12 +119,12 @@ class _Rail {
       },
     );
   }
-  late final CollectionCatalogPager pager;
+  late final CollectionPager pager;
   bool forceRefresh = false;
 
   final CollectionCatalogSource source;
-  final StremioAddon addon;
-  final StremioAddonCatalog catalog;
+  final StremioAddon? addon;
+  final StremioAddonCatalog? catalog;
   final GlobalKey<SeeAllPosterGridState> gridKey = GlobalKey();
   final GlobalKey containerKey = GlobalKey();
   final FocusNode seeAllNode = FocusNode(debugLabel: 'collection_rail_seeall');
@@ -124,7 +137,9 @@ class _Rail {
 
   /// "Popular Movies · Action" — the Home row title plus the source's genre.
   String get title {
-    final base = CatalogSection.rowTitle(catalog);
+    final base =
+        source.title ??
+        (catalog == null ? source.label : CatalogSection.rowTitle(catalog!));
     final genre = source.genre;
     return genre == null ? base : '$base · $genre';
   }
@@ -176,6 +191,7 @@ class _CollectionFolderScreenState extends State<CollectionFolderScreen> {
   final FocusNode _listNode = FocusNode(debugLabel: 'collection_list');
   final FocusNode _sortNode = FocusNode(debugLabel: 'collection_sort');
   final FocusNode _retryNode = FocusNode(debugLabel: 'collection_retry');
+  final FocusNode _issuesNode = FocusNode(debugLabel: 'collection_issues');
 
   late HomeCollection _collection;
   int _configurationToken = 0;
@@ -188,11 +204,19 @@ class _CollectionFolderScreenState extends State<CollectionFolderScreen> {
   /// The folder's lists minus the ones switched off in Home Rows.
   List<CollectionCatalogSource> get _enabledSources => [
     for (final s in _folder.sources)
-      if (!_disabled.contains(
-        HomeCollectionRowIds.folderList(_collection.id, _folder.id, s),
-      ))
+      if ((widget.sourceKey == null || s.key == widget.sourceKey) &&
+          !_disabled.contains(
+            HomeCollectionRowIds.folderList(_collection.id, _folder.id, s),
+          ))
         s,
   ];
+
+  Set<String> get _sourceIssues => {
+    ..._unresolved,
+    for (final r in _rails)
+      if (r.error != null) '${r.title}: ${r.error}',
+    if (_showingAll) ...?_loader?.errors,
+  };
 
   bool get _offersAll => _collection.showAllTab && _rails.length > 1;
 
@@ -219,7 +243,7 @@ class _CollectionFolderScreenState extends State<CollectionFolderScreen> {
     final generation = ++_configurationToken;
     final session = HomeCollectionsStore.captureSession();
     try {
-      final addons = await _stremio.getCatalogAddons();
+      final addons = await _stremio.getAddons();
       final disabled = await StorageService.getHomeDisabledSections();
       final layout = await HomeCollectionsStore.instance.getFolderLayout();
       HomeCollection? updated;
@@ -263,7 +287,13 @@ class _CollectionFolderScreenState extends State<CollectionFolderScreen> {
       final folderId = _hasFolders ? _folder.id : null;
       _addons = addons;
       _disabled = disabled;
-      _layout = layout;
+      _layout = widget.sourceKey != null
+          ? CollectionFolderLayout.tabs
+          : switch (candidate.viewMode?.toUpperCase()) {
+              'TABBED_GRID' => CollectionFolderLayout.tabs,
+              'FOLLOW_LAYOUT' || 'ROWS' => CollectionFolderLayout.rows,
+              _ => layout,
+            };
       if (refreshCollection) {
         _collection =
             updated ??
@@ -301,6 +331,7 @@ class _CollectionFolderScreenState extends State<CollectionFolderScreen> {
     _listNode.dispose();
     _sortNode.dispose();
     _retryNode.dispose();
+    _issuesNode.dispose();
     super.dispose();
   }
 
@@ -315,6 +346,8 @@ class _CollectionFolderScreenState extends State<CollectionFolderScreen> {
     final oldSource = preserveSelection ? _tabRail?.source.key : null;
     final wasAll = preserveSelection && _showingAll;
     final token = ++_reqToken;
+    _openRequest++;
+    _openingTitle = null;
     for (final r in _rails) {
       r.dispose();
     }
@@ -327,23 +360,30 @@ class _CollectionFolderScreenState extends State<CollectionFolderScreen> {
         final catalog = addon == null
             ? null
             : HomeCollectionsStore.resolveCatalog(s, addon);
-        if (addon == null || catalog == null) {
+        if (!s.isNative && (addon == null || catalog == null)) {
           unresolved.add(
-            addon == null
-                ? s.addonId
-                : '${s.addonId} → ${s.type}/${s.catalogId}',
+            HomeCollectionsStore.sourceIssue(s, _addons) ?? s.label,
           );
           continue;
         }
-        final resolvedKey = jsonEncode([
-          addon.manifestUrl,
-          catalog.type,
-          catalog.id,
-          s.genre,
-        ]);
+        final resolvedKey = s.isNative
+            ? s.key
+            : jsonEncode([
+                addon!.manifestUrl,
+                catalog!.type,
+                catalog.id,
+                s.genre,
+              ]);
         if (!resolved.add(resolvedKey)) continue;
         rails.add(
-          _Rail(source: s, addon: addon, catalog: catalog, stremio: _stremio),
+          _Rail(
+            source: s,
+            addon: addon,
+            catalog: catalog,
+            stremio: _stremio,
+            native:
+                widget.nativeSources ?? CollectionNativeSourceService.instance,
+          ),
         );
       }
     }
@@ -493,6 +533,7 @@ class _CollectionFolderScreenState extends State<CollectionFolderScreen> {
       folder: _folder.copyWith(sources: _enabledSources),
       installedAddons: _addons,
       forceRefresh: forceRefresh,
+      native: widget.nativeSources,
     );
     setState(() {
       _loader = loader;
@@ -569,6 +610,47 @@ class _CollectionFolderScreenState extends State<CollectionFolderScreen> {
 
   // ── Handlers ───────────────────────────────────────────────────────────
 
+  int _openRequest = 0;
+  String? _openingTitle;
+
+  void _openItem(StremioMeta item) => _dispatchItem(item, widget.onOpenItem);
+
+  void _quickPlay(StremioMeta item) {
+    final callback = widget.onQuickPlay;
+    if (callback != null) _dispatchItem(item, callback);
+  }
+
+  Future<void> _dispatchItem(
+    StremioMeta item,
+    void Function(StremioMeta) callback,
+  ) async {
+    final request = ++_openRequest;
+    final native =
+        widget.nativeSources ?? CollectionNativeSourceService.instance;
+    if (!item.id.startsWith('tmdb:') || !native.resolveIds) {
+      setState(() => _openingTitle = null);
+      callback(item);
+      return;
+    }
+    setState(() => _openingTitle = item.name);
+    final session = HomeCollectionsStore.captureSession();
+    try {
+      final resolved = await native
+          .resolveIdentity(item)
+          .timeout(const Duration(seconds: 4), onTimeout: () => item);
+      if (mounted &&
+          request == _openRequest &&
+          session == HomeCollectionsStore.captureSession() &&
+          ModalRoute.of(context)?.isCurrent == true) {
+        callback(resolved);
+      }
+    } finally {
+      if (mounted && request == _openRequest) {
+        setState(() => _openingTitle = null);
+      }
+    }
+  }
+
   void _onFolderChanged(int index) {
     if (index == _folderIndex) return;
     setState(() => _folderIndex = index);
@@ -599,14 +681,43 @@ class _CollectionFolderScreenState extends State<CollectionFolderScreen> {
   /// rail already loaded (paging continues rather than restarts) and opened
   /// on the source's genre.
   void _openRailSeeAll(_Rail r) {
+    if (r.source.isNative) {
+      final settings = DiscoverCardSettingsScope.maybeOf(context);
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) {
+            final screen = CollectionFolderScreen(
+              collection: _collection,
+              initialFolderIndex: _folderIndex,
+              sourceKey: r.source.key,
+              nativeSources: widget.nativeSources,
+              isTelevision: widget.isTelevision,
+              onOpenItem: widget.onOpenItem,
+              onQuickPlay: widget.onQuickPlay,
+              onItemFocused: widget.onItemFocused,
+              isBound: widget.isBound,
+            );
+            return settings == null
+                ? screen
+                : DiscoverCardSettingsScope(
+                    showTitles: settings.showTitles,
+                    showRatings: settings.showRatings,
+                    showTypeTags: settings.showTypeTags,
+                    child: screen,
+                  );
+          },
+        ),
+      );
+      return;
+    }
     final settings = DiscoverCardSettingsScope.maybeOf(context);
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) {
           final screen = CatalogSeeAllScreen(
-            addon: r.addon,
-            initialCatalog: r.catalog,
-            initialGenre: r.catalog.supportsGenre ? r.source.genre : null,
+            addon: r.addon!,
+            initialCatalog: r.catalog!,
+            initialGenre: r.catalog!.supportsGenre ? r.source.genre : null,
             seedItems: List<StremioMeta>.of(r.items),
             seedNextSkip: r.nextSkip,
             isTelevision: widget.isTelevision,
@@ -648,6 +759,7 @@ class _CollectionFolderScreenState extends State<CollectionFolderScreen> {
       if (_view == _View.all) _sortNode,
     ],
     if (_hasVisibleLoadError) _retryNode,
+    if (_sourceIssues.isNotEmpty && _rails.isNotEmpty) _issuesNode,
   ];
 
   bool get _showingEmpty {
@@ -750,9 +862,37 @@ class _CollectionFolderScreenState extends State<CollectionFolderScreen> {
               FolderHeroBand(
                 key: ValueKey('folder-hero-${_folder.id}'),
                 folder: _folder,
+                collectionBackdropUrl: _collection.backdropImageUrl,
                 isTelevision: widget.isTelevision,
               ),
             _buildFilterBar(),
+            if (_openingTitle != null)
+              Row(
+                children: [
+                  const Padding(
+                    padding: EdgeInsets.all(12),
+                    child: SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  ),
+                  Expanded(
+                    child: Text(
+                      'Opening $_openingTitle…',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: () => setState(() {
+                      _openRequest++;
+                      _openingTitle = null;
+                    }),
+                    child: const Text('Cancel'),
+                  ),
+                ],
+              ),
             if (_hasVisibleLoadError)
               Focus(
                 canRequestFocus: false,
@@ -761,9 +901,38 @@ class _CollectionFolderScreenState extends State<CollectionFolderScreen> {
                   focusNode: _retryNode,
                   onPressed: _retryCurrent,
                   icon: const Icon(Icons.refresh),
-                  label: Text(_hasVisibleLoadFailure
-                      ? 'Some lists could not load · Retry'
-                      : 'No new titles loaded · Continue'),
+                  label: Text(
+                    _hasVisibleLoadFailure
+                        ? 'Some lists could not load · Retry'
+                        : 'No new titles loaded · Continue',
+                  ),
+                ),
+              ),
+            if (_sourceIssues.isNotEmpty && _rails.isNotEmpty)
+              Focus(
+                canRequestFocus: false,
+                onKeyEvent: _handleFilterKeys,
+                child: TextButton.icon(
+                  focusNode: _issuesNode,
+                  icon: const Icon(Icons.info_outline),
+                  label: Text(
+                    '${_sourceIssues.length} source(s) need attention',
+                  ),
+                  onPressed: () => showDialog<void>(
+                    context: context,
+                    builder: (context) => AlertDialog(
+                      scrollable: true,
+                      title: const Text('Unavailable sources'),
+                      content: Text(_sourceIssues.join('\n\n')),
+                      actions: [
+                        TextButton(
+                          autofocus: true,
+                          onPressed: () => Navigator.pop(context),
+                          child: const Text('Close'),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
               ),
             Expanded(child: _buildBody()),
@@ -806,7 +975,8 @@ class _CollectionFolderScreenState extends State<CollectionFolderScreen> {
               focusNode: _folderNode,
               options: [
                 for (var i = 0; i < folders.length; i++)
-                  StremioDropdownOption(i, folders[i].title),
+                  if (widget.sourceKey == null || i == _folderIndex)
+                    StremioDropdownOption(i, folders[i].title),
               ],
               onSelected: _onFolderChanged,
             ),
@@ -926,7 +1096,11 @@ class _CollectionFolderScreenState extends State<CollectionFolderScreen> {
                 ),
               ),
               const SizedBox(width: 10),
-              Flexible(child: RowTagPill(r.addon.name)),
+              Flexible(
+                child: RowTagPill(
+                  r.addon?.name ?? r.source.provider.toUpperCase(),
+                ),
+              ),
               const Spacer(),
               RailSeeAllPill(
                 node: r.seeAllNode,
@@ -951,8 +1125,8 @@ class _CollectionFolderScreenState extends State<CollectionFolderScreen> {
                     isTelevision: tv,
                     loadingMore: r.loadingMore,
                     exhausted: r.exhausted,
-                    onOpen: widget.onOpenItem,
-                    onQuickPlay: widget.onQuickPlay,
+                    onOpen: _openItem,
+                    onQuickPlay: widget.onQuickPlay == null ? null : _quickPlay,
                     onItemFocused: (item) {
                       widget.onItemFocused?.call(item);
                     },
@@ -983,8 +1157,8 @@ class _CollectionFolderScreenState extends State<CollectionFolderScreen> {
       isTelevision: widget.isTelevision,
       loadingMore: r.loadingMore,
       exhausted: r.exhausted,
-      onOpen: widget.onOpenItem,
-      onQuickPlay: widget.onQuickPlay,
+      onOpen: _openItem,
+      onQuickPlay: widget.onQuickPlay == null ? null : _quickPlay,
       onItemFocused: widget.onItemFocused,
       isBound: widget.isBound,
       onLoadMore: () => _loadMoreRail(r),
@@ -1005,8 +1179,8 @@ class _CollectionFolderScreenState extends State<CollectionFolderScreen> {
       isTelevision: widget.isTelevision,
       loadingMore: _allLoadingMore,
       exhausted: _allExhausted,
-      onOpen: widget.onOpenItem,
-      onQuickPlay: widget.onQuickPlay,
+      onOpen: _openItem,
+      onQuickPlay: widget.onQuickPlay == null ? null : _quickPlay,
       onItemFocused: widget.onItemFocused,
       isBound: widget.isBound,
       onLoadMore: _loadMoreAll,
@@ -1025,29 +1199,41 @@ class _CollectionFolderScreenState extends State<CollectionFolderScreen> {
       detail = _configurationError!;
     } else if (!_hasFolders) {
       title = 'This collection has no folders';
-      detail = 'Import a file that lists folders with catalog sources.';
+      detail =
+          'Add a folder in the collection editor or import a collection file.';
     } else if (_folder.sources.isEmpty) {
-      title = 'This folder lists no catalogs';
-      detail = 'Nothing to browse here.';
+      title = 'This folder has no sources';
+      detail = 'Add an addon, TMDB, or Trakt source in the collection editor.';
     } else if (_enabledSources.isEmpty) {
       title = 'Every list in this folder is switched off';
       detail =
           'Turn its lists back on under Settings › Home Screen › Home Rows.';
     } else if (_rails.isEmpty) {
-      title = 'No matching addon installed';
-      detail =
-          'This folder needs an addon that isn\'t installed:\n'
-          '${_unresolved.toSet().join('\n')}\n\n'
-          'Install it under Addons, then come back.';
+      title = 'Some collection sources need attention';
+      detail = _unresolved.toSet().join('\n\n');
+    } else if (_showingAll && (_loader?.hasErrors ?? false)) {
+      title = 'Could not load all lists';
+      detail = _loader!.errors.toSet().join('\n');
     } else if (_tabs && !_showingAll) {
-      title = 'Nothing in this list';
-      detail = 'The catalog may be empty, or the addon failed to respond.';
+      title = _tabRail?.error == null
+          ? 'Nothing in this list'
+          : 'Could not load this list';
+      detail =
+          _tabRail?.error ??
+          'This list is empty or its titles are hidden by your watched filter.';
     } else {
       title = 'Nothing in this folder';
       detail = _unresolved.isNotEmpty
           ? 'The installed catalogs returned nothing. Some lists are '
-                'missing an addon:\n${_unresolved.toSet().join('\n')}'
-          : 'The catalogs may be empty, or the addon failed to respond.';
+                'unavailable:\n${_unresolved.toSet().join('\n')}'
+          : _rails
+                .map((r) => r.error)
+                .whereType<String>()
+                .toSet()
+                .join('\n')
+                .isNotEmpty
+          ? _rails.map((r) => r.error).whereType<String>().toSet().join('\n')
+          : 'The lists are empty or their titles are hidden by your watched filter.';
     }
     return SingleChildScrollView(
       child: Center(
