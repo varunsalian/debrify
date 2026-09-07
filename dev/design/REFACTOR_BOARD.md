@@ -1,5 +1,8 @@
   # Refactor board
 
+## #256 merged (V1-F menu identity snapshot); lane D running
+Merged at 4f535136, rebased on main after #251 deletion. Independent verdict ADMIT WITH NOTES (no blocker; goldens pending in CI but test/native-player passed). Host 10,027 to 9,918 (-109), controller +109, net +0. Player 9,768 / 9,500 (268 remaining). Production merges since gate10: 1 (#256). In flight: lane D (stale-token candidate elimination, ~40 lines estimated) for final close-out.
+
 ## Gate10 84f81806 PASS with notes
 Gate10 on 84f81806b1f19c1d04f58e71c8890fcdf0d39744 (after 252/253/255): generic 6,493 passed / 33 exact known / 3 skipped, zero new; analyzer 447 with identical 18 NEW / 19 UNUSED drift (local Dart 3.13 vs CI 3.44.8); layering 52/77 unchanged; Python 55/55; Windows release fresh (105 KiB) with uncommitted MSVC-2026 workaround (build only). Video player 9,829 lines (−501 since gate9's 10,330, project −505 total expected vs observed +4). Evidence C:/Users/hunth/source/gate10-main/REPORT.md. Production merges since gate10: 0 (#254 awaits verdict fix, #256 awaiting CI).
 
