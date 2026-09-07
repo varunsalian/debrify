@@ -55,6 +55,7 @@ import 'package:media_kit_video/media_kit_video.dart' as mkv;
 
 // Video Player Components
 import 'video_player/models/playlist_entry.dart';
+import 'video_player/episode_display_inputs.dart';
 import 'video_player/player_launch_config.dart';
 import 'video_player/resume_controller.dart';
 import 'video_player/player_tracker_lifecycle.dart';
@@ -3065,6 +3066,27 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     await _handleSeriesNextEpisode();
   }
 
+
+  /// The episode display projection's reads, each taken once in origin
+  /// first-read order; the lazy, cache-writing `_seriesPlaylist` is evaluated
+  /// here, at the call, exactly where the origin evaluated it first.
+  // ignore: unused_element
+  EpisodeDisplayInputs get _episodeDisplayInputs => EpisodeDisplayInputs(
+    seriesPlaylist: _seriesPlaylist,
+    activePlaylist: _activePlaylist,
+    currentIndex: _currentIndex,
+    effectiveContentTitle: _effectiveContentTitle,
+    effectiveStremioTvChannels: _effectiveStremioTvChannels,
+    hasStremioTvGuide: _hasStremioTvGuide,
+    dynamicTitle: _dynamicTitle,
+    hasMagicNext: widget.requestMagicNext != null,
+    effectiveIptvChannels: _effectiveIptvChannels,
+    title: widget.title,
+    currentIptvIndex: _currentIptvIndex,
+    effectiveContentSeason: _effectiveContentSeason,
+    effectiveContentEpisode: _effectiveContentEpisode,
+    subtitle: widget.subtitle,
+  );
 
   /// Get the current episode title for display
   String _getCurrentEpisodeTitle() => _getCurrentEpisodeTitleInfo().title;
