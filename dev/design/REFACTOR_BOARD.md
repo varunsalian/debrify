@@ -1,5 +1,9 @@
   # Refactor board
 
+## Merged #240 — R2 closeout
+
+Exact reviewed fe748e8b merged after247. Independent ordered union f3ccbf024dacc926c6386aaca2c622b8387fa293, four intended payloads and2802 outside files preserved. All three CI checks passed; prior independent origin/current runtime evidence retained. Router4300→3889 (-411), net+170. Did we make a difference? Transfer bookkeeping now has a separate owner. More? R3 presenter remains pending. Player10334,834 remaining; other gods unchanged. Two production merges since gate534. Next237 then mandatory integrated gate before239. No user decision.
+
 ## Merged #247 — player retry closeout
 
 Merged599dcb12ee23f3094847594978d042910ef95b63, exact reviewed headf3886f6671d75e58acbdceb7e2b574b245fdce4a. Actual merge tree65cda6d8b93d23e9b8d220a2e53e452f5e8e6c76 matches independently accepted union. All three CI checks PASS; independent37 tests and baseline correspondence review retained. Gate534 passed before merge; this is one production merge since that gate, not a new integrated-build/device claim.
