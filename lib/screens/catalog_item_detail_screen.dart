@@ -18,16 +18,22 @@ import '../services/main_page_bridge.dart';
 import '../services/series_source_service.dart';
 import 'package:debrify/services/storage/quick_play_policy_prefs.dart';
 import '../widgets/detail/theme/detail_theme.dart';
+import '../widgets/detail/catalog_detail_action_row.dart';
+import '../widgets/detail/catalog_detail_backdrop.dart';
+import '../widgets/detail/catalog_detail_badges.dart';
+import '../widgets/detail/catalog_detail_description.dart';
+import '../widgets/detail/catalog_detail_glass.dart';
+import '../widgets/detail/catalog_detail_quick_actions.dart';
+import '../widgets/detail/catalog_detail_rec_card.dart';
+import '../widgets/detail/catalog_detail_reveal.dart';
 import '../widgets/detail/detail_primary_sources.dart';
 import '../widgets/parents_guide_section.dart';
-import '../widgets/movie_watched_badge.dart';
 import '../widgets/shimmer.dart';
 import '../widgets/trakt/trakt_menu_helpers.dart';
 import '../services/simkl/simkl_menu_helpers.dart';
 import '../services/simkl/simkl_service.dart';
 import '../services/mdblist/mdblist_menu_helpers.dart';
 import '../utils/artwork_url.dart';
-import '../utils/tv_keys.dart';
 
 /// Cinematic detail screen for a catalog item.
 ///
@@ -612,7 +618,7 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
             left: 0,
             right: 0,
             height: isWide ? size.height : size.height * 0.62,
-            child: _Backdrop(
+            child: CatalogDetailBackdrop(
               url: backdropUrl,
               isWide: isWide,
               animate: !widget.isTelevision,
@@ -634,7 +640,7 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
             child: SafeArea(
               child: Padding(
                 padding: EdgeInsets.all(widget.isTelevision ? 28 : 8),
-                child: _GlassIconButton(
+                child: CatalogDetailGlassIconButton(
                   icon: Icons.arrow_back_rounded,
                   onTap: () => Navigator.of(context).pop(),
                 ),
@@ -838,10 +844,10 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
       children
         ..add(const SizedBox(height: 24))
         ..add(
-          _Reveal(
+          CatalogDetailReveal(
             parent: _revealCtrl,
             start: infoStart,
-            child: _GlassCard(children: infoChildren),
+            child: CatalogDetailGlassCard(children: infoChildren),
           ),
         );
     }
@@ -879,10 +885,10 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
       children
         ..add(const SizedBox(height: 24))
         ..add(
-          _Reveal(
+          CatalogDetailReveal(
             parent: _revealCtrl,
             start: detailStart,
-            child: _GlassCard(children: detailChildren),
+            child: CatalogDetailGlassCard(children: detailChildren),
           ),
         );
     }
@@ -920,7 +926,7 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
 
   // ── Sections ──────────────────────────────────────────────────────────────
 
-  Widget _secEyebrow(double start) => _Reveal(
+  Widget _secEyebrow(double start) => CatalogDetailReveal(
     parent: _revealCtrl,
     start: start,
     child: Text(
@@ -938,7 +944,7 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
     ),
   );
 
-  Widget _secTitle(double start) => _Reveal(
+  Widget _secTitle(double start) => CatalogDetailReveal(
     parent: _revealCtrl,
     start: start,
     child: Text(
@@ -973,7 +979,7 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
     final voteCount = extra?.voteCountFormatted;
     final hasVotes = voteCount != null && voteCount.isNotEmpty;
     final showMetaShimmer = !_imdbLoaded && extra == null;
-    return _Reveal(
+    return CatalogDetailReveal(
       parent: _revealCtrl,
       start: start,
       child: DefaultTextStyle(
@@ -993,7 +999,7 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
           crossAxisAlignment: WrapCrossAlignment.center,
           children: [
             if (hasYear) Text(year),
-            if (cert != null) ...[if (hasYear) _dot(), _CertBadge(label: cert)],
+            if (cert != null) ...[if (hasYear) _dot(), CatalogDetailCertBadge(label: cert)],
             if (runtime != null) ...[
               if (hasYear || cert != null) _dot(),
               Text(runtime),
@@ -1043,7 +1049,7 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
             ],
             if (extra?.metacriticScore != null) ...[
               _dot(),
-              _MetacriticBadge(score: extra!.metacriticScore!),
+              CatalogDetailMetacriticBadge(score: extra!.metacriticScore!),
             ],
           ],
         ),
@@ -1056,7 +1062,7 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
     if (genres.isEmpty) genres = _imdbExtra?.genres ?? const [];
     if (genres.isEmpty) {
       if (_imdbLoaded) return null;
-      return _Reveal(
+      return CatalogDetailReveal(
         parent: _revealCtrl,
         start: start,
         child: Wrap(
@@ -1082,13 +1088,13 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
         ),
       );
     }
-    return _Reveal(
+    return CatalogDetailReveal(
       parent: _revealCtrl,
       start: start,
       child: Wrap(
         spacing: 7,
         runSpacing: 7,
-        children: [for (final g in genres.take(5)) _GenreChip(label: g)],
+        children: [for (final g in genres.take(5)) CatalogDetailGenreChip(label: g)],
       ),
     );
   }
@@ -1096,7 +1102,7 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
   Widget? _secAwards(double start) {
     final extra = _imdbExtra;
     if (extra == null || !extra.hasAwards) return null;
-    return _Reveal(
+    return CatalogDetailReveal(
       parent: _revealCtrl,
       start: start,
       child: Container(
@@ -1140,7 +1146,7 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
     if (extra == null) {
       if (_imdbLoaded) return null;
       final h = _tight ? 10.0 : 12.0;
-      return _Reveal(
+      return CatalogDetailReveal(
         parent: _revealCtrl,
         start: start,
         child: Column(
@@ -1201,7 +1207,7 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
       shadows: sh,
     );
 
-    return _Reveal(
+    return CatalogDetailReveal(
       parent: _revealCtrl,
       start: start,
       child: Column(
@@ -1242,7 +1248,7 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
     final cast = _imdbExtra?.cast ?? const [];
     if (cast.isEmpty) {
       if (_imdbLoaded) return null;
-      return _Reveal(
+      return CatalogDetailReveal(
         parent: _revealCtrl,
         start: start,
         child: Column(
@@ -1282,7 +1288,7 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
     }
 
     final avatarSize = _tight ? 56.0 : 68.0;
-    return _Reveal(
+    return CatalogDetailReveal(
       parent: _revealCtrl,
       start: start,
       child: Column(
@@ -1302,7 +1308,7 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
                 children: [
                   for (var i = 0; i < cast.length; i++) ...[
                     if (i > 0) const SizedBox(width: 14),
-                    _CastAvatar(member: cast[i], size: avatarSize),
+                    CatalogDetailCastAvatar(member: cast[i], size: avatarSize),
                   ],
                 ],
               ),
@@ -1317,7 +1323,7 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
     final extra = _imdbExtra;
     if (extra == null) {
       if (_imdbLoaded) return null;
-      return _Reveal(
+      return CatalogDetailReveal(
         parent: _revealCtrl,
         start: start,
         child: Column(
@@ -1378,7 +1384,7 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
       shadows: const [Shadow(color: Color(0x55000000), blurRadius: 4)],
     );
 
-    return _Reveal(
+    return CatalogDetailReveal(
       parent: _revealCtrl,
       start: start,
       child: Column(
@@ -1420,7 +1426,7 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
     if (guide == null) {
       if (_parentsGuideLoaded) return null;
       final rowH = _tight ? 38.0 : 44.0;
-      return _Reveal(
+      return CatalogDetailReveal(
         parent: _revealCtrl,
         start: start,
         child: Column(
@@ -1446,7 +1452,7 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
       );
     }
     if (guide.isEmpty) return null;
-    return _Reveal(
+    return CatalogDetailReveal(
       parent: _revealCtrl,
       start: start,
       child: ParentsGuideSection(
@@ -1461,10 +1467,10 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
     if (widget.simklMenuOptions.isEmpty || widget.onSimklAction == null) {
       return null;
     }
-    return _Reveal(
+    return CatalogDetailReveal(
       parent: _revealCtrl,
       start: start,
-      child: _SimklQuickActions(
+      child: CatalogDetailSimklQuickActions(
         options: widget.simklMenuOptions,
         tv: widget.isTelevision,
         phone: !_wide,
@@ -1477,10 +1483,10 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
     if (widget.mdblistMenuOptions.isEmpty || widget.onMdblistAction == null) {
       return null;
     }
-    return _Reveal(
+    return CatalogDetailReveal(
       parent: _revealCtrl,
       start: start,
-      child: _MdblistQuickActions(
+      child: CatalogDetailMdblistQuickActions(
         options: widget.mdblistMenuOptions,
         onSelected: widget.onMdblistAction!,
       ),
@@ -1491,10 +1497,10 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
     if (widget.traktMenuOptions.isEmpty || widget.onTraktAction == null) {
       return null;
     }
-    return _Reveal(
+    return CatalogDetailReveal(
       parent: _revealCtrl,
       start: start,
-      child: _QuickActions(
+      child: CatalogDetailQuickActions(
         options: widget.traktMenuOptions,
         tv: widget.isTelevision,
         // Phone (narrow layout): force a tidy 3-up grid. Wide/TV keeps
@@ -1520,7 +1526,7 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
       return null;
     }
 
-    return _Reveal(
+    return CatalogDetailReveal(
       parent: _revealCtrl,
       start: start,
       child: Column(
@@ -1583,7 +1589,7 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
                         children: [
                           for (var i = 0; i < recs!.length; i++) ...[
                             if (i > 0) const SizedBox(width: 12),
-                            _RecCard(
+                            CatalogDetailRecCard(
                               item: recs[i],
                               width: cardW,
                               posterHeight: posterH,
@@ -1608,7 +1614,7 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
     }
     if (description.isEmpty) return null;
     final tagline = _imdbExtra?.tagline;
-    return _Reveal(
+    return CatalogDetailReveal(
       parent: _revealCtrl,
       start: start,
       child: Column(
@@ -1632,7 +1638,7 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
             SizedBox(height: _tight ? 6 : 10),
           ],
           if (_wide)
-            _Description(
+            CatalogDetailDescription(
               text: description,
               wide: true,
               dense: _tight,
@@ -1674,11 +1680,11 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
   /// The Play / Sources action row.
   Widget _buildActionRow(double start) {
     final item = widget.item;
-    return _Reveal(
+    return CatalogDetailReveal(
       parent: _revealCtrl,
       start: start,
       dy: 16,
-      child: _ActionRow(
+      child: CatalogDetailActionRow(
         compact: !_wide,
         showQuickPlay: widget.showQuickPlay,
         isSeries: item.type == 'series',
@@ -1762,1627 +1768,4 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
     '·',
     style: TextStyle(color: Colors.white.withValues(alpha: 0.4), fontSize: 14),
   );
-}
-
-// ── Staggered entrance reveal ───────────────────────────────────────────────
-
-/// Fades + slides a section in from below, on an [Interval] of [parent] so
-/// successive sections cascade. Cheap: a single shared controller drives all.
-class _Reveal extends StatelessWidget {
-  final AnimationController parent;
-
-  /// Where on the 0‥1 timeline this section starts (earlier = sooner).
-  final double start;
-
-  /// How far (px) it travels up into place.
-  final double dy;
-  final Widget child;
-
-  const _Reveal({
-    required this.parent,
-    required this.start,
-    required this.child,
-    this.dy = 26,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final anim = CurvedAnimation(
-      parent: parent,
-      curve: Interval(
-        start,
-        (start + 0.42).clamp(0.0, 1.0),
-        curve: Curves.easeOutCubic,
-      ),
-    );
-    return AnimatedBuilder(
-      animation: anim,
-      builder: (context, child) => Opacity(
-        opacity: anim.value,
-        child: Transform.translate(
-          offset: Offset(0, (1 - anim.value) * dy),
-          child: child,
-        ),
-      ),
-      child: child,
-    );
-  }
-}
-
-// ── Backdrop ────────────────────────────────────────────────────────────────
-
-/// Cinematic backdrop: a slow Ken-Burns push-in, a gentle fade-in once the
-/// image decodes, a layered vertical scrim, a corner vignette, and (on wide)
-/// a left-side scrim where the content sits.
-class _Backdrop extends StatefulWidget {
-  final String? url;
-  final bool isWide;
-
-  /// When false (TV) the Ken-Burns push-in and fade-in are skipped — a
-  /// static image, so there's no continuous repaint on low-power devices.
-  final bool animate;
-  const _Backdrop({
-    required this.url,
-    required this.isWide,
-    this.animate = true,
-  });
-
-  @override
-  State<_Backdrop> createState() => _BackdropState();
-}
-
-class _BackdropState extends State<_Backdrop>
-    with SingleTickerProviderStateMixin {
-  AnimationController? _ken;
-
-  @override
-  void initState() {
-    super.initState();
-    if (widget.animate) {
-      _ken = AnimationController(
-        vsync: this,
-        duration: const Duration(seconds: 22),
-      )..repeat(reverse: true);
-    }
-  }
-
-  @override
-  void dispose() {
-    _ken?.dispose();
-    super.dispose();
-  }
-
-  Widget _image(String url) {
-    final ken = _ken;
-
-    // Static (TV): no fade-in, no Ken-Burns — cheapest possible.
-    if (ken == null) {
-      return Image.network(
-        url,
-        fit: BoxFit.cover,
-        alignment: Alignment.topCenter,
-        errorBuilder: (_, __, ___) => Container(color: Colors.black),
-      );
-    }
-
-    return AnimatedBuilder(
-      animation: ken,
-      builder: (context, child) {
-        final t = Curves.easeInOut.transform(ken.value);
-        return Transform.scale(
-          scale: 1.0 + 0.07 * t,
-          alignment: Alignment(0, -0.7 + 0.2 * t),
-          child: child,
-        );
-      },
-      child: Image.network(
-        url,
-        fit: BoxFit.cover,
-        alignment: Alignment.topCenter,
-        frameBuilder: (_, child, frame, wasSync) {
-          if (wasSync) return child;
-          return AnimatedOpacity(
-            opacity: frame == null ? 0 : 1,
-            duration: const Duration(milliseconds: 650),
-            curve: Curves.easeOut,
-            child: child,
-          );
-        },
-        errorBuilder: (_, __, ___) => Container(color: Colors.black),
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final isWide = widget.isWide;
-    final url = widget.url;
-
-    return ClipRect(
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          if (url != null && url.isNotEmpty)
-            _image(url)
-          else
-            Container(color: Colors.black),
-
-          // Base darkening wash — guarantees legibility even on pure-white
-          // or very bright posters. Uniform tint, no gradient.
-          const ColoredBox(color: Color(0x44000000)),
-
-          // Corner vignette — frames the art, cinema style.
-          const DecoratedBox(
-            decoration: BoxDecoration(
-              gradient: RadialGradient(
-                center: Alignment(0, -0.25),
-                radius: 1.15,
-                colors: [
-                  Color(0x00000000),
-                  Color(0x00000000),
-                  Color(0x66000000),
-                ],
-                stops: [0.0, 0.55, 1.0],
-              ),
-            ),
-          ),
-
-          // Vertical scrim — heavier than before so content stays readable
-          // regardless of poster brightness.
-          DecoratedBox(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: const [
-                  Color(0x33000000),
-                  Color(0x66000000),
-                  Color(0xCC050507),
-                  Color(0xF5050507),
-                  Color(0xFF050507),
-                ],
-                stops: isWide
-                    ? const [0.0, 0.30, 0.58, 0.82, 1.0]
-                    : const [0.0, 0.32, 0.62, 0.86, 1.0],
-              ),
-            ),
-          ),
-
-          // Side scrim on wide layouts — darken the left where content sits,
-          // fade to clear art on the right.
-          if (isWide)
-            const DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.centerLeft,
-                  end: Alignment.centerRight,
-                  colors: [
-                    Color(0xEE050507),
-                    Color(0x99050507),
-                    Color(0x33000000),
-                    Color(0x00000000),
-                  ],
-                  stops: [0.0, 0.32, 0.60, 1.0],
-                ),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-// ── Certificate badge ──────────────────────────────────────────────────────
-
-class _CertBadge extends StatelessWidget {
-  final String label;
-  const _CertBadge({required this.label});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-      decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.30),
-        borderRadius: BorderRadius.circular(4),
-        border: Border.all(
-          color: Colors.white.withValues(alpha: 0.50),
-          width: 1,
-        ),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          color: Colors.white.withValues(alpha: 0.85),
-          fontSize: 11,
-          fontWeight: FontWeight.w700,
-          letterSpacing: 0.3,
-          height: 1.3,
-        ),
-      ),
-    );
-  }
-}
-
-// ── Genre chip ──────────────────────────────────────────────────────────────
-
-class _GenreChip extends StatelessWidget {
-  final String label;
-  const _GenreChip({required this.label});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.35),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(
-          color: Colors.white.withValues(alpha: 0.15),
-          width: 0.5,
-        ),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          color: Colors.white.withValues(alpha: 0.88),
-          fontSize: 11,
-          fontWeight: FontWeight.w600,
-          letterSpacing: 0.3,
-        ),
-      ),
-    );
-  }
-}
-
-// ── Metacritic badge ──────────────────────────────────────────────────────
-
-class _MetacriticBadge extends StatelessWidget {
-  final int score;
-  const _MetacriticBadge({required this.score});
-
-  @override
-  Widget build(BuildContext context) {
-    final Color bg;
-    if (score >= 61) {
-      bg = const Color(0xFF66CC33);
-    } else if (score >= 40) {
-      bg = const Color(0xFFFFCC33);
-    } else {
-      bg = const Color(0xFFFF0000);
-    }
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(3),
-      ),
-      child: Text(
-        '$score',
-        style: TextStyle(
-          color: Colors.white,
-          fontSize: 11,
-          fontWeight: FontWeight.w900,
-          height: 1.3,
-        ),
-      ),
-    );
-  }
-}
-
-// ── Cast avatar ──────────────────────────────────────────────────────────
-
-class _CastAvatar extends StatelessWidget {
-  final CastMember member;
-  final double size;
-  const _CastAvatar({required this.member, required this.size});
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: size + 8,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: size,
-            height: size,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: Colors.white.withValues(alpha: 0.06),
-              border: Border.all(
-                color: Colors.white.withValues(alpha: 0.12),
-                width: 0.5,
-              ),
-              boxShadow: const [
-                BoxShadow(color: Color(0x33000000), blurRadius: 8),
-              ],
-            ),
-            clipBehavior: Clip.antiAlias,
-            child: member.imageUrl != null
-                ? CachedNetworkImage(
-                    imageUrl: member.imageUrl!,
-                    fit: BoxFit.cover,
-                    placeholder: (_, __) => _initials(),
-                    errorWidget: (_, __, ___) => _initials(),
-                  )
-                : _initials(),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            member.name.split(' ').last,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.80),
-              fontSize: 10,
-              fontWeight: FontWeight.w600,
-              height: 1.2,
-            ),
-          ),
-          if (member.character != null) ...[
-            const SizedBox(height: 1),
-            Text(
-              member.character!,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.38),
-                fontSize: 9,
-                fontWeight: FontWeight.w500,
-                height: 1.2,
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  Widget _initials() => Center(
-    child: Text(
-      member.name.isNotEmpty ? member.name[0].toUpperCase() : '?',
-      style: TextStyle(
-        color: Colors.white.withValues(alpha: 0.4),
-        fontSize: 20,
-        fontWeight: FontWeight.w700,
-      ),
-    ),
-  );
-}
-
-// ── Recommendation ("Watch Next") card ─────────────────────────────────────
-
-class _RecCard extends StatefulWidget {
-  final StremioMeta item;
-  final double width;
-  final double posterHeight;
-  final bool tv;
-  final VoidCallback onTap;
-
-  const _RecCard({
-    required this.item,
-    required this.width,
-    required this.posterHeight,
-    required this.tv,
-    required this.onTap,
-  });
-
-  @override
-  State<_RecCard> createState() => _RecCardState();
-}
-
-class _RecCardState extends State<_RecCard> {
-  bool _focused = false;
-  bool _hovered = false;
-  bool get _active => _focused || _hovered;
-
-  @override
-  Widget build(BuildContext context) {
-    final poster = widget.item.poster;
-    // Signal — this screen is never wrapped in a DetailThemeScope today, so
-    // the fallback IS the shipped gold. Hoisted out of the tree below so the
-    // lookup happens once per build, never inside an animated builder.
-    final t = DetailThemeScope.maybeOf(context);
-    return Focus(
-      onFocusChange: (f) => setState(() => _focused = f),
-      onKeyEvent: (node, event) {
-        if (event is KeyDownEvent &&
-            (isActivateKey(event.logicalKey) ||
-                event.logicalKey == LogicalKeyboardKey.space)) {
-          widget.onTap();
-          return KeyEventResult.handled;
-        }
-        return KeyEventResult.ignored;
-      },
-      child: MouseRegion(
-        onEnter: (_) => setState(() => _hovered = true),
-        onExit: (_) => setState(() => _hovered = false),
-        cursor: SystemMouseCursors.click,
-        child: GestureDetector(
-          onTap: widget.onTap,
-          behavior: HitTestBehavior.opaque,
-          child: AnimatedScale(
-            duration: widget.tv
-                ? Duration.zero
-                : const Duration(milliseconds: 150),
-            curve: Curves.easeOutCubic,
-            scale: _active ? 1.05 : 1.0,
-            child: SizedBox(
-              width: widget.width,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(12),
-                    child: Container(
-                      width: widget.width,
-                      height: widget.posterHeight,
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.06),
-                        border: Border.all(
-                          color: _active
-                              ? t.focus
-                              : Colors.white.withValues(alpha: 0.10),
-                          width: _active ? 2 : 0.5,
-                        ),
-                      ),
-                      child: Stack(
-                        fit: StackFit.expand,
-                        children: [
-                          if (poster != null && poster.isNotEmpty)
-                            CachedNetworkImage(
-                              imageUrl: poster,
-                              fit: BoxFit.cover,
-                              placeholder: (_, __) => _posterFallback(),
-                              errorWidget: (_, __, ___) => _posterFallback(),
-                            )
-                          else
-                            _posterFallback(),
-                          if (widget.item.type == 'movie' ||
-                              widget.item.type == 'series')
-                            Positioned(
-                              top: 7,
-                              right: 7,
-                              child: MovieWatchedBadge(
-                                imdbId:
-                                    widget.item.effectiveImdbId ??
-                                    widget.item.id,
-                                contentType: widget.item.type,
-                                compact: true,
-                                tickPolicyScoped: true,
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    widget.item.name,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: Colors.white.withValues(
-                        alpha: _active ? 1.0 : 0.82,
-                      ),
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      height: 1.2,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _posterFallback() => Center(
-    child: Padding(
-      padding: const EdgeInsets.all(8),
-      child: Text(
-        widget.item.name,
-        maxLines: 3,
-        overflow: TextOverflow.ellipsis,
-        textAlign: TextAlign.center,
-        style: TextStyle(
-          color: Colors.white.withValues(alpha: 0.6),
-          fontSize: 11,
-          fontWeight: FontWeight.w600,
-        ),
-      ),
-    ),
-  );
-}
-
-// ── Description with "Read more" ───────────────────────────────────────────
-
-class _Description extends StatelessWidget {
-  final String text;
-  final bool wide;
-  final bool dense;
-  final int collapsedLines;
-  final bool expanded;
-  final VoidCallback onToggle;
-  const _Description({
-    required this.text,
-    required this.wide,
-    required this.expanded,
-    required this.onToggle,
-    this.dense = false,
-    this.collapsedLines = 4,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final style = TextStyle(
-      color: Colors.white.withValues(alpha: 0.82),
-      fontSize: dense ? 13 : (wide ? 17 : 15),
-      height: dense ? 1.4 : 1.5,
-      letterSpacing: 0.1,
-      shadows: const [Shadow(color: Color(0x66000000), blurRadius: 6)],
-    );
-
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final tp = TextPainter(
-          text: TextSpan(text: text, style: style),
-          maxLines: collapsedLines,
-          textDirection: TextDirection.ltr,
-        )..layout(maxWidth: constraints.maxWidth);
-        final overflows = tp.didExceedMaxLines;
-
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              text,
-              style: style,
-              maxLines: expanded ? null : collapsedLines,
-              overflow: expanded ? TextOverflow.visible : TextOverflow.fade,
-            ),
-            if (overflows) ...[
-              const SizedBox(height: 6),
-              _ReadMoreToggle(
-                label: expanded ? 'Show less' : 'Read more',
-                onToggle: onToggle,
-              ),
-            ],
-          ],
-        );
-      },
-    );
-  }
-}
-
-/// Focusable "Read more / Show less" toggle. A bare GestureDetector is not
-/// reachable or activatable with a D-pad/remote, so this mirrors the
-/// focus idiom used by [_QuickAction]: a [Focus] that tracks focus, accepts
-/// select/enter/space, and shows a gold affordance when focused or hovered.
-class _ReadMoreToggle extends StatefulWidget {
-  final String label;
-  final VoidCallback onToggle;
-  const _ReadMoreToggle({required this.label, required this.onToggle});
-
-  @override
-  State<_ReadMoreToggle> createState() => _ReadMoreToggleState();
-}
-
-class _ReadMoreToggleState extends State<_ReadMoreToggle> {
-  bool _focused = false;
-  bool _hovered = false;
-  bool get _active => _focused || _hovered;
-
-  @override
-  Widget build(BuildContext context) {
-    final t = DetailThemeScope.maybeOf(context);
-    return Focus(
-      onFocusChange: (f) => setState(() => _focused = f),
-      onKeyEvent: (node, event) {
-        if (event is KeyDownEvent &&
-            (isActivateKey(event.logicalKey) ||
-                event.logicalKey == LogicalKeyboardKey.space)) {
-          widget.onToggle();
-          return KeyEventResult.handled;
-        }
-        return KeyEventResult.ignored;
-      },
-      child: MouseRegion(
-        onEnter: (_) => setState(() => _hovered = true),
-        onExit: (_) => setState(() => _hovered = false),
-        cursor: SystemMouseCursors.click,
-        child: GestureDetector(
-          onTap: widget.onToggle,
-          behavior: HitTestBehavior.opaque,
-          // Inactive state is byte-identical to the old bare text link (no
-          // box/indent, so the phone/touch look is unchanged). Focus/hover is
-          // signalled with gold + underline + a transform-only scale (no
-          // layout reflow), echoing _QuickAction's scale feedback.
-          child: AnimatedScale(
-            duration: const Duration(milliseconds: 150),
-            curve: Curves.easeOutCubic,
-            scale: _active ? 1.04 : 1.0,
-            alignment: Alignment.centerLeft,
-            child: Text(
-              widget.label,
-              style: TextStyle(
-                color: _active ? t.focus : Colors.white.withValues(alpha: 0.95),
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 0.3,
-                decoration: _active ? TextDecoration.underline : null,
-                decorationColor: t.focus,
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-// ── Action row (PLAY + BROWSE) ──────────────────────────────────────────────
-
-class _ActionRow extends StatelessWidget {
-  final bool compact;
-  final bool showQuickPlay;
-  final bool isSeries;
-  final bool hasBoundSource;
-  final FocusNode playFocus;
-  final FocusNode browseFocus;
-  final FocusNode watchlistFocus;
-  final bool tv;
-
-  /// The primary button's label — progress-aware ("Start Watching" /
-  /// "Resume · S3E4"), computed by the host.
-  final String playLabel;
-
-  /// Resume state still resolving — Play shows a spinner instead of a label.
-  final bool playBusy;
-  final VoidCallback onPlay;
-  final VoidCallback? onPlayLongPress;
-  final VoidCallback onBrowse;
-  final bool inMyWatchlist;
-  final VoidCallback? onToggleMyWatchlist;
-
-  /// D-pad "up" handler — the row is the top focusable, so this scrolls the
-  /// sheet back to the header rather than letting focus dead-end. Null off TV.
-  final VoidCallback? onArrowUp;
-
-  const _ActionRow({
-    required this.compact,
-    required this.showQuickPlay,
-    required this.isSeries,
-    required this.hasBoundSource,
-    required this.playFocus,
-    required this.browseFocus,
-    required this.watchlistFocus,
-    required this.tv,
-    required this.playLabel,
-    this.playBusy = false,
-    required this.onPlay,
-    this.onPlayLongPress,
-    required this.onBrowse,
-    required this.inMyWatchlist,
-    required this.onToggleMyWatchlist,
-    this.onArrowUp,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final browseLabel = isSeries ? 'Episodes' : 'Sources';
-    final browseIcon = isSeries ? Icons.list_alt_rounded : Icons.layers_rounded;
-    final gap = compact ? 8.0 : 10.0;
-
-    final browse = _PrimaryButton(
-      focusNode: browseFocus,
-      icon: browseIcon,
-      label: browseLabel,
-      filled: !showQuickPlay,
-      compact: compact,
-      tv: tv,
-      onTap: onBrowse,
-      onArrowUp: onArrowUp,
-      tinted: hasBoundSource,
-    );
-
-    final watchlist = onToggleMyWatchlist == null
-        ? null
-        : _PrimaryButton(
-            focusNode: watchlistFocus,
-            icon: inMyWatchlist
-                ? Icons.bookmark_rounded
-                : Icons.bookmark_add_outlined,
-            label: inMyWatchlist ? 'In My Watchlist' : 'My Watchlist',
-            filled: false,
-            compact: compact,
-            tv: tv,
-            onTap: onToggleMyWatchlist!,
-            onArrowUp: onArrowUp,
-            tinted: inMyWatchlist,
-          );
-
-    if (!showQuickPlay) {
-      if (compact) {
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            browse,
-            if (watchlist != null) ...[SizedBox(height: gap), watchlist],
-          ],
-        );
-      }
-      return Row(
-        children: [
-          Expanded(child: browse),
-          if (watchlist != null) ...[
-            SizedBox(width: gap),
-            Expanded(child: watchlist),
-          ],
-        ],
-      );
-    }
-
-    // Play is the page's IDENTITY control, so it is where this title's own
-    // colour belongs — the one role `ArtworkAccentScope` exists to serve.
-    //
-    // Gated on `!isLegacy` deliberately. Signal declares `useArtworkAccent`,
-    // so `resolve` would hand the poster colour to legacy too, and legacy's
-    // Play button has always been this red. New behaviour goes to the themes
-    // a user opted into, not to the default look.
-    final app = AppThemeScope.of(context);
-    final playAccent = app.isLegacy
-        ? _kNetflixRed
-        : ArtworkAccentScope.resolve(context, app, fallback: _kNetflixRed);
-    final play = _PrimaryButton(
-      focusNode: playFocus,
-      icon: Icons.play_arrow_rounded,
-      label: playLabel,
-      busy: playBusy,
-      filled: true,
-      compact: compact,
-      tv: tv,
-      accent: playAccent,
-      // An arbitrary poster colour is an arbitrary fill, so the label is
-      // SCORED against it rather than assumed white — the whole reason
-      // `inkOn` exists. Legacy keeps its shipped white on the red.
-      accentInk: app.isLegacy ? null : app.inkOn(playAccent),
-      onTap: onPlay,
-      onLongPress: onPlayLongPress,
-      onArrowUp: onArrowUp,
-    );
-
-    // Narrow screens: stack a full-width Play on top of Sources so every
-    // label has room and never gets clipped.
-    if (compact) {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          play,
-          SizedBox(height: gap),
-          browse,
-          if (watchlist != null) ...[SizedBox(height: gap), watchlist],
-        ],
-      );
-    }
-
-    return Row(
-      children: [
-        Expanded(flex: 3, child: play),
-        SizedBox(width: gap),
-        Expanded(flex: 2, child: browse),
-        if (watchlist != null) ...[
-          SizedBox(width: gap),
-          Expanded(flex: 2, child: watchlist),
-        ],
-      ],
-    );
-  }
-}
-
-const Color _kNetflixRed = Color(0xFFE50914);
-
-// ── Quick actions row ───────────────────────────────────────────────────────
-
-/// Prime-style quick actions: a wrapped grid of uniform icon buttons with a
-/// caption underneath. Everything is visible at once — no hidden scroll — so
-/// users always see every action. Items are a fixed width so rows align.
-class _QuickActions extends StatelessWidget {
-  final List<TraktMenuOption> options;
-  final bool tv;
-
-  /// Phone (narrow layout): lay out as an even 3-column grid so narrow
-  /// widths don't drop to an ugly 2-up. Wide/TV keeps the free wrap.
-  final bool phone;
-  final void Function(TraktItemMenuAction) onSelected;
-
-  const _QuickActions({
-    required this.options,
-    required this.tv,
-    required this.phone,
-    required this.onSelected,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(
-          'QUICK ACTIONS',
-          style: TextStyle(
-            color: Colors.white.withValues(alpha: 0.5),
-            fontSize: 10,
-            fontWeight: FontWeight.w800,
-            letterSpacing: 2.2,
-          ),
-        ),
-        const SizedBox(height: 16),
-        if (phone) _grid() else _wrap(),
-      ],
-    );
-  }
-
-  Widget _wrap() => Wrap(
-    spacing: 8,
-    runSpacing: 18,
-    children: [
-      for (final o in options)
-        _QuickAction(option: o, tv: tv, onTap: () => onSelected(o.action)),
-    ],
-  );
-
-  Widget _grid() {
-    const cols = 3;
-    const gap = 8.0;
-    final rows = <Widget>[];
-    for (var i = 0; i < options.length; i += cols) {
-      final cells = <Widget>[];
-      for (var j = 0; j < cols; j++) {
-        if (j > 0) cells.add(const SizedBox(width: gap));
-        final idx = i + j;
-        cells.add(
-          Expanded(
-            child: idx < options.length
-                ? _QuickAction(
-                    option: options[idx],
-                    tv: tv,
-                    expand: true,
-                    onTap: () => onSelected(options[idx].action),
-                  )
-                : const SizedBox.shrink(),
-          ),
-        );
-      }
-      if (i > 0) rows.add(const SizedBox(height: 18));
-      rows.add(
-        Row(crossAxisAlignment: CrossAxisAlignment.start, children: cells),
-      );
-    }
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: rows,
-    );
-  }
-}
-
-class _QuickAction extends StatefulWidget {
-  final TraktMenuOption option;
-  final bool tv;
-
-  /// Grid mode: fill the parent cell instead of a fixed 80px box.
-  final bool expand;
-  final VoidCallback onTap;
-
-  const _QuickAction({
-    required this.option,
-    required this.tv,
-    required this.onTap,
-    this.expand = false,
-  });
-
-  @override
-  State<_QuickAction> createState() => _QuickActionState();
-}
-
-class _QuickActionState extends State<_QuickAction> {
-  bool _focused = false;
-  bool _hovered = false;
-  bool get _active => _focused || _hovered;
-
-  @override
-  Widget build(BuildContext context) {
-    final o = widget.option;
-    final t = DetailThemeScope.maybeOf(context);
-
-    return Focus(
-      onFocusChange: (f) => setState(() => _focused = f),
-      onKeyEvent: (node, event) {
-        if (event is KeyDownEvent &&
-            (isActivateKey(event.logicalKey) ||
-                event.logicalKey == LogicalKeyboardKey.space)) {
-          widget.onTap();
-          return KeyEventResult.handled;
-        }
-        return KeyEventResult.ignored;
-      },
-      child: MouseRegion(
-        onEnter: (_) => setState(() => _hovered = true),
-        onExit: (_) => setState(() => _hovered = false),
-        cursor: SystemMouseCursors.click,
-        child: GestureDetector(
-          onTap: widget.onTap,
-          behavior: HitTestBehavior.opaque,
-          child: AnimatedScale(
-            duration: widget.tv
-                ? Duration.zero
-                : const Duration(milliseconds: 150),
-            curve: Curves.easeOutCubic,
-            scale: _active ? 1.06 : 1.0,
-            child: SizedBox(
-              width: widget.expand ? null : 80,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Stack(
-                    clipBehavior: Clip.none,
-                    alignment: Alignment.center,
-                    children: [
-                      AnimatedContainer(
-                        duration: widget.tv
-                            ? Duration.zero
-                            : const Duration(milliseconds: 150),
-                        width: 54,
-                        height: 54,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: Colors.white.withValues(
-                            alpha: _active ? 0.16 : 0.07,
-                          ),
-                          border: Border.all(
-                            color: _active
-                                ? t.focus
-                                : Colors.white.withValues(alpha: 0.12),
-                            width: _active ? 1.6 : 1,
-                          ),
-                          boxShadow: _active
-                              ? [
-                                  BoxShadow(
-                                    color: t.fade(t.focus, 0.32),
-                                    blurRadius: 18,
-                                    spreadRadius: 0.5,
-                                  ),
-                                ]
-                              : null,
-                        ),
-                        child: Icon(
-                          o.icon,
-                          size: 24,
-                          color: Colors.white.withValues(
-                            alpha: _active ? 1.0 : 0.92,
-                          ),
-                        ),
-                      ),
-                      if (o.isTrakt)
-                        Positioned(
-                          top: -4,
-                          right: -2,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 5,
-                              vertical: 1.5,
-                            ),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFED1C24),
-                              borderRadius: BorderRadius.circular(5),
-                              border: Border.all(
-                                color: const Color(0xFF050507),
-                                width: 1.5,
-                              ),
-                            ),
-                            child: const Text(
-                              'TRAKT',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 7,
-                                fontWeight: FontWeight.w900,
-                                letterSpacing: 0.6,
-                                height: 1.0,
-                              ),
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
-                  const SizedBox(height: 9),
-                  Text(
-                    o.caption,
-                    maxLines: 2,
-                    textAlign: TextAlign.center,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: Colors.white.withValues(
-                        alpha: _active ? 1.0 : 0.62,
-                      ),
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      letterSpacing: 0.1,
-                      height: 1.15,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _MdblistQuickActions extends StatelessWidget {
-  const _MdblistQuickActions({required this.options, required this.onSelected});
-  final List<MdblistMenuOption> options;
-  final void Function(MdblistItemMenuAction) onSelected;
-
-  @override
-  Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      Text(
-        'MDBLIST ACTIONS',
-        style: TextStyle(
-          color: Colors.white.withValues(alpha: 0.5),
-          fontSize: 10,
-          fontWeight: FontWeight.w800,
-          letterSpacing: 2.2,
-        ),
-      ),
-      const SizedBox(height: 12),
-      Wrap(
-        spacing: 8,
-        runSpacing: 8,
-        children: [
-          for (final option in options)
-            ActionChip(
-              avatar: Icon(option.icon, size: 18, color: option.color),
-              label: Text(option.caption),
-              tooltip: option.label,
-              onPressed: () => onSelected(option.action),
-            ),
-        ],
-      ),
-    ],
-  );
-}
-
-/// Simkl's quick-actions section — duplicated from [_QuickActions] rather
-/// than genericized, since sharing a widget across [TraktMenuOption] and
-/// [SimklMenuOption] would mean a shared type between the two trackers,
-/// which the rest of this integration deliberately avoids.
-class _SimklQuickActions extends StatelessWidget {
-  final List<SimklMenuOption> options;
-  final bool tv;
-  final bool phone;
-  final void Function(SimklItemMenuAction) onSelected;
-
-  const _SimklQuickActions({
-    required this.options,
-    required this.tv,
-    required this.phone,
-    required this.onSelected,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(
-          'SIMKL ACTIONS',
-          style: TextStyle(
-            color: Colors.white.withValues(alpha: 0.5),
-            fontSize: 10,
-            fontWeight: FontWeight.w800,
-            letterSpacing: 2.2,
-          ),
-        ),
-        const SizedBox(height: 16),
-        if (phone) _grid() else _wrap(),
-      ],
-    );
-  }
-
-  Widget _wrap() => Wrap(
-    spacing: 8,
-    runSpacing: 18,
-    children: [
-      for (final o in options)
-        _SimklQuickAction(option: o, tv: tv, onTap: () => onSelected(o.action)),
-    ],
-  );
-
-  Widget _grid() {
-    const cols = 3;
-    const gap = 8.0;
-    final rows = <Widget>[];
-    for (var i = 0; i < options.length; i += cols) {
-      final cells = <Widget>[];
-      for (var j = 0; j < cols; j++) {
-        if (j > 0) cells.add(const SizedBox(width: gap));
-        final idx = i + j;
-        cells.add(
-          Expanded(
-            child: idx < options.length
-                ? _SimklQuickAction(
-                    option: options[idx],
-                    tv: tv,
-                    expand: true,
-                    onTap: () => onSelected(options[idx].action),
-                  )
-                : const SizedBox.shrink(),
-          ),
-        );
-      }
-      if (i > 0) rows.add(const SizedBox(height: 18));
-      rows.add(
-        Row(crossAxisAlignment: CrossAxisAlignment.start, children: cells),
-      );
-    }
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: rows,
-    );
-  }
-}
-
-class _SimklQuickAction extends StatefulWidget {
-  final SimklMenuOption option;
-  final bool tv;
-  final bool expand;
-  final VoidCallback onTap;
-
-  const _SimklQuickAction({
-    required this.option,
-    required this.tv,
-    required this.onTap,
-    this.expand = false,
-  });
-
-  @override
-  State<_SimklQuickAction> createState() => _SimklQuickActionState();
-}
-
-class _SimklQuickActionState extends State<_SimklQuickAction> {
-  bool _focused = false;
-  bool _hovered = false;
-  bool get _active => _focused || _hovered;
-
-  @override
-  Widget build(BuildContext context) {
-    final o = widget.option;
-    final t = DetailThemeScope.maybeOf(context);
-
-    return Focus(
-      onFocusChange: (f) => setState(() => _focused = f),
-      onKeyEvent: (node, event) {
-        if (event is KeyDownEvent &&
-            (isActivateKey(event.logicalKey) ||
-                event.logicalKey == LogicalKeyboardKey.space)) {
-          widget.onTap();
-          return KeyEventResult.handled;
-        }
-        return KeyEventResult.ignored;
-      },
-      child: MouseRegion(
-        onEnter: (_) => setState(() => _hovered = true),
-        onExit: (_) => setState(() => _hovered = false),
-        cursor: SystemMouseCursors.click,
-        child: GestureDetector(
-          onTap: widget.onTap,
-          behavior: HitTestBehavior.opaque,
-          child: AnimatedScale(
-            duration: widget.tv
-                ? Duration.zero
-                : const Duration(milliseconds: 150),
-            curve: Curves.easeOutCubic,
-            scale: _active ? 1.06 : 1.0,
-            child: SizedBox(
-              width: widget.expand ? null : 80,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Stack(
-                    clipBehavior: Clip.none,
-                    alignment: Alignment.center,
-                    children: [
-                      AnimatedContainer(
-                        duration: widget.tv
-                            ? Duration.zero
-                            : const Duration(milliseconds: 150),
-                        width: 54,
-                        height: 54,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: Colors.white.withValues(
-                            alpha: _active ? 0.16 : 0.07,
-                          ),
-                          border: Border.all(
-                            color: _active
-                                ? t.focus
-                                : Colors.white.withValues(alpha: 0.12),
-                            width: _active ? 1.6 : 1,
-                          ),
-                          boxShadow: _active
-                              ? [
-                                  BoxShadow(
-                                    color: t.fade(t.focus, 0.32),
-                                    blurRadius: 18,
-                                    spreadRadius: 0.5,
-                                  ),
-                                ]
-                              : null,
-                        ),
-                        child: Icon(
-                          o.icon,
-                          size: 24,
-                          color: Colors.white.withValues(
-                            alpha: _active ? 1.0 : 0.92,
-                          ),
-                        ),
-                      ),
-                      Positioned(
-                        top: -4,
-                        right: -2,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 5,
-                            vertical: 1.5,
-                          ),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF22D3EE),
-                            borderRadius: BorderRadius.circular(5),
-                            border: Border.all(
-                              color: const Color(0xFF050507),
-                              width: 1.5,
-                            ),
-                          ),
-                          child: const Text(
-                            'SIMKL',
-                            style: TextStyle(
-                              color: Colors.black,
-                              fontSize: 7,
-                              fontWeight: FontWeight.w900,
-                              letterSpacing: 0.6,
-                              height: 1.0,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 9),
-                  Text(
-                    o.caption,
-                    maxLines: 2,
-                    textAlign: TextAlign.center,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: Colors.white.withValues(
-                        alpha: _active ? 1.0 : 0.62,
-                      ),
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      letterSpacing: 0.1,
-                      height: 1.15,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _PrimaryButton extends StatefulWidget {
-  final FocusNode focusNode;
-  final IconData icon;
-  final String label;
-
-  /// Filled buttons get a solid background ([accent] when provided, white
-  /// otherwise). Outlined buttons have a glass background.
-  final bool filled;
-  final bool tinted;
-
-  /// Narrow screens: shorter button, smaller icon/text, tighter spacing.
-  final bool compact;
-
-  /// TV: skip the focus tween (instant), keep the highlight.
-  final bool tv;
-
-  /// Optional brand accent for a filled button. Falls back to white.
-  final Color? accent;
-
-  /// Ink for the label ON [accent], scored by the caller.
-  ///
-  /// Null keeps the shipped rule (`accent == null ? black : white`), which is
-  /// right for legacy's fixed red and wrong for an arbitrary poster colour —
-  /// white on a pale artwork accent is unreadable.
-  final Color? accentInk;
-  final VoidCallback onTap;
-  final VoidCallback? onLongPress;
-
-  /// D-pad "up" handler (TV). Set on the top action row so "up" reveals the
-  /// header rather than dead-ending focus traversal.
-  final VoidCallback? onArrowUp;
-
-  /// Resume state still resolving — spinner instead of icon+label so the
-  /// button never flashes a wrong status. Stays tappable.
-  final bool busy;
-
-  const _PrimaryButton({
-    required this.focusNode,
-    required this.icon,
-    required this.label,
-    required this.filled,
-    required this.onTap,
-    this.onLongPress,
-    this.busy = false,
-    this.compact = false,
-    this.tv = false,
-    this.tinted = false,
-    this.accent,
-    this.accentInk,
-    this.onArrowUp,
-  });
-
-  @override
-  State<_PrimaryButton> createState() => _PrimaryButtonState();
-}
-
-class _PrimaryButtonState extends State<_PrimaryButton> {
-  bool _focused = false;
-  late final TvHoldOk _hold;
-
-  @override
-  void initState() {
-    super.initState();
-    _hold = TvHoldOk(
-      onTap: () => widget.onTap(),
-      onHold: () => widget.onLongPress?.call(),
-    );
-  }
-
-  @override
-  void dispose() {
-    _hold.reset();
-    super.dispose();
-  }
-
-  void _onPointerLongPress() {
-    HapticFeedback.mediumImpact();
-    widget.onLongPress?.call();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final filled = widget.filled;
-    final accent = widget.accent;
-    final t = DetailThemeScope.maybeOf(context);
-
-    final filledBg = accent ?? Colors.white;
-    final filledFg =
-        widget.accentInk ?? (accent == null ? Colors.black : Colors.white);
-
-    final bg = filled
-        ? (_focused ? Color.lerp(filledBg, Colors.white, 0.12)! : filledBg)
-        : (_focused
-              ? Colors.white.withValues(alpha: 0.18)
-              : Colors.white.withValues(alpha: 0.06));
-
-    final fg = filled ? filledFg : Colors.white;
-
-    // Focus is always shown as a bright gold ring + glow (+ a slight
-    // scale-up) regardless of the button's base colour, so it's obvious
-    // even on the red Play button.
-    final Color borderColor;
-    if (_focused) {
-      borderColor = t.focus;
-    } else if (filled) {
-      borderColor = Colors.transparent;
-    } else if (widget.tinted) {
-      // A bound source: hint with a soft gold resting border.
-      borderColor = t.fade(t.focus, 0.5);
-    } else {
-      borderColor = Colors.white.withValues(alpha: 0.18);
-    }
-    final borderWidth = _focused ? 2.5 : (filled ? 0.0 : 1.2);
-
-    return Focus(
-      focusNode: widget.focusNode,
-      onFocusChange: (f) {
-        setState(() => _focused = f);
-        if (!f) _hold.reset();
-      },
-      onKeyEvent: (node, event) {
-        if (widget.onLongPress != null &&
-            isActivateOrSpaceKey(event.logicalKey)) {
-          return _hold.handle(event);
-        }
-        if (event is KeyDownEvent) {
-          if (isActivateKey(event.logicalKey) ||
-              event.logicalKey == LogicalKeyboardKey.space) {
-            widget.onTap();
-            return KeyEventResult.handled;
-          }
-          // Nothing focusable sits above this row, so consume "up" and use
-          // it to bring the header back into view instead of no-op.
-          if (widget.onArrowUp != null &&
-              event.logicalKey == LogicalKeyboardKey.arrowUp) {
-            widget.onArrowUp!();
-            return KeyEventResult.handled;
-          }
-        }
-        return KeyEventResult.ignored;
-      },
-      child: GestureDetector(
-        onTap: widget.onTap,
-        onLongPress: widget.onLongPress == null ? null : _onPointerLongPress,
-        child: AnimatedScale(
-          duration: widget.tv
-              ? Duration.zero
-              : const Duration(milliseconds: 160),
-          curve: Curves.easeOutCubic,
-          scale: _focused ? 1.035 : 1.0,
-          child: AnimatedContainer(
-            duration: widget.tv
-                ? Duration.zero
-                : const Duration(milliseconds: 160),
-            height: widget.compact ? 48 : 54,
-            padding: EdgeInsets.symmetric(horizontal: widget.compact ? 10 : 14),
-            decoration: BoxDecoration(
-              color: bg,
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: borderColor, width: borderWidth),
-              boxShadow: _focused
-                  ? [
-                      BoxShadow(
-                        color: t.fade(t.focus, 0.55),
-                        blurRadius: 30,
-                        spreadRadius: 2,
-                      ),
-                    ]
-                  : null,
-            ),
-            alignment: Alignment.center,
-            child: widget.busy
-                ? SizedBox(
-                    width: widget.compact ? 52 : 64,
-                    child: Center(
-                      child: SizedBox(
-                        width: widget.compact ? 16 : 18,
-                        height: widget.compact ? 16 : 18,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: fg,
-                        ),
-                      ),
-                    ),
-                  )
-                : Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        widget.icon,
-                        color: fg,
-                        size: widget.compact ? 20 : 24,
-                      ),
-                      SizedBox(width: widget.compact ? 7 : 10),
-                      Flexible(
-                        child: Text(
-                          widget.label,
-                          maxLines: 1,
-                          softWrap: false,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            color: fg,
-                            fontSize: widget.compact ? 14 : 16,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: 0.3,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-// ── Glass card ────────────────────────────────────────────────────────────
-
-class _GlassCard extends StatelessWidget {
-  final List<Widget> children;
-  const _GlassCard({required this.children});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.05),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: Colors.white.withValues(alpha: 0.08),
-          width: 0.5,
-        ),
-        boxShadow: const [
-          BoxShadow(color: Color(0x22000000), blurRadius: 20, spreadRadius: 2),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: children,
-      ),
-    );
-  }
-}
-
-// ── Glass icon button (back) ────────────────────────────────────────────────
-
-class _GlassIconButton extends StatelessWidget {
-  final IconData icon;
-  final VoidCallback onTap;
-  const _GlassIconButton({required this.icon, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(999),
-        child: Container(
-          width: 42,
-          height: 42,
-          decoration: BoxDecoration(
-            color: Colors.black.withValues(alpha: 0.55),
-            shape: BoxShape.circle,
-            border: Border.all(
-              color: Colors.white.withValues(alpha: 0.18),
-              width: 0.5,
-            ),
-            boxShadow: const [
-              BoxShadow(
-                color: Color(0x44000000),
-                blurRadius: 12,
-                spreadRadius: 1,
-              ),
-            ],
-          ),
-          child: Icon(icon, color: Colors.white, size: 22),
-        ),
-      ),
-    );
-  }
 }
