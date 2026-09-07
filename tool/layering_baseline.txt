@@ -4,4 +4,6 @@
 # #72 merge efdeaeb084edcfd8fe763f18d4cc9030dc794e35: 77 occurrences, 77 unique.
 # origin/main 843d631b: 84 occurrences, 84 unique. Current debt is not a baseline.
 # The previously recorded 90 ceiling was not the #72 ceiling; restore shrink-only.
-77
+# fix/layering-six-identities: 52 -> 46 (badge model, transfer glyphs, provider
+# presentation, CloudSelectSourceOpener seam). Lowered from 77 to 46.
+46
