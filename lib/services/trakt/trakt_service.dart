@@ -6,6 +6,9 @@ import 'package:http/http.dart' as http;
 import '../../models/profiles/profile_policy.dart';
 import '../../models/tracking_source.dart';
 import '../episode_tracker_snapshot_revision.dart';
+import '../diagnostic_log.dart';
+import 'trakt_continue_watching_merge.dart';
+import 'trakt_watched_history_reader.dart';
 import '../profiles/profile_async_authorization.dart';
 import '../profiles/profile_runtime.dart';
 import '../storage_service.dart';
@@ -763,6 +766,16 @@ class TraktService {
       };
     }
     final response = await _authenticatedPost(path, body);
+    DiagnosticLog.instance.recordEvent(
+      source: 'trakt',
+      event: 'scrobble_result',
+      fields: {
+        'action': DiagnosticLabel(path.split('/').last),
+        'status': response?.statusCode,
+        'episode': season != null && episode != null,
+        'progress': progress,
+      },
+    );
     if (response == null) return false;
     if (response.statusCode >= 200 && response.statusCode < 300) {
       if (season != null && episode != null) {
@@ -1359,102 +1372,38 @@ class TraktService {
     return debugNormalizeContinueWatchingShows(raw);
   }
 
-  /// Build the complete episode-shaped Continue Watching feed.
-  ///
-  /// The intent-aware endpoint owns membership, order, and the next episode.
-  /// Paused playback is optional enrichment for that exact episode; it must
-  /// never add a show or replace Trakt's authoritative episode coordinate.
-  /// Returns null when the authoritative read fails so UI callers can retain
-  /// their last successful snapshot instead of publishing an approximation.
+  /// Resume checkpoints and Up Next are independent: a new show can have
+  /// paused playback before any episode reaches watched history.
   Future<List<dynamic>?> fetchContinueWatchingEpisodeItemsOrNull() async {
-    final reads = await Future.wait<Object?>([
-      fetchContinueWatchingShowsOrNull(),
-      fetchPlaybackItemsOrNull('episodes'),
-    ]);
-    final authoritative = reads[0] as List<Map<String, dynamic>>?;
-    if (authoritative == null) return null;
-
-    // Playback progress is useful but not authoritative. A playback outage
-    // should not hide a valid Up Next row; the play path performs its own fresh
-    // checkpoint lookup before launch.
-    final playback = reads[1] as List<dynamic>? ?? const <dynamic>[];
-    return debugMergeContinueWatchingShows(playback, authoritative);
+    return loadTraktContinueWatching(
+      upNext: fetchContinueWatchingShowsOrNull,
+      playback: () => fetchPlaybackItemsOrNull('episodes'),
+      hidden: () => _fetchAllPagesOrNull(
+        basePath: '/users/hidden/progress_watched',
+        logLabel: 'continue watching hidden',
+      ),
+      dropped: () => _fetchAllPagesOrNull(
+        basePath: '/users/hidden/dropped',
+        logLabel: 'continue watching dropped',
+      ),
+      // Show-level activity is sufficient to reject a checkpoint superseded
+      // by a subsequent watch. Do not request the entire season breakdown.
+      watched: () => readTraktWatchedShowHistory(_authenticatedGet),
+    );
   }
 
   @visibleForTesting
   static List<dynamic> debugMergeContinueWatchingShows(
     List<dynamic> playback,
-    List<Map<String, dynamic>> authoritative,
-  ) {
-    final playbackByShow = <String, List<Map<String, dynamic>>>{};
-    for (final raw in playback) {
-      if (raw is! Map<String, dynamic>) continue;
-      final show = raw['show'] as Map<String, dynamic>?;
-      final key = _traktShowIdentity(show);
-      if (key == null) continue;
-      playbackByShow.putIfAbsent(key, () => []).add(raw);
-    }
-
-    final result = <dynamic>[];
-    for (final raw in authoritative) {
-      final show = raw['show'] as Map<String, dynamic>?;
-      final key = _traktShowIdentity(show);
-      final checkpoints = key == null
-          ? const <Map<String, dynamic>>[]
-          : playbackByShow[key] ?? const <Map<String, dynamic>>[];
-      final merged = Map<String, dynamic>.from(raw);
-
-      // Keep every deletion id for the existing deliberate remove behaviour,
-      // but don't let unrelated paused episodes influence the displayed or
-      // launched episode.
-      final playbackIds = <int>[
-        for (final checkpoint in checkpoints)
-          if (checkpoint['id'] is int) checkpoint['id'] as int,
-      ];
-      if (playbackIds.isNotEmpty) merged['_playback_ids'] = playbackIds;
-
-      final authoritativeEpisode = raw['episode'] as Map<String, dynamic>?;
-      final season = authoritativeEpisode?['season'] as int?;
-      final episode = authoritativeEpisode?['number'] as int?;
-      Map<String, dynamic>? matchingCheckpoint;
-      if (season != null && episode != null) {
-        for (final checkpoint in checkpoints) {
-          final candidate = checkpoint['episode'] as Map<String, dynamic>?;
-          if (candidate?['season'] == season &&
-              candidate?['number'] == episode) {
-            matchingCheckpoint = checkpoint;
-            break;
-          }
-        }
-      }
-
-      if (matchingCheckpoint != null) {
-        final progress = matchingCheckpoint['progress'];
-        if (progress is num) merged['progress'] = progress;
-
-        // Extended playback can contain richer episode metadata. Preserve it
-        // while making the authoritative season/number win on any conflict.
-        final checkpointEpisode =
-            matchingCheckpoint['episode'] as Map<String, dynamic>?;
-        if (checkpointEpisode != null && authoritativeEpisode != null) {
-          merged['episode'] = <String, dynamic>{
-            ...checkpointEpisode,
-            ...authoritativeEpisode,
-          };
-        }
-      }
-      result.add(merged);
-    }
-    return result;
-  }
-
-  static String? _traktShowIdentity(Map<String, dynamic>? show) {
-    final ids = show?['ids'] as Map<String, dynamic>?;
-    final traktId = ids?['trakt'];
-    if (traktId != null) return 'trakt:$traktId';
-    final imdbId = (ids?['imdb'] as String?)?.trim().toLowerCase();
-    return imdbId == null || imdbId.isEmpty ? null : 'imdb:$imdbId';
-  }
+    List<Map<String, dynamic>> authoritative, {
+    List<dynamic> hidden = const [],
+    List<dynamic> watched = const [],
+  }) => mergeTraktContinueWatching(
+    playback,
+    authoritative,
+    hidden: hidden,
+    watched: watched,
+  );
 
   /// Convert Trakt's `{show, progress: {next_episode, last_watched_at}}`
   /// response into the playback-like shape shared by the existing transformer.
