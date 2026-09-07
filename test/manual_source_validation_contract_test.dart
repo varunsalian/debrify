@@ -190,7 +190,7 @@ void main() {
     final selection = _between(
       playbackService,
       'static Future<void> playFromSelection(',
-      'static Future<FilterLadder> loadLadder(',
+      'static void _applyLadderNote(',
     );
     final boundPlayback = _between(
       playbackService,
