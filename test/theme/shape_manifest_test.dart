@@ -103,6 +103,8 @@ const Map<String, int> kShapeResidue = {
   'lib/widgets/iptv/iptv_list_name_dialog.dart': 0,
   'lib/widgets/iptv/iptv_list_picker_dialog.dart': 0,
   'lib/widgets/iptv/iptv_results_view.dart': 1,
+  'lib/widgets/iptv/stage/iptv_cockpit_stage.dart': 0,
+  'lib/widgets/iptv/stage/iptv_preview_rail.dart': 0,
   'lib/widgets/iptv/stage/iptv_rail_info.dart': 0,
   'lib/widgets/iptv/stage/iptv_stage_chip.dart': 0,
   'lib/widgets/iptv/iptv_stage_panel.dart': 2,
