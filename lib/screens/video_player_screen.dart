@@ -1,6 +1,7 @@
 import 'video_player/playlist_navigation_policy.dart';
 import 'video_player/pikpak_retry_session.dart';
 import 'video_player/player_transition_session.dart';
+import 'video_player/episode_ladder_controller.dart';
 import '../services/series_playlist_metadata_loader.dart';
 import 'video_player/services/renderer_startup_environment.dart';
 import 'video_player/services/renderer_coordinator.dart';
@@ -948,9 +949,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       IptvRecordingController(_IptvRecordingSession(this));
   late final IptvZapController _zap =
       IptvZapController(_IptvZapSession(this));
+  late final EpisodeLadderController _ladder =
+      EpisodeLadderController(_EpisodeLadderSession(this));
   void _runSubtitleSetState(VoidCallback updates) => setState(updates);
   void _runRecordingSetState(VoidCallback updates) => setState(updates);
   void _runZapSetState(VoidCallback updates) => setState(updates);
+  void _runLadderSetState(VoidCallback updates) => setState(updates);
   // Bumped whenever the media the landing verifier is watching stops being
   // current (item change, source switch). Aborts the verifier WITHOUT
   // releasing the guard — the guard must survive through the outgoing
@@ -3545,7 +3549,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           if (!mounted) return;
         }
         if (next != null) {
-          await _fetchAndPlayEpisode(next.$1, next.$2);
+          await _ladder.fetchAndPlayEpisode(next.$1, next.$2);
           return;
         }
       }
@@ -6181,7 +6185,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
             ? _adjacentEpisode(se.season!, se.episode!, -1)
             : null;
         if (prev != null) {
-          await _fetchAndPlayEpisode(prev.$1, prev.$2);
+          await _ladder.fetchAndPlayEpisode(prev.$1, prev.$2);
           return;
         }
       }
@@ -7870,14 +7874,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       _effectiveIptvChannels == null &&
       widget.requestMagicNext == null;
 
-  bool _episodeFetchInProgress = false;
-
   // Synthetic 1-entry guide backing for single-stream launches (no playlist):
   // lets the episode guide open and offer the show's full episode list.
   SeriesPlaylist? _syntheticGuidePlaylist;
   List<PlaylistEntry>? _syntheticGuideEntries;
-
-  static String _pad2(int n) => n.toString().padLeft(2, '0');
 
   (SeriesPlaylist, List<PlaylistEntry>)? _buildSyntheticGuide() {
     final existingSp = _syntheticGuidePlaylist;
@@ -7891,7 +7891,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     final info = SeriesParser.parseFilename(title);
     if (info.season == null || info.episode == null) {
       // Stamp the playing episode's identity so the guide groups it right.
-      title = 'S${_pad2(se.season!)}E${_pad2(se.episode!)} $title';
+      title = 'S${EpisodeLadderController.pad2(se.season!)}E${EpisodeLadderController.pad2(se.episode!)} $title';
     }
     final entries = [PlaylistEntry(url: widget.videoUrl, title: title)];
     final sp = SeriesPlaylist.fromPlaylistEntries(
@@ -7903,193 +7903,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _syntheticGuidePlaylist = sp;
     _syntheticGuideEntries = entries;
     return (sp, entries);
-  }
-
-  bool _packCoversSeason(Torrent t, int season) {
-    switch (t.coverageType) {
-      case 'completeSeries':
-        final start = t.startSeason;
-        final end = t.endSeason;
-        if (start == null && end == null) return true;
-        return season >= (start ?? 1) && season <= (end ?? season);
-      case 'multiSeasonPack':
-        final start = t.startSeason;
-        final end = t.endSeason;
-        return start != null && end != null && season >= start && season <= end;
-      case 'seasonPack':
-        return t.seasonNumber == season;
-      default:
-        return false;
-    }
-  }
-
-  /// Quick-play an episode that isn't in the current playlist, WITHOUT
-  /// leaving the player: try packs already in the source list, then an
-  /// episode-targeted fetch, then a fresh pack search — switching to the
-  /// first candidate that resolves and actually contains the episode.
-  Future<void> _fetchAndPlayEpisode(int season, int episode) async {
-    if (!_canFetchEpisodes || _episodeFetchInProgress) {
-      // A next/prev press may have raised the transition curtain already;
-      // never leave it up when the request can't run.
-      if (mounted && _transition.blocking) {
-        setState(() => _transition.setBlocking(false));
-      }
-      return;
-    }
-    final fetcher = widget.seriesSourceFetcher!;
-    _episodeFetchInProgress = true;
-    final messenger = ScaffoldMessenger.of(context);
-    final label = 'S${_pad2(season)}E${_pad2(episode)}';
-    messenger.showSnackBar(
-      SnackBar(
-        content: Text('Fetching $label…'),
-        duration: const Duration(seconds: 2),
-      ),
-    );
-    try {
-      final token = _playlistIdentityToken;
-
-      // 1. Try what's already in the source list: exact-episode singles and
-      // packs covering the season (often already unlocked on the account).
-      final existing = List<Torrent>.of(_effectiveSources ?? const <Torrent>[]);
-      var attempts = 0;
-      for (var i = 0; i < existing.length && attempts < 4; i++) {
-        if (i == _currentSourceIndex) continue;
-        final t = existing[i];
-        if (t.streamType == StreamType.externalUrl) continue;
-        final info = SeriesParser.parseFilename(t.displayTitle);
-        final matchesEpisode = info.season == season && info.episode == episode;
-        final coversAsPack =
-            t.streamType == StreamType.torrent && _packCoversSeason(t, season);
-        if (!matchesEpisode && !coversAsPack) continue;
-        attempts++;
-        if (await _tryEpisodeCandidate(i, t, season, episode, token)) return;
-        if (!mounted || token != _playlistIdentityToken) return;
-      }
-
-      // 2. Episode-targeted fetch (direct links resolve instantly).
-      List<Torrent>? fetched;
-      try {
-        fetched = await fetcher.fetch(
-          SeriesSourceFetcher.modeEpisodes,
-          season: season,
-          episode: episode,
-        );
-      } catch (_) {
-        fetched = null;
-      }
-      if (!mounted || token != _playlistIdentityToken) return;
-      if (fetched != null && fetched.isNotEmpty) {
-        final base = _effectiveSources ?? const <Torrent>[];
-        final merged = SeriesSourceFetcher.mergeSources(base, fetched);
-        setState(() => _augmentedSources = merged);
-        attempts = 0;
-        for (var i = base.length; i < merged.length && attempts < 5; i++) {
-          final t = merged[i];
-          if (t.streamType == StreamType.externalUrl) continue;
-          attempts++;
-          if (await _tryEpisodeCandidate(i, t, season, episode, token)) return;
-          if (!mounted || token != _playlistIdentityToken) return;
-        }
-      }
-
-      // 3. Last resort: a fresh pack search for that season.
-      List<Torrent>? packs;
-      try {
-        packs = await fetcher.fetch(
-          SeriesSourceFetcher.modePacks,
-          season: season,
-          episode: episode,
-        );
-      } catch (_) {
-        packs = null;
-      }
-      if (!mounted || token != _playlistIdentityToken) return;
-      if (packs != null && packs.isNotEmpty) {
-        final base = _effectiveSources ?? const <Torrent>[];
-        final merged = SeriesSourceFetcher.mergeSources(base, packs);
-        setState(() => _augmentedSources = merged);
-        attempts = 0;
-        for (var i = base.length; i < merged.length && attempts < 3; i++) {
-          final t = merged[i];
-          if (t.streamType != StreamType.torrent) continue;
-          // Pack-search results are season-targeted; only skip ones whose
-          // detected coverage positively excludes the season.
-          if (t.coverageType != null && !_packCoversSeason(t, season)) {
-            continue;
-          }
-          attempts++;
-          if (await _tryEpisodeCandidate(i, t, season, episode, token)) return;
-          if (!mounted || token != _playlistIdentityToken) return;
-        }
-      }
-
-      if (mounted && token == _playlistIdentityToken) {
-        // A next/prev press raised the transition curtain before calling in
-        // here — drop it, or a failed fetch leaves the screen black.
-        if (_transition.blocking) {
-          setState(() => _transition.setBlocking(false));
-        }
-        messenger.showSnackBar(
-          SnackBar(content: Text('No playable source found for $label')),
-        );
-      }
-    } finally {
-      _episodeFetchInProgress = false;
-    }
-  }
-
-  /// Resolve one candidate and switch to it when it actually contains the
-  /// target episode. Returns true when playback switched (or when the
-  /// attempt went stale and the loop must stop).
-  Future<bool> _tryEpisodeCandidate(
-    int sourceIndex,
-    Torrent t,
-    int season,
-    int episode,
-    int token,
-  ) async {
-    if (!await widget.seriesSourceFetcher!.allowsCandidate(t)) return false;
-    if (!mounted || token != _playlistIdentityToken) return true;
-    List<PlaylistEntry>? playlist;
-    try {
-      playlist = await widget.resolveSourceToPlaylist!(t);
-    } catch (_) {
-      playlist = null;
-    }
-    if (!mounted || token != _playlistIdentityToken) return true;
-    if (playlist == null || playlist.isEmpty) return false;
-    if (playlist.length == 1) {
-      final info = SeriesParser.parseFilename(playlist.first.title);
-      if (info.season == null || info.episode == null) {
-        // Unparseable single stream: stamp the target identity into the
-        // title so parsing (titles, scrobbling, the guide) stays coherent.
-        playlist = [
-          playlist.first.copyWithTitle(
-            'S${_pad2(season)}E${_pad2(episode)} ${playlist.first.title}',
-          ),
-        ];
-      } else if (info.season != season || info.episode != episode) {
-        return false; // resolves to a DIFFERENT episode — wrong result
-      }
-    } else {
-      final sp = SeriesPlaylist.fromPlaylistEntries(
-        playlist,
-        collectionTitle: widget.title,
-        forceSeries: true,
-      );
-      if (sp.findOriginalIndexBySeasonEpisode(season, episode) < 0) {
-        return false; // pack without the target — try the next candidate
-      }
-    }
-    _setManualSelectionMode(allowResume: true);
-    await _switchToSourcePlaylist(
-      sourceIndex,
-      playlist,
-      targetSeason: season,
-      targetEpisode: episode,
-    );
-    return true;
   }
 
   /// The episode adjacent to (season, episode) in the show's full TVMaze
@@ -8147,7 +7960,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         _setManualSelectionMode(allowResume: allowResume);
         await _loadPlaylistIndex(index, autoplay: true);
       },
-      onFetchEpisode: canFetch ? _fetchAndPlayEpisode : null,
+      onFetchEpisode: canFetch ? _ladder.fetchAndPlayEpisode : null,
     );
   }
 
@@ -9892,6 +9705,40 @@ class _IptvZapSession implements IptvZapSession {
   @override bool get iptvErrorsMuted => _s._iptvErrorsMuted;
   @override void noteTuneError(String error) => _s._iptvDiag.onError(error);
   @override bool tryLiveRecoveryOnError() => _s._iptvLiveRecovery.onError();
+}
+
+class _EpisodeLadderSession implements EpisodeLadderSession {
+  _EpisodeLadderSession(this._s);
+  final _VideoPlayerScreenState _s;
+  @override bool get isMounted => _s.mounted;
+  @override BuildContext get hostContext => _s.context;
+  @override void runSetState(VoidCallback updates) =>
+      _s._runLadderSetState(updates);
+  @override bool get canFetchEpisodes => _s._canFetchEpisodes;
+  @override PlayerTransitionSession get transition => _s._transition;
+  @override SeriesSourceFetcher? get seriesSourceFetcher =>
+      _s.widget.seriesSourceFetcher;
+  @override Future<List<PlaylistEntry>?> Function(Torrent)?
+      get resolveSourceToPlaylist => _s.widget.resolveSourceToPlaylist;
+  @override String get title => _s.widget.title;
+  @override int get playlistIdentityToken => _s._playlistIdentityToken;
+  @override List<Torrent>? get effectiveSources => _s._effectiveSources;
+  @override int get currentSourceIndex => _s._currentSourceIndex;
+  @override set augmentedSources(List<Torrent>? value) =>
+      _s._augmentedSources = value;
+  @override void setManualSelectionMode({required bool allowResume}) =>
+      _s._setManualSelectionMode(allowResume: allowResume);
+  @override Future<void> switchToSourcePlaylist(
+    int sourceIndex,
+    List<PlaylistEntry> newPlaylist, {
+    int? targetSeason,
+    int? targetEpisode,
+  }) => _s._switchToSourcePlaylist(
+    sourceIndex,
+    newPlaylist,
+    targetSeason: targetSeason,
+    targetEpisode: targetEpisode,
+  );
 }
 
 class _IptvRecordingSession implements IptvRecordingSession {
