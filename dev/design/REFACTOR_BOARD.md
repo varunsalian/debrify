@@ -1,6 +1,34 @@
   # Refactor board
 
+## Merged #247 — player retry closeout
+
+Merged599dcb12ee23f3094847594978d042910ef95b63, exact reviewed headf3886f6671d75e58acbdceb7e2b574b245fdce4a. Actual merge tree65cda6d8b93d23e9b8d220a2e53e452f5e8e6c76 matches independently accepted union. All three CI checks PASS; independent37 tests and baseline correspondence review retained. Gate534 passed before merge; this is one production merge since that gate, not a new integrated-build/device claim.
+
+Player10720→10334 (-386), target9500,834 remaining. New owner459, net production+73;59 lines retained glue explicitly counted. Did we make a difference? Retry state and monitoring now have a dedicated owner with real-screen coverage. Is there more? Target remains834 away, retained glue and untested long-retry branches remain debt. Other god files unchanged: Search5879/Magic3322/Storage1741/Settings2908. Final ordered checks240→237→239 assigned Confucius; recheck against this merge. No user blocker. Earlier10720 and1220 entries below are historical snapshots.
+## G4-5 baseline lock decision — closeout correction
+
+G4-5 baseline grant: tool/analyze_baseline.json is granted for exactly the two-host-to-one-owner DEPRECATED_MEMBER_USE 'value' correspondence. Remove one matching entry for lib/screens/debrid_downloads_screen.dart and one for lib/screens/torbox/torbox_downloads_screen.dart; add one matching diagnostic for lib/widgets/cloud/cloud_view_mode_dropdown.dart using actual analyzer location. Preserve code/message/severity and every unrelated entry/metadata; no regeneration, stale-entry pruning, suppression or initialValue change. Total entries decrease by one; this is consolidation of an existing warning, not a warning fixed.
+
+Retry #247 baseline work is finished and frozen at f3886f6. Its write lock is released to G4-5 for this exact edit only; preserve all 34 retry correspondences when rebasing/merging. QA remains excluded from baseline writes. Run the existing analyzer baseline helper and report exact new/unused identities; fresh CI required. Other #243 review requirements remain in force. This is a closeout correction, not a new extraction.
+
+## Closeout directive — September 7, user reports 5% quota remaining
+
+New assignments and production applications are stopped. Cicero finishes the already-running full gate at 534bcb70; Locke, Confucius and Arendt preserve artifacts and provide final handoffs. T3-F remains independently source-reviewed but UNAPPLIED. No additional scope is authorized by this closeout. Prior R3 move authorization is superseded by this session-wide pause on new moves.
+
+- [x] Finish and record gate534: PASS with exact known failure allowances; evidence below.
+- [ ] Close out eligible reviewed PRs only after their existing gates pass; #247 goldens still running at this checkpoint.
+- [ ] Preserve pending PR decisions and exact evidence for continuation; do not label the architectural target complete.
+- [ ] Final report: player 10,720 / target 9,500, 1,220 lines remaining. Unmerged #247 would remove386, leaving834; prospective only.
+
+No user action is required. Keep one board commit per actual merge; this status remains pending that commit.
+## Closeout gate534 — PASS
+
+Verified source534bcb70bde82bf954cf5ef092f9a99d9dcdb874, tree47f9af43b6bb06a12ac3b0f19e1d59b7b12dfc42. Generic6352 passed /12 exact known failures /2 skipped; goldens21 exact known failures after configured two retries. Both allowance checks zero unexpected and zero unused; this is not a claim golden images pass. Analyzer430/449, zero errors/new; Python55 passed; layering53/77, unchanged IDs. Native first origin/current pair passed. First Windows and ARM64 builds passed. App/engine ARM64;12 other-ABI dependency libraries byte-identical to prior gate. No device install or new smoke.
+
+Report and raw evidence: C:/Users/hunth/debrify/g238/.dart_tool/main-gate/REPORT.md, gate-manifest.json, checksums.json. Physical lines Storage1741/Search5879/Player10720/Magic3322/Settings2908; fixed-AST forwarders204/133/202/23/0 respectively. Player remains1220 over9500; Phase2 architectural target NOT complete. Workers instructed to stop expansion and preserve handoffs; hourly automation deleted for user quota closeout. Pending reviewed PRs still require exact current CI/union checks; do not infer merge from this gate.
 ## Latest merge — T3 PR238, September 7
+
+**T3-F preparation assigned Locke; independent reviewer Confucius.** Exact seven-file scope: `lib/services/torrent_playback_service.dart`; `test/playback_candidate_ranking_origin_pin_test.dart`; `test/playback_source_search_origin_pin_test.dart`; `test/playback_source_alias_warmup_origin_pin_test.dart`; `test/quick_play_rules_test.dart`; `test/filter_ladder_test.dart`; `test/torrent_playback_service_strings_test.dart`. Twenty-one aliases occupy55 declaration/annotation lines plus9 comments=64. Thirty-one unqualified internal host call/tearoff sites still depend on15 aliases, so old no-lib-caller claim is false; qualify them without changing invocation. Six suites have156 qualified-reference lines, not156 tests. Existing owner bodies/cache/other APIs untouched. Unapplied patch/inverse/actual line budget first, no code application/runtime yet. T4 waits this removal; fullgate534 still blocks next production merge.
 
 Merged534bcb70bde82bf954cf5ef092f9a99d9dcdb874 at09:24:51Z, reviewedhead4b98a93e. Exact actualuniontree47f9af43b6bb06a12ac3b0f19e1d59b7b12dfc42 verified aftermerge; preserves main skip CODEMAP entry and both distinct source-marker repairs. AllthreeCIgreen34104106030. Independent search-origin141PASS, warm-origin6PASS, candidate246PASS (+2 suite lifecycle events, not248tests); pairedanalyzer10→10 exactidentities, newowners0, layer53→53 identicalIDs. Unsupported analyzer-flag64 evidence retained separately; corrected firstactualanalysis/run passed. Pin history transparently rewritten after initialmoveattempt, oldhead retained evidence/t3-first-move. Warm gap closed; mutationcounts remain author-reported without raw reproduction.
 
