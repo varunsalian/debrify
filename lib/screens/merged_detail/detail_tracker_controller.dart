@@ -337,9 +337,9 @@ class DetailTrackerController extends ChangeNotifier {
       showDragHandle: true,
       isScrollControlled: true,
       builder: (sheetCtx) => DetailQuickActionsMenu(
-        title: inputs.title,
+        title: read().title,
         options: options,
-        isTelevision: inputs.isTelevision,
+        isTelevision: read().isTelevision,
         onSelected: (action) async {
           Navigator.of(sheetCtx).pop();
           await read().onTraktAction?.call(action);
@@ -366,8 +366,8 @@ class DetailTrackerController extends ChangeNotifier {
       showDragHandle: true,
       isScrollControlled: true,
       builder: (sheetCtx) => DetailTraktSheet(
-        title: inputs.title,
-        isTelevision: inputs.isTelevision,
+        title: read().title,
+        isTelevision: read().isTelevision,
         status: _traktStatus,
         optionsFor: (status) => [
           for (final o
@@ -378,8 +378,8 @@ class DetailTrackerController extends ChangeNotifier {
         onAction: (action) async {
           await read().onTraktAction?.call(action);
         },
-        onRate: inputs.onTraktRate,
-        statusLoader: inputs.traktStatusLoader,
+        onRate: read().onTraktRate,
+        statusLoader: read().traktStatusLoader,
         // Keep the pill in sync with whatever the sheet did while it was open.
         onChanged: (status) {
           if (!_disposed) {
@@ -404,16 +404,16 @@ class DetailTrackerController extends ChangeNotifier {
       showDragHandle: true,
       isScrollControlled: true,
       builder: (sheetCtx) => DetailSimklSheet(
-        title: inputs.title,
-        isTelevision: inputs.isTelevision,
+        title: read().title,
+        isTelevision: read().isTelevision,
         status: _simklStatus,
         optionsFor: (status) =>
             read().simklMenuBuilder?.call(status) ?? read().simklMenuOptions,
         onAction: (action) async {
           await read().onSimklAction?.call(action);
         },
-        onRate: inputs.onSimklRate,
-        statusLoader: inputs.simklStatusLoader,
+        onRate: read().onSimklRate,
+        statusLoader: read().simklStatusLoader,
         onChanged: (status) {
           if (!_disposed) {
             _simklStatus = status;
@@ -430,6 +430,9 @@ class DetailTrackerController extends ChangeNotifier {
     if (menuOptionsMdblist.isEmpty || inputs.onMdblistAction == null) return;
     showModalBottomSheet<void>(
       context: context,
+      backgroundColor: AppThemeScope.of(context).sheetSurface,
+      showDragHandle: true,
+      isScrollControlled: true,
       builder: (sheetContext) => SafeArea(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 640, maxHeight: 620),
@@ -438,7 +441,7 @@ class DetailTrackerController extends ChangeNotifier {
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
             children: [
               Text(
-                inputs.title,
+                read().title,
                 style: Theme.of(sheetContext).textTheme.titleLarge,
               ),
               const SizedBox(height: 4),
