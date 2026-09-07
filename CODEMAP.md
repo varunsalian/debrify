@@ -21,7 +21,7 @@ right code instead of re-discovering it. Flutter app; code under `lib/{screens,s
 | `lib/screens/torbox/torbox_downloads_screen.dart` | 7 069 |
 | `lib/screens/debrid_downloads_screen.dart` | 6 444 |
 | `lib/services/video_player_launcher.dart` | 5 769 |
-| `lib/services/torrent_playback_service.dart` | 4 521 |
+| `lib/services/torrent_playback_service.dart` | 4 539 |
 | `lib/services/remote_control/remote_command_router.dart` | 5 100 |
 
 Sources is an independent library: `lib/screens/search/search_sources.dart` (2 804).
@@ -59,7 +59,7 @@ using `search_content_session.dart` and `search_content_actions.dart` shared wit
 `lib/screens/torbox/torbox_downloads_screen.dart` (7 069) ·
 `lib/screens/debrid_downloads_screen.dart` (6 444) ·
 `lib/services/video_player_launcher.dart` (5 769) ·
-`lib/services/torrent_playback_service.dart` (4 521) ·
+`lib/services/torrent_playback_service.dart` (4 539) ·
 `lib/services/remote_control/remote_command_router.dart` (5 100).
 
 `lib/widgets/initial_setup_flow.dart` is a 4-line export of
