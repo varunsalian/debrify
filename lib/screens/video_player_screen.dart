@@ -1,3 +1,4 @@
+import 'video_player/services/renderer_startup_environment.dart';
 import 'package:debrify/services/storage/quick_play_policy_prefs.dart';
 import '../services/playback/decoder_diagnostics.dart';
 import 'video_player/services/player_terminal_backend.dart';
@@ -2276,7 +2277,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // Load default player settings
     await _loadPlayerDefaults();
     unawaited(_loadDockPrefs());
-    if (Platform.isAndroid && !PlatformUtil.isAndroidTvCached) {
+    if (RendererStartupEnvironment.isAndroid && !PlatformUtil.isAndroidTvCached) {
       _androidVideoRendererMode =
           await StorageService.getAndroidVideoRendererMode();
     }
@@ -3013,7 +3014,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     required String reason,
   }) async {
     if (!AndroidRendererStartupFallback.shouldArm(
-          isAndroid: Platform.isAndroid,
+          isAndroid: RendererStartupEnvironment.isAndroid,
           isAndroidTv: PlatformUtil.isAndroidTvCached,
           mode: _androidVideoRendererMode,
           alreadyValidated: _rendererValidatedForSession,
