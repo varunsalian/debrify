@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:debrify/utils/series_parser.dart' show SeriesInfo;
+
 import 'package:debrify/models/playlist_entry.dart';
 import 'package:debrify/models/series_playlist.dart';
 import 'package:debrify/services/episode_info_service.dart';
@@ -467,6 +469,251 @@ void main() {
       expect(playlist.imdbId, 'tt9500001');
     });
   });
+
+  // Six branch tests / nine scenarios; all preceding thirteen stay unchanged.
+  test('saved mapping miss enriches through later episode recovery without show state', () async {
+    await _withFixture((fixture) async {
+      final playlist = _series();
+      final first = playlist.allEpisodes[0];
+      final second = playlist.allEpisodes[1];
+      final item = <String, dynamic>{'rdTorrentId': 'branch-mapped-miss'};
+      await PlaybackProgressStore.saveTVMazeSeriesMapping(
+        playlistItem: item, tvmazeShowId: 4101, showName: 'Missing',
+      );
+      fixture.get('$_tv/shows/4101', {}, 404);
+      fixture.get('$_tv/search/shows?q=origin%20show', [{'show': _show(4102)}]);
+      fixture.get('$_tv/shows/4102/episodes', [_episode(1), _episode(2)]);
+      await playlist.fetchEpisodeInfo(playlistItem: item, imdbId: 'tt1111111');
+      expect(playlist.allEpisodes[0], same(first));
+      expect(playlist.allEpisodes[1], same(second));
+      expect(first.episodeInfo!.title, 'Episode 1');
+      expect(second.episodeInfo!.title, 'Episode 2');
+      expect(playlist.imdbId, 'tt1111111');
+      // Recovery did not re-enter the earlier show-selection/update branch.
+      expect(playlist.tvmazeShowId, isNull);
+      expect(playlist.tvmazeShowName, isNull);
+      expect(playlist.showPosterUrl, isNull);
+      expect(playlist.fullTvmazeEpisodes, isEmpty);
+    });
+  });
+
+  test('parameter defaults and empty explicit title use four fresh fixtures', () async {
+    await _withFixture((fixture) async {
+      final playlist = _series()..imdbId = 'tt0000000';
+      fixture.get('$_tv/search/shows?q=origin%20show', [{'show': _show(4201)}]);
+      fixture.get('$_tv/shows/4201/episodes', [_episode(1), _episode(2)]);
+      await playlist.fetchEpisodeInfo(); // Omitted PARAM, no saved mapping.
+      expect(playlist.imdbId, 'tt0000000');
+      expect(playlist.tvmazeShowId, 4201);
+      expect(playlist.allEpisodes.first.episodeInfo!.title, 'Episode 1');
+    });
+    await _withFixture((fixture) async {
+      final playlist = _series()..imdbId = 'tt0000000';
+      fixture.get('$_tv/search/shows?q=origin%20show', [{'show': _show(4202)}]);
+      fixture.get('$_tv/shows/4202/episodes', [_episode(1), _episode(2)]);
+      await playlist.fetchEpisodeInfo(imdbId: 'invalid'); // No saved mapping.
+      expect(playlist.imdbId, 'tt0000000');
+      expect(playlist.tvmazeShowId, 4202);
+      expect(playlist.allEpisodes.first.episodeInfo!.title, 'Episode 1');
+    });
+    await _withFixture((fixture) async {
+      final parsed = _series();
+      final playlist = SeriesPlaylist(seriesTitle: '', seasons: parsed.seasons,
+          allEpisodes: parsed.allEpisodes, isSeries: true, imdbId: 'tt0000000');
+      final first = playlist.allEpisodes.first;
+      expect(first.seriesInfo.title, isNotEmpty);
+      final item = <String, dynamic>{'rdTorrentId': 'empty-title-null'};
+      await PlaybackProgressStore.saveTVMazeSeriesMapping(
+        playlistItem: item, tvmazeShowId: 4203, showName: 'Mapped',
+      );
+      final before = fixture.observed.length;
+      await playlist.fetchEpisodeInfo(playlistItem: item, imdbId: null);
+      expect(fixture.observed.length, before);
+      expect(playlist.imdbId, 'tt0000000');
+      expect(playlist.tvmazeShowId, isNull);
+      expect(playlist.tvmazeShowName, isNull);
+      expect(playlist.showPosterUrl, isNull);
+      expect(playlist.fullTvmazeEpisodes, isEmpty);
+      expect(playlist.allEpisodes.first, same(first));
+      expect(first.episodeInfo, isNull);
+    });
+    await _withFixture((fixture) async {
+      final parsed = _series();
+      final playlist = SeriesPlaylist(seriesTitle: '', seasons: parsed.seasons,
+          allEpisodes: parsed.allEpisodes, isSeries: true, imdbId: 'tt0000000');
+      expect(playlist.allEpisodes.first.seriesInfo.title, isNotEmpty);
+      final item = <String, dynamic>{'rdTorrentId': 'empty-title-invalid'};
+      await PlaybackProgressStore.saveTVMazeSeriesMapping(
+        playlistItem: item, tvmazeShowId: 4204, showName: 'Mapped',
+      );
+      fixture.get('$_tv/shows/4204', _show(4204));
+      fixture.get('$_tv/shows/4204/episodes', [_episode(1), _episode(2)]);
+      await playlist.fetchEpisodeInfo(playlistItem: item, imdbId: 'invalid');
+      expect(playlist.imdbId, 'tt0000000');
+      expect(playlist.tvmazeShowId, 4204);
+      expect(playlist.allEpisodes.first.episodeInfo!.title, 'Episode 1');
+    });
+  });
+
+  test('show original-image type error escapes before bulk or show-state updates', () async {
+    await _withFixture((fixture) async {
+      final playlist = _series();
+      final first = playlist.allEpisodes.first;
+      final firstInfo = first.seriesInfo;
+      final response = _show(4301)..['image'] = {'original': 123, 'medium': 'valid-medium'};
+      fixture.get('$_tv/lookup/shows?imdb=tt3333333', response);
+      final operation = playlist.fetchEpisodeInfo(imdbId: 'tt3333333');
+      expect(playlist.imdbId, 'tt3333333');
+      await expectLater(operation, throwsA(isA<TypeError>()));
+      expect(playlist.imdbId, 'tt3333333');
+      expect(playlist.tvmazeShowId, isNull);
+      expect(playlist.tvmazeShowName, isNull);
+      expect(playlist.showPosterUrl, isNull);
+      expect(playlist.fullTvmazeEpisodes, isEmpty);
+      expect(playlist.allEpisodes.first, same(first));
+      expect(first.seriesInfo, same(firstInfo));
+      expect(first.episodeInfo, isNull);
+    });
+  });
+
+  test('title-only numeric name fails before middle metadata assignment', () async {
+    await _withFixture((fixture) async {
+      final playlist = _titleOnlyPlaylist('12345');
+      final all = playlist.allEpisodes;
+      final seasons = playlist.seasons;
+      final season = seasons.single;
+      final first = all[0];
+      final middle = all[1];
+      final last = all[2];
+      final firstInfo = first.seriesInfo;
+      final middleInfo = middle.seriesInfo;
+      final lastInfo = last.seriesInfo;
+      final middleMetadata = middle.episodeInfo;
+      final lastMetadata = last.episodeInfo;
+      fixture.get('$_tv/lookup/shows?imdb=tt4400001', _show(4401));
+      fixture.get('$_tv/shows/4401/episodes', [
+        _episode(1)..['name'] = 'First Beacon',
+        _episode(7)..['name'] = 12345,
+        _episode(9)..['name'] = 'Last Orchard',
+      ]);
+      await expectLater(playlist.fetchEpisodeInfo(imdbId: 'tt4400001'), throwsA(isA<TypeError>()));
+      expect(playlist.allEpisodes, same(all));
+      expect(playlist.seasons, same(seasons));
+      expect(playlist.seasons.single, same(season));
+      expect(season.episodes, same(all));
+      expect(all[0], same(first));
+      expect(all[1], same(middle));
+      expect(all[2], same(last));
+      expect(first.episodeInfo!.title, 'First Beacon');
+      expect(first.seriesInfo, isNot(same(firstInfo)));
+      expect(first.seriesInfo.season, 1);
+      expect(first.seriesInfo.episode, 1);
+      expect(middle.episodeInfo, same(middleMetadata));
+      expect(middle.seriesInfo, same(middleInfo));
+      expect(last.episodeInfo, same(lastMetadata));
+      expect(last.seriesInfo, same(lastInfo));
+      expect(playlist.tvmazeShowId, 4401);
+      expect(playlist.tvmazeShowName, 'Origin Show');
+      expect(playlist.showPosterUrl, 'https://images.invalid/show');
+      expect(playlist.fullTvmazeEpisodes, hasLength(3));
+      expect(playlist.fullTvmazeEpisodes[1]['name'], 12345);
+    });
+  });
+
+  test('title-only string season escapes after middle metadata assignment', () async {
+    await _withFixture((fixture) async {
+      final playlist = _titleOnlyPlaylist('Middle Harbor');
+      final all = playlist.allEpisodes;
+      final seasons = playlist.seasons;
+      final season = seasons.single;
+      final first = all[0];
+      final middle = all[1];
+      final last = all[2];
+      final middleInfo = middle.seriesInfo;
+      final lastInfo = last.seriesInfo;
+      final middleMetadata = middle.episodeInfo;
+      final lastMetadata = last.episodeInfo;
+      fixture.get('$_tv/lookup/shows?imdb=tt4500001', _show(4501));
+      fixture.get('$_tv/shows/4501/episodes', [
+        _episode(1)..['name'] = 'First Beacon',
+        _episode(7)
+          ..['name'] = 'Middle Harbor'
+          ..['season'] = '2',
+        _episode(9)..['name'] = 'Last Orchard',
+      ]);
+      await expectLater(playlist.fetchEpisodeInfo(imdbId: 'tt4500001'), throwsA(isA<TypeError>()));
+      expect(playlist.allEpisodes, same(all));
+      expect(playlist.seasons, same(seasons));
+      expect(playlist.seasons.single, same(season));
+      expect(season.episodes, same(all));
+      expect(all[0], same(first));
+      expect(all[1], same(middle));
+      expect(all[2], same(last));
+      expect(first.episodeInfo!.title, 'First Beacon');
+      expect(first.seriesInfo.season, 1);
+      expect(first.seriesInfo.episode, 1);
+      expect(middle.episodeInfo, isNot(same(middleMetadata)));
+      expect(middle.episodeInfo!.title, 'Middle Harbor');
+      expect(middle.episodeInfo!.seasonNumber, '2');
+      expect(middle.episodeInfo!.episodeNumber, '7');
+      expect(middle.seriesInfo, same(middleInfo));
+      expect(last.episodeInfo, same(lastMetadata));
+      expect(last.seriesInfo, same(lastInfo));
+      expect(playlist.tvmazeShowId, 4501);
+      expect(playlist.tvmazeShowName, 'Origin Show');
+      expect(playlist.showPosterUrl, 'https://images.invalid/show');
+      expect(playlist.fullTvmazeEpisodes, hasLength(3));
+      expect(playlist.fullTvmazeEpisodes[1]['season'], '2');
+    });
+  });
+
+  test('title-only string number escapes after middle metadata assignment', () async {
+    await _withFixture((fixture) async {
+      final playlist = _titleOnlyPlaylist('Middle Harbor');
+      final all = playlist.allEpisodes;
+      final seasons = playlist.seasons;
+      final season = seasons.single;
+      final first = all[0];
+      final middle = all[1];
+      final last = all[2];
+      final middleInfo = middle.seriesInfo;
+      final lastInfo = last.seriesInfo;
+      final middleMetadata = middle.episodeInfo;
+      final lastMetadata = last.episodeInfo;
+      fixture.get('$_tv/lookup/shows?imdb=tt4600001', _show(4601));
+      fixture.get('$_tv/shows/4601/episodes', [
+        _episode(1)..['name'] = 'First Beacon',
+        _episode(7)
+          ..['name'] = 'Middle Harbor'
+          ..['season'] = 2
+          ..['number'] = '7',
+        _episode(9)..['name'] = 'Last Orchard',
+      ]);
+      await expectLater(playlist.fetchEpisodeInfo(imdbId: 'tt4600001'), throwsA(isA<TypeError>()));
+      expect(playlist.allEpisodes, same(all));
+      expect(playlist.seasons, same(seasons));
+      expect(playlist.seasons.single, same(season));
+      expect(season.episodes, same(all));
+      expect(all[0], same(first));
+      expect(all[1], same(middle));
+      expect(all[2], same(last));
+      expect(first.episodeInfo!.title, 'First Beacon');
+      expect(first.seriesInfo.season, 1);
+      expect(first.seriesInfo.episode, 1);
+      expect(middle.episodeInfo, isNot(same(middleMetadata)));
+      expect(middle.episodeInfo!.title, 'Middle Harbor');
+      expect(middle.episodeInfo!.seasonNumber, '2');
+      expect(middle.episodeInfo!.episodeNumber, '7');
+      expect(middle.seriesInfo, same(middleInfo));
+      expect(last.episodeInfo, same(lastMetadata));
+      expect(last.seriesInfo, same(lastInfo));
+      expect(playlist.tvmazeShowId, 4601);
+      expect(playlist.tvmazeShowName, 'Origin Show');
+      expect(playlist.showPosterUrl, 'https://images.invalid/show');
+      expect(playlist.fullTvmazeEpisodes, hasLength(3));
+      expect(playlist.fullTvmazeEpisodes[1]['number'], '7');
+    });
+  });
 }
 
 // Minimal additive transport helpers; no model injection or completion observer.
@@ -522,4 +769,24 @@ Future<void> _releaseAndJoinPair(
     primaryStack ??= stack;
   }
   if (primary != null) Error.throwWithStackTrace(primary, primaryStack!);
+}
+
+// One additive public-constructor helper: deliberately title-only siblings.
+SeriesPlaylist _titleOnlyPlaylist(String middleName) {
+  final episodes = <SeriesEpisode>[
+    SeriesEpisode(url: 'https://fixture.invalid/first', title: 'First Beacon',
+        filename: 'First Beacon', originalIndex: 0,
+        seriesInfo: const SeriesInfo(title: 'Origin Show', isSeries: true)),
+    SeriesEpisode(url: 'https://fixture.invalid/middle', title: middleName,
+        filename: middleName, originalIndex: 1,
+        episodeInfo: const EpisodeInfo(title: 'Prior middle'),
+        seriesInfo: const SeriesInfo(title: 'Origin Show', isSeries: true)),
+    SeriesEpisode(url: 'https://fixture.invalid/last', title: 'Last Orchard',
+        filename: 'Last Orchard', originalIndex: 2,
+        episodeInfo: const EpisodeInfo(title: 'Prior last'),
+        seriesInfo: const SeriesInfo(title: 'Origin Show', isSeries: true)),
+  ];
+  return SeriesPlaylist(seriesTitle: 'Origin Show', isSeries: true,
+      seasons: [SeriesSeason(seasonNumber: 1, episodes: episodes)],
+      allEpisodes: episodes);
 }
