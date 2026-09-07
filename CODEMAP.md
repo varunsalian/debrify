@@ -577,7 +577,8 @@ is an editor mirror, not the source of truth. How to add a provider:
   persist, diagnostics, addon fetch, and the player-menu track-apply
   operations (`menuSelectAudio`, `menuSubtitlesOff`,
   `menuSelectEmbeddedSubtitle`, `menuSelectAddonSubtitle`,
-  `applyStremioSubtitleFromTracksSheet`):
+  `applyStremioSubtitleFromTracksSheet`) and the menu identity snapshot
+  (`resolveMenuIdentityForTracks`, `menuIdentityQuick` -> `PlayerMenuIdentity`):
   `lib/screens/video_player/subtitle_track_controller.dart`
   (`SubtitleTrackController` + `SubtitleTrackSession`; host keeps
   `_SubtitleTrackSession` adapter and title/season resolvers).

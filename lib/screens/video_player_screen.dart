@@ -9186,105 +9186,13 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
 
   Future<void> _showTracksSheet(BuildContext context) async {
-    // Dynamically parse season/episode from current video's filename
-    final currentTitle = _currentPlaybackTitleForIdentity();
-    final seriesInfo = SeriesParser.parseFilename(currentTitle);
-    final season =
-        seriesInfo.season ?? _manualContentSeason ?? _effectiveContentSeason;
-    final episode =
-        seriesInfo.episode ?? _manualContentEpisode ?? _effectiveContentEpisode;
-
-    // Get IMDB ID for current item
-    // For series: uses shared IMDB ID (all episodes share same show ID)
-    // For movies: uses per-item IMDB ID (each movie in collection has unique ID)
-    String? effectiveImdbId;
-    final seriesPlaylist = _seriesPlaylist;
-
-    if (_manualContentImdbId != null && _manualContentImdbId!.isNotEmpty) {
-      effectiveImdbId = _manualContentImdbId;
-    } else if (seriesPlaylist != null) {
-      if (seriesPlaylist.isSeries) {
-        // Series: use shared IMDB ID
-        effectiveImdbId = seriesPlaylist.imdbId ?? _effectiveContentImdbId;
-      } else {
-        // Movie collection: try to get/fetch IMDB ID for current index
-        effectiveImdbId = seriesPlaylist.getImdbIdForIndex(_currentIndex);
-
-        // If not cached, try to fetch it now (async but we wait for it)
-        if (effectiveImdbId == null && _effectiveContentImdbId == null) {
-          debugPrint(
-            'VideoPlayer: Fetching movie metadata for index $_currentIndex before showing tracks',
-          );
-          effectiveImdbId = await SeriesPlaylistMetadataLoader.fetchMovieMetadataForIndex(seriesPlaylist,
-            _currentIndex,
-          );
-        }
-
-        // Fall back to widget's contentImdbId if still null
-        effectiveImdbId ??= _effectiveContentImdbId;
-      }
-    } else {
-      // Single-file playback (no playlist)
-      // Try cached single-file IMDB ID, then widget's contentImdbId
-      effectiveImdbId = _singleFileImdbId ?? _effectiveContentImdbId;
-
-      // If not cached yet, try to fetch it now
-      if (effectiveImdbId == null && !_singleFileImdbFetched) {
-        debugPrint(
-          'VideoPlayer: Fetching single-file movie metadata before showing tracks',
-        );
-        await _fetchSingleFileMovieMetadata();
-        effectiveImdbId = _singleFileImdbId;
-      }
-    }
-
-    // Determine content type
-    // Priority: manual override > widget/channel metadata > playlist detection
-    String? effectiveContentType = _manualContentType ?? _effectiveContentType;
-    if (effectiveContentType == null) {
-      if (seriesPlaylist?.isSeries == true) {
-        effectiveContentType = 'series';
-      } else if (effectiveImdbId != null) {
-        // We have an IMDB ID (either from playlist or single-file lookup)
-        // If not a series, it's a movie
-        effectiveContentType = 'movie';
-      }
-    }
-
-    debugPrint(
-      'VideoPlayer: Opening TracksSheet with contentImdbId=$effectiveImdbId, '
-      'contentType=$effectiveContentType, '
-      'season=$season, episode=$episode (parsed from: $currentTitle)',
-    );
-
-    final subtitleSeason = effectiveContentType == 'series' ? season : null;
-    final subtitleEpisode = effectiveContentType == 'series' ? episode : null;
-
-    // Build cache key for subtitle caching (per-item like Android TV)
-    final String? cacheKey = effectiveImdbId != null
-        ? (subtitleSeason != null && subtitleEpisode != null
-              ? '$effectiveImdbId:$subtitleSeason:$subtitleEpisode'
-              : effectiveImdbId)
-        : null;
-
-    // Check if we have cached per-addon subtitle slots for this content.
-    final List<AddonSubtitleSlot>? baseSlots =
-        (cacheKey != null && _cachedSubtitleKey == cacheKey)
-        ? _cachedAddonSlots
-        : null;
-    // Always include launch-supplied subtitles (e.g. YouTube captions). They
-    // aren't IMDb-keyed, so they never live in the per-item cache above and
-    // must be appended unconditionally — otherwise identifying the title (which
-    // populates _cachedAddonSlots) would make the caption group disappear.
-    final List<AddonSubtitleSlot>? cachedSlots = _injectedSubtitleSlots != null
-        ? [...?baseSlots, ..._injectedSubtitleSlots!]
-        : baseSlots;
-
-    if (cachedSlots != null) {
-      debugPrint(
-        'VideoPlayer: Using ${cachedSlots.length} cached addon slots for key: $cacheKey',
-      );
-    }
+    final identity = await _subs.resolveMenuIdentityForTracks();
+    final effectiveImdbId = identity.imdbId;
+    final effectiveContentType = identity.contentType;
+    final subtitleSeason = identity.season;
+    final subtitleEpisode = identity.episode;
+    final cachedSlots = identity.cachedSlots;
+    final cacheKey = identity.cacheKey;
 
     if (!context.mounted) return;
 
@@ -9396,57 +9304,16 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   /// If the IMDb id was never fetched, the Subtitles pane still offers the
   /// "Fix the title" recovery, so nothing is lost — just not pre-fetched.
   void _openPlayerMenuQuick(PlayerMenuSection section) {
-    final currentTitle = _currentPlaybackTitleForIdentity();
-    final seriesInfo = SeriesParser.parseFilename(currentTitle);
-    final season =
-        seriesInfo.season ?? _manualContentSeason ?? _effectiveContentSeason;
-    final episode =
-        seriesInfo.episode ?? _manualContentEpisode ?? _effectiveContentEpisode;
-
-    String? imdbId;
-    final seriesPlaylist = _seriesPlaylist;
-    if (_manualContentImdbId != null && _manualContentImdbId!.isNotEmpty) {
-      imdbId = _manualContentImdbId;
-    } else if (seriesPlaylist != null) {
-      imdbId = seriesPlaylist.isSeries
-          ? (seriesPlaylist.imdbId ?? _effectiveContentImdbId)
-          : (seriesPlaylist.getImdbIdForIndex(_currentIndex) ??
-                _effectiveContentImdbId);
-    } else {
-      imdbId = _singleFileImdbId ?? _effectiveContentImdbId;
-    }
-
-    String? contentType = _manualContentType ?? _effectiveContentType;
-    if (contentType == null) {
-      if (seriesPlaylist?.isSeries == true) {
-        contentType = 'series';
-      } else if (imdbId != null) {
-        contentType = 'movie';
-      }
-    }
-
-    final subtitleSeason = contentType == 'series' ? season : null;
-    final subtitleEpisode = contentType == 'series' ? episode : null;
-    final String? cacheKey = imdbId != null
-        ? (subtitleSeason != null && subtitleEpisode != null
-              ? '$imdbId:$subtitleSeason:$subtitleEpisode'
-              : imdbId)
-        : null;
-    final baseSlots = (cacheKey != null && _cachedSubtitleKey == cacheKey)
-        ? _cachedAddonSlots
-        : null;
-    final cachedSlots = _injectedSubtitleSlots != null
-        ? [...?baseSlots, ..._injectedSubtitleSlots!]
-        : baseSlots;
+    final identity = _subs.menuIdentityQuick();
 
     _openPlayerMenuAt(
       section,
-      imdbId: imdbId,
-      contentType: contentType,
-      season: subtitleSeason,
-      episode: subtitleEpisode,
-      cachedSlots: cachedSlots,
-      cacheKey: cacheKey,
+      imdbId: identity.imdbId,
+      contentType: identity.contentType,
+      season: identity.season,
+      episode: identity.episode,
+      cachedSlots: identity.cachedSlots,
+      cacheKey: identity.cacheKey,
     );
   }
 
@@ -9715,6 +9582,12 @@ class _SubtitleTrackSession implements SubtitleTrackSession {
   @override int? get effectiveContentSeason => _s._effectiveContentSeason;
   @override int? get effectiveContentEpisode => _s._effectiveContentEpisode;
   @override String? get singleFileImdbId => _s._singleFileImdbId;
+  @override bool get singleFileImdbFetched => _s._singleFileImdbFetched;
+  @override int get currentIndex => _s._currentIndex;
+  @override List<AddonSubtitleSlot>? get injectedSubtitleSlots =>
+      _s._injectedSubtitleSlots;
+  @override Future<void> fetchSingleFileMovieMetadata() =>
+      _s._fetchSingleFileMovieMetadata();
   @override int? get currentStremioTvContentSeason =>
       _s._currentStremioTvContentSeason;
   @override int? get currentStremioTvContentEpisode =>

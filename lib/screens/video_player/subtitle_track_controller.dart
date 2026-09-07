@@ -11,9 +11,11 @@ import '../../models/android_video_renderer_mode.dart';
 import '../../models/series_playlist.dart';
 import '../../models/stremio_addon.dart';
 import '../../models/stremio_subtitle.dart';
+import '../../services/series_playlist_metadata_loader.dart';
 import '../../services/storage_service.dart';
 import '../../services/stremio_subtitle_service.dart';
 import '../../utils/platform_util.dart';
+import '../../utils/series_parser.dart';
 import '../../widgets/player/identify_title_sheet.dart';
 import 'services/external_subtitle_payload.dart';
 import 'services/subtitle_track_utils.dart';
@@ -58,11 +60,13 @@ abstract class SubtitleTrackSession {
   String get videoTitle;
 
   SeriesPlaylist? get seriesPlaylist;
+  int get currentIndex;
   String? get effectiveContentImdbId;
   String? get effectiveContentType;
   int? get effectiveContentSeason;
   int? get effectiveContentEpisode;
   String? get singleFileImdbId;
+  bool get singleFileImdbFetched;
   int? get currentStremioTvContentSeason;
   int? get currentStremioTvContentEpisode;
   int? get launchContentSeason;
@@ -96,6 +100,7 @@ abstract class SubtitleTrackSession {
   set trackPreferencesReadyForAddonSubtitles(bool value);
   Set<String> get tempSubtitleFiles;
   String? get activeExternalSubtitlePath;
+  List<AddonSubtitleSlot>? get injectedSubtitleSlots;
 
   String? get manualContentImdbId;
   set manualContentImdbId(String? value);
@@ -117,6 +122,7 @@ abstract class SubtitleTrackSession {
   void hidePlayerMenuOnContentChange();
   void reconcileMenuSubtitleSelection(String restoredSelection);
   Future<void> applyIptvAudioPreference(int ticket);
+  Future<void> fetchSingleFileMovieMetadata();
   SeriesEpisode? findSeriesEpisodeForCurrentIndex(
     SeriesPlaylist seriesPlaylist,
   );
@@ -155,6 +161,27 @@ bool subtitlePreferenceMatchesAttempt(
     return subtitle.startsWith('stremio:');
   }
   return subtitle == attempt.requested.id;
+}
+
+/// The subtitle-identity context the player menu opens with (origin: the
+/// six locals `_showTracksSheet` / `_openPlayerMenuQuick` handed to
+/// `_openPlayerMenuAt`).
+class PlayerMenuIdentity {
+  const PlayerMenuIdentity({
+    required this.imdbId,
+    required this.contentType,
+    required this.season,
+    required this.episode,
+    required this.cachedSlots,
+    required this.cacheKey,
+  });
+
+  final String? imdbId;
+  final String? contentType;
+  final int? season;
+  final int? episode;
+  final List<AddonSubtitleSlot>? cachedSlots;
+  final String? cacheKey;
 }
 
 /// Player subtitle/track restore, persist, diagnostics, and addon fetch.
@@ -1306,5 +1333,175 @@ class SubtitleTrackController {
       );
       return false;
     }
+  }
+
+  /// Origin `_showTracksSheet` prelude (the tracks-button path): resolves
+  /// the identity the player menu opens with, awaiting a metadata fetch
+  /// when the imdb id is not cached yet.
+  Future<PlayerMenuIdentity> resolveMenuIdentityForTracks() async {
+    // Dynamically parse season/episode from current video's filename
+    final currentTitle = session.currentPlaybackTitleForIdentity();
+    final seriesInfo = SeriesParser.parseFilename(currentTitle);
+    final season =
+        seriesInfo.season ?? session.manualContentSeason ?? session.effectiveContentSeason;
+    final episode =
+        seriesInfo.episode ?? session.manualContentEpisode ?? session.effectiveContentEpisode;
+
+    // Get IMDB ID for current item
+    // For series: uses shared IMDB ID (all episodes share same show ID)
+    // For movies: uses per-item IMDB ID (each movie in collection has unique ID)
+    String? effectiveImdbId;
+    final seriesPlaylist = session.seriesPlaylist;
+
+    if (session.manualContentImdbId != null && session.manualContentImdbId!.isNotEmpty) {
+      effectiveImdbId = session.manualContentImdbId;
+    } else if (seriesPlaylist != null) {
+      if (seriesPlaylist.isSeries) {
+        // Series: use shared IMDB ID
+        effectiveImdbId = seriesPlaylist.imdbId ?? session.effectiveContentImdbId;
+      } else {
+        // Movie collection: try to get/fetch IMDB ID for current index
+        effectiveImdbId = seriesPlaylist.getImdbIdForIndex(session.currentIndex);
+
+        // If not cached, try to fetch it now (async but we wait for it)
+        if (effectiveImdbId == null && session.effectiveContentImdbId == null) {
+          debugPrint(
+            'VideoPlayer: Fetching movie metadata for index ${session.currentIndex} before showing tracks',
+          );
+          effectiveImdbId = await SeriesPlaylistMetadataLoader.fetchMovieMetadataForIndex(seriesPlaylist,
+            session.currentIndex,
+          );
+        }
+
+        // Fall back to widget's contentImdbId if still null
+        effectiveImdbId ??= session.effectiveContentImdbId;
+      }
+    } else {
+      // Single-file playback (no playlist)
+      // Try cached single-file IMDB ID, then widget's contentImdbId
+      effectiveImdbId = session.singleFileImdbId ?? session.effectiveContentImdbId;
+
+      // If not cached yet, try to fetch it now
+      if (effectiveImdbId == null && !session.singleFileImdbFetched) {
+        debugPrint(
+          'VideoPlayer: Fetching single-file movie metadata before showing tracks',
+        );
+        await session.fetchSingleFileMovieMetadata();
+        effectiveImdbId = session.singleFileImdbId;
+      }
+    }
+
+    // Determine content type
+    // Priority: manual override > widget/channel metadata > playlist detection
+    String? effectiveContentType = session.manualContentType ?? session.effectiveContentType;
+    if (effectiveContentType == null) {
+      if (seriesPlaylist?.isSeries == true) {
+        effectiveContentType = 'series';
+      } else if (effectiveImdbId != null) {
+        // We have an IMDB ID (either from playlist or single-file lookup)
+        // If not a series, it's a movie
+        effectiveContentType = 'movie';
+      }
+    }
+
+    debugPrint(
+      'VideoPlayer: Opening TracksSheet with contentImdbId=$effectiveImdbId, '
+      'contentType=$effectiveContentType, '
+      'season=$season, episode=$episode (parsed from: $currentTitle)',
+    );
+
+    final subtitleSeason = effectiveContentType == 'series' ? season : null;
+    final subtitleEpisode = effectiveContentType == 'series' ? episode : null;
+
+    // Build cache key for subtitle caching (per-item like Android TV)
+    final String? cacheKey = effectiveImdbId != null
+        ? (subtitleSeason != null && subtitleEpisode != null
+              ? '$effectiveImdbId:$subtitleSeason:$subtitleEpisode'
+              : effectiveImdbId)
+        : null;
+
+    // Check if we have cached per-addon subtitle slots for this content.
+    final List<AddonSubtitleSlot>? baseSlots =
+        (cacheKey != null && session.cachedSubtitleKey == cacheKey)
+        ? session.cachedAddonSlots
+        : null;
+    // Always include launch-supplied subtitles (e.g. YouTube captions). They
+    // aren't IMDb-keyed, so they never live in the per-item cache above and
+    // must be appended unconditionally — otherwise identifying the title (which
+    // populates _cachedAddonSlots) would make the caption group disappear.
+    final List<AddonSubtitleSlot>? cachedSlots = session.injectedSubtitleSlots != null
+        ? [...?baseSlots, ...session.injectedSubtitleSlots!]
+        : baseSlots;
+
+    if (cachedSlots != null) {
+      debugPrint(
+        'VideoPlayer: Using ${cachedSlots.length} cached addon slots for key: $cacheKey',
+      );
+    }
+
+    return PlayerMenuIdentity(
+      imdbId: effectiveImdbId,
+      contentType: effectiveContentType,
+      season: subtitleSeason,
+      episode: subtitleEpisode,
+      cachedSlots: cachedSlots,
+      cacheKey: cacheKey,
+    );
+  }
+
+  /// Origin `_openPlayerMenuQuick` snapshot (speed, sleep, aspect,
+  /// shuffle): identity from caches only, no fetch.
+  PlayerMenuIdentity menuIdentityQuick() {
+    final currentTitle = session.currentPlaybackTitleForIdentity();
+    final seriesInfo = SeriesParser.parseFilename(currentTitle);
+    final season =
+        seriesInfo.season ?? session.manualContentSeason ?? session.effectiveContentSeason;
+    final episode =
+        seriesInfo.episode ?? session.manualContentEpisode ?? session.effectiveContentEpisode;
+
+    String? imdbId;
+    final seriesPlaylist = session.seriesPlaylist;
+    if (session.manualContentImdbId != null && session.manualContentImdbId!.isNotEmpty) {
+      imdbId = session.manualContentImdbId;
+    } else if (seriesPlaylist != null) {
+      imdbId = seriesPlaylist.isSeries
+          ? (seriesPlaylist.imdbId ?? session.effectiveContentImdbId)
+          : (seriesPlaylist.getImdbIdForIndex(session.currentIndex) ??
+                session.effectiveContentImdbId);
+    } else {
+      imdbId = session.singleFileImdbId ?? session.effectiveContentImdbId;
+    }
+
+    String? contentType = session.manualContentType ?? session.effectiveContentType;
+    if (contentType == null) {
+      if (seriesPlaylist?.isSeries == true) {
+        contentType = 'series';
+      } else if (imdbId != null) {
+        contentType = 'movie';
+      }
+    }
+
+    final subtitleSeason = contentType == 'series' ? season : null;
+    final subtitleEpisode = contentType == 'series' ? episode : null;
+    final String? cacheKey = imdbId != null
+        ? (subtitleSeason != null && subtitleEpisode != null
+              ? '$imdbId:$subtitleSeason:$subtitleEpisode'
+              : imdbId)
+        : null;
+    final baseSlots = (cacheKey != null && session.cachedSubtitleKey == cacheKey)
+        ? session.cachedAddonSlots
+        : null;
+    final cachedSlots = session.injectedSubtitleSlots != null
+        ? [...?baseSlots, ...session.injectedSubtitleSlots!]
+        : baseSlots;
+
+    return PlayerMenuIdentity(
+      imdbId: imdbId,
+      contentType: contentType,
+      season: subtitleSeason,
+      episode: subtitleEpisode,
+      cachedSlots: cachedSlots,
+      cacheKey: cacheKey,
+    );
   }
 }
