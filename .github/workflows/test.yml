@@ -56,9 +56,20 @@ jobs:
           python3 -c "import json; print('layering count (HEAD):', json.load(open('/tmp/layering-head.json'))['count'])"
           PARENT="${{ github.workspace }}/layering-parent"
           test -d "$PARENT/lib" || { echo "Missing layering base tree" >&2; exit 1; }
-          test -f "$PARENT/tool/layering_baseline.txt" || { echo "Missing layering base ceiling" >&2; exit 1; }
-          dart run tool/check_layering.dart --all --json --root "$PARENT" --ceiling-file "$PARENT/tool/layering_baseline.txt" > /tmp/layering-parent.json
-          python3 tool/ci_layering_delta.py /tmp/layering-parent.json /tmp/layering-head.json
+          if [ -f "$PARENT/tool/layering_baseline.txt" ]; then
+            dart run tool/check_layering.dart --all --json --root "$PARENT" --ceiling-file "$PARENT/tool/layering_baseline.txt" > /tmp/layering-parent.json
+            python3 tool/ci_layering_delta.py /tmp/layering-parent.json /tmp/layering-head.json
+          else
+            # The base predates gate (i) entirely (e.g. an upstream tree that
+            # never carried the layering ceiling), so a per-identity delta has
+            # no baseline to compare against. Report the raw delta for the
+            # record, then enforce the absolute ceiling this tree commits to.
+            dart run tool/check_layering.dart --all --json --root "$PARENT" --ceiling-file tool/layering_baseline.txt > /tmp/layering-parent.json || true
+            echo "Base tree has no tool/layering_baseline.txt (predates gate i); raw delta for the record:"
+            python3 tool/ci_layering_delta.py /tmp/layering-parent.json /tmp/layering-head.json || true
+            echo "Enforcing this tree's absolute ceiling instead:"
+            dart run tool/check_layering.dart
+          fi
 
       - name: Run refactor contract tests
         run: flutter test
