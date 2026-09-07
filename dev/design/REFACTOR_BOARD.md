@@ -1,5 +1,10 @@
   # Refactor board
 
+## #239 merged; gate7a512 PASS recorded
+
+Gate7a5120982374acc251a44f63b4a931e74dcee727 PASS: generic6390 passed/12 exactknown/2skip; goldens21 exactknown after configured retries; zero unexpected/unused. Analyzer430/449 zeroerrors/new; Python55; layer53/77 unchanged; native firstpair and both first builds passed. Evidence C:/Users/hunth/debrify/g247/.dart_tool/main-gate/REPORT.md. No new smoke; other-ABI dependencylibs unchanged. This gate precedes239.
+
+Merged239 at04ecd3372030606a6e87dae38d22583a65c527f2, exactreviewedf28bd771. Actualtree5cb4de0368eeabfc94acc981236f61d350b847d1 matches refreshed merge-tree, differs from prior independent orderedunion only in BOARD. AllthreeCIgreen. Prior independent104PASS+1known preserved. IPTV7080→6647 (-433), owners732/net+299. Did we make a difference? Preview stage machinery has explicit owners and pinned behavior. More? Dead stage elements remain Phase3 debt. Player10334/9500,834remaining; Search5879/Magic3322/Storage1741/Settings2908 unchanged. Reviewer intake requires another integrated gate after allthree stacked PRs240/237/239: assigned Cicero at04ecd337; do not call currentmain fully gated yet. No new extraction.
 ## Merged #237 — D2 closeout; gate required
 
 Exact reviewed ecca2d8e merged after240. Actual union differs from independently accepted ceb10eb9f3641243cbfeb25d5655834908c2b927 only in the orchestrator R2 board update. All three CI checks passed; previous independent source/lifecycle and runtime review retained. Detail3143→2609 (-534), net+242. Did we make a difference? Tracker/trailer state has explicit owners; mechanical notification rewrites were reviewed per body. More? Final integrated acceptance remains. Player10334,834 remaining; other gods unchanged. Three production merges247/240/237 since gate534: STOP further merges until full integrated gate passes.239 source-union and CI accepted but gate-blocked. Cicero assigned this gate only; no new extraction or device claim.
