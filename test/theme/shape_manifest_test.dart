@@ -38,7 +38,7 @@ const Map<String, int> kShapeResidue = {
   'lib/screens/addons/addon_hub_screen.dart': 7,
   'lib/screens/alldebrid/alldebrid_files_screen.dart': 1,
   'lib/screens/cloud_screen.dart': 0,
-  'lib/screens/debrid_downloads_screen.dart': 23,
+  'lib/screens/debrid_downloads_screen.dart': 20,
   'lib/screens/debrify_tv/dialogs/channel_playback_settings.dart': 0,
   'lib/screens/debrify_tv/dialogs/community_channels_dialog.dart': 12,
   'lib/screens/debrify_tv/import_export_dialogs.dart': 0,
@@ -87,13 +87,16 @@ const Map<String, int> kShapeResidue = {
   'lib/screens/stremio_tv/widgets/stremio_tv_local_catalogs_dialog.dart': 4,
   'lib/screens/stremio_tv/widgets/stremio_tv_repo_browser_dialog.dart': 3,
   'lib/screens/stremio_tv/widgets/stremio_tv_tuner.dart': 0,
-  'lib/screens/torbox/torbox_downloads_screen.dart': 14,
+  'lib/screens/torbox/torbox_downloads_screen.dart': 11,
   'lib/screens/trakt_calendar_screen.dart': 2,
   'lib/screens/webdav/webdav_files_screen.dart': 0,
   'lib/widgets/adaptive_playlist_section.dart': 0,
   'lib/widgets/catalog_item_tile.dart': 0,
   'lib/widgets/cloud/cloud_file_row.dart': 0,
+  'lib/widgets/cloud/cloud_search_bar.dart': 0,
   'lib/widgets/cloud/cloud_segmented_tabs.dart': 0,
+  'lib/widgets/cloud/cloud_selection_bar.dart': 0,
+  'lib/widgets/cloud/cloud_torrent_search_bar.dart': 0,
   'lib/widgets/desktop_sidebar_nav.dart': 0,
   'lib/widgets/home/cw_card_menu.dart': 0,
   'lib/widgets/iptv/iptv_channel_row.dart': 1,
@@ -212,8 +215,8 @@ void main() {
       originalTotal += calls.allMatches(original).length;
       removedTotal += calls.allMatches(entry == path ? removed : original).length;
     }
-    expect(originalTotal, greaterThanOrEqualTo(490));
-    expect(greaterThanOrEqualTo(490).matches(removedTotal, {}), isFalse);
+    expect(originalTotal, greaterThanOrEqualTo(484));
+    expect(greaterThanOrEqualTo(484).matches(removedTotal, {}), isFalse);
   });
 
   test('new bare radius in favourite artwork is still detected', () {
@@ -236,7 +239,11 @@ void main() {
           .allMatches(File(path).readAsStringSync())
           .length;
     }
-    expect(calls, greaterThanOrEqualTo(490),
+    // 490 until G4-5 pulled the cloud chrome out of the two files screens:
+    // twelve identical token calls across the two hosts became six in the
+    // shared widgets below. The floor tracks a revert, not a site budget, so
+    // de-duplication lowers it.
+    expect(calls, greaterThanOrEqualTo(484),
         reason: 'the shape sweep converted 500 sites; only \$calls remain');
   });
 }
