@@ -818,3 +818,6 @@ These are author-reported preserved behaviors pending independent source/pin rev
 - T3: smallest ranking sinks unknown sizes; directValidationBudgetForRules ignores argument and returns5; pack curation strict while ordinary curation falls back.18 test-facing forwards (~44lines) explicitly expire in queued T3-F owning service plus quick_play_rules_test/filter_ladder_test/torrent_playback_service_strings_test and origin pin. No lib callers claimed; verify before deletion.
 - I1/I2:111-line target shortfall is accepted with clearing slice I3 Phase3. Retained dead classes are described as208lines in I1; these are different accounting measures. I2 unreachable railTV/non-touch branches and focus-stage callback plumbing join I3 after reachability verification; no revived layout. Live stage getters preserve startup suppression/rearm semantics.
 - R3 afterR2 clears busy and legacy-consent dialog layering together; not part of R1/R2. T3 CODEMAP hunk accepted within lane scope.
+
+
+D2 correction to intake quirk report: independent actual-origin comparison found MDBList sheet DID provide backgroundColor/showDragHandle/isScrollControlled; fc8 omission is a regression, not a preserved quirk. Prior entry is author-reported and superseded by this finding. Restore exact origin arguments and correct PR before merge.
