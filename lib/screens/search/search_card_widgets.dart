@@ -39,9 +39,8 @@ class _StremioCard extends StatefulWidget {
   /// centre-cropped poster.
   final String? artUrl;
 
-  /// Animated art shown over [artUrl] only while the card is focused or
-  /// hovered (collection folder tiles). At most one card is active, so at
-  /// most one GIF decodes at a time.
+  /// Collection GIF shown over [artUrl] according to the device playback
+  /// preference. Videos continue to require focus or hover.
   final String? focusArtUrl;
   final String? focusVideoUrl;
   final bool focusGlowEnabled;
@@ -176,10 +175,11 @@ class _StremioCardState extends State<_StremioCard>
         )
       else
         _placeholder(item.name),
-      if (_active &&
-          (widget.focusArtUrl != null || widget.focusVideoUrl != null))
+      if (widget.focusArtUrl != null || widget.focusVideoUrl != null)
         Positioned.fill(
           child: CollectionFocusArt(
+            focused: _active,
+            applyGifPreference: true,
             gifUrl: widget.focusArtUrl,
             videoUrl: widget.focusVideoUrl,
           ),

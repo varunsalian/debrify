@@ -17,6 +17,7 @@ import '../../utils/dialog_tap_guard.dart';
 import '../../utils/tv_keys.dart';
 import 'row_tag_pill.dart';
 import '../collections/collection_focus_glow.dart';
+import '../collections/collection_focus_art.dart';
 import '../movie_watched_badge.dart';
 import '../../utils/platform_util.dart';
 import '../../utils/wide_touch_scale.dart';
@@ -61,6 +62,10 @@ class SpotlightCard {
   final String? watchedImdbId;
   final String? watchedContentType;
 
+  /// Collection GIFs follow the device preference; collection videos need focus.
+  final String? collectionGifUrl;
+  final String? collectionVideoUrl;
+
   /// A lightweight, in-card preview for the one card the user is actively
   /// inspecting. It is built only while the card is hovered on pointer
   /// surfaces, or holds DPAD focus on television; resting cards never mount a
@@ -85,6 +90,8 @@ class SpotlightCard {
     this.shape = SpotlightCardShape.poster,
     this.showCaption = true,
     this.previewBuilder,
+    this.collectionGifUrl,
+    this.collectionVideoUrl,
     this.focusGlowEnabled = false,
     this.previewOnKeyboardFocus = false,
     this.watchedImdbId,
@@ -2400,7 +2407,8 @@ class _CardState extends State<_Card> {
   void _reportDesktopPreviewActivity(bool active) {
     final report = active &&
         !widget.dpad &&
-        widget.card.previewBuilder != null;
+        (widget.card.previewBuilder != null ||
+            widget.card.collectionVideoUrl != null);
     if (_previewActivityReported == report) return;
     _previewActivityReported = report;
     widget.onDesktopPreviewActivityChanged?.call(_previewOwner, report);
@@ -2410,7 +2418,10 @@ class _CardState extends State<_Card> {
   void didUpdateWidget(_Card oldWidget) {
     super.didUpdateWidget(oldWidget);
     final shouldReport =
-        _previewActive && !widget.dpad && widget.card.previewBuilder != null;
+        _previewActive &&
+        !widget.dpad &&
+        (widget.card.previewBuilder != null ||
+            widget.card.collectionVideoUrl != null);
     if (_previewActivityReported && !shouldReport) {
       _previewActivityReported = false;
       oldWidget.onDesktopPreviewActivityChanged?.call(_previewOwner, false);
@@ -2607,6 +2618,13 @@ class _CardState extends State<_Card> {
                           )
                         : const SizedBox.shrink(),
                   ),
+                ),
+              if (c.collectionGifUrl != null || c.collectionVideoUrl != null)
+                CollectionFocusArt(
+                  gifUrl: c.collectionGifUrl,
+                  videoUrl: c.collectionVideoUrl,
+                  focused: previewActive,
+                  applyGifPreference: true,
                 ),
               if (preview != null && previewActive)
                 // The art stays underneath until the first live frame lands,

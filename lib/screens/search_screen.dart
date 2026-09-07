@@ -7175,12 +7175,8 @@ class _SearchScreenState extends State<SearchScreen>
               coverEmoji: section.folderOf(m)?.coverEmoji,
               focusGlowEnabled: section.collection.focusGlowEnabled,
               previewOnKeyboardFocus: true,
-              previewBuilder: section.focusArtOf(m) == null && section.focusVideoOf(m) == null
-                  ? null
-                  : (_) => CollectionFocusArt(
-                      gifUrl: section.focusArtOf(m),
-                      videoUrl: section.focusVideoOf(m),
-                    ),
+              collectionGifUrl: section.focusArtOf(m),
+              collectionVideoUrl: section.focusVideoOf(m),
               title: m.name,
               shape: section.tileAspectOf(m) == 1
                   ? SpotlightCardShape.square

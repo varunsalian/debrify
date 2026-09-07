@@ -59,6 +59,8 @@ abstract final class WebDavSyncUiRefresh {
     'remote_home_collections_sync_deferred': {_WebDavSyncUiRefreshTarget.homeSettings},
     'remote_home_collections_v2': {_WebDavSyncUiRefreshTarget.homeSettings},
     'home_collections_v1': {_WebDavSyncUiRefreshTarget.homeSettings},
+    'home_collections_gif_touch': {_WebDavSyncUiRefreshTarget.homeSettings},
+    'home_collections_gif_remote': {_WebDavSyncUiRefreshTarget.homeSettings},
     'home_collections_folder_layout': {_WebDavSyncUiRefreshTarget.homeSettings},
     'home_row_order_v1': {_WebDavSyncUiRefreshTarget.homeSettings},
     'home_continue_watching_enabled': {_WebDavSyncUiRefreshTarget.homeSettings},

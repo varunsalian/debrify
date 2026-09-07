@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import '../../models/home_collection.dart';
 import '../../models/stremio_addon.dart';
 import '../../services/analytics_service.dart';
+import '../../services/collection_gif_settings.dart';
 import '../../services/home_collections_store.dart';
 import '../../services/main_page_bridge.dart';
 import '../../services/stremio_service.dart';
@@ -35,6 +36,7 @@ class _CollectionsSettingsPageState extends State<CollectionsSettingsPage> {
     debugLabel: 'collections-first',
   );
 
+  CollectionGifMode _gifMode = CollectionGifMode.focused;
   bool _loading = true;
   bool _busy = false;
   bool _refreshPending = false;
@@ -76,6 +78,7 @@ class _CollectionsSettingsPageState extends State<CollectionsSettingsPage> {
       final inventory = await _store.getInventory();
       final collections = inventory.collections;
       final layout = await _store.getFolderLayout();
+      final gifMode = await CollectionGifSettings.read();
       List<StremioAddon> addons = const [];
       try {
         addons = await StremioService.instance.getAddons();
@@ -86,6 +89,7 @@ class _CollectionsSettingsPageState extends State<CollectionsSettingsPage> {
       HomeCollectionsStore.checkSession(session);
       setState(() {
         _collections = collections;
+        _gifMode = gifMode;
         _damagedInventory = inventory.hadCorruption;
         _syncDeferred = inventory.syncDeferred;
         _addons = addons;
@@ -637,6 +641,35 @@ class _CollectionsSettingsPageState extends State<CollectionsSettingsPage> {
                       subtitle: 'Paste the file contents directly',
                       enabled: !_busy,
                       onTap: _importFromPaste,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                SettingsSection(
+                  title: 'Collection GIF playback',
+                  blurb: 'Choose how folder GIFs play on this device. Video previews are unchanged.',
+                  children: [
+                    IgnorePointer(
+                      ignoring: _busy,
+                      child: ExcludeFocus(
+                        excluding: _busy,
+                        child: SettingsSelectDropdown(
+                          key: ValueKey(_gifMode),
+                          value: _gifMode.name,
+                          options: const [
+                            SettingsSelectOption('visible', 'Animate visible GIFs'),
+                            SettingsSelectOption('focused', 'On focus or hover'),
+                            SettingsSelectOption('off', 'Off'),
+                          ],
+                          onChanged: (value) => _guarded(() async {
+                            final mode = CollectionGifMode.values.byName(value);
+                            await CollectionGifSettings.write(mode);
+                            if (!mounted) return;
+                            setState(() => _gifMode = mode);
+                            MainPageBridge.notifyHomeSettingsChanged();
+                          }),
+                        ),
+                      ),
                     ),
                   ],
                 ),

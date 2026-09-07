@@ -77,9 +77,14 @@ Field notes:
   respected per folder even when one row mixes shapes.
 - `coverEmoji`: cover fallback when image artwork is absent or fails.
 - `hideTitle`: draw no text over the cover (the art carries the brand).
-- `focusGifUrl`: animated art played over the tile while it is focused or
-  hovered. `focusGifEnabled` defaults to true when omitted; explicit false
-  disables the GIF.
+- `focusGifUrl`: animated tile art governed by **Collections → Collection GIF
+  playback**. The single dropdown offers **Animate visible GIFs**, **On focus or
+  hover**, and **Off**. Phones/tablets default to visible playback; TV/desktop
+  default to focus/hover. Touch and remote/desktop choices are saved separately
+  per profile. Off-screen, backgrounded and covered-route GIFs stop; reduced
+  motion disables them too. `focusGifEnabled` defaults to true when omitted;
+  explicit false still disables that folder's GIF. Video previews continue to
+  require focus or hover regardless of this setting.
 - `heroBackdropUrl`, `titleLogoUrl`: the backdrop and logo shown above the
   folder's lists when it is opened. A missing folder backdrop falls back to
   collection `backdropImageUrl`, then the cover; a missing logo falls back to text.
