@@ -503,15 +503,10 @@ class SpotlightBoardState extends State<SpotlightBoard> {
   /// measure with.
   double _heroBandH = 0;
 
-  /// The extent the veil rebuild below was last run for.
-  ///
-  /// `ScrollMetricsNotification` is dispatched once per SCROLLED FRAME, not
-  /// only when the extent moves — `_isMetricsChanged` compares `extentBefore`,
-  /// which is `pixels - minScrollExtent`. Rebuilding the board on each one is
-  /// a full rebuild of every shelf and every visible card per frame, which is
-  /// what made touch scrolling lag. The offset ramp does not need it: the veil
-  /// listens to `_scroll` directly. Only an extent CHANGE does.
+  /// Lazy-list extent estimates can change during scrolling. Refresh only
+  /// the veil when metrics change, never the board and its mounted shelves.
   double _lastMaxExtent = -1;
+  final _veilMetricsRevision = ValueNotifier<int>(0);
 
   /// True once the board is scrolled far enough that the pinned hero is
   /// effectively covered. Owns the trailer's lifecycle for SCROLLING, which
@@ -847,6 +842,7 @@ class SpotlightBoardState extends State<SpotlightBoard> {
 
   @override
   void dispose() {
+    _veilMetricsRevision.dispose();
     widget.heroNode.removeListener(_onHeroFocus);
     if (_rolling) widget.onTrailerStop?.call();
     _cadence?.cancel();
@@ -1325,31 +1321,22 @@ class SpotlightBoardState extends State<SpotlightBoard> {
     // clamps the offset during layout WITHOUT notifying the controller, so
     // the veil and the scrolled-away trailer gate would keep acting on an
     // offset the list no longer has — a hero veiled opaque with nothing left
-    // to scroll back from. Metrics changes on the board's own axis are rare
-    // (shelf batches, viewport resizes), so a rebuild is cheap; depth 0
-    // filters out every horizontal shelf list bubbling through.
+    // to scroll back from. Notify only the veil; extent estimates also change
+    // as differently sized shelves enter the lazy viewport during a fling.
+    // Depth 0 excludes the horizontal shelf lists.
     final content = NotificationListener<ScrollMetricsNotification>(
       onNotification: (n) {
         if (n.depth == 0) {
           // Always re-run the crossing detector — a clamped offset never
           // notifies the controller (cheap: no rebuild of its own).
           _onBoardScrolled();
-          // The rebuild exists ONLY for the touch veil, and only for the
-          // case the controller cannot report: a board reload that SHRINKS
-          // the list under a parked scroll is clamped during layout without
-          // notifying it. The continuous offset ramp is already covered —
-          // the veil's own `AnimatedBuilder` listens to `_scroll`.
-          //
-          // Gated on the EXTENT, because this notification arrives once per
-          // scrolled frame (see [_lastMaxExtent]). Ungated it rebuilt the
-          // hero and every shelf and card on the board every frame of every
-          // touch scroll, which is exactly the lag it was meant to avoid on
-          // TV — where it is skipped, so that path is unchanged.
+          // The controller already drives normal scrolling. Metrics changes
+          // cover silent layout corrections without rebuilding the shelves.
           if (!widget.dpad &&
               mounted &&
               n.metrics.maxScrollExtent != _lastMaxExtent) {
             _lastMaxExtent = n.metrics.maxScrollExtent;
-            setState(() {});
+            _veilMetricsRevision.value++;
           }
         }
         return false;
@@ -1811,7 +1798,7 @@ class SpotlightBoardState extends State<SpotlightBoard> {
             child: widget.dpad
                 ? _veil(ground, _row < 0 ? 0.0 : (_row == 0 ? 0.72 : 1.0))
                 : AnimatedBuilder(
-                    animation: _scroll,
+                    animation: Listenable.merge([_scroll, _veilMetricsRevision]),
                     builder: (context, _) {
                       final off = _scroll.hasClients ? _scroll.offset : 0.0;
                       final t = (off / (heroH * 0.8)).clamp(0.0, 1.0);

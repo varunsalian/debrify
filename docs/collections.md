@@ -340,3 +340,25 @@ the ordinary 4 MiB cache can be reused without evicting ordinary hot state.
 Recovered backup records retain a corruption marker for the settings notice.
 Restore staging honors the tvOS preference budget and aborts without publishing
 a new generation if the restored data cannot fit.
+
+### TMDB connectivity fallback
+
+Native TMDB API requests use system DNS first. A DNS/TCP connection failure
+triggers a bounded Google DNS-over-HTTPS lookup, with Cloudflare as the secondary
+resolver. Only `api.themoviedb.org` is looked up; API tokens and request parameters
+are never sent to DNS providers. Returned IPv4 addresses are cached for their DNS
+TTL, capped at five minutes. Failed lookups have a ten-second cooldown.
+
+The transport retains the original HTTPS hostname for TLS/SNI and certificate
+verification. It tries at most two returned addresses per connection. Resolver
+requests are size-limited, timed out, and closed after completion; concurrent
+lookups share one in-flight request. Closing the client cancels pending work.
+
+This does not change device DNS, bypass configured proxies, or affect Trakt,
+addon, WebDAV, or artwork clients. It addresses DNS/TCP failures, not certificate
+errors, API authorization/rate limits, or every form of network blocking.
+
+The TLS handshake retains its raw transport until completion; timeout and client
+closure close that transport, and late TLS results are disposed. The TLS
+regression test requires OpenSSL on PATH and generates an isolated temporary CA
+and server certificate for each run, so no checked-in certificate can expire.

@@ -106,6 +106,37 @@ void main() {
     return tester.getSize(clips.first);
   }
 
+  testWidgets('extent corrections do not rebuild the whole touch board', (
+    tester,
+  ) async {
+    surface(tester, const Size(430, 900));
+    await tester.pumpWidget(host([_meta('hero', 'Hero')], [], dpad: false));
+    await tester.pumpAndSettle();
+    var boardBuilds = 0;
+    final previous = debugOnRebuildDirtyWidget;
+    debugOnRebuildDirtyWidget = (element, builtOnce) {
+      if (element.widget is SpotlightBoard) boardBuilds++;
+      previous?.call(element, builtOnce);
+    };
+    addTearDown(() => debugOnRebuildDirtyWidget = previous);
+    final list = tester.element(find.byType(ListView).first);
+    for (final extent in [1000.0, 1200.0, 900.0]) {
+      ScrollMetricsNotification(
+        metrics: FixedScrollMetrics(
+          minScrollExtent: 0,
+          maxScrollExtent: extent,
+          pixels: 100,
+          viewportDimension: 900,
+          axisDirection: AxisDirection.down,
+          devicePixelRatio: 1,
+        ),
+        context: list,
+      ).dispatch(list);
+      await tester.pump();
+    }
+    expect(boardBuilds, 0);
+  });
+
   group('the metric tier follows width — but only off DPAD', () {
     testWidgets('390 wide + touch = compact: posters at 25.7%',
         (tester) async {

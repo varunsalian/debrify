@@ -7,6 +7,7 @@ import 'package:http/http.dart' as http;
 import '../models/home_collection.dart';
 import '../models/stremio_addon.dart';
 import 'collection_catalog_pager.dart';
+import 'tmdb_http_client.dart';
 import 'trakt/trakt_constants.dart';
 import 'trakt/trakt_item_transformer.dart';
 
@@ -19,13 +20,18 @@ class CollectionNativeSourceService {
     this.resolveIds = true,
     this.enrichmentBudget = const Duration(seconds: 3),
   }) : _client = client ?? http.Client(),
+       _tmdbClient = client ?? TmdbHttpClient(),
        _tmdbToken =
            tmdbToken ?? const String.fromEnvironment('TMDB_READ_ACCESS_TOKEN');
 
   static final instance = CollectionNativeSourceService();
   final http.Client _client;
+  final http.Client _tmdbClient;
   final String _tmdbToken;
-  void close() => _client.close();
+  void close() {
+    _client.close();
+    if (!identical(_client, _tmdbClient)) _tmdbClient.close();
+  }
   static const pageSize = 50;
   static const tmdbLocalPageSize = 20;
   final _localTmdbLists = <String, _TmdbListCursor>{};
@@ -117,7 +123,8 @@ class CollectionNativeSourceService {
 
   Future<http.Response> _get(Uri uri, Map<String, String> headers) async {
     final identity = uri.path.endsWith('/external_ids');
-    Future<http.Response> request() => _client
+    final client = uri.host == 'api.themoviedb.org' ? _tmdbClient : _client;
+    Future<http.Response> request() => client
         .get(uri, headers: headers)
         .timeout(identity ? enrichmentBudget : const Duration(seconds: 25));
     // Background metadata never occupies the catalog request gate.
