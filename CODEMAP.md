@@ -202,6 +202,10 @@ Same plan table also lists (not extra “sites”, but still consumers until T1/
   16 inputs, private title-art memo and single shared region/feather helpers.
   Native trailer/live layers remain in `search_hero_widgets.dart`; no engine move.
   Host +1 / whole production +15, zero Leaves/638 credit; strict composition remains open.
+  Passive `HeroTakeoverInfo` in `search/hero_takeover_info.dart` owns classic Home
+  lower-third metadata and staggered paint with three borrowed signals, no callbacks.
+  Host -223 / whole production +29; zero seven-stage credit. Native layers,
+  recede/veil, focus and shell lifetimes retain their owners; strict composition OPEN.
   Hero state, focus-rest/enrichment timers, ambient trailers/live IPTV and shell
   art/tint/chrome relays live in `lib/screens/search/hero_presenter.dart`
   (`HeroPresenter`, `HeroEnvironment`). This remains screen/UI presentation,
