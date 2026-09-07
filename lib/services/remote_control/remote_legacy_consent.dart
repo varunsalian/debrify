@@ -42,6 +42,7 @@ class LegacyConsentItem {
 class RemoteLegacyConsentQueue {
   RemoteLegacyConsentQueue({
     required this.approvalWindow,
+    required this.canPresentConsent,
     required this.presentConsent,
     required this.dismissConsent,
     required this.dispatchCommand,
@@ -54,7 +55,12 @@ class RemoteLegacyConsentQueue {
   final Duration approvalWindow;
 
   /// Raise the consent dialog for [peer]; false when there is no UI to ask on.
-  final bool Function(String peer) presentConsent;
+  /// Whether a navigator exists to host the dialog right now. Checked
+  /// before the latch is set, exactly as the origin checked
+  /// `_navigatorKey?.currentState` before flipping `_legacyDialogShowing`.
+  final bool Function() canPresentConsent;
+
+  final void Function(String peer) presentConsent;
 
   /// Take down a consent dialog that outlived its buffer.
   final void Function() dismissConsent;
@@ -129,8 +135,7 @@ class RemoteLegacyConsentQueue {
 
   void _maybeShowLegacyConsentDialog() {
     if (_legacyDialogShowing) return;
-    final peer = _legacyPeerIp ?? 'unknown address';
-    if (!presentConsent(peer)) {
+    if (!canPresentConsent()) {
       // Headless (no UI mounted yet): nothing to ask — the expiry timer
       // drops the buffer and the sender sees nothing applied.
       debugPrint(
@@ -139,6 +144,8 @@ class RemoteLegacyConsentQueue {
       return;
     }
     _legacyDialogShowing = true;
+    final peer = _legacyPeerIp ?? 'unknown address';
+    presentConsent(peer);
   }
 
   /// The user answered the dialog the router raised for us.

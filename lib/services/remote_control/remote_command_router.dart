@@ -128,6 +128,7 @@ class RemoteCommandRouter {
   // The consent gate in front of plaintext (v1) traffic; owns its own buffer.
   late final RemoteLegacyConsentQueue _legacyConsent = RemoteLegacyConsentQueue(
     approvalWindow: _authorizedActivityWindow,
+    canPresentConsent: _canPresentLegacyConsent,
     presentConsent: _presentLegacyConsent,
     dismissConsent: _dismissLegacyConsent,
     dispatchCommand: _dispatchCommandAndWait,
@@ -2551,9 +2552,11 @@ class RemoteCommandRouter {
   /// Raises the v1 consent question. The dialog is the only part of the
   /// legacy gate that needs a `BuildContext`, so it stays here; the queue
   /// owns everything else. False means there is no UI to ask on.
-  bool _presentLegacyConsent(String peer) {
+  bool _canPresentLegacyConsent() => _navigatorKey?.currentState != null;
+
+  void _presentLegacyConsent(String peer) {
     final navigator = _navigatorKey?.currentState;
-    if (navigator == null) return false;
+    if (navigator == null) return;
     showDialog<bool>(
       context: navigator.context,
       barrierDismissible: false,
@@ -2586,7 +2589,6 @@ class RemoteCommandRouter {
       _legacyDialogContext = null;
       _legacyConsent.onConsentAnswer(allowed == true);
     });
-    return true;
   }
 
   void _dismissLegacyConsent() {
