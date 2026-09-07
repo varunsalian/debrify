@@ -112,6 +112,7 @@ abstract class SubtitleTrackSession {
   void showSubtitleFailureMessage(String message);
   void showSnackBar(String message);
   void setActiveExternalSubtitlePath(String? path);
+  void captureIptvAudioLanguage(String audioId);
   void resetSubtitleSyncOffset();
   void hidePlayerMenuOnContentChange();
   void reconcileMenuSubtitleSelection(String restoredSelection);
@@ -1178,6 +1179,132 @@ class SubtitleTrackController {
       if (persistenceDone != null && !persistenceDone.isCompleted) {
         persistenceDone.complete();
       }
+    }
+  }
+
+  /// The old tracks-sheet `onTrackChanged` closure, verbatim: shared tail of
+  /// every track selection made from the menu.
+  Future<void> menuApplyTrackChange(String audioId, String subtitleId) async {
+    session.userManuallySelectedSubtitle = true;
+    if (!subtitleId.startsWith('stremio:')) {
+      session.setActiveExternalSubtitlePath(null);
+    }
+    session.captureIptvAudioLanguage(audioId);
+    await persistTrackChoice(audioId, subtitleId);
+  }
+
+  Future<void> menuSelectAudio(String audioId, String currentSubId) async {
+    final track = session.player.state.tracks.audio
+        .where((a) => a.id == audioId)
+        .firstOrNull;
+    if (track == null) return;
+    await session.player.setAudioTrack(track);
+    await menuApplyTrackChange(audioId, currentSubId);
+  }
+
+  Future<bool> menuSubtitlesOff(String audioId) async {
+    final applied = await setSubtitleTrackWithDiagnostics(
+      mk.SubtitleTrack.no(),
+      source: 'player-menu-off',
+    );
+    if (!applied) return false;
+    session.selectedStremioSubtitleId = null;
+    await menuApplyTrackChange(audioId, 'no');
+    return true;
+  }
+
+  Future<bool> menuSelectEmbeddedSubtitle(String subId, String audioId) async {
+    final track = session.player.state.tracks.subtitle
+        .where((s) => s.id == subId)
+        .firstOrNull;
+    if (track == null) {
+      session.showSubtitleFailureMessage(
+        'That subtitle track is no longer available. Try another track.',
+      );
+      return false;
+    }
+    final applied = await setSubtitleTrackWithDiagnostics(
+      track,
+      source: 'player-menu-embedded',
+    );
+    if (!applied) return false;
+    session.selectedStremioSubtitleId = null;
+    await menuApplyTrackChange(audioId, subId);
+    return true;
+  }
+
+  /// Returns false when the download/apply failed — the panel keeps the
+  /// previous selection (and its sync offset) in that case.
+  Future<bool> menuSelectAddonSubtitle(
+    StremioSubtitle sub,
+    String audioId,
+  ) async {
+    // Playback continues behind the menu: if the content switches while the
+    // download is in flight (auto-advance, zap), applying the stale subtitle
+    // would attach it — and persist its ids — against the NEW item.
+    final token = session.addonSubtitleFetchToken;
+    try {
+      final filePath = await downloadStremioSubtitleToTempFile(sub);
+      if (filePath == null) {
+        session.showSubtitleFailureMessage(
+          'Couldn’t load subtitles. Check your connection or try another track.',
+        );
+        return false;
+      }
+      if (token != session.addonSubtitleFetchToken || !session.isMounted) {
+        return false;
+      }
+      final track = mk.SubtitleTrack.uri(
+        filePath,
+        title: sub.displayName,
+        language: sub.lang,
+      );
+      final applied = await applyExternalSubtitleTrack(track);
+      if (!applied) return false;
+      if (token != session.addonSubtitleFetchToken || !session.isMounted) return false;
+      session.selectedStremioSubtitleId = sub.id;
+      session.setActiveExternalSubtitlePath(filePath);
+      await menuApplyTrackChange(audioId, 'stremio:${sub.id}');
+      return true;
+    } catch (e) {
+      debugPrint('PlayerMenu: subtitle apply failed - $e');
+      session.showSubtitleFailureMessage(
+        'Couldn’t apply subtitles. Try another embedded or online track.',
+      );
+      return false;
+    }
+  }
+
+  Future<bool> applyStremioSubtitleFromTracksSheet(StremioSubtitle sub) async {
+    final token = session.addonSubtitleFetchToken;
+    try {
+      final filePath = await downloadStremioSubtitleToTempFile(sub);
+      if (filePath == null) {
+        session.showSubtitleFailureMessage(
+          'Couldn’t load subtitles. Check your connection or try another track.',
+        );
+        return false;
+      }
+      if (token != session.addonSubtitleFetchToken || !session.isMounted) {
+        return false;
+      }
+      final applied = await applyExternalSubtitleTrack(
+        mk.SubtitleTrack.uri(
+          filePath,
+          title: sub.displayName,
+          language: sub.lang,
+        ),
+      );
+      if (!applied) return false;
+      if (token != session.addonSubtitleFetchToken || !session.isMounted) return false;
+      session.setActiveExternalSubtitlePath(filePath);
+      return true;
+    } catch (e) {
+      debugPrint('TracksSheet: subtitle apply failed - $e');
+      session.showSubtitleFailureMessage(
+        'Couldn’t apply subtitles. Try another embedded or online track.',
+      );
+      return false;
     }
   }
 }

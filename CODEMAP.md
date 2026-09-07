@@ -565,7 +565,10 @@ is an editor mirror, not the source of truth. How to add a provider:
   (`showSpotlightDialog`, `SpotlightDialogCard`).
   Identify-title sheet: `lib/widgets/player/identify_title_sheet.dart`
   (`showIdentifyTitleSearchSheet` → `StremioMeta?`). Subtitle/track restore,
-  persist, diagnostics, and addon fetch:
+  persist, diagnostics, addon fetch, and the player-menu track-apply
+  operations (`menuSelectAudio`, `menuSubtitlesOff`,
+  `menuSelectEmbeddedSubtitle`, `menuSelectAddonSubtitle`,
+  `applyStremioSubtitleFromTracksSheet`):
   `lib/screens/video_player/subtitle_track_controller.dart`
   (`SubtitleTrackController` + `SubtitleTrackSession`; host keeps
   `_SubtitleTrackSession` adapter and title/season resolvers).
