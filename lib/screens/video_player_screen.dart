@@ -9606,7 +9606,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         track,
         source: 'tracks-sheet-embedded',
       ),
-      onApplyStremioSubtitle: _applyStremioSubtitleFromTracksSheet,
+      onApplyStremioSubtitle: _subs.applyStremioSubtitleFromTracksSheet,
       onIdentifyTitle: _subs.identifyTitleAndFetchSubtitles,
       subtitleIdentityLabel: _subs.subtitleIdentityLabelForSheet(),
     );
@@ -9701,132 +9701,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   }
 
 
-  /// The old tracks-sheet `onTrackChanged` closure, verbatim: shared tail of
-  /// every track selection made from the menu.
-  Future<void> _menuApplyTrackChange(String audioId, String subtitleId) async {
-    _userManuallySelectedSubtitle = true;
-    if (!subtitleId.startsWith('stremio:')) {
-      _setActiveExternalSubtitlePath(null);
-    }
-    _captureIptvAudioLanguage(audioId);
-    await _subs.persistTrackChoice(audioId, subtitleId);
-  }
-
-  Future<void> _menuSelectAudio(String audioId, String currentSubId) async {
-    final track = _player.state.tracks.audio
-        .where((a) => a.id == audioId)
-        .firstOrNull;
-    if (track == null) return;
-    await _player.setAudioTrack(track);
-    await _menuApplyTrackChange(audioId, currentSubId);
-  }
-
-  Future<bool> _menuSubtitlesOff(String audioId) async {
-    final applied = await _subs.setSubtitleTrackWithDiagnostics(
-      mk.SubtitleTrack.no(),
-      source: 'player-menu-off',
-    );
-    if (!applied) return false;
-    _selectedStremioSubtitleId = null;
-    await _menuApplyTrackChange(audioId, 'no');
-    return true;
-  }
-
-  Future<bool> _menuSelectEmbeddedSubtitle(String subId, String audioId) async {
-    final track = _player.state.tracks.subtitle
-        .where((s) => s.id == subId)
-        .firstOrNull;
-    if (track == null) {
-      _showSubtitleFailureMessage(
-        'That subtitle track is no longer available. Try another track.',
-      );
-      return false;
-    }
-    final applied = await _subs.setSubtitleTrackWithDiagnostics(
-      track,
-      source: 'player-menu-embedded',
-    );
-    if (!applied) return false;
-    _selectedStremioSubtitleId = null;
-    await _menuApplyTrackChange(audioId, subId);
-    return true;
-  }
-
-  /// Returns false when the download/apply failed — the panel keeps the
-  /// previous selection (and its sync offset) in that case.
-  Future<bool> _menuSelectAddonSubtitle(
-    StremioSubtitle sub,
-    String audioId,
-  ) async {
-    // Playback continues behind the menu: if the content switches while the
-    // download is in flight (auto-advance, zap), applying the stale subtitle
-    // would attach it — and persist its ids — against the NEW item.
-    final token = _addonSubtitleFetchToken;
-    try {
-      final filePath = await _subs.downloadStremioSubtitleToTempFile(sub);
-      if (filePath == null) {
-        _showSubtitleFailureMessage(
-          'Couldn’t load subtitles. Check your connection or try another track.',
-        );
-        return false;
-      }
-      if (token != _addonSubtitleFetchToken || !mounted) {
-        return false;
-      }
-      final track = mk.SubtitleTrack.uri(
-        filePath,
-        title: sub.displayName,
-        language: sub.lang,
-      );
-      final applied = await _subs.applyExternalSubtitleTrack(track);
-      if (!applied) return false;
-      if (token != _addonSubtitleFetchToken || !mounted) return false;
-      _selectedStremioSubtitleId = sub.id;
-      _setActiveExternalSubtitlePath(filePath);
-      await _menuApplyTrackChange(audioId, 'stremio:${sub.id}');
-      return true;
-    } catch (e) {
-      debugPrint('PlayerMenu: subtitle apply failed - $e');
-      _showSubtitleFailureMessage(
-        'Couldn’t apply subtitles. Try another embedded or online track.',
-      );
-      return false;
-    }
-  }
-
-  Future<bool> _applyStremioSubtitleFromTracksSheet(StremioSubtitle sub) async {
-    final token = _addonSubtitleFetchToken;
-    try {
-      final filePath = await _subs.downloadStremioSubtitleToTempFile(sub);
-      if (filePath == null) {
-        _showSubtitleFailureMessage(
-          'Couldn’t load subtitles. Check your connection or try another track.',
-        );
-        return false;
-      }
-      if (token != _addonSubtitleFetchToken || !mounted) {
-        return false;
-      }
-      final applied = await _subs.applyExternalSubtitleTrack(
-        mk.SubtitleTrack.uri(
-          filePath,
-          title: sub.displayName,
-          language: sub.lang,
-        ),
-      );
-      if (!applied) return false;
-      if (token != _addonSubtitleFetchToken || !mounted) return false;
-      _setActiveExternalSubtitlePath(filePath);
-      return true;
-    } catch (e) {
-      debugPrint('TracksSheet: subtitle apply failed - $e');
-      _showSubtitleFailureMessage(
-        'Couldn’t apply subtitles. Try another embedded or online track.',
-      );
-      return false;
-    }
-  }
-
   Widget _buildPlayerMenuPanel() {
     final audios = _player.state.tracks.audio
         .where((a) => a.id.toLowerCase() != 'no')
@@ -9853,7 +9727,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         (id, label) => PlayerMenuTrackOption(id, label),
       ),
       selectedAudioId: _player.state.track.audio.id,
-      onAudioSelected: _menuSelectAudio,
+      onAudioSelected: _subs.menuSelectAudio,
       audioPassthrough: !kIsWeb && Platform.isAndroid
           ? _audioPassthroughEnabled
           : null,
@@ -9865,9 +9739,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           PlayerMenuTrackOption(s.id, LanguageMapper.labelForTrack(s, i)),
       ],
       selectedSubtitleId: selectedSub,
-      onSubtitlesOff: _menuSubtitlesOff,
-      onEmbeddedSubtitleSelected: _menuSelectEmbeddedSubtitle,
-      onAddonSubtitleSelected: _menuSelectAddonSubtitle,
+      onSubtitlesOff: _subs.menuSubtitlesOff,
+      onEmbeddedSubtitleSelected: _subs.menuSelectEmbeddedSubtitle,
+      onAddonSubtitleSelected: _subs.menuSelectAddonSubtitle,
       onSubtitleTrackChanged: _resetSubtitleSyncOffset,
       contentImdbId: _menuImdbId,
       contentType: _menuContentType,
@@ -10169,6 +10043,8 @@ class _SubtitleTrackSession implements SubtitleTrackSession {
   }
   @override void setActiveExternalSubtitlePath(String? path) =>
       _s._setActiveExternalSubtitlePath(path);
+  @override void captureIptvAudioLanguage(String audioId) =>
+      _s._captureIptvAudioLanguage(audioId);
   @override void resetSubtitleSyncOffset() => _s._resetSubtitleSyncOffset();
   @override void hidePlayerMenuOnContentChange() {
     _s._showSyncOverlay = false;
