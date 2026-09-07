@@ -770,3 +770,8 @@ Hero origin finally2PASS after reviewed fixture-only cache setup, exact backgrou
 ## #225 merged: shared rail labels (d282889d)
 
 Origin tests preserve the existing held ninth-row focus behavior: keyed Promenade/Mosaic replacement can leave the enclosing route scope focused. Explicit ninth-row focus recovery is a separate test action, not an automatic-focus fix. Theme dependency moves from the host to the inner stage; finite theme/scaler evidence is recorded, not exclusive host-detachment proof. Origin eight cases passed before the move; production and independent suites each passed132 with one existing sidebar shape exception. Search removes80 physical lines (64 label,4 height,1 font,1 binding,10 documentation/separators), while whole production grows9. Stage credit is988/1400, leaving412. Full-row focus/action ownership remains excluded from the next Atrium text preparation.
+
+
+## #226 merged52e8da5b: Atrium text ownership
+
+Origin e8c759 five tests green before product b58fc1; independent129PASS and one exact known sidebar failure. Wall theme dependency moves into the inner stage; borrowed notifier references are stable, values remain lazy. Same Text measurement, conditional second-row read, dossier builder context and row/native bodies are preserved. Host -59, owner +80, whole production +21; callables7 to6 but leaf inputs10 to14. Stage shortfall353 after merge. Full gate remains31e360, production counter2; #227 would trigger next gate. Home takeover proposal has zero seven-stage credit.
