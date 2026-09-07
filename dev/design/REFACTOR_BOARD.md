@@ -1,5 +1,9 @@
   # Refactor board
 
+## Gate7 cb8e196c PASS with notes; #241 merged
+Orchestration handed to the Claude session on September 7 (Codex board stopped). Gate7 on cb8e196c57932ce42ade116fa71461e2fa816130 (after #239): generic 6,399 passed / 33 exact known (12 generic + 21 golden) / 3 skipped, zero new and zero unused; layering 53/77 unchanged ids; Python 55/55; analyzer 448 vs 449 baseline with 18 NEW / 19 UNUSED that reproduce byte-identically on the parent under the local Dart 3.13 SDK (CI 3.44.8 unaffected), zero new versus parent; Windows release builds only with the local MSVC-2026 coroutine workaround applied temporarily and reverted (source unchanged), fails without it on this toolchain; Android/native not run. Evidence C:/Users/hunth/source/gate7-main/REPORT.md.
+Merged #241 (D3) at e0340d6ab8bd2b5fb4a3cf2ce9784354de7d5f46, exact reviewed 5f55b6d6; independent verdict ADMIT WITH NOTES (C:/Users/hunth/source/review-241/VERDICT.md): merge tree exactly the 11 owned files, pin d7cd989a precedes move, 25/25 moved blocks token-identical, 26/26 pin reproduced pre-move with owner files absent, all three CI green. Catalog detail 3,388 to 1,771 (-1,617), owners 1,734, net +117, zero forwarders. Did we make a difference? The presentational tail has nine owners with a real-screen pin. More? TV hold path unpinned; rec-card/button convergence under lib/widgets/detail later. Player 10,334 / 9,500 unchanged. Production merges since gate7: 1.
+
 ## #239 merged; gate7a512 PASS recorded
 
 Gate7a5120982374acc251a44f63b4a931e74dcee727 PASS: generic6390 passed/12 exactknown/2skip; goldens21 exactknown after configured retries; zero unexpected/unused. Analyzer430/449 zeroerrors/new; Python55; layer53/77 unchanged; native firstpair and both first builds passed. Evidence C:/Users/hunth/debrify/g247/.dart_tool/main-gate/REPORT.md. No new smoke; other-ABI dependencylibs unchanged. This gate precedes239.
