@@ -4,7 +4,7 @@
 
 **Player now: 11,538 lines. Lines remaining to remove: 2,038.**
 
-Stopping target: **9,500 lines or fewer on merged main**. No overall percentage. Current measured main is1e4128ae after #227. Line reductions must preserve functionality; test results and architectural benefit remain explicit.
+Stopping target: **9,500 lines or fewer on merged main**. No overall percentage. Current measured main is408cd894 after #228. Line reductions must preserve functionality; test results and architectural benefit remain explicit.
 
 ### Current to-do list
 
@@ -32,9 +32,9 @@ Source **d2cbea19**, Windows, **Flutter 3.47.2**. Full suite **6,187 pass /33 fa
 
 ### Frozen work and Phase 3 backlog
 
-- Search6,102; MagicTV3,322; Storage1,741; Settings2,908 — accepted at target by user direction. No further extraction/stage/shared-visual work. Q2 facade removal only if it deletes lines; no worker assigned to it during the player finish.
-- **PR #228: explicit user exception to finish.** Previously reviewed/CI-green; integrate #227, verify exact union/fresh CI, then merge after the full227 gate. No broader Search work is reopened.
-- **PR #227 merged1e4128ae by explicit user exception.** Independent35 tests and exact-head CI passed. Full integrated gate underway before #228. This is the third production merge since31e360; no player extraction credit.
+- Search5,879; MagicTV3,322; Storage1,741; Settings2,908 — accepted at target by user direction. No further extraction/stage/shared-visual work. Q2 facade removal only if it deletes lines; no worker assigned to it during the player finish.
+- **PR #228 merged408cd894: explicit user exception complete.** Exact1a70 source/union and fresh CI passed after full227 gate. Search is now5,879; no broader Search work is reopened.
+- **PR #227 merged1e4128ae by explicit user exception.** Independent35 tests and exact-head CI passed. Full integrated gate at1e4128 passed before #228. This is the third production merge since31e360; no player extraction credit.
 - IPTV origin-admission gap, indexer export test (static stopped, no test executed), remaining Q/Storage cleanup and all other outstanding outcomes move to Phase 3. No further work on those lanes now.
 - Upstream mapping is required at closure. Publication remains local-only under the existing user decision; mapping is not permission to publish upstream.
 
@@ -43,6 +43,10 @@ Source **d2cbea19**, Windows, **Flutter 3.47.2**. Full suite **6,187 pass /33 fa
 One board commit per merged PR. This direction change and Gate 5 are recorded in the working board now and will be included in the next merged-PR board commit. Historical sections below remain evidence, not active assignments or current targets.
 
 ### Latest completed milestones
+
+- **#228 merged408cd894; both exceptions finished.** Exact1a70 CI allpassed after full227 gate. Independent105PASS/one exact known sidebar failure; three shape probes caught intended mutations, allowances unchanged. Search6102→5879 (-223), owner252, wholeproduction+29, zero player/stage credit. Did we make a difference? Passive Home presentation has its own owner. Is more needed? Only the active player finish for Phase2; other work remains Phase3. Production counter1 since full1e4128.
+
+- **Full1e4128 gate PASS:**6206PASS/12exactknown/2skip, goldens21known with configuredretries, both actualhelpers0/zero unexpected/unused; nativebc46/current FIRSTPAIR passed. Analyzer430/449/zeroerrors/zeroNew, Python55, layering56→53 exact3removed, AST204/133/161/23/0. Windows68fileZIP f153b15e0b4f097cfca57a74174d73ca80a05a17247635b8a436f83438ad35ed; ARM64APK7166f741dd2714c74172ced304a7a56b5235f0bbc6f39d1ef9df6ce9a5d2ebeb, ABIverified. No newdevice smoke inferred. Separate from userGate5/Flutter3.47.2.
 
 - **#227 merged1e4128ae:** user explicitly requested finishing227/228 despite the freeze. Exact5f3 CI allgreen, independent35PASS; metadata ownership removes three model-to-service violations in measured candidate56→53, analyzer431→430. Production net+20; no player extraction credit. Full actual-main gate pending. Did we make a difference? Yes, model no longer owns metadata-service calls. Is more needed? Finish228 as the second exception, then player-only target.
 

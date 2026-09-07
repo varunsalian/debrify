@@ -785,3 +785,8 @@ Gate 5 user report at d2cbea19 Windows Flutter3.47.2:6187pass/33exactallowlisted
 ## Explicit exception: finish227 and228
 
 User requested both after the player-only direction. #227 merged1e4128ae with reviewed5f3 head and allCIpassing. #228 authorized pending currentunion/CI and full227 gate. This exception does not reopen broader Search/Q work. Player count refreshed from actual merged source; no extraction credit for metadata wiring.
+
+
+## Exceptions227/228 complete
+
+Full1e4128 actual-main gate passed with exact known failures and both native builds; #228 merged408cd894 after exactfreshCI and union acceptance. Search5879, player11538:2038remaining to9500. Takeover -223host/+29wholeproduction earns zero player/stage credit. Freeze resumes; onlyplayerPhase2 work. Gate evidence in debrify-c0-post-225-226-227-gate/.dart_tool/main-gate/REPORT.md. Counter1 aftergate.
