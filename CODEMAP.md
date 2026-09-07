@@ -586,6 +586,14 @@ is an editor mirror, not the source of truth. How to add a provider:
   Nine lazy/effect bindings and three borrowed transport/focus resources remain;
   host retains event/render wiring. Host -109 / whole production +83; eight
   invalidation sites have source-only proof, not complete native/lifecycle proof.
+  Skip fetch/cache: `lib/services/playback/skip_segment_session.dart`
+  (`SkipSegmentSession`) owns provider, loading key, generation and session cache;
+  `configure` / `sync` / `reset` / `close` use four live host inputs. Settings,
+  published segments/key, identity and seek/UI policy remain host-owned.
+  Preserve stale cache-before-guards, cache-retaining reset and key-only finally.
+  Positive held-fetch/dedup/Skip-to-20s pin is finite; reset/revisit/error/late
+  disposal alternatives retain source-equivalence proof, not native coverage.
+  Host -54 lines / whole production +50; partial ownership, not pure deletion.
   IPTV recording (libmpv tee, Android engine, desktop capture):
   `lib/services/playback/iptv_recording_controller.dart`
   (`IptvRecordingController` + `IptvRecordingSession`; host keeps
