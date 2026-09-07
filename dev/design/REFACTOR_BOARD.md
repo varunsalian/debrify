@@ -1,5 +1,9 @@
   # Refactor board
 
+## Merged #237 — D2 closeout; gate required
+
+Exact reviewed ecca2d8e merged after240. Actual union differs from independently accepted ceb10eb9f3641243cbfeb25d5655834908c2b927 only in the orchestrator R2 board update. All three CI checks passed; previous independent source/lifecycle and runtime review retained. Detail3143→2609 (-534), net+242. Did we make a difference? Tracker/trailer state has explicit owners; mechanical notification rewrites were reviewed per body. More? Final integrated acceptance remains. Player10334,834 remaining; other gods unchanged. Three production merges247/240/237 since gate534: STOP further merges until full integrated gate passes.239 source-union and CI accepted but gate-blocked. Cicero assigned this gate only; no new extraction or device claim.
+
 ## Merged #240 — R2 closeout
 
 Exact reviewed fe748e8b merged after247. Independent ordered union f3ccbf024dacc926c6386aaca2c622b8387fa293, four intended payloads and2802 outside files preserved. All three CI checks passed; prior independent origin/current runtime evidence retained. Router4300→3889 (-411), net+170. Did we make a difference? Transfer bookkeeping now has a separate owner. More? R3 presenter remains pending. Player10334,834 remaining; other gods unchanged. Two production merges since gate534. Next237 then mandatory integrated gate before239. No user decision.
