@@ -18,6 +18,7 @@ import 'package:debrify/services/remote_control/remote_control_state.dart';
 import 'package:debrify/services/remote_control/remote_session.dart';
 import 'package:debrify/services/remote_control/udp_command_service.dart';
 import 'package:debrify/utils/app_storage.dart';
+import 'package:debrify/widgets/remote/remote_router_dialogs.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
@@ -81,6 +82,9 @@ void main() {
   }
 
   setUp(() async {
+    // The production dialog presenter, registered here because these tests
+    // pump a bare `MaterialApp` rather than going through `main.dart`.
+    router.setDialogs(const RemoteRouterDialogs());
     ProfileRuntime.debugReset();
     DeviceKeyProvider.debugReset();
     SharedPreferences.setMockInitialValues(<String, Object>{});

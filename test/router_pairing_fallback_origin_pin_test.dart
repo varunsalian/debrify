@@ -8,6 +8,7 @@ import 'package:debrify/services/remote_control/remote_control_state.dart';
 import 'package:debrify/services/remote_control/remote_session.dart';
 import 'package:debrify/services/remote_control/udp_command_service.dart';
 import 'package:debrify/widgets/remote/remote_pairing_dialog.dart';
+import 'package:debrify/widgets/remote/remote_router_dialogs.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -75,6 +76,9 @@ void main() {
   }
 
   setUp(() async {
+    // The production dialog presenter, registered here because these tests
+    // pump a bare `MaterialApp` rather than going through `main.dart`.
+    router.setDialogs(const RemoteRouterDialogs());
     SharedPreferences.setMockInitialValues(<String, Object>{});
     // Plaintext-era runtime: `ProfileAsyncAuthorization.capture` returns null,
     // so the state's outbound path runs without a committed profile scope.
