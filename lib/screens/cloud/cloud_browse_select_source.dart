@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../services/cloud/cloud_provider_id.dart';
 import '../../services/series_source_service.dart';
+import '../../widgets/cloud/cloud_select_source_opener.dart';
 import '../alldebrid/alldebrid_files_screen.dart';
 import '../debrid_downloads_screen.dart';
 import '../pikpak/pikpak_files_screen.dart';
@@ -10,8 +11,14 @@ import '../torbox/torbox_downloads_screen.dart';
 
 /// Bind-source cloud browsers for catalog, Trakt, and aggregated search.
 /// [fromPlaybackId] only — `rd` does not open Real-Debrid.
+///
+/// Result widgets (lib/widgets) reach this through [opener], a
+/// [CloudSelectSourceOpener] their hosting screen passes in.
 class CloudBrowseSelectSource {
   CloudBrowseSelectSource._();
+
+  /// [push] / [pushRdOrTorbox] behind the widgets-layer interface.
+  static const CloudSelectSourceOpener opener = _CloudBrowseSelectSourceOpener();
 
   /// Sheet accents. Not [CloudProviderChrome.sourceChip] (TorBox chip is blue).
   static const rdSheetAccent = Color(0xFF22C55E);
@@ -145,4 +152,36 @@ class CloudBrowseSelectSource {
       ),
     );
   }
+}
+
+class _CloudBrowseSelectSourceOpener implements CloudSelectSourceOpener {
+  const _CloudBrowseSelectSourceOpener();
+
+  @override
+  void push(
+    BuildContext context, {
+    required String provider,
+    required String query,
+    required Future<void> Function(SeriesSource) onSourceSelected,
+  }) => CloudBrowseSelectSource.push(
+    context,
+    provider: provider,
+    query: query,
+    onSourceSelected: onSourceSelected,
+  );
+
+  @override
+  void pushRdOrTorbox(
+    BuildContext context, {
+    required String query,
+    required bool rdEnabled,
+    required bool torboxEnabled,
+    required Future<void> Function(SeriesSource) onSourceSelected,
+  }) => CloudBrowseSelectSource.pushRdOrTorbox(
+    context,
+    query: query,
+    rdEnabled: rdEnabled,
+    torboxEnabled: torboxEnabled,
+    onSourceSelected: onSourceSelected,
+  );
 }

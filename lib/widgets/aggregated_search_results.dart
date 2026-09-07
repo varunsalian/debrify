@@ -15,7 +15,6 @@ import '../services/simkl/simkl_service.dart';
 import '../services/local_bound_source_service.dart';
 import '../services/series_source_service.dart';
 import 'cloud_provider_chrome.dart';
-import '../screens/cloud/cloud_browse_select_source.dart';
 import '../services/storage_service.dart';
 import '../screens/stremio_tv/widgets/stremio_tv_catalog_picker_dialog.dart';
 import 'add_source_picker_dialog.dart';
@@ -23,6 +22,7 @@ import 'catalog_item_tile.dart';
 import 'trakt/trakt_menu_helpers.dart';
 import '../services/simkl/simkl_menu_helpers.dart';
 import '../screens/catalog_item_detail_screen.dart';
+import 'cloud/cloud_select_source_opener.dart';
 
 /// Displays aggregated search results from all catalog sources
 ///
@@ -61,6 +61,11 @@ class AggregatedSearchResults extends StatefulWidget {
   final void Function(StremioMeta)? onSelectSource;
   final void Function(StremioMeta)? onKeywordSelectSource;
 
+  /// Opens cloud browsers in bind-source mode. Supplied by the hosting
+  /// screen (`CloudBrowseSelectSource.opener`); without it the add-source
+  /// picker offers no cloud providers.
+  final CloudSelectSourceOpener? cloudSelectSourceOpener;
+
   /// Callback when user selects "Play Random Episode" for a series
   final Future<void> Function(StremioMeta show, StremioAddon? addon)?
   onPlayRandomEpisode;
@@ -85,6 +90,7 @@ class AggregatedSearchResults extends StatefulWidget {
     this.onRequestFocusAbove,
     this.onSelectSource,
     this.onKeywordSelectSource,
+    this.cloudSelectSourceOpener,
     this.onPlayRandomEpisode,
     this.onSearchPacks,
     this.onBrowseSeriesEpisodes,
@@ -585,14 +591,19 @@ class AggregatedSearchResultsState extends State<AggregatedSearchResults> {
     final premiumizeIntegration =
         await ProviderCredentialPrefs.getPremiumizeIntegrationEnabled();
     final allDebridKey = await StorageService.getAllDebridApiKey();
-    final pikpakEnabled = await ProviderCredentialPrefs.getPikPakEnabled();
-    final rdEnabled = rdKey != null && rdKey.isNotEmpty;
-    final torboxEnabled = torboxKey != null && torboxKey.isNotEmpty;
-    final premiumizeEnabled = premiumizeIntegration &&
+    final pikpakOn = await ProviderCredentialPrefs.getPikPakEnabled();
+    // Cloud bind options need a browser opener from the hosting screen.
+    final canBrowseCloud = widget.cloudSelectSourceOpener != null;
+    final pikpakEnabled = canBrowseCloud && pikpakOn;
+    final rdEnabled = canBrowseCloud && rdKey != null && rdKey.isNotEmpty;
+    final torboxEnabled =
+        canBrowseCloud && torboxKey != null && torboxKey.isNotEmpty;
+    final premiumizeEnabled = canBrowseCloud &&
+        premiumizeIntegration &&
         premiumizeKey != null &&
         premiumizeKey.isNotEmpty;
     final allDebridEnabled =
-        allDebridKey != null && allDebridKey.isNotEmpty;
+        canBrowseCloud && allDebridKey != null && allDebridKey.isNotEmpty;
 
     if (!mounted) return;
 
@@ -678,7 +689,7 @@ class AggregatedSearchResultsState extends State<AggregatedSearchResults> {
       if (mounted) setState(() => _boundSources[imdbId] = updated);
     }
 
-    CloudBrowseSelectSource.push(
+    widget.cloudSelectSourceOpener?.push(
       context,
       provider: provider,
       query: show.name,
@@ -1044,7 +1055,7 @@ class AggregatedSearchResultsState extends State<AggregatedSearchResults> {
       }
     }
 
-    CloudBrowseSelectSource.pushRdOrTorbox(
+    widget.cloudSelectSourceOpener?.pushRdOrTorbox(
       context,
       query: show.name,
       rdEnabled: rdEnabled,

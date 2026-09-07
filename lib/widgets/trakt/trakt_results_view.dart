@@ -17,7 +17,6 @@ import '../../services/tvmaze_service.dart';
 import '../../services/local_bound_source_service.dart';
 import '../../services/series_source_service.dart';
 import '../cloud_provider_chrome.dart';
-import '../../screens/cloud/cloud_browse_select_source.dart';
 import 'package:debrify/services/storage/home_prefs.dart';
 import '../../services/storage_service.dart';
 import '../../screens/catalog_item_detail_screen.dart';
@@ -25,6 +24,7 @@ import '../tv_focus_scroll_wrapper.dart';
 import '../../screens/stremio_tv/widgets/stremio_tv_catalog_picker_dialog.dart';
 import '../add_source_picker_dialog.dart';
 import '../../utils/tv_keys.dart';
+import '../cloud/cloud_select_source_opener.dart';
 
 /// Trakt list type options
 enum TraktListType {
@@ -147,6 +147,11 @@ class TraktResultsView extends StatefulWidget {
   /// Called when user picks "Keyword Search" from the add-source picker.
   final void Function(StremioMeta show)? onKeywordSelectSource;
 
+  /// Opens cloud browsers in bind-source mode. Supplied by the hosting
+  /// screen (`CloudBrowseSelectSource.opener`); without it the add-source
+  /// picker offers no cloud providers.
+  final CloudSelectSourceOpener? cloudSelectSourceOpener;
+
   /// Called when user selects "Search Season Packs" for a series.
   final void Function(StremioMeta show)? onSearchPacks;
 
@@ -162,6 +167,7 @@ class TraktResultsView extends StatefulWidget {
     this.onEpisodeModeEntered,
     this.onSelectSource,
     this.onKeywordSelectSource,
+    this.cloudSelectSourceOpener,
     this.onSearchPacks,
   });
 
@@ -1371,7 +1377,7 @@ class TraktResultsViewState extends State<TraktResultsView> {
       }
     }
 
-    CloudBrowseSelectSource.pushRdOrTorbox(
+    widget.cloudSelectSourceOpener?.pushRdOrTorbox(
       context,
       query: show.name,
       rdEnabled: rdEnabled,
@@ -1502,14 +1508,20 @@ class TraktResultsViewState extends State<TraktResultsView> {
     final premiumizeIntegration =
         await ProviderCredentialPrefs.getPremiumizeIntegrationEnabled();
     final allDebridKey = await StorageService.getAllDebridApiKey();
-    final pikpakEnabled = await ProviderCredentialPrefs.getPikPakEnabled();
-    final rdEnabled = rdKey != null && rdKey.isNotEmpty;
-    final torboxEnabled = torboxKey != null && torboxKey.isNotEmpty;
+    final pikpakOn = await ProviderCredentialPrefs.getPikPakEnabled();
+    // Cloud bind options need a browser opener from the hosting screen.
+    final canBrowseCloud = widget.cloudSelectSourceOpener != null;
+    final pikpakEnabled = canBrowseCloud && pikpakOn;
+    final rdEnabled = canBrowseCloud && rdKey != null && rdKey.isNotEmpty;
+    final torboxEnabled =
+        canBrowseCloud && torboxKey != null && torboxKey.isNotEmpty;
     final premiumizeEnabled =
+        canBrowseCloud &&
         premiumizeIntegration &&
         premiumizeKey != null &&
         premiumizeKey.isNotEmpty;
-    final allDebridEnabled = allDebridKey != null && allDebridKey.isNotEmpty;
+    final allDebridEnabled =
+        canBrowseCloud && allDebridKey != null && allDebridKey.isNotEmpty;
 
     if (!mounted) return;
 
@@ -1594,7 +1606,7 @@ class TraktResultsViewState extends State<TraktResultsView> {
       if (mounted) setState(() => _boundSources[imdbId] = updated);
     }
 
-    CloudBrowseSelectSource.push(
+    widget.cloudSelectSourceOpener?.push(
       context,
       provider: provider,
       query: show.name,
