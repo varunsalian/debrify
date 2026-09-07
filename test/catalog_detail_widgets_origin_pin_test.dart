@@ -655,34 +655,72 @@ void main() {
       (resting.decoration! as BoxDecoration).border!.top.color,
       Colors.white.withValues(alpha: 0.18),
     );
+
+    // Tapping flips label, icon and the tinted resting border. The screen
+    // updates optimistically, so this is the state the first frame after the
+    // tap shows.
+    await tester.tap(find.text('My Watchlist'));
+    await tester.pump();
+    expect(find.text('My Watchlist'), findsNothing);
+    expect(find.text('In My Watchlist'), findsOneWidget);
+    expect(find.byIcon(Icons.bookmark_rounded), findsOneWidget);
+    expect(find.byIcon(Icons.bookmark_add_outlined), findsNothing);
+    final saved = ancestorOf<AnimatedContainer>(
+      tester,
+      find.text('In My Watchlist'),
+    );
+    expect(
+      (saved.decoration! as BoxDecoration).border!.top.color,
+      isNot(Colors.white.withValues(alpha: 0.18)),
+    );
   });
 
   testWidgets('an unresolved resume lookup shows a spinner, not a label', (
     tester,
   ) async {
     final pending = Completer<({bool started, int? season, int? episode})>();
-    await pumpDetail(
-      tester,
-      screenFor(movie(id: 'tt6000005'), resumeInfoLoader: () => pending.future),
-    );
+    try {
+      await pumpDetail(
+        tester,
+        screenFor(
+          movie(id: 'tt6000005'),
+          resumeInfoLoader: () => pending.future,
+        ),
+      );
 
-    expect(find.text('Play'), findsNothing);
-    expect(find.byIcon(Icons.play_arrow_rounded), findsNothing);
-    final spinner = find.byType(CircularProgressIndicator);
-    expect(spinner, findsOneWidget);
-    expect(tester.widget<CircularProgressIndicator>(spinner).strokeWidth, 2);
-    expect(
-      tester.widget<CircularProgressIndicator>(spinner).color,
-      Colors.white,
-    );
-    // Non-compact: the indicator is 18px inside a 64px reserved box.
-    expect(ancestorOf<SizedBox>(tester, spinner).width, 18);
+      expect(find.text('Play'), findsNothing);
+      expect(find.byIcon(Icons.play_arrow_rounded), findsNothing);
+      final spinner = find.byType(CircularProgressIndicator);
+      expect(spinner, findsOneWidget);
+      expect(tester.widget<CircularProgressIndicator>(spinner).strokeWidth, 2);
+      expect(
+        tester.widget<CircularProgressIndicator>(spinner).color,
+        Colors.white,
+      );
+      // Non-compact: the indicator is 18px inside a 64px reserved box.
+      expect(ancestorOf<SizedBox>(tester, spinner).width, 18);
 
-    pending.complete((started: false, season: null, episode: null));
-    await tester.pump();
-    await tester.pump();
-    expect(find.byType(CircularProgressIndicator), findsNothing);
-    expect(find.text('Play'), findsOneWidget);
+      pending.complete((started: false, season: null, episode: null));
+      await tester.pump();
+      await tester.pump();
+      expect(find.byType(CircularProgressIndicator), findsNothing);
+      expect(find.text('Play'), findsOneWidget);
+    } finally {
+      // The screen holds this future for the life of the State. If an
+      // assertion above throws, the completion below never runs, so release
+      // it here: this is cleanup only, and the primary failure still
+      // propagates out of the `finally`.
+      if (!pending.isCompleted) {
+        pending.complete((started: false, season: null, episode: null));
+        // Drain the loader's continuation before teardown. Guarded so a
+        // failure here cannot mask the assertion that actually failed.
+        try {
+          await tester.pump();
+        } catch (_) {
+          // Cleanup only.
+        }
+      }
+    }
   });
 
   testWidgets('a resolved resume relabels Play with the season/episode tag', (
