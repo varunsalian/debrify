@@ -66,6 +66,10 @@ class CloudViewModeDropdown extends StatelessWidget {
           focusNode: dropdownFocusNode,
           autofocus: true,
           isExpanded: true,
+          // The origin hosts carried this deprecation under the path-keyed
+          // analyzer baseline; it moves here with the code (same handling as
+          // G1'-2's onReorder). Switching to initialValue changes behaviour.
+          // ignore: deprecated_member_use
           value: mode,
           decoration: InputDecoration(
             labelText: 'View Mode',
