@@ -23,6 +23,7 @@ import '../services/local_playback_resume_resolver.dart';
 import '../services/startup_stream_policy.dart';
 import '../services/resume_write_guard.dart';
 import '../services/skip_segment_service.dart';
+import '../services/playback/skip_segment_session.dart';
 import '../services/analytics_service.dart';
 import '../services/pip_service.dart';
 import '../services/audio_effect_session_service.dart';
@@ -832,12 +833,14 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   bool _skipSegmentSettingsLoaded = false;
   bool _skipSegmentsEnabled = false;
   String _skipSegmentProviderId = SkipSegmentProviders.auto;
-  SkipSegmentProvider? _skipSegmentProvider;
+  late final SkipSegmentSession _skipSegmentSession = SkipSegmentSession(
+    currentRequest: _currentSkipSegmentRequest,
+    isMounted: () => mounted,
+    loadedKey: () => _loadedSkipSegmentsKey,
+    publish: _publishSkipSegments,
+  );
   SkipSegments _skipSegments = SkipSegments.empty;
   String? _loadedSkipSegmentsKey;
-  String? _loadingSkipSegmentsKey;
-  int _skipSegmentsFetchGeneration = 0;
-  final Map<String, SkipSegments> _skipSegmentsCache = <String, SkipSegments>{};
 
   /// Whether _position/_duration describe the item currently selected, rather
   /// than the one being switched away from. The native player's equivalent is
@@ -1300,10 +1303,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         ? storedProvider
         : SkipSegmentProviders.auto;
 
-    _skipSegmentProvider?.close();
-    _skipSegmentProvider = enabled
-        ? SkipSegmentProviders.create(providerId)
-        : null;
+    _skipSegmentSession.configure(enabled, providerId);
     _skipSegmentsEnabled = enabled;
     _skipSegmentProviderId = providerId;
     _skipSegmentSettingsLoaded = true;
@@ -1421,66 +1421,15 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   }
 
   void _syncSkipSegmentsForCurrentContent() {
-    final request = _currentSkipSegmentRequest();
-    final provider = _skipSegmentProvider;
-    if (request == null || provider == null) return;
-    if (_loadedSkipSegmentsKey == request.key ||
-        _loadingSkipSegmentsKey == request.key) {
-      return;
-    }
+    _skipSegmentSession.sync();
+  }
 
-    if (_skipSegmentsCache.containsKey(request.key)) {
-      final cached = _skipSegmentsCache[request.key]!;
-      if (mounted) {
-        setState(() {
-          _skipSegments = cached;
-          _loadedSkipSegmentsKey = request.key;
-        });
-        _syncActiveSkipSegmentUi();
-      }
-      return;
-    }
-
-    final generation = ++_skipSegmentsFetchGeneration;
-    _loadingSkipSegmentsKey = request.key;
-    provider
-        .fetch(
-          imdbId: request.imdbId,
-          season: request.season,
-          episode: request.episode,
-          duration: request.duration,
-        )
-        .then((segments) {
-          _skipSegmentsCache[request.key] = segments;
-          if (!mounted || generation != _skipSegmentsFetchGeneration) return;
-          if (_currentSkipSegmentRequest()?.key != request.key) return;
-          setState(() {
-            _skipSegments = segments;
-            _loadedSkipSegmentsKey = request.key;
-          });
-          _syncActiveSkipSegmentUi();
-        })
-        .catchError((Object error) {
-          // Missing skip data must never affect playback. Cache the miss for
-          // this session so an offline API cannot be retried on every position
-          // tick.
-          _skipSegmentsCache[request.key] = SkipSegments.empty;
-          debugPrint(
-            'SkipSegments: ${provider.displayName} fetch failed: $error',
-          );
-          if (!mounted || generation != _skipSegmentsFetchGeneration) return;
-          if (_currentSkipSegmentRequest()?.key != request.key) return;
-          setState(() {
-            _skipSegments = SkipSegments.empty;
-            _loadedSkipSegmentsKey = request.key;
-          });
-          _syncActiveSkipSegmentUi();
-        })
-        .whenComplete(() {
-          if (_loadingSkipSegmentsKey == request.key) {
-            _loadingSkipSegmentsKey = null;
-          }
-        });
+  void _publishSkipSegments(SkipSegments segments, String key) {
+    setState(() {
+      _skipSegments = segments;
+      _loadedSkipSegmentsKey = key;
+    });
+    _syncActiveSkipSegmentUi();
   }
 
   /// Forget the outgoing item's skip segments when switching playlist entries,
@@ -1490,8 +1439,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   /// The fetch cache survives on purpose: it's keyed per episode, so going
   /// back to one already looked up is instant.
   void _resetSkipSegmentState() {
-    _skipSegmentsFetchGeneration++;
-    _loadingSkipSegmentsKey = null;
+    _skipSegmentSession.reset();
     _loadedSkipSegmentsKey = null;
     _skipSegments = SkipSegments.empty;
     _skipSegmentsMediaReady = false;
@@ -7666,9 +7614,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _pikPakRetryMessage = null;
 
     _subs.cleanupTempSubtitleFilesSync();
-    _skipSegmentsFetchGeneration++;
-    _skipSegmentProvider?.close();
-    _skipSegmentProvider = null;
+    _skipSegmentSession.close();
     _transportVisibility.cancelAutoHide();
     _autosaveTimer?.cancel();
     _manualSelectionResetTimer?.cancel();
