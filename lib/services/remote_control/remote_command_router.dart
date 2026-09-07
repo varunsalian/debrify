@@ -172,8 +172,13 @@ class RemoteCommandRouter {
   }
 
   /// Set the presenter that owns the router's dialog routes. Registered from
-  /// `main.dart` alongside [setNavigatorKey]; without it the router has
-  /// nowhere to put a dialog, exactly as with a missing navigator.
+  /// `main.dart` alongside [setNavigatorKey]. Missing-presenter policy, one
+  /// rule at every site: an unregistered presenter means "no UI to present
+  /// on", decided at the same point where the origin tested its navigator
+  /// and before any state changes. The consent queue takes its headless
+  /// branch and latches nothing; a profile-graph import is refused to the
+  /// sender before the confirmation and before any restore work; the pairing
+  /// fallback is skipped while the gate keeps the code it already issued.
   void setDialogs(RouterDialogs dialogs) {
     _dialogs = dialogs;
   }
@@ -1292,6 +1297,24 @@ class RemoteCommandRouter {
       );
       return;
     }
+    // The busy dialog that covers the restore comes from the registered
+    // presenter. Without one the import is refused here, before the
+    // confirmation is shown and before any restore work, as with no screen.
+    final dialogs = _dialogs;
+    if (dialogs == null) {
+      RemoteTransferDiagnostics.record(
+        'receiver_graph_presenter_unavailable',
+        fields: <String, Object?>{'trace': trace},
+      );
+      _showSnackBar('Profile import needs the app screen open', isError: true);
+      await _transfers.reportProfileGraphResult(
+        remoteContext,
+        requestId: requestId,
+        ok: false,
+        message: 'Open the Debrify screen on the TV, then resend',
+      );
+      return;
+    }
     final sender =
         remoteContext.peerName ?? remoteContext.sourceIp ?? 'a paired phone';
     final rebuildableCachesOmitted = package.omissions.containsKey(
@@ -1370,10 +1393,9 @@ class RemoteCommandRouter {
     // Busy dialog while the restore stages and verifies. Self-dismissing via
     // its own context — the router must never pop someone else's route.
     final done = ValueNotifier<bool>(false);
-    assert(_dialogs != null, 'RemoteRouterDialogs not registered');
-    if (context.mounted && _dialogs != null) {
+    if (context.mounted) {
       unawaited(
-        _dialogs!.showBusy(
+        dialogs.showBusy(
           context: context,
           message: 'Importing profiles…',
           done: done,
@@ -2561,13 +2583,15 @@ class RemoteCommandRouter {
 
   /// Raises the v1 consent question. The dialog is the only part of the
   /// legacy gate that needs a `BuildContext`, so it stays here; the queue
-  /// owns everything else. False means there is no UI to ask on.
-  bool _canPresentLegacyConsent() => _navigatorKey?.currentState != null;
+  /// owns everything else. False means there is no UI to ask on: no
+  /// navigator, or no registered presenter. The queue checks this before it
+  /// flips `_legacyDialogShowing`, so neither case latches the queue.
+  bool _canPresentLegacyConsent() =>
+      _navigatorKey?.currentState != null && _dialogs != null;
 
   void _presentLegacyConsent(String peer) {
     final navigator = _navigatorKey?.currentState;
     if (navigator == null) return;
-    assert(_dialogs != null, 'RemoteRouterDialogs not registered');
     final dialogs = _dialogs;
     if (dialogs == null) return;
     dialogs
@@ -3584,10 +3608,16 @@ class RemoteCommandRouter {
   /// When no pairing presenter is mounted (TV sitting on Home with its
   /// always-on listener), raise the fallback code dialog.
   void _ensurePairingUi(PairingGate gate) {
-    assert(_dialogs != null, 'RemoteRouterDialogs not registered');
+    final dialogs = _dialogs;
+    if (dialogs == null) {
+      // No presenter registered: the gate keeps the code it already issued,
+      // there is just nowhere to draw it, as with no navigator.
+      debugPrint('RemoteCommandRouter: No dialog presenter for pairing UI');
+      return;
+    }
     // The key is handed over as a getter, not as its current state: the
     // presenter must look it up at the moment it presents, as the origin did.
-    _dialogs?.showPairingFallback(
+    dialogs.showPairingFallback(
       navigatorKey: () => _navigatorKey,
       gate: gate,
     );
