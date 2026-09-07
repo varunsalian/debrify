@@ -12,7 +12,7 @@
 - **Storage:** 9,963 → **1,741** (8,222 fewer)
 - **Settings:** 7,905 → **2,908** (4,997 fewer)
 
-Physical lines, not whole-project deletions. Last full gate: **d7cdffb7 PASSED**; its forwarder ledger was Storage204 / Search133 / Player161 / Magic23 / Settings0. #219/#220/#221 are included in this gate. Forbidden imports: **77 → 56 on merged main**, including #217/#218. No baseline increase.
+Physical lines, not whole-project deletions. Last full gate: **31e360f6 PASSED**; its forwarder ledger was Storage204 / Search133 / Player161 / Magic23 / Settings0. #222/#223/#224 are included in this gate. Forbidden imports: **77 → 56 on merged main**, including #217/#218. No baseline increase.
 
 ### Do next — actual execution order
 
@@ -77,15 +77,17 @@ Finite pre-S2 fixtures are not proof of every pre-refactor backup. Indexer expor
 
 ### Who owns the next action
 
-- **Cicero:** full integrated gate at frozen31e360f6 after #224 merge; exclusive runtime.
+- **Cicero:** completed31e360 full gate; shared rail-label origin review next.
 - **Locke:** next cohesive Search ownership proposal against remaining492-line shortfall.
-- **Confucius:** metadata13-case execution/evidence preparation; tests wait for gate terminal.
+- **Confucius:** running metadata13-case origin batch after passing gate.
 - **Arendt:** read-only plan for remaining metadata parameter/mapping/exception origin gaps.
 - **Parent:** merge/gates/board. #224 merged after exact CI and independent review; third merge since d7cd triggers gate. Renderer remains HOLD. No user blocker.
 ### Update rules for this checklist
 
 Check off an item only when its stated result is achieved. Update its owner/blocker when it changes; retain these six outcome names. Record merged work separately from prepared/reviewed PRs. Keep original/current god lines visible. After each merge explain the actual benefit and remaining work; preserve detailed evidence in the history below.
 ### Latest completed milestones
+
+- **Full31e360f6 gate PASSED:**6174PASS/12exactknown/2skip;goldens21known/configured2retries/actualhelpers0/no unexpected or unused. NativeFIRSTPAIRPASS; analyzer431/449zeroNew/Python55/layer56→56delta0cap77. AST204/133/161/23/0 unchangedidentities; physical1741/6241/11539/3322/2908. WindowsZIPf7a60321172ef1ac23eaa927693ce58ab42f5a3405de6ded3d669bfd2fb34cef; ARM64APK2ffa8838347adb6bf980c97eb1363b6d9d64c162b68604b48d1d493e86d8e2b1, ABIverified/exactheadmanifests. Counterreset0; no newdevice/completearchitecture claim. Did we make a difference? Integrated Hero/keyword/Canvas changes pass the established gate; remainingSearch492 and metadata/Player/Q obligations stay open.
 
 - #224 merged **31e360f6**, exact7ff528 unionaccepted/allCIpassed/independent120PASS+one exactknownsidebar failure. Canvas owns tabs/height with live resolver; Search6387→6241 (-146physical=129span+17other), wholeproduction+3. Credit146 against existing638shortfall: remaining492, strictoutcomeOPEN. Shapeallowance162/floor490 unchanged and negativeprobe caught. Did we make a difference? Actual layout ownership moved into the existing stage; no netdeletion or completeSearch claim. Thirdmerge triggers exact31e360fullgate; newdeviceproof absent.
 
