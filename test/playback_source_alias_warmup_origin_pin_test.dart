@@ -11,7 +11,7 @@
 //   TorrentPlaybackService._cachedSourceAliases   static field
 //   TorrentPlaybackService._sourceAliasWarmup     static field
 //   TorrentPlaybackService._sourceAliases         private getter
-//   TorrentPlaybackService.warmSourceAliases      public static
+//   PlaybackCandidateRanking.warmSourceAliases      public static
 //
 // plus the two call sites that READ the alias map, so the warmup is observed
 // through its actual effect and not through a re-implementation:
@@ -84,7 +84,7 @@ import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/profiles/profile_session_memory.dart';
 import 'package:debrify/services/storage_service.dart';
 import 'package:debrify/services/stremio_service.dart';
-import 'package:debrify/services/torrent_playback_service.dart';
+import 'package:debrify/services/torrent_playback/playback_candidate_ranking.dart';
 import 'package:debrify/utils/app_storage.dart';
 import 'package:debrify/utils/filter_ladder.dart';
 
@@ -224,7 +224,7 @@ void main() {
       await boot(_indexerPrefs(id: 'ix1', name: 'Pin Hub'));
 
       final ordered =
-          TorrentPlaybackService.orderCacheCheckedCandidatesForRules([
+          PlaybackCandidateRanking.orderCacheCheckedCandidatesForRules([
             _row('Alpha 1080p', 'alpha'),
             _row('Hub 1080p', 'Pin Hub'),
           ], rules: rulesFor([hubEngineKey, 'engine:alpha']));
@@ -241,10 +241,10 @@ void main() {
     await boot(_indexerPrefs(id: 'ix1', name: 'Pin Hub'));
 
     resetFetchCount();
-    await TorrentPlaybackService.warmSourceAliases();
+    await PlaybackCandidateRanking.warmSourceAliases();
     expect(fetches(), 1, reason: 'one warmup performs exactly one alias fetch');
 
-    final ordered = TorrentPlaybackService.orderCacheCheckedCandidatesForRules([
+    final ordered = PlaybackCandidateRanking.orderCacheCheckedCandidatesForRules([
       _row('Alpha 1080p', 'alpha'),
       _row('Hub 1080p', 'Pin Hub'),
     ], rules: rulesFor([hubEngineKey, 'engine:alpha']));
@@ -259,7 +259,7 @@ void main() {
   test('the warmed map also merges alias and engine-id rows into one exactOrder '
       'ladder group', () async {
     await boot(_indexerPrefs(id: 'ix1', name: 'Pin Hub'));
-    await TorrentPlaybackService.warmSourceAliases();
+    await PlaybackCandidateRanking.warmSourceAliases();
 
     // Ladder active (a quality filter is set) + relaxFilters + exactOrder is
     // the branch that groups by keyForSource(source, aliases: _sourceAliases).
@@ -273,7 +273,7 @@ void main() {
       sourcePriority: const <String>[],
     );
 
-    final ordered = TorrentPlaybackService.orderCandidatesForRules(
+    final ordered = PlaybackCandidateRanking.orderCandidatesForRules(
       [
         // display name, fails the 1080p tier
         _row('Hub 720p', 'Pin Hub'),
@@ -293,7 +293,7 @@ void main() {
   test('the cached map is retained between warmups and refreshed by the next '
       'one', () async {
     await boot(_indexerPrefs(id: 'ix1', name: 'Pin Hub'));
-    await TorrentPlaybackService.warmSourceAliases();
+    await PlaybackCandidateRanking.warmSourceAliases();
 
     // Settings-style mid-session change: the manager is renamed, so its engine
     // id changes too. No profile/engine reset accompanies it.
@@ -310,7 +310,7 @@ void main() {
     // yet aliased and sorts unlisted.
     expect(
       _names(
-        TorrentPlaybackService.orderCacheCheckedCandidatesForRules(
+        PlaybackCandidateRanking.orderCacheCheckedCandidatesForRules(
           candidates,
           rules: rules,
         ),
@@ -321,11 +321,11 @@ void main() {
 
     // The next warmup refetches (single-flight, not memoized) and the new
     // alias becomes visible.
-    await TorrentPlaybackService.warmSourceAliases();
+    await PlaybackCandidateRanking.warmSourceAliases();
     expect(fetches(), 1);
     expect(
       _names(
-        TorrentPlaybackService.orderCacheCheckedCandidatesForRules(
+        PlaybackCandidateRanking.orderCacheCheckedCandidatesForRules(
           candidates,
           rules: rules,
         ),
@@ -341,8 +341,8 @@ void main() {
     // Both calls happen before the first can complete: the config read behind
     // engineAliases awaits SharedPreferences and the SecretVault open, so the
     // window is real and no gate is needed to hold it open.
-    final first = TorrentPlaybackService.warmSourceAliases();
-    final second = TorrentPlaybackService.warmSourceAliases();
+    final first = PlaybackCandidateRanking.warmSourceAliases();
+    final second = PlaybackCandidateRanking.warmSourceAliases();
     expect(
       identical(first, second),
       isTrue,
@@ -355,7 +355,7 @@ void main() {
     // Both awaited the same completion: the map is live for ordering.
     expect(
       _names(
-        TorrentPlaybackService.orderCacheCheckedCandidatesForRules([
+        PlaybackCandidateRanking.orderCacheCheckedCandidatesForRules([
           _row('Alpha 1080p', 'alpha'),
           _row('Hub 1080p', 'Pin Hub'),
         ], rules: rulesFor([hubEngineKey, 'engine:alpha'])),
@@ -364,7 +364,7 @@ void main() {
     );
 
     // whenComplete cleared the slot, so this is a NEW future and it refetches.
-    final third = TorrentPlaybackService.warmSourceAliases();
+    final third = PlaybackCandidateRanking.warmSourceAliases();
     expect(identical(third, first), isFalse);
     await third;
     expect(fetches(), 2, reason: 'the warmup is single-flight, not memoized');
@@ -373,7 +373,7 @@ void main() {
   test('a refreshed warmup that finds no indexer managers overwrites the '
       'populated map', () async {
     await boot(_indexerPrefs(id: 'ix1', name: 'Pin Hub'));
-    await TorrentPlaybackService.warmSourceAliases();
+    await PlaybackCandidateRanking.warmSourceAliases();
 
     final candidates = [
       _row('Alpha 1080p', 'alpha'),
@@ -382,7 +382,7 @@ void main() {
     final rules = rulesFor([hubEngineKey, 'engine:alpha']);
     expect(
       _names(
-        TorrentPlaybackService.orderCacheCheckedCandidatesForRules(
+        PlaybackCandidateRanking.orderCacheCheckedCandidatesForRules(
           candidates,
           rules: rules,
         ),
@@ -394,11 +394,11 @@ void main() {
     // the empty result replaces the populated map rather than being ignored.
     final prefs = await SharedPreferences.getInstance();
     await prefs.setStringList('indexer_manager_configs_v1', const <String>[]);
-    await TorrentPlaybackService.warmSourceAliases();
+    await PlaybackCandidateRanking.warmSourceAliases();
 
     expect(
       _names(
-        TorrentPlaybackService.orderCacheCheckedCandidatesForRules(
+        PlaybackCandidateRanking.orderCacheCheckedCandidatesForRules(
           candidates,
           rules: rules,
         ),

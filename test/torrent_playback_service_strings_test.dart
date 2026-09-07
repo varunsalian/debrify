@@ -9,6 +9,7 @@ import 'package:debrify/services/cloud/cloud_provider_registry.dart';
 import 'package:debrify/services/download_service.dart';
 import 'package:debrify/services/playback_service_dispatch.dart';
 import 'package:debrify/services/series_source_service.dart';
+import 'package:debrify/services/torrent_playback/playback_candidate_ranking.dart';
 import 'package:debrify/services/torrent_playback_service.dart';
 import 'package:debrify/utils/filter_ladder.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -127,7 +128,7 @@ void main() {
   group('PikPak one-probe / pack-top / series skip', () {
     test('probeAttemptCount: pikpak is 1 no matter what', () {
       expect(
-        TorrentPlaybackService.probeAttemptCount(
+        PlaybackCandidateRanking.probeAttemptCount(
           'pikpak',
           tryMultiple: true,
           maxRetries: 10,
@@ -159,7 +160,7 @@ void main() {
         final (
           debridList,
           debridAttempts,
-        ) = TorrentPlaybackService.packTopSafety(
+        ) = PlaybackCandidateRanking.packTopSafety(
           [pack, pack2, single],
           provider: 'debrid',
           ladder: ladder,
@@ -172,7 +173,7 @@ void main() {
         final (
           pikpakList,
           pikpakAttempts,
-        ) = TorrentPlaybackService.packTopSafety(
+        ) = PlaybackCandidateRanking.packTopSafety(
           [pack, pack2, single],
           provider: 'pikpak',
           ladder: ladder,

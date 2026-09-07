@@ -20,7 +20,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:debrify/models/quick_play_rules.dart';
 import 'package:debrify/models/torrent.dart';
 import 'package:debrify/models/torrent_filter_state.dart';
-import 'package:debrify/services/torrent_playback_service.dart';
+import 'package:debrify/services/torrent_playback/playback_candidate_ranking.dart';
 import 'package:debrify/utils/filter_ladder.dart';
 
 var _hashSeed = 0;
@@ -90,7 +90,7 @@ void main() {
     test('every spelling lands in its documented tier, highest first', () {
       // Feed them in reverse (worst first) so a no-op would be detected.
       final input = [for (final row in table.reversed) _t(row.$1)];
-      final ordered = TorrentPlaybackService.orderCandidatesForRules(
+      final ordered = PlaybackCandidateRanking.orderCandidatesForRules(
         input,
         rules: _rules(QuickPlayRanking.quality),
       );
@@ -112,7 +112,7 @@ void main() {
     });
 
     test('seeders break a quality tie; size and codec do not', () {
-      final ordered = TorrentPlaybackService.orderCandidatesForRules(
+      final ordered = PlaybackCandidateRanking.orderCandidatesForRules(
         [
           _t('A 1080p WEB x264', seeders: 10, size: 900),
           _t('B 1080p WEB x265', seeders: 90, size: 1),
@@ -128,7 +128,7 @@ void main() {
     });
 
     test('equal score AND seeders keep their original positions', () {
-      final ordered = TorrentPlaybackService.orderCandidatesForRules(
+      final ordered = PlaybackCandidateRanking.orderCandidatesForRules(
         [
           _t('first 1080p', seeders: 7),
           _t('second 1080p', seeders: 7),
@@ -140,7 +140,7 @@ void main() {
     });
 
     test('a lower-resolution torrent outranks a higher-res direct link', () {
-      final ordered = TorrentPlaybackService.orderCandidatesForRules(
+      final ordered = PlaybackCandidateRanking.orderCandidatesForRules(
         [
           _t('direct 720p', type: StreamType.directUrl, seeders: 0),
           _t('torrent 2160p', seeders: 1),
@@ -154,7 +154,7 @@ void main() {
   // ── QuickPlayRanking.smallest ────────────────────────────────────────────
   group('orderCandidatesForRules — smallest ranking', () {
     test('ascending by size, with unknown (0) sizes sunk to the end', () {
-      final ordered = TorrentPlaybackService.orderCandidatesForRules(
+      final ordered = PlaybackCandidateRanking.orderCandidatesForRules(
         [
           _t('unknown-a', size: 0),
           _t('big', size: 9000),
@@ -174,7 +174,7 @@ void main() {
     });
 
     test('equal sizes keep their original positions', () {
-      final ordered = TorrentPlaybackService.orderCandidatesForRules(
+      final ordered = PlaybackCandidateRanking.orderCandidatesForRules(
         [_t('one', size: 42), _t('two', size: 42), _t('three', size: 42)],
         rules: _rules(QuickPlayRanking.smallest),
       );
@@ -185,7 +185,7 @@ void main() {
   // ── QuickPlayRanking.readyFirst ──────────────────────────────────────────
   group('orderCandidatesForRules — ready-first ranking', () {
     test('direct links lead, then seeders descending inside each half', () {
-      final ordered = TorrentPlaybackService.orderCandidatesForRules(
+      final ordered = PlaybackCandidateRanking.orderCandidatesForRules(
         [
           _t('torrent-hi', seeders: 500),
           _t('direct-lo', type: StreamType.directUrl, seeders: 0),
@@ -203,7 +203,7 @@ void main() {
     });
 
     test('external links rank with the non-direct half', () {
-      final ordered = TorrentPlaybackService.orderCandidatesForRules(
+      final ordered = PlaybackCandidateRanking.orderCandidatesForRules(
         [
           _t('external', type: StreamType.externalUrl, seeders: 0),
           _t('direct', type: StreamType.directUrl, seeders: 0),
@@ -228,7 +228,7 @@ void main() {
         ];
         // exactOrder + "prefer torrents" would hoist torrents; these are all
         // torrents, so the walk is a pure identity check either way.
-        final ordered = TorrentPlaybackService.orderCandidatesForRules(
+        final ordered = PlaybackCandidateRanking.orderCandidatesForRules(
           input,
           rules: _rules(ranking),
         );
@@ -237,7 +237,7 @@ void main() {
     }
 
     test('duplicate infohashes collapse to the first occurrence', () {
-      final ordered = TorrentPlaybackService.orderCandidatesForRules(
+      final ordered = PlaybackCandidateRanking.orderCandidatesForRules(
         [
           _t('winner', infohash: 'b' * 40),
           _t('loser', infohash: 'B' * 40),
@@ -252,7 +252,7 @@ void main() {
   // ── Direct-link gate and the torrent-first transport walk ────────────────
   group('orderCandidatesForRules — transport policy', () {
     test('allowDirectLinks:false drops direct rows, keeps external ones', () {
-      final ordered = TorrentPlaybackService.orderCandidatesForRules(
+      final ordered = PlaybackCandidateRanking.orderCandidatesForRules(
         [
           _t('direct', type: StreamType.directUrl),
           _t('external', type: StreamType.externalUrl),
@@ -278,7 +278,7 @@ void main() {
 
     for (final mode in torrentFirstModes) {
       test('$mode hoists torrent rows in exact order', () {
-        final ordered = TorrentPlaybackService.orderCandidatesForRules(
+        final ordered = PlaybackCandidateRanking.orderCandidatesForRules(
           [
             _t('direct', type: StreamType.directUrl),
             _t('torrent'),
@@ -286,7 +286,7 @@ void main() {
           rules: _rules(QuickPlayRanking.exactOrder, sourceMode: mode),
         );
         expect(_names(ordered), ['torrent', 'direct']);
-        expect(TorrentPlaybackService.prefersTorrentCandidates(
+        expect(PlaybackCandidateRanking.prefersTorrentCandidates(
           _rules(QuickPlayRanking.exactOrder, sourceMode: mode),
         ), isTrue);
       });
@@ -294,7 +294,7 @@ void main() {
 
     for (final mode in addonFirstModes) {
       test('$mode leaves the provider transport order alone', () {
-        final ordered = TorrentPlaybackService.orderCandidatesForRules(
+        final ordered = PlaybackCandidateRanking.orderCandidatesForRules(
           [
             _t('direct', type: StreamType.directUrl),
             _t('torrent'),
@@ -315,7 +315,7 @@ void main() {
     ];
 
     test('exact order keeps the cache partition verbatim (copy, not alias)', () {
-      final out = TorrentPlaybackService.orderCacheCheckedCandidatesForRules(
+      final out = PlaybackCandidateRanking.orderCacheCheckedCandidatesForRules(
         input,
         rules: _rules(QuickPlayRanking.exactOrder),
       );
@@ -324,7 +324,7 @@ void main() {
     });
 
     test('ready-first keeps the partition instead of re-sorting by seeders', () {
-      final out = TorrentPlaybackService.orderCacheCheckedCandidatesForRules(
+      final out = PlaybackCandidateRanking.orderCacheCheckedCandidatesForRules(
         input,
         rules: _rules(QuickPlayRanking.readyFirst),
       );
@@ -332,14 +332,14 @@ void main() {
     });
 
     test('other rankings fall through to the full rule ordering', () {
-      final out = TorrentPlaybackService.orderCacheCheckedCandidatesForRules(
+      final out = PlaybackCandidateRanking.orderCacheCheckedCandidatesForRules(
         input,
         rules: _rules(QuickPlayRanking.smallest),
       );
       expect(
         _names(out),
         _names(
-          TorrentPlaybackService.orderCandidatesForRules(
+          PlaybackCandidateRanking.orderCandidatesForRules(
             input,
             rules: _rules(QuickPlayRanking.smallest),
           ),
@@ -348,7 +348,7 @@ void main() {
     });
 
     test('an inactive ladder never disturbs ready-first', () {
-      final out = TorrentPlaybackService.orderCacheCheckedCandidatesForRules(
+      final out = PlaybackCandidateRanking.orderCacheCheckedCandidatesForRules(
         input,
         rules: _rules(QuickPlayRanking.readyFirst),
         ladder: FilterLadder(const TorrentFilterState.empty()),
@@ -368,7 +368,7 @@ void main() {
         _t('t3'),
       ];
       final prepared = [_t('p-a'), _t('p-b'), _t('p-c')];
-      final merged = TorrentPlaybackService.mergePreparedTorrentOrder(
+      final merged = PlaybackCandidateRanking.mergePreparedTorrentOrder(
         sources,
         prepared,
       );
@@ -389,7 +389,7 @@ void main() {
         streamType: StreamType.torrent,
         hasRealInfoHash: false,
       );
-      final merged = TorrentPlaybackService.mergePreparedTorrentOrder(
+      final merged = PlaybackCandidateRanking.mergePreparedTorrentOrder(
         [noAcquisition, _t('t1')],
         [_t('p-a')],
       );
@@ -426,7 +426,7 @@ void main() {
         '⇒ ${row.$5}',
         () {
           expect(
-            TorrentPlaybackService.probeAttemptCount(
+            PlaybackCandidateRanking.probeAttemptCount(
               row.$1,
               tryMultiple: row.$2,
               maxRetries: row.$3,
@@ -451,7 +451,7 @@ void main() {
       final multi = pack('multiSeasonPack');
       final season = pack('seasonPack');
       final single = _t('Show S02E04 1080p WEB x264');
-      final (list, attempts) = TorrentPlaybackService.packTopSafety(
+      final (list, attempts) = PlaybackCandidateRanking.packTopSafety(
         [complete, multi, season, single],
         provider: 'realdebrid',
         ladder: ladder,
@@ -471,7 +471,7 @@ void main() {
       final top = pack('seasonPack');
       final first = _t('Show S02E04 720p WEB x264');
       final second = _t('Show S02E04 2160p WEB x265');
-      final (list, _) = TorrentPlaybackService.packTopSafety(
+      final (list, _) = PlaybackCandidateRanking.packTopSafety(
         [top, first, second],
         provider: 'realdebrid',
         ladder: ladder,
@@ -487,7 +487,7 @@ void main() {
         coverageType: 'seasonPack',
       );
       final single = _t('Show S02E04 720p WEB x264');
-      final (list, attempts) = TorrentPlaybackService.packTopSafety(
+      final (list, attempts) = PlaybackCandidateRanking.packTopSafety(
         [top, single],
         provider: 'realdebrid',
         ladder: ladder,
@@ -500,7 +500,7 @@ void main() {
 
     test('a single-element list is never touched', () {
       final top = pack('completeSeries');
-      final (list, attempts) = TorrentPlaybackService.packTopSafety(
+      final (list, attempts) = PlaybackCandidateRanking.packTopSafety(
         [top],
         provider: 'realdebrid',
         ladder: ladder,
@@ -514,7 +514,7 @@ void main() {
     test('an unknown coverage top is treated as a single, not a pack', () {
       final top = _t('Show 2160p WEB', coverageType: 'unknown');
       final single = _t('Show S02E04 720p WEB x264');
-      final (list, attempts) = TorrentPlaybackService.packTopSafety(
+      final (list, attempts) = PlaybackCandidateRanking.packTopSafety(
         [top, single],
         provider: 'realdebrid',
         ladder: ladder,
@@ -538,7 +538,7 @@ void main() {
       };
       for (final entry in expected.entries) {
         expect(
-          TorrentPlaybackService.addonStreamSearchPlan(
+          PlaybackCandidateRanking.addonStreamSearchPlan(
             _rules(QuickPlayRanking.debrify, sourceMode: entry.key),
           ),
           entry.value,
@@ -557,7 +557,7 @@ void main() {
       };
       for (final entry in expected.entries) {
         expect(
-          TorrentPlaybackService.seriesPackSearchPlan(
+          PlaybackCandidateRanking.seriesPackSearchPlan(
             _rules(QuickPlayRanking.debrify, sourceMode: entry.key),
           ),
           entry.value,
@@ -578,21 +578,21 @@ void main() {
         'engineErrors': {'e': 'boom'},
       };
       expect(
-        TorrentPlaybackService.packSearchReportedErrors(
+        PlaybackCandidateRanking.packSearchReportedErrors(
           withAddonErrors,
           addonStage,
         ),
         isTrue,
       );
       expect(
-        TorrentPlaybackService.packSearchReportedErrors(
+        PlaybackCandidateRanking.packSearchReportedErrors(
           withAddonErrors,
           engineStage,
         ),
         isFalse,
       );
       expect(
-        TorrentPlaybackService.packSearchReportedErrors(
+        PlaybackCandidateRanking.packSearchReportedErrors(
           withEngineErrors,
           engineStage,
         ),
@@ -600,7 +600,7 @@ void main() {
       );
       // A missing map is "no errors reported", not a crash.
       expect(
-        TorrentPlaybackService.packSearchReportedErrors(
+        PlaybackCandidateRanking.packSearchReportedErrors(
           <String, dynamic>{},
           engineStage,
         ),
@@ -610,17 +610,17 @@ void main() {
 
     test('auto-playable candidates exclude external links', () {
       expect(
-        TorrentPlaybackService.isAutoPlayableCandidate(
+        PlaybackCandidateRanking.isAutoPlayableCandidate(
           _t('direct', type: StreamType.directUrl),
         ),
         isTrue,
       );
       expect(
-        TorrentPlaybackService.isAutoPlayableCandidate(_t('torrent')),
+        PlaybackCandidateRanking.isAutoPlayableCandidate(_t('torrent')),
         isTrue,
       );
       expect(
-        TorrentPlaybackService.isAutoPlayableCandidate(
+        PlaybackCandidateRanking.isAutoPlayableCandidate(
           _t('external', type: StreamType.externalUrl),
         ),
         isFalse,
@@ -630,19 +630,19 @@ void main() {
     test('direct validation budget stays at five for every retry count', () {
       for (final attempts in const [1, 3, 10]) {
         expect(
-          TorrentPlaybackService.directValidationBudgetForRules(
+          PlaybackCandidateRanking.directValidationBudgetForRules(
             _rules(QuickPlayRanking.debrify).copyWith(maxAttempts: attempts),
           ),
           5,
         );
       }
-      expect(TorrentPlaybackService.directValidationBudgetForRules(null), 5);
+      expect(PlaybackCandidateRanking.directValidationBudgetForRules(null), 5);
     });
 
     test('addon search is allowed everywhere except torrents-only', () {
       for (final mode in QuickPlaySourceMode.values) {
         expect(
-          TorrentPlaybackService.allowsAddonSearch(
+          PlaybackCandidateRanking.allowsAddonSearch(
             _rules(QuickPlayRanking.debrify, sourceMode: mode),
           ),
           mode != QuickPlaySourceMode.torrentsOnly,
@@ -657,14 +657,14 @@ void main() {
         sourceMode: QuickPlaySourceMode.addonsOnly,
       );
       expect(
-        TorrentPlaybackService.shouldSearchAddonsBeforeProvider(
+        PlaybackCandidateRanking.shouldSearchAddonsBeforeProvider(
           addonsOnly,
           isMovie: true,
         ),
         isTrue,
       );
       expect(
-        TorrentPlaybackService.shouldSearchAddonsBeforeProvider(
+        PlaybackCandidateRanking.shouldSearchAddonsBeforeProvider(
           addonsOnly,
           isMovie: true,
           hasPreferredProvider: true,
@@ -673,14 +673,14 @@ void main() {
       );
       // A series that still wants packs stays on the provider-backed route.
       expect(
-        TorrentPlaybackService.shouldSearchAddonsBeforeProvider(
+        PlaybackCandidateRanking.shouldSearchAddonsBeforeProvider(
           addonsOnly.copyWith(preferSeriesPacks: true),
           isMovie: false,
         ),
         isFalse,
       );
       expect(
-        TorrentPlaybackService.shouldSearchAddonsBeforeProvider(
+        PlaybackCandidateRanking.shouldSearchAddonsBeforeProvider(
           addonsOnly.copyWith(
             preferSeriesPacks: true,
             packPreference: QuickPlayPackPreference.exactEpisodeOnly,
@@ -690,7 +690,7 @@ void main() {
         isTrue,
       );
       expect(
-        TorrentPlaybackService.shouldSearchAddonsBeforeProvider(
+        PlaybackCandidateRanking.shouldSearchAddonsBeforeProvider(
           _rules(
             QuickPlayRanking.debrify,
             sourceMode: QuickPlaySourceMode.together,
@@ -707,14 +707,14 @@ void main() {
             mode == QuickPlaySourceMode.torrentsThenAddons ||
             mode == QuickPlaySourceMode.torrentsOnly;
         expect(
-          TorrentPlaybackService.shouldTryDirectBeforeTorrent(
+          PlaybackCandidateRanking.shouldTryDirectBeforeTorrent(
             _rules(QuickPlayRanking.debrify, sourceMode: mode),
           ),
           !torrentFirst,
           reason: '$mode',
         );
       }
-      expect(TorrentPlaybackService.shouldTryDirectBeforeTorrent(null), isTrue);
+      expect(PlaybackCandidateRanking.shouldTryDirectBeforeTorrent(null), isTrue);
     });
   });
 }
