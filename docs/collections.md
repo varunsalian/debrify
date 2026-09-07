@@ -80,6 +80,21 @@ Field notes:
 - `heroBackdropUrl`, `titleLogoUrl`: the backdrop and logo shown above the
   folder's lists when it is opened; the cover stands in for a missing
   backdrop, the title for a missing logo.
+- `focusGlowEnabled` (on the collection, default `true`): adds a halo tinted
+  from the folder's cover when its tile is focused or hovered. `false` removes
+  this extra halo while retaining the theme's normal focus indicator. Supported
+  across Classic, Spotlight and the stage Home layouts.
+- `focusVideoUrl` (on the folder): an HTTP(S) video played muted and looping
+  from the beginning after a 350 ms focus/hover dwell. `focusVideoEnabled`
+  defaults to `true`; an explicit `false` disables it. Video takes precedence
+  over focus GIFs. The cover stays visible while loading; failed videos fall
+  back to the GIF when present, otherwise the cover. An eight-second
+  first-frame timeout prevents a stalled preview from owning playback forever.
+  Focus loss, route changes, app backgrounding, and content playback stop the
+  preview. Reduced-motion mode disables both animated focus media types.
+  The active preview temporarily suspends other ambient trailers, and native
+  disposal finishes before the next ambient decoder is created. Android TV
+  tiles use a 480px-high texture to support clipping and focus transforms.
 - `pinToTop`: a newly imported row leads the Home board, including when a
   saved Home Rows order already exists; otherwise collection rows sit
   after the tracker list rows and before addon catalog rows. Rows can be
@@ -88,8 +103,19 @@ Field notes:
 - `showAllTab`: the folder browser offers an "All" view merging every list.
 - Records without an `id` get a stable one derived from their title, so
   re-importing the same file updates rather than duplicates.
-- Unknown fields (`viewMode`, `focusGlowEnabled`, focus video URLs, …) are
-  ignored.
+- Unknown fields (`viewMode`, `heroVideoUrl`, …) are ignored. `heroVideoUrl`
+  describes the opened folder’s hero background, not a tile focus preview.
+
+The glow flag follows [Nuvio’s collection model](https://github.com/NuvioMedia/NuvioTV/blob/dev/app/src/main/java/com/nuvio/tv/domain/model/Collection.kt).
+Its artwork-derived appearance follows the same intent as
+[Nuvio’s glow component](https://github.com/NuvioMedia/NuvioTV/blob/dev/app/src/main/java/com/nuvio/tv/ui/components/CollectionCardGlow.kt), using Debrify’s existing
+small-image color extractor and focus styling. `focusVideoUrl` is accepted from
+community exports; it is distinct from Nuvio’s `heroVideoUrl`.
+
+Existing imported records cannot recover fields that an older build discarded.
+Re-import the original collection JSON to restore its video URLs and any
+explicit `focusGlowEnabled: false` setting. The new fields persist through
+profile storage, sync, re-import, visibility changes and Backup & Restore.
 
 ## Addon resolution
 

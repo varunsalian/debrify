@@ -152,6 +152,8 @@ class HomeCollectionFolder {
   final String? titleLogoUrl;
   final String? focusGifUrl;
   final bool focusGifEnabled;
+  final String? focusVideoUrl;
+  final bool focusVideoEnabled;
   final CollectionTileShape tileShape;
   final List<CollectionCatalogSource> sources;
 
@@ -165,6 +167,8 @@ class HomeCollectionFolder {
     this.titleLogoUrl,
     this.focusGifUrl,
     this.focusGifEnabled = false,
+    this.focusVideoUrl,
+    this.focusVideoEnabled = true,
     this.tileShape = CollectionTileShape.landscape,
     this.sources = const [],
   });
@@ -180,6 +184,8 @@ class HomeCollectionFolder {
         titleLogoUrl: titleLogoUrl,
         focusGifUrl: focusGifUrl,
         focusGifEnabled: focusGifEnabled,
+        focusVideoUrl: focusVideoUrl,
+        focusVideoEnabled: focusVideoEnabled,
         tileShape: tileShape,
         sources: sources ?? this.sources,
       );
@@ -219,6 +225,8 @@ class HomeCollectionFolder {
       titleLogoUrl: _str(json['titleLogoUrl']),
       focusGifUrl: _str(json['focusGifUrl']),
       focusGifEnabled: json['focusGifEnabled'] == true,
+      focusVideoUrl: _str(json['focusVideoUrl']),
+      focusVideoEnabled: json['focusVideoEnabled'] != false,
       tileShape: CollectionTileShape.parse(json['tileShape']),
       sources: sources,
     );
@@ -234,6 +242,8 @@ class HomeCollectionFolder {
     'titleLogoUrl': titleLogoUrl,
     'focusGifUrl': focusGifUrl,
     'focusGifEnabled': focusGifEnabled,
+    'focusVideoUrl': focusVideoUrl,
+    'focusVideoEnabled': focusVideoEnabled,
     'tileShape': tileShape.storageValue,
     'catalogSources': [for (final s in sources) s.toJson()],
   };
@@ -252,6 +262,9 @@ class HomeCollection {
   /// The row leads the board, ahead of the tracker list rows.
   final bool pinToTop;
 
+  /// Artwork-colored halo around the focused folder tile (Nuvio default: on).
+  final bool focusGlowEnabled;
+
   /// Whether the folder browser offers an "All" view merging every list.
   final bool showAllTab;
   final String? backdropImageUrl;
@@ -267,6 +280,7 @@ class HomeCollection {
     required this.id,
     required this.title,
     this.pinToTop = false,
+    this.focusGlowEnabled = true,
     this.showAllTab = true,
     this.backdropImageUrl,
     this.folders = const [],
@@ -282,6 +296,7 @@ class HomeCollection {
     id: id,
     title: title,
     pinToTop: pinToTop,
+    focusGlowEnabled: focusGlowEnabled,
     showAllTab: showAllTab,
     backdropImageUrl: backdropImageUrl,
     folders: folders,
@@ -308,6 +323,7 @@ class HomeCollection {
       id: id,
       title: title.isEmpty ? 'Collection' : title,
       pinToTop: json['pinToTop'] == true,
+      focusGlowEnabled: json['focusGlowEnabled'] != false,
       showAllTab: json['showAllTab'] != false,
       backdropImageUrl: _str(json['backdropImageUrl']),
       folders: folders,
@@ -322,6 +338,7 @@ class HomeCollection {
     'id': id,
     'title': title,
     'pinToTop': pinToTop,
+    'focusGlowEnabled': focusGlowEnabled,
     'showAllTab': showAllTab,
     'backdropImageUrl': backdropImageUrl,
     'folders': [for (final f in folders) f.toJson()],

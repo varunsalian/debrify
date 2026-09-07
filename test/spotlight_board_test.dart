@@ -16,6 +16,7 @@ import 'package:debrify/theme/widgets/parallax_focus.dart';
 import 'package:debrify/widgets/detail/theme/detail_themes.dart';
 import 'package:debrify/widgets/hero_trailer_backdrop.dart';
 import 'package:debrify/widgets/home/spotlight_board.dart';
+import 'package:debrify/widgets/collections/collection_focus_glow.dart';
 
 /// Spotlight's hero, which is the piece that changes Home's focus topology
 /// rather than its paint.
@@ -1100,6 +1101,28 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(preview), findsOneWidget);
 
+    hero.requestFocus();
+    await tester.pumpAndSettle();
+    expect(find.byKey(preview), findsNothing);
+  });
+
+  testWidgets('collection previews follow desktop keyboard focus and row glow', (tester) async {
+    const preview = ValueKey('collection-card-preview');
+    await tester.pumpWidget(host([_meta('tt1', 'Alpha')], [
+      SpotlightShelf(title: 'Collections', nodes: rows[0], items: [
+        SpotlightCard(title: 'Brand', shape: SpotlightCardShape.wide,
+          onOpen: _noop, focusGlowEnabled: true, previewOnKeyboardFocus: true,
+          previewBuilder: (_) => const SizedBox.expand(key: preview)),
+      ]),
+    ], dpad: false));
+    await tester.pumpAndSettle();
+    expect(find.byKey(preview), findsNothing);
+    rows[0][0].requestFocus();
+    await tester.pumpAndSettle();
+    expect(find.byKey(preview), findsOneWidget);
+    final glow = tester.widget<CollectionFocusGlow>(find.byType(CollectionFocusGlow));
+    expect(glow.enabled, isTrue);
+    expect(glow.active, isTrue);
     hero.requestFocus();
     await tester.pumpAndSettle();
     expect(find.byKey(preview), findsNothing);

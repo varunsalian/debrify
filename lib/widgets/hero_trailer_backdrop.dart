@@ -14,6 +14,8 @@ import '../services/debrify_image_cache.dart';
 import '../utils/platform_util.dart';
 import '../utils/tv_keys.dart';
 import 'trailer_engine.dart';
+import 'serialized_trailer_engine.dart';
+import '../services/collection_focus_playback.dart';
 
 /// OTT-style "living backdrop": shows the static blurred [imageUrl] and, when
 /// [videoUrl] is supplied and enabled, crossfades to an audible, looping trailer in
@@ -117,6 +119,10 @@ class HeroTrailerBackdrop extends StatefulWidget {
   /// discipline, URL-change restarts — applies unchanged.
   final bool live;
 
+  /// Non-null for a muted collection tile: no intro skip, small texture, and
+  /// playback only while this token owns ambient video.
+  final Object? focusPreviewOwner;
+
   /// Headers to send with every media request — the IPTV preview passes the
   /// channel's own playback headers so a UA/Referer-guarded channel behaves
   /// exactly as it does in the real players. Null for trailer clips.
@@ -145,6 +151,7 @@ class HeroTrailerBackdrop extends StatefulWidget {
     this.ambientVolume = _defaultAmbientVolume,
     this.heroTag,
     this.live = false,
+    this.focusPreviewOwner,
     this.httpHeaders,
     this.engineFactory,
   });
@@ -253,6 +260,7 @@ class HeroTrailerBackdropState extends State<HeroTrailerBackdrop>
 
   bool get _canPlay =>
       widget.enabled &&
+      CollectionFocusPlayback.allows(widget.focusPreviewOwner) &&
       widget.videoUrl != null &&
       widget.videoUrl!.isNotEmpty &&
       !_reduceMotion &&
@@ -290,17 +298,23 @@ class HeroTrailerBackdropState extends State<HeroTrailerBackdrop>
       final underlayAtLaunch =
           await StorageService.getTvTrailerUnderlayEnabledAtLaunch();
       return ExoTrailerEngine(
-        maxHeight: _tvTrailerMaxHeight,
-        underlay: underlayAtLaunch && widget.videoBlurSigma <= 0,
+        maxHeight: widget.focusPreviewOwner != null ? 480 : _tvTrailerMaxHeight,
+        underlay:
+            widget.focusPreviewOwner == null &&
+            underlayAtLaunch &&
+            widget.videoBlurSigma <= 0,
       );
     }
-    return await MediaKitTrailerEngine.create();
+    return await MediaKitTrailerEngine.create(
+      reportPlaybackErrors: widget.focusPreviewOwner != null,
+    );
   }
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    CollectionFocusPlayback.owner.addListener(_onFocusPreviewChanged);
     MainPageBridge.addExternalPlayerLaunchListener(_onExternalPlayerLaunched);
     MainPageBridge.addPlayerLaunchListener(_onContentPlayerLaunching);
     _fg =
@@ -315,11 +329,22 @@ class HeroTrailerBackdropState extends State<HeroTrailerBackdrop>
     // before initState completes.
   }
 
+  void _onFocusPreviewChanged() {
+    if (!mounted) return;
+    if (!_canPlay) {
+      _teardownPlayer();
+    } else if (!_covered && !_appPaused && _engine == null) {
+      _scheduleStart();
+    }
+  }
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     final route = ModalRoute.of(context);
     if (route is PageRoute) appRouteObserver.subscribe(this, route);
+    _covered = route != null && !route.isCurrent;
+    if (!_canPlay) _teardownPlayer();
     // Handles the first-build-with-a-url case (e.g. a cached stream). The far
     // more common async-arrival case is handled by didUpdateWidget.
     if (_canPlay && _engine == null && _startTimer == null) _scheduleStart();
@@ -412,11 +437,29 @@ class HeroTrailerBackdropState extends State<HeroTrailerBackdrop>
     // on the far side of it. `_teardownPlayer` bumps the generation, which is
     // what tells an in-flight creation that its reason has gone.
     final gen = ++_engineGen;
-    final engine = await _createEngine();
+    TrailerEngine? created;
+    try {
+      created = await SerializedTrailerEngine.create(
+        _createEngine,
+        () =>
+            mounted &&
+            gen == _engineGen &&
+            !_covered &&
+            !_appPaused &&
+            _canPlay,
+      );
+    } catch (_) {
+      if (mounted && gen == _engineGen) _notifyPlaybackFailed();
+      return;
+    }
+    final engine = created;
+    if (engine == null) return;
     if (!mounted ||
         gen != _engineGen ||
         _engine != null ||
         _covered ||
+        _appPaused ||
+        !_canPlay ||
         widget.videoUrl != url) {
       // Nothing else knows this engine exists, so nothing else will dispose it
       // — and its lease would be stranded.
@@ -464,7 +507,10 @@ class HeroTrailerBackdropState extends State<HeroTrailerBackdrop>
       final dur = _duration;
       final longEnough =
           dur == Duration.zero || dur > const Duration(seconds: 8);
-      if (!widget.live && !widget.foreground && longEnough) {
+      if (widget.focusPreviewOwner == null &&
+          !widget.live &&
+          !widget.foreground &&
+          longEnough) {
         engine.seek(_introSkip);
       }
       setState(() => _videoVisible = true);
@@ -483,7 +529,8 @@ class HeroTrailerBackdropState extends State<HeroTrailerBackdrop>
     _posSub = engine.positionStream.listen((p) {
       // Loop restart (position wrapped back to the start) → skip the intro
       // again. Ambient only: never fight a manual scrub or foreground seek.
-      if (!widget.live &&
+      if (widget.focusPreviewOwner == null &&
+          !widget.live &&
           !widget.foreground &&
           !_scrubbing &&
           _lastPos > const Duration(seconds: 6) &&
@@ -799,7 +846,7 @@ class HeroTrailerBackdropState extends State<HeroTrailerBackdrop>
       _appPaused = true;
       // Release the hardware decoder on TV so the native fullscreen player can
       // claim it (see [_releaseDecoderWhenHidden]); pause/resume elsewhere.
-      if (_releaseDecoderWhenHidden) {
+      if (_releaseDecoderWhenHidden || widget.focusPreviewOwner != null) {
         _teardownPlayer();
       } else {
         _engine?.pause();
@@ -815,6 +862,7 @@ class HeroTrailerBackdropState extends State<HeroTrailerBackdrop>
   void dispose() {
     appRouteObserver.unsubscribe(this);
     WidgetsBinding.instance.removeObserver(this);
+    CollectionFocusPlayback.owner.removeListener(_onFocusPreviewChanged);
     MainPageBridge.removeExternalPlayerLaunchListener(
       _onExternalPlayerLaunched,
     );

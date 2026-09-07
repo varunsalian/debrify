@@ -16,6 +16,7 @@ import '../../utils/dominant_color.dart';
 import '../../utils/dialog_tap_guard.dart';
 import '../../utils/tv_keys.dart';
 import 'row_tag_pill.dart';
+import '../collections/collection_focus_glow.dart';
 import '../movie_watched_badge.dart';
 import '../../utils/platform_util.dart';
 import '../../utils/wide_touch_scale.dart';
@@ -64,6 +65,11 @@ class SpotlightCard {
   /// surfaces, or holds DPAD focus on television; resting cards never mount a
   /// player/decoder.
   final WidgetBuilder? previewBuilder;
+  final bool focusGlowEnabled;
+
+  /// Collection art also follows keyboard focus on desktop. Live IPTV keeps
+  /// its pointer-only desktop preview policy.
+  final bool previewOnKeyboardFocus;
 
   const SpotlightCard({
     required this.title,
@@ -77,6 +83,8 @@ class SpotlightCard {
     this.shape = SpotlightCardShape.poster,
     this.showCaption = true,
     this.previewBuilder,
+    this.focusGlowEnabled = false,
+    this.previewOnKeyboardFocus = false,
     this.watchedImdbId,
     this.watchedContentType,
   });
@@ -2377,10 +2385,14 @@ class _CardState extends State<_Card> {
   final Object _previewOwner = Object();
   bool _previewActivityReported = false;
 
+  bool get _previewActive => widget.dpad
+      ? _f
+      : _h || (widget.card.previewOnKeyboardFocus && _f);
+
   void _setHover(bool hovered) {
     if (_h == hovered) return;
     setState(() => _h = hovered);
-    _reportDesktopPreviewActivity(hovered);
+    _reportDesktopPreviewActivity(_previewActive);
   }
 
   void _reportDesktopPreviewActivity(bool active) {
@@ -2396,7 +2408,7 @@ class _CardState extends State<_Card> {
   void didUpdateWidget(_Card oldWidget) {
     super.didUpdateWidget(oldWidget);
     final shouldReport =
-        _h && !widget.dpad && widget.card.previewBuilder != null;
+        _previewActive && !widget.dpad && widget.card.previewBuilder != null;
     if (_previewActivityReported && !shouldReport) {
       _previewActivityReported = false;
       oldWidget.onDesktopPreviewActivityChanged?.call(_previewOwner, false);
@@ -2449,7 +2461,7 @@ class _CardState extends State<_Card> {
     // follows the remote cursor. The preview is unmounted immediately when it
     // stops being active, which tears its player down instead of leaving a
     // decoder alive for every card crossed while browsing.
-    final previewActive = widget.dpad ? _f : _h;
+    final previewActive = _previewActive;
 
     // The gradient remains part of the artwork so it covers and clips to the
     // whole poster as that poster grows. Only the glyph layer is counter-
@@ -2655,13 +2667,21 @@ class _CardState extends State<_Card> {
     // FocusExpressionBox: its parallax arm clips the glare at the theme's
     // scaled radius, and Spotlight's 0.7 shape scale would shrink the
     // shipped look's clip from 7 to 4.9.
-    final cursored = app.focus.expression == FocusExpression.parallax
+    final cursor = app.focus.expression == FocusExpression.parallax
         ? art
         : FocusExpressionBox(
             focused: _f || _h,
             radius: widget.radius,
             child: art,
           );
+
+    final cursored = CollectionFocusGlow(
+      active: _f || _h,
+      enabled: c.focusGlowEnabled,
+      imageUrl: c.image,
+      radius: widget.radius,
+      child: cursor,
+    );
 
     // Compact: art + its caption below, one Column — the caption is part of
     // the card so the tap target covers both. Keep the same metadata line as
@@ -2746,6 +2766,7 @@ class _CardState extends State<_Card> {
       skipTraversal: true,
       onFocusChange: (v) {
         setState(() => _f = v);
+        _reportDesktopPreviewActivity(_previewActive);
         if (!v) _hold.reset();
         if (v && context.findRenderObject() is RenderBox) {
           Scrollable.ensureVisible(

@@ -81,10 +81,10 @@ class MediaKitTrailerEngine implements TrailerEngine {
   /// Asynchronous because `VideoController`'s constructor IS the output
   /// creation, so the wait has to happen before construction rather than
   /// inside it. See [VideoOutputLease] for why a second one aborts the process.
-  static Future<MediaKitTrailerEngine> create() async {
+  static Future<MediaKitTrailerEngine> create({bool reportPlaybackErrors = false}) async {
     final lease = await VideoOutputLease.acquire(debugLabel: 'trailer');
     try {
-      return MediaKitTrailerEngine._(lease);
+      return MediaKitTrailerEngine._(lease, reportPlaybackErrors);
     } catch (_) {
       // A throw here would strand the slot forever, and nothing else knows the
       // handle exists yet.
@@ -93,7 +93,7 @@ class MediaKitTrailerEngine implements TrailerEngine {
     }
   }
 
-  MediaKitTrailerEngine._(this._lease) {
+  MediaKitTrailerEngine._(this._lease, this._reportPlaybackErrors) {
     // Idempotent; the main player also initializes it, but guard in case the
     // trailer is the first media_kit surface in this session.
     MediaKitInit.ensureInitialized();
@@ -102,6 +102,7 @@ class MediaKitTrailerEngine implements TrailerEngine {
   }
 
   final VideoOutputLeaseHandle _lease;
+  final bool _reportPlaybackErrors;
   late final mk.Player _player;
   late final mkv.VideoController _controller;
   bool _disposed = false;
@@ -115,10 +116,12 @@ class MediaKitTrailerEngine implements TrailerEngine {
   Stream<Duration> get positionStream => _player.stream.position;
   @override
   Stream<Duration> get durationStream => _player.stream.duration;
-  // media_kit surfaces open failures by throwing from open(); it has no
-  // separate post-first-frame error path (unchanged from the original).
+  // Decorative focus clips should fall back even on a mid-play network or
+  // decoder error. Keep the existing full-trailer policy for other callers.
   @override
-  Stream<void> get errorStream => const Stream<void>.empty();
+  Stream<void> get errorStream => _reportPlaybackErrors
+      ? _player.stream.error.map<void>((_) {})
+      : const Stream<void>.empty();
   @override
   Future<void> get firstFrameRendered =>
       _controller.waitUntilFirstFrameRendered;

@@ -85,6 +85,8 @@ void main() {
       expect(body, contains('_stageCardAspect(rail'));
       expect(body, contains('_stageCardArt(rail'));
       expect(body, contains('focusArtOf('));
+      expect(body, contains('focusVideoOf('));
+      expect(body, contains('focusGlowEnabled:'));
       expect(body, contains('hideTitle'));
     });
   }

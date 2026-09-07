@@ -1,3 +1,5 @@
+import '../widgets/collections/collection_focus_art.dart';
+import '../widgets/collections/collection_focus_glow.dart';
 import '../widgets/see_all/discover_browsing_input.dart';
 import '../services/home_catalog_refresh.dart';
 import '../services/home_load_deadline.dart';
@@ -7170,13 +7172,13 @@ class _SearchScreenState extends State<SearchScreen>
             SpotlightCard(
               image: m.poster,
               fallbackImage: m.background,
-              previewBuilder: section.focusArtOf(m) == null
+              focusGlowEnabled: section.collection.focusGlowEnabled,
+              previewOnKeyboardFocus: true,
+              previewBuilder: section.focusArtOf(m) == null && section.focusVideoOf(m) == null
                   ? null
-                  : (_) => CachedNetworkImage(
-                      imageUrl: section.focusArtOf(m)!,
-                      memCacheWidth: 640,
-                      errorWidget: (_, _, _) => const SizedBox.shrink(),
-                      fit: BoxFit.cover,
+                  : (_) => CollectionFocusArt(
+                      gifUrl: section.focusArtOf(m),
+                      videoUrl: section.focusVideoOf(m),
                     ),
               title: m.name,
               shape: section.tileAspectRatio == 1
@@ -8071,6 +8073,8 @@ class _SearchScreenState extends State<SearchScreen>
                                             aspectRatio: _stageCardAspect(rail),
                                             artUrl: _stageCardArt(rail, item),
                                             focusArtUrl: _stageCollection(rail)?.focusArtOf(item),
+                                            focusVideoUrl: _stageCollection(rail)?.focusVideoOf(item),
+                                            focusGlowEnabled: _stageCollection(rail)?.collection.focusGlowEnabled ?? false,
                                             showTitleOverlay: !(_stageCollection(rail)?.folderOf(item)?.hideTitle ?? false),
                                             progress: rail.cw?.progressOf(item),
                                             episodeLabel: rail.cw?.episodeOf(
@@ -8537,6 +8541,8 @@ class _SearchScreenState extends State<SearchScreen>
       aspectRatio: _stageCardAspect(rail, fallback: 16 / 9),
       artUrl: _stageCardArt(rail, item, wide: true),
       focusArtUrl: _stageCollection(rail)?.focusArtOf(item),
+      focusVideoUrl: _stageCollection(rail)?.focusVideoOf(item),
+      focusGlowEnabled: _stageCollection(rail)?.collection.focusGlowEnabled ?? false,
       showTitleOverlay: !(_stageCollection(rail)?.folderOf(item)?.hideTitle ?? false),
       restVeil: _kPromRestVeil,
       progress: rail.cw?.progressOf(item),
@@ -9019,6 +9025,8 @@ class _SearchScreenState extends State<SearchScreen>
                             aspectRatio: _stageCardAspect(rail),
                             artUrl: _stageCardArt(rail, items[col]),
                             focusArtUrl: _stageCollection(rail)?.focusArtOf(items[col]),
+                            focusVideoUrl: _stageCollection(rail)?.focusVideoOf(items[col]),
+                            focusGlowEnabled: _stageCollection(rail)?.collection.focusGlowEnabled ?? false,
                             showTitleOverlay: !(_stageCollection(rail)?.folderOf(items[col])?.hideTitle ?? false),
                             progress: rail.cw?.progressOf(items[col]),
                             episodeLabel: rail.cw?.episodeOf(items[col]),
@@ -9397,6 +9405,8 @@ class _SearchScreenState extends State<SearchScreen>
         aspectRatio: _stageCardAspect(rail),
         artUrl: _stageCardArt(rail, item),
         focusArtUrl: _stageCollection(rail)?.focusArtOf(item),
+        focusVideoUrl: _stageCollection(rail)?.focusVideoOf(item),
+        focusGlowEnabled: _stageCollection(rail)?.collection.focusGlowEnabled ?? false,
         showTitleOverlay: !(_stageCollection(rail)?.folderOf(item)?.hideTitle ?? false),
         hasBoundSource: _isBound(item),
         ringColor: Colors.white,
@@ -9823,6 +9833,8 @@ class _SearchScreenState extends State<SearchScreen>
       aspectRatio: _stageCardAspect(rail),
       artUrl: _stageCardArt(rail, item),
       focusArtUrl: _stageCollection(rail)?.focusArtOf(item),
+      focusVideoUrl: _stageCollection(rail)?.focusVideoOf(item),
+      focusGlowEnabled: _stageCollection(rail)?.collection.focusGlowEnabled ?? false,
       showTitleOverlay: !(_stageCollection(rail)?.folderOf(item)?.hideTitle ?? false),
       progress: rail.cw?.progressOf(item),
       episodeLabel: rail.cw?.episodeOf(item),
@@ -18999,6 +19011,8 @@ class _SearchScreenState extends State<SearchScreen>
                                 ? item.poster
                                 : _titleArtUrl(item),
                             focusArtUrl: collection?.focusArtOf(item),
+                            focusVideoUrl: collection?.focusVideoOf(item),
+                            focusGlowEnabled: collection?.collection.focusGlowEnabled ?? false,
                             showTitleOverlay: collection != null
                                 ? !(collection.folderOf(item)?.hideTitle ??
                                       false)

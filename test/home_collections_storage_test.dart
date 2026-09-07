@@ -21,6 +21,47 @@ void main() {
     SharedPreferences.setMockInitialValues({});
   });
   tearDown(ProfilePreferenceBudget.debugReset);
+  test(
+    'visual fields survive storage, visibility, reimport and backup restore',
+    () async {
+      final store = HomeCollectionsStore();
+      const original = HomeCollection(
+        id: 'effects',
+        title: 'Effects',
+        focusGlowEnabled: false,
+        folders: [
+          HomeCollectionFolder(
+            id: 'f',
+            title: 'F',
+            focusVideoUrl: 'https://example.test/focus.mp4',
+            focusVideoEnabled: false,
+          ),
+        ],
+      );
+      await store.importJson(jsonEncode(original.toJson()));
+      await store.setEnabled('effects', false);
+      await store.importJson(jsonEncode(original.toJson()));
+      final backup = await store.exportJson();
+      SharedPreferences.setMockInitialValues({});
+      await HomeCollectionsStore().applyBackup(backup);
+      final restored = (await HomeCollectionsStore().getCollections()).single;
+      expect(restored.enabled, isFalse);
+      expect(restored.focusGlowEnabled, isFalse);
+      expect(restored.folders.single.focusVideoEnabled, isFalse);
+      expect(
+        restored.folders.single.focusVideoUrl,
+        'https://example.test/focus.mp4',
+      );
+      expect(
+        HomeCollectionsStore.signatureOf([original]),
+        isNot(
+          HomeCollectionsStore.signatureOf([
+            const HomeCollection(id: 'effects', title: 'Effects'),
+          ]),
+        ),
+      );
+    },
+  );
   test('invalid sync order identities cannot enter storage', () async {
     final store = HomeCollectionsStore();
     for (final id in ['', 'bad\u0000id']) {

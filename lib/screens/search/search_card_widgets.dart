@@ -43,6 +43,8 @@ class _StremioCard extends StatefulWidget {
   /// hovered (collection folder tiles). At most one card is active, so at
   /// most one GIF decodes at a time.
   final String? focusArtUrl;
+  final String? focusVideoUrl;
+  final bool focusGlowEnabled;
 
   /// Whether the card may paint local title text, either on a landscape
   /// artwork overlay or inside a loading/missing-art placeholder. Home can
@@ -68,6 +70,8 @@ class _StremioCard extends StatefulWidget {
     this.aspectRatio = 2 / 3,
     this.artUrl,
     this.focusArtUrl,
+    this.focusVideoUrl,
+    this.focusGlowEnabled = false,
     this.showTitleOverlay = true,
     this.restVeil,
   });
@@ -170,15 +174,12 @@ class _StremioCardState extends State<_StremioCard>
         )
       else
         _placeholder(item.name),
-      if (widget.focusArtUrl != null && _active)
+      if (_active &&
+          (widget.focusArtUrl != null || widget.focusVideoUrl != null))
         Positioned.fill(
-          child: CachedNetworkImage(
-            imageUrl: widget.focusArtUrl!,
-            memCacheWidth: 640,
-            fit: BoxFit.cover,
-            fadeInDuration: HomeTheme.imageFadeIn(widget.isTelevision),
-            fadeOutDuration: Duration.zero,
-            errorWidget: (_, __, ___) => const SizedBox.shrink(),
+          child: CollectionFocusArt(
+            gifUrl: widget.focusArtUrl,
+            videoUrl: widget.focusVideoUrl,
           ),
         ),
       // A landscape still rarely carries its title the way poster art does,
@@ -297,13 +298,18 @@ class _StremioCardState extends State<_StremioCard>
       if (_holding) _holdLayer(),
     ];
 
-    final posterCard = CardFocusRise(
+    final posterCard = CollectionFocusGlow(
       active: _active,
-      isTelevision: widget.isTelevision,
-      ringColor: widget.ringColor,
-      aspectRatio: widget.aspectRatio,
-      restVeil: widget.restVeil,
-      children: layers,
+      enabled: widget.focusGlowEnabled,
+      imageUrl: poster,
+      child: CardFocusRise(
+        active: _active,
+        isTelevision: widget.isTelevision,
+        ringColor: widget.ringColor,
+        aspectRatio: widget.aspectRatio,
+        restVeil: widget.restVeil,
+        children: layers,
+      ),
     );
 
     return Focus(

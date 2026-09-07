@@ -42,6 +42,18 @@ class HomeCollectionSection extends CatalogSection {
   /// The folder's animated focus art for [item], when the file carries one.
   String? focusArtOf(StremioMeta item) => folderOf(item)?.focusGifUrl;
 
+  String? focusVideoOf(StremioMeta item) {
+    final folder = folderOf(item);
+    if (folder == null || !folder.focusVideoEnabled) return null;
+    final url = folder.focusVideoUrl;
+    final uri = url == null ? null : Uri.tryParse(url);
+    return uri != null &&
+            (uri.scheme == 'https' || uri.scheme == 'http') &&
+            uri.host.isNotEmpty
+        ? url
+        : null;
+  }
+
   HomeCollectionFolder? folderOf(StremioMeta item) {
     final i = folderIndexOf(item);
     return i < 0 ? null : collection.folders[i];
