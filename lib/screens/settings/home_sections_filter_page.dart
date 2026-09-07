@@ -171,9 +171,11 @@ class _HomeSectionsFilterPageState extends State<HomeSectionsFilterPage> {
       anchors: const ['simkl:movies', 'simkl:shows'],
     );
     _orderIds = HomeRowOrder.reconcile(
-      HomeRowOrder.seedPinned(seededOrder, [
+      HomeRowOrder.seedCollections(seededOrder, [
         for (final c in widget.collections)
           if (c.pinToTop) HomeCollectionRowIds.collection(c.id),
+        for (final c in widget.collections)
+          if (!c.pinToTop) HomeCollectionRowIds.collection(c.id),
       ]),
       _canonicalOrderIds(),
     );
@@ -450,8 +452,7 @@ class _HomeSectionsFilterPageState extends State<HomeSectionsFilterPage> {
         if (HomeExtraRowIds.isTracker(item.id)) add(item.id);
       }
     }
-    // Collection rows follow the tracker lists and lead the addon catalogs,
-    // matching the board's placement of unpinned collections.
+    // Gather the remaining collections; defaults groups them after CW.
     for (final group in _groups) {
       for (final item in group.items) {
         if (HomeCollectionRowIds.isCollection(item.id)) add(item.id);
@@ -464,7 +465,7 @@ class _HomeSectionsFilterPageState extends State<HomeSectionsFilterPage> {
         if (item.arrangeable) add(item.id);
       }
     }
-    return out;
+    return HomeRowOrder.defaults(out, (id) => id);
   }
 
   List<_ArrangeEntry> get _arrangeEntries {

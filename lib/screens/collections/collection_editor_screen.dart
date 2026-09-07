@@ -85,7 +85,7 @@ class _CollectionEditorScreenState extends State<CollectionEditorScreen> {
               'TABBED_GRID': 'Tabs',
               'FOLLOW_LAYOUT': 'Rows',
             }),
-            _toggle(_draft, 'pinToTop', 'Pin to top', false),
+            _toggle(_draft, 'pinToTop', 'Prioritize among collections', false),
             _toggle(_draft, 'focusGlowEnabled', 'Focus glow', true),
             _toggle(_draft, 'showAllTab', 'Show merged All view', true),
             const SizedBox(height: 20),

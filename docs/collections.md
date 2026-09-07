@@ -103,10 +103,11 @@ Field notes:
   The active preview temporarily suspends other ambient trailers, and native
   disposal finishes before the next ambient decoder is created. Android TV
   tiles use a 480px-high texture to support clipping and focus transforms.
-- `pinToTop`: a newly imported row leads the Home board, including when a
-  saved Home Rows order already exists; otherwise collection rows sit
-  after the tracker list rows and before addon catalog rows. Rows can be
-  re-arranged or hidden under **Home Screen → Home Rows** like any other row
+- Home defaults to all Continue Watching rows, then collections, then other
+  rows. `pinToTop` prioritizes a collection within the collection family.
+  Newly imported collections enter after the saved Continue Watching rows.
+  Existing manual positions remain authoritative. Re-arrange or hide each
+  collection under **Home Screen → Home Rows → Arrange**
   (row id `collection:<id>`).
 - `showAllTab`: the folder browser offers an "All" view merging every list.
 - Records without an `id` get a stable one derived from their title, so

@@ -428,7 +428,7 @@ class _CollectionsSettingsPageState extends State<CollectionsSettingsPage> {
     final parts = [
       '$folders folder${folders == 1 ? '' : 's'}',
       '$sources source${sources == 1 ? '' : 's'}',
-      if (c.pinToTop) 'pinned to top',
+      if (c.pinToTop) 'prioritized among collections',
       if (!c.enabled) 'hidden',
     ];
     return parts.join(' · ');

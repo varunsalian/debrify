@@ -1365,7 +1365,7 @@ class _SearchScreenState extends State<SearchScreen>
   /// CW ids. Seed those new ids after the Simkl CW family instead of allowing
   /// the generic ordering projection to append them at the bottom. Any MDBList
   /// id already saved keeps its chosen position untouched.
-  List<String> get _effectiveHomeRowOrder => HomeRowOrder.seedPinned(
+  List<String> get _effectiveHomeRowOrder => HomeRowOrder.seedCollections(
     HomeRowOrder.insertMissingAfter(
       _homeRowOrder,
       additions: const ['mdblist:movies', 'mdblist:shows'],
@@ -1374,6 +1374,8 @@ class _SearchScreenState extends State<SearchScreen>
     [
       for (final c in _homeCollections)
         if (c.pinToTop) HomeCollectionRowIds.collection(c.id),
+      for (final c in _homeCollections)
+        if (!c.pinToTop) HomeCollectionRowIds.collection(c.id),
     ],
   );
 
@@ -2750,9 +2752,8 @@ class _SearchScreenState extends State<SearchScreen>
           if (!mounted || gen != _boardLoadGen) return;
           // List rows lead the sections — after the favourites rows, before every
           // addon catalog row. Batching appends after them untouched.
-          // Imported collections follow Nuvio's order: pinned ones lead the
-          // board, the rest sit after the tracker list rows and before every
-          // addon catalog row. No network — folders are static tiles.
+          // Pinned collections lead their family. The shared Home ordering
+          // places that family after Continue Watching. Folders are static tiles.
           final collectionRows = widget.searchMode || widget.discoverMode
               ? const <HomeCollectionSection>[]
               : _buildCollectionSections();
@@ -7562,12 +7563,7 @@ class _SearchScreenState extends State<SearchScreen>
       if (_sections[i].items.isEmpty || i >= _rowNodes.length) continue;
       rails.add(_CanvasRail(sectionIndex: i));
     }
-    return [
-      for (final rail in rails)
-        if (_stageCollection(rail)?.collection.pinToTop ?? false) rail,
-      for (final rail in rails)
-        if (!(_stageCollection(rail)?.collection.pinToTop ?? false)) rail,
-    ];
+    return HomeRowOrder.defaults(rails, _canvasRailRowId);
   }
 
   /// The canonical rails, globally sorted by the user's saved row ids.
@@ -7597,8 +7593,7 @@ class _SearchScreenState extends State<SearchScreen>
       rails = HomeRowOrder.insertAfterLeadingRun(
         rails,
         skeletons,
-        (rail) => rail.cw != null ||
-            (_stageCollection(rail)?.collection.pinToTop ?? false),
+        (rail) => rail.cw != null,
       );
     }
     return _homeRowOrderActive

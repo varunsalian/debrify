@@ -59,19 +59,49 @@ class HomeRowOrder {
     return out;
   }
 
-  /// New pinned rows lead an existing order. Once saved, an explicit manual
-  /// position wins, so arranging a pinned collection remains possible.
-  static List<String> seedPinned(
+  static const continueWatchingIds = [
+    'cw:movies',
+    'cw:series',
+    'trakt:movies',
+    'trakt:shows',
+    'simkl:movies',
+    'simkl:shows',
+    'mdblist:movies',
+    'mdblist:shows',
+    'iptv:movies',
+    'iptv:series',
+  ];
+
+  /// Keep the existing order within each family. Callers may put imported
+  /// pinned collections first within the collection family.
+  static List<T> defaults<T>(Iterable<T> rows, String Function(T) idOf) {
+    final values = rows.toList();
+    bool cw(T row) => continueWatchingIds.contains(idOf(row));
+    bool collection(T row) => idOf(row).startsWith('collection:');
+    return [
+      ...values.where(cw),
+      ...values.where((row) => !cw(row) && collection(row)),
+      ...values.where((row) => !cw(row) && !collection(row)),
+    ];
+  }
+
+  /// Newly imported collections inherit the slot after Continue Watching.
+  /// Existing saved positions (including unavailable rows) remain untouched.
+  /// An empty preference uses the complete canonical order at render time.
+  static List<String> seedCollections(
     Iterable<String> saved,
-    Iterable<String> pinned,
+    Iterable<String> collections,
   ) {
     final order = normalize(saved);
+    if (order.isEmpty) return order;
     final known = order.toSet();
-    return normalize([
-      for (final id in pinned)
-        if (!known.contains(id)) id,
-      ...order,
-    ]);
+    final missing = normalize(collections).where((id) => !known.contains(id));
+    var insertion = 0;
+    for (var i = 0; i < order.length; i++) {
+      if (continueWatchingIds.contains(order[i])) insertion = i + 1;
+    }
+    order.insertAll(insertion, missing);
+    return order;
   }
 
   /// Sort [values] by the saved ids. Unranked values append stably.

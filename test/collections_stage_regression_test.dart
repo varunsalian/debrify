@@ -51,18 +51,26 @@ void main() {
     );
   });
 
-  test('new pins lead saved rows and saved manual positions survive', () {
+  test('new collections follow CW and saved manual positions survive', () {
     const saved = ['cw:movies', 'traktlist:watchlist', 'collection:old'];
-    final seeded = HomeRowOrder.seedPinned(saved, [
+    final seeded = HomeRowOrder.seedCollections(saved, [
       'collection:new',
       'collection:old',
     ]);
-    expect(seeded, ['collection:new', ...saved]);
+    expect(seeded, [
+      'cw:movies',
+      'collection:new',
+      'traktlist:watchlist',
+      'collection:old',
+    ]);
     expect(
-      HomeRowOrder.seedPinned(seeded, ['collection:new', 'collection:old']),
+      HomeRowOrder.seedCollections(seeded, [
+        'collection:new',
+        'collection:old',
+      ]),
       seeded,
     );
-    expect(HomeRowOrder.seedPinned([], ['collection:new']), ['collection:new']);
+    expect(HomeRowOrder.seedCollections([], ['collection:new']), isEmpty);
   });
 
   // The stage layouts are private parts of SearchScreen. These wiring guards
