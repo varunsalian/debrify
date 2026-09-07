@@ -12,6 +12,7 @@ import '../../models/torbox_web_download.dart';
 import '../../models/rd_file_node.dart';
 import '../../services/analytics_service.dart';
 import '../../services/cloud/cloud_folder_sort.dart';
+import '../../services/cloud/cloud_search_query.dart';
 import '../../services/series_source_service.dart';
 import '../../services/torbox_service.dart';
 import '../../services/video_player_launcher.dart';
@@ -27,13 +28,17 @@ import '../../utils/series_parser.dart';
 import '../../utils/torbox_folder_tree_builder.dart';
 import '../../widgets/cloud/cloud_file_row.dart';
 import '../../widgets/cloud/cloud_row_skeleton.dart';
+import '../../widgets/cloud/cloud_search_bar.dart';
+import '../../widgets/cloud/cloud_search_result_card.dart';
 import '../../widgets/cloud/cloud_segmented_tabs.dart';
+import '../../widgets/cloud/cloud_selection_bar.dart';
 import '../../widgets/cloud/cloud_theme.dart';
+import '../../widgets/cloud/cloud_torrent_search_bar.dart';
+import '../../widgets/cloud/cloud_view_mode_dropdown.dart';
 import '../../widgets/file_selection_dialog.dart';
 import '../../widgets/tv_text_field.dart';
 import '../video_player_screen.dart';
 import '../../utils/platform_util.dart';
-import '../../utils/tv_keys.dart';
 import '../../utils/tv_search_focus_handoff.dart';
 import '../cloud_files/cloud_files_opening_splash.dart';
 import '../cloud_files/cloud_files_screen.dart';
@@ -130,8 +135,6 @@ class TorboxCloudFilesHost extends StatefulWidget {
   State<TorboxCloudFilesHost> createState() => _TorboxDownloadsScreenState();
 }
 
-enum _FolderViewMode { raw, sortedAZ, seriesArrange }
-
 enum _TorboxDownloadsView { torrents, webDownloads }
 
 class _TorboxDownloadsScreenState extends State<TorboxCloudFilesHost> {
@@ -184,8 +187,8 @@ class _TorboxDownloadsScreenState extends State<TorboxCloudFilesHost> {
   _navigationStack = [];
 
   // View mode state
-  final Map<int, _FolderViewMode> _torrentViewModes = {};
-  final Map<int, _FolderViewMode> _webDownloadViewModes = {};
+  final Map<int, CloudFolderViewMode> _torrentViewModes = {};
+  final Map<int, CloudFolderViewMode> _webDownloadViewModes = {};
   List<RDFileNode>? _currentViewNodes;
 
   // Focus nodes for TV/DPAD navigation
@@ -5169,19 +5172,19 @@ class _TorboxDownloadsScreenState extends State<TorboxCloudFilesHost> {
     print('   Tree built: root has ${tree.children.length} children');
 
     // Initialize view mode for this torrent if not already set
-    _torrentViewModes.putIfAbsent(torrent.id, () => _FolderViewMode.raw);
+    _torrentViewModes.putIfAbsent(torrent.id, () => CloudFolderViewMode.raw);
 
     // Apply view mode transformation to root nodes
     final mode = _torrentViewModes[torrent.id]!;
     List<RDFileNode> transformedNodes;
     switch (mode) {
-      case _FolderViewMode.raw:
+      case CloudFolderViewMode.raw:
         transformedNodes = tree.children;
         break;
-      case _FolderViewMode.sortedAZ:
+      case CloudFolderViewMode.sortedAZ:
         transformedNodes = CloudFolderSort.sortedView(tree.children);
         break;
-      case _FolderViewMode.seriesArrange:
+      case CloudFolderViewMode.seriesArrange:
         transformedNodes = _applySeriesArrangedView(tree.children);
         break;
     }
@@ -5220,20 +5223,20 @@ class _TorboxDownloadsScreenState extends State<TorboxCloudFilesHost> {
     // Initialize view mode for this web download if not already set
     _webDownloadViewModes.putIfAbsent(
       webDownload.id,
-      () => _FolderViewMode.raw,
+      () => CloudFolderViewMode.raw,
     );
 
     // Apply view mode transformation to root nodes
     final mode = _webDownloadViewModes[webDownload.id]!;
     List<RDFileNode> transformedNodes;
     switch (mode) {
-      case _FolderViewMode.raw:
+      case CloudFolderViewMode.raw:
         transformedNodes = tree.children;
         break;
-      case _FolderViewMode.sortedAZ:
+      case CloudFolderViewMode.sortedAZ:
         transformedNodes = CloudFolderSort.sortedView(tree.children);
         break;
-      case _FolderViewMode.seriesArrange:
+      case CloudFolderViewMode.seriesArrange:
         transformedNodes = _applySeriesArrangedView(tree.children);
         break;
     }
@@ -5274,13 +5277,13 @@ class _TorboxDownloadsScreenState extends State<TorboxCloudFilesHost> {
     List<RDFileNode> transformedChildren;
 
     switch (mode) {
-      case _FolderViewMode.raw:
+      case CloudFolderViewMode.raw:
         transformedChildren = folderNode.children;
         break;
-      case _FolderViewMode.sortedAZ:
+      case CloudFolderViewMode.sortedAZ:
         transformedChildren = CloudFolderSort.sortedView(folderNode.children);
         break;
-      case _FolderViewMode.seriesArrange:
+      case CloudFolderViewMode.seriesArrange:
         // Inside a folder with Series Arrange mode: show files sorted by name
         transformedChildren = CloudFolderSort.sortedView(folderNode.children);
         break;
@@ -5337,30 +5340,30 @@ class _TorboxDownloadsScreenState extends State<TorboxCloudFilesHost> {
     List<RDFileNode>? transformedNodes;
     if (previous.node != null &&
         (previous.torrent != null || previous.webDownload != null)) {
-      _FolderViewMode mode;
+      CloudFolderViewMode mode;
       if (previous.torrent != null) {
-        mode = _torrentViewModes[previous.torrent!.id] ?? _FolderViewMode.raw;
+        mode = _torrentViewModes[previous.torrent!.id] ?? CloudFolderViewMode.raw;
       } else {
         mode =
             _webDownloadViewModes[previous.webDownload!.id] ??
-            _FolderViewMode.raw;
+            CloudFolderViewMode.raw;
       }
       final rawNodes = previous.node!.children;
 
       // Apply view mode transformation
       // NOTE: Series Arrange only applies at root level
-      if (mode == _FolderViewMode.seriesArrange && previous.path.isNotEmpty) {
+      if (mode == CloudFolderViewMode.seriesArrange && previous.path.isNotEmpty) {
         // Still inside a folder after going up - use sorted view
         transformedNodes = CloudFolderSort.sortedView(rawNodes);
       } else {
         switch (mode) {
-          case _FolderViewMode.raw:
+          case CloudFolderViewMode.raw:
             transformedNodes = rawNodes;
             break;
-          case _FolderViewMode.sortedAZ:
+          case CloudFolderViewMode.sortedAZ:
             transformedNodes = CloudFolderSort.sortedView(rawNodes);
             break;
-          case _FolderViewMode.seriesArrange:
+          case CloudFolderViewMode.seriesArrange:
             transformedNodes = _applySeriesArrangedView(rawNodes);
             break;
         }
@@ -5487,19 +5490,19 @@ class _TorboxDownloadsScreenState extends State<TorboxCloudFilesHost> {
   }
 
   /// Get current view mode for active torrent/web download
-  _FolderViewMode _getCurrentViewMode() {
+  CloudFolderViewMode _getCurrentViewMode() {
     if (_currentTorrent != null) {
-      return _torrentViewModes[_currentTorrent!.id] ?? _FolderViewMode.raw;
+      return _torrentViewModes[_currentTorrent!.id] ?? CloudFolderViewMode.raw;
     }
     if (_currentWebDownload != null) {
       return _webDownloadViewModes[_currentWebDownload!.id] ??
-          _FolderViewMode.raw;
+          CloudFolderViewMode.raw;
     }
-    return _FolderViewMode.raw;
+    return CloudFolderViewMode.raw;
   }
 
   /// Set view mode and refresh display
-  void _setViewMode(_FolderViewMode mode) {
+  void _setViewMode(CloudFolderViewMode mode) {
     if ((_currentTorrent == null && _currentWebDownload == null) ||
         _currentFolderNode == null) {
       return;
@@ -5546,7 +5549,7 @@ class _TorboxDownloadsScreenState extends State<TorboxCloudFilesHost> {
     }
 
     // If user selected Series Arrange, detect if content is actually a series
-    if (mode == _FolderViewMode.seriesArrange) {
+    if (mode == CloudFolderViewMode.seriesArrange) {
       final isSeries = _detectSeriesPattern(rawNodes);
 
       if (!isSeries) {
@@ -5565,10 +5568,10 @@ class _TorboxDownloadsScreenState extends State<TorboxCloudFilesHost> {
         // Switch to sorted view instead
         setState(() {
           if (_currentTorrent != null) {
-            _torrentViewModes[_currentTorrent!.id] = _FolderViewMode.sortedAZ;
+            _torrentViewModes[_currentTorrent!.id] = CloudFolderViewMode.sortedAZ;
           } else if (_currentWebDownload != null) {
             _webDownloadViewModes[_currentWebDownload!.id] =
-                _FolderViewMode.sortedAZ;
+                CloudFolderViewMode.sortedAZ;
           }
           _currentViewNodes = CloudFolderSort.sortedView(rawNodes);
         });
@@ -5585,83 +5588,17 @@ class _TorboxDownloadsScreenState extends State<TorboxCloudFilesHost> {
       }
 
       switch (mode) {
-        case _FolderViewMode.raw:
+        case CloudFolderViewMode.raw:
           _currentViewNodes = rawNodes;
           break;
-        case _FolderViewMode.sortedAZ:
+        case CloudFolderViewMode.sortedAZ:
           _currentViewNodes = CloudFolderSort.sortedView(rawNodes);
           break;
-        case _FolderViewMode.seriesArrange:
+        case CloudFolderViewMode.seriesArrange:
           _currentViewNodes = _applySeriesArrangedView(rawNodes);
           break;
       }
     });
-  }
-
-  Widget _buildViewModeDropdown() {
-    final theme = Theme.of(context);
-    final mode = _getCurrentViewMode();
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
-        border: Border(
-          bottom: BorderSide(
-            color: theme.dividerColor.withValues(alpha: 0.1),
-            width: 1,
-          ),
-        ),
-      ),
-      child: Focus(
-        skipTraversal: true,
-        onKeyEvent: (node, event) {
-          // Navigate to back button on up arrow
-          if (event is KeyDownEvent &&
-              event.logicalKey == LogicalKeyboardKey.arrowUp) {
-            _backButtonFocusNode.requestFocus();
-            return KeyEventResult.handled;
-          }
-          return KeyEventResult.ignored;
-        },
-        child: DropdownButtonFormField<_FolderViewMode>(
-          focusNode: _viewModeDropdownFocusNode,
-          autofocus: true,
-          isExpanded: true,
-          value: mode,
-          decoration: InputDecoration(
-            labelText: 'View Mode',
-            prefixIcon: Icon(
-              mode == _FolderViewMode.raw
-                  ? Icons.view_list
-                  : mode == _FolderViewMode.sortedAZ
-                  ? Icons.sort_by_alpha
-                  : Icons.video_library,
-              color: theme.colorScheme.primary,
-            ),
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-            filled: true,
-            fillColor: theme.colorScheme.surfaceContainerHighest.withValues(
-              alpha: 0.3,
-            ),
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: 12,
-              vertical: 12,
-            ),
-          ),
-          items: const [
-            DropdownMenuItem(value: _FolderViewMode.raw, child: Text('Raw')),
-            DropdownMenuItem(
-              value: _FolderViewMode.sortedAZ,
-              child: Text('Sort (A-Z)'),
-            ),
-          ],
-          onChanged: (value) {
-            if (value != null) _setViewMode(value);
-          },
-        ),
-      ),
-    );
   }
 
   // ============ Torrent-Level Search Methods ============
@@ -5682,24 +5619,6 @@ class _TorboxDownloadsScreenState extends State<TorboxCloudFilesHost> {
     });
   }
 
-  bool _queryMatchesInitialTitle(String query) {
-    final title = widget.initialSearchQuery;
-    if (title == null || title.isEmpty) return true;
-    const stopwords = {'the', 'a', 'an'};
-    final rawTokens = title
-        .toLowerCase()
-        .split(RegExp(r'[^a-z0-9]+'))
-        .where((t) => t.isNotEmpty)
-        .toList();
-    final filtered = rawTokens
-        .where((t) => !stopwords.contains(t) && t.length >= 2)
-        .toList();
-    final effectiveTokens = filtered.isEmpty ? rawTokens : filtered;
-    if (effectiveTokens.isEmpty) return true;
-    final normalizedQuery = query.toLowerCase();
-    return effectiveTokens.any((t) => normalizedQuery.contains(t));
-  }
-
   void _submitTorrentSearch() {
     final query = _torrentSearchController.text.trim();
     if (query.isEmpty) {
@@ -5708,7 +5627,7 @@ class _TorboxDownloadsScreenState extends State<TorboxCloudFilesHost> {
     }
     if (widget.selectSourceMode &&
         _hiddenFromNav &&
-        !_queryMatchesInitialTitle(query)) {
+        !queryMatchesInitialTitle(query, widget.initialSearchQuery)) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
@@ -5860,102 +5779,6 @@ class _TorboxDownloadsScreenState extends State<TorboxCloudFilesHost> {
     setState(() => _searchResults = results);
   }
 
-  /// Build the search bar widget
-  Widget _buildSearchBar() {
-    final app = AppThemeScope.of(context);
-    final hasText = _searchController.text.isNotEmpty;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-      child: Row(
-        children: [
-          Expanded(
-            child: TvTextField(
-              controller: _searchController,
-              focusNode: _searchFocusNode,
-              textInputAction: TextInputAction.search,
-              // D-pad exits for Android TV (formerly a Focus/onKeyEvent wrapper)
-              onUpArrow: () => _searchFocusNode.unfocus(),
-              onDownArrow: () => _searchFocusNode.unfocus(),
-              onRightArrow: hasText
-                  ? () => _searchClearFocusNode.requestFocus()
-                  : null,
-              decoration: InputDecoration(
-                hintText: 'Search all files...',
-                prefixIcon: const Icon(Icons.search, color: Colors.grey),
-                filled: true,
-                fillColor: app.fade(app.core.tx, 0.06),
-                border: OutlineInputBorder(
-                  borderRadius: app.shape.br(8),
-                  borderSide: BorderSide.none,
-                ),
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 12,
-                ),
-              ),
-              onChanged: _performSearch,
-              onSubmitted: (_) => _searchFocusNode.unfocus(),
-            ),
-          ),
-          // Clear button - separate focusable widget for D-pad navigation
-          if (hasText)
-            Padding(
-              padding: const EdgeInsets.only(left: 8),
-              child: Focus(
-                focusNode: _searchClearFocusNode,
-                onKeyEvent: (node, event) {
-                  if (event is! KeyDownEvent) return KeyEventResult.ignored;
-                  final key = event.logicalKey;
-
-                  // Select/Enter: clear search
-                  if (isActivateKey(key)) {
-                    setState(() {
-                      _searchController.clear();
-                      _searchResults.clear();
-                    });
-                    _searchFocusNode.requestFocus();
-                    return KeyEventResult.handled;
-                  }
-
-                  // Arrow Left: go back to TextField
-                  if (key == LogicalKeyboardKey.arrowLeft) {
-                    _searchFocusNode.requestFocus();
-                    return KeyEventResult.handled;
-                  }
-
-                  return KeyEventResult.ignored;
-                },
-                child: Builder(
-                  builder: (context) {
-                    final isFocused = Focus.of(context).hasFocus;
-                    return Container(
-                      decoration: BoxDecoration(
-                        color: app.fade(app.core.tx, 0.06),
-                        borderRadius: app.shape.br(8),
-                        border: isFocused
-                            ? Border.all(color: app.core.tx, width: 2)
-                            : null,
-                      ),
-                      child: IconButton(
-                        icon: const Icon(Icons.clear, color: Colors.grey),
-                        onPressed: () {
-                          setState(() {
-                            _searchController.clear();
-                            _searchResults.clear();
-                          });
-                          _searchFocusNode.requestFocus();
-                        },
-                      ),
-                    );
-                  },
-                ),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-
   /// Build search results list
   Widget _buildSearchResults() {
     if (_searchController.text.isEmpty) {
@@ -5978,82 +5801,12 @@ class _TorboxDownloadsScreenState extends State<TorboxCloudFilesHost> {
       itemCount: _searchResults.length,
       itemBuilder: (context, index) {
         final result = _searchResults[index];
-        return _buildSearchResultCard(result);
+        return CloudSearchResultCard(
+          node: result.node,
+          path: result.path,
+          onTap: () => _playVideoFile(result.node),
+        );
       },
-    );
-  }
-
-  /// Build a card for a search result
-  Widget _buildSearchResultCard(_TorboxSearchResult result) {
-    final node = result.node;
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFF1F2A44), Color(0xFF111C32)],
-        ),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(
-          color: Colors.white.withValues(alpha: 0.08),
-          width: 1.2,
-        ),
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(18),
-          onTap: () => _playVideoFile(node),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              children: [
-                const Icon(
-                  Icons.play_circle_outline,
-                  color: Colors.blue,
-                  size: 32,
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        node.name,
-                        style: const TextStyle(fontWeight: FontWeight.w500),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      if (result.path.isNotEmpty) ...[
-                        const SizedBox(height: 4),
-                        Text(
-                          result.path,
-                          style: TextStyle(
-                            color: Colors.grey[500],
-                            fontSize: 12,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ],
-                      if (node.bytes != null)
-                        Text(
-                          Formatters.formatFileSize(node.bytes!),
-                          style: TextStyle(
-                            color: Colors.grey[400],
-                            fontSize: 12,
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
     );
   }
 
@@ -6086,8 +5839,9 @@ class _TorboxDownloadsScreenState extends State<TorboxCloudFilesHost> {
     }
 
     final currentMode = _getCurrentViewMode();
+    final app = AppThemeScope.of(context);
     final showSearch =
-        !_isAtRoot && currentMode != _FolderViewMode.seriesArrange;
+        !_isAtRoot && currentMode != CloudFolderViewMode.seriesArrange;
 
     return CloudScaffold(
       appBar: _isAtRoot
@@ -6138,10 +5892,43 @@ class _TorboxDownloadsScreenState extends State<TorboxCloudFilesHost> {
           const SizedBox(height: 8),
           if (_isAtRoot && !widget.selectSourceMode) _buildToolbar(),
           if (_isAtRoot) _buildViewSelectorBar(),
-          if (_isAtRoot && _isTorrentSearchActive) _buildTorrentSearchBar(),
-          if (_isAtRoot && _isSelectionMode) _buildSelectionBar(),
-          if (!_isAtRoot) _buildViewModeDropdown(),
-          if (_isSearchActive && showSearch) _buildSearchBar(),
+          if (_isAtRoot && _isTorrentSearchActive)
+            CloudTorrentSearchBar(
+              controller: _torrentSearchController,
+              focusNode: _torrentSearchFocusNode,
+              clearFocusNode: _torrentSearchClearFocusNode,
+              onCancelPendingSubmit: _torrentSearchSubmitFocus.cancel,
+              onSubmit: _submitTorrentSearch,
+              onQueryCleared: () => setState(() => _torrentSearchQuery = ''),
+            ),
+          if (_isAtRoot && _isSelectionMode)
+            CloudSelectionBar(
+              selectedCount: _activeSelectedIds.length,
+              isAllSelected: _isAllSelected,
+              onToggleSelectAll: _toggleSelectAll,
+              onDeleteSelected: _handleDeleteSelected,
+              deleteButtonFocusNode: _deleteButtonFocusNode,
+            ),
+          if (!_isAtRoot)
+            CloudViewModeDropdown(
+              mode: currentMode,
+              dropdownFocusNode: _viewModeDropdownFocusNode,
+              backButtonFocusNode: _backButtonFocusNode,
+              onChanged: _setViewMode,
+            ),
+          if (_isSearchActive && showSearch)
+            CloudSearchBar(
+              controller: _searchController,
+              focusNode: _searchFocusNode,
+              clearFocusNode: _searchClearFocusNode,
+              onChanged: _performSearch,
+              onClear: () => setState(() {
+                _searchController.clear();
+                _searchResults.clear();
+              }),
+              clearButtonFill: app.fade(app.core.tx, 0.06),
+              clearButtonFocusRing: app.core.tx,
+            ),
           Expanded(
             child: _isTorrentSearchActive && _isAtRoot
                 ? _buildTorrentSearchResults()
@@ -6610,153 +6397,6 @@ class _TorboxDownloadsScreenState extends State<TorboxCloudFilesHost> {
             }
           });
         },
-      ),
-    );
-  }
-
-  Widget _buildSelectionBar() {
-    final app = AppThemeScope.of(context);
-    final theme = Theme.of(context);
-    final count = _activeSelectedIds.length;
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.primary.withValues(alpha: 0.1),
-        borderRadius: app.shape.br(12),
-        border: Border.all(
-          color: theme.colorScheme.primary.withValues(alpha: 0.3),
-        ),
-      ),
-      child: Row(
-        children: [
-          Text(
-            '$count selected',
-            style: TextStyle(
-              color: theme.colorScheme.onSurface,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const Spacer(),
-          TextButton(
-            onPressed: _toggleSelectAll,
-            child: Text(_isAllSelected ? 'Deselect All' : 'Select All'),
-          ),
-          const SizedBox(width: 8),
-          FilledButton.icon(
-            focusNode: _deleteButtonFocusNode,
-            onPressed: count > 0 ? _handleDeleteSelected : null,
-            icon: const Icon(Icons.delete_outline, size: 18),
-            label: const Text('Delete'),
-            style:
-                FilledButton.styleFrom(
-                  backgroundColor: theme.colorScheme.error,
-                  disabledBackgroundColor: theme.colorScheme.error.withValues(
-                    alpha: 0.3,
-                  ),
-                ).copyWith(
-                  side: WidgetStateProperty.resolveWith((states) {
-                    if (states.contains(WidgetState.focused)) {
-                      return BorderSide(color: app.core.tx, width: 3);
-                    }
-                    return null;
-                  }),
-                ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTorrentSearchBar() {
-    final app = AppThemeScope.of(context);
-    final hasText = _torrentSearchController.text.isNotEmpty;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-      child: Row(
-        children: [
-          Expanded(
-            child: TvTextField(
-              controller: _torrentSearchController,
-              focusNode: _torrentSearchFocusNode,
-              autofocus: true,
-              onChanged: (_) => _torrentSearchSubmitFocus.cancel(),
-              onSubmitted: (_) => _submitTorrentSearch(),
-              textInputAction: TextInputAction.search,
-              style: const TextStyle(fontSize: 14),
-              decoration: InputDecoration(
-                hintText: 'Search your torrents...',
-                hintStyle: TextStyle(color: app.fade(app.core.tx, 0.3)),
-                prefixIcon: Icon(
-                  Icons.search_rounded,
-                  color: app.fade(app.core.tx, 0.4),
-                  size: 20,
-                ),
-                filled: true,
-                fillColor: app.fade(app.core.tx, 0.06),
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 12,
-                ),
-                border: OutlineInputBorder(
-                  borderRadius: app.shape.br(12),
-                  borderSide: BorderSide(color: app.fade(app.core.tx, 0.08)),
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: app.shape.br(12),
-                  borderSide: BorderSide(color: app.fade(app.core.tx, 0.08)),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: app.shape.br(12),
-                  borderSide: BorderSide(color: app.cloud.accent),
-                ),
-              ),
-            ),
-          ),
-          if (hasText)
-            Padding(
-              padding: const EdgeInsets.only(left: 8),
-              child: Focus(
-                focusNode: _torrentSearchClearFocusNode,
-                onKeyEvent: (node, event) {
-                  if (event is! KeyDownEvent) return KeyEventResult.ignored;
-                  final key = event.logicalKey;
-                  if (isActivateKey(key) || key == LogicalKeyboardKey.space) {
-                    _torrentSearchSubmitFocus.cancel();
-                    _torrentSearchController.clear();
-                    setState(() => _torrentSearchQuery = '');
-                    _torrentSearchFocusNode.requestFocus();
-                    return KeyEventResult.handled;
-                  }
-                  if (key == LogicalKeyboardKey.arrowLeft) {
-                    _torrentSearchFocusNode.requestFocus();
-                    return KeyEventResult.handled;
-                  }
-                  return KeyEventResult.ignored;
-                },
-                child: Builder(
-                  builder: (context) {
-                    final isFocused = Focus.of(context).hasFocus;
-                    return IconButton(
-                      onPressed: () {
-                        _torrentSearchSubmitFocus.cancel();
-                        _torrentSearchController.clear();
-                        setState(() => _torrentSearchQuery = '');
-                        _torrentSearchFocusNode.requestFocus();
-                      },
-                      icon: Icon(
-                        Icons.clear_rounded,
-                        color: isFocused
-                            ? app.core.tx
-                            : app.fade(app.core.tx, 0.4),
-                        size: 18,
-                      ),
-                    );
-                  },
-                ),
-              ),
-            ),
-        ],
       ),
     );
   }
