@@ -105,6 +105,7 @@ import 'widgets/auto_launch_overlay.dart';
 import 'widgets/remote/addon_install_dialog.dart';
 import 'widgets/remote/remote_pairing_dialog.dart';
 import 'widgets/remote/remote_role_picker_screen.dart';
+import 'widgets/remote/remote_router_dialogs.dart';
 import 'widgets/support_donation_chooser_dialog.dart';
 import 'utils/platform_util.dart';
 import 'utils/tvos_device.dart';
@@ -994,6 +995,7 @@ class _DebrifyAppState extends State<DebrifyApp> {
     // legacy-consent dialog for v1 senders. Without this key neither can
     // appear — the phone would ask for a code the TV never shows.
     RemoteCommandRouter().setNavigatorKey(_navigatorKey);
+    RemoteCommandRouter().setDialogs(const RemoteRouterDialogs());
 
     // Set up restart callback for remote config (when TV receives setup from phone)
     RemoteCommandRouter().setRestartCallback(() {
