@@ -1,3 +1,4 @@
+import '../services/series_playlist_metadata_loader.dart';
 import 'package:debrify/services/storage/quick_play_policy_prefs.dart';
 import '../services/playback/decoder_diagnostics.dart';
 import 'video_player/services/player_terminal_backend.dart';
@@ -7144,7 +7145,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // This runs in background so subtitles are ready when user opens TracksSheet
     final seriesPlaylist = _seriesPlaylist;
     if (seriesPlaylist != null && !seriesPlaylist.isSeries) {
-      seriesPlaylist.fetchMovieMetadataForIndex(index).catchError((e) {
+      SeriesPlaylistMetadataLoader.fetchMovieMetadataForIndex(seriesPlaylist, index).catchError((e) {
         // Silently ignore errors - metadata is optional
         return null;
       });
@@ -7715,8 +7716,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       final playlistIdentityToken = _playlistIdentityToken;
       // Preload episode information in the background
       // Pass IMDB ID from catalog for faster, more accurate lookup
-      await seriesPlaylist
-          .fetchEpisodeInfo(
+      await SeriesPlaylistMetadataLoader.fetchEpisodeInfo(seriesPlaylist,
             playlistItem: _constructPlaylistItemData(),
             imdbId: widget.contentImdbId,
           )
@@ -7750,8 +7750,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     } else if (seriesPlaylist != null && !seriesPlaylist.isSeries) {
       // For non-series content (movie collections), fetch movie metadata for current index
       // This enables subtitles for movies from Debrid/Torbox/PikPak
-      await seriesPlaylist
-          .fetchMovieMetadataForIndex(_currentIndex)
+      await SeriesPlaylistMetadataLoader.fetchMovieMetadataForIndex(seriesPlaylist, _currentIndex)
           .then((imdbId) {
             // Trigger UI update if IMDB ID was discovered
             if (mounted && imdbId != null) {
@@ -10748,7 +10747,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           debugPrint(
             'VideoPlayer: Fetching movie metadata for index $_currentIndex before showing tracks',
           );
-          effectiveImdbId = await seriesPlaylist.fetchMovieMetadataForIndex(
+          effectiveImdbId = await SeriesPlaylistMetadataLoader.fetchMovieMetadataForIndex(seriesPlaylist,
             _currentIndex,
           );
         }
