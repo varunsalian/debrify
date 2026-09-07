@@ -1881,3 +1881,15 @@ These ranges overlap by containment (class/member); they are an index, not addit
 - [Band3 detailed inventory](C:/Users/hunth/debrify/confucius-t3-current-2c48/.dart_tool/band-5501-8250/INVENTORY.md); SHA256 `0456038934e4baaaf9127c24ab5d913b7d9150063b34d5b72e1b96b42d5533d9`.
 - [Band4 detailed inventory](C:/Users/hunth/debrify/locke-transition-a100/.dart_tool/player-band-8251/INVENTORY.md); SHA256 `6f31ebc628b21dd920317e9ade8c19d8d9246264ed324e01c0d8e91bc6012747`.
 - [Whole-file AST and contextual reference index](C:/Users/hunth/debrify/locke-transition-a100/.dart_tool/player-band-8251/wholefile-ast.json); SHA256 `a8dbff1a6c18270966b68fb036a9b9d444768eac3125c5c3278cbd1318201fe6`. Static syntax evidence, not fresh behavior-test execution.
+# L1 reviewer intake — September 7 decision addendum
+
+Preserved quirks reported with origin pin d7d357c9 (not yet fetchable from origin during this review): IMDb-bearing multi-entry series without tracker credentials clears the cached cross-device percentage in that payload; getLastPlayedEpisode resolves equal updatedAt values by map iteration order, affecting series startIndex. Keep both; author reports actual-path pins and mutation coverage, parent verification pending.
+
+L1's17-line debugAndroidTvLaunch production seam was outside the prior pin-only scope. A nullable terminal bridge substitution is acceptable in principle, but exact null-path equivalence, result/error propagation and test reset require source review before move admission. This is not blanket authorization for production changes in pins.
+
+Builder inclusion and three narrowly repointed source-marker assertions are accepted scope. New launcher/builder circular imports are rejected: moving launch args alone leaves static backedges and its toWidget screen dependency. An acyclic ownership proposal is required; no reduction is earned and no args relocation is yet authorized. Report corrected physical ranges, moved cache lines outside the tail, total new code and wrapper debt separately.
+# R3 dialog presentation decisions — September 7
+
+Author-reported origin a0f6683d: busy dialog is protected by BOTH barrierDismissible=false and PopScope.canPop=false. Pin both separately; dropping one may escape a naive dismissal test. Preserve self-close on success and finally-close on failed restore. Single-profile confirmation deliberately reads "Import 1 profiles?". Legacy consent expiry remains silent while explicit Deny raises "Incoming settings were blocked". Preserve Deny-first autofocus and no answer on expiry.
+
+Reverse-direction presenter registration accepted with narrowly owned main import/registration, idempotent/store-only binding and no silently missing dialog path. Pairing fallback expansion requires its own genuine origin coverage before relocation. Measured target removes only router's pairing-widget edge (2→1); remaining material edge is Phase3 R3-M debt covering snackbar/profile confirmations/focus only after separate ownership/pins. Frozen profile cluster stays untouched now. No claim of total UI decoupling or independently reproduced a0f6683d results yet.

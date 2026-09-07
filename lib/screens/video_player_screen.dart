@@ -1,3 +1,4 @@
+import 'video_player/playlist_navigation_policy.dart';
 import 'video_player/player_transition_session.dart';
 import '../services/series_playlist_metadata_loader.dart';
 import 'video_player/services/renderer_startup_environment.dart';
@@ -493,8 +494,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   bool _allowResumeForManualSelection =
       false; // Allow resuming for manual selections with progress
   Timer? _manualSelectionResetTimer; // Timer to reset manual selection flag
-  bool _continuousShuffleEnabled = false;
-  final List<int> _shuffleBag = [];
+  final _navigation = PlaylistNavigationPolicy();
 
   // Channel metadata for Debrify TV flows
   String? _currentChannelName;
@@ -2994,7 +2994,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     }
 
     // Playlist auto-advance keeps priority over guide-based Stremio TV next.
-    if (_continuousShuffleEnabled) {
+    if (_navigation.continuousEnabled) {
       final shuffleIndex = _pickShuffleIndex();
       if (shuffleIndex != null) {
         _isAutoAdvancing = true;
@@ -3272,97 +3272,17 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   /// Find the next logical episode index for auto-advance
   int _findNextEpisodeIndex() {
     final seriesPlaylist = _seriesPlaylist;
-
-    if (seriesPlaylist == null || !seriesPlaylist.isSeries) {
-      // Raw mode OR Sorted mode: sequential navigation through all files
-      // In sorted mode, files are already pre-sorted A-Z, so sequential = alphabetical
-      if (config.viewMode == PlaylistViewMode.raw ||
-          config.viewMode == PlaylistViewMode.sorted) {
-        if (_activePlaylist == null || _activePlaylist!.isEmpty) return -1;
-        if (_currentIndex + 1 < _activePlaylist!.length) {
-          return _currentIndex + 1;
-        }
-        return -1;
-      }
-
-      // Collection mode (view mode not specified): navigate within Main group only
-      if (_activePlaylist == null || _activePlaylist!.isEmpty) return -1;
-      final indices = _getMainGroupIndices(_activePlaylist!);
-      if (indices.isEmpty) return -1;
-
-      final currentPos = indices.indexOf(_currentIndex);
-      if (currentPos == -1) {
-        return indices.first;
-      }
-
-      if (currentPos + 1 < indices.length) {
-        return indices[currentPos + 1];
-      }
-
-      return -1;
-    }
-
-    // Series mode: existing logic
-    try {
-      // Find current episode in the sorted allEpisodes list
-      final currentEpisode = seriesPlaylist.allEpisodes.firstWhere(
-        (episode) => episode.originalIndex == _currentIndex,
-        orElse: () {
-          if (seriesPlaylist.allEpisodes.isEmpty) {
-            throw StateError('allEpisodes is empty');
-          }
-          return seriesPlaylist.allEpisodes.first;
-        },
-      );
-
-      // Find the index of current episode in allEpisodes
-      final currentEpisodeIndex = seriesPlaylist.allEpisodes.indexOf(
-        currentEpisode,
-      );
-
-      if (currentEpisodeIndex == -1 ||
-          currentEpisodeIndex + 1 >= seriesPlaylist.allEpisodes.length) {
-        return -1;
-      }
-
-      // Get the next episode from the sorted list
-      final nextEpisode = seriesPlaylist.allEpisodes[currentEpisodeIndex + 1];
-      return nextEpisode.originalIndex;
-    } catch (e) {
-      return -1;
-    }
+    final sequentialOrder = (seriesPlaylist == null || !seriesPlaylist.isSeries) &&
+        (config.viewMode == PlaylistViewMode.raw ||
+            config.viewMode == PlaylistViewMode.sorted);
+    return _navigation.nextIndex(
+      _activePlaylist, seriesPlaylist, _currentIndex, sequentialOrder,
+    );
   }
 
   /// Compute the Main group indices for movie collections (size >= 70% of largest)
-  List<int> _getMainGroupIndices(List<PlaylistEntry> entries) {
-    int maxSize = -1;
-    for (final e in entries) {
-      final s = e.sizeBytes ?? -1;
-      if (s > maxSize) maxSize = s;
-    }
-    final double threshold = maxSize > 0 ? maxSize * 0.40 : -1;
-    final main = <int>[];
-    for (int i = 0; i < entries.length; i++) {
-      final e = entries[i];
-      final isSmall =
-          threshold > 0 && (e.sizeBytes != null && e.sizeBytes! < threshold);
-      if (!isSmall) main.add(i);
-    }
-    int sizeOf(int idx) => entries[idx].sizeBytes ?? -1;
-    int? yearOf(int idx) {
-      final m = RegExp(r'\b(19|20)\d{2}\b').firstMatch(entries[idx].title);
-      if (m != null) return int.tryParse(m.group(0)!);
-      return null;
-    }
-
-    main.sort((a, b) {
-      final ya = yearOf(a);
-      final yb = yearOf(b);
-      if (ya != null && yb != null) return ya.compareTo(yb); // older first
-      return sizeOf(b).compareTo(sizeOf(a));
-    });
-    return main;
-  }
+  List<int> _getMainGroupIndices(List<PlaylistEntry> entries) =>
+      _navigation.mainGroupIndices(entries);
 
   Future<void> _showRandomPlaybackMenu() async {
     final entries = _activePlaylist ?? const [];
@@ -3382,10 +3302,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     final choice = await showDialog<String>(
       context: context,
       builder: (context) {
-        final shuffleLabel = _continuousShuffleEnabled
+        final shuffleLabel = _navigation.continuousEnabled
             ? 'Turn Off Continuous Shuffle'
             : 'Shuffle Continuously';
-        final shuffleSubtitle = _continuousShuffleEnabled
+        final shuffleSubtitle = _navigation.continuousEnabled
             ? 'Return to normal ordered playback'
             : 'Keep picking random items after each episode ends';
 
@@ -3406,7 +3326,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
               ),
               const SizedBox(height: 8),
               _RandomChoiceTile(
-                icon: _continuousShuffleEnabled
+                icon: _navigation.continuousEnabled
                     ? Icons.check_circle_rounded
                     : Icons.all_inclusive_rounded,
                 title: shuffleLabel,
@@ -3430,18 +3350,16 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   }
 
   Future<void> _toggleContinuousShuffle() async {
-    if (_continuousShuffleEnabled) {
+    if (_navigation.continuousEnabled) {
       setState(() {
-        _continuousShuffleEnabled = false;
-        _shuffleBag.clear();
+        _navigation.setContinuousAndClear(false);
       });
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('Continuous shuffle off')));
     } else {
       setState(() {
-        _continuousShuffleEnabled = true;
-        _shuffleBag.clear();
+        _navigation.setContinuousAndClear(true);
       });
       ScaffoldMessenger.of(
         context,
@@ -3452,13 +3370,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
   Future<void> _playRandomOnce({required bool disableContinuousShuffle}) async {
     if (disableContinuousShuffle) {
-      if (_continuousShuffleEnabled) {
+      if (_navigation.continuousEnabled) {
         setState(() {
-          _continuousShuffleEnabled = false;
-          _shuffleBag.clear();
+          _navigation.setContinuousAndClear(false);
         });
       } else {
-        _shuffleBag.clear();
+        _navigation.clearBag();
       }
     }
 
@@ -3468,116 +3385,24 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     await _loadPlaylistIndex(nextIndex, autoplay: true);
   }
 
-  List<int> _shuffleEligibleIndices() {
-    final entries = _activePlaylist;
-    if (entries == null || entries.isEmpty) return const [];
-
-    final seriesPlaylist = _seriesPlaylist;
-    if (seriesPlaylist != null && seriesPlaylist.isSeries) {
-      final indices = seriesPlaylist.allEpisodes
-          .map((episode) => episode.originalIndex)
-          .where((index) => index >= 0 && index < entries.length)
-          .toSet()
-          .toList();
-      if (indices.isNotEmpty) return indices;
-    }
-
-    if (widget.viewMode == PlaylistViewMode.raw ||
-        widget.viewMode == PlaylistViewMode.sorted) {
-      return List<int>.generate(entries.length, (index) => index);
-    }
-
-    final mainIndices = _getMainGroupIndices(
-      entries,
-    ).where((index) => index >= 0 && index < entries.length).toList();
-    if (mainIndices.isNotEmpty) return mainIndices;
-
-    return List<int>.generate(entries.length, (index) => index);
-  }
-
   int? _pickShuffleIndex() {
-    final eligible = _shuffleEligibleIndices();
-    if (eligible.isEmpty) return null;
-    if (eligible.length == 1) return eligible.first;
-
-    final eligibleSet = eligible.toSet();
-    _shuffleBag.removeWhere(
-      (index) => !eligibleSet.contains(index) || index == _currentIndex,
+    final entries = _activePlaylist;
+    if (entries == null || entries.isEmpty) return null;
+    final seriesPlaylist = _seriesPlaylist;
+    return _navigation.pickShuffleIndex(
+      entries, seriesPlaylist, _currentIndex, widget.viewMode, _random,
     );
-
-    if (_shuffleBag.isEmpty) {
-      _shuffleBag.addAll(
-        eligible.where((index) => index != _currentIndex).toList()
-          ..shuffle(_random),
-      );
-    }
-
-    if (_shuffleBag.isEmpty) return null;
-    return _shuffleBag.removeLast();
   }
 
   /// Find the previous logical episode index
   int _findPreviousEpisodeIndex() {
     final seriesPlaylist = _seriesPlaylist;
-
-    if (seriesPlaylist == null || !seriesPlaylist.isSeries) {
-      // Raw mode OR Sorted mode: sequential navigation through all files
-      // In sorted mode, files are already pre-sorted A-Z, so sequential = alphabetical
-      if (config.viewMode == PlaylistViewMode.raw ||
-          config.viewMode == PlaylistViewMode.sorted) {
-        if (_activePlaylist == null || _activePlaylist!.isEmpty) return -1;
-        if (_currentIndex - 1 >= 0) {
-          return _currentIndex - 1;
-        }
-        return -1;
-      }
-
-      // Collection mode (view mode not specified): navigate within Main group only
-      if (_activePlaylist == null || _activePlaylist!.isEmpty) return -1;
-      final indices = _getMainGroupIndices(_activePlaylist!);
-      if (indices.isEmpty) return -1;
-
-      final currentPos = indices.indexOf(_currentIndex);
-      if (currentPos == -1) {
-        return indices.first;
-      }
-
-      if (currentPos - 1 >= 0) {
-        return indices[currentPos - 1];
-      }
-
-      return -1;
-    }
-
-    // Series mode: existing logic
-    try {
-      // Find current episode in the sorted allEpisodes list
-      final currentEpisode = seriesPlaylist.allEpisodes.firstWhere(
-        (episode) => episode.originalIndex == _currentIndex,
-        orElse: () {
-          if (seriesPlaylist.allEpisodes.isEmpty) {
-            throw StateError('allEpisodes is empty');
-          }
-          return seriesPlaylist.allEpisodes.first;
-        },
-      );
-
-      // Find the index of current episode in allEpisodes
-      final currentEpisodeIndex = seriesPlaylist.allEpisodes.indexOf(
-        currentEpisode,
-      );
-
-      if (currentEpisodeIndex <= 0) {
-        return -1;
-      }
-
-      // Get the previous episode from the sorted list
-      final previousEpisode =
-          seriesPlaylist.allEpisodes[currentEpisodeIndex - 1];
-      return previousEpisode.originalIndex;
-    } catch (e) {
-      return -1;
-    }
+    final sequentialOrder = (seriesPlaylist == null || !seriesPlaylist.isSeries) &&
+        (config.viewMode == PlaylistViewMode.raw ||
+            config.viewMode == PlaylistViewMode.sorted);
+    return _navigation.previousIndex(
+      _activePlaylist, seriesPlaylist, _currentIndex, sequentialOrder,
+    );
   }
 
   /// Check if there's a next episode available
@@ -3633,7 +3458,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     try {
       await _player.pause();
     } catch (_) {}
-    if (_continuousShuffleEnabled) {
+    if (_navigation.continuousEnabled) {
       final shuffleIndex = _pickShuffleIndex();
       if (shuffleIndex != null) {
         _setManualSelectionMode();
@@ -10461,7 +10286,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       hasPlaylist:
           (_activePlaylist != null && _activePlaylist!.isNotEmpty) ||
           _canFetchEpisodes,
-      continuousShuffle: _continuousShuffleEnabled,
+      continuousShuffle: _navigation.continuousEnabled,
       onShuffleOnce: () {
         _transportVisibility.hideMenu();
         unawaited(_playRandomOnce(disableContinuousShuffle: true));

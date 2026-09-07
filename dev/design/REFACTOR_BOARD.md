@@ -1,8 +1,46 @@
   # Refactor board
 
+## Latest merge — PR245, September 7
+
+Merged2d3ed563175f5d3e49c5ec2989e733f3f00007b9 at09:04:59Z, reviewedhead5010f9ad. Actualtreee8dc9b75cf4b60f2121ede90653202ba6ab7fbf7 exactly matches reviewed main union. Pin fbed before move5010; author20PASS and independent20PASS; analyzer430/449 no identity changes, independent touched58 inherited/0new; layering53/77 sameIDs. All3CI passed run34102527393. First test harness failures and CRLF verifier stops retained; no native/device claim from mock tests.
+
+Player10895→10720 (-175), owner229, netproduction+54. Four adapters28lines retained with Phase3 caller-ownership expiry. Did we make a difference? Selection rules and shuffle state now have one explicit owner, exercised through real screen pins. Is there more? Player still1,220 over9,500; retry and display remain unmerged. Original baseline player16,278→10,720; Search19,073→5,879; MagicTV10,712→3,322; Storage9,963→1,741; Settings7,905→2,908 (Search original parts separately accounted). These counts do not equate relocation to logic separation.
+
+Two production merges (#244/#245) since full f371 gate; next applicable third merge requires full gate, with reviewer T3 intake checkpoint also enforced. Retry host overlaps are import-only; recheck against actual2d3ed563 before its application. QA retains baseline deletion lock; no retry path substitution until released. No decisions require user action.
+## Live worker assignments — September 7, after disk cleanup
+
+**PR queue correction:** T3 reviewer supplied test-only origin pin99044640 and requested OptionB at07:39; parent disposition was delayed. OptionB now approved in PR238: transparent ranking-pin/search-pin/move replay, old head retained, fresh CI and independent actual-origin verification still required. Check warmSourceAliases coverage before replay; no blanket gate waiver. Confucius prioritizes this verification after current narrow display review. R2/#240, D2/#237 and I2/#239 have green CI but wait for T3 and the integrated gate, not further user approval. T4/#242 waits T3-F. D3/#241 and G4-5/#243 are green but lack completed normal intake review; parked112/109/56 remain excluded. No merge yet.
+
+### R3 reviewer move request — September 7 decisions
+
+Accept reverse-direction presenter design, not a router import of extracted widgets. R3 remains stacked after R2/#240 and its required intake gate; source preparation/pinning may proceed, no premature merge. Author reports origin a0f6683d on fe748e8b, six real-wire/dialog cases and five caught mutations; exact pin evidence remains subject to normal review, not parent-reproduced credit.
+
+1. Grant only `lib/main.dart` import for `lib/widgets/remote/remote_router_dialogs.dart` and `RemoteCommandRouter().setDialogs(const RemoteRouterDialogs());` beside existing navigator registration in _MyAppState.build. No other main edits/formatting. Registration must be synchronous/idempotent, store-only, not create routes or retire active dialog work on rebuild. Show every router initialization/entry path; never treat absent presenter as permission to proceed, silently skip consent or drop a busy route. Existing application startup must install it before reachable commands. Tests use real registered presenter.
+2. Expand R3 to pairing fallback through the same interface. Exact production scope: router, new `lib/widgets/remote/router_busy_dialog.dart`, `lib/widgets/remote/remote_legacy_consent_dialog.dart`, `lib/widgets/remote/remote_router_dialogs.dart`, and the two main hunks above. Existing pairing widget is CALLED unchanged, not owned for edits. Extend `test/router_dialogs_origin_pin_test.dart` with real fallback pairing coverage BEFORE moving that path; six busy/consent cases alone are insufficient. Additional test paths require exact request. Keep current callbacks/results, route identity, barrier/back behavior, timeout and finally dismissal; interface has only necessary dialog operations, not a generic UI/service locator.
+3. Accept measured router layering goal2→1 by removing pairing-widget import. Material remains for snackbar, frozen profile confirmations and navigation focus. Record remaining material edge as Phase3 R3-M debt; no frozen-cluster edit or zero-layering claim. Verify actual unique IDs repo-wide (expected53→52 only if all else unchanged), not only per-file counts. New widgets may import router interface; router must not import them.
+
+Quirks and test limitations in NOTES. No new analyzer baseline, key/protocol change, tests weakened or main-wide cleanup. Pairing pin and registration/lifetime proof are required before move admission; ordinary parent scope/origin/inverse/verification/CI gates still apply.
+
+### QA reviewer lane — authorized September 7
+
+Owner: user's reviewer supervising local Qwen; branch `refactor/qa-analyzer-deprecations`. This is an explicit user-authorized deprecation-only intake, not an expansion of player worker scope. Exact13 production paths: `lib/screens/settings/external_player_settings_page.dart`; `lib/screens/settings/iptv_settings_two_pane.dart`; `lib/screens/settings/iptv_settings_page.dart`; `lib/screens/settings/home_page_settings_page.dart`; `lib/screens/settings/indexer_managers_settings_page.dart`; `lib/screens/stremio_tv/widgets/stremio_tv_local_catalogs_dialog.dart`; `lib/theme/app_theme_adapter.dart`; `lib/services/account_service.dart`; `lib/services/alldebrid_account_service.dart`; `lib/services/premiumize_account_service.dart`; `lib/services/torbox_account_service.dart`; `lib/services/pikpak_api_service.dart`; `lib/services/episode_tracker_snapshot_service.dart`.
+
+Grant `tool/analyze_baseline.json` for deletion-only pruning of exact diagnostic identities/multiplicities proven removed by QA's13 files, preferably one final baseline-only commit after per-file production commits. No added entries, path/message substitutions, ceiling reset, unrelated stale pruning or regenerated baseline. Coordinate this temporary baseline lock with future retry UNUSED_FIELD path migration; retry may not edit it while QA holds it. Rebase/recheck exact identities before merge and release lock afterward.
+
+One production commit per file, replacements limited to analyzer-named substitutes. Exclude DropdownButtonFormField.value→initialValue. Named substitute alone is not behavior proof: preserve defaults, precision, error/async behavior and call semantics; stop/report semantic deltas rather than extending cleanup. No source formatting sweep, tests/CI/lockfile edits or other frozen-host changes. Run per-file analysis and actual referencing suites; include exact suite manifest/results, before/after diagnostic identities and reviewer diff approval in one PR. Theme changes also require affected visual/golden evidence on the supported platform; Windows results cannot claim Linux golden equivalence. Parent normal merge gates remain; no source-only claim of test execution.
+
+No active production-file overlap found in current board. Reviewer names all testing dependencies before modifying any additional test file. This lane earns analyzer debt reduction only, not player-line progress; preserve “Did we make a difference?” and remaining limitations in PR body.
+
+- Cicero: navigation origin test repair and one corrective run. First behavior batch4PASS/1ERROR: menu row tapped offscreen during320ms entrance. Hit-testable readiness correction authorized within unchanged budget; retain first-failure evidence. No production move yet.
+- Locke: retry origin test standard45s timeout correction, isolated sole-test placement and scoped analysis. Four-case runtime awaits independent draft admission; no product or baseline edit.
+- Confucius: independent retry draft admission and narrow navigation repair review; no duplicate implementation.
+- Arendt: display projection actual-host pin draft and unapplied body/accounting evidence. Three pure functions with11/11/3 explicit argument slots accepted for preparation; same-call inert reads only after each original lazy lookup. No production move or runtime yet.
+
+All four have explicit next assignments and must report completion/blockers. C: verified32.4GiB free after user deleted378 approved old compiled-cache files; disk write pause lifted. No user action required. Player now10,720;1,220 lines above target. No design estimate counted as completed.
+
 ## Whole-player inventory — September 7, current priority
 
-User direction: inventory the entire player and decide clean ownership boundaries systematically before authorizing any new move. Isolated candidate hunting is superseded. Existing reviewed PR #244 may finish its checks; no other player production work is authorized during this inventory.
+User direction: inventory the entire player and decide clean ownership boundaries systematically before authorizing any new move. Isolated candidate hunting is superseded. Inventory is complete. #244 and #245 are merged; subsequent moves follow the recorded ownership and pin decisions.
 
 - [x] Enumerate every declaration, field group, method and adapter at fixed main `bde119f5` (11,034 lines), including explicit non-code ranges.
 - [x] Four bands complete: Arendt 1–2,750; Cicero 2,751–5,500; Confucius 5,501–8,250; Locke 8,251–11,034. All 11,034 physical lines reconciled exactly once, zero gaps/overlaps. Parsed structural records total2,126 including nonadditive nested declarations; parser0 errors.
@@ -25,9 +63,9 @@ PR #244: merged `f65486a3`, reviewed head `cc02d0e2`; all three CI jobs passed. 
 
 ## Phase 2 — player finish (user direction, September 6)
 
-**Player now: 10,895 lines. Lines remaining to remove: 1,395.**
+**Player now: 10,720 lines. Lines remaining to remove: 1,220.**
 
-Stopping target: **9,500 lines or fewer on merged main**. No overall percentage. Current measured main is f65486a3 after #244. Line reductions must preserve functionality; test results and architectural benefit remain explicit.
+Stopping target: **9,500 lines or fewer on merged main**. No overall percentage. Current measured main is2d3ed563 after #245. Line reductions must preserve functionality; test results and architectural benefit remain explicit.
 
 ### Current to-do list
 
@@ -80,6 +118,16 @@ Author for all seven lanes: user's reviewer, not a worker. Exclusive ownership b
 - **Shape manifest:** retain floor490 and register moved shape-token owners in `kShapeResidue`; do not lower the floor, broaden exemptions or claim zero regressions merely from counts. I1/I2 manifest edits belong to their explicitly listed supporting scope.
 
 ### Reviewer reservations L1 / P1 — origin pins only
+
+**L1 move request disposition (September 7): preparation scope expanded; movement not yet granted.** Author reports pin d7d357c9 on48f045f8, five real-path tests and eight caught mutations; these results are author-reported until exact objects and evidence are available. Fetching origin did not expose d7d357c9. The existing pin-only grant excluded production seams; the reported17-line seam is an explicit exception request, not an already approved change.
+
+- **D1:** approve the builder as part of the same cohesive Android TV payload slice and reserve exactly `lib/services/launcher/android_tv_playback_payload.dart`, `lib/services/launcher/android_tv_playlist_resolver.dart`, `lib/services/launcher/android_tv_playback_payload_builder.dart`. No target credit before measured diff. Correct the range/count discrepancy:4523–4828 is306 lines, not423; separately count cache code outside the tail and every record.
+- **D2:** accept a terminal bridge substitution in principle, conditional on reviewing the exact17-line seam: nullable default preserves real production bridge invocation, same map/live resolver, async result/error behavior and complete per-test reset. No platform bypass elsewhere or fabricated payload. Make the pin commit available on a fetchable fork branch before movement; parent has not independently rerun it.
+- **D3:** grant L1 `test/android_tv_mdblist_progress_source_test.dart` exclusively for the three reported moved-region source assertions and symbol/delimiter correspondence only. Preserve assertions and all host-side checks; no source-text coverage claimed as the origin pin. Supporting origin test is `test/android_tv_playback_payload_origin_pin_test.dart`. No ownership conflict found on the board.
+- **D4:** reject the proposed new launcher/builder import cycle. Moving `VideoPlayerLaunchArgs` alone does not remove the three remaining launcher-static backedges; current args also contains `toWidget()` returning VideoPlayerScreen, so it is not presently a neutral data-only class. Provide an acyclic dependency sketch covering BOTH args and statics, exact additional file/API scope and behavior/caller accounting before this move. No automatic grant to relocate args, add a broad interface, duplicate it or change toWidget semantics.
+- **D5:** cross-library visibility renames are admissible only where required by the accepted boundary. List exact final owners, callers and the unnamed read accessor; cache lifetime and identity stay unchanged. No duplicate cache, gratuitous public facade or unrecorded forwarder. Final symbol list waits D4.
+
+L1 preserves existing launcher hooks and all previous exclusions. Final move admission still requires accessible origin seam/pin evidence plus the acyclic boundary; source preparation may continue. No merge or test pass is implied by these decisions.
 
 - **L1 — reserved to user's reviewer, pin-only.** Exclusive production file reservation: `lib/services/video_player_launcher.dart`; proposed future destination `lib/services/launcher/` is reserved only for the named Android TV payload/resolver cluster. Current authorized work: read-only inventory plus a new lane-specific origin test, commit that pin only, then STOP. Test path must be reported before editing if it overlaps any existing suite; no existing source-marker suite edits authorized. Proposed Leaves>=900 is not accepted credit. Before any move, report exact impact on `test/android_tv_mdblist_progress_source_test.dart` markers and obtain separate move disposition. Excludes `video_player_screen.dart`, `lib/screens/video_player/**`, `services/playback/**`, `services/cloud/**`. No production seams, visibility changes, helpers or destination file may be added under the pin-only grant.
 - **P1 (reviewer profile-registry lane, distinct from historical provider P1) — reserved to user's reviewer, pin-only.** Exclusive production file reservation: `lib/services/profiles/profile_registry.dart`; future sibling destination must be named after inventory. Choose ONE cohesive restore-staging, secret-chunk, interrupted-recovery or abandoned-generation-cleanup cluster and report its boundaries. Current authorized work: read-only inventory plus a new lane-specific origin test, commit that pin only, then STOP. Proposed Leaves>=500; no move or cleanup implementation authorized. Excludes `portable_profile_package*` (#112), `profile_credential_facade*`, `profile_preferences*`, `profile_path*`, every storage store. Persisted keys/formats/schema remain frozen; tests must isolate disposable fixtures, not alter user profiles.
