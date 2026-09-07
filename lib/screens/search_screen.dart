@@ -273,12 +273,11 @@ const double _kStageMinPosterH = 56;
 
 // ATRIUM metrics. The wall's height is DERIVED from these (never guessed),
 // so the dossier column beside it can't be crowded by a taller row.
-const double _kAtriumLabelFontSize = 12.0;
 const double _kAtriumLabelGap = atriumLabelGap;
 
 
 double _atriumLabelHeight(BuildContext context) =>
-    MediaQuery.textScalerOf(context).scale(_kAtriumLabelFontSize) * 1.35;
+    MediaQuery.textScalerOf(context).scale(atriumLabelFontSize) * 1.35;
 
 
 
@@ -3130,24 +3129,6 @@ class _SearchScreenState extends State<SearchScreenHost>
   }
 
 
-  /// One row of Atrium's wall: a quiet rail label over a horizontal strip of
-  /// the SAME cells every other board uses.
-  Text _atriumRailLabel(List<CanvasRail> rails, int index) {
-    final app = AppThemeScope.of(context);
-    return Text(
-      _canvasTabTitle(rails, index).toUpperCase(),
-      maxLines: 1,
-      overflow: TextOverflow.ellipsis,
-      style: TextStyle(
-        fontSize: _kAtriumLabelFontSize,
-        fontWeight: FontWeight.w800,
-        letterSpacing: 1.6,
-        color: app.fade(app.core.tx, 0.86),
-        shadows: const [Shadow(color: Color(0x99000000), blurRadius: 6)],
-      ),
-    );
-  }
-
   AtriumStageFrame? _readAtriumFrame() {
     final app = AppThemeScope.of(context);
     final view = _resolveStageRail();
@@ -3159,8 +3140,21 @@ class _SearchScreenState extends State<SearchScreenHost>
       app: app,
       minimumPosterHeight: _kStageMinPosterH,
       hasSecondRow: active + 1 < rails.length,
+      text: (
+        focusedRailKey: _atriumFocusedRailKey,
+        favourite: _canvasFavFocus,
+        item: _heroItem,
+        enriched: _heroEnriched,
+        trailerShowing: _heroTrailerShowing,
+        readTitle: (offset, {focusedRailKey}) {
+          if (focusedRailKey == null) {
+            return _canvasTabTitle(rails, active + offset);
+          }
+          final i = rails.indexWhere((r) => _canvasRailKeyOf(r) == focusedRailKey);
+          return _canvasTabTitle(rails, i < 0 ? active : i);
+        },
+      ),
       wall: (
-        label: (offset) => _atriumRailLabel(rails, active + offset),
         captionBand: () => _homeArtPosterCaptionBand,
         rowBoxHeight: _stageRailBoxH,
         row: (offset, height, label, {required isTopRow, required hasRowBelow}) =>
@@ -3204,60 +3198,7 @@ class _SearchScreenState extends State<SearchScreenHost>
                   ),
                 ],
               ),
-        dossier: (boardH, splitX) => Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      ValueListenableBuilder<String?>(
-                        valueListenable: _atriumFocusedRailKey,
-                        builder: (context, key, _) {
-                          final i = key == null
-                              ? active
-                              : rails.indexWhere(
-                                  (r) => _canvasRailKeyOf(r) == key,
-                                );
-                          final title = _canvasTabTitle(
-                            rails,
-                            i < 0 ? active : i,
-                          );
-                          return Text(
-                            title.toUpperCase(),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: 2.6,
-                              color: kCardFocusRing,
-                            ),
-                          );
-                        },
-                      ),
-                      const SizedBox(height: 22),
-                      ValueListenableBuilder<CanvasFavFocus?>(
-                        valueListenable: _canvasFavFocus,
-                        builder: (context, fav, _) => fav != null
-                            ? StageFavIdentity(fav: fav)
-                            : CanvasIdentity(
-                                item: _heroItem,
-                                enriched: _heroEnriched,
-                                trailerShowing: _heroTrailerShowing,
-                                // Drop the synopsis rather than clip it when
-                                // the column is short (small board / large
-                                // text scale).
-                                variant:
-                                    boardH - 64 >=
-                                        stageNarrowIdentityH(context) + 90
-                                    ? StageIdentityVariant.narrow
-                                    : StageIdentityVariant.headline,
-                                maxWidth: (splitX - atriumPanelPad * 2).clamp(
-                                  120.0,
-                                  520.0,
-                                ),
-                              ),
-                      ),
-                    ],
-                  ),
+
       ),
     );
   }
