@@ -92,10 +92,47 @@ void main() {
     final crossedLocalThreshold = TvPlaybackCheckpoint.tryParse(
       jsonEncode(_checkpoint(localCompletionEligible: true)),
     )!;
+    final crossedThenRewound = TvPlaybackCheckpoint.tryParse(
+      jsonEncode(
+        _checkpoint(positionMs: 1_500_000, localCompletionReached: true),
+      ),
+    )!;
+    final completedThenFinalTick = TvPlaybackCheckpoint.tryParse(
+      jsonEncode(_checkpoint(completed: false, completionReached: true)),
+    )!;
 
     expect(completed.isResumable, isFalse);
     expect(nearEnd.isResumable, isFalse);
     expect(crossedLocalThreshold.isResumable, isFalse);
+    expect(crossedThenRewound.shouldPersistCompletion, isTrue);
+    expect(crossedThenRewound.isResumable, isFalse);
+    expect(completedThenFinalTick.shouldPersistCompletion, isTrue);
+  });
+
+  test('only a partial locally tracked movie is a rewatch candidate', () {
+    final rewatch = TvPlaybackCheckpoint.tryParse(
+      jsonEncode(
+        _checkpoint(
+          contentType: 'single',
+          positionMs: 1_500_000,
+          localCompletionTracking: true,
+          completionThreshold: 80,
+        ),
+      ),
+    )!;
+    final trackerManaged = TvPlaybackCheckpoint.tryParse(
+      jsonEncode(
+        _checkpoint(
+          contentType: 'single',
+          positionMs: 1_500_000,
+          localCompletionTracking: false,
+        ),
+      ),
+    )!;
+
+    expect(rewatch.isLocalMovieRewatch, isTrue);
+    expect(rewatch.shouldPersistCompletion, isFalse);
+    expect(trackerManaged.isLocalMovieRewatch, isFalse);
   });
 
   test('malformed or unsupported checkpoints fail closed', () {
@@ -116,9 +153,14 @@ void main() {
 }
 
 Map<String, Object?> _checkpoint({
+  String contentType = 'series',
   int positionMs = 2_084_494,
   bool completed = false,
+  bool completionReached = false,
   bool localCompletionEligible = false,
+  bool localCompletionReached = false,
+  bool localCompletionTracking = true,
+  int completionThreshold = 80,
 }) => <String, Object?>{
   'version': 1,
   'sessionId': 7,
@@ -126,7 +168,7 @@ Map<String, Object?> _checkpoint({
   'profileId': 'adult',
   'dataGeneration': 3,
   'updatedAtMs': DateTime.now().millisecondsSinceEpoch,
-  'contentType': 'series',
+  'contentType': contentType,
   'title': 'Episode 4',
   'seriesTitle': 'The Example Show',
   'imdbId': 'tt1234567',
@@ -140,6 +182,10 @@ Map<String, Object?> _checkpoint({
   'speed': 1.0,
   'aspect': 'contain',
   'completed': completed,
+  'completionReached': completionReached,
   'localCompleted': false,
   'localCompletionEligible': localCompletionEligible,
+  'localCompletionReached': localCompletionReached,
+  'localCompletionTracking': localCompletionTracking,
+  'completionThreshold': completionThreshold,
 };

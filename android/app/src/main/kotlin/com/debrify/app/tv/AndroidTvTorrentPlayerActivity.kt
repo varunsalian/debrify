@@ -1397,6 +1397,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     // its index is always 0. Deduplicate completion by episode identity rather
     // than index or only the first direct episode could cross the threshold.
     private val locallyCompletedItemKeys = mutableSetOf<String>()
+    private val recoveryCompletedItemKeys = mutableSetOf<String>()
     private val bufferingHandler = Handler(Looper.getMainLooper())
     private var bufferingDebounceRunnable: Runnable? = null
 
@@ -16173,11 +16174,15 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             .put("speed", progress["speed"] ?: 1.0)
             .put("aspect", progress["aspect"] ?: "contain")
             .put("completed", progress["completed"] == true)
+            .put("completionReached", progress["completionReached"] == true)
             .put("localCompleted", progress["localCompleted"] == true)
-            // localCompleted is an edge-trigger (true only on the first tick
-            // crossing the threshold). Keep the level-triggered eligibility
-            // too, so a later checkpoint cannot resurrect completed content.
             .put("localCompletionEligible", progress["localCompletionEligible"] == true)
+            // localCompleted is edge-triggered and eligibility can become
+            // false after a seek. This per-item cumulative bit preserves the
+            // completion decision across every later checkpoint.
+            .put("localCompletionReached", progress["localCompletionReached"] == true)
+            .put("localCompletionTracking", progress["localCompletionTracking"] == true)
+            .put("completionThreshold", progress["completionThreshold"] ?: 80)
             .toString()
 
         if (synchronous) {
@@ -16250,6 +16255,9 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             rawPosition > 0L &&
             rawPosition.toDouble() * 100.0 / duration.toDouble() >= completionThreshold
         val localCompleted = localCompletionEligible && locallyCompletedItemKeys.add(completionKey)
+        val localCompletionReached = locallyCompletedItemKeys.contains(completionKey)
+        if (completed) recoveryCompletedItemKeys.add(completionKey)
+        val completionReached = recoveryCompletedItemKeys.contains(completionKey)
 
         // Update the item's progress in the payload for live UI updates
         val updatedItem = item.copy(
@@ -16274,8 +16282,12 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             "speed" to playbackSpeeds[playbackSpeedIndex].toDouble(),
             "aspect" to resizeModeLabels[resizeModeIndex].lowercase(),
             "completed" to completed,
+            "completionReached" to completionReached,
             "localCompleted" to localCompleted,
             "localCompletionEligible" to localCompletionEligible,
+            "localCompletionReached" to localCompletionReached,
+            "localCompletionTracking" to model.localCompletionTracking,
+            "completionThreshold" to completionThreshold,
             "url" to item.url,
             "isPlaying" to (player?.isPlaying ?: false),
             "isBuffering" to (player?.playbackState == Player.STATE_BUFFERING)
@@ -18230,6 +18242,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             addonFetchState.clear()
             addonPackProbing.clear()
             locallyCompletedItemKeys.clear()
+            recoveryCompletedItemKeys.clear()
 
             android.util.Log.d("AndroidTvPlayer", "parsePayload - startIndex: $startIndex, items: ${items.size}, nextMap: ${nextEpisodeMap.size}, prevMap: ${prevEpisodeMap.size}, collectionGroups: ${collectionGroups?.size ?: 0}, imdbId: $imdbId, startAtPercent: $startAtPercent")
 

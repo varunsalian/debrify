@@ -52,11 +52,16 @@ class TvPlaybackRecovery {
           checkpoint.updatedAtMs <= now &&
           now - checkpoint.updatedAtMs <= _staleAfter.inMilliseconds;
       var changed = false;
-      if (validAge && checkpoint.isResumable) {
-        changed = await ProfileRuntime.withCapturedScope(
-          scope,
-          () => _apply(checkpoint, sameProcessReturn: returning),
-        );
+      if (validAge) {
+        changed = await ProfileRuntime.withCapturedScope(scope, () async {
+          if (checkpoint.shouldPersistCompletion) {
+            return _applyCompletion(checkpoint);
+          }
+          if (checkpoint.isResumable) {
+            return _apply(checkpoint, sameProcessReturn: returning);
+          }
+          return false;
+        });
       }
       await _ack(checkpoint);
       DiagnosticLog.instance.recordEvent(
@@ -163,16 +168,28 @@ class TvPlaybackRecovery {
 
     final resumeId = checkpoint.resumeId ?? checkpoint.title;
     if (resumeId != null && resumeId.isNotEmpty) {
-      final existing = await StorageService.getVideoPlaybackState(
+      var existing = await StorageService.getVideoPlaybackState(
         videoTitle: resumeId,
       );
       final existingUrl = existing?['url'];
       final url =
           checkpoint.url ?? (existingUrl is String ? existingUrl : null);
-      final movieFinished =
+      var movieFinished =
           checkpoint.contentType == 'single' &&
           checkpoint.imdbId != null &&
           await StorageService.isMovieFinished(checkpoint.imdbId!);
+      // Mirror the normal native-progress path: a proven return below the
+      // configured local threshold is an active rewatch, not stale progress.
+      // Cold journals never clear a watched marker.
+      if (movieFinished &&
+          sameProcessReturn &&
+          checkpoint.isLocalMovieRewatch) {
+        await StorageService.unmarkMovieAsFinished(checkpoint.imdbId!);
+        movieFinished = false;
+        existing = await StorageService.getVideoPlaybackState(
+          videoTitle: resumeId,
+        );
+      }
       if (!movieFinished &&
           url != null &&
           url.isNotEmpty &&
@@ -211,6 +228,48 @@ class TvPlaybackRecovery {
       }
     }
     return changed;
+  }
+
+  static Future<bool> _applyCompletion(TvPlaybackCheckpoint checkpoint) async {
+    if (checkpoint.contentType == 'series') {
+      final seriesTitle = checkpoint.seriesTitle ?? checkpoint.title;
+      final season = checkpoint.season;
+      final episode = checkpoint.episode;
+      if (seriesTitle == null || season == null || episode == null) {
+        return false;
+      }
+      await StorageService.markEpisodeAsFinished(
+        seriesTitle: seriesTitle,
+        season: season,
+        episode: episode,
+        imdbId: checkpoint.imdbId,
+      );
+      return true;
+    }
+    if (checkpoint.contentType == 'collection') {
+      final seriesTitle = checkpoint.seriesTitle;
+      if (seriesTitle == null) return false;
+      await StorageService.markEpisodeAsFinished(
+        seriesTitle: seriesTitle,
+        season: 0,
+        episode: checkpoint.itemIndex + 1,
+        imdbId: checkpoint.imdbId,
+      );
+      return true;
+    }
+    final imdbId = checkpoint.imdbId;
+    if (checkpoint.contentType != 'single' ||
+        !checkpoint.localCompletionTracking ||
+        imdbId == null ||
+        imdbId.isEmpty) {
+      return false;
+    }
+    await Future.wait([
+      StorageService.markMovieAsFinished(imdbId),
+      if (checkpoint.resumeId case final resumeId? when resumeId.isNotEmpty)
+        StorageService.removeVideoResume(resumeId),
+    ]);
+    return true;
   }
 
   static Future<void> _ack(TvPlaybackCheckpoint checkpoint) async {
@@ -257,8 +316,12 @@ class TvPlaybackCheckpoint {
     required this.aspect,
     required this.itemIndex,
     required this.completed,
+    required this.completionReached,
     required this.localCompleted,
     required this.localCompletionEligible,
+    required this.localCompletionReached,
+    required this.localCompletionTracking,
+    required this.completionThreshold,
     this.title,
     this.seriesTitle,
     this.imdbId,
@@ -287,20 +350,48 @@ class TvPlaybackCheckpoint {
   final double speed;
   final String aspect;
   final bool completed;
+  final bool completionReached;
   final bool localCompleted;
   final bool localCompletionEligible;
+  final bool localCompletionReached;
+  final bool localCompletionTracking;
+  final int completionThreshold;
 
   bool belongsTo(ProfileScope scope) =>
       profileId == scope.profileId && dataGeneration == scope.dataGeneration;
+
+  bool get shouldPersistCompletion => switch (contentType) {
+    'series' =>
+      completed ||
+          completionReached ||
+          localCompleted ||
+          localCompletionEligible ||
+          localCompletionReached,
+    'collection' => completed || completionReached,
+    'single' =>
+      localCompletionTracking &&
+          (completed ||
+              completionReached ||
+              localCompleted ||
+              localCompletionEligible ||
+              localCompletionReached),
+    _ => false,
+  };
+
+  bool get isLocalMovieRewatch =>
+      contentType == 'single' &&
+      localCompletionTracking &&
+      !shouldPersistCompletion &&
+      positionMs > 0 &&
+      durationMs > 0 &&
+      positionMs * 100.0 / durationMs < completionThreshold;
 
   bool get isResumable =>
       sessionId > 0 &&
       sequence > 0 &&
       positionMs > 0 &&
       durationMs > 0 &&
-      !completed &&
-      !localCompleted &&
-      !localCompletionEligible &&
+      !shouldPersistCompletion &&
       positionMs * 100.0 / durationMs < 95.0;
 
   bool shouldApply(
@@ -347,8 +438,14 @@ class TvPlaybackCheckpoint {
         speed: (decoded['speed'] as num?)?.toDouble() ?? 1.0,
         aspect: _string(decoded['aspect']) ?? 'contain',
         completed: decoded['completed'] == true,
+        completionReached: decoded['completionReached'] == true,
         localCompleted: decoded['localCompleted'] == true,
         localCompletionEligible: decoded['localCompletionEligible'] == true,
+        localCompletionReached: decoded['localCompletionReached'] == true,
+        localCompletionTracking: decoded['localCompletionTracking'] == true,
+        completionThreshold: _completionThreshold(
+          decoded['completionThreshold'],
+        ),
       );
     } catch (_) {
       return null;
@@ -356,6 +453,11 @@ class TvPlaybackCheckpoint {
   }
 
   static int _int(Object? value) => value is num ? value.toInt() : 0;
+  static int _completionThreshold(Object? value) {
+    final parsed = _int(value);
+    return (parsed == 0 ? 80 : parsed).clamp(50, 95);
+  }
+
   static int? _nullableInt(Object? value) =>
       value is num ? value.toInt() : null;
   static String? _string(Object? value) => value is String ? value : null;
