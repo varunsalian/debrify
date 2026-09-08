@@ -7,6 +7,9 @@ import 'package:debrify/services/metadata_explore_service.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/profiles/profile_scope.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
 import 'package:flutter_test/flutter_test.dart';
 
 class ExploreService extends MetadataExploreService {
@@ -136,6 +139,53 @@ void main() {
       findsOneWidget,
     );
     await tester.pumpWidget(const SizedBox());
+    expect(tester.takeException(), isNull);
+  });
+  testWidgets('Franchise shortcut focuses and activates its first title', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    ProfileRuntime.initializeLegacy();
+    final service = ExploreService()
+      ..respond = (_) async => MetadataExploreData(
+        franchiseName: 'Movie collection',
+        franchise: List.generate(
+          30,
+          (i) => StremioMeta(
+            id: 'tt${133093 + i}',
+            type: 'movie',
+            name: 'Movie $i',
+          ),
+        ),
+      );
+    final opened = <String>[];
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MetadataExplorePage(
+          item: const StremioMeta(id: 'tmdb:1', type: 'movie', name: 'Movie'),
+          preferences: MetadataPreferences(
+            features: {MetadataFeature.franchises},
+          ),
+          isTelevision: true,
+          onOpen: (item) => opened.add(item.id),
+          service: service,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final rail = tester.widget<ListView>(find.byType(ListView));
+    rail.controller!.jumpTo(rail.controller!.position.maxScrollExtent);
+    await tester.pumpAndSettle();
+    expect(find.text('Movie 0'), findsNothing);
+    final shortcut = find.widgetWithText(OutlinedButton, 'Franchise');
+    Focus.of(tester.element(find.text('Franchise'))).requestFocus();
+    await tester.pumpAndSettle();
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    expect(shortcut, findsOneWidget);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    expect(opened, ['tt133093']);
     expect(tester.takeException(), isNull);
   });
 }

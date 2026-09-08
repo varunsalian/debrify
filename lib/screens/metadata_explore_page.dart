@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../models/metadata_preferences.dart';
 import '../models/stremio_addon.dart';
@@ -11,7 +10,7 @@ import '../services/metadata_explore_service.dart';
 import '../services/metadata_preferences_service.dart';
 import '../services/profiles/profile_runtime.dart';
 import '../widgets/catalog_item_tile.dart';
-import '../widgets/collections/tmdb_attribution.dart';
+import '../widgets/metadata_explore_spotlight.dart';
 
 /// Optional detail destination, using the host's existing title-open action.
 class MetadataExplorePage extends StatefulWidget {
@@ -132,6 +131,7 @@ class _MetadataExplorePageState extends State<MetadataExplorePage> {
   }
 
   void _entity(String kind, Map<String, dynamic> row) {
+    if (!mounted || _profileChanged || _scope != ProfileRuntime.scope.value) return;
     final id = MetadataDetailsService.positiveId(row['id']);
     if (id == null) return;
     Navigator.of(context).push(
@@ -150,181 +150,36 @@ class _MetadataExplorePageState extends State<MetadataExplorePage> {
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: Text('Explore ${widget.item.name}')),
-    body: _profileChanged
-        ? const Center(
-            child: Text(
-              'Profile changed. Go back to browse your current profile.',
-            ),
-          )
-        : Builder(
-            builder: (context) {
-              if (_failed && _data == null) {
-                return Center(
-                  child: TextButton(
-                    onPressed: () => setState(_reload),
-                    child: const Text('Could not load. Retry'),
-                  ),
-                );
-              }
-              final data = _data;
-              if (data == null) {
-                return const Center(child: CircularProgressIndicator());
-              }
-              return ListView(
-                padding: const EdgeInsets.all(20),
-                children: [
-                  if (_loading)
-                    const LinearProgressIndicator()
-                  else if (_failed || data.unavailable.isNotEmpty)
-                    TextButton(
-                      onPressed: () => setState(_reload),
-                      child: const Text('Some sections could not load. Retry'),
-                    ),
-                  if (data.franchise.isNotEmpty) ...[
-                    Text(
-                      data.franchiseName ?? 'Franchise',
-                      style: Theme.of(context).textTheme.titleLarge,
-                    ),
-                    const SizedBox(height: 12),
-                    SizedBox(
-                      height: 230,
-                      child: ListView.separated(
-                        scrollDirection: Axis.horizontal,
-                        itemCount: data.franchise.length,
-                        separatorBuilder: (_, _) => const SizedBox(width: 12),
-                        itemBuilder: (context, i) => SizedBox(
-                          width: 145,
-                          child: _MetadataTitleTile(
-                            item: data.franchise[i],
-                            onOpen: widget.onOpen,
-                            isTelevision: widget.isTelevision,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                  if (data.people.isNotEmpty) ...[
-                    const SizedBox(height: 20),
-                    Text(
-                      'Cast and crew',
-                      style: Theme.of(context).textTheme.titleLarge,
-                    ),
-                    for (final person in data.people)
-                      ListTile(
-                        title: Text('${person['name'] ?? ''}'),
-                        subtitle: Text(
-                          '${person['character'] ?? person['job'] ?? ''}',
-                        ),
-                        trailing: const Icon(Icons.chevron_right),
-                        onTap: () => _entity('person', person),
-                      ),
-                  ],
-                  if (data.companies.isNotEmpty ||
-                      data.networks.isNotEmpty) ...[
-                    Text(
-                      'Studios and networks',
-                      style: Theme.of(context).textTheme.titleLarge,
-                    ),
-                    for (final row in data.companies)
-                      ListTile(
-                        title: Text('${row['name'] ?? ''}'),
-                        trailing: const Icon(Icons.chevron_right),
-                        onTap: () => _entity('company', row),
-                      ),
-                    for (final row in data.networks)
-                      ListTile(
-                        title: Text('${row['name'] ?? ''}'),
-                        trailing: const Icon(Icons.chevron_right),
-                        onTap: () => _entity('network', row),
-                      ),
-                  ],
-                  if (_preferences.features.contains(
-                    MetadataFeature.availability,
-                  )) ...[
-                    Text(
-                      'Where to watch · ${_preferences.region}',
-                      style: Theme.of(context).textTheme.titleLarge,
-                    ),
-                    if (data.providers.isEmpty)
-                      const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 12),
-                        child: Text(
-                          'No availability information for this region.',
-                        ),
-                      ),
-                    for (final entry in data.providers.entries)
-                      ListTile(
-                        title: Text(
-                          const {
-                                'flatrate': 'Subscription',
-                                'free': 'Free',
-                                'ads': 'With ads',
-                                'rent': 'Rent',
-                                'buy': 'Buy',
-                              }[entry.key] ??
-                              entry.key,
-                        ),
-                        subtitle: Text(
-                          entry.value
-                              .map((p) => p['provider_name'])
-                              .whereType<String>()
-                              .join(', '),
-                        ),
-                      ),
-                    const Text('Availability data supplied by JustWatch.'),
-                    if (data.providerLink != null)
-                      TextButton(
-                        onPressed: () async {
-                          final uri = Uri.tryParse(data.providerLink!);
-                          if (uri?.scheme == 'https' &&
-                              (uri!.host == 'www.themoviedb.org' ||
-                                  uri.host == 'themoviedb.org')) {
-                            var opened = false;
-                            try {
-                              opened = await launchUrl(
-                                uri,
-                                mode: LaunchMode.externalApplication,
-                              );
-                            } catch (_) {
-                              // A missing browser must not escape the action.
-                            }
-                            if (!opened && context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('Could not open the browser.'),
-                                ),
-                              );
-                            }
-                          }
-                        },
-                        child: const Text('Check availability on TMDB'),
-                      ),
-                  ],
-                  if (_preferences.features.contains(MetadataFeature.discovery))
-                    ListTile(
-                      title: const Text('Discover movies and shows'),
-                      trailing: const Icon(Icons.chevron_right),
-                      onTap: () => Navigator.of(context).push(
-                        MaterialPageRoute<void>(
-                          builder: (_) => MetadataBrowsePage(
-                            title: 'Discover',
-                            kind: 'discover',
-                            preferences: _preferences,
-                            onOpen: widget.onOpen,
-                            isTelevision: widget.isTelevision,
-                          ),
-                        ),
-                      ),
-                    ),
-                  const SizedBox(height: 24),
-                  const TmdbAttribution(),
-                ],
-              );
-            },
-          ),
-  );
+  Widget build(BuildContext context) {
+    if (_profileChanged) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Explore')),
+        body: const Center(child: Text(
+          'Profile changed. Go back to browse your current profile.',
+        )),
+      );
+    }
+    return MetadataExploreSpotlight(
+      item: widget.item,
+      preferences: _preferences,
+      data: _data,
+      loading: _loading,
+      failed: _failed,
+      isTelevision: widget.isTelevision,
+      onRetry: () => setState(_reload),
+      onEntity: _entity,
+      titleBuilder: (item, focusNode) => _MetadataTitleTile(
+        focusNode: focusNode,
+        item: item, onOpen: widget.onOpen, isTelevision: widget.isTelevision,
+      ),
+      onDiscover: () => Navigator.of(context).push(MaterialPageRoute<void>(
+        builder: (_) => MetadataBrowsePage(
+          title: 'Discover', kind: 'discover', preferences: _preferences,
+          onOpen: widget.onOpen, isTelevision: widget.isTelevision,
+        ),
+      )),
+    );
+  }
 }
 
 class MetadataBrowsePage extends StatefulWidget {
@@ -613,7 +468,9 @@ class _MetadataTitleTile extends StatefulWidget {
     required this.onOpen,
     required this.isTelevision,
     this.onFocused,
+    this.focusNode,
   });
+  final FocusNode? focusNode;
   final VoidCallback? onFocused;
   final StremioMeta item;
   final ValueChanged<StremioMeta> onOpen;
@@ -664,7 +521,7 @@ class _MetadataTitleTileState extends State<_MetadataTitleTile> {
         child: CatalogItemTile(
           item: widget.item,
           isTelevision: widget.isTelevision,
-          focusNode: _focus,
+          focusNode: widget.focusNode ?? _focus,
           hasBoundSource: false,
           onOpen: _open,
           onFocused: widget.onFocused,
