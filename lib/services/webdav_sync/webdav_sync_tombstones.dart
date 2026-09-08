@@ -499,6 +499,98 @@ abstract final class WebDavSyncTombstoneRecorder {
       WebDavSyncRegistryTombstoneStore();
   static WebDavSyncTombstoneDebugSink? _debugSink;
   static WebDavSyncRegistryTombstoneDebugSink? _registryDebugSink;
+  static final Object _playbackRecoverySnapshotKey = Object();
+
+  /// One lazy read per captured profile during one startup replay, never a
+  /// process-global cache that can conceal sync changes on the next launch.
+  static Future<T> withPlaybackRecoverySnapshot<T>(Future<T> Function() body) =>
+      runZoned(
+        body,
+        zoneValues: {
+          _playbackRecoverySnapshotKey:
+              <String, Future<_PlaybackRecoverySyncSnapshot?>>{},
+        },
+      );
+
+  /// Compare recovery against the last committed sync state using its clock.
+  /// Read failures propagate so the native journal remains available to retry.
+  static Future<bool> hasNewerPlaybackIntent(
+    Set<String> keys,
+    int localCheckpointAtMs, {
+    bool Function(String, Map<String, dynamic>)? isOwnRecoveryWrite,
+    bool includePositions = true,
+  }) async {
+    if (!ProfileRuntime.isInitialized || !ProfileRuntime.isProfileCommitted) {
+      return false;
+    }
+    final scope = ProfileRuntime.capture();
+    final cache =
+        Zone.current[_playbackRecoverySnapshotKey]
+            as Map<String, Future<_PlaybackRecoverySyncSnapshot?>>?;
+    final snapshot =
+        await (cache?.putIfAbsent(
+              scope.cacheKey,
+              () => _loadPlaybackRecoverySnapshot(scope.profileId),
+            ) ??
+            _loadPlaybackRecoverySnapshot(scope.profileId));
+    final profile = snapshot?.profile;
+    if (profile == null) return false;
+    final serverCheckpointAtMs = localCheckpointAtMs + snapshot!.clockOffsetMs;
+    for (final key in keys) {
+      final tombstone = profile.tombstones[key];
+      if (tombstone != null &&
+          tombstone.stamp.normalizedTimeMs >=
+              (tombstone.rawLocalTime
+                  ? localCheckpointAtMs
+                  : serverCheckpointAtMs)) {
+        return true;
+      }
+      final record = profile.baseline?.watchState.records[key];
+      final value = record?.value;
+      final ownWrite =
+          value is Map &&
+          (isOwnRecoveryWrite?.call(key, Map<String, dynamic>.from(value)) ??
+              false);
+      // A different episode can update shared show metadata without changing
+      // this episode's playback intent.
+      if (!key.startsWith('playback/meta/') &&
+          // Playing an episode again does not unwatch it. Only explicit
+          // deletion intent (checked above) can cancel its pending completion.
+          (includePositions ||
+              (!key.startsWith('playback/episode/') &&
+                  !key.startsWith('playback/record/'))) &&
+          record != null &&
+          record.stamp.normalizedTimeMs >= serverCheckpointAtMs &&
+          !ownWrite) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  static Future<_PlaybackRecoverySyncSnapshot?> _loadPlaybackRecoverySnapshot(
+    String profileId,
+  ) async {
+    final snapshot = await _bindingStore.load();
+    final binding = _bindingForTombstones(snapshot);
+    if (binding == null) return null;
+    final namespace = snapshot.namespaceFor(binding);
+    if (namespace == null) return null;
+    final repository =
+        _stateRepository ??
+        WebDavSyncEngineStateStore(bindingStore: _bindingStore);
+    final state = await repository.load(namespace.id);
+    final circleId = state.circleToLocalProfiles?.entries
+        .where((entry) => entry.value == profileId)
+        .map((entry) => entry.key)
+        .firstOrNull;
+    return _PlaybackRecoverySyncSnapshot(
+      profile: circleId == null
+          ? state.pendingLocalProfiles[profileId]
+          : state.profiles[circleId],
+      clockOffsetMs: state.clock.acceptedOffsetMs ?? 0,
+    );
+  }
 
   static Future<void> recordForCurrentProfile(Iterable<String> keys) async {
     if (!ProfileRuntime.isInitialized || !ProfileRuntime.isProfileCommitted) {
@@ -897,6 +989,15 @@ abstract final class WebDavSyncTombstoneRecorder {
     _debugSink = null;
     _registryDebugSink = null;
   }
+}
+
+final class _PlaybackRecoverySyncSnapshot {
+  const _PlaybackRecoverySyncSnapshot({
+    required this.profile,
+    required this.clockOffsetMs,
+  });
+  final WebDavSyncProfileEngineState? profile;
+  final int clockOffsetMs;
 }
 
 extension _FirstOrNull<T> on Iterable<T> {

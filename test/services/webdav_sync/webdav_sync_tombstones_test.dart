@@ -5,9 +5,11 @@ import 'dart:typed_data';
 import 'package:debrify/models/webdav_item.dart';
 import 'package:debrify/services/profiles/device_key_provider.dart';
 import 'package:debrify/services/profiles/profile_preferences.dart';
+import 'package:debrify/services/profiles/profile_preference_portability.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/profiles/profile_scope.dart';
 import 'package:debrify/services/storage_service.dart';
+import 'package:debrify/services/tv_playback_recovery.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_binding_store.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_clock.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_circle_models.dart';
@@ -562,6 +564,373 @@ void main() {
     );
   });
 
+  test(
+    'native recovery respects normalized remote unwatch and rewind timestamps',
+    () async {
+      final binding = await _activateBinding(
+        bindingStore,
+        circleId: 'recovery-circle',
+      );
+      ProfileRuntime.initializeCommitted(
+        ProfileScope(
+          profileId: 'local-profile',
+          dataGeneration: 1,
+          sessionEpoch: 1,
+        ),
+      );
+      final finishedKey = WebDavSyncRecordKey.playbackFinished(
+        'series_example',
+        1,
+        4,
+      );
+      final localKey = WebDavSyncRecordKey.finishedMovie('tt-local');
+      final prefs = <String, Object?>{
+        WebDavSyncHotMerge.playbackPreference: jsonEncode({
+          'series_example': {
+            'type': 'series',
+            'title': 'Example',
+            'seasons': {
+              '1': {
+                '5': {
+                  'positionMs': 1000,
+                  'durationMs': 10000,
+                  'updatedAt': 1200,
+                },
+              },
+            },
+          },
+        }),
+      };
+      final baseline = WebDavSyncHotMerge.build(
+        WebDavSyncBuildInput(
+          circleProfileId: 'profile-circle',
+          deviceId: 'device-remote',
+          rawPreferences: prefs,
+          portablePreferences: prefs,
+          identityMaps: WebDavSyncIdentityMaps(
+            circleToLocalProfiles: {'profile-circle': 'local-profile'},
+            circleToLocalResources: {},
+          ),
+          localNowMs: 1200,
+          clockOffsetMs: 5000,
+          serverNowMs: 6200,
+        ),
+      ).document;
+      await engineStore.update(
+        binding.namespaceId,
+        (state) => state.copyWith(
+          clock: const WebDavSyncClockState(acceptedOffsetMs: 5000),
+          circleToLocalProfiles: {'profile-circle': 'local-profile'},
+          circleToLocalResources: {},
+          profiles: {
+            'profile-circle': WebDavSyncProfileEngineState(
+              baseline: baseline,
+              tombstones: {
+                finishedKey: WebDavSyncTombstone(
+                  key: finishedKey,
+                  stamp: const WebDavSyncStamp(
+                    normalizedTimeMs: 6100,
+                    originDeviceId: 'remote-device',
+                  ),
+                ),
+                localKey: WebDavSyncTombstone(
+                  key: localKey,
+                  rawLocalTime: true,
+                  stamp: const WebDavSyncStamp(
+                    normalizedTimeMs: 1100,
+                    originDeviceId: 'local-device',
+                  ),
+                ),
+              },
+            ),
+          },
+        ),
+      );
+      expect(
+        await WebDavSyncTombstoneRecorder.hasNewerPlaybackIntent({
+          finishedKey,
+        }, 1000),
+        isTrue,
+      );
+      expect(
+        await WebDavSyncTombstoneRecorder.hasNewerPlaybackIntent({
+          finishedKey,
+        }, 1150),
+        isFalse,
+      );
+      expect(
+        await WebDavSyncTombstoneRecorder.hasNewerPlaybackIntent({
+          localKey,
+        }, 1000),
+        isTrue,
+      );
+      expect(
+        await WebDavSyncTombstoneRecorder.hasNewerPlaybackIntent({
+          localKey,
+        }, 1150),
+        isFalse,
+      );
+      expect(
+        await WebDavSyncTombstoneRecorder.hasNewerPlaybackIntent({
+          WebDavSyncRecordKey.playbackEpisode('series_example', 1, 5),
+        }, 1000),
+        isTrue,
+      );
+      expect(
+        await WebDavSyncTombstoneRecorder.hasNewerPlaybackIntent(
+          {WebDavSyncRecordKey.playbackEpisode('series_example', 1, 5)},
+          1000,
+          includePositions: false,
+        ),
+        isFalse,
+      );
+      expect(
+        await WebDavSyncTombstoneRecorder.hasNewerPlaybackIntent(
+          {finishedKey},
+          1000,
+          includePositions: false,
+        ),
+        isTrue,
+      );
+      // A different episode's save changes shared metadata, not this item.
+      expect(
+        await WebDavSyncTombstoneRecorder.hasNewerPlaybackIntent({
+          WebDavSyncRecordKey.playbackMeta('series_example'),
+          WebDavSyncRecordKey.playbackEpisode('series_example', 1, 6),
+        }, 1000),
+        isFalse,
+      );
+    },
+  );
+
+  test(
+    'sync of a recovery write permits retry but a remote rewind fences it',
+    () async {
+      final binding = await _activateBinding(
+        bindingStore,
+        circleId: 'retry-circle',
+      );
+      ProfileRuntime.initializeCommitted(
+        ProfileScope(
+          profileId: 'local-profile',
+          dataGeneration: 1,
+          sessionEpoch: 1,
+        ),
+      );
+      final checkpoint = TvPlaybackCheckpoint.tryParse(
+        jsonEncode({
+          'sessionId': 7,
+          'sequence': 50,
+          'profileId': 'local-profile',
+          'dataGeneration': 1,
+          'updatedAtMs': 1000,
+          'contentType': 'single',
+          'resumeId': 'movie',
+          'positionMs': 5000,
+          'durationMs': 100000,
+          'speed': 1.0,
+          'aspect': 'contain',
+        }),
+      )!;
+      await StorageService.saveVideoPlaybackState(
+        videoTitle: 'movie',
+        videoUrl: 'https://example.invalid/video',
+        positionMs: 5000,
+        durationMs: 100000,
+        recoveryCheckpointId: checkpoint.recoveryId,
+        recoveryUpdatedAtMs: 1000,
+      );
+      final prefs = await ProfilePreferences.instance();
+      final raw = prefs.getString(WebDavSyncHotMerge.playbackPreference)!;
+      final portable = ProfilePreferencePortability.prepareValue(
+        WebDavSyncHotMerge.playbackPreference,
+        raw,
+      ).value;
+      final identityMaps = WebDavSyncIdentityMaps(
+        circleToLocalProfiles: {'profile-circle': 'local-profile'},
+        circleToLocalResources: {},
+      );
+      final built = WebDavSyncHotMerge.build(
+        WebDavSyncBuildInput(
+          circleProfileId: 'profile-circle',
+          deviceId: 'device-local',
+          rawPreferences: {WebDavSyncHotMerge.playbackPreference: raw},
+          portablePreferences: {
+            WebDavSyncHotMerge.playbackPreference: portable,
+          },
+          identityMaps: identityMaps,
+          localNowMs: 1200,
+          clockOffsetMs: 5000,
+          serverNowMs: 6200,
+        ),
+      );
+      final restored = WebDavSyncHotMerge.materializePreferences(
+        document: built.document,
+        identityMaps: identityMaps,
+        localRichRecords: built.localRichRecords,
+        localPortableRecords: built.document.watchState.records,
+      );
+      await prefs.setString(
+        WebDavSyncHotMerge.playbackPreference,
+        restored[WebDavSyncHotMerge.playbackPreference]! as String,
+      );
+      expect(
+        checkpoint.isOwnRecoveryWrite(
+          await StorageService.getVideoPlaybackState(videoTitle: 'movie'),
+        ),
+        isTrue,
+      );
+      expect(portable, isNot(contains('recoveryCheckpointId')));
+
+      Future<void> setBaseline(WebDavSyncHotDocument baseline) =>
+          engineStore.update(
+            binding.namespaceId,
+            (state) => state.copyWith(
+              clock: const WebDavSyncClockState(acceptedOffsetMs: 5000),
+              circleToLocalProfiles: {'profile-circle': 'local-profile'},
+              circleToLocalResources: {},
+              profiles: {
+                'profile-circle': WebDavSyncProfileEngineState(
+                  baseline: baseline,
+                ),
+              },
+            ),
+          );
+      Future<bool> newerIntent() =>
+          StorageService.hasNewerPlaybackRecoveryIntent(
+            resumeId: 'movie',
+            checkpointAtMs: 1000,
+            isOwnRecoveryWrite: checkpoint.isOwnRecoveryWrite,
+            matchesRecoveryPosition: checkpoint.matchesRecoveryPosition,
+          );
+      await setBaseline(built.document);
+      expect(await newerIntent(), isFalse);
+      final remote = jsonDecode(portable! as String) as Map<String, dynamic>;
+      remote['video_movie']['positionMs'] = 100;
+      remote['video_movie']['updatedAt'] = 1200;
+      final remotePrefs = {
+        WebDavSyncHotMerge.playbackPreference: jsonEncode(remote),
+      };
+      await setBaseline(
+        WebDavSyncHotMerge.build(
+          WebDavSyncBuildInput(
+            circleProfileId: 'profile-circle',
+            deviceId: 'device-remote',
+            rawPreferences: remotePrefs,
+            portablePreferences: remotePrefs,
+            identityMaps: identityMaps,
+            localNowMs: 1200,
+            clockOffsetMs: 5000,
+            serverNowMs: 6200,
+          ),
+        ).document,
+      );
+      expect(await newerIntent(), isTrue);
+    },
+  );
+
+  test(
+    'a journal uses one sync snapshot and the next replay reloads it',
+    () async {
+      final binding = await _activateBinding(
+        bindingStore,
+        circleId: 'snapshot-circle',
+      );
+      final scope = ProfileScope(
+        profileId: 'local-profile',
+        dataGeneration: 1,
+        sessionEpoch: 1,
+      );
+      ProfileRuntime.initializeCommitted(scope);
+      final repository = _CountingEngineRepository(engineStore);
+      WebDavSyncTombstoneRecorder.debugInstall(
+        bindingStore: bindingStore,
+        stateRepository: repository,
+      );
+      final time = DateTime.now().millisecondsSinceEpoch - 1000;
+      final encoded = jsonEncode({
+        'version': 2,
+        'latest': [],
+        'completions': [
+          for (var episode = 1; episode <= 3; episode++)
+            {
+              'sessionId': 7,
+              'sequence': episode,
+              'profileId': 'local-profile',
+              'dataGeneration': 1,
+              'updatedAtMs': time,
+              'contentType': 'series',
+              'seriesTitle': 'Example',
+              'season': 1,
+              'episode': episode,
+              'completed': true,
+            },
+        ],
+      });
+      final decisions = <bool>[];
+      final acked = <int>[];
+      Future<void> replay() => TvPlaybackRecovery.recoverJournal(
+        encoded,
+        scope: scope,
+        apply: (checkpoint, _) async {
+          decisions.add(
+            await StorageService.hasNewerPlaybackRecoveryIntent(
+              seriesTitle: 'Example',
+              season: 1,
+              episode: checkpoint.episode,
+              checkpointAtMs: time,
+            ),
+          );
+          return false;
+        },
+        acknowledge: (checkpoint) async {
+          acked.add(checkpoint.sequence);
+        },
+        discard: (_) async => fail('valid journal discarded'),
+      );
+      await replay();
+      expect(repository.loads, 1);
+      expect(decisions, [false, false, false]);
+      final deleted = WebDavSyncRecordKey.playbackFinished(
+        'series_example',
+        1,
+        2,
+      );
+      await engineStore.update(
+        binding.namespaceId,
+        (state) => state.copyWith(
+          circleToLocalProfiles: {'circle-profile': 'local-profile'},
+          profiles: {
+            'circle-profile': WebDavSyncProfileEngineState(
+              tombstones: {
+                deleted: WebDavSyncTombstone(
+                  key: deleted,
+                  rawLocalTime: true,
+                  stamp: WebDavSyncStamp(
+                    normalizedTimeMs: time + 1,
+                    originDeviceId: 'device',
+                  ),
+                ),
+              },
+            ),
+          },
+        ),
+      );
+      decisions.clear();
+      await replay();
+      expect(repository.loads, 2);
+      expect(decisions, [false, true, false]);
+
+      repository.failNextLoad = true;
+      acked.clear();
+      await expectLater(replay(), throwsStateError);
+      expect(acked, isEmpty);
+      await replay();
+      expect(repository.loads, 4);
+      expect(acked, [1, 2, 3]);
+    },
+  );
+
   test('bootstrap and circle state round-trips with strict digests', () {
     const stamp = WebDavSyncStamp(
       normalizedTimeMs: 42,
@@ -735,6 +1104,29 @@ void main() {
     expect(bounded, contains('peer-0000'));
     expect(bounded, isNot(contains('peer-0001')));
   });
+}
+
+class _CountingEngineRepository implements WebDavSyncEngineStateRepository {
+  _CountingEngineRepository(this.delegate);
+  final WebDavSyncEngineStateRepository delegate;
+  int loads = 0;
+  bool failNextLoad = false;
+
+  @override
+  Future<WebDavSyncEngineState> load(String namespaceId) {
+    loads++;
+    if (failNextLoad) {
+      failNextLoad = false;
+      throw StateError('transient sync state read failure');
+    }
+    return delegate.load(namespaceId);
+  }
+
+  @override
+  Future<WebDavSyncEngineState> update(
+    String namespaceId,
+    WebDavSyncEngineState Function(WebDavSyncEngineState) update,
+  ) => delegate.update(namespaceId, update);
 }
 
 Future<WebDavSyncBinding> _activateBinding(

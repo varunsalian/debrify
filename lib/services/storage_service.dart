@@ -32,6 +32,7 @@ import '../utils/json_isolate.dart';
 import '../utils/platform_util.dart';
 import 'tracking_scrobble_preferences.dart';
 import 'playlist_dedupe_key.dart';
+import 'playback_recovery_intent.dart';
 import 'webdav_sync/webdav_sync_hot_merge.dart';
 import 'webdav_sync/webdav_sync_library_models.dart';
 import 'webdav_sync/webdav_sync_tombstones.dart';
@@ -2650,6 +2651,9 @@ class StorageService {
     final finished = await _getFinishedMovieIds();
     if (!finished.remove(normalized)) return;
 
+    await PlaybackRecoveryIntent.record({
+      WebDavSyncRecordKey.finishedMovie(normalized),
+    });
     await WebDavSyncTombstoneRecorder.recordForCurrentProfile(<String>{
       WebDavSyncRecordKey.finishedMovie(normalized),
     });
@@ -2742,15 +2746,133 @@ class StorageService {
     bool recordDeletions = false,
   }) async {
     final prefs = await ProfilePreferences.instance();
-    if (recordDeletions &&
-        await WebDavSyncTombstoneRecorder.shouldRecordForCurrentProfile()) {
+    if (recordDeletions) {
       final previous = await _getPlaybackStateMap();
+      if (PlaybackRecoveryIntent.isSupported) {
+        await PlaybackRecoveryIntent.record(
+          _playbackRecoveryRecordKeys(
+            previous,
+          ).difference(_playbackRecoveryRecordKeys(map)),
+        );
+      }
       final retained = _webDavPlaybackRecordKeys(map);
       await WebDavSyncTombstoneRecorder.recordForCurrentProfile(
         _webDavPlaybackRecordKeys(previous).difference(retained),
       );
     }
     await prefs.setString(_playbackStateKey, jsonEncode(map));
+  }
+
+  static Set<String> _playbackRecoveryRecordKeys(Map<String, dynamic> map) => {
+    ..._webDavPlaybackRecordKeys(map),
+    for (final entry in map.entries)
+      if (entry.value is Map && entry.value['imdbId'] is String)
+        ..._webDavPlaybackRecordKeys({
+          'imdb:${(entry.value['imdbId'] as String).trim().toLowerCase()}':
+              entry.value,
+        }),
+  };
+
+  /// Deletions and sync intent fence every replay. Cold recovery also checks
+  /// local position timestamps; a proven return can finish an interrupted
+  /// normal save whose position was written just after its native snapshot.
+  static Future<bool> hasNewerPlaybackRecoveryIntent({
+    String? seriesTitle,
+    int? season,
+    int? episode,
+    String? imdbId,
+    String? resumeId,
+    required int checkpointAtMs,
+    bool includePositions = true,
+    bool includeSyncedPositions = true,
+    bool Function(Map<String, dynamic>)? isOwnRecoveryWrite,
+    bool Function(Map<String, dynamic>)? matchesRecoveryPosition,
+  }) async {
+    String alias(String type, String title) =>
+        '${type}_${title.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_')}';
+    final map = await _getPlaybackStateMap();
+    final stableId = imdbId?.trim().toLowerCase();
+    final keys = <String>{};
+    final ownRecoveryKeys = <String>{};
+    bool newerPosition(Object? value, String key) {
+      if (value is! Map) return false;
+      final state = Map<String, dynamic>.from(value);
+      if (isOwnRecoveryWrite?.call(state) ?? false) {
+        ownRecoveryKeys.add(key);
+        return false;
+      }
+      return includePositions &&
+          (state['updatedAt'] as num? ?? 0) >= checkpointAtMs;
+    }
+
+    final seriesAliases = <String>{
+      if (seriesTitle != null) alias('series', seriesTitle),
+    };
+    final videoAliases = <String>{
+      if (resumeId != null) alias('video', resumeId),
+    };
+    if (stableId != null && stableId.isNotEmpty) {
+      if (seriesTitle == null) {
+        keys.add(WebDavSyncRecordKey.finishedMovie(stableId));
+        keys.add(WebDavSyncRecordKey.playback('imdb:$stableId'));
+      }
+      for (final entry in map.entries) {
+        final value = entry.value;
+        if (value is! Map ||
+            value['imdbId']?.toString().trim().toLowerCase() != stableId) {
+          continue;
+        }
+        if (value['type'] == 'series' && seriesTitle != null) {
+          seriesAliases.add(entry.key);
+        } else if (value['type'] == 'video' && seriesTitle == null) {
+          videoAliases.add(entry.key);
+        }
+      }
+    }
+    for (final key in seriesAliases) {
+      if (season == null || episode == null) continue;
+      keys.addAll({
+        WebDavSyncRecordKey.playbackMeta(key),
+        WebDavSyncRecordKey.playbackEpisode(key, season, episode),
+        WebDavSyncRecordKey.playbackFinished(key, season, episode),
+        if (stableId != null) ...{
+          WebDavSyncRecordKey.playbackEpisode(
+            'imdb:$stableId',
+            season,
+            episode,
+          ),
+          WebDavSyncRecordKey.playbackFinished(
+            'imdb:$stableId',
+            season,
+            episode,
+          ),
+        },
+      });
+      final state =
+          map[key]?['seasons']?[season.toString()]?[episode.toString()];
+      if (newerPosition(
+        state,
+        WebDavSyncRecordKey.playbackEpisode(key, season, episode),
+      )) {
+        return true;
+      }
+    }
+    for (final key in videoAliases) {
+      keys.add(WebDavSyncRecordKey.playback(key));
+      final state = map[key];
+      if (newerPosition(state, WebDavSyncRecordKey.playback(key))) {
+        return true;
+      }
+    }
+    return await PlaybackRecoveryIntent.hasNewer(keys, checkpointAtMs) ||
+        await WebDavSyncTombstoneRecorder.hasNewerPlaybackIntent(
+          keys,
+          checkpointAtMs,
+          includePositions: includeSyncedPositions,
+          isOwnRecoveryWrite: (key, payload) =>
+              ownRecoveryKeys.contains(key) &&
+              (matchesRecoveryPosition?.call(payload) ?? false),
+        );
   }
 
   static Set<String> _webDavPlaybackRecordKeys(Map<String, dynamic> map) {
@@ -2813,6 +2935,8 @@ class StorageService {
     double speed = 1.0,
     String aspect = 'contain',
     String? imdbId,
+    String? recoveryCheckpointId,
+    int? recoveryUpdatedAtMs,
   }) async {
     final map = await _getPlaybackStateMap();
     final key =
@@ -2837,7 +2961,9 @@ class StorageService {
       'durationMs': durationMs,
       'speed': speed,
       'aspect': aspect,
-      'updatedAt': DateTime.now().millisecondsSinceEpoch,
+      'updatedAt': recoveryUpdatedAtMs ?? DateTime.now().millisecondsSinceEpoch,
+      if (recoveryCheckpointId != null)
+        'recoveryCheckpointId': recoveryCheckpointId,
     };
 
     debugPrint(
@@ -2853,7 +2979,12 @@ class StorageService {
     required int season,
     required int episode,
     String? imdbId,
+    int? recoveryUpdatedAtMs,
   }) async {
+    // Recovery is a historical observation, not a new playback event. Both
+    // records must keep its original time so the latest episode remains last.
+    final completedAtMs =
+        recoveryUpdatedAtMs ?? DateTime.now().millisecondsSinceEpoch;
     final map = await _getPlaybackStateMap();
     final key =
         'series_${seriesTitle.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_')}';
@@ -2889,7 +3020,7 @@ class StorageService {
     }
 
     seriesData['finishedEpisodes'][season.toString()][episode.toString()] = {
-      'finishedAt': DateTime.now().millisecondsSinceEpoch,
+      'finishedAt': completedAtMs,
     };
 
     // Also add/update in seasons map so it appears in getEpisodeProgress()
@@ -2908,15 +3039,21 @@ class StorageService {
         'durationMs': 1,
         'speed': 1.0,
         'aspect': 'contain',
-        'updatedAt': DateTime.now().millisecondsSinceEpoch,
+        'updatedAt': completedAtMs,
       };
     } else {
       // Episode has existing progress - update it to show as finished
       // Set position = duration to show 100% progress
       final existingData = episodeData as Map<String, dynamic>;
-      final durationMs = existingData['durationMs'] as int? ?? 1;
-      existingData['positionMs'] = durationMs; // Mark as fully watched
-      existingData['updatedAt'] = DateTime.now().millisecondsSinceEpoch;
+      // A later rewatch can already be saved while the older watched marker
+      // is still pending. Preserve that newer bookmark when filling the gap.
+      if (recoveryUpdatedAtMs == null ||
+          (existingData['updatedAt'] as num? ?? 0) <= completedAtMs) {
+        final durationMs = existingData['durationMs'] as int? ?? 1;
+        existingData['positionMs'] = durationMs; // Mark as fully watched
+        existingData['updatedAt'] = completedAtMs;
+        existingData.remove('recoveryCheckpointId');
+      }
     }
 
     debugPrint(
@@ -3590,6 +3727,8 @@ class StorageService {
     double speed = 1.0,
     String aspect = 'contain',
     String? imdbId,
+    String? recoveryCheckpointId,
+    int? recoveryUpdatedAtMs,
   }) async {
     final map = await _getPlaybackStateMap();
     final key =
@@ -3603,7 +3742,9 @@ class StorageService {
       'durationMs': durationMs,
       'speed': speed,
       'aspect': aspect,
-      'updatedAt': DateTime.now().millisecondsSinceEpoch,
+      'updatedAt': recoveryUpdatedAtMs ?? DateTime.now().millisecondsSinceEpoch,
+      if (recoveryCheckpointId != null)
+        'recoveryCheckpointId': recoveryCheckpointId,
       if (imdbId != null) 'imdbId': imdbId,
     };
 
@@ -3613,6 +3754,7 @@ class StorageService {
   /// Get playback state for non-series content
   static Future<Map<String, dynamic>?> getVideoPlaybackState({
     required String videoTitle,
+    bool includeFinished = false,
   }) async {
     final map = await _getPlaybackStateMap();
     final key =
@@ -3624,7 +3766,10 @@ class StorageService {
     final imdbId = (videoData['imdbId'] as String?)?.trim();
     // A finished movie can have a stale source-specific state from a final
     // autosave tick. Its local completion record wins over that stale resume.
-    if (imdbId != null && imdbId.isNotEmpty && await isMovieFinished(imdbId)) {
+    if (!includeFinished &&
+        imdbId != null &&
+        imdbId.isNotEmpty &&
+        await isMovieFinished(imdbId)) {
       return null;
     }
 
@@ -3938,6 +4083,9 @@ class StorageService {
     bool recordSyncDeletions = true,
   }) async {
     final prefs = await ProfilePreferences.instance();
+    // Device-local clears must invalidate native recovery too, without
+    // publishing a deletion to the user's other devices.
+    await PlaybackRecoveryIntent.recordClearAll();
     await _savePlaybackStateMap(
       <String, dynamic>{},
       recordDeletions: recordSyncDeletions,
@@ -4107,7 +4255,11 @@ class StorageService {
     bool playbackCheckpoint = false,
     WebDavSyncMutationOrigin origin = WebDavSyncMutationOrigin.user,
   }) {
-    return IptvMediaStore.removeVideoResume(key, origin: origin, playbackCheckpoint: playbackCheckpoint);
+    return IptvMediaStore.removeVideoResume(
+      key,
+      origin: origin,
+      playbackCheckpoint: playbackCheckpoint,
+    );
   }
 
   /// Save audio and subtitle preferences for series content

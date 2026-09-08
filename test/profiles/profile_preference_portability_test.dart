@@ -194,6 +194,7 @@ void main() {
             'url': 'https://signed.example/video?token=secret',
             'positionMs': 12000,
             'durationMs': 90000,
+            'recoveryCheckpointId': 'source-device-checkpoint',
             'httpHeaders': <String, String>{'Authorization': 'Bearer secret'},
             'nested': <String, Object?>{
               'localPath': '/Users/source/movie.mkv',
@@ -211,6 +212,7 @@ void main() {
       expect(movie['durationMs'], 90000);
       expect(movie, isNot(contains('url')));
       expect(movie, isNot(contains('httpHeaders')));
+      expect(movie, isNot(contains('recoveryCheckpointId')));
       expect(movie['nested'], <String, Object?>{'speed': 1.25});
       expect(jsonEncode(restored), isNot(contains('secret')));
       expect(jsonEncode(restored), isNot(contains('/Users/source')));

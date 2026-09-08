@@ -169,6 +169,7 @@ abstract final class ProfilePreferencePortability {
   };
 
   static const Set<String> _playbackExecutionFields = <String>{
+    'recoverycheckpointid',
     'url',
     'videourl',
     'streamurl',

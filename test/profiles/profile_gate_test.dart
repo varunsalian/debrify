@@ -48,6 +48,13 @@ void main() {
       isFalse,
     );
     expect(shouldEnterPlaybackReturn(_profile(), claimed: false), isFalse);
+    expect(
+      shouldEnterPlaybackReturn(
+        _profile(pinResetRequired: true),
+        claimed: true,
+      ),
+      isFalse,
+    );
   });
 
   // The gate composes the two: startup passes `allowSingleProfileAutoEnter:

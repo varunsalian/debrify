@@ -1076,10 +1076,6 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private var recoveryImdbId: String? = null
     private val recoveryStartedAtMs = System.currentTimeMillis()
     private var recoverySequence = 0L
-    private val recoveryExecutor =
-        java.util.concurrent.Executors.newSingleThreadExecutor { runnable ->
-            Thread(runnable, "debrify-tv-progress").apply { isDaemon = true }
-        }
     private var startupPikPakTorrentAcquisitionAttempted = false
     // An explicit in-player source pick is a one-candidate transaction. It
     // shares the startup decoder/slate checks, but never advances to another
@@ -16081,7 +16077,11 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         // on it here recreates the stale Continue Watching race seen on Bravia.
         if (!exitCheckpointWritten) {
             finalProgressSnapshot = true
-            sendProgress(completed = false)
+            try {
+                sendProgress(completed = false)
+            } finally {
+                finalProgressSnapshot = false
+            }
             exitCheckpointWritten = true
         }
         PlaybackReturnHandoff.markReturning(sourcePersistenceSessionId)
@@ -16146,6 +16146,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         sequence: Long,
         synchronous: Boolean,
     ) {
+        // IPTV VOD has a separate Dart store; never disguise it as a movie.
+        if (isIptvMode || progress["mode"] == "iptv") return
         val ownerProfileId = recoveryProfileId ?: return
         if (recoveryDataGeneration <= 0 || sourcePersistenceSessionId <= 0) return
         val positionMs = (progress["positionMs"] as? Number)?.toLong() ?: 0L
@@ -16185,27 +16187,15 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             .put("completionThreshold", progress["completionThreshold"] ?: 80)
             .toString()
 
-        if (synchronous) {
+        if (synchronous || progress["completed"] == true || progress["localCompleted"] == true) {
             TvPlaybackRecoveryStore.stage(filesDir, snapshot)
             return
         }
-        runCatching {
-            recoveryExecutor.execute {
-                TvPlaybackRecoveryStore.stage(filesDir, snapshot)
-            }
-        }
+        TvPlaybackRecoveryStore.stageAsync(filesDir, snapshot)
     }
 
     private fun acknowledgeRecoveryCheckpoint(sequence: Long) {
-        runCatching {
-            recoveryExecutor.execute {
-                TvPlaybackRecoveryStore.acknowledge(
-                    filesDir,
-                    sourcePersistenceSessionId,
-                    sequence,
-                )
-            }
-        }
+        TvPlaybackRecoveryStore.acknowledgeAsync(filesDir, sourcePersistenceSessionId, sequence)
     }
 
     private fun sendProgress(completed: Boolean) {
@@ -18601,7 +18591,6 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         if (::seekbarOverlay.isInitialized) seekbarOverlay.setOnKeyListener(null)
 
         sendFinished()
-        recoveryExecutor.shutdown()
         super.onDestroy()
         recordPlaybackLifecycle("activity_destroy_complete")
     }

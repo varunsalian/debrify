@@ -129,7 +129,6 @@ class AndroidTvPlayerBridge {
   _sourcePlaylistResolver;
   static Future<void> Function(int)? _stremioSourceCommitter;
   static PlaybackFinishedCallback? _startupSourcesExhaustedCallback;
-  static int _nextSourcePersistenceSessionId = 0;
   static _StremioSourcePersistenceSession? _sourcePersistenceSession;
   static NativePlaybackProgressSession? _progressSession;
   static Future<void> _progressDrain = Future<void>.value();
@@ -1702,6 +1701,7 @@ class AndroidTvPlayerBridge {
       return false;
     }
 
+    final sessionId = await TvPlaybackRecovery.allocateSessionId();
     await _progressDrain;
     await _progressSession?.closeAndDrain();
     await _sourcePersistenceSession?.closeAndDrain();
@@ -1711,9 +1711,7 @@ class AndroidTvPlayerBridge {
     }
     final lockOwner = _beginNativePlayback();
     _nativePlaybackLockOwner = lockOwner;
-    final persistenceSession = _StremioSourcePersistenceSession(
-      ++_nextSourcePersistenceSessionId,
-    );
+    final persistenceSession = _StremioSourcePersistenceSession(sessionId);
     _sourcePersistenceSession = persistenceSession;
     final profileOwner = ProfileSessionMemory.captureOwner();
     final progressSession = onProgress == null

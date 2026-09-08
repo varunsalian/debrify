@@ -1380,6 +1380,21 @@ class MainActivity : FlutterActivity() {
 			TV_PLAYBACK_RECOVERY_CHANNEL,
 		).setMethodCallHandler { call, result ->
 			when (call.method) {
+				"allocatePlaybackSession" -> result.success(
+					com.debrify.app.tv.TvPlaybackRecoveryStore.allocateSessionId(filesDir) { error ->
+						DiagnosticFileLog.recordError(
+							source = "tv_playback_recovery",
+							event = "session_allocation_read_failed",
+							throwable = error,
+						)
+					},
+				)
+				"claimPlaybackReturnSession" -> {
+					val profileId = call.argument<String>("profileId")
+					val generation = call.argument<Number>("dataGeneration")?.toInt() ?: 0
+					result.success(if (profileId.isNullOrBlank() || generation <= 0) null else
+						com.debrify.app.tv.PlaybackReturnHandoff.consumeSession(profileId, generation))
+				}
 				"claimPlaybackReturn" -> {
 					val profileId = call.argument<String>("profileId")
 					val generation = call.argument<Number>("dataGeneration")?.toInt() ?: 0
@@ -1404,6 +1419,11 @@ class MainActivity : FlutterActivity() {
 						),
 					)
 				}
+				"discardCheckpoint" -> result.success(
+					com.debrify.app.tv.TvPlaybackRecoveryStore.discard(
+						filesDir, call.argument<String>("encoded").orEmpty(),
+					),
+				)
 				"cancelPlaybackReturn" -> {
 					val sessionId = call.argument<Number>("sessionId")?.toInt() ?: 0
 					com.debrify.app.tv.PlaybackReturnHandoff.cancel(sessionId)
@@ -2905,7 +2925,7 @@ class MainActivity : FlutterActivity() {
                 putExtra("payloadPath", tempFile.absolutePath)
                 putExtra("playbackSessionId", playbackSessionId)
             }
-            com.debrify.app.tv.TvPlaybackRecoveryStore.begin(filesDir)
+            com.debrify.app.tv.TvPlaybackRecoveryStore.begin(filesDir, playbackSessionId)
             com.debrify.app.tv.PlaybackReturnHandoff.begin(
                 playbackSessionId,
                 ownerProfileId.orEmpty(),

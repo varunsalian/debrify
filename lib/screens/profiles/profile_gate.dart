@@ -82,7 +82,8 @@ bool shouldEnterPlaybackReturn(
   required bool claimed,
 }) {
   if (!claimed || activeProfile == null) return false;
-  return !(activeProfile.lockOnResume && activeProfile.hasPin);
+  return !activeProfile.pinResetRequired &&
+      !(activeProfile.lockOnResume && activeProfile.hasPin);
 }
 
 class ProfileGate extends StatefulWidget {

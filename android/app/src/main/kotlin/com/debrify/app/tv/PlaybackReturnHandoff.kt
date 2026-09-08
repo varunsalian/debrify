@@ -38,9 +38,9 @@ internal class PlaybackReturnLedger(
     }
 
     @Synchronized
-    fun consume(profileId: String, dataGeneration: Int): Boolean {
-        val current = session ?: return false
-        val pendingAt = current.pendingSinceMs ?: return false
+    fun consumeSession(profileId: String, dataGeneration: Int): Int? {
+        val current = session ?: return null
+        val pendingAt = current.pendingSinceMs ?: return null
         val age = nowMs() - pendingAt
         val valid = age in 0..ttlMs &&
             current.profileId == profileId &&
@@ -49,8 +49,11 @@ internal class PlaybackReturnLedger(
         // The active registry profile is authoritative; retaining a mismatched
         // token for a later switch would turn it into a delayed unlock.
         session = null
-        return valid
+        return if (valid) current.id else null
     }
+
+    fun consume(profileId: String, dataGeneration: Int): Boolean =
+        consumeSession(profileId, dataGeneration) != null
 
     @Synchronized
     fun cancel(id: Int) {
@@ -70,6 +73,9 @@ object PlaybackReturnHandoff {
 
     fun consume(profileId: String, dataGeneration: Int): Boolean =
         ledger.consume(profileId, dataGeneration)
+
+    fun consumeSession(profileId: String, dataGeneration: Int): Int? =
+        ledger.consumeSession(profileId, dataGeneration)
 
     fun cancel(id: Int) = ledger.cancel(id)
 }
