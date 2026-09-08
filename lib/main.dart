@@ -66,6 +66,7 @@ import 'services/secret_vault.dart';
 import 'services/play_loader_style.dart';
 import 'services/storage_service.dart';
 import 'services/tv_hero_artwork_quality_controller.dart';
+import 'services/tv_playback_recovery.dart';
 import 'services/tvos_top_shelf_service.dart';
 import 'services/simkl/simkl_service.dart';
 import 'services/trakt/trakt_service.dart';
@@ -574,6 +575,10 @@ Future<void> _bestEffortStartupStep(
 }
 
 Future<void> _continueApplicationStartup() async {
+  // A Sony/Android lifecycle can reclaim MainActivity while the separate
+  // native player remains foreground. Recover its one-shot profile return and
+  // last position before ProfileGate paints the recreated session.
+  await TvPlaybackRecovery.initialize();
   // This common path is also entered after registry recovery and interactive
   // Linux vault unlock; both must receive the same native lock authority as a
   // normal bootstrap.

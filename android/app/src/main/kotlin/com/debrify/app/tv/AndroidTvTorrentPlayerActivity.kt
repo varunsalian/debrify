@@ -1069,6 +1069,17 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private var startupRecoveryAvailable = false
     private var startupSourcesExhausted = false
     private var sourcePersistenceSessionId = 0
+    private var recoveryProfileId: String? = null
+    private var recoveryDataGeneration = 0
+    private var recoveryTitle: String? = null
+    private var recoverySeriesTitle: String? = null
+    private var recoveryImdbId: String? = null
+    private val recoveryStartedAtMs = System.currentTimeMillis()
+    private var recoverySequence = 0L
+    private val recoveryExecutor =
+        java.util.concurrent.Executors.newSingleThreadExecutor { runnable ->
+            Thread(runnable, "debrify-tv-progress").apply { isDaemon = true }
+        }
     private var startupPikPakTorrentAcquisitionAttempted = false
     // An explicit in-player source pick is a one-candidate transaction. It
     // shares the startup decoder/slate checks, but never advances to another
@@ -1969,6 +1980,14 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             // the callbacks it is about to clear.
             sourcePersistenceSessionId =
                 payloadCheck.optInt("sourcePersistenceSessionId", sourcePersistenceSessionId)
+            recoveryProfileId = payloadCheck.optString("playbackOwnerProfileId")
+                .takeIf { it.isNotBlank() }
+            recoveryDataGeneration =
+                payloadCheck.optInt("playbackOwnerDataGeneration", 0)
+            recoveryTitle = payloadCheck.optString("title").takeIf { it.isNotBlank() }
+            recoverySeriesTitle = payloadCheck.optString("seriesTitle")
+                .takeIf { it.isNotBlank() }
+            recoveryImdbId = payloadCheck.optString("imdbId").takeIf { it.isNotBlank() }
             if (payloadCheck.optString("mode") == "iptv") {
                 initIptvMode(payloadCheck)
                 return
@@ -16043,6 +16062,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private var lastProgressAckAt = 0L
     private var lastProgressBridgeAvailable: Boolean? = null
     private var finalProgressSnapshot = false
+    private var exitCheckpointWritten = false
 
     private fun recordPlaybackLifecycle(event: String, details: String = "") {
         DiagnosticFileLog.recordCritical(
@@ -16055,6 +16075,15 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     }
 
     override fun finish() {
+        // Write the exact exit position before Android uncovers/recreates the
+        // Flutter host. The normal five-second writer is asynchronous; relying
+        // on it here recreates the stale Continue Watching race seen on Bravia.
+        if (!exitCheckpointWritten) {
+            finalProgressSnapshot = true
+            sendProgress(completed = false)
+            exitCheckpointWritten = true
+        }
+        PlaybackReturnHandoff.markReturning(sourcePersistenceSessionId)
         recordPlaybackLifecycle("finish_requested")
         super.finish()
     }
@@ -16063,6 +16092,12 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
      * identity or URL is logged. A callback confirms the Dart handler finished. */
     private fun deliverProgress(map: HashMap<String, Any?>) {
         map["sourcePersistenceSessionId"] = sourcePersistenceSessionId
+        val recoverySequenceForMap = ++recoverySequence
+        stageRecoveryCheckpoint(
+            map,
+            recoverySequenceForMap,
+            synchronous = finalProgressSnapshot,
+        )
         val channel = MainActivity.getAndroidTvPlayerChannel()
         val now = SystemClock.elapsedRealtime()
         val forceLog = finalProgressSnapshot || map["completed"] == true
@@ -16087,6 +16122,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                     if (result == true) {
                         progressAckCount++
                         lastProgressAckAt = SystemClock.elapsedRealtime()
+                        acknowledgeRecoveryCheckpoint(recoverySequenceForMap)
                     }
                     if (logSample) recordPlaybackLifecycle("progress_ack", "accepted=${result == true}")
                 }
@@ -16101,6 +16137,65 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             if (logSample) DiagnosticFileLog.recordError(
                 source = "android_tv_player", event = "progress_delivery_failed", throwable = error,
             )
+        }
+    }
+
+    private fun stageRecoveryCheckpoint(
+        progress: Map<String, Any?>,
+        sequence: Long,
+        synchronous: Boolean,
+    ) {
+        val ownerProfileId = recoveryProfileId ?: return
+        if (recoveryDataGeneration <= 0 || sourcePersistenceSessionId <= 0) return
+        val positionMs = (progress["positionMs"] as? Number)?.toLong() ?: 0L
+        val durationMs = (progress["durationMs"] as? Number)?.toLong() ?: 0L
+        if (positionMs <= 0L || durationMs <= 0L) return
+
+        val snapshot = JSONObject()
+            .put("version", 1)
+            .put("sessionId", sourcePersistenceSessionId)
+            .put("sequence", sequence)
+            .put("profileId", ownerProfileId)
+            .put("dataGeneration", recoveryDataGeneration)
+            .put("startedAtMs", recoveryStartedAtMs)
+            .put("updatedAtMs", System.currentTimeMillis())
+            .put("contentType", progress["contentType"] ?: "single")
+            .put("title", recoveryTitle)
+            .put("seriesTitle", recoverySeriesTitle)
+            .put("imdbId", recoveryImdbId)
+            .put("resumeId", progress["resumeId"])
+            .put("url", progress["url"])
+            .put("itemIndex", progress["itemIndex"] ?: 0)
+            .put("season", progress["season"])
+            .put("episode", progress["episode"])
+            .put("positionMs", positionMs)
+            .put("durationMs", durationMs)
+            .put("speed", progress["speed"] ?: 1.0)
+            .put("aspect", progress["aspect"] ?: "contain")
+            .put("completed", progress["completed"] == true)
+            .put("localCompleted", progress["localCompleted"] == true)
+            .toString()
+
+        if (synchronous) {
+            TvPlaybackRecoveryStore.stage(filesDir, snapshot)
+            return
+        }
+        runCatching {
+            recoveryExecutor.execute {
+                TvPlaybackRecoveryStore.stage(filesDir, snapshot)
+            }
+        }
+    }
+
+    private fun acknowledgeRecoveryCheckpoint(sequence: Long) {
+        runCatching {
+            recoveryExecutor.execute {
+                TvPlaybackRecoveryStore.acknowledge(
+                    filesDir,
+                    sourcePersistenceSessionId,
+                    sequence,
+                )
+            }
         }
     }
 
@@ -18335,8 +18430,11 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         sourceBrowser?.destroy()
         sourceBrowser = null
         recordPlaybackLifecycle("activity_destroy_begin")
-        finalProgressSnapshot = true
-        sendProgress(completed = false)
+        if (!exitCheckpointWritten) {
+            finalProgressSnapshot = true
+            sendProgress(completed = false)
+            exitCheckpointWritten = true
+        }
         if (::subtitleControlsLift.isInitialized) subtitleControlsLift.cancel()
         iptvTuneDiagnostics.onSessionEnd()
         startupFailoverTimeout?.let { progressHandler.removeCallbacks(it) }
@@ -18486,6 +18584,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         if (::seekbarOverlay.isInitialized) seekbarOverlay.setOnKeyListener(null)
 
         sendFinished()
+        recoveryExecutor.shutdown()
         super.onDestroy()
         recordPlaybackLifecycle("activity_destroy_complete")
     }

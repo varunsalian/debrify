@@ -20,6 +20,7 @@ import '../../services/profiles/profile_runtime.dart';
 import '../../services/profiles/profile_remote_lease.dart';
 import '../../services/remote_control/remote_command_router.dart';
 import '../../services/tvos_top_shelf_service.dart';
+import '../../services/tv_playback_recovery.dart';
 import '../../services/watched_status_service.dart';
 import 'manage_profiles_screen.dart';
 import 'profile_gate_looks.dart';
@@ -73,6 +74,15 @@ final class _PendingSyncedProfileRetirement {
 
   final String profileId;
   final SyncedProfileOutcomeApply applyOutcome;
+}
+
+@visibleForTesting
+bool shouldEnterPlaybackReturn(
+  UserProfile? activeProfile, {
+  required bool claimed,
+}) {
+  if (!claimed || activeProfile == null) return false;
+  return !(activeProfile.lockOnResume && activeProfile.hasPin);
 }
 
 class ProfileGate extends StatefulWidget {
@@ -211,17 +221,31 @@ class _ProfileGateState extends State<ProfileGate> with WidgetsBindingObserver {
     }
     if (!mounted) return;
     _retriedLoad = false;
+    final playbackReturnClaim =
+        allowSingleProfileAutoEnter &&
+        TvPlaybackRecovery.consumeGateBypass(ProfileRuntime.capture());
+    final activeAtStartup = profiles.where(
+      (profile) => profile.id == ProfileRuntime.capture().profileId,
+    );
+    // A playback continuation may skip the ordinary multi-profile chooser,
+    // but it never outranks an explicit PIN-on-resume policy.
+    final playbackReturn = shouldEnterPlaybackReturn(
+      activeAtStartup.firstOrNull,
+      claimed: playbackReturnClaim,
+    );
     setState(() {
       _profiles = profiles;
-      _entered = shouldAutoEnterSoleProfile(
-        profiles,
-        // The sole-profile launch convenience is opt-IN now: the gate always
-        // asks unless the hub's startup toggle re-enables auto-enter. The
-        // caller's argument still outranks everything — an explicit Switch
-        // or a lock must land on the picker regardless of the toggle.
-        allowSingleProfileAutoEnter:
-            allowSingleProfileAutoEnter && !ProfileGateAlwaysAsk.cached,
-      );
+      _entered =
+          playbackReturn ||
+          shouldAutoEnterSoleProfile(
+            profiles,
+            // The sole-profile launch convenience is opt-IN now: the gate always
+            // asks unless the hub's startup toggle re-enables auto-enter. The
+            // caller's argument still outranks everything — an explicit Switch
+            // or a lock must land on the picker regardless of the toggle.
+            allowSingleProfileAutoEnter:
+                allowSingleProfileAutoEnter && !ProfileGateAlwaysAsk.cached,
+          );
     });
     DiagnosticLog.instance.recordEvent(
       source: 'profile_gate',
@@ -231,6 +255,7 @@ class _ProfileGateState extends State<ProfileGate> with WidgetsBindingObserver {
         'profileCount': profiles.length,
         'pickerVisible': !_entered,
         'startupLoad': allowSingleProfileAutoEnter,
+        'playbackReturn': playbackReturn,
       },
     );
     if (!_entered) {

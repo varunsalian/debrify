@@ -38,6 +38,18 @@ void main() {
     );
   });
 
+  test('playback return skips chooser but honors PIN-on-resume', () {
+    expect(shouldEnterPlaybackReturn(_profile(), claimed: true), isTrue);
+    expect(
+      shouldEnterPlaybackReturn(
+        _profile(hasPin: true, lockOnResume: true),
+        claimed: true,
+      ),
+      isFalse,
+    );
+    expect(shouldEnterPlaybackReturn(_profile(), claimed: false), isFalse);
+  });
+
   // The gate composes the two: startup passes `allowSingleProfileAutoEnter:
   // true` but ANDs it with `!ProfileGateAlwaysAsk.cached`, so the fresh-
   // install default (ask) wins until the hub's startup toggle opts out.
@@ -53,7 +65,11 @@ void main() {
   });
 }
 
-UserProfile _profile({bool hasPin = false, bool pinResetRequired = false}) {
+UserProfile _profile({
+  bool hasPin = false,
+  bool pinResetRequired = false,
+  bool lockOnResume = false,
+}) {
   final now = DateTime.utc(2026, 8, 13);
   return UserProfile(
     id: 'admin',
@@ -66,7 +82,7 @@ UserProfile _profile({bool hasPin = false, bool pinResetRequired = false}) {
     setupComplete: true,
     pinResetRequired: pinResetRequired,
     hasPin: hasPin,
-    lockOnResume: false,
+    lockOnResume: lockOnResume,
     createdAt: now,
     updatedAt: now,
   );

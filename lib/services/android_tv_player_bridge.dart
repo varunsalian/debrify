@@ -28,6 +28,7 @@ import 'profiles/profile_lock_controller.dart';
 import 'profiles/profile_session_memory.dart';
 import 'native_playback_progress_session.dart';
 import 'diagnostic_log.dart';
+import 'tv_playback_recovery.dart';
 
 typedef StreamNextProvider = Future<Map<String, String>?> Function();
 typedef TorboxNextProvider = StreamNextProvider; // Backward compatibility
@@ -826,6 +827,7 @@ class AndroidTvPlayerBridge {
             event: 'playback_finished_received',
             fields: <String, Object?>{'session': finishedSessionId},
           );
+          await TvPlaybackRecovery.cancelReturn(finishedSessionId);
           final finishedTorrent = _torrentFinishedCallback;
           final startupExhausted =
               finishedArgs is Map &&
@@ -1758,6 +1760,15 @@ class AndroidTvPlayerBridge {
       // Add font info to payload
       final payloadWithFont = Map<String, dynamic>.from(payload);
       payloadWithFont['sourcePersistenceSessionId'] = persistenceSession.id;
+      // Native keeps this owner only for the lifetime of the playback return
+      // handoff/checkpoint. It lets a recreated Flutter host prove that it is
+      // continuing the same unlocked profile rather than cold-starting into
+      // an unguarded profile session.
+      if (ProfileRuntime.isProfileCommitted) {
+        final scope = ProfileRuntime.capture();
+        payloadWithFont['playbackOwnerProfileId'] = scope.profileId;
+        payloadWithFont['playbackOwnerDataGeneration'] = scope.dataGeneration;
+      }
       if (fontInfo['customFontPath'] != null) {
         payloadWithFont['customFontPath'] = fontInfo['customFontPath'];
         payloadWithFont['customFontName'] = fontInfo['customFontName'];

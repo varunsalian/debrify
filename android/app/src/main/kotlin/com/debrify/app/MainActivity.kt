@@ -53,6 +53,7 @@ class MainActivity : FlutterActivity() {
 	private val PLAYER_DIAGNOSTICS_CHANNEL = "debrify/player_diagnostics"
 	private val REMOTE_TRANSFER_DIAGNOSTICS_CHANNEL = "debrify/remote_transfer_diagnostics"
 	private val NATIVE_DIAGNOSTICS_CHANNEL = "debrify/native_diagnostics"
+	private val TV_PLAYBACK_RECOVERY_CHANNEL = "debrify/tv_playback_recovery"
 	// SecretVault key derivation. ANDROID_ID is per-device (scoped to our
 	// signing key + user since Android 8, stable across OTAs) — unlike the
 	// build/model fields device_info_plus exposes, which every unit of the
@@ -1370,6 +1371,43 @@ class MainActivity : FlutterActivity() {
 					} else {
 						result.error("native_profile_migration_reset_failed", null, null)
 					}
+				}
+				else -> result.notImplemented()
+			}
+		}
+		MethodChannel(
+			flutterEngine.dartExecutor.binaryMessenger,
+			TV_PLAYBACK_RECOVERY_CHANNEL,
+		).setMethodCallHandler { call, result ->
+			when (call.method) {
+				"claimPlaybackReturn" -> {
+					val profileId = call.argument<String>("profileId")
+					val generation = call.argument<Number>("dataGeneration")?.toInt() ?: 0
+					val claimed = if (profileId.isNullOrBlank() || generation <= 0) {
+						false
+					} else {
+						com.debrify.app.tv.PlaybackReturnHandoff.consume(profileId, generation)
+					}
+					result.success(claimed)
+				}
+				"readCheckpoint" -> result.success(
+					com.debrify.app.tv.TvPlaybackRecoveryStore.read(filesDir),
+				)
+				"ackCheckpoint" -> {
+					val sessionId = call.argument<Number>("sessionId")?.toInt() ?: 0
+					val sequence = call.argument<Number>("sequence")?.toLong() ?: 0L
+					result.success(
+						com.debrify.app.tv.TvPlaybackRecoveryStore.acknowledge(
+							filesDir,
+							sessionId,
+							sequence,
+						),
+					)
+				}
+				"cancelPlaybackReturn" -> {
+					val sessionId = call.argument<Number>("sessionId")?.toInt() ?: 0
+					com.debrify.app.tv.PlaybackReturnHandoff.cancel(sessionId)
+					result.success(true)
 				}
 				else -> result.notImplemented()
 			}
@@ -2839,6 +2877,12 @@ class MainActivity : FlutterActivity() {
                 "startIndex=${(payload["startIndex"] as? Number)?.toInt() ?: -1}",
         )
 
+        val playbackSessionId =
+            (payload["sourcePersistenceSessionId"] as? Number)?.toInt() ?: 0
+        val ownerProfileId = payload["playbackOwnerProfileId"] as? String
+        val ownerGeneration =
+            (payload["playbackOwnerDataGeneration"] as? Number)?.toInt() ?: 0
+
         try {
             val payloadJson = mapToJson(payload).toString()
 
@@ -2859,8 +2903,14 @@ class MainActivity : FlutterActivity() {
                     "com.debrify.app.tv.AndroidTvTorrentPlayerActivity",
                 )
                 putExtra("payloadPath", tempFile.absolutePath)
-                putExtra("playbackSessionId", (payload["sourcePersistenceSessionId"] as? Number)?.toInt() ?: 0)
+                putExtra("playbackSessionId", playbackSessionId)
             }
+            com.debrify.app.tv.TvPlaybackRecoveryStore.begin(filesDir)
+            com.debrify.app.tv.PlaybackReturnHandoff.begin(
+                playbackSessionId,
+                ownerProfileId.orEmpty(),
+                ownerGeneration,
+            )
             startActivity(intent)
             DiagnosticFileLog.record(
                 source = "android_tv_launcher",
@@ -2868,6 +2918,7 @@ class MainActivity : FlutterActivity() {
             )
             result.success(true)
         } catch (e: Exception) {
+            com.debrify.app.tv.PlaybackReturnHandoff.cancel(playbackSessionId)
             DiagnosticFileLog.recordError(
                 source = "android_tv_launcher",
                 event = "torrent_launch_failed",
