@@ -177,13 +177,18 @@ class _MetadataSettingsPageState extends State<MetadataSettingsPage> {
     String title,
     String value,
     Map<String, String> options,
-    MetadataPreferences Function(String) update,
-  ) => ListTile(
+    MetadataPreferences Function(String) update, {
+    bool enabled = true,
+    String? disabledReason,
+  }) => ListTile(
     title: Text(title),
-    subtitle: Text(options[value] ?? 'Selected provider unavailable'),
+    subtitle: Text([
+      options[value] ?? 'Selected provider unavailable',
+      if (!enabled && disabledReason != null) disabledReason,
+    ].join('\n')),
     trailing: const Icon(Icons.chevron_right),
-    enabled: !_saving && _loadedRevision == MetadataPreferencesService.revision.value,
-    onTap: () async {
+    enabled: enabled && !_saving && _loadedRevision == MetadataPreferencesService.revision.value,
+    onTap: !enabled ? null : () async {
       if (_loadedRevision != MetadataPreferencesService.revision.value) return;
       final scope = ProfileRuntime.scope.value;
       final generation = _loadGeneration;
@@ -222,6 +227,19 @@ class _MetadataSettingsPageState extends State<MetadataSettingsPage> {
   @override
   Widget build(BuildContext context) {
     final prefs = _preferences;
+    bool tmdb(MetadataCategory category) =>
+        _repository.configured && prefs?.provider(category) == MetadataPreferences.tmdb;
+    final artwork = tmdb(MetadataCategory.posters) || tmdb(MetadataCategory.backgrounds);
+    final trailers = tmdb(MetadataCategory.trailers);
+    final language = _repository.configured && prefs != null && (
+        tmdb(MetadataCategory.information) || tmdb(MetadataCategory.episodeInformation) ||
+        tmdb(MetadataCategory.credits) || tmdb(MetadataCategory.recommendations) ||
+        prefs.features.any((f) => f != MetadataFeature.availability) ||
+        (artwork && prefs.artworkLanguage == 'same') ||
+        (trailers && prefs.trailerLanguage == 'same'));
+    final region = _repository.configured && prefs != null &&
+        (prefs.features.contains(MetadataFeature.availability) ||
+         prefs.features.contains(MetadataFeature.discovery));
     return Scaffold(
       appBar: AppBar(title: const Text('Metadata')),
       body: prefs == null
@@ -274,6 +292,8 @@ class _MetadataSettingsPageState extends State<MetadataSettingsPage> {
                   prefs.language,
                   _languageOptions,
                   (v) => prefs.copyWith(language: v),
+                  enabled: language,
+                  disabledReason: 'Enable a TMDB feature that uses metadata language.',
                 ),
                 _selection(
                   'Artwork language',
@@ -284,6 +304,8 @@ class _MetadataSettingsPageState extends State<MetadataSettingsPage> {
                     ..._languageOptions,
                   },
                   (v) => prefs.copyWith(artworkLanguage: v),
+                  enabled: artwork,
+                  disabledReason: 'Select TMDB for posters or backdrops to change this.',
                 ),
                 _selection(
                   'Trailer language',
@@ -294,6 +316,8 @@ class _MetadataSettingsPageState extends State<MetadataSettingsPage> {
                     ..._languageOptions,
                   },
                   (v) => prefs.copyWith(trailerLanguage: v),
+                  enabled: trailers,
+                  disabledReason: 'Select TMDB for trailers to change this.',
                 ),
                 _selection(
                   'Country / region',
@@ -313,6 +337,8 @@ class _MetadataSettingsPageState extends State<MetadataSettingsPage> {
                         'KR': 'South Korea',
                       },
                   (v) => prefs.copyWith(region: v),
+                  enabled: region,
+                  disabledReason: 'Enable Where to watch or TMDB discovery to change this.',
                 ),
                 const Divider(),
                 const Padding(

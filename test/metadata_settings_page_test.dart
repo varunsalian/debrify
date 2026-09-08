@@ -90,10 +90,46 @@ void main() {
     expect(prefs.fallback, isFalse);
   });
 
+  testWidgets('language controls follow their consumers and preserve saved values', (tester) async {
+    tester.view.physicalSize = const Size(1000, 4000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await open(tester);
+    Future<bool> enabled(String title) async {
+      return tester.widget<ListTile>(find.ancestor(of: find.text(title), matching: find.byType(ListTile))).enabled;
+    }
+    expect(await enabled('Metadata language'), isFalse);
+    expect(await enabled('Artwork language'), isFalse);
+    expect(await enabled('Trailer language'), isFalse);
+    expect(await enabled('Country / region'), isFalse);
+    var prefs = MetadataPreferences(providers: {MetadataCategory.posters: 'tmdb'},
+      language: 'hi-IN', region: 'IN');
+    await MetadataPreferencesService.save(prefs);
+    await tester.pumpAndSettle();
+    expect(await enabled('Metadata language'), isTrue);
+    expect(await enabled('Artwork language'), isTrue);
+    expect(await enabled('Trailer language'), isFalse);
+    prefs = prefs.copyWith(providers: {MetadataCategory.trailers: 'tmdb'}, features: {MetadataFeature.availability});
+    await MetadataPreferencesService.save(prefs);
+    await tester.pumpAndSettle();
+    expect(await enabled('Trailer language'), isTrue);
+    expect(await enabled('Country / region'), isTrue);
+    await MetadataPreferencesService.save(prefs.copyWith(providers: {}, features: {}));
+    await tester.pumpAndSettle();
+    expect(await enabled('Country / region'), isFalse);
+    final saved = await MetadataPreferencesService.load();
+    expect(saved.language, 'hi-IN');
+    expect(saved.region, 'IN');
+  });
+
   testWidgets('language picker includes TMDB configuration results', (
     tester,
   ) async {
     await open(tester);
+    await MetadataPreferencesService.save(MetadataPreferences(
+      providers: {MetadataCategory.information: MetadataPreferences.tmdb}));
+    await tester.pumpAndSettle();
     await tester.scrollUntilVisible(find.text('Metadata language'), 350);
     await tester.tap(find.text('Metadata language'));
     await tester.pumpAndSettle();
@@ -106,7 +142,7 @@ void main() {
     await tester.pumpAndSettle();
     final prefs = await MetadataPreferencesService.load();
     expect(prefs.language, 'nl');
-    expect(prefs.isCurrent, isTrue);
+    expect(prefs.provider(MetadataCategory.information), MetadataPreferences.tmdb);
   });
   testWidgets('metadata picker fits a narrow phone with enlarged text', (
     tester,
