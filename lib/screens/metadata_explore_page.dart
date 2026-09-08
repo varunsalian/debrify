@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -277,7 +279,9 @@ class MetadataBrowsePage extends StatefulWidget {
     this.id,
     this.type = 'movie',
     this.isTelevision = false,
+    this.service,
   });
+  final MetadataExploreService? service;
   final String title, kind, type;
   final int? id;
   final MetadataPreferences preferences;
@@ -289,6 +293,27 @@ class MetadataBrowsePage extends StatefulWidget {
 
 class _MetadataBrowsePageState extends State<MetadataBrowsePage> {
   final _items = <StremioMeta>[];
+  final _scroll = ScrollController();
+  Timer? _retryTimer;
+  int _retryCount = 0;
+
+  void _nearEnd() {
+    if (!mounted || _profileChanged || _busy || !_more || _error != null ||
+        _retryTimer != null || !_scroll.hasClients) {
+      return;
+    }
+    if (_scroll.position.extentAfter < _scroll.position.viewportDimension) {
+      _load();
+    }
+  }
+
+  void _focused(int index) {
+    if (index >= _items.length - 8 && !_busy && _more &&
+        _error == null && _retryTimer == null) {
+      _load();
+    }
+  }
+
   int _page = 0, _generation = 0;
   bool _busy = false, _more = true;
   String? _error, _description;
@@ -303,6 +328,8 @@ class _MetadataBrowsePageState extends State<MetadataBrowsePage> {
   Future<void> _policyChanged() async {
     final generation = ++_policyGeneration;
     ++_generation;
+    _retryTimer?.cancel();
+    _retryTimer = null;
     if (_scope != ProfileRuntime.scope.value) {
       setState(() {
         _profileChanged = true;
@@ -331,6 +358,8 @@ class _MetadataBrowsePageState extends State<MetadataBrowsePage> {
 
   @override
   void dispose() {
+    _retryTimer?.cancel();
+    _scroll.dispose();
     MetadataPreferencesService.revision.removeListener(_policyChanged);
     ProfileRuntime.scope.removeListener(_policyChanged);
     super.dispose();
@@ -339,6 +368,7 @@ class _MetadataBrowsePageState extends State<MetadataBrowsePage> {
   @override
   void initState() {
     super.initState();
+    _scroll.addListener(_nearEnd);
     _type = widget.type;
     _preferences = widget.preferences;
     MetadataPreferencesService.revision.addListener(_policyChanged);
@@ -346,10 +376,14 @@ class _MetadataBrowsePageState extends State<MetadataBrowsePage> {
     _load();
   }
 
-  Future<void> _load({bool reset = false}) async {
+  Future<void> _load({bool reset = false, bool retry = false}) async {
     if (_profileChanged || (_busy && !reset)) return;
+    _retryTimer?.cancel();
+    _retryTimer = null;
+    if (!retry) _retryCount = 0;
     if (reset) {
       _items.clear();
+      _description = null;
       _page = 0;
       _more = true;
     }
@@ -359,7 +393,7 @@ class _MetadataBrowsePageState extends State<MetadataBrowsePage> {
       _error = null;
     });
     try {
-      final result = await MetadataExploreService.instance.browse(
+      final result = await (widget.service ?? MetadataExploreService.instance).browse(
         kind: widget.kind,
         id: widget.id,
         preferences: _preferences,
@@ -380,10 +414,25 @@ class _MetadataBrowsePageState extends State<MetadataBrowsePage> {
       });
     } catch (_) {
       if (mounted && generation == _generation) {
-        setState(() => _error = 'Could not load titles. Retry');
+        if (_retryCount < 2) {
+          final delay = Duration(seconds: 1 << _retryCount++);
+          _retryTimer = Timer(delay, () {
+            _retryTimer = null;
+            if (mounted && generation == _generation && !_profileChanged) {
+              _load(retry: true);
+            }
+          });
+        } else {
+          setState(() => _error = 'Could not load titles. Retry');
+        }
       }
     } finally {
-      if (mounted && generation == _generation) setState(() => _busy = false);
+      if (mounted && generation == _generation) {
+        setState(() => _busy = false);
+        if (_retryTimer == null && _error == null) {
+          WidgetsBinding.instance.addPostFrameCallback((_) => _nearEnd());
+        }
+      }
     }
   }
 
@@ -397,6 +446,7 @@ class _MetadataBrowsePageState extends State<MetadataBrowsePage> {
             ),
           )
         : CustomScrollView(
+            controller: _scroll,
             slivers: [
               if (_description?.isNotEmpty == true)
                 SliverToBoxAdapter(
@@ -470,6 +520,7 @@ class _MetadataBrowsePageState extends State<MetadataBrowsePage> {
                   delegate: SliverChildBuilderDelegate(
                     (context, i) => _MetadataTitleTile(
                       item: _items[i],
+                      onFocused: () => _focused(i),
                       onOpen: widget.onOpen,
                       isTelevision: widget.isTelevision,
                     ),
@@ -479,7 +530,7 @@ class _MetadataBrowsePageState extends State<MetadataBrowsePage> {
               ),
               SliverToBoxAdapter(
                 child: Center(
-                  child: _busy
+                  child: _busy || _retryTimer != null
                       ? const Padding(
                           padding: EdgeInsets.all(20),
                           child: CircularProgressIndicator(),
@@ -487,10 +538,7 @@ class _MetadataBrowsePageState extends State<MetadataBrowsePage> {
                       : _error != null
                       ? TextButton(onPressed: _load, child: Text(_error!))
                       : _more
-                      ? TextButton(
-                          onPressed: _load,
-                          child: const Text('Load more'),
-                        )
+                      ? const SizedBox(height: 40)
                       : _items.isEmpty
                       ? const Text('No matching titles')
                       : const SizedBox.shrink(),
@@ -506,7 +554,9 @@ class _MetadataTitleTile extends StatefulWidget {
     required this.item,
     required this.onOpen,
     required this.isTelevision,
+    this.onFocused,
   });
+  final VoidCallback? onFocused;
   final StremioMeta item;
   final ValueChanged<StremioMeta> onOpen;
   final bool isTelevision;
@@ -559,6 +609,7 @@ class _MetadataTitleTileState extends State<_MetadataTitleTile> {
           focusNode: _focus,
           hasBoundSource: false,
           onOpen: _open,
+          onFocused: widget.onFocused,
         ),
       ),
       if (_opening) const Center(child: CircularProgressIndicator()),
