@@ -36,6 +36,25 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  testWidgets('Restore defaults restores the build-aware cast default', (tester) async {
+    await MetadataPreferencesService.save(MetadataPreferences(
+      providers: {for (final c in MetadataCategory.values) c: 'current'},
+      features: MetadataFeature.values.toSet(),
+      fallback: true,
+      language: 'hi-IN', artworkLanguage: 'original',
+      trailerLanguage: 'hi-IN', region: 'IN',
+    ));
+    await open(tester);
+    await tester.scrollUntilVisible(find.text('Restore defaults'), 400);
+    await tester.tap(find.text('Restore defaults'));
+    await tester.pumpAndSettle();
+    final prefs = await MetadataPreferencesService.load();
+    expect(prefs.toJson(), MetadataPreferences().toJson());
+    expect(prefs.provider(MetadataCategory.credits),
+      const String.fromEnvironment('TMDB_READ_ACCESS_TOKEN').trim().isEmpty
+          ? MetadataPreferences.current : MetadataPreferences.tmdb);
+  });
+
   testWidgets(
     'external metadata revision is retained by the next settings edit',
     (tester) async {
