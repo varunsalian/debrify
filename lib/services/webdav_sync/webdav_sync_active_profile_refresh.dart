@@ -4,6 +4,7 @@ import '../hide_watched_prefs.dart';
 import '../engine/engine_profile_lifecycle.dart';
 import '../engine/local_engine_storage.dart';
 import '../main_page_bridge.dart';
+import '../metadata_preferences_service.dart';
 import '../play_loader_style.dart';
 import '../storage_service.dart';
 import '../stream_badges_service.dart';
@@ -123,6 +124,13 @@ final class DefaultWebDavSyncActiveProfileRefresher
         changedKeys.contains('stremio_metadata_provider_v1')) {
       authorizationBarrier();
       StremioService.instance.refreshAfterExternalChange();
+      authorizationBarrier();
+    }
+    if (changedKeys.contains(MetadataPreferencesService.key) ||
+        changedKeys.contains('stremio_addons_v1') ||
+        changedKeys.contains('stremio_metadata_provider_v1')) {
+      authorizationBarrier();
+      MetadataPreferencesService.revision.value++;
       authorizationBarrier();
     }
 

@@ -77,6 +77,7 @@ DetailModel _model({
   List<StremioMeta> recs = const [],
   void Function(bool)? onDepth,
   VoidCallback? onPrimary,
+  VoidCallback? onExplore,
   VoidCallback? onPrimaryLongPress,
   bool openingDataReady = true,
 }) {
@@ -130,6 +131,7 @@ DetailModel _model({
     onTrailer: () {},
     onSelectSource: () {},
     onAppMenu: () {},
+    onMetadataExplore: onExplore,
     onTraktMenu: () {},
     onSimklMenu: () {},
     onMdblistMenu: () {},
@@ -208,6 +210,23 @@ Future<void> _press(WidgetTester t, LogicalKeyboardKey k) async {
 }
 
 void main() {
+  testWidgets('Explore is a registered Showcase action for the remote', (tester) async {
+    tester.view.physicalSize = _tv;
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    var opens = 0;
+    final model = _model(onExplore: () => opens++);
+    await tester.pumpWidget(_host(model));
+    await tester.pump(const Duration(seconds: 2));
+    expect(find.byIcon(Icons.explore_outlined), findsOneWidget);
+    Focus.of(tester.element(find.byIcon(Icons.explore_outlined))).requestFocus();
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pump();
+    expect(opens, 1);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('Showcase Play hold invokes sources without also playing', (
     tester,
   ) async {

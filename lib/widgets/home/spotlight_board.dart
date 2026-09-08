@@ -1,3 +1,5 @@
+import '../../models/metadata_preferences.dart';
+import '../metadata_presentation_mixin.dart';
 import 'dart:async';
 
 import 'package:cached_network_image/cached_network_image.dart';
@@ -31,12 +33,56 @@ import '../../utils/wide_touch_scale.dart';
 /// through a poster model is how they end up looking wrong in four different
 /// ways.
 class SpotlightCard {
+  final StremioMeta? metadata;
+  final bool episodeArtwork;
   /// Poster, channel logo, or a user override. Null draws the placeholder.
   final String? image;
 
   /// Used when [image] fails to load. Landscape title cards point this at the
   /// portrait poster because synchronously-derived MetaHub backdrops can 404.
   final String? fallbackImage;
+  /// Image-download errors obey the same policy as missing metadata artwork.
+  String? imageErrorFallback(
+    StremioMeta? presented,
+    MetadataPreferences preferences,
+  ) {
+    if (episodeArtwork) {
+      return preferences.provider(MetadataCategory.episodeArtwork) != MetadataPreferences.current &&
+          !preferences.fallback ? null : fallbackImage;
+    }
+    if (presented == null || identical(presented, metadata)) return fallbackImage;
+    bool selected(MetadataCategory category) =>
+        preferences.provider(category) != MetadataPreferences.current;
+    final selectedArtwork =
+        (shape == SpotlightCardShape.wide && selected(MetadataCategory.backgrounds)) ||
+        (shape == SpotlightCardShape.poster && selected(MetadataCategory.posters));
+    if (selectedArtwork && !preferences.fallback) return null;
+    return selectedArtwork || selected(MetadataCategory.posters)
+        ? presented.poster
+        : fallbackImage;
+  }
+
+  String? imageForPresentation(
+    StremioMeta? presented,
+    MetadataPreferences preferences,
+  ) {
+    final changed = presented != null && !identical(presented, metadata);
+    bool selected(MetadataCategory category) =>
+        preferences.provider(category) != MetadataPreferences.current;
+    final primary = !changed || episodeArtwork
+        ? image
+        : shape == SpotlightCardShape.poster &&
+              selected(MetadataCategory.posters)
+        ? presented.poster
+        : shape == SpotlightCardShape.wide &&
+              selected(MetadataCategory.backgrounds)
+        ? presented.background
+        : image;
+    return primary?.trim().isNotEmpty == true
+        ? primary
+        : imageErrorFallback(presented, preferences);
+  }
+
   final String? coverEmoji;
   final String title;
 
@@ -78,6 +124,8 @@ class SpotlightCard {
   final bool previewOnKeyboardFocus;
 
   const SpotlightCard({
+    this.metadata,
+    this.episodeArtwork = false,
     required this.title,
     required this.onOpen,
     this.image,
@@ -463,7 +511,18 @@ class _M {
   double get captionBlock => compact ? 40.0 : 0;
 }
 
-class SpotlightBoardState extends State<SpotlightBoard> {
+class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentationMixin<SpotlightBoard> {
+  @override
+  StremioMeta? get originalMetadata => widget.hero.isEmpty ? null : widget.hero[_heroIndex];
+  @override
+  void onMetadataPresentationChanged() => unawaited(_probe());
+
+  @override
+  void onMetadataPolicyChanged() {
+    // A previous image's tint must not publish after the policy changes.
+    _probeGen++;
+  }
+
   /// Start fetching the next shelf batch before touch scrolling reaches the
   /// hard end. TV has its own DPAD-at-last-shelf trigger in [_down].
   static const double _touchLoadMoreThreshold = 600;
@@ -656,6 +715,7 @@ class SpotlightBoardState extends State<SpotlightBoard> {
     if (i < 0 || i >= widget.hero.length) return;
     _stopRolling();
     setState(() => _heroId = widget.hero[i].id);
+    refreshMetadataPresentation();
     _probe();
     _restartCadence();
   }
@@ -709,9 +769,14 @@ class SpotlightBoardState extends State<SpotlightBoard> {
   /// decode budgets. The poster fallback is what blurry heroes are made of
   /// (~350px of 2:3 art cover-cropped over a full screen), so it is LAST, not
   /// second.
-  static String? _heroArt(StremioMeta item) {
+  String? _heroPoster(StremioMeta item) =>
+      usesMetadataProvider(MetadataCategory.backgrounds) && !metadataPreferences.fallback
+          ? null : highQualityArtworkUrl(item.poster);
+
+  String? _heroArt(StremioMeta item) {
     final b = item.background;
     if (b != null && b.isNotEmpty) return highQualityArtworkUrl(b);
+    if (usesMetadataProvider(MetadataCategory.backgrounds)) return _heroPoster(item);
     final tt = item.imdbId ?? (item.id.startsWith('tt') ? item.id : null);
     if (tt != null) {
       return 'https://images.metahub.space/background/large/$tt/img';
@@ -726,8 +791,13 @@ class SpotlightBoardState extends State<SpotlightBoard> {
     return i < 0 ? 0 : i;
   }
 
-  StremioMeta? get _heroItem =>
-      widget.hero.isEmpty ? null : widget.hero[_heroIndex];
+  StremioMeta? get _heroItem => presentedMetadata;
+
+  void _openHero() {
+    final item = originalMetadata;
+    final addon = widget.heroAddon;
+    if (item != null && addon != null) widget.onHeroOpen(item, addon);
+  }
 
   /// The id of the slide currently SHOWING — the host's suppression snapshot
   /// reads this at content-playback launch, because its own bookkeeping only
@@ -854,28 +924,44 @@ class SpotlightBoardState extends State<SpotlightBoard> {
   /// paged on must not publish its colour over the current one.
   int _probeGen = 0;
   final Map<String, Color?> _tints = {};
+  ({String? art, Color? tint})? _lastAmbient;
+  void Function(String?, Color?)? _lastAmbientSink;
+
+  void _emitAmbient(String? art, Color? tint) {
+    final next = (art: art, tint: tint);
+    final sink = widget.onAmbient;
+    if (identical(sink, _lastAmbientSink) && next == _lastAmbient) return;
+    _lastAmbientSink = sink;
+    _lastAmbient = next;
+    sink?.call(art, tint);
+  }
 
   Future<void> _probe() async {
     // The RESOLVED art, not the raw fields — tint and side-flip must be
     // measured on the image actually drawn.
+    final gen = ++_probeGen;
     final item = _heroItem;
     final url = item == null ? null : _heroArt(item);
-    if (url == null || url.isEmpty) return;
-    final gen = ++_probeGen;
+    if (url == null || url.isEmpty) {
+      _emitAmbient(null, null);
+      return;
+    }
 
     // Publish FIRST from cache when we have it. Skipping the publish for a
     // cached URL meant paging A→B→A left B's art and tint on the shell —
     // the cache short-circuited the only code path that told anyone.
     if (_tints.containsKey(url)) {
-      widget.onAmbient?.call(url, _tints[url]);
+      _emitAmbient(url, _tints[url]);
     } else {
+      // Update the shell immediately; colour extraction may wait on a decode.
+      _emitAmbient(url, null);
       final tint = await extractDominantColor(
         CachedNetworkImageProvider(url,
             cacheManager: DebrifyImageCache.manager),
       );
       if (!mounted || gen != _probeGen) return;
       setState(() => _remember(url, tint));
-      widget.onAmbient?.call(url, tint);
+      _emitAmbient(url, tint);
     }
     unawaited(_warmNext());
   }
@@ -947,6 +1033,7 @@ class SpotlightBoardState extends State<SpotlightBoard> {
     final next = (_heroIndex + delta + n) % n;
     _stopRolling();
     setState(() => _heroId = widget.hero[next].id);
+    refreshMetadataPresentation();
     ParallaxTravel.note(Offset(delta.toDouble(), 0));
     _probe();
     _restartCadence();
@@ -1169,7 +1256,7 @@ class SpotlightBoardState extends State<SpotlightBoard> {
         final item = _heroItem;
         final addon = widget.heroAddon;
         if (_row < 0 && item != null && addon != null) {
-          widget.onHeroOpen(item, addon);
+          _openHero();
           return KeyEventResult.handled;
         }
         return KeyEventResult.ignored;
@@ -1443,7 +1530,7 @@ class SpotlightBoardState extends State<SpotlightBoard> {
     final item = _heroItem;
     if (item == null) return const SizedBox.shrink();
     final url = _heroArt(item);
-    final posterUrl = highQualityArtworkUrl(item.poster);
+    final posterUrl = _heroPoster(item);
     final app = AppThemeScope.of(context);
     final ground = SpotlightBoard.groundOf(app);
     final rolling = _rolling;
@@ -1458,7 +1545,7 @@ class SpotlightBoardState extends State<SpotlightBoard> {
       },
       onTap: () {
         final addon = widget.heroAddon;
-        if (addon != null) widget.onHeroOpen(item, addon);
+        if (addon != null) _openHero();
       },
       child: Stack(
         fit: StackFit.expand,
@@ -1575,7 +1662,7 @@ class SpotlightBoardState extends State<SpotlightBoard> {
         _HeroOpenPill(
           onTap: () {
             final addon = widget.heroAddon;
-            if (addon != null) widget.onHeroOpen(item, addon);
+            if (addon != null) _openHero();
           },
         ),
         if (widget.hero.length > 1) ...[
@@ -1612,7 +1699,7 @@ class SpotlightBoardState extends State<SpotlightBoard> {
       },
       onTap: () {
         final addon = widget.heroAddon;
-        if (addon != null) widget.onHeroOpen(item, addon);
+        if (addon != null) _openHero();
       },
       child: wide,
     );
@@ -1625,7 +1712,7 @@ class SpotlightBoardState extends State<SpotlightBoard> {
     final item = _heroItem;
     if (item == null) return const SizedBox.shrink();
     final url = _heroArt(item);
-    final posterUrl = highQualityArtworkUrl(item.poster);
+    final posterUrl = _heroPoster(item);
     final flip = _flip;
     // Both scrims below were tuned against a STILL, where they only have to
     // keep white text off busy artwork. Left at that strength over a moving
@@ -2362,7 +2449,9 @@ class _Card extends StatefulWidget {
   State<_Card> createState() => _CardState();
 }
 
-class _CardState extends State<_Card> {
+class _CardState extends State<_Card> with MetadataPresentationMixin<_Card> {
+  @override
+  StremioMeta? get originalMetadata => widget.card.metadata;
   bool _f = false;
 
   /// DPAD centre is a key gesture, not a pointer long-press. Keep the short
@@ -2443,8 +2532,11 @@ class _CardState extends State<_Card> {
     final decodeW = (w * MediaQuery.devicePixelRatioOf(context) * 1.1)
         .round()
         .clamp(100, 1000);
-    final url = c.image;
-    final fallbackUrl = c.fallbackImage;
+    final meta = presentedMetadata;
+    final changed = meta != null && !identical(meta, originalMetadata);
+    final url = c.imageForPresentation(meta, metadataPreferences);
+    final displayedTitle = changed ? meta.name : c.title;
+    final fallbackUrl = c.imageErrorFallback(meta, metadataPreferences);
     final contained = c.shape.fit == BoxFit.contain;
     // The caption's second line — kind and/or rating, dot-joined. One line
     // whatever it carries, so the caption bed math stays two-state.
@@ -2453,7 +2545,7 @@ class _CardState extends State<_Card> {
       if (widget.showTitleAndRating && (c.rating ?? 0) > 0)
         '★ ${c.rating!.toStringAsFixed(1)}',
     ].join(' · ');
-    final hasTitle = widget.showTitleAndRating && c.title.isNotEmpty;
+    final hasTitle = widget.showTitleAndRating && displayedTitle.isNotEmpty;
     final hasSubtitle = metaLine.isNotEmpty;
     final hasCaptionContent = hasTitle || hasSubtitle;
     final preview = c.previewBuilder;
@@ -2493,7 +2585,7 @@ class _CardState extends State<_Card> {
                         children: [
                           if (hasTitle)
                             Text(
-                              c.title,
+                              displayedTitle,
                               maxLines: 1,
                               textAlign: TextAlign.center,
                               overflow: TextOverflow.ellipsis,
@@ -2710,7 +2802,7 @@ class _CardState extends State<_Card> {
                       children: [
                         if (hasTitle)
                           Text(
-                            c.title,
+                            displayedTitle,
                             maxLines: 1,
                             textAlign: TextAlign.center,
                             overflow: TextOverflow.ellipsis,

@@ -161,6 +161,7 @@ class _BoardCell extends StatelessWidget {
   /// row uses; Promenade's strip passes 16/9 with a derived wide still.
   final double aspectRatio;
   final String? artUrl;
+
   final String? focusArtUrl;
   final String? focusVideoUrl;
   final bool focusGlowEnabled;
@@ -573,10 +574,11 @@ class _TonightCardCaption extends StatelessWidget {
                     final enr = (en != null && _sameCanvasTitle(it0, en))
                         ? en
                         : null;
+                    final fields = HeroMetadataFields(it0, enr);
                     final logo =
-                        _firstNonEmpty(enr?.logo, it0.logo) ??
-                        _metahubLogoUrl(it0);
-                    final runtime = _firstNonEmpty(enr?.runtime, it0.runtime);
+                        fields.logo ??
+                        (fields.allowArtworkFallback ? _metahubLogoUrl(it0) : null);
+                    final runtime = fields.runtime;
                     final left = _timeLeft(runtime, nfo?.progress);
                     final parts = <String>[
                       if (nfo?.episode != null) nfo!.episode!,
@@ -603,10 +605,10 @@ class _TonightCardCaption extends StatelessWidget {
                                 placeholder: (_, __) =>
                                     const SizedBox(height: 46),
                                 errorWidget: (_, __, ___) =>
-                                    _fallbackTitle(it0.name),
+                                    _fallbackTitle(fields.name),
                               ),
                             )
-                          : _fallbackTitle(it0.name),
+                          : _fallbackTitle(fields.name),
                       line: parts.join('  ·  '),
                       action: nfo?.action ?? 'Open',
                       progress: nfo?.progress,
@@ -1111,17 +1113,16 @@ class _CanvasArtLayer extends StatelessWidget {
             // like the title logo) is a real landscape frame and exists for
             // most titles; the poster stays as the last resort, applied by the
             // error branch below so a 404 still lands on something.
+            final fields = it == null ? null : HeroMetadataFields(it, enr);
             final wide = it == null
                 ? null
-                : _firstNonEmpty(enr?.background, it.background) ??
-                      (_deadBackdropUrls.contains(
+                : fields!.background ??
+                      (!fields.allowArtworkFallback || _deadBackdropUrls.contains(
                             _metahubBackgroundUrl(it) ?? '',
                           )
                           ? null
                           : _metahubBackgroundUrl(it));
-            final posterUrl = (it?.poster?.isNotEmpty ?? false)
-                ? it!.poster
-                : null;
+            final posterUrl = fields?.posterFallback;
             final bg = wide ?? posterUrl ?? '';
             final Widget art;
             final favArt = fav?.art;
@@ -1480,17 +1481,17 @@ class _CanvasIdentity extends StatelessWidget {
           // /meta record is tt…), and a sparse /meta response — it may carry
           // only a rating — can never erase what the catalog already knew.
           final enr = (en != null && _sameCanvasTitle(it0, en)) ? en : null;
+          final fields = HeroMetadataFields(it0, enr);
           final logo =
-              _firstNonEmpty(enr?.logo, it0.logo) ?? _metahubLogoUrl(it0);
+              fields.logo ??
+              (fields.allowArtworkFallback ? _metahubLogoUrl(it0) : null);
           final rating = enr?.imdbRating ?? it0.imdbRating;
           final year = _firstNonEmpty(enr?.year, it0.year);
-          final runtime = _firstNonEmpty(enr?.runtime, it0.runtime);
-          final genres = (enr?.genres != null && enr!.genres!.isNotEmpty)
-              ? enr.genres
-              : it0.genres;
-          final description = _firstNonEmpty(enr?.description, it0.description);
+          final runtime = fields.runtime;
+          final genres = fields.genres;
+          final description = fields.description;
           final titleText = Text(
-            it0.name,
+            fields.name,
             maxLines: narrow ? 2 : 1,
             overflow: TextOverflow.ellipsis,
             textAlign: align,

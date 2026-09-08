@@ -1,3 +1,4 @@
+import 'settings/metadata_settings_page.dart';
 import '../widgets/collections/tmdb_attribution.dart';
 import 'dart:async';
 import 'dart:convert';
@@ -1276,6 +1277,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       firstFocusNode: _firstCardFocusNode,
       onOpenSearch: _openSettingsSearch,
       onOpenHomePageSettings: _openHomePageSettings,
+      onOpenMetadataSettings: _openMetadataSettings,
       onOpenExternalPlayerSettings: _openExternalPlayerSettings,
       onOpenRemoteControl: _openRemoteControl,
       showSwitchProfile:
@@ -1397,6 +1399,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       onOpenDebrifyTvSettings: _openDebrifyTvSettings,
       onOpenPikPakSettings: _openPikPakSettings,
       onOpenHomePageSettings: _openHomePageSettings,
+      onOpenMetadataSettings: _openMetadataSettings,
       onOpenExternalPlayerSettings: _openExternalPlayerSettings,
       onOpenRemoteControl: _openRemoteControl,
       showSwitchProfile:
@@ -1826,6 +1829,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
           'xperience',
           'folders',
           'import json',
+        ],
+      ),
+
+      nav(
+        SettingsRows.metadata,
+        'Metadata',
+        _openMetadataSettings,
+        keywords: const [
+          'tmdb',
+          'language',
+          'poster',
+          'artwork',
+          'provider',
+          'trailer',
         ],
       ),
 
@@ -5001,6 +5018,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await pushSettingsPage(context, const RecordingsPage());
   }
 
+  Future<void> _openMetadataSettings() async {
+    await pushSettingsPage(context, const MetadataSettingsPage());
+  }
+
   Future<void> _openCollectionsSettings() async {
     await pushSettingsPage(context, const CollectionsSettingsPage());
   }
@@ -7352,6 +7373,7 @@ class _SettingsLayout extends StatelessWidget {
   final Future<void> Function() onOpenDebrifyTvSettings;
   final Future<void> Function() onOpenPikPakSettings;
   final Future<void> Function() onOpenHomePageSettings;
+  final Future<void> Function() onOpenMetadataSettings;
   final Future<void> Function() onOpenExternalPlayerSettings;
   final VoidCallback onOpenRemoteControl;
   final bool showSwitchProfile;
@@ -7444,6 +7466,7 @@ class _SettingsLayout extends StatelessWidget {
     required this.onOpenDebrifyTvSettings,
     required this.onOpenPikPakSettings,
     required this.onOpenHomePageSettings,
+    required this.onOpenMetadataSettings,
     required this.onOpenExternalPlayerSettings,
     required this.onOpenRemoteControl,
     required this.showSwitchProfile,
@@ -7622,6 +7645,10 @@ class _SettingsLayout extends StatelessWidget {
             SettingsTile.spec(
               SettingsRows.homePage,
               onTap: onOpenHomePageSettings,
+            ),
+            SettingsTile.spec(
+              SettingsRows.metadata,
+              onTap: onOpenMetadataSettings,
             ),
             SettingsTile.spec(
               SettingsRows.navigationStyle,
@@ -7995,6 +8022,10 @@ class _SettingsLayout extends StatelessWidget {
                     SettingsTile.spec(
                       SettingsRows.homePage,
                       onTap: onOpenHomePageSettings,
+                    ),
+                    SettingsTile.spec(
+                      SettingsRows.metadata,
+                      onTap: onOpenMetadataSettings,
                     ),
                     if (isAndroidTv)
                       SettingsToggleTile.spec(

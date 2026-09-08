@@ -93,6 +93,11 @@ class SettingsRowContent {
 
 /// Single source of truth for every settings row's icon + copy.
 abstract final class SettingsRows {
+  static const metadata = SettingsRowContent(
+    icon: Icons.info_outline_rounded,
+    title: 'Metadata',
+    subtitle: 'Providers, artwork, languages & discovery',
+  );
   static const homePage = SettingsRowContent(
     icon: Icons.home_rounded,
     title: 'Home Screen',

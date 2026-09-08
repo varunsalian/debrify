@@ -46,6 +46,7 @@ class SettingsTvLayout extends StatefulWidget {
   final VoidCallback onOpenSearch;
 
   final Future<void> Function() onOpenHomePageSettings;
+  final Future<void> Function() onOpenMetadataSettings;
   final Future<void> Function() onOpenExternalPlayerSettings;
   final VoidCallback onOpenRemoteControl;
   final bool showSwitchProfile;
@@ -157,6 +158,7 @@ class SettingsTvLayout extends StatefulWidget {
     required this.firstFocusNode,
     required this.onOpenSearch,
     required this.onOpenHomePageSettings,
+    required this.onOpenMetadataSettings,
     required this.onOpenExternalPlayerSettings,
     required this.onOpenRemoteControl,
     this.showSwitchProfile = false,
@@ -904,11 +906,16 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
                 onTap: widget.onOpenHomePageSettings,
                 focusNode: _paneNodes[0],
               ),
+              SettingsTile.spec(
+                SettingsRows.metadata,
+                onTap: widget.onOpenMetadataSettings,
+                focusNode: _paneNodes[1],
+              ),
               SettingsToggleTile.spec(
                 SettingsRows.tvKeyboard,
                 value: widget.tvKeyboardEnabled,
                 onChanged: widget.onToggleTvKeyboard,
-                focusNode: _paneNodes[1],
+                focusNode: _paneNodes[2],
               ),
             ],
           ),

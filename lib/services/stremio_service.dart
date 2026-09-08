@@ -1,3 +1,4 @@
+import 'metadata_preferences_service.dart';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
@@ -183,6 +184,7 @@ class StremioService {
 
   /// Notify all listeners that addons have changed
   void _notifyAddonsChanged() {
+    MetadataPreferencesService.revision.value++;
     for (final listener in _addonsChangedListeners) {
       listener();
     }
@@ -507,8 +509,10 @@ class StremioService {
 
   Future<void> setMetadataProviderPreference(String value) async {
     final prefs = await ProfilePreferences.instance();
+    if (prefs.getString(_metadataProviderKey) == value) return;
     await prefs.setString(_metadataProviderKey, value);
     _metaDetailsCache.clear();
+    MetadataPreferencesService.revision.value++;
   }
 
   static bool isCinemetaAddon(StremioAddon addon) {
@@ -1953,8 +1957,9 @@ class StremioService {
   Future<StremioMeta?> fetchMetaDetails({
     required String imdbId,
     required String type,
+    String? providerOverride,
   }) async {
-    if (!imdbId.startsWith('tt') || (type != 'movie' && type != 'series')) {
+    if ((providerOverride == null && !imdbId.startsWith('tt')) || imdbId.isEmpty || (type != 'movie' && type != 'series')) {
       return null;
     }
     try {
@@ -1962,7 +1967,14 @@ class StremioService {
       final metadataAddons = addons
           .where((a) => a.resources.contains('meta') && a.baseUrl.isNotEmpty)
           .toList();
-      final preference = await getMetadataProviderPreference();
+      if (providerOverride != null &&
+          !metadataAddons.any(
+            (addon) => metadataProviderValue(addon) == providerOverride,
+          )) {
+        return null;
+      }
+      final preference =
+          providerOverride ?? await getMetadataProviderPreference();
       final preferred = metadataCandidatesForPreference(
         metadataAddons,
         preference,
@@ -2001,7 +2013,8 @@ class StremioService {
           final streamed = await client
               .send(request)
               .timeout(const Duration(seconds: 8));
-          final response = await http.Response.fromStream(streamed);
+          final response = await http.Response.fromStream(streamed)
+              .timeout(const Duration(seconds: 8));
           if (response.statusCode != 200) return null;
           final data =
               await decodeJsonAsync(response.body) as Map<String, dynamic>?;
@@ -2022,6 +2035,10 @@ class StremioService {
       StremioMeta? descriptionOnly;
       for (final meta in results) {
         if (meta == null) continue;
+        if (providerOverride != null) {
+          _metaDetailsCache[cacheKey] = meta;
+          return meta;
+        }
         final hasStructured =
             meta.year != null ||
             meta.imdbRating != null ||
@@ -2482,7 +2499,7 @@ class StremioService {
 
     // Serve from the short-TTL cache: the episodes panel and the Sources
     // screen's Season chip both fetch the same series meta back-to-back.
-    final cacheKey = '${addon.id}:$contentId';
+    final cacheKey = '${addon.portableConfigurationKey}:$contentId';
     final cached = _seriesMetaCache[cacheKey];
     if (cached != null &&
         DateTime.now().difference(cached.fetchedAt) < _seriesMetaCacheTtl) {
@@ -2506,7 +2523,8 @@ class StremioService {
         final streamedResponse = await client
             .send(request)
             .timeout(_requestTimeout);
-        final response = await http.Response.fromStream(streamedResponse);
+        final response = await http.Response.fromStream(streamedResponse)
+            .timeout(_requestTimeout);
 
         if (response.statusCode != 200) {
           debugPrint(

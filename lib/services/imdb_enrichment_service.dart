@@ -5,9 +5,15 @@ import 'package:http/http.dart' as http;
 
 class CastMember {
   final String name;
+  final int? tmdbPersonId;
   final String? character;
   final String? imageUrl;
-  const CastMember({required this.name, this.character, this.imageUrl});
+  const CastMember({
+    required this.name,
+    this.character,
+    this.imageUrl,
+    this.tmdbPersonId,
+  });
 }
 
 /// One "Did You Know" card: a piece of trivia, a goof, or a quote.
@@ -115,6 +121,42 @@ class ImdbEnrichment {
     this.quotesTotal = 0,
     this.universe = const [],
   });
+
+  ImdbEnrichment withCredits({
+    required List<CastMember> cast,
+    String? director,
+    bool retainPlot = true,
+    bool retainStars = false,
+    bool retainRuntimeAndGenres = true,
+  }) => ImdbEnrichment(
+    cast: cast,
+    director: director,
+    stars: retainStars ? stars : cast.take(3).map((c) => c.name).toList(),
+    plot: retainPlot ? plot : null,
+    runtime: retainRuntimeAndGenres ? runtime : null,
+    certificate: certificate,
+    rating: rating,
+    voteCount: voteCount,
+    genres: retainRuntimeAndGenres ? genres : const [],
+    awardWins: awardWins,
+    awardNominations: awardNominations,
+    tagline: tagline,
+    year: year,
+    countries: countries,
+    languages: languages,
+    productionCompany: productionCompany,
+    boxOffice: boxOffice,
+    metacriticScore: metacriticScore,
+    runtimeMinutes: retainRuntimeAndGenres ? runtimeMinutes : null,
+    top250Rank: top250Rank,
+    meterRank: meterRank,
+    meterDelta: meterDelta,
+    didYouKnow: didYouKnow,
+    triviaTotal: triviaTotal,
+    goofsTotal: goofsTotal,
+    quotesTotal: quotesTotal,
+    universe: universe,
+  );
 
   int get didYouKnowTotal => triviaTotal + goofsTotal + quotesTotal;
 
@@ -266,12 +308,12 @@ class ImdbEnrichmentService {
       final title = (data['data'] as Map?)?['title'] as Map?;
       if (title == null) return null;
 
-      final plot =
-          (title['plot'] as Map?)?['plotText'] as Map?;
+      final plot = (title['plot'] as Map?)?['plotText'] as Map?;
       final runtimeMap = title['runtime'] as Map?;
       final runtimeDisplay =
           ((runtimeMap?['displayableProperty'] as Map?)?['value']
-              as Map?)?['plainText'] as String?;
+                  as Map?)?['plainText']
+              as String?;
       final runtimeSecs = runtimeMap?['seconds'] as int?;
       final cert = title['certificate'] as Map?;
       final ratings = title['ratingsSummary'] as Map?;
@@ -279,27 +321,25 @@ class ImdbEnrichmentService {
           (title['titleGenres'] as Map?)?['genres'] as List? ?? [];
       final credits = title['principalCredits'] as List? ?? [];
       final releaseYear = title['releaseYear'] as Map?;
-      final taglines =
-          (title['taglines'] as Map?)?['edges'] as List? ?? [];
+      final taglines = (title['taglines'] as Map?)?['edges'] as List? ?? [];
       final awards = title['prestigiousAwardSummary'] as Map?;
 
       String? director;
       final stars = <String>[];
       final castList = <CastMember>[];
       for (final group in credits) {
-        final category =
-            (group['category'] as Map?)?['text'] as String? ?? '';
+        final category = (group['category'] as Map?)?['text'] as String? ?? '';
         final names = group['credits'] as List? ?? [];
         if (category == 'Director' || category == 'Directors') {
           if (names.isNotEmpty) {
-            director = ((names.first['name'] as Map?)?['nameText']
-                as Map?)?['text'] as String?;
+            director =
+                ((names.first['name'] as Map?)?['nameText'] as Map?)?['text']
+                    as String?;
           }
         } else if (category == 'Stars' || category == 'Star') {
           for (final c in names) {
             final nameMap = c['name'] as Map?;
-            final name =
-                (nameMap?['nameText'] as Map?)?['text'] as String?;
+            final name = (nameMap?['nameText'] as Map?)?['text'] as String?;
             if (name == null) continue;
             stars.add(name);
             final imageUrl =
@@ -309,11 +349,9 @@ class ImdbEnrichmentService {
             if (chars != null && chars.isNotEmpty) {
               character = chars.first['name'] as String?;
             }
-            castList.add(CastMember(
-              name: name,
-              character: character,
-              imageUrl: imageUrl,
-            ));
+            castList.add(
+              CastMember(name: name, character: character, imageUrl: imageUrl),
+            );
           }
         }
       }
@@ -353,8 +391,10 @@ class ImdbEnrichmentService {
       final prodEdges =
           (title['companyCredits'] as Map?)?['edges'] as List? ?? [];
       if (prodEdges.isNotEmpty) {
-        prodCompany = (((prodEdges.first as Map?)?['node'] as Map?)?['company']
-            as Map?)?['companyText']?['text'] as String?;
+        prodCompany =
+            (((prodEdges.first as Map?)?['node'] as Map?)?['company']
+                    as Map?)?['companyText']?['text']
+                as String?;
       }
 
       // Box office
@@ -379,11 +419,11 @@ class ImdbEnrichmentService {
 
       // Metacritic
       final metaScore =
-          ((title['metacritic'] as Map?)?['metascore'] as Map?)?['score'] as int?;
+          ((title['metacritic'] as Map?)?['metascore'] as Map?)?['score']
+              as int?;
 
       // Honors — Top 250 position and the popularity meter.
-      final top250 =
-          ((ratings?['topRanking'] as Map?)?['rank']) as int?;
+      final top250 = ((ratings?['topRanking'] as Map?)?['rank']) as int?;
       final meter = title['meterRanking'] as Map?;
       final meterRank = meter?['currentRank'] as int?;
       int? meterDelta;
@@ -475,15 +515,17 @@ class ImdbEnrichmentService {
         if (!seenIds.add(id)) continue;
         final relYear = assoc?['releaseYear'] as Map?;
         final typeId = (assoc?['titleType'] as Map?)?['id'] as String? ?? '';
-        universe.add(UniverseTitle(
-          imdbId: id,
-          name: name,
-          relation: relation,
-          posterUrl: (assoc?['primaryImage'] as Map?)?['url'] as String?,
-          year: relYear?['year'] as int?,
-          endYear: relYear?['endYear'] as int?,
-          isSeries: typeId.startsWith('tv') && typeId != 'tvMovie',
-        ));
+        universe.add(
+          UniverseTitle(
+            imdbId: id,
+            name: name,
+            relation: relation,
+            posterUrl: (assoc?['primaryImage'] as Map?)?['url'] as String?,
+            year: relYear?['year'] as int?,
+            endYear: relYear?['endYear'] as int?,
+            isSeries: typeId.startsWith('tv') && typeId != 'tvMovie',
+          ),
+        );
       }
 
       final result = ImdbEnrichment(

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../../models/stremio_addon.dart';
+import '../../models/metadata_preferences.dart';
+import '../../services/metadata_details_service.dart';
 import '../../services/imdb_enrichment_service.dart';
 import '../../services/imdb_parents_guide_service.dart';
 import '../../services/series_source_service.dart';
@@ -154,6 +156,7 @@ class DetailModel {
   final VoidCallback onTrailer;
   final VoidCallback? onSelectSource;
   final VoidCallback? onAppMenu;
+  final VoidCallback? onMetadataExplore;
   final VoidCallback? onTraktMenu;
   final VoidCallback? onSimklMenu;
   final VoidCallback? onMdblistMenu;
@@ -201,7 +204,10 @@ class DetailModel {
 
   final DetailFocusCoordinator focus;
 
+  final MetadataPreferences? metadataPreferences;
+
   const DetailModel({
+    this.metadataPreferences,
     required this.item,
     required this.isMovie,
     required this.isTelevision,
@@ -236,6 +242,7 @@ class DetailModel {
     required this.onTrailer,
     required this.onSelectSource,
     required this.onAppMenu,
+    this.onMetadataExplore,
     required this.onTraktMenu,
     required this.onSimklMenu,
     this.onMdblistMenu,
@@ -255,16 +262,20 @@ class DetailModel {
   String? get year => item.year ?? imdbExtra?.year;
   double? get rating => imdbExtra?.rating ?? item.imdbRating;
   String? get certificate => imdbExtra?.certificate;
-  String? get runtime => imdbExtra?.runtime;
+  String? get runtime => MetadataDetailsService.informationRuntime(
+    item,
+    imdbExtra,
+    metadataPreferences,
+  );
   String? get logo => item.logo;
   String? get poster => item.poster;
-  String? get backdrop => item.background ?? item.poster;
+  String? get backdrop => MetadataDetailsService.backdrop(item, metadataPreferences);
 
-  List<String> get genres {
-    final own = item.genres;
-    if (own != null && own.isNotEmpty) return own;
-    return imdbExtra?.genres ?? const [];
-  }
+  List<String> get genres => MetadataDetailsService.informationGenres(
+    item,
+    imdbExtra,
+    metadataPreferences,
+  );
 
   String? get synopsis {
     final own = item.description;

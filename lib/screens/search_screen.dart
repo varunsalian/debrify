@@ -1,3 +1,11 @@
+import '../models/metadata_card_artwork.dart';
+import '../models/hero_metadata_presentation.dart';
+import '../services/profiles/profile_runtime.dart';
+import 'metadata_explore_page.dart';
+import '../widgets/metadata_presentation_mixin.dart';
+import '../models/metadata_preferences.dart';
+import '../services/metadata_preferences_service.dart';
+import '../services/metadata_provider_service.dart';
 import '../widgets/collections/collection_focus_art.dart';
 import '../widgets/collections/collection_focus_glow.dart';
 import '../widgets/see_all/discover_browsing_input.dart';
@@ -1654,6 +1662,8 @@ class _SearchScreenState extends State<SearchScreen>
   @override
   void initState() {
     super.initState();
+    MetadataPreferencesService.revision.addListener(_metadataSettingsChanged);
+    unawaited(_refreshMetadataFeaturePolicy());
     WidgetsBinding.instance.addObserver(this);
     _profileSessionOwner = ProfileSessionMemory.captureOwner();
     // This one widget backs three tabs (Home board / dedicated Search / Discover).
@@ -2153,6 +2163,7 @@ class _SearchScreenState extends State<SearchScreen>
 
   @override
   void dispose() {
+    MetadataPreferencesService.revision.removeListener(_metadataSettingsChanged);
     _catalogContinueNode.dispose();
     _catalogMoreNode.dispose();
     WidgetsBinding.instance.removeObserver(this);
@@ -3318,12 +3329,20 @@ class _SearchScreenState extends State<SearchScreen>
   /// Resolve episode stills away from the build path, at TV-safe concurrency.
   /// A provider refresh owns the result through [isCurrent], so an older batch
   /// can never paint the episode that preceded a newly-resumed one.
+  int _metadataArtworkGeneration = 0;
+  final _metadataArtworkRequests = <Map<String, String>, ({
+    Map<String, ({int season, int episode})> refs,
+    bool Function() isCurrent,
+  })>{};
+
   Future<void> _enrichCwEpisodeArtwork({
     required Map<String, ({int season, int episode})> refs,
     required Map<String, String> target,
     required bool Function() isCurrent,
   }) async {
+    _metadataArtworkRequests[target] = (refs: Map.of(refs), isCurrent: isCurrent);
     if (refs.isEmpty) return;
+    final metadataGeneration = _metadataArtworkGeneration;
     final resolved = await mapWithConcurrency(refs.entries, (entry) async {
       final art = await EpisodeArtworkService.instance.resolve(
         imdbId: entry.key,
@@ -3332,7 +3351,7 @@ class _SearchScreenState extends State<SearchScreen>
       );
       return (id: entry.key, art: art);
     }, concurrency: 3);
-    if (!mounted || !isCurrent()) return;
+    if (!mounted || !isCurrent() || metadataGeneration != _metadataArtworkGeneration) return;
     final artwork = <String, String>{
       for (final item in resolved)
         if (item.art != null && item.art!.isNotEmpty) item.id: item.art!,
@@ -7208,6 +7227,7 @@ class _SearchScreenState extends State<SearchScreen>
       items: [
         for (final m in _sections[i].items)
           SpotlightCard(
+            metadata: m,
             image: _homeLandscapeCards ? _wideArtUrl(m) : m.poster,
             fallbackImage: _homeLandscapeCards ? m.poster : null,
             title: m.name,
@@ -7236,6 +7256,8 @@ class _SearchScreenState extends State<SearchScreen>
         ? row.episodeArtworkOf(item)
         : null;
     return SpotlightCard(
+      metadata: item,
+      episodeArtwork: _homeLandscapeCards && episodeArt != null,
       image: _homeLandscapeCards ? (episodeArt ?? wideArt) : item.poster,
       // An episode still is best-effort. If it fails at image-decode time (not
       // only during lookup), fall back to the same show art CW used before.
@@ -10687,21 +10709,25 @@ class _SearchScreenState extends State<SearchScreen>
       }
       return;
     }
-    final backdrop = item?.background?.isNotEmpty == true
-        ? item!.background
-        : (enriched?.background?.isNotEmpty == true
-              ? enriched!.background
-              : null);
+    final authoritative = enriched is HeroMetadataPresentation && item != null &&
+        _sameCanvasTitle(item, enriched);
+    final resolvedFields = authoritative ? HeroMetadataFields(item, enriched) : null;
+    final fields = resolvedFields != null &&
+        (resolvedFields.selected(MetadataCategory.backgrounds) ||
+         resolvedFields.selected(MetadataCategory.posters)) ? resolvedFields : null;
+    final backdrop = fields != null ? fields.background :
+        (item?.background?.isNotEmpty == true ? item!.background :
+          (enriched?.background?.isNotEmpty == true ? enriched!.background : null));
     // Same title, no backdrop in hand (only the poster fallback), and the
     // stage already shows SOMETHING for it → keep what's showing; the
     // enrichment landing republishes the real backdrop moments later.
-    if (backdrop == null &&
+    if (fields == null && backdrop == null &&
         item?.id != null &&
         item!.id == _ambientArtItemId &&
         MainPageBridge.tvAmbientArt.value != null) {
       return;
     }
-    final art = backdrop ?? item?.poster;
+    final art = backdrop ?? (fields != null ? fields.posterFallback : item?.poster);
     _ambientArtItemId = item?.id;
     MainPageBridge.tvAmbientArt.value = (art == null || art.isEmpty)
         ? null
@@ -10715,6 +10741,50 @@ class _SearchScreenState extends State<SearchScreen>
   /// nothing but a timer reset, never a resolve or a decoder spin-up. Both
   /// lookups (Cinemeta /meta for the YouTube id, then the stream resolve) are
   /// cached in their services, so re-resting on a recent card starts fast.
+  MetadataPreferences? _metadataFeaturePolicy;
+  int _metadataFeatureGeneration = 0;
+  Future<void> _refreshMetadataFeaturePolicy() async {
+    final generation = ++_metadataFeatureGeneration;
+    final scope = ProfileRuntime.scope.value;
+    try {
+      final prefs = await MetadataPreferencesService.load();
+      if (!mounted || generation != _metadataFeatureGeneration || scope != ProfileRuntime.scope.value) return;
+      setState(() => _metadataFeaturePolicy = prefs);
+    } catch (_) {}
+  }
+
+  void _openMetadataDiscover() {
+    final prefs = _metadataFeaturePolicy;
+    if (prefs == null || !prefs.features.contains(MetadataFeature.discovery)) return;
+    Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) =>
+      MetadataBrowsePage(title: 'TMDB Discover', kind: 'discover', preferences: prefs,
+        isTelevision: widget.isTelevision,
+        onOpen: (item) => _openItem(item, item.sourceAddon ?? _addonForContinue(null)))));
+  }
+
+  void _metadataSettingsChanged() {
+    if (!mounted) return;
+    unawaited(_refreshMetadataFeaturePolicy());
+    _metadataArtworkGeneration++;
+    final requests = _metadataArtworkRequests.entries.toList();
+    setState(() {
+      for (final request in requests) { request.key.clear(); }
+    });
+    for (final request in requests) {
+      if (request.value.isCurrent()) {
+        unawaited(_enrichCwEpisodeArtwork(refs: request.value.refs,
+          target: request.key, isCurrent: request.value.isCurrent));
+      }
+    }
+    _clearHeroTrailer();
+    _heroEnriched.value = null;
+    final item = _heroItem.value;
+    if (item != null) {
+      _enrichHero(item);
+      _scheduleHeroTrailer(item, fromSpotlight: _homeStyleEffective == 'spotlight');
+    }
+  }
+
   void _scheduleHeroTrailer(StremioMeta item, {bool fromSpotlight = false}) {
     if (item.type == 'folder') return;
     // Off-TV nothing ever calls _applyHero (the TV paths that lift the
@@ -10756,6 +10826,11 @@ class _SearchScreenState extends State<SearchScreen>
     }
     _heroTrailerTimer?.cancel();
     final req = ++_heroTrailerReq;
+    final scope = ProfileRuntime.scope.value;
+    bool current() =>
+        mounted &&
+        req == _heroTrailerReq &&
+        scope == ProfileRuntime.scope.value;
     if (_heroTrailer.value != null) _heroTrailer.value = null;
     if (_heroTrailerLoading.value) _heroTrailerLoading.value = false;
     if (_heroTrailerShowing.value) _heroTrailerShowing.value = false;
@@ -10766,7 +10841,7 @@ class _SearchScreenState extends State<SearchScreen>
         ? Duration.zero
         : const Duration(milliseconds: 2400);
     _heroTrailerTimer = Timer(resolveDelay, () async {
-      if (!mounted || req != _heroTrailerReq) return;
+      if (!current()) return;
       // The layout may have changed during the dwell — a stage with nowhere
       // to put moving picture must not spin up an engine.
       if (_stageActive && !_stageWantsAmbient) return;
@@ -10785,48 +10860,77 @@ class _SearchScreenState extends State<SearchScreen>
         }
       }
 
-      // YouTube id: catalog rows rarely carry it, so fall back to the /meta
-      // details (the same fetch — and cache — the hero enrichment uses).
-      final imdb = item.imdbId ?? (item.id.startsWith('tt') ? item.id : null);
-      String? ytId = item.trailerYtId;
-      if (ytId == null || ytId.isEmpty) {
-        if (imdb == null) return fail();
-        try {
-          final full = await _stremio.fetchMetaDetails(
-            imdbId: imdb,
-            type: item.type,
-          );
-          ytId = full?.trailerYtId;
-        } catch (_) {
-          // Meta fetch failed — the IMDb backup below may still carry it.
+      try {
+        // YouTube id: catalog rows rarely carry it, so fall back to the /meta
+        // details (the same fetch — and cache — the hero enrichment uses).
+        final imdb = item.imdbId ?? (item.id.startsWith('tt') ? item.id : null);
+        final metadataPrefs =
+            await MetadataPreferencesService.loadForBackground(
+              isCurrent: () =>
+                  mounted &&
+                  req == _heroTrailerReq &&
+                  scope == ProfileRuntime.scope.value,
+            );
+        if (metadataPrefs == null) {
+          fail();
+          return;
         }
-      }
-      if (!mounted || req != _heroTrailerReq) return;
-      // Ambient hero backdrop: resolve at a low cap (small region, weak TV).
-      var streams = (ytId != null && ytId.isNotEmpty)
-          ? await YoutubeService.resolveStreams(
-              ytId,
-              maxHeightOverride: YoutubeService.ambientTrailerMaxHeight,
-              preferVp9: true,
-            )
-          : null;
-      // Backup source: IMDb hosts its own trailer MP4s, so a YouTube block
-      // (or a title with no YouTube id at all) still gets a moving hero.
-      if ((streams == null || !streams.hasPlayable) && imdb != null) {
-        if (!mounted || req != _heroTrailerReq) return;
-        streams = await ImdbTrailerService.resolveTrailer(
-          imdb,
-          maxHeight: YoutubeService.ambientTrailerMaxHeight,
+        final candidates = await MetadataProviderService.instance.trailers(
+          item,
+          () async {
+            String? ytId = item.trailerYtId;
+            if (ytId == null || ytId.isEmpty) {
+              if (imdb == null) return null;
+              try {
+                final full = await _stremio.fetchMetaDetails(
+                  imdbId: imdb,
+                  type: item.type,
+                );
+                ytId = full?.trailerYtId;
+              } catch (_) {
+                // Meta fetch failed — the IMDb backup below may still carry it.
+              }
+            }
+            return ytId;
+          },
+          preferences: metadataPrefs,
         );
+        final ytId = candidates.firstOrNull?.key;
+        final allowBackup =
+            metadataPrefs.provider(MetadataCategory.trailers) ==
+                MetadataPreferences.current ||
+            metadataPrefs.fallback;
+        if (!current()) return;
+        // Ambient hero backdrop: resolve at a low cap (small region, weak TV).
+        var streams = (ytId != null && ytId.isNotEmpty)
+            ? await YoutubeService.resolveStreams(
+                ytId,
+                maxHeightOverride: YoutubeService.ambientTrailerMaxHeight,
+                preferVp9: true,
+              )
+            : null;
+        // Backup source: IMDb hosts its own trailer MP4s, so a YouTube block
+        // (or a title with no YouTube id at all) still gets a moving hero.
+        if (allowBackup &&
+            (streams == null || !streams.hasPlayable) &&
+            imdb != null) {
+          if (!current()) return;
+          streams = await ImdbTrailerService.resolveTrailer(
+            imdb,
+            maxHeight: YoutubeService.ambientTrailerMaxHeight,
+          );
+        }
+        if (!current()) return;
+        if (streams == null || !streams.hasPlayable) return fail();
+        _heroTrailer.value = streams;
+        // Failsafe: a dead/bot-blocked stream can error inside the engine
+        // before ever producing a frame, in which case onPlayingChanged never
+        // fires (it only reports real transitions) — don't let the pill spin
+        // forever on a trailer that will never come.
+        Timer(const Duration(seconds: 15), fail);
+      } catch (_) {
+        fail();
       }
-      if (!mounted || req != _heroTrailerReq) return;
-      if (streams == null || !streams.hasPlayable) return fail();
-      _heroTrailer.value = streams;
-      // Failsafe: a dead/bot-blocked stream can error inside the engine
-      // before ever producing a frame, in which case onPlayingChanged never
-      // fires (it only reports real transitions) — don't let the pill spin
-      // forever on a trailer that will never come.
-      Timer(const Duration(seconds: 15), fail);
     });
   }
 
@@ -11109,7 +11213,15 @@ class _SearchScreenState extends State<SearchScreen>
   /// omit `background`/`description` (they come from the /meta endpoint), so
   /// fetch them lazily — cached in [StremioService], and guarded against the
   /// focus moving on (req id) so a slow fetch never clobbers a newer hero.
-  void _enrichHero(StremioMeta item) {
+  Future<void> _enrichHero(StremioMeta item) async {
+    final reqId = ++_heroReqId;
+    final scope = ProfileRuntime.scope.value;
+    bool current() =>
+        mounted && reqId == _heroReqId && scope == ProfileRuntime.scope.value;
+    final prefs = await MetadataPreferencesService.loadForBackground(
+      isCurrent: current,
+    );
+    if (prefs == null) return;
     _heroTimer?.cancel();
     final needsBg = item.background == null || item.background!.isEmpty;
     final needsDesc = item.description == null || item.description!.isEmpty;
@@ -11122,23 +11234,37 @@ class _SearchScreenState extends State<SearchScreen>
     // it, and without this an item that happens to have bg+desc+rating+runtime
     // (e.g. Continue Watching) would skip the fetch and stay text-titled.
     final needsLogo = item.logo == null || item.logo!.isEmpty;
-    if (!needsBg && !needsDesc && !needsRating && !needsRuntime && !needsLogo) {
+    if (prefs.isCurrent &&
+        !needsBg &&
+        !needsDesc &&
+        !needsRating &&
+        !needsRuntime &&
+        !needsLogo) {
       return;
     }
     final imdb = item.imdbId ?? (item.id.startsWith('tt') ? item.id : null);
-    if (imdb == null) return;
-    final reqId = ++_heroReqId;
+    if (imdb == null && prefs.isCurrent) return;
     // Short: on the board this only fires after the 260ms hero-swap settle.
     _heroTimer = Timer(const Duration(milliseconds: 140), () async {
-      final details = await _stremio.fetchMetaDetails(
-        imdbId: imdb,
-        type: item.type,
-      );
-      if (!mounted || reqId != _heroReqId || details == null) return;
-      _heroEnriched.value = details;
-      // The enrichment usually carries the real backdrop a catalog item
-      // lacked — upgrade the shell stage from the poster-blur to it.
-      _publishAmbientArt(item, details);
+      if (!current()) return;
+      try {
+        final originalDetails = imdb == null
+            ? item
+            : await _stremio.fetchMetaDetails(imdbId: imdb, type: item.type);
+        final presentation = await MetadataProviderService.instance.present(
+          mergeHeroMetadata(item, originalDetails),
+          preferences: prefs,
+          isRelevant: current,
+        );
+        final details = prefs.isCurrent ? originalDetails : presentation.item;
+        if (!current() || details == null) return;
+        _heroEnriched.value = HeroMetadataPresentation(details, prefs);
+        // The enrichment usually carries the real backdrop a catalog item
+        // lacked — upgrade the shell stage from the poster-blur to it.
+        _publishAmbientArt(item, _heroEnriched.value);
+      } catch (_) {
+        // Optional enrichment leaves the currently rendered hero intact.
+      }
     });
   }
 
@@ -12730,9 +12856,9 @@ class _SearchScreenState extends State<SearchScreen>
                         type: item.type,
                       )
                     : null,
-                onRecommendationTap: imdb != null
-                    ? (rec) => _openItem(rec, rec.sourceAddon ?? addon)
-                    : null,
+                // Native TMDB titles can navigate even without IMDb recommendations.
+                onRecommendationTap: (rec) =>
+                    _openItem(rec, rec.sourceAddon ?? addon),
                 metaEnricher: (id, type) =>
                     _stremio.fetchMetaDetails(imdbId: id, type: type),
               ),
@@ -12828,9 +12954,9 @@ class _SearchScreenState extends State<SearchScreen>
                       type: item.type,
                     )
                   : null,
-              onRecommendationTap: imdb != null
-                  ? (rec) => _openItem(rec, rec.sourceAddon ?? addon)
-                  : null,
+              // Native TMDB titles can navigate even without IMDb recommendations.
+              onRecommendationTap: (rec) =>
+                  _openItem(rec, rec.sourceAddon ?? addon),
               metaEnricher: (id, type) =>
                   _stremio.fetchMetaDetails(imdbId: id, type: type),
             ),
@@ -15111,6 +15237,17 @@ class _SearchScreenState extends State<SearchScreen>
     final glassHome = _heroTrailerActive;
     final app = AppThemeScope.of(context);
     return Scaffold(
+      floatingActionButton: widget.discoverMode && !widget.isTelevision
+          ? ValueListenableBuilder<double>(
+              valueListenable: _discTakeover,
+              builder: (_, takeover, __) => takeover > 0 ? const SizedBox.shrink()
+                  : MetadataExploreButton.discover(
+                      isTelevision: widget.isTelevision,
+                      onOpen: (item) => _openItem(item,
+                          item.sourceAddon ?? _addonForContinue(null)),
+                    ),
+            )
+          : null,
       backgroundColor: glassHome ? Colors.transparent : app.home.bg,
       // A restrained indigo bloom near the top fading fast into near-black —
       // toned down from a saturated purple so the posters carry the colour
@@ -17492,6 +17629,8 @@ class _SearchScreenState extends State<SearchScreen>
       quietAccent: true,
       focusNode: _discSourceNode,
       options: [
+        if (_metadataFeaturePolicy?.features.contains(MetadataFeature.discovery) == true)
+          const StremioDropdownOption('__metadata_discover', 'TMDB Discover'),
         const StremioDropdownOption(_discCw, 'Continue Watching'),
         const StremioDropdownOption(_discTrakt, 'Trakt'),
         const StremioDropdownOption(_discSimkl, 'Simkl'),
@@ -17505,6 +17644,7 @@ class _SearchScreenState extends State<SearchScreen>
           StremioDropdownOption('$_discAddonPrefix${a.id}', a.name),
       ],
       onSelected: (s) {
+        if (s == '__metadata_discover') { _openMetadataDiscover(); return; }
         if (s == _discSource) return;
         // Swapping source re-mounts the grid and drops DPAD focus back onto the
         // Source dropdown — clear the rail (and the stage backdrop behind it)

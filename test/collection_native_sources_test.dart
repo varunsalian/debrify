@@ -25,6 +25,56 @@ CollectionCatalogSource source(
 })!;
 
 void main() {
+  for (final media in ['MOVIE', 'TV']) {
+    for (final region in [null, 'IN']) {
+      test('monetization-only $media filter supplies region $region', () {
+        final query = CollectionNativeSourceService.discoverQuery(
+          source('DISCOVER', media: media, filters: {
+            'monetization': 'free',
+            if (region != null) 'watchRegion': region,
+          }),
+          1,
+        );
+        expect(query['with_watch_monetization_types'], 'free');
+        expect(query['watch_region'], region ?? 'US');
+        expect(query.containsKey('with_watch_providers'), false);
+      });
+    }
+  }
+  test('empty monetization does not add a region', () {
+    final query = CollectionNativeSourceService.discoverQuery(
+      source('DISCOVER', filters: {'monetization': ' '}), 1,
+    );
+    expect(query.containsKey('watch_region'), false);
+    expect(query.containsKey('with_watch_monetization_types'), false);
+  });
+
+  test('expanded discover filters preserve region and selected monetization', () {
+    final query = CollectionNativeSourceService.discoverQuery(source('DISCOVER', filters: {
+      'runtimeGte': 60, 'runtimeLte': 120,
+      'certificationCountry': 'IN', 'certification': 'U',
+      'withCast': '1,2', 'withCrew': '3', 'withPeople': '4',
+      'watchRegion': 'IN', 'withWatchProviders': '8', 'monetization': 'flatrate',
+    }), 2);
+    expect(query['with_runtime.gte'], '60');
+    expect(query['with_runtime.lte'], '120');
+    expect(query['certification_country'], 'IN');
+    expect(query['certification'], 'U');
+    expect(query['with_cast'], '1,2');
+    expect(query['with_crew'], '3');
+    expect(query['with_people'], '4');
+    expect(query['watch_region'], 'IN');
+    expect(query['with_watch_monetization_types'], 'flatrate');
+    final tv = CollectionNativeSourceService.discoverQuery(source('DISCOVER', media: 'TV', filters: {
+      'runtimeLte': 60, 'certification': 'U', 'certificationCountry': 'IN',
+      'withCast': '1', 'withCrew': '2', 'withPeople': '3',
+    }), 1);
+    expect(tv['with_runtime.lte'], '60');
+    for (final key in ['certification', 'certification_country', 'with_cast', 'with_crew', 'with_people']) {
+      expect(tv.containsKey(key), isFalse);
+    }
+  });
+
   test(
     'native source IDs accept integral JSON doubles without truncating fractions',
     () {

@@ -80,7 +80,9 @@ class _StremioCard extends StatefulWidget {
 }
 
 class _StremioCardState extends State<_StremioCard>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, MetadataPresentationMixin<_StremioCard> {
+  @override
+  StremioMeta get originalMetadata => widget.item;
   bool _focused = false;
   bool _hovered = false;
   bool _keyDown = false;
@@ -128,11 +130,17 @@ class _StremioCardState extends State<_StremioCard>
   @override
   Widget build(BuildContext context) {
     final app = AppThemeScope.of(context);
-    final item = widget.item;
+    final item = presentedMetadata!;
     final folder = item is CollectionFolderMeta ? item.folder : null;
     final aspect = folder?.tileShape.aspectRatio ?? widget.aspectRatio;
     final wide = aspect > 1;
-    final poster = widget.artUrl ?? item.poster;
+    final artwork = metadataCardArtwork(
+      presented: item, preferences: metadataPreferences, wide: wide,
+      overrideUrl: widget.artUrl,
+      collection: folder != null,
+    );
+    final poster = artwork.primary;
+    final fallbackPoster = artwork.fallback;
     final isMovie = item.type.toLowerCase() == 'movie';
     final supportsWatched = isMovie || item.type.toLowerCase() == 'series';
     final movieId = item.effectiveImdbId ?? item.id;
@@ -159,11 +167,10 @@ class _StremioCardState extends State<_StremioCard>
           // A derived wide still (MetaHub) can 404 where the poster exists —
           // cover-crop the poster into the wide cell before giving up on art.
           errorWidget: (_, __, ___) =>
-              poster != item.poster &&
-                  item.poster != null &&
-                  item.poster!.isNotEmpty
+              poster != fallbackPoster &&
+                  fallbackPoster != null && fallbackPoster.isNotEmpty
               ? CachedNetworkImage(
-                  imageUrl: item.poster!,
+                  imageUrl: fallbackPoster,
                   fit: BoxFit.cover,
                   memCacheWidth: widget.isTelevision ? 320 : 480,
                   fadeInDuration: HomeTheme.imageFadeIn(widget.isTelevision),
@@ -460,7 +467,7 @@ class _StremioCardState extends State<_StremioCard>
 
   Widget _placeholder(String title) {
     final app = AppThemeScope.of(context);
-    final item = widget.item;
+    final item = presentedMetadata!;
     final emoji = item is CollectionFolderMeta ? item.folder.coverEmoji : null;
     return Container(
       // Subtle vertical gradient instead of a flat fill: while art loads the

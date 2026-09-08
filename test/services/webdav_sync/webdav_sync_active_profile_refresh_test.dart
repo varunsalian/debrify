@@ -1,3 +1,4 @@
+import 'package:debrify/services/metadata_preferences_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:debrify/services/hide_watched_prefs.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_ui_refresh.dart';
@@ -12,6 +13,32 @@ void main() {
   const refresher = DefaultWebDavSyncActiveProfileRefresher();
 
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  test('synced metadata policy invalidates live presentation once', () async {
+    SharedPreferences.setMockInitialValues({});
+    final initial = MetadataPreferencesService.revision.value;
+    await refresher.refresh({
+      MetadataPreferencesService.key,
+    }, authorizationBarrier: () {});
+    expect(MetadataPreferencesService.revision.value, initial + 1);
+    await refresher.refresh({'unrelated_setting'}, authorizationBarrier: () {});
+    expect(MetadataPreferencesService.revision.value, initial + 1);
+  });
+
+  test(
+    'metadata invalidation respects the active-profile authorization barrier',
+    () async {
+      SharedPreferences.setMockInitialValues({});
+      final initial = MetadataPreferencesService.revision.value;
+      await expectLater(
+        refresher.refresh({
+          MetadataPreferencesService.key,
+        }, authorizationBarrier: () => throw StateError('profile changed')),
+        throwsStateError,
+      );
+      expect(MetadataPreferencesService.revision.value, initial);
+    },
+  );
 
   test('synced hide-watched is refreshed before Home is notified', () async {
     SharedPreferences.setMockInitialValues({});

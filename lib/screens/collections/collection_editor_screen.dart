@@ -246,6 +246,14 @@ class _SourceEditorState extends State<_SourceEditor> {
   }
 
   static const _filters = <String, String>{
+    'runtimeGte': 'Minimum runtime (minutes)',
+    'runtimeLte': 'Maximum runtime (minutes)',
+    'certificationCountry': 'Certification country (movies)',
+    'certification': 'Certification (movies)',
+    'withCast': 'Cast person IDs (movies)',
+    'withCrew': 'Crew person IDs (movies)',
+    'withPeople': 'Cast or crew person IDs (movies)',
+    'monetization': 'Availability: flatrate, free, ads, rent, buy (join with |)',
     'withGenres': 'Include genre IDs',
     'withoutGenres': 'Exclude genre IDs',
     'releaseDateGte': 'Released from (YYYY-MM-DD)',
@@ -426,7 +434,7 @@ class _SourceEditorState extends State<_SourceEditor> {
                       filters,
                       e.key,
                       e.value,
-                      integer: e.key == 'year' || e.key == 'voteCountGte',
+                      integer: e.key == 'year' || e.key == 'voteCountGte' || e.key.startsWith('runtime'),
                       decimal: e.key.startsWith('voteAverage'),
                     ),
                 ],

@@ -570,6 +570,10 @@ class ShowcaseIdentity extends StatelessWidget {
         ),
       );
     }
+    if (m.onMetadataExplore != null && i < actionNodes.length) {
+      actions.add(_Circle(node: next(), icon: Icons.explore_outlined,
+        label: 'Explore', onTap: m.onMetadataExplore!));
+    }
     if (m.onAppMenu != null && i < actionNodes.length) {
       actions.add(
         _Circle(

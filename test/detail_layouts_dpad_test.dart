@@ -78,7 +78,7 @@ EpisodesPanelView _view({
   );
 }
 
-DetailModel _model({bool withParentsGuide = false}) {
+DetailModel _model({bool withParentsGuide = false, VoidCallback? onExplore}) {
   final item = StremioMeta(
     id: 'tt0903747',
     imdbId: 'tt0903747',
@@ -130,6 +130,7 @@ DetailModel _model({bool withParentsGuide = false}) {
     onTrailer: () {},
     onSelectSource: () {},
     onAppMenu: () {},
+    onMetadataExplore: onExplore,
     onTraktMenu: () {},
     onSimklMenu: () {},
     onRecommendationTap: (_) {},
@@ -199,6 +200,7 @@ Future<DetailModel> _pump(
   String layoutId, {
   required bool manySeasons,
   bool withParentsGuide = false,
+  VoidCallback? onExplore,
   int episodeCount = 8,
   int landingNumber = 1,
   EpisodeFocusIntent focusIntent = EpisodeFocusIntent.none,
@@ -206,7 +208,7 @@ Future<DetailModel> _pump(
   tester.view.physicalSize = _tv;
   tester.view.devicePixelRatio = 1.0;
   addTearDown(tester.view.reset);
-  final model = _model(withParentsGuide: withParentsGuide);
+  final model = _model(withParentsGuide: withParentsGuide, onExplore: onExplore);
   await tester.pumpWidget(
     MediaQuery(
       data: const MediaQueryData(size: _tv, devicePixelRatio: 1.0),
@@ -266,6 +268,22 @@ void main() {
     'halo',
     'premiere',
   ];
+
+
+  group('optional Explore action supports remote activation', () {
+    for (final id in layouts) {
+      testWidgets(id, (tester) async {
+        var opens = 0;
+        await _pump(tester, id, manySeasons: false, onExplore: () => opens++);
+        expect(find.text('Explore'), findsOneWidget);
+        Focus.of(tester.element(find.text('Explore'))).requestFocus();
+        await tester.pump();
+        await _key(tester, LogicalKeyboardKey.enter);
+        expect(opens, 1);
+        expect(tester.takeException(), isNull);
+      });
+    }
+  });
 
   group('DOWN from Play reaches the episodes (multi-season)', () {
     for (final id in layouts) {

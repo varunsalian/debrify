@@ -1,3 +1,6 @@
+import '../services/metadata_preferences_service.dart';
+import '../services/profiles/profile_runtime.dart';
+import '../services/metadata_episode_service.dart';
 import 'dart:async';
 
 import 'package:cached_network_image/cached_network_image.dart';
@@ -359,6 +362,8 @@ class EpisodesPanelState extends State<EpisodesPanel> {
   @override
   void initState() {
     super.initState();
+    MetadataPreferencesService.revision.addListener(_episodePolicyChanged);
+    ProfileRuntime.scope.addListener(_episodePolicyChanged);
     // The custom season-dropdown key handler deliberately traps Up/Left/Right
     // for the standalone route's single-row header. When hosted chromeless
     // (merged page), leave it to default directional focus so Up escapes to the
@@ -380,6 +385,8 @@ class EpisodesPanelState extends State<EpisodesPanel> {
 
   @override
   void dispose() {
+    MetadataPreferencesService.revision.removeListener(_episodePolicyChanged);
+    ProfileRuntime.scope.removeListener(_episodePolicyChanged);
     _mdblistRefreshToken++;
     _mdblistService.playbackRevision.removeListener(_onMdblistPlaybackRevision);
     _episodeScrollController.dispose();
@@ -1222,6 +1229,10 @@ class EpisodesPanelState extends State<EpisodesPanel> {
         _focusIntent = EpisodeFocusIntent.landing;
         _viewGeneration++;
       });
+      _episodeMetadataBaselines
+        ..clear()
+        ..addEntries(seasons.map((season) => MapEntry(season.number, season)));
+      unawaited(_loadSelectedEpisodeMetadata());
       final mergedNext = _nextEpisode;
       if (mergedNext != null) {
         _publishNextEpisode(mergedNext);
@@ -1343,6 +1354,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
 
       if (changed && mounted && generation == _episodeModeGeneration) {
         setState(() {});
+        unawaited(_loadSelectedEpisodeMetadata());
       }
     } catch (e) {
       debugPrint('EpisodesPanel: Trakt rating enrichment failed: $e');
@@ -1423,6 +1435,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
 
     if (changed) {
       setState(() {});
+      unawaited(_loadSelectedEpisodeMetadata());
     }
   }
 
@@ -1479,6 +1492,68 @@ class EpisodesPanelState extends State<EpisodesPanel> {
     WidgetsBinding.instance.addPostFrameCallback((_) => attempt(0));
   }
 
+  final _episodeMetadataBaselines = <int, TraktSeason>{};
+  int _episodeMetadataGeneration = 0;
+  void _episodePolicyChanged() {
+    _episodeMetadataGeneration++;
+    if (!mounted) return;
+    setState(() {
+      _episodeSeasons = [
+        for (final season in _episodeSeasons)
+          _episodeMetadataBaselines[season.number] ?? season,
+      ];
+      _refreshMetadataLanding();
+      // Presentation changes preserve the season view and its focus/scroll.
+    });
+    unawaited(_loadSelectedEpisodeMetadata());
+  }
+
+  void _refreshMetadataLanding() {
+    final landing = _landing;
+    if (landing == null) return;
+    final season = _episodeSeasons
+        .where((s) => s.number == landing.season)
+        .firstOrNull;
+    _landing = season?.episodes
+        .where((e) => e.number == landing.number)
+        .firstOrNull;
+  }
+
+  Future<void> _loadSelectedEpisodeMetadata() async {
+    if (_isDirectSource || _episodeSeasons.isEmpty) return;
+    final generation = _episodeModeGeneration;
+    final selected = _selectedSeasonNumber;
+    final index = _episodeSeasons.indexWhere((s) => s.number == selected);
+    if (index < 0) return;
+    final original = _episodeMetadataBaselines.putIfAbsent(
+      selected,
+      () => _episodeSeasons[index],
+    );
+    final metadataGeneration = ++_episodeMetadataGeneration;
+    final scope = ProfileRuntime.scope.value;
+    try {
+      final result = await MetadataEpisodeService.instance.present(
+        widget.show,
+        original,
+      );
+      if (!mounted ||
+          generation != _episodeModeGeneration ||
+          selected != _selectedSeasonNumber ||
+          scope != ProfileRuntime.scope.value ||
+          metadataGeneration != _episodeMetadataGeneration ||
+          identical(result, _episodeSeasons[index])) {
+        return;
+      }
+      setState(() {
+        _episodeSeasons = [
+          for (final s in _episodeSeasons) s.number == selected ? result : s,
+        ];
+        _refreshMetadataLanding();
+        // Presentation changes preserve the season view and its focus/scroll.
+      });
+    } catch (_) {}
+  }
+
   void _onSeasonChanged(int? seasonNumber) {
     if (seasonNumber == null || seasonNumber == _selectedSeasonNumber) return;
 
@@ -1507,6 +1582,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
       _focusIntent = EpisodeFocusIntent.seasonControl;
       _viewGeneration++;
     });
+    unawaited(_loadSelectedEpisodeMetadata());
   }
 
   void _onEpisodeTap(TraktEpisode episode) {

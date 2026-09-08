@@ -35,6 +35,7 @@ SettingsTvLayout _layout(
   trackers: [_connection('Trakt'), _connection('Simkl', connected: false)],
   firstFocusNode: entry,
   onOpenSearch: _voidNoop,
+  onOpenMetadataSettings: () async {},
   onOpenHomePageSettings: _noop,
   onOpenExternalPlayerSettings: _noop,
   onOpenRemoteControl: _voidNoop,
@@ -173,7 +174,7 @@ void main() {
       FocusManager.instance.primaryFocus?.debugLabel,
       'settings-tv-rail-10',
     );
-    expect(find.text('Sync and Migrate'), findsWidgets);
+    expect(find.text('Sync and backup'), findsWidgets);
 
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
     await tester.pump();

@@ -181,6 +181,14 @@ class CollectionNativeSourceService {
   }
 
   static const _filterNames = {
+    'runtimeGte': 'with_runtime.gte',
+    'runtimeLte': 'with_runtime.lte',
+    'certificationCountry': 'certification_country',
+    'certification': 'certification',
+    'withCast': 'with_cast',
+    'withCrew': 'with_crew',
+    'withPeople': 'with_people',
+    'monetization': 'with_watch_monetization_types',
     'withGenres': 'with_genres',
     'withoutGenres': 'without_genres',
     'voteAverageGte': 'vote_average.gte',
@@ -220,7 +228,7 @@ class CollectionNativeSourceService {
         'year' => tv ? 'first_air_date_year' : 'primary_release_year',
         _ => _filterNames[entry.key],
       };
-      if (key != null) query[key] = '${entry.value}';
+      if (key != null && !(tv && const {'certification_country', 'certification', 'with_cast', 'with_crew', 'with_people'}.contains(key))) query[key] = '${entry.value}';
     }
     if (source.tmdbSourceType == 'COMPANY') {
       query['with_companies'] = '${source.tmdbId}';
@@ -234,11 +242,12 @@ class CollectionNativeSourceService {
       query['with_status'] = '0|3|4';
     }
     if (query.containsKey('with_watch_providers') ||
-        query.containsKey('without_watch_providers')) {
+        query.containsKey('without_watch_providers') ||
+        query.containsKey('with_watch_monetization_types')) {
       query.putIfAbsent('watch_region', () => 'US');
     }
     if (query.containsKey('with_watch_providers')) {
-      query['with_watch_monetization_types'] = 'flatrate|free|ads|rent|buy';
+      query.putIfAbsent('with_watch_monetization_types', () => 'flatrate|free|ads|rent|buy');
     }
     return query;
   }

@@ -291,6 +291,24 @@ void main() {
     },
   );
 
+  test('short-lived clients share DNS answers without sharing socket ownership', () async {
+    final cache = TmdbDnsCache();
+    var lookups = 0;
+    TmdbConnections client() => TmdbConnections(dnsCache: cache,
+      dnsClientFactory: () => MockClient((_) async { lookups++; return answer(); }),
+      startConnect: (host, port) async {
+        if (host is String) throw const SocketException('system DNS unavailable');
+        return success();
+      });
+    final first = client();
+    await (await first.connect(uri, null, null)).socket;
+    first.close();
+    final second = client();
+    addTearDown(second.close);
+    await (await second.connect(uri, null, null)).socket;
+    expect(lookups, 1);
+  });
+
   test('proxy and other hosts bypass fallback', () async {
     final destinations = <String>[];
     final c = TmdbConnections(

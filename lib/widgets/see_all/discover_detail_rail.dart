@@ -1,3 +1,7 @@
+import '../metadata_presentation_mixin.dart';
+import '../../models/metadata_preferences.dart';
+import '../../services/metadata_preferences_service.dart';
+import '../../services/metadata_provider_service.dart';
 import 'dart:async';
 
 import 'package:cached_network_image/cached_network_image.dart';
@@ -118,7 +122,22 @@ class DiscoverDetailRail extends StatefulWidget {
 }
 
 class _DiscoverDetailRailState extends State<DiscoverDetailRail>
-    with RouteAware, WidgetsBindingObserver {
+    with RouteAware, WidgetsBindingObserver, MetadataPresentationMixin<DiscoverDetailRail> {
+  @override
+  StremioMeta? get originalMetadata => _shown;
+  @override
+  void onMetadataPresentationChanged() {
+    _publishShown();
+    if (_streams != null) widget.trailerMeta.value = presentedMetadata;
+  }
+  @override
+  void onMetadataPolicyChanged() {
+    if (!mounted) return;
+    _enriched.clear();
+    _dropTrailer();
+    _scheduleEnrich(widget.item);
+    _evaluateTrailer();
+  }
   final StremioService _stremio = StremioService.instance;
 
   /// What's actually rendered — the focused item merged with any enrichment.
@@ -156,7 +175,7 @@ class _DiscoverDetailRailState extends State<DiscoverDetailRail>
   set _streams(YoutubeResolvedStreams? v) {
     // Meta first, so the stage's meta listener updates its held copy before its
     // streams listener mounts the player for a new title.
-    widget.trailerMeta.value = v == null ? null : _shown;
+    widget.trailerMeta.value = v == null ? null : presentedMetadata;
     widget.trailerStreams.value = v;
   }
 
@@ -316,6 +335,7 @@ class _DiscoverDetailRailState extends State<DiscoverDetailRail>
     // wrap their call in setState themselves.
     final cached = _cachedFor(m);
     _shown = cached ?? m;
+    refreshMetadataPresentation();
     _publishShown();
     if (m != null && cached == null) _scheduleEnrich(m);
     _evaluateTrailer();
@@ -327,7 +347,7 @@ class _DiscoverDetailRailState extends State<DiscoverDetailRail>
   /// time means queued callbacks all publish the latest value (idempotent).
   void _publishShown() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) widget.shownItem.value = _shown;
+      if (mounted) widget.shownItem.value = presentedMetadata;
     });
   }
 
@@ -374,6 +394,7 @@ class _DiscoverDetailRailState extends State<DiscoverDetailRail>
       // either way, so a later revisit still benefits).
       if (widget.item?.imdbId != key) return;
       setState(() => _shown = merged);
+      refreshMetadataPresentation();
       // Async context (Timer) — safe to publish directly; the stage picks up
       // the enriched backdrop.
       widget.shownItem.value = merged;
@@ -390,12 +411,15 @@ class _DiscoverDetailRailState extends State<DiscoverDetailRail>
   /// the title changes, then — if the setting is on and the title is playable —
   /// debounces a resolve→play. Cheap and idempotent, so it's safe to call from
   /// every path that moves [_shown] (focus change, enrichment, settings load).
+  String? _trailerIdentity(StremioMeta? item) => item?.effectiveImdbId ??
+      (item?.id.startsWith('tmdb:') == true ? '${item!.type}:${item.id}' : null);
+
   void _evaluateTrailer() {
     final m = _shown;
     // Settings/enrichment can finish while the visible title is settling.
     // They must not re-arm the trailer for the card we have already left.
-    if (widget.item?.imdbId != m?.imdbId || (_settle?.isActive ?? false)) return;
-    final imdb = m?.imdbId;
+    if (_trailerIdentity(widget.item) != _trailerIdentity(m) || (_settle?.isActive ?? false)) return;
+    final imdb = _trailerIdentity(m);
     // Focus moved to a different title (or away): drop the old trailer + dwell.
     // A genuine browse action also means we're no longer sitting behind a player,
     // so lift suppression here (the same-title return case is handled by
@@ -412,7 +436,7 @@ class _DiscoverDetailRailState extends State<DiscoverDetailRail>
       _streams = null;
     }
     if (_suppressed || !_trailerEnabled) return;
-    if (imdb == null) return; // need an imdbId to look up / play a trailer
+    if (imdb == null) return; // need a stable supported identity
     if (_streams != null) return; // already playing this title
     if (_trailerDwell?.isActive ?? false) return; // resolve already pending
     // Two dwells, both reset by arrowing: a short one flips the pill on for a
@@ -422,7 +446,7 @@ class _DiscoverDetailRailState extends State<DiscoverDetailRail>
     _pillDwell = Timer(_pillDwellDelay, () {
       if (mounted &&
           !_suppressed &&
-          _shown?.imdbId == imdb &&
+          _trailerIdentity(_shown) == imdb &&
           (_shown?.trailerYtId?.isNotEmpty ?? false)) {
         widget.trailerLoading.value = true;
       }
@@ -436,9 +460,10 @@ class _DiscoverDetailRailState extends State<DiscoverDetailRail>
   /// attempt commits, not just before frames). Every failure exit clears it;
   /// success hands off to the stage, which drops it once frames land.
   Future<void> _resolveAndPlay(String imdb) async {
+    final revision = MetadataPreferencesService.revision.value;
     // Moved on / suppressed: whoever caused it already reset the pill (and, if
     // the user browsed on, the new title now owns it) — don't touch it.
-    if (!mounted || _suppressed || _shown?.imdbId != imdb) return;
+    if (!mounted || _suppressed || _trailerIdentity(_shown) != imdb) return;
     // A modal/sheet the route observer can't see covered us AFTER the pill dwell
     // turned the spinner on: clear it, since this path arms no watchdog and
     // nothing else would.
@@ -461,17 +486,22 @@ class _DiscoverDetailRailState extends State<DiscoverDetailRail>
     // title being left, so an in-flight resolve would otherwise sail past
     // this guard and mount a decoder for a card the user has walked away
     // from — a spurious lights-down mid-settle.
-    bool stale() =>
+    bool stale() => revision != MetadataPreferencesService.revision.value ||
         !mounted ||
         _suppressed ||
         _trailerImdb != imdb ||
-        _shown?.imdbId != imdb;
+        _trailerIdentity(_shown) != imdb;
     void fail() {
-      if (mounted && _shown?.imdbId == imdb) widget.trailerLoading.value = false;
+      if (mounted && _trailerIdentity(_shown) == imdb) widget.trailerLoading.value = false;
     }
 
     // Trailer id: from the item when the catalog carries it, else the /meta
     // details (the same cached fetch the rail's enrichment uses).
+    try {
+    final metadataPrefs = await MetadataPreferencesService.load();
+    final trailerItem = _shown;
+    if (trailerItem == null || stale()) return;
+    final candidates = await MetadataProviderService.instance.trailers(trailerItem, () async {
     String? ytId = _shown?.trailerYtId;
     if (ytId == null || ytId.isEmpty) {
       try {
@@ -484,6 +514,10 @@ class _DiscoverDetailRailState extends State<DiscoverDetailRail>
         // Meta fetch failed — the IMDb backup below may still carry it.
       }
     }
+      return ytId;
+    }, preferences: metadataPrefs);
+    final ytId = candidates.firstOrNull?.key;
+    final allowBackup = metadataPrefs.provider(MetadataCategory.trailers) == MetadataPreferences.current || metadataPrefs.fallback;
     if (stale()) return; // moved on — the new title owns the pill now
     // Ambient rail backdrop: resolve at a low cap (small box, weak TV).
     var streams = (ytId != null && ytId.isNotEmpty)
@@ -495,7 +529,7 @@ class _DiscoverDetailRailState extends State<DiscoverDetailRail>
         : null;
     // Backup source: IMDb's own trailer MP4s — a YouTube block (or a title
     // with no YouTube id) still lights the stage.
-    if (streams == null || !streams.hasPlayable) {
+    if (allowBackup && imdb.startsWith('tt') && (streams == null || !streams.hasPlayable)) {
       if (stale()) return;
       streams = await ImdbTrailerService.resolveTrailer(
         imdb,
@@ -507,6 +541,9 @@ class _DiscoverDetailRailState extends State<DiscoverDetailRail>
     // Publish — the stage mounts the player; the pill stays up until the stage
     // reports its first frames (which drops loading).
     _streams = streams;
+    } catch (_) {
+      if (!stale()) fail();
+    }
   }
 
   /// Real playback is launching (possibly a native TV player that never pushes a
@@ -546,7 +583,7 @@ class _DiscoverDetailRailState extends State<DiscoverDetailRail>
 
   @override
   Widget build(BuildContext context) {
-    final item = _shown;
+    final item = presentedMetadata;
     if (widget.layout == DiscoverDetailLayout.stage) {
       // Nothing focused yet: the stage shows its art and the shelf below —
       // a "browse to preview" card would be talking about the only thing

@@ -1278,6 +1278,7 @@ class _DetailShowcaseState extends State<DetailShowcase> {
     // trailer and the app menu by ShowcaseIdentity; the count here is what
     // keeps its node real.
     if (m.onBrowse != null) n++;
+    if (m.onMetadataExplore != null) n++;
     if (m.onAppMenu != null) n++;
     return n;
   }

@@ -9,8 +9,8 @@ import 'tmdb_transport_socket.dart';
 /// Changes TCP address selection, then performs TLS using the original URI
 /// hostname, including SNI and normal certificate verification.
 class TmdbHttpClient extends IOClient {
-  factory TmdbHttpClient() {
-    final connections = TmdbConnections();
+  factory TmdbHttpClient({TmdbDnsCache? dnsCache}) {
+    final connections = TmdbConnections(dnsCache: dnsCache);
     final transport = connections.httpClient();
     return TmdbHttpClient._(transport, connections);
   }
@@ -24,17 +24,29 @@ class TmdbHttpClient extends IOClient {
   }
 }
 
+/// Share only public DNS answers, never sockets, requests or credentials.
+/// Short-lived metadata clients can retain the fallback route without sharing
+/// cancellation ownership of their transports.
+class TmdbDnsCache {
+  List<InternetAddress> addresses = [];
+  DateTime? expires;
+  DateTime? retryAt;
+}
+
 /// TMDB API only: never intercept proxies, artwork, addons, or other providers.
 /// Public DNS receives a hostname lookup, never API headers or query strings.
 class TmdbConnections {
   TmdbConnections({
+    TmdbDnsCache? dnsCache,
     http.Client Function()? dnsClientFactory,
     Future<ConnectionTask<Socket>> Function(dynamic, int)? startConnect,
     DateTime Function()? now,
     this.connectBudget = const Duration(seconds: 2),
     this.dnsBudget = const Duration(seconds: 2),
     this.tlsBudget = const Duration(seconds: 5),
-  }) : _dnsFactory =
+  }) : _dnsCache = dnsCache ?? TmdbDnsCache(),
+       _ownsDnsCache = dnsCache == null,
+       _dnsFactory =
            dnsClientFactory ??
            (() => IOClient(
              HttpClient()..connectionTimeout = const Duration(seconds: 2),
@@ -52,9 +64,8 @@ class TmdbConnections {
   final Duration tlsBudget;
   final _handshakes = <void Function()>{};
   final _active = <_ConnectionAttempt>{};
-  List<InternetAddress> _addresses = [];
-  DateTime? _expires;
-  DateTime? _retryDnsAt;
+  final TmdbDnsCache _dnsCache;
+  final bool _ownsDnsCache;
   Future<List<InternetAddress>>? _resolving;
   bool _closed = false;
 
@@ -194,8 +205,8 @@ class TmdbConnections {
   }
 
   Future<Socket> _connect(_ConnectionAttempt attempt) async {
-    final cached = _expires != null && _now().isBefore(_expires!)
-        ? _addresses
+    final cached = _dnsCache.expires != null && _now().isBefore(_dnsCache.expires!)
+        ? _dnsCache.addresses
         : const <InternetAddress>[];
     for (final address in cached.take(2)) {
       try {
@@ -207,8 +218,8 @@ class TmdbConnections {
       }
     }
     if (cached.isNotEmpty) {
-      _addresses = [];
-      _expires = null;
+      _dnsCache.addresses = [];
+      _dnsCache.expires = null;
     }
     try {
       return await _open(host, attempt);
@@ -233,8 +244,8 @@ class TmdbConnections {
 
   Future<List<InternetAddress>> _resolve() async {
     if (_closed) throw const SocketException('TMDB client is closed');
-    if (_expires != null && _now().isBefore(_expires!)) return _addresses;
-    if (_retryDnsAt != null && _now().isBefore(_retryDnsAt!)) return [];
+    if (_dnsCache.expires != null && _now().isBefore(_dnsCache.expires!)) return _dnsCache.addresses;
+    if (_dnsCache.retryAt != null && _now().isBefore(_dnsCache.retryAt!)) return [];
     final pending = _resolving;
     if (pending != null) return pending;
     final work = _lookup();
@@ -270,15 +281,15 @@ class TmdbConnections {
           client.close();
         }
         if (_closed) throw const SocketException('TMDB client is closed');
-        _addresses = answer.$1;
-        _expires = _now().add(Duration(seconds: answer.$2));
-        _retryDnsAt = null;
-        return _addresses;
+        _dnsCache.addresses = answer.$1;
+        _dnsCache.expires = _now().add(Duration(seconds: answer.$2));
+        _dnsCache.retryAt = null;
+        return _dnsCache.addresses;
       } catch (_) {
         // A failed resolver is bounded; try the independent secondary once.
       }
     }
-    _retryDnsAt = _now().add(const Duration(seconds: 10));
+    _dnsCache.retryAt = _now().add(const Duration(seconds: 10));
     return [];
   }
 
@@ -346,7 +357,7 @@ class TmdbConnections {
     for (final client in _dnsClients.toList()) {
       client.close();
     }
-    _addresses = [];
+    if (_ownsDnsCache) _dnsCache.addresses = [];
   }
 }
 
