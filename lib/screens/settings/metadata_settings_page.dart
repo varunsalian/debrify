@@ -364,7 +364,10 @@ class _MetadataSettingsPageState extends State<MetadataSettingsPage> {
                 TextButton(
                   onPressed: _saving
                       ? null
-                      : () => _save(MetadataPreferences()),
+                      : () => _save(MetadataPreferences(providers: {
+                          for (final category in MetadataCategory.values)
+                            category: MetadataPreferences.current,
+                        })),
                   child: const Text('Restore current behaviour'),
                 ),
                 const Padding(

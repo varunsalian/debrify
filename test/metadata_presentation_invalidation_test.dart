@@ -78,7 +78,7 @@ void main() {
       await prefs.setString(MetadataPreferencesService.key, 'broken-json');
       expect((await MetadataPreferencesService.load()).language, 'en-US');
       await prefs.remove(MetadataPreferencesService.key);
-      expect((await MetadataPreferencesService.load()).isCurrent, true);
+      expect((await MetadataPreferencesService.load()).provider(MetadataCategory.credits), MetadataPreferences.defaultCreditsProvider);
     },
   );
 }

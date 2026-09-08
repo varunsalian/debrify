@@ -5,17 +5,26 @@ import 'package:debrify/models/metadata_preferences.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  test('new and legacy profiles preserve every existing source', () {
+  test('unspecified cast follows build availability; other categories retain current sources', () {
     for (final prefs in [
       MetadataPreferences(),
       MetadataPreferences.fromJson({}),
     ]) {
-      expect(prefs.isCurrent, isTrue);
+      expect(prefs.isCurrent, MetadataPreferences.defaultCreditsProvider == MetadataPreferences.current);
       expect(prefs.features, isEmpty);
       expect(prefs.fallback, isFalse);
       for (final c in MetadataCategory.values) {
-        expect(prefs.provider(c), MetadataPreferences.current);
+        expect(prefs.provider(c), c == MetadataCategory.credits
+            ? MetadataPreferences.defaultCreditsProvider : MetadataPreferences.current);
       }
+    }
+  });
+
+  test('explicit cast choices survive the new default and round trip', () {
+    for (final choice in ['current', 'imdb', 'tmdb']) {
+      final prefs = MetadataPreferences.fromJson({'providers': {'credits': choice}});
+      expect(prefs.provider(MetadataCategory.credits), choice);
+      expect(MetadataPreferences.fromJson(prefs.toJson()).provider(MetadataCategory.credits), choice);
     }
   });
 
@@ -34,7 +43,7 @@ void main() {
     expect(decoded.fallback, isFalse);
   });
 
-  test('malformed imported settings do not activate new functionality', () {
+  test('malformed imported settings use defaults', () {
     final prefs = MetadataPreferences.fromJson({
       'providers': {'posters': 42, 'information': 'unknown'},
       'features': 'people',
@@ -42,7 +51,7 @@ void main() {
       'language': '../../x',
       'region': 'not a region',
     });
-    expect(prefs.isCurrent, isTrue);
+    expect(prefs.isCurrent, MetadataPreferences.defaultCreditsProvider == MetadataPreferences.current);
     expect(prefs.fallback, isFalse);
     expect(prefs.language, 'en-US');
     expect(prefs.region, 'US');
@@ -71,7 +80,7 @@ void main() {
       );
       expect(prefs.provider(MetadataCategory.information), 'current');
       expect(prefs.provider(MetadataCategory.posters), 'current');
-      expect(prefs.provider(MetadataCategory.credits), 'current');
+      expect(prefs.provider(MetadataCategory.credits), MetadataPreferences.defaultCreditsProvider);
       expect(prefs.provider(MetadataCategory.episodeArtwork), 'tvmaze');
       expect(prefs.toJson().toString(), isNot(contains('private-token')));
     },

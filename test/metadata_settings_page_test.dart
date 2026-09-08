@@ -58,7 +58,7 @@ void main() {
     },
   );
 
-  testWidgets('opening settings does not opt anyone into TMDB', (tester) async {
+  testWidgets('opening settings does not persist defaults', (tester) async {
     await open(tester);
     final preferences = await SharedPreferences.getInstance();
     expect(preferences.getString(MetadataPreferencesService.key), isNull);
@@ -72,7 +72,7 @@ void main() {
     await open(tester);
     await tester.tap(find.text('Posters'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('TMDB'));
+    await tester.tap(find.descendant(of: find.byType(SimpleDialog), matching: find.text('TMDB')));
     await tester.pumpAndSettle();
     final raw = (await SharedPreferences.getInstance()).getString(
       MetadataPreferencesService.key,
@@ -84,7 +84,7 @@ void main() {
     for (final category in MetadataCategory.values.where(
       (c) => c != MetadataCategory.posters,
     )) {
-      expect(prefs.provider(category), 'current');
+      expect(prefs.provider(category), category == MetadataCategory.credits ? MetadataPreferences.defaultCreditsProvider : 'current');
     }
     expect(prefs.features, isEmpty);
     expect(prefs.fallback, isFalse);
@@ -99,7 +99,7 @@ void main() {
     Future<bool> enabled(String title) async {
       return tester.widget<ListTile>(find.ancestor(of: find.text(title), matching: find.byType(ListTile))).enabled;
     }
-    expect(await enabled('Metadata language'), isFalse);
+    expect(await enabled('Metadata language'), MetadataPreferences.defaultCreditsProvider == MetadataPreferences.tmdb);
     expect(await enabled('Artwork language'), isFalse);
     expect(await enabled('Trailer language'), isFalse);
     expect(await enabled('Country / region'), isFalse);
@@ -157,7 +157,7 @@ void main() {
     await tester.scrollUntilVisible(find.text('Posters'), 250);
     await tester.tap(find.text('Posters'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('TMDB'));
+    await tester.tap(find.descendant(of: find.byType(SimpleDialog), matching: find.text('TMDB')));
     await tester.pumpAndSettle();
     expect(
       (await MetadataPreferencesService.load()).provider(

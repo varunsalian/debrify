@@ -40,6 +40,10 @@ class MetadataPreferences {
   final String trailerLanguage;
   final String region;
 
+  static String get defaultCreditsProvider =>
+      const String.fromEnvironment('TMDB_READ_ACCESS_TOKEN').trim().isNotEmpty
+          ? tmdb : current;
+
   MetadataPreferences({
     Map<MetadataCategory, String> providers = const {},
     Set<MetadataFeature> features = const {},
@@ -49,6 +53,7 @@ class MetadataPreferences {
     this.trailerLanguage = 'same',
     this.region = 'US',
   }) : providers = Map.unmodifiable({
+         MetadataCategory.credits: defaultCreditsProvider,
          for (final entry in providers.entries)
            if (validProvider(entry.value) && supports(entry.key, entry.value))
              entry.key: entry.value,

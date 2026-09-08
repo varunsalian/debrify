@@ -15,6 +15,20 @@ import 'package:http/testing.dart';
 void main() {
   const movie = StremioMeta(id: 'tmdb:550', type: 'movie', name: 'Title');
 
+  test('automatic credits retain IMDb in a build without TMDB credentials', () async {
+    const configured = String.fromEnvironment('TMDB_READ_ACCESS_TOKEN');
+    final service = MetadataDetailsService(repository: TmdbMetadataRepository(
+      token: configured,
+      clientFactory: () => MockClient((_) async => http.Response(
+        '{"cast":[{"id":1,"name":"TMDB Actor"}]}', 200)),
+    ));
+    const existing = ImdbEnrichment(cast: [CastMember(name: 'IMDb Actor')]);
+    final result = await service.enrich(movie,
+      loadExisting: () async => existing, preferences: MetadataPreferences());
+    expect(result!.cast.single.name,
+      configured.trim().isEmpty ? 'IMDb Actor' : 'TMDB Actor');
+  });
+
   test(
     'credits begin while IMDb is pending and retain its eventual rating',
     () async {

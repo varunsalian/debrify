@@ -152,7 +152,10 @@ void main() {
         'selected information populated=$populated fallback=$fallback reaches details',
         () async {
           final prefs = MetadataPreferences(
-            providers: {MetadataCategory.information: MetadataPreferences.tmdb},
+            providers: {
+              MetadataCategory.information: MetadataPreferences.tmdb,
+              MetadataCategory.credits: MetadataPreferences.current,
+            },
             fallback: fallback,
           );
           final repository = TmdbMetadataRepository(
