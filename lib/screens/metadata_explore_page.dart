@@ -21,7 +21,9 @@ class MetadataExplorePage extends StatefulWidget {
     required this.preferences,
     required this.onOpen,
     this.isTelevision = false,
+    this.service,
   });
+  final MetadataExploreService? service;
   final StremioMeta item;
   final MetadataPreferences preferences;
   final ValueChanged<StremioMeta> onOpen;
@@ -31,7 +33,17 @@ class MetadataExplorePage extends StatefulWidget {
 }
 
 class _MetadataExplorePageState extends State<MetadataExplorePage> {
-  late Future<MetadataExploreData> _data;
+  MetadataExploreData? _data;
+  Timer? _retryTimer;
+  int _loadGeneration = 0;
+  bool _loading = true;
+  bool _failed = false;
+
+  void _cancelLoad() {
+    ++_loadGeneration;
+    _retryTimer?.cancel();
+    _retryTimer = null;
+  }
   late MetadataPreferences _preferences;
   final _scope = ProfileRuntime.scope.value;
   int _policyGeneration = 0;
@@ -39,6 +51,12 @@ class _MetadataExplorePageState extends State<MetadataExplorePage> {
 
   Future<void> _policyChanged() async {
     final generation = ++_policyGeneration;
+    _cancelLoad();
+    setState(() {
+      _data = null;
+      _loading = true;
+      _failed = false;
+    });
     if (_scope != ProfileRuntime.scope.value) {
       setState(() => _profileChanged = true);
       return;
@@ -50,11 +68,19 @@ class _MetadataExplorePageState extends State<MetadataExplorePage> {
         _preferences = preferences;
         _reload();
       });
-    } catch (_) {}
+    } catch (_) {
+      if (mounted && generation == _policyGeneration) {
+        setState(() {
+          _loading = false;
+          _failed = true;
+        });
+      }
+    }
   }
 
   @override
   void dispose() {
+    _cancelLoad();
     MetadataPreferencesService.revision.removeListener(_policyChanged);
     ProfileRuntime.scope.removeListener(_policyChanged);
     super.dispose();
@@ -70,7 +96,39 @@ class _MetadataExplorePageState extends State<MetadataExplorePage> {
   }
 
   void _reload() {
-    _data = MetadataExploreService.instance.details(widget.item, _preferences);
+    _cancelLoad();
+    _loading = true;
+    _failed = false;
+    _attemptLoad(_loadGeneration, 0);
+  }
+
+  Future<void> _attemptLoad(int generation, int attempt) async {
+    bool current() => mounted && !_profileChanged &&
+        _scope == ProfileRuntime.scope.value && generation == _loadGeneration;
+    if (!current()) return;
+    try {
+      final data = await (widget.service ?? MetadataExploreService.instance)
+          .details(widget.item, _preferences);
+      if (!current()) return;
+      setState(() => _data = data);
+      if (data.unavailable.isEmpty) {
+        setState(() => _loading = false);
+        return;
+      }
+    } catch (_) {
+      if (!current()) return;
+    }
+    if (attempt < 2) {
+      _retryTimer = Timer(Duration(seconds: 1 << attempt), () {
+        _retryTimer = null;
+        if (current()) _attemptLoad(generation, attempt + 1);
+      });
+    } else {
+      setState(() {
+        _loading = false;
+        _failed = true;
+      });
+    }
   }
 
   void _entity(String kind, Map<String, dynamic> row) {
@@ -100,10 +158,9 @@ class _MetadataExplorePageState extends State<MetadataExplorePage> {
               'Profile changed. Go back to browse your current profile.',
             ),
           )
-        : FutureBuilder<MetadataExploreData>(
-            future: _data,
-            builder: (context, snapshot) {
-              if (snapshot.hasError) {
+        : Builder(
+            builder: (context) {
+              if (_failed && _data == null) {
                 return Center(
                   child: TextButton(
                     onPressed: () => setState(_reload),
@@ -111,15 +168,16 @@ class _MetadataExplorePageState extends State<MetadataExplorePage> {
                   ),
                 );
               }
-              final data = snapshot.data;
-              if (snapshot.connectionState != ConnectionState.done ||
-                  data == null) {
+              final data = _data;
+              if (data == null) {
                 return const Center(child: CircularProgressIndicator());
               }
               return ListView(
                 padding: const EdgeInsets.all(20),
                 children: [
-                  if (data.unavailable.isNotEmpty)
+                  if (_loading)
+                    const LinearProgressIndicator()
+                  else if (_failed || data.unavailable.isNotEmpty)
                     TextButton(
                       onPressed: () => setState(_reload),
                       child: const Text('Some sections could not load. Retry'),

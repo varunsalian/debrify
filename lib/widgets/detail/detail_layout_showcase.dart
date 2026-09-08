@@ -1,3 +1,7 @@
+import 'dart:async';
+import '../../services/metadata_explore_service.dart';
+import '../../services/profiles/profile_runtime.dart';
+import 'showcase_availability.dart';
 import '../../models/metadata_preferences.dart';
 import '../../screens/metadata_explore_page.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -54,12 +58,14 @@ class DetailShowcase extends StatefulWidget {
   /// implies input — a narrow TV keeps the wide presentation so the DPAD
   /// ladder's widgets all exist.
   final bool dpad;
+  final MetadataExploreService? exploreService;
 
   const DetailShowcase({
     super.key,
     required this.model,
     required this.episodesHost,
     this.dpad = true,
+    this.exploreService,
   });
 
   @override
@@ -191,6 +197,90 @@ class _Band {
 }
 
 class _DetailShowcaseState extends State<DetailShowcase> {
+  MetadataExploreData? _explore;
+  final _exploreScope = ProfileRuntime.scope.value;
+  int _exploreGeneration = 0;
+  Timer? _exploreRetry;
+  bool _exploreFailed = false;
+  final _extraNodes = <String, List<FocusNode>>{};
+  final _extraKeys = <String, GlobalKey>{};
+
+  List<ShowcaseAvailabilityRow> get _extraRows => showcaseAvailabilityRows(
+    _explore, widget.model.metadataPreferences,
+    failed: _exploreFailed,
+  );
+
+  Object? _explorePolicy(MetadataPreferences? prefs) => prefs == null ? null : (
+    prefs.language, prefs.region,
+    prefs.features.contains(MetadataFeature.companies),
+    prefs.features.contains(MetadataFeature.availability),
+  );
+
+  void _scopeChanged() {
+    ++_exploreGeneration;
+    _exploreRetry?.cancel();
+    if (mounted) setState(() { _explore = null; _exploreFailed = false; });
+  }
+
+  @override
+  void didUpdateWidget(covariant DetailShowcase oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.model.item.id != widget.model.item.id ||
+        oldWidget.model.item.type != widget.model.item.type ||
+        _explorePolicy(oldWidget.model.metadataPreferences) !=
+            _explorePolicy(widget.model.metadataPreferences) ||
+        oldWidget.exploreService != widget.exploreService) {
+      _loadExplore();
+    }
+  }
+
+  void _loadExplore() {
+    final generation = ++_exploreGeneration;
+    _exploreRetry?.cancel();
+    _explore = null;
+    _exploreFailed = false;
+    final prefs = widget.model.metadataPreferences;
+    if (prefs == null || _exploreScope != ProfileRuntime.scope.value) return;
+    final features = prefs.features.intersection({
+      MetadataFeature.companies, MetadataFeature.availability,
+    });
+    if (features.isEmpty) return;
+    _fetchExplore(generation, prefs.copyWith(features: features), 0);
+  }
+
+  Future<void> _fetchExplore(int generation, MetadataPreferences prefs, int attempt) async {
+    bool current() => mounted && generation == _exploreGeneration &&
+        _exploreScope == ProfileRuntime.scope.value;
+    try {
+      final data = await (widget.exploreService ?? MetadataExploreService.instance)
+          .details(widget.model.item, prefs);
+      if (current()) setState(() => _explore = data);
+    } catch (_) {
+      if (!current()) return;
+      if (attempt < 2) {
+        _exploreRetry = Timer(Duration(seconds: 1 << attempt), () {
+          if (current()) _fetchExplore(generation, prefs, attempt + 1);
+        });
+      } else {
+        setState(() => _exploreFailed = true);
+      }
+    }
+  }
+
+  void _openStudio(ShowcaseAvailabilityEntry entry) {
+    final onOpen = widget.model.onRecommendationTap;
+    final prefs = widget.model.metadataPreferences;
+    if (onOpen == null || prefs == null || entry.id == null ||
+        !prefs.features.contains(MetadataFeature.companies)) {
+      return;
+    }
+    Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => MetadataBrowsePage(
+      title: entry.name, kind: entry.kind!, id: entry.id,
+      type: widget.model.item.type == 'series' ? 'tv' : 'movie',
+      preferences: prefs, onOpen: onOpen, isTelevision: widget.model.isTelevision,
+    )));
+  }
+
   final ScrollController _scroll = ScrollController();
   final DetailCellNodes _cells = DetailCellNodes('showcase');
 
@@ -330,6 +420,8 @@ class _DetailShowcaseState extends State<DetailShowcase> {
   void initState() {
     super.initState();
     if (!widget.dpad) _scroll.addListener(_onScrollDepth);
+    ProfileRuntime.scope.addListener(_scopeChanged);
+    _loadExplore();
   }
 
   @override
@@ -467,9 +559,13 @@ class _DetailShowcaseState extends State<DetailShowcase> {
   @override
   void dispose() {
     _detachOpeningKeyHandler();
+    ++_exploreGeneration;
+    _exploreRetry?.cancel();
+    ProfileRuntime.scope.removeListener(_scopeChanged);
     _scroll.dispose();
     _epScroll.dispose();
     for (final n in [
+      ..._extraNodes.values.expand((nodes) => nodes),
       ..._actionNodes,
       ..._seasonNodes,
       ..._castNodes,
@@ -964,6 +1060,11 @@ class _DetailShowcaseState extends State<DetailShowcase> {
         ),
       );
     }
+    for (final row in _extraRows) {
+      bands.add(_Band(row.key,
+        _grow(_extraNodes.putIfAbsent(row.key, () => []), row.entries.length, row.key),
+        _extraKeys.putIfAbsent(row.key, GlobalKey.new), 150));
+    }
     if (_universe.isNotEmpty) {
       bands.add(
         _Band(
@@ -1240,6 +1341,16 @@ class _DetailShowcaseState extends State<DetailShowcase> {
                         onTap: m.onRecommendationTap,
                       ),
                     ),
+                  for (final row in _extraRows)
+                    _band(row.key, ShowcaseAvailabilityBand(
+                      key: _extraKeys.putIfAbsent(row.key, GlobalKey.new),
+                      row: row,
+                      nodes: _grow(_extraNodes.putIfAbsent(row.key, () => []),
+                        row.entries.length, row.key),
+                      accent: m.accent,
+                      onStudio: m.onRecommendationTap == null ? null : _openStudio,
+                      onRetry: () => setState(_loadExplore),
+                    )),
                   if (_universe.isNotEmpty)
                     _band(
                       'universe',

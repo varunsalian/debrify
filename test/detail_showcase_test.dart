@@ -1,3 +1,5 @@
+import 'package:debrify/services/metadata_explore_service.dart';
+import 'package:debrify/widgets/detail/showcase_availability.dart';
 import 'package:debrify/models/metadata_preferences.dart';
 import 'package:debrify/screens/metadata_explore_page.dart';
 import 'package:flutter/gestures.dart';
@@ -83,6 +85,7 @@ DetailModel _model({
   VoidCallback? onPrimaryLongPress,
   bool openingDataReady = true,
   bool peopleEnabled = false,
+  Set<MetadataFeature>? features,
 }) {
   final item = StremioMeta(
     id: 'tt0903747',
@@ -95,7 +98,7 @@ DetailModel _model({
   );
   return DetailModel(
     item: item,
-    metadataPreferences: MetadataPreferences(features: {if (peopleEnabled) MetadataFeature.people}),
+    metadataPreferences: MetadataPreferences(features: features ?? {if (peopleEnabled) MetadataFeature.people}),
     isMovie: isMovie,
     isTelevision: true,
     accent: const Color(0xFFABA124),
@@ -164,6 +167,7 @@ Widget _host(
   bool manySeasons = true,
   int count = 5,
   bool tall = false,
+  MetadataExploreService? exploreService,
 }) => MediaQuery(
   data: MediaQueryData(size: tall ? const Size(960, 2000) : _tv),
   child: MaterialApp(
@@ -183,6 +187,7 @@ Widget _host(
             ),
             DetailShowcase(
               model: m,
+              exploreService: exploreService,
               episodesHost: m.isMovie
                   ? null
                   : (builder) => Builder(
@@ -213,7 +218,95 @@ Future<void> _press(WidgetTester t, LogicalKeyboardKey k) async {
   await t.pump(const Duration(milliseconds: 320));
 }
 
+class _ExploreFixture extends MetadataExploreService {
+  int calls = 0;
+  int failures = 0;
+  @override
+  Future<MetadataExploreData> details(StremioMeta item, MetadataPreferences prefs) async {
+    calls++;
+    if (failures-- > 0) throw Exception('Temporary failure');
+    return const MetadataExploreData(
+      companies: [{'id': 97, 'name': 'Castle Rock Entertainment'}],
+      providers: {'flatrate': [{'provider_name': 'Philo'}],
+        'rent': [{'provider_name': 'Apple TV Store'}]},
+      providerLink: 'https://www.themoviedb.org/movie/1/watch',
+    );
+  }
+}
+
 void main() {
+  testWidgets('showcase extras retry temporary failures and stop after disposal', (tester) async {
+    final service = _ExploreFixture()..failures = 1;
+    await tester.pumpWidget(_host(_model(isMovie: true,
+      features: {MetadataFeature.companies}), exploreService: service));
+    await tester.pump();
+    expect(service.calls, 1);
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pump();
+    expect(service.calls, 2);
+    await tester.pumpWidget(const SizedBox());
+    final failing = _ExploreFixture()..failures = 10;
+    await tester.pumpWidget(_host(_model(isMovie: true,
+      features: {MetadataFeature.availability}), exploreService: failing));
+    await tester.pump();
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(seconds: 5));
+    expect(failing.calls, 1);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('disabling extras removes rows and stops requests', (tester) async {
+    _surface(tester, const Size(960, 2200));
+    final service = _ExploreFixture();
+    await tester.pumpWidget(_host(_model(isMovie: true,
+      features: {MetadataFeature.companies}), tall: true, exploreService: service));
+    await tester.pumpAndSettle();
+    expect(service.calls, 1);
+    await tester.pumpWidget(_host(_model(isMovie: true, features: {}),
+      tall: true, exploreService: service));
+    await tester.pumpAndSettle();
+    expect(find.byType(ShowcaseAvailabilityBand), findsNothing);
+    expect(service.calls, 1);
+  });
+
+  testWidgets('availability bands follow recommendations and participate in the DPAD ladder', (tester) async {
+    _surface(tester, const Size(960, 2200));
+    final service = _ExploreFixture();
+    await tester.pumpWidget(_host(_model(isMovie: true,
+      features: {MetadataFeature.companies, MetadataFeature.availability},
+      recs: [const StremioMeta(id: 'tmdb:2', type: 'movie', name: 'Related')]),
+      tall: true, exploreService: service));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.text('Studios & networks'), 500,
+      scrollable: find.byType(Scrollable).first);
+    await tester.pumpAndSettle();
+    final bands = tester.widgetList<ShowcaseAvailabilityBand>(find.byType(ShowcaseAvailabilityBand)).toList();
+    expect(bands.map((b) => b.row.key), ['studios', 'watch-flatrate', 'watch-rent', 'watch-attribution']);
+    expect(tester.getTopLeft(find.byType(ShowcaseAvailabilityBand).first).dy,
+      greaterThan(tester.getTopLeft(find.byType(ShowcaseRecs)).dy));
+    bands.first.nodes.first.requestFocus();
+    await tester.pumpAndSettle();
+    await _press(tester, LogicalKeyboardKey.arrowDown);
+    expect(bands[1].nodes.first.hasFocus, isTrue);
+    await _press(tester, LogicalKeyboardKey.arrowUp);
+    expect(bands.first.nodes.first.hasFocus, isTrue);
+    await _press(tester, LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    final destination = tester.widget<MetadataBrowsePage>(find.byType(MetadataBrowsePage));
+    expect(destination.id, 97);
+    expect(destination.kind, 'company');
+    expect(service.calls, 1);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('disabled showcase extras issue no requests', (tester) async {
+    final service = _ExploreFixture();
+    await tester.pumpWidget(_host(_model(isMovie: true, features: {}), exploreService: service));
+    await tester.pumpAndSettle();
+    expect(service.calls, 0);
+    expect(find.byType(ShowcaseAvailabilityBand), findsNothing);
+  });
+
   for (final enabled in [false, true]) {
     testWidgets('Showcase person navigation respects feature toggle $enabled', (tester) async {
       _surface(tester, const Size(960, 1400));
