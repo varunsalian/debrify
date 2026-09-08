@@ -1965,8 +1965,9 @@ class _Badge extends StatelessWidget {
 class ShowcaseCast extends StatelessWidget {
   final List<CastMember> cast;
   final List<FocusNode> nodes;
+  final ValueChanged<CastMember>? onPersonOpen;
 
-  const ShowcaseCast({super.key, required this.cast, required this.nodes});
+  const ShowcaseCast({super.key, required this.cast, required this.nodes, this.onPersonOpen});
 
   @override
   Widget build(BuildContext context) {
@@ -1981,7 +1982,9 @@ class ShowcaseCast extends StatelessWidget {
         itemCount: cast.length,
         separatorBuilder: (_, __) => SizedBox(width: m.castGap),
         itemBuilder: (context, i) =>
-            _CastTile(member: cast[i], node: nodes[i], size: m.circle),
+            _CastTile(member: cast[i], node: nodes[i], size: m.circle,
+              onTap: onPersonOpen != null && (cast[i].tmdbPersonId ?? 0) > 0
+                  ? () => onPersonOpen!(cast[i]) : null),
       ),
     );
   }
@@ -1991,11 +1994,13 @@ class _CastTile extends StatefulWidget {
   final CastMember member;
   final FocusNode node;
   final double size;
+  final VoidCallback? onTap;
 
   const _CastTile({
     required this.member,
     required this.node,
     required this.size,
+    this.onTap,
   });
 
   @override
@@ -2015,10 +2020,14 @@ class _CastTileState extends State<_CastTile> {
         setState(() => _f = v);
         if (v) _keepVisible(context);
       },
-      // Basic cursor: a cast tile is ambient reading — SELECT and tap do
-      // nothing — but the lift still answers "am I on this one".
-      child: _Hover(
-        cursor: MouseCursor.defer,
+      onKeyEvent: (_, event) => _activate(event, widget.onTap),
+      child: Semantics(
+        button: widget.onTap != null,
+        child: GestureDetector(
+          onTap: widget.onTap,
+          behavior: HitTestBehavior.opaque,
+          child: _Hover(
+        cursor: widget.onTap != null ? SystemMouseCursors.click : MouseCursor.defer,
         builder: (context, hovered) => SizedBox(
           width: widget.size,
           child: Column(
@@ -2065,6 +2074,8 @@ class _CastTileState extends State<_CastTile> {
                 ),
             ],
           ),
+        ),
+      ),
         ),
       ),
     );

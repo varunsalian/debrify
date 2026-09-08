@@ -1,3 +1,5 @@
+import '../../models/metadata_preferences.dart';
+import '../../screens/metadata_explore_page.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show ScrollCacheExtent;
@@ -1169,6 +1171,21 @@ class _DetailShowcaseState extends State<DetailShowcase> {
                       ShowcaseCast(
                         key: _castKey,
                         cast: m.cast,
+                        onPersonOpen: m.metadataPreferences?.features.contains(MetadataFeature.people) == true &&
+                                m.onRecommendationTap != null
+                            ? (person) {
+                                final id = person.tmdbPersonId;
+                                if (id == null || id <= 0) return;
+                                Navigator.of(context).push(MaterialPageRoute<void>(
+                                  builder: (_) => MetadataBrowsePage(
+                                    title: person.name, kind: 'person', id: id,
+                                    preferences: m.metadataPreferences!,
+                                    onOpen: m.onRecommendationTap!,
+                                    isTelevision: m.isTelevision,
+                                  ),
+                                ));
+                              }
+                            : null,
                         nodes: _grow(
                           _castNodes,
                           m.cast.length,

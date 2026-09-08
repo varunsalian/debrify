@@ -1,3 +1,5 @@
+import 'package:debrify/models/metadata_preferences.dart';
+import 'package:debrify/screens/metadata_explore_page.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -80,6 +82,7 @@ DetailModel _model({
   VoidCallback? onExplore,
   VoidCallback? onPrimaryLongPress,
   bool openingDataReady = true,
+  bool peopleEnabled = false,
 }) {
   final item = StremioMeta(
     id: 'tt0903747',
@@ -92,13 +95,14 @@ DetailModel _model({
   );
   return DetailModel(
     item: item,
+    metadataPreferences: MetadataPreferences(features: {if (peopleEnabled) MetadataFeature.people}),
     isMovie: isMovie,
     isTelevision: true,
     accent: const Color(0xFFABA124),
     imdbExtra: withCast
         ? const ImdbEnrichment(
             cast: [
-              CastMember(name: 'A Person', character: 'Someone'),
+              CastMember(name: 'A Person', character: 'Someone', tmdbPersonId: 42),
               CastMember(name: 'B Person', character: 'Someone Else'),
             ],
           )
@@ -210,6 +214,57 @@ Future<void> _press(WidgetTester t, LogicalKeyboardKey k) async {
 }
 
 void main() {
+  for (final enabled in [false, true]) {
+    testWidgets('Showcase person navigation respects feature toggle $enabled', (tester) async {
+      _surface(tester, const Size(960, 1400));
+      await tester.pumpWidget(_host(_model(isMovie: true, peopleEnabled: enabled), tall: true));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('A Person'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('A Person'));
+      await tester.pumpAndSettle();
+      expect(find.byType(MetadataBrowsePage), enabled ? findsOneWidget : findsNothing);
+      if (enabled) {
+        final page = tester.widget<MetadataBrowsePage>(find.byType(MetadataBrowsePage));
+        expect(page.id, 42);
+        expect(page.kind, 'person');
+        expect(page.title, 'A Person');
+        expect(page.isTelevision, isTrue);
+      }
+      await tester.pumpWidget(const SizedBox());
+    });
+  }
+
+  for (final enabled in [false, true]) {
+    for (final personId in [null, 42]) {
+      testWidgets('cast opens by tap and remote only with an enabled person link enabled=$enabled id=$personId', (tester) async {
+        tester.view.physicalSize = _tv;
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        final node = FocusNode();
+        addTearDown(node.dispose);
+        var opens = 0;
+        final member = CastMember(name: 'Actor', character: 'Role', tmdbPersonId: personId);
+        await tester.pumpWidget(MaterialApp(home: AppThemeScope(
+          theme: AppThemes.legacy,
+          child: Scaffold(body: ShowcaseCast(cast: [member], nodes: [node],
+            onPersonOpen: enabled ? (person) { expect(person, same(member)); opens++; } : null)),
+        )));
+        await tester.tap(find.text('Actor'));
+        await tester.pump();
+        final expected = enabled && personId != null ? 1 : 0;
+        expect(opens, expected);
+        node.requestFocus();
+        await tester.pump();
+        await tester.sendKeyEvent(LogicalKeyboardKey.select);
+        expect(opens, expected * 2);
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox());
+      });
+    }
+  }
+
   testWidgets('Explore is a registered Showcase action for the remote', (tester) async {
     tester.view.physicalSize = _tv;
     tester.view.devicePixelRatio = 1;
