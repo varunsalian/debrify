@@ -4,6 +4,7 @@ import 'dart:ui' show PointerDeviceKind;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:debrify/models/iptv_playlist.dart';
 import 'package:debrify/models/stremio_addon.dart';
@@ -68,6 +69,7 @@ void main() {
   late List<List<FocusNode>> rows;
 
   setUp(() {
+    SharedPreferences.setMockInitialValues({});
     hero = FocusNode(debugLabel: 'hero');
     rows = [
       [FocusNode(debugLabel: 'r0c0'), FocusNode(debugLabel: 'r0c1')],

@@ -1,4 +1,6 @@
+import 'diagnostic_log.dart';
 import 'dart:async';
+import 'dart:io';
 import 'dart:collection';
 import 'dart:typed_data';
 import '../utils/json_isolate.dart';
@@ -40,7 +42,12 @@ class TmdbMetadataRepository {
   final _cache =
       <String, ({DateTime expires, Map<String, dynamic> data, int bytes})>{};
   final _pending = <String, Future<Map<String, dynamic>>>{};
-  final _waiters = Queue<Completer<void>>();
+  static final Object _heroPriorityKey = Object();
+  static Future<T> withHeroPriority<T>(Future<T> Function() action) =>
+      runZoned(action, zoneValues: {_heroPriorityKey: true});
+  final _waiters = Queue<({String key, Completer<void> ready})>();
+  final _heroRequests = <String>{};
+  int _heroBurst = 0;
   final _relevance = <String, List<bool Function()>>{};
   int _active = 0;
   int _cacheBytes = 0;
@@ -72,12 +79,14 @@ class TmdbMetadataRepository {
       return Future.value(_copy(cached.data));
     }
     if (cached != null) _cacheBytes -= cached.bytes;
+    if (Zone.current[_heroPriorityKey] == true) _heroRequests.add(key);
     final pending = _pending[key];
     if (pending != null) {
       _relevance[key]?.add(isRelevant ?? () => true);
       return pending.then(_copy);
     }
     if (_pending.length >= 128) {
+      _heroRequests.remove(key);
       return Future.error(
         const TmdbMetadataException('Metadata is busy. Try again shortly.'),
       );
@@ -100,6 +109,7 @@ class TmdbMetadataRepository {
         .whenComplete(() {
           _pending.remove(key);
           _relevance.remove(key);
+          _heroRequests.remove(key);
         });
     _pending[key] = request;
     return request.then(_copy);
@@ -137,29 +147,38 @@ class TmdbMetadataRepository {
   }
 
   Future<({Map<String, dynamic> data, int bytes})> _fetch(Uri uri) async {
+    final timing = Stopwatch()..start();
     if (_active >= 4) {
       final ready = Completer<void>();
-      _waiters.add(ready);
+      _waiters.add((key: uri.toString(), ready: ready));
       await ready.future;
     } else {
       _active++;
     }
+    final queueMs = timing.elapsedMilliseconds;
+    var success = false;
+    var failure = 'none';
+    int? status;
     try {
       if (!(_relevance[uri.toString()]?.any((check) => check()) ?? true)) {
+        failure = 'cancelled';
         throw const TmdbMetadataException(
           'Metadata request is no longer needed.',
         );
       }
       if (_retryAfter?.isAfter(_now()) ?? false) {
+        failure = 'rate_limited';
         throw const TmdbMetadataException('TMDB is busy. Try again shortly.');
       }
       final response = await _readWithRetry(uri);
+      status = response.statusCode;
       if (response.statusCode == 429) {
         final seconds =
             int.tryParse(response.headers['retry-after'] ?? '') ?? 30;
         _retryAfter = _now().add(Duration(seconds: seconds.clamp(1, 300)));
       }
       if (response.statusCode != 200) {
+        failure = 'http_status';
         throw TmdbMetadataException(
           'TMDB could not load metadata (${response.statusCode}).',
         );
@@ -179,12 +198,35 @@ class TmdbMetadataRepository {
       if (data is! Map<String, dynamic>) {
         throw const TmdbMetadataException('TMDB returned invalid metadata.');
       }
+      success = true;
       return (data: data, bytes: response.bodyBytes.length);
     } on TimeoutException {
+      failure = 'timeout';
       throw const TmdbMetadataException('TMDB timed out. Try again.');
+    } catch (error) {
+      if (failure == 'none') {
+        failure = error is HandshakeException ? 'tls' :
+            error is SocketException ? 'socket' :
+            error is http.ClientException ? 'transport' :
+            error is FormatException ? 'decode' : 'invalid_response';
+      }
+      rethrow;
     } finally {
+      DiagnosticLog.instance.recordEvent(source: 'metadata', event: 'tmdb_request',
+        fields: {'queue_ms': queueMs, 'work_ms': timing.elapsedMilliseconds - queueMs,
+          'success': success, 'waiting': _waiters.length,
+          'failure': DiagnosticLabel(failure), 'status': status,
+          'hero': _heroRequests.contains(uri.toString()),
+          'kind': DiagnosticLabel(uri.path.startsWith('/3/find/') ? 'identity' : 'metadata')});
       if (_waiters.isNotEmpty) {
-        _waiters.removeFirst().complete();
+        // Prefer heroes, but give ordinary cards a turn after two heroes.
+        final heroes = _waiters.where((w) => _heroRequests.contains(w.key));
+        final normal = _waiters.where((w) => !_heroRequests.contains(w.key));
+        final next = heroes.isNotEmpty && (_heroBurst < 2 || normal.isEmpty)
+            ? heroes.first : normal.isNotEmpty ? normal.first : _waiters.first;
+        _heroBurst = _heroRequests.contains(next.key) ? _heroBurst + 1 : 0;
+        _waiters.remove(next);
+        next.ready.complete();
       } else {
         _active--;
       }

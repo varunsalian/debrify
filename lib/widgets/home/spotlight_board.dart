@@ -1,3 +1,4 @@
+import '../../services/diagnostic_log.dart';
 import '../recoverable_network_image.dart';
 import '../../models/metadata_preferences.dart';
 import '../metadata_presentation_mixin.dart';
@@ -514,6 +515,8 @@ class _M {
 
 class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentationMixin<SpotlightBoard> {
   @override
+  bool get prioritizeMetadata => true;
+  @override
   StremioMeta? get originalMetadata => widget.hero.isEmpty ? null : widget.hero[_heroIndex];
   @override
   void onMetadataPresentationChanged() => unawaited(_probe());
@@ -522,6 +525,64 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
   void onMetadataPolicyChanged() {
     // A previous image's tint must not publish after the policy changes.
     _probeGen++;
+    _preloadHeroes();
+  }
+
+  final _cancelHeroWarmups = <VoidCallback>{};
+
+  void _cancelWarmups() {
+    for (final cancel in _cancelHeroWarmups.toList()) { cancel(); }
+  }
+
+  int get _heroDecodeWidth => widget.dpad
+      ? 1400
+      : (MediaQuery.devicePixelRatioOf(context) * MediaQuery.sizeOf(context).width)
+          .round().clamp(720, 1920);
+
+  @visibleForTesting
+  ImageProvider heroWarmupProvider(String url) => ResizeImage.resizeIfNeeded(
+      _heroDecodeWidth, null,
+      CachedNetworkImageProvider(url, cacheManager: DebrifyImageCache.manager));
+
+  Future<bool> _warmHeroImage(String url) {
+    final result = Completer<bool>();
+    final stream = heroWarmupProvider(url).resolve(createLocalImageConfiguration(context));
+    Timer? timer;
+    late ImageStreamListener listener;
+    late VoidCallback cancel;
+    void finish(bool success) {
+      if (result.isCompleted) return;
+      timer?.cancel();
+      stream.removeListener(listener);
+      _cancelHeroWarmups.remove(cancel);
+      result.complete(success);
+    }
+    cancel = () => finish(false);
+    listener = ImageStreamListener((image, _) {
+      image.dispose();
+      finish(true);
+    }, onError: (_, _) => finish(false));
+    _cancelHeroWarmups.add(cancel);
+    timer = Timer(const Duration(seconds: 15), cancel);
+    stream.addListener(listener);
+    return result.future;
+  }
+
+  void _preloadHeroes() {
+    _cancelWarmups();
+    unawaited(preloadMetadata(widget.hero, (item, prefs) async {
+      if (!mounted) return;
+      final selected = prefs.provider(MetadataCategory.backgrounds) != MetadataPreferences.current;
+      final url = highQualityArtworkUrl(item.background) ??
+          (!selected && (item.imdbId ?? item.id).startsWith('tt')
+              ? 'https://images.metahub.space/background/large/${item.imdbId ?? item.id}/img'
+              : !selected || prefs.fallback ? highQualityArtworkUrl(item.poster) : null);
+      if (url == null || url.isEmpty) return;
+      final timer = Stopwatch()..start();
+      final failed = !await _warmHeroImage(url);
+      DiagnosticLog.instance.recordEvent(source: 'metadata', event: 'hero_image_warm',
+        fields: {'elapsed_ms': timer.elapsedMilliseconds, 'failed': failed});
+    }));
   }
 
   /// Start fetching the next shelf batch before touch scrolling reaches the
@@ -771,10 +832,12 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
   /// (~350px of 2:3 art cover-cropped over a full screen), so it is LAST, not
   /// second.
   String? _heroPoster(StremioMeta item) =>
+      metadataArtworkPending(MetadataCategory.backgrounds) ? null :
       usesMetadataProvider(MetadataCategory.backgrounds) && !metadataPreferences.fallback
           ? null : highQualityArtworkUrl(item.poster);
 
   String? _heroArt(StremioMeta item) {
+    if (metadataArtworkPending(MetadataCategory.backgrounds)) return null;
     final b = item.background;
     if (b != null && b.isNotEmpty) return highQualityArtworkUrl(b);
     if (usesMetadataProvider(MetadataCategory.backgrounds)) return _heroPoster(item);
@@ -792,7 +855,7 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
     return i < 0 ? 0 : i;
   }
 
-  StremioMeta? get _heroItem => presentedMetadata;
+  StremioMeta? get _heroItem => heroPresentation;
 
   void _openHero() {
     final item = originalMetadata;
@@ -814,12 +877,18 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _probe();
       _restartCadence();
+      _preloadHeroes();
     });
   }
 
   @override
   void didUpdateWidget(SpotlightBoard old) {
     super.didUpdateWidget(old);
+    if (old.hero.length != widget.hero.length ||
+        List.generate(widget.hero.length, (i) => i).any((i) =>
+            !identical(old.hero[i], widget.hero[i]))) {
+      _preloadHeroes();
+    }
     // The reel can change under us as sections load. Keep the parked item if
     // it is still present; otherwise fall back to the head rather than to a
     // stale index pointing at a different title.
@@ -913,6 +982,7 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
 
   @override
   void dispose() {
+    _cancelWarmups();
     _veilMetricsRevision.dispose();
     widget.heroNode.removeListener(_onHeroFocus);
     if (_rolling) widget.onTrailerStop?.call();
@@ -998,6 +1068,9 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
   String? _flipFor;
   bool _flipValue = false;
 
+  @visibleForTesting
+  String? get heroAlignmentItemId => _flipFor;
+
   /// The side the identity sits on, FROZEN for as long as an item is showing.
   ///
   /// This used to read `_leftThird` directly on every build. That map is
@@ -1012,6 +1085,9 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
   bool get _flip {
     final item = _heroItem;
     if (item == null) return false;
+    // The missing URL is temporary during provider loading. Do not freeze
+    // the default side before the resolved artwork's cached tint is usable.
+    if (metadataArtworkPending(MetadataCategory.backgrounds)) return false;
     if (_flipFor != item.id) {
       _flipFor = item.id;
       final url = _heroArt(item);
@@ -1561,10 +1637,7 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
               // 900 was under a 1080-class phone's physical width (390 × 3),
               // so the one full-bleed image on the screen was the soft one.
               // Clamped: metahub art tops out around 1920.
-              memCacheWidth: (MediaQuery.devicePixelRatioOf(context) *
-                      MediaQuery.sizeOf(context).width)
-                  .round()
-                  .clamp(720, 1920),
+              memCacheWidth: _heroDecodeWidth,
               fadeInDuration: const Duration(milliseconds: 420),
               placeholder: (_, __) => ColoredBox(color: ground),
               // Same guess-404 fallback as the wide backdrop: derived
@@ -1751,12 +1824,7 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
             // TV keeps the 1400: its panels sit behind the box's own
             // upscaler and the decode budget there is the tighter constraint
             // (see TvHeroArtworkQuality).
-            memCacheWidth: widget.dpad
-                ? 1400
-                : (MediaQuery.devicePixelRatioOf(context) *
-                        MediaQuery.sizeOf(context).width)
-                    .round()
-                    .clamp(720, 1920),
+            memCacheWidth: _heroDecodeWidth,
             fadeInDuration: const Duration(milliseconds: 420),
             placeholder: (_, __) => ColoredBox(color: ground),
             // The derived metahub URL is a GUESS — when it 404s (no still

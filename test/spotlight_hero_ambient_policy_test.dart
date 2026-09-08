@@ -10,16 +10,74 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+class _LoadingBoard extends SpotlightBoard {
+  const _LoadingBoard({required super.heroNode})
+    : super(
+        hero: const [StremioMeta(id: 'alignment', type: 'movie', name: 'Title')],
+        sections: const [],
+        heroAddon: null,
+        onHeroOpen: _open,
+        trailersEnabled: false,
+      );
+
+  static void _open(StremioMeta item, StremioAddon addon) {}
+
+  @override
+  SpotlightBoardState createState() => _LoadingBoardState();
+}
+
+class _LoadingBoardState extends SpotlightBoardState {
+  bool pending = true;
+
+  @override
+  bool metadataArtworkPending(MetadataCategory category) => pending;
+
+  void resolve() => setState(() => pending = false);
+}
+
 void main() {
-  for (final compact in [false, true]) {
+  testWidgets('wide hero freezes alignment only after artwork loading ends', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    tester.view.physicalSize = const Size(1920, 1080);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final node = FocusNode();
+    addTearDown(node.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AppThemeScope(
+          theme: AppThemes.legacy,
+          child: Scaffold(body: _LoadingBoard(heroNode: node)),
+        ),
+      ),
+    );
+    await tester.pump();
+    final state = tester.state<_LoadingBoardState>(find.byType(_LoadingBoard));
+    expect(state.heroAlignmentItemId, isNull);
+    state.resolve();
+    await tester.pump();
+    expect(state.heroAlignmentItemId, 'alignment');
+    await tester.pumpWidget(const SizedBox());
+    expect(tester.takeException(), isNull);
+  });
+
+  for (final config in [
+    (compact: false, dpad: true, dpr: 1.0, decode: 1400),
+    (compact: true, dpad: false, dpr: 1.0, decode: 720),
+    (compact: false, dpad: false, dpr: 2.0, decode: 1920),
+  ]) {
+    final compact = config.compact;
     testWidgets(
-      'hero clears forbidden artwork and republishes after reset compact=$compact',
+      'hero clears forbidden artwork and republishes after reset compact=$compact dpr=${config.dpr}',
       (tester) async {
         SharedPreferences.setMockInitialValues({});
-        tester.view.physicalSize = compact
+        tester.view.physicalSize = (compact
             ? const Size(390, 844)
-            : const Size(1280, 800);
-        tester.view.devicePixelRatio = 1;
+            : const Size(1280, 800)) * config.dpr;
+        tester.view.devicePixelRatio = config.dpr;
         addTearDown(tester.view.resetPhysicalSize);
         addTearDown(tester.view.resetDevicePixelRatio);
         final node = FocusNode();
@@ -50,7 +108,7 @@ void main() {
                   ),
                   onHeroOpen: (item, _) => opened = item,
                   onAmbient: (art, _) => ambient.add(art),
-                  dpad: !compact,
+                  dpad: config.dpad,
                   trailersEnabled: false,
                 ),
               ),
@@ -64,6 +122,19 @@ void main() {
         }
 
         await settle();
+        final rendered = tester.widgetList<CachedNetworkImage>(
+            find.byType(CachedNetworkImage)).firstWhere(
+                (image) => image.imageUrl == original.background);
+        expect(rendered.memCacheWidth, config.decode);
+        final board = tester.state<SpotlightBoardState>(find.byType(SpotlightBoard));
+        final warmedKey = await board.heroWarmupProvider(rendered.imageUrl)
+            .obtainKey(ImageConfiguration.empty);
+        final displayedKey = await ResizeImage.resizeIfNeeded(
+            rendered.memCacheWidth, rendered.memCacheHeight,
+            CachedNetworkImageProvider(rendered.imageUrl, cacheManager: rendered.cacheManager))
+            .obtainKey(ImageConfiguration.empty);
+        expect(warmedKey, displayedKey,
+            reason: 'Preloading must reuse the displayed decoded image entry');
         await MetadataPreferencesService.save(
           MetadataPreferences(
             providers: {MetadataCategory.backgrounds: 'tmdb'},
