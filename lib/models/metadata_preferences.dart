@@ -44,7 +44,13 @@ class MetadataPreferences {
       const String.fromEnvironment('TMDB_READ_ACCESS_TOKEN').trim().isNotEmpty
           ? tmdb : current;
 
-  static const defaultFeatures = {MetadataFeature.people};
+  static const defaultFeatures = {
+    MetadataFeature.franchises,
+    MetadataFeature.people,
+    MetadataFeature.companies,
+    MetadataFeature.availability,
+    MetadataFeature.discovery,
+  };
 
   MetadataPreferences({
     Map<MetadataCategory, String> providers = const {},

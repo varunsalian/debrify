@@ -61,7 +61,7 @@ void main() {
     );
     expect(filmography.items.single.name, 'Film');
     expect(requests, hasLength(2));
-    expect(requests.first.queryParameters['append_to_response'], 'credits');
+    expect(requests.first.queryParameters['append_to_response'], 'credits,watch/providers');
     expect(requests.last.path, endsWith('/person/3'));
     expect(requests.last.queryParameters['append_to_response'], 'combined_credits');
   });

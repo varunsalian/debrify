@@ -20,7 +20,7 @@ void main() {
   const item = StremioMeta(id: 'tmdb:1', type: 'movie', name: 'Movie');
 
   testWidgets(
-    'franchise section is absent by default and restores that state',
+    'franchise section defaults on and restores after disabling',
     (tester) async {
       var reads = 0;
       StremioMeta? opened;
@@ -63,12 +63,6 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      expect(reads, 0);
-      expect(find.byType(CatalogItemTile), findsNothing);
-      await MetadataPreferencesService.save(
-        MetadataPreferences(features: {MetadataFeature.franchises}),
-      );
-      await tester.pumpAndSettle();
       expect(reads, 2);
       expect(find.text('Movie saga'), findsOneWidget);
       expect(find.byType(CatalogItemTile), findsNWidgets(2));
@@ -78,11 +72,15 @@ void main() {
       await tester.sendKeyEvent(LogicalKeyboardKey.enter);
       await tester.pumpAndSettle();
       expect(opened?.id, 'tmdb:2');
-      await MetadataPreferencesService.save(MetadataPreferences());
+      await MetadataPreferencesService.save(MetadataPreferences(features: {}));
       await tester.pumpAndSettle();
       expect(find.text('Movie saga'), findsNothing);
       expect(find.byType(CatalogItemTile), findsNothing);
       expect(reads, 2);
+      await MetadataPreferencesService.save(MetadataPreferences());
+      await tester.pumpAndSettle();
+      expect(find.text('Movie saga'), findsOneWidget);
+      expect(find.byType(CatalogItemTile), findsNWidgets(2));
     },
   );
 
@@ -112,7 +110,7 @@ void main() {
       ),
     );
     await tester.pump();
-    await MetadataPreferencesService.save(MetadataPreferences());
+    await MetadataPreferencesService.save(MetadataPreferences(features: {}));
     await tester.pump();
     pending.complete(http.Response('{}', 200));
     await tester.pumpAndSettle();

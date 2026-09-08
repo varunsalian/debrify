@@ -8,7 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
-  testWidgets('direct discovery is opt-in and reacts to a settings reset', (
+  testWidgets('direct discovery defaults on and is restored after disabling', (
     tester,
   ) async {
     await tester.pumpWidget(
@@ -22,7 +22,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    expect(find.byType(FloatingActionButton), findsNothing);
+    expect(find.text('TMDB Discover'), findsOneWidget);
     await MetadataPreferencesService.save(
       MetadataPreferences(features: {MetadataFeature.people}),
     );
@@ -35,7 +35,7 @@ void main() {
     expect(find.text('TMDB Discover'), findsOneWidget);
     await MetadataPreferencesService.save(MetadataPreferences());
     await tester.pumpAndSettle();
-    expect(find.byType(FloatingActionButton), findsNothing);
+    expect(find.text('TMDB Discover'), findsOneWidget);
   });
 
   testWidgets('direct discovery opens without requiring an existing title', (

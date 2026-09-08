@@ -36,10 +36,10 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('Restore defaults re-enables people pages and restores the cast default', (tester) async {
+  testWidgets('Restore defaults re-enables all optional features and restores the cast default', (tester) async {
     await MetadataPreferencesService.save(MetadataPreferences(
       providers: {for (final c in MetadataCategory.values) c: 'current'},
-      features: {MetadataFeature.discovery},
+      features: {},
       fallback: true,
       language: 'hi-IN', artworkLanguage: 'original',
       trailerLanguage: 'hi-IN', region: 'IN',
@@ -50,7 +50,7 @@ void main() {
     await tester.pumpAndSettle();
     final prefs = await MetadataPreferencesService.load();
     expect(prefs.toJson(), MetadataPreferences().toJson());
-    expect(prefs.features, {MetadataFeature.people});
+    expect(prefs.features, MetadataFeature.values.toSet());
     expect(prefs.provider(MetadataCategory.credits),
       const String.fromEnvironment('TMDB_READ_ACCESS_TOKEN').trim().isEmpty
           ? MetadataPreferences.current : MetadataPreferences.tmdb);
@@ -106,7 +106,7 @@ void main() {
     )) {
       expect(prefs.provider(category), category == MetadataCategory.credits ? MetadataPreferences.defaultCreditsProvider : 'current');
     }
-    expect(prefs.features, {MetadataFeature.people});
+    expect(prefs.features, MetadataFeature.values.toSet());
     expect(prefs.fallback, isFalse);
   });
 
@@ -122,7 +122,7 @@ void main() {
     expect(await enabled('Metadata language'), isTrue);
     expect(await enabled('Artwork language'), isFalse);
     expect(await enabled('Trailer language'), isFalse);
-    expect(await enabled('Country / region'), isFalse);
+    expect(await enabled('Country / region'), isTrue);
     var prefs = MetadataPreferences(providers: {MetadataCategory.posters: 'tmdb'},
       language: 'hi-IN', region: 'IN');
     await MetadataPreferencesService.save(prefs);

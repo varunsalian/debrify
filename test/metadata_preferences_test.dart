@@ -11,7 +11,7 @@ void main() {
       MetadataPreferences.fromJson({}),
     ]) {
       expect(prefs.isCurrent, isFalse);
-      expect(prefs.features, {MetadataFeature.people});
+      expect(prefs.features, MetadataFeature.values.toSet());
       expect(prefs.fallback, isFalse);
       for (final c in MetadataCategory.values) {
         expect(prefs.provider(c), c == MetadataCategory.credits
@@ -20,7 +20,7 @@ void main() {
     }
   });
 
-  test('explicitly disabled people pages survive decoding and copying', () {
+  test('explicitly disabled optional features survive decoding and copying', () {
     final prefs = MetadataPreferences.fromJson({'features': <String>[]});
     expect(prefs.features, isEmpty);
     expect(prefs.copyWith(language: 'hi-IN').features, isEmpty);
