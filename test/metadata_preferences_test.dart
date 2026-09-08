@@ -10,14 +10,21 @@ void main() {
       MetadataPreferences(),
       MetadataPreferences.fromJson({}),
     ]) {
-      expect(prefs.isCurrent, MetadataPreferences.defaultCreditsProvider == MetadataPreferences.current);
-      expect(prefs.features, isEmpty);
+      expect(prefs.isCurrent, isFalse);
+      expect(prefs.features, {MetadataFeature.people});
       expect(prefs.fallback, isFalse);
       for (final c in MetadataCategory.values) {
         expect(prefs.provider(c), c == MetadataCategory.credits
             ? MetadataPreferences.defaultCreditsProvider : MetadataPreferences.current);
       }
     }
+  });
+
+  test('explicitly disabled people pages survive decoding and copying', () {
+    final prefs = MetadataPreferences.fromJson({'features': <String>[]});
+    expect(prefs.features, isEmpty);
+    expect(prefs.copyWith(language: 'hi-IN').features, isEmpty);
+    expect(MetadataPreferences.fromJson(prefs.toJson()).features, isEmpty);
   });
 
   test('explicit cast choices survive the new default and round trip', () {
@@ -51,7 +58,7 @@ void main() {
       'language': '../../x',
       'region': 'not a region',
     });
-    expect(prefs.isCurrent, MetadataPreferences.defaultCreditsProvider == MetadataPreferences.current);
+    expect(prefs.isCurrent, isFalse);
     expect(prefs.fallback, isFalse);
     expect(prefs.language, 'en-US');
     expect(prefs.region, 'US');

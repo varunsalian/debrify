@@ -11,7 +11,7 @@ import 'package:http/testing.dart';
 void main() {
   const movie = StremioMeta(id: 'tmdb:1', type: 'movie', name: 'Movie');
   test(
-    'default and discovery-only details do not fetch extra metadata',
+    'disabled and discovery-only details do not fetch extra metadata',
     () async {
       var reads = 0;
       final service = MetadataExploreService(
@@ -24,7 +24,7 @@ void main() {
         ),
       );
       for (final prefs in [
-        MetadataPreferences(),
+        MetadataPreferences(features: {}),
         MetadataPreferences(features: {MetadataFeature.discovery}),
       ]) {
         expect((await service.details(movie, prefs)).franchise, isEmpty);
@@ -32,6 +32,39 @@ void main() {
       expect(reads, 0);
     },
   );
+
+  test('default preferences load people and allow their filmography', () async {
+    final requests = <Uri>[];
+    final service = MetadataExploreService(
+      repository: TmdbMetadataRepository(
+        token: 'test',
+        clientFactory: () => MockClient((request) async {
+          requests.add(request.url);
+          return http.Response(jsonEncode(
+            request.url.path.endsWith('/person/3')
+                ? {'combined_credits': {'cast': [
+                    {'id': 2, 'title': 'Film', 'media_type': 'movie'},
+                  ]}}
+                : {'credits': {'cast': [{'id': 3, 'name': 'Person'}]}},
+          ), 200);
+        }),
+      ),
+    );
+    final prefs = MetadataPreferences();
+    final details = await service.details(movie, prefs);
+    expect(details.people.single['id'], 3);
+    expect(details.franchise, isEmpty);
+    expect(details.companies, isEmpty);
+    expect(details.providers, isEmpty);
+    final filmography = await service.browse(
+      kind: 'person', id: 3, preferences: prefs,
+    );
+    expect(filmography.items.single.name, 'Film');
+    expect(requests, hasLength(2));
+    expect(requests.first.queryParameters['append_to_response'], 'credits');
+    expect(requests.last.path, endsWith('/person/3'));
+    expect(requests.last.queryParameters['append_to_response'], 'combined_credits');
+  });
 
   test(
     'franchise failure preserves people, studios and regional availability',
@@ -124,7 +157,7 @@ void main() {
           (await service.browse(
             kind: kind,
             id: 1,
-            preferences: MetadataPreferences(),
+            preferences: MetadataPreferences(features: {}),
           )).items,
           isEmpty,
         );

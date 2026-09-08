@@ -44,9 +44,11 @@ class MetadataPreferences {
       const String.fromEnvironment('TMDB_READ_ACCESS_TOKEN').trim().isNotEmpty
           ? tmdb : current;
 
+  static const defaultFeatures = {MetadataFeature.people};
+
   MetadataPreferences({
     Map<MetadataCategory, String> providers = const {},
-    Set<MetadataFeature> features = const {},
+    Set<MetadataFeature> features = defaultFeatures,
     this.fallback = false,
     this.language = 'en-US',
     this.artworkLanguage = 'same',
@@ -116,10 +118,9 @@ class MetadataPreferences {
               supports(c, raw[c.name] as String))
             c: raw[c.name] as String,
       },
-      features: {
-        for (final f in MetadataFeature.values)
-          if (flags is List && flags.contains(f.name)) f,
-      },
+      features: flags is List
+          ? {for (final f in MetadataFeature.values) if (flags.contains(f.name)) f}
+          : defaultFeatures,
       fallback: json['fallback'] == true,
       language: locale(json['language'], 'en-US'),
       artworkLanguage: locale(json['artworkLanguage'], 'same', special: true),
