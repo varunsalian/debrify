@@ -166,13 +166,13 @@ void main() {
 
     entry.requestFocus();
     await tester.pump();
-    for (var index = 0; index < 10; index++) {
+    for (var index = 0; index < 11; index++) {
       await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
       await tester.pump();
     }
     expect(
       FocusManager.instance.primaryFocus?.debugLabel,
-      'settings-tv-rail-10',
+      'settings-tv-rail-11',
     );
     expect(find.text('Sync and backup'), findsWidgets);
 

@@ -16,9 +16,10 @@ void main() {
   setUpAll(() {
     final src = File('lib/screens/settings/settings_tv_layout.dart')
         .readAsStringSync();
-    final start = src.indexOf('case 3: // Appearance');
-    final end = src.indexOf('case 4: // Playback', start);
+    final start = src.indexOf('case 4: // Appearance');
     expect(start, isNonNegative, reason: 'Appearance case not found');
+    final end = src.indexOf('case 5: // Playback', start);
+    expect(end, greaterThan(start), reason: 'Playback boundary not found');
     appearance = src.substring(start, end);
   });
 

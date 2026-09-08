@@ -7251,6 +7251,14 @@ const List<SettingsCategoryDefinition> _kAdaptiveSettingsCategories = [
         'device.',
   ),
   SettingsCategoryDefinition(
+    icon: Icons.info_outline_rounded,
+    label: 'Metadata',
+    subtitle: 'Providers, artwork, languages & discovery',
+    eyebrow: 'Metadata',
+    title: 'Choose your metadata.',
+    description: 'Choose providers for title information, artwork and trailers, and set your preferred languages.',
+  ),
+  SettingsCategoryDefinition(
     icon: Icons.auto_awesome_rounded,
     label: 'Appearance',
     subtitle: 'Look, text, motion & layouts',
@@ -7647,10 +7655,6 @@ class _SettingsLayout extends StatelessWidget {
               onTap: onOpenHomePageSettings,
             ),
             SettingsTile.spec(
-              SettingsRows.metadata,
-              onTap: onOpenMetadataSettings,
-            ),
-            SettingsTile.spec(
               SettingsRows.navigationStyle,
               subtitle: phoneNavStyleLabel,
               onTap: onOpenNavigationSettings,
@@ -7663,6 +7667,16 @@ class _SettingsLayout extends StatelessWidget {
           ],
         );
       case 3:
+        return SettingsSection(
+          title: '',
+          children: [
+            SettingsTile.spec(
+              SettingsRows.metadata,
+              onTap: onOpenMetadataSettings,
+            ),
+          ],
+        );
+      case 4:
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -7753,7 +7767,7 @@ class _SettingsLayout extends StatelessWidget {
             ),
           ],
         );
-      case 4:
+      case 5:
         return SettingsSection(
           title: '',
           children: [
@@ -7763,7 +7777,7 @@ class _SettingsLayout extends StatelessWidget {
             ),
           ],
         );
-      case 5:
+      case 6:
         return SettingsSection(
           title: '',
           children: [
@@ -7785,7 +7799,7 @@ class _SettingsLayout extends StatelessWidget {
             ),
           ],
         );
-      case 6:
+      case 7:
         return SettingsSection(
           title: '',
           children: [
@@ -7795,7 +7809,7 @@ class _SettingsLayout extends StatelessWidget {
             ),
           ],
         );
-      case 7:
+      case 8:
         return SettingsSection(
           title: '',
           children: [
@@ -7810,7 +7824,7 @@ class _SettingsLayout extends StatelessWidget {
             ),
           ],
         );
-      case 8:
+      case 9:
         return SettingsSection(
           title: '',
           children: [
@@ -7820,7 +7834,7 @@ class _SettingsLayout extends StatelessWidget {
             ),
           ],
         );
-      case 9:
+      case 10:
         // Profiles' own card (it used to be a tenant row under Devices). A
         // legacy-mode install keeps the card but says why it's empty rather
         // than presenting actions that would fail.
@@ -7849,7 +7863,7 @@ class _SettingsLayout extends StatelessWidget {
               ),
           ],
         );
-      case 10:
+      case 11:
         return SettingsSection(
           title: '',
           children: [
@@ -7860,7 +7874,7 @@ class _SettingsLayout extends StatelessWidget {
             ),
           ],
         );
-      case 11:
+      case 12:
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -7918,7 +7932,7 @@ class _SettingsLayout extends StatelessWidget {
             ],
           ],
         );
-      case 12:
+      case 13:
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -7973,7 +7987,7 @@ class _SettingsLayout extends StatelessWidget {
             ),
           ],
         );
-      case 13:
+      case 14:
         return SettingsSection(
           title: '',
           accentColor: t.danger,
@@ -8023,16 +8037,22 @@ class _SettingsLayout extends StatelessWidget {
                       SettingsRows.homePage,
                       onTap: onOpenHomePageSettings,
                     ),
-                    SettingsTile.spec(
-                      SettingsRows.metadata,
-                      onTap: onOpenMetadataSettings,
-                    ),
                     if (isAndroidTv)
                       SettingsToggleTile.spec(
                         SettingsRows.tvKeyboard,
                         value: tvKeyboardEnabled,
                         onChanged: onToggleTvKeyboard,
                       ),
+                  ],
+                ),
+                const SizedBox(height: 24),
+                SettingsSection(
+                  title: 'Metadata',
+                  children: [
+                    SettingsTile.spec(
+                      SettingsRows.metadata,
+                      onTap: onOpenMetadataSettings,
+                    ),
                   ],
                 ),
                 const SizedBox(height: 24),

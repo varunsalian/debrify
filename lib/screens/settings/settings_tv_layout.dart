@@ -288,6 +288,13 @@ const List<_Category> _kCategories = [
     'Arrange the home screen and tune this television for the room.',
   ),
   _Category(
+    Icons.info_outline_rounded,
+    'Metadata',
+    'Providers, artwork, languages & discovery',
+    'Choose your metadata.',
+    'Choose providers for title information, artwork and trailers, and set your preferred languages.',
+  ),
+  _Category(
     Icons.auto_awesome_rounded,
     'Appearance',
     'Text, home, sidebar, IPTV & player looks',
@@ -906,21 +913,29 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
                 onTap: widget.onOpenHomePageSettings,
                 focusNode: _paneNodes[0],
               ),
-              SettingsTile.spec(
-                SettingsRows.metadata,
-                onTap: widget.onOpenMetadataSettings,
-                focusNode: _paneNodes[1],
-              ),
               SettingsToggleTile.spec(
                 SettingsRows.tvKeyboard,
                 value: widget.tvKeyboardEnabled,
                 onChanged: widget.onToggleTvKeyboard,
-                focusNode: _paneNodes[2],
+                focusNode: _paneNodes[1],
               ),
             ],
           ),
         ];
-      case 3: // Appearance — grouped by the QUESTION each row answers.
+      case 3: // Metadata
+        return [
+          SettingsSection(
+            title: '',
+            children: [
+              SettingsTile.spec(
+                SettingsRows.metadata,
+                onTap: widget.onOpenMetadataSettings,
+                focusNode: _paneNodes[0],
+              ),
+            ],
+          ),
+        ];
+      case 4: // Appearance — grouped by the QUESTION each row answers.
         // Four groups, not one list of fifteen. The rows used to interleave
         // four different kinds of decision — a global theme, a per-screen
         // layout, a per-device performance cap and a preset that sets several
@@ -1099,7 +1114,7 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
             ),
           ],
         ];
-      case 4: // Playback
+      case 5: // Playback
         return [
           SettingsSection(
             title: '',
@@ -1112,7 +1127,7 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
             ],
           ),
         ];
-      case 5: // Search
+      case 6: // Search
         return [
           SettingsSection(
             title: '',
@@ -1140,7 +1155,7 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
             ],
           ),
         ];
-      case 6: // Discover
+      case 7: // Discover
         return [
           SettingsSection(
             title: '',
@@ -1153,7 +1168,7 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
             ],
           ),
         ];
-      case 7: // Live TV & DVR
+      case 8: // Live TV & DVR
         return [
           SettingsSection(
             title: '',
@@ -1176,7 +1191,7 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
             ],
           ),
         ];
-      case 8: // Devices
+      case 9: // Devices
         return [
           SettingsSection(
             title: '',
@@ -1189,7 +1204,7 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
             ],
           ),
         ];
-      case 9: // Profiles — its own card (it was a tenant row under Devices).
+      case 10: // Profiles — its own card (it was a tenant row under Devices).
         return [
           SettingsSection(
             title: '',
@@ -1231,7 +1246,7 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
             ],
           ),
         ];
-      case 10: // Sync and Migrate
+      case 11: // Sync and Migrate
         return [
           SettingsSection(
             title: '',
@@ -1245,7 +1260,7 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
             ],
           ),
         ];
-      case 11: // Data & Backup
+      case 12: // Data & Backup
         {
           // Focus nodes are claimed sequentially so the optional
           // download-location row doesn't shift hardcoded indices.
@@ -1316,7 +1331,7 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
             ],
           ];
         }
-      case 12: // About (Updates + Support merged — matches the phone layout)
+      case 13: // About (Updates + Support merged — matches the phone layout)
         {
           // The donation row is conditional, so index the pane nodes off a
           // running counter to keep Up/Down wiring contiguous.
@@ -1385,7 +1400,7 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
             ),
           ];
         }
-      case 13: // Danger Zone
+      case 14: // Danger Zone
         return [
           SettingsSection(
             title: '',
