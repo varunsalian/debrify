@@ -41,6 +41,94 @@ void main() {
     ProfileRuntime.debugReset();
   });
 
+  for (final sameProcessReturn in [false, true]) {
+    for (final position in [95000, 99000, 100000]) {
+      test(
+        'tracker movie at $position recovers both bookmarks (return: $sameProcessReturn)',
+        () async {
+          final timestamp = DateTime.now().millisecondsSinceEpoch - 1000;
+          await StorageService.saveVideoPlaybackState(
+            videoTitle: 'episode-4',
+            videoUrl: 'https://example.invalid/video',
+            positionMs: 5000,
+            durationMs: 100000,
+            imdbId: 'tt1234',
+            recoveryUpdatedAtMs: timestamp - 1000,
+          );
+          await StorageService.upsertVideoResume('episode-4', {
+            'positionMs': 5000,
+            'durationMs': 100000,
+            'updatedAt': timestamp - 1000,
+          });
+          final checkpoint = TvPlaybackCheckpoint.tryParse(
+            jsonEncode(
+              record(type: 'single', completed: position == 100000)
+                ..['localCompletionTracking'] = false
+                ..['positionMs'] = position
+                ..['updatedAtMs'] = timestamp,
+            ),
+          )!;
+          expect(checkpoint.shouldPersistCompletion, isFalse);
+          expect(
+            await TvPlaybackRecovery.applyCheckpoint(
+              checkpoint,
+              sameProcessReturn: sameProcessReturn,
+            ),
+            isTrue,
+          );
+          final video = await StorageService.getVideoPlaybackState(
+            videoTitle: 'episode-4',
+            includeFinished: true,
+          );
+          final resume = await StorageService.getVideoResume('episode-4');
+          expect(video?['positionMs'], position);
+          expect(video?['updatedAt'], timestamp);
+          expect(resume?['positionMs'], position);
+          expect(resume?['updatedAt'], timestamp);
+          expect(await StorageService.isMovieFinished('tt1234'), isFalse);
+        },
+      );
+    }
+  }
+
+  for (final imdbId in [null, 'null', '']) {
+    test(
+      'unidentified movie $imdbId recovers progress without a null watched ID',
+      () async {
+        final checkpoint = TvPlaybackCheckpoint.tryParse(
+          jsonEncode(
+            record(type: 'single', completed: true)
+              ..['imdbId'] = imdbId
+              ..['seriesTitle'] = imdbId
+              ..['positionMs'] = 99000,
+          ),
+        )!;
+        expect(checkpoint.imdbId, isNull);
+        expect(checkpoint.seriesTitle, isNull);
+        expect(checkpoint.shouldPersistCompletion, isFalse);
+        expect(
+          await TvPlaybackRecovery.applyCheckpoint(
+            checkpoint,
+            sameProcessReturn: true,
+          ),
+          isTrue,
+        );
+        expect(await StorageService.isMovieFinished('null'), isFalse);
+        expect(
+          (await StorageService.getVideoPlaybackState(
+            videoTitle: 'episode-4',
+            includeFinished: true,
+          ))?['positionMs'],
+          99000,
+        );
+        expect(
+          (await StorageService.getVideoResume('episode-4'))?['positionMs'],
+          99000,
+        );
+      },
+    );
+  }
+
   test(
     'retry should finish a checkpoint after its first store was written',
     () async {

@@ -543,6 +543,8 @@ class TvPlaybackCheckpoint {
     'collection' => completed || completionReached,
     'single' =>
       localCompletionTracking &&
+          imdbId != null &&
+          imdbId!.isNotEmpty &&
           (completed ||
               completionReached ||
               localCompleted ||
@@ -565,7 +567,9 @@ class TvPlaybackCheckpoint {
       positionMs > 0 &&
       durationMs > 0 &&
       !shouldPersistCompletion &&
-      positionMs * 100.0 / durationMs < 95.0;
+      // The live movie path saves progress even near the end when no local
+      // watched marker applies (tracker-managed movies and unidentified files).
+      (contentType == 'single' || positionMs * 100.0 / durationMs < 95.0);
 
   String get recoveryId =>
       jsonEncode([profileId, dataGeneration, sessionId, sequence, updatedAtMs]);
@@ -622,8 +626,8 @@ class TvPlaybackCheckpoint {
         updatedAtMs: _int(decoded['updatedAtMs']),
         contentType: contentType,
         title: _string(decoded['title']),
-        seriesTitle: _string(decoded['seriesTitle']),
-        imdbId: _string(decoded['imdbId']),
+        seriesTitle: _identity(decoded['seriesTitle']),
+        imdbId: _identity(decoded['imdbId']),
         resumeId: _string(decoded['resumeId']),
         url: _string(decoded['url']),
         season: _nullableInt(decoded['season']),
@@ -657,6 +661,12 @@ class TvPlaybackCheckpoint {
   static int? _nullableInt(Object? value) =>
       value is num ? value.toInt() : null;
   static String? _string(Object? value) => value is String ? value : null;
+
+  // Older Android checkpoints may already contain an optString-coerced null.
+  static String? _identity(Object? value) =>
+      value is String && value.trim().isNotEmpty && value.trim() != 'null'
+      ? value
+      : null;
 }
 
 @immutable

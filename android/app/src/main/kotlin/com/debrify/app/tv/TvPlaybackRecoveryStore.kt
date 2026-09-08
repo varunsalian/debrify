@@ -21,6 +21,26 @@ object TvPlaybackRecoveryStore {
     private var activeSessionId = 0
     private val completedItems = mutableSetOf<String>()
     private var highestSequence = 0L
+    private data class FileStamp(val isFile: Boolean, val exists: Boolean, val size: Long, val modified: Long)
+    private var cachedPath: String? = null
+    private var cachedStamp: FileStamp? = null
+    // Published journals/records are immutable. Mutations use fresh arrays and
+    // only replace this snapshot after the atomic file replacement succeeds.
+    private var cachedJournal: JSONObject? = null
+    private var cacheNeedsSave = false
+    internal var diskReadCount = 0L
+        private set
+    internal var diskSyncCount = 0L
+        private set
+
+    /** Simulates a cold reader in tests without resetting session fencing. */
+    @Synchronized
+    internal fun clearMemoryCache() {
+        cachedPath = null
+        cachedStamp = null
+        cachedJournal = null
+        cacheNeedsSave = false
+    }
 
     @Synchronized
     fun allocateSessionId(filesDir: File, onReadFailure: (Throwable) -> Unit = {}): Int {
@@ -41,7 +61,10 @@ object TvPlaybackRecoveryStore {
         highestSequence = 0L
         completedItems.clear()
         // Only age out expired data. Failed recovery still needs its next retry.
-        runCatching { save(filesDir, load(filesDir)) }
+        runCatching {
+            val journal = load(filesDir)
+            if (cacheNeedsSave) save(filesDir, journal)
+        }
     }
 
     fun stageAsync(filesDir: File, encoded: String) =
@@ -55,12 +78,9 @@ object TvPlaybackRecoveryStore {
         val incoming = runCatching { JSONObject(encoded) }.getOrNull() ?: return
         val session = incoming.optInt("sessionId")
         val sequence = incoming.optLong("sequence")
-        if (session <= 0 || session != activeSessionId || sequence <= 0L ||
-            incoming.optString("contentType") !in setOf("single", "series", "collection") ||
-            incoming.optString("mode") == "iptv"
-        ) return
+        if (session != activeSessionId || !isValidRecord(incoming, System.currentTimeMillis())) return
 
-        val journal = runCatching { load(filesDir) }.getOrNull() ?: return
+        val journal = runCatching { copyJournal(load(filesDir)) }.getOrNull() ?: return
         val completion = isCompletion(incoming)
         // Completion edges are synchronous, before auto-advance. Once ACKed,
         // cumulative flags on later ticks must not recreate that event.
@@ -84,19 +104,27 @@ object TvPlaybackRecoveryStore {
     @Synchronized
     fun read(filesDir: File): String? {
         val journal = runCatching { load(filesDir) }.getOrNull() ?: return null
-        save(filesDir, journal) // removes malformed/expired legacy records
+        if (cacheNeedsSave) save(filesDir, journal) // normalize only once
         return if (records(journal).isEmpty()) null else journal.toString()
     }
 
     /** ACK exactly one applied event, never a different episode or session. */
     @Synchronized
     fun acknowledge(filesDir: File, sessionId: Int, sequence: Long): Boolean {
-        val journal = runCatching { load(filesDir) }.getOrNull() ?: return false
+        val journal = runCatching { copyJournal(load(filesDir)) }.getOrNull() ?: return false
+        var removed = false
         for (field in listOf("completions", "latest")) {
             journal.put(field, filter(journal.getJSONArray(field)) {
-                it.optInt("sessionId") != sessionId || it.optLong("sequence") != sequence
+                val matches = it.optInt("sessionId") == sessionId && it.optLong("sequence") == sequence
+                if (matches) removed = true
+                !matches
             })
         }
+        if (!removed && !cacheNeedsSave) return true
+        // The ordinary ACK deletes the last record without a rewrite/fsync.
+        // If other records remain, their replacement still needs fsync: an
+        // atomic rename alone could lose those unACKed observations on power
+        // failure, not merely replay the record being acknowledged.
         return save(filesDir, journal)
     }
 
@@ -104,36 +132,73 @@ object TvPlaybackRecoveryStore {
     @Synchronized
     fun discard(filesDir: File, encoded: String): Boolean {
         val target = File(filesDir, FILE_NAME)
-        if (!target.exists()) return true
-        return runCatching { target.readText() == encoded && target.delete() }.getOrDefault(false)
+        val discarded = runCatching {
+            !target.exists() || (target.readText() == encoded && target.delete())
+        }.getOrDefault(false)
+        if (discarded) clearMemoryCache()
+        return discarded
     }
 
     private fun emptyJournal() = JSONObject().put("version", 2)
         .put("completions", JSONArray()).put("latest", JSONArray())
 
+    private fun copyJournal(journal: JSONObject) = emptyJournal().apply {
+        for (field in listOf("completions", "latest")) {
+            put(field, filter(journal.getJSONArray(field)) { true })
+        }
+    }
+
+    private fun stamp(file: File) = FileStamp(file.isFile, file.exists(), file.length(), file.lastModified())
+
     private fun load(filesDir: File): JSONObject {
         val target = File(filesDir, FILE_NAME)
-        if (!target.exists()) return emptyJournal()
-        // I/O failure is retryable, not evidence that a journal is malformed.
-        val encoded = target.readText()
-        val source = runCatching { JSONObject(encoded) }.getOrNull()
-            ?: return emptyJournal()
-        val result = emptyJournal()
+        val currentStamp = stamp(target)
+        val cached = cachedJournal
         val now = System.currentTimeMillis()
+        if (cached != null && cachedPath == target.absolutePath && cachedStamp == currentStamp) {
+            // A long-running process must still expire cached checkpoints.
+            if (records(cached).all { now - it.optLong("updatedAtMs") in 0..MAX_AGE_MS }) {
+                return cached
+            }
+            val pruned = copyJournal(cached)
+            for (field in listOf("completions", "latest")) {
+                pruned.put(field, filter(pruned.getJSONArray(field)) {
+                    now - it.optLong("updatedAtMs") in 0..MAX_AGE_MS
+                })
+            }
+            cachedJournal = pruned
+            cacheNeedsSave = true
+            return pruned
+        }
+        // I/O failure is retryable, not evidence that a journal is malformed.
+        val encoded = if (currentStamp.exists) {
+            diskReadCount++
+            target.readText()
+        } else null
+        val source = encoded?.let { runCatching { JSONObject(it) }.getOrNull() }
+        val result = emptyJournal()
         fun add(record: JSONObject) {
-            val age = now - record.optLong("updatedAtMs")
-            if (record.optInt("sessionId") <= 0 || record.optLong("sequence") <= 0 ||
-                record.optString("profileId").isBlank() || record.optInt("dataGeneration") <= 0 ||
-                age !in 0..MAX_AGE_MS || record.optString("mode") == "iptv" ||
-                (record.has("speed") && record.opt("speed") !is Number) ||
-                record.optString("contentType") !in setOf("single", "series", "collection")
-            ) return
+            if (!isValidRecord(record, now)) return
             result.getJSONArray(if (isCompletion(record)) "completions" else "latest").put(record)
         }
-        if (source.optInt("version") == 1) add(source)
-        else if (source.optInt("version") == 2) records(source).forEach(::add)
+        if (source?.optInt("version") == 1) add(source)
+        else if (source?.optInt("version") == 2) records(source).forEach(::add)
+        cachedPath = target.absolutePath
+        cachedStamp = currentStamp
+        cachedJournal = result
+        cacheNeedsSave = encoded != null &&
+            (records(result).isEmpty() || source?.toString() != result.toString())
         return result
     }
+
+    private fun isValidRecord(record: JSONObject, now: Long): Boolean =
+        record.optInt("sessionId") > 0 && record.optLong("sequence") > 0 &&
+            record.nullableString("profileId").let { it != null && it != "null" } &&
+            record.optInt("dataGeneration") > 0 &&
+            now - record.optLong("updatedAtMs") in 0..MAX_AGE_MS &&
+            record.optString("mode") != "iptv" &&
+            (!record.has("speed") || record.opt("speed") is Number) &&
+            record.optString("contentType") in setOf("single", "series", "collection")
 
     private fun records(journal: JSONObject): List<JSONObject> =
         listOf("completions", "latest").flatMap { field ->
@@ -166,7 +231,8 @@ object TvPlaybackRecoveryStore {
         return when (record.optString("contentType")) {
             "series" -> completed || local
             "collection" -> completed
-            "single" -> record.optBoolean("localCompletionTracking") && (completed || local)
+            "single" -> record.optBoolean("localCompletionTracking") &&
+                record.nullableString("imdbId").let { it != null && it != "null" } && (completed || local)
             else -> false
         }
     }
@@ -174,19 +240,26 @@ object TvPlaybackRecoveryStore {
     private fun save(filesDir: File, journal: JSONObject): Boolean {
         val target = File(filesDir, FILE_NAME)
         val temp = File(filesDir, TEMP_NAME)
-        if (records(journal).isEmpty()) {
+        val saved = if (records(journal).isEmpty()) {
             temp.delete()
-            return target.delete() || !target.exists()
-        }
-        return runCatching {
+            target.delete() || !target.exists()
+        } else runCatching {
             temp.outputStream().use { stream ->
                 stream.write(journal.toString().toByteArray(Charsets.UTF_8))
                 stream.fd.sync()
+                diskSyncCount++
             }
             // Android/Linux rename atomically replaces the destination. Keep
             // the last good journal if its replacement fails.
             check(temp.renameTo(target)) { "checkpoint rename failed" }
             true
         }.getOrElse { temp.delete(); false }
+        if (saved) {
+            cachedPath = target.absolutePath
+            cachedStamp = stamp(target)
+            cachedJournal = journal
+            cacheNeedsSave = false
+        }
+        return saved
     }
 }

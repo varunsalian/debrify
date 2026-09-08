@@ -1977,14 +1977,12 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             // the callbacks it is about to clear.
             sourcePersistenceSessionId =
                 payloadCheck.optInt("sourcePersistenceSessionId", sourcePersistenceSessionId)
-            recoveryProfileId = payloadCheck.optString("playbackOwnerProfileId")
-                .takeIf { it.isNotBlank() }
+            recoveryProfileId = payloadCheck.nullableString("playbackOwnerProfileId")
             recoveryDataGeneration =
                 payloadCheck.optInt("playbackOwnerDataGeneration", 0)
-            recoveryTitle = payloadCheck.optString("title").takeIf { it.isNotBlank() }
-            recoverySeriesTitle = payloadCheck.optString("seriesTitle")
-                .takeIf { it.isNotBlank() }
-            recoveryImdbId = payloadCheck.optString("imdbId").takeIf { it.isNotBlank() }
+            recoveryTitle = payloadCheck.nullableString("title")
+            recoverySeriesTitle = payloadCheck.nullableString("seriesTitle")
+            recoveryImdbId = payloadCheck.nullableString("imdbId")
             if (payloadCheck.optString("mode") == "iptv") {
                 initIptvMode(payloadCheck)
                 return
@@ -16059,7 +16057,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private var lastProgressAckAt = 0L
     private var lastProgressBridgeAvailable: Boolean? = null
     private var finalProgressSnapshot = false
-    private var exitCheckpointWritten = false
+    private var finishProgressAttempted = false
 
     private fun recordPlaybackLifecycle(event: String, details: String = "") {
         DiagnosticFileLog.recordCritical(
@@ -16075,14 +16073,14 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         // Write the exact exit position before Android uncovers/recreates the
         // Flutter host. The normal five-second writer is asynchronous; relying
         // on it here recreates the stale Continue Watching race seen on Bravia.
-        if (!exitCheckpointWritten) {
+        if (!finishProgressAttempted) {
             finalProgressSnapshot = true
             try {
                 sendProgress(completed = false)
             } finally {
                 finalProgressSnapshot = false
             }
-            exitCheckpointWritten = true
+            finishProgressAttempted = true
         }
         PlaybackReturnHandoff.markReturning(sourcePersistenceSessionId)
         recordPlaybackLifecycle("finish_requested")
@@ -18145,7 +18143,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             } else null
 
             // Parse IMDB ID for external subtitles
-            val imdbId = obj.optString("imdbId").takeIf { it.isNotEmpty() }
+            val imdbId = obj.nullableString("imdbId")
 
             val httpHeaders = mutableMapOf<String, String>()
             obj.optJSONObject("httpHeaders")?.let { headersObj ->
@@ -18242,7 +18240,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 contentType = obj.optString("contentType", "single"),
                 items = items,
                 startIndex = startIndex,
-                seriesTitle = obj.optString("seriesTitle"),
+                seriesTitle = obj.nullableString("seriesTitle"),
                 nextEpisodeMap = nextEpisodeMap,
                 prevEpisodeMap = prevEpisodeMap,
                 collectionGroups = collectionGroups,
@@ -18437,10 +18435,13 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         sourceBrowser?.destroy()
         sourceBrowser = null
         recordPlaybackLifecycle("activity_destroy_begin")
-        if (!exitCheckpointWritten) {
-            finalProgressSnapshot = true
+        // finish/onStop may have been blocked by an uncommitted source switch.
+        // Retry before tearing down the player, keeping sendProgress's guards.
+        finalProgressSnapshot = true
+        try {
             sendProgress(completed = false)
-            exitCheckpointWritten = true
+        } finally {
+            finalProgressSnapshot = false
         }
         if (::subtitleControlsLift.isInitialized) subtitleControlsLift.cancel()
         iptvTuneDiagnostics.onSessionEnd()

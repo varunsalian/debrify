@@ -2746,7 +2746,9 @@ class StorageService {
     bool recordDeletions = false,
   }) async {
     final prefs = await ProfilePreferences.instance();
-    if (recordDeletions) {
+    if (recordDeletions &&
+        (PlaybackRecoveryIntent.isSupported ||
+            await WebDavSyncTombstoneRecorder.shouldRecordForCurrentProfile())) {
       final previous = await _getPlaybackStateMap();
       if (PlaybackRecoveryIntent.isSupported) {
         await PlaybackRecoveryIntent.record(

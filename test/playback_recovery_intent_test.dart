@@ -167,6 +167,58 @@ void main() {
             as Map;
     expect(history.keys, ['*']);
   });
+
+  for (final corrupt in [
+    '{broken',
+    '[]',
+    'null',
+    '{"item":"bad"}',
+    '{"item":-1}',
+  ]) {
+    test('corrupt history read fails closed and repairs $corrupt', () async {
+      SharedPreferences.setMockInitialValues({_historyKey: corrupt});
+      final before = DateTime.now().millisecondsSinceEpoch - 1000;
+      expect(await PlaybackRecoveryIntent.hasNewer(['item'], before), isTrue);
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.reload();
+      final repaired = jsonDecode(prefs.getString(_historyKey)!) as Map;
+      expect(repaired.keys, ['*']);
+      final cutoff = repaired['*'] as int;
+      PlaybackRecoveryIntent.debugReset();
+      PlaybackRecoveryIntent.debugSupportedOverride = true;
+      expect(
+        await PlaybackRecoveryIntent.hasNewer(['unrelated'], before),
+        isTrue,
+      );
+      // Only the unknowable old history is fenced, not all future playback.
+      expect(
+        await PlaybackRecoveryIntent.hasNewer(['item'], cutoff + 1),
+        isFalse,
+      );
+    });
+  }
+
+  for (final throwing in [false, true]) {
+    test(
+      'failed corrupt-history repair still consumes old replay ($throwing)',
+      () async {
+        final store = _FailingHistoryStore(throwing: throwing, failures: 2);
+        SharedPreferencesStorePlatform.instance = store;
+        final prefs = await SharedPreferences.getInstance();
+        // Seed the corrupt value without spending the injected repair failures.
+        await store.seedCorruptHistory();
+        await prefs.reload();
+        final before = DateTime.now().millisecondsSinceEpoch - 1000;
+        expect(await PlaybackRecoveryIntent.hasNewer(['item'], before), isTrue);
+        expect(await PlaybackRecoveryIntent.hasNewer(['item'], before), isTrue);
+        expect(
+          store.historyWrites,
+          1,
+          reason: 'the in-memory cutoff avoids repeated repair attempts',
+        );
+      },
+    );
+  }
 }
 
 class _FailingHistoryStore extends InMemorySharedPreferencesStore {
@@ -175,6 +227,10 @@ class _FailingHistoryStore extends InMemorySharedPreferencesStore {
   final bool throwing;
   final int failures;
   int historyWrites = 0;
+
+  Future<void> seedCorruptHistory() async {
+    await super.setValue('String', 'flutter.$_historyKey', '{broken');
+  }
 
   @override
   Future<bool> setValue(String valueType, String key, Object value) async {

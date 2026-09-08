@@ -46,7 +46,7 @@ abstract final class PlaybackRecoveryIntent {
       final saved = await prefs.mutateStringAtomically(_key, (encoded) {
         final previous = encoded == null
             ? <String, dynamic>{}
-            : jsonDecode(encoded) as Map<String, dynamic>;
+            : _decode(encoded);
         return jsonEncode(<String, int>{
           for (final entry in previous.entries)
             if (entry.value is int &&
@@ -88,14 +88,49 @@ abstract final class PlaybackRecoveryIntent {
     int checkpointAtMs,
   ) async {
     if (!isSupported) return false;
-    if ((_failureCutoffs[_scopeKey] ?? 0) >= checkpointAtMs) return true;
+    final scopeKey = _scopeKey;
+    if ((_failureCutoffs[scopeKey] ?? 0) >= checkpointAtMs) return true;
     final prefs = await ProfilePreferences.instance();
     final encoded = prefs.getString(_key);
     if (encoded == null) return false;
-    final records = jsonDecode(encoded) as Map<String, dynamic>;
+    final Map<String, dynamic> records;
+    try {
+      records = _decode(encoded);
+    } catch (error, stackTrace) {
+      // Missing deletion history cannot authorize an old replay. Replace only
+      // the corrupt value with a bounded cutoff so future playback can recover
+      // again, without overwriting a concurrent unwatch or successful repair.
+      final cutoff = DateTime.now().millisecondsSinceEpoch;
+      _failureCutoffs[scopeKey] = cutoff;
+      try {
+        await prefs.mutateStringAtomically(_key, (current) {
+          if (current != null && current != encoded) return current;
+          return jsonEncode({_allPlayback: cutoff});
+        });
+      } catch (_) {
+        // Retain the in-memory fence if the best-effort repair cannot persist.
+      }
+      DiagnosticLog.instance.recordError(
+        source: 'tv_playback_recovery',
+        event: 'deletion_intent_read_fallback',
+        durable: true,
+        error: error,
+        stackTrace: stackTrace,
+      );
+      return true;
+    }
     return [
       _allPlayback,
       ...keys,
     ].any((key) => records[key] is int && records[key] >= checkpointAtMs);
+  }
+
+  static Map<String, dynamic> _decode(String encoded) {
+    final records = jsonDecode(encoded);
+    if (records is! Map<String, dynamic> ||
+        records.values.any((value) => value is! int || value <= 0)) {
+      throw const FormatException('Invalid playback deletion history');
+    }
+    return records;
   }
 }

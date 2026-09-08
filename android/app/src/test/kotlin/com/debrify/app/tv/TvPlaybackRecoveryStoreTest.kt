@@ -156,9 +156,103 @@ class TvPlaybackRecoveryStoreTest {
         stage(checkpoint(2, completed = true))
         val saved = JSONObject(File(files, "tv_playback_recovery.json").readText())
         assertEquals(1L, saved.getJSONArray("latest").getJSONObject(0).getLong("sequence"))
+        // A failed write must not publish its mutation into the hot cache.
+        assertEquals(0, journal().getJSONArray("completions").length())
+        assertEquals(1L, journal().getJSONArray("latest").getJSONObject(0).getLong("sequence"))
         assertTrue(blocker.delete())
         assertTrue(blockedTemp.delete())
         stage(checkpoint(2, completed = true))
         assertEquals(1, journal().getJSONArray("completions").length())
+    }
+
+    @Test fun jsonNullIsNeverCoercedIntoAMediaIdentity() {
+        val payload = JSONObject("""{"imdbId":null,"seriesTitle":null,"title":"Movie"}""")
+        assertTrue(payload.isNull("imdbId"))
+        assertNull(payload.nullableString("imdbId"))
+        assertNull(payload.nullableString("seriesTitle"))
+        assertNull(payload.nullableString("missing"))
+        assertNull(JSONObject().put("imdbId", 123).nullableString("imdbId"))
+        assertNull(JSONObject().put("imdbId", " ").nullableString("imdbId"))
+        assertEquals("Movie", payload.nullableString("title"))
+        assertEquals("tt1234", JSONObject().put("imdbId", "tt1234").nullableString("imdbId"))
+    }
+
+    @Test fun unidentifiedMoviesKeepTheirLatestPositionInsteadOfDedupingCompletion() {
+        for ((index, id) in listOf(JSONObject.NULL, "null").withIndex()) {
+            val sequence = index * 2L + 1
+            stage(checkpoint(sequence, type = "single", completed = true)
+                .put("imdbId", id).put("localCompletionTracking", true))
+            stage(checkpoint(sequence + 1, type = "single", completed = true)
+                .put("imdbId", id).put("localCompletionTracking", true).put("positionMs", 99000))
+            assertEquals(0, journal().getJSONArray("completions").length())
+            assertEquals(99000, journal().getJSONArray("latest").getJSONObject(0).getInt("positionMs"))
+        }
+    }
+
+    @Test fun hotTicksReuseParsedJournalAndAckDurablyRetainsOtherRecords() {
+        stage(checkpoint(1, completed = true)) // retained while newer ticks are ACKed
+        TvPlaybackRecoveryStore.clearMemoryCache()
+        val reads = TvPlaybackRecoveryStore.diskReadCount
+        val syncs = TvPlaybackRecoveryStore.diskSyncCount
+        for (sequence in 2L..10L) {
+            stage(checkpoint(sequence, episode = 5))
+            assertTrue(TvPlaybackRecoveryStore.acknowledge(files, session, sequence))
+            assertEquals(1, journal().getJSONArray("completions").length())
+        }
+        assertEquals(reads + 1, TvPlaybackRecoveryStore.diskReadCount)
+        assertEquals(syncs + 18, TvPlaybackRecoveryStore.diskSyncCount)
+        // A cold reader must see ACK cleanup, not just the in-memory snapshot.
+        TvPlaybackRecoveryStore.clearMemoryCache()
+        assertEquals(1, journal().getJSONArray("completions").length())
+        assertEquals(0, journal().getJSONArray("latest").length())
+    }
+
+    @Test fun ordinaryTicksAndAcksOnlySyncTheNewCheckpoint() {
+        val reads = TvPlaybackRecoveryStore.diskReadCount
+        val syncs = TvPlaybackRecoveryStore.diskSyncCount
+        for (sequence in 1L..10L) {
+            stage(checkpoint(sequence))
+            assertTrue(TvPlaybackRecoveryStore.acknowledge(files, session, sequence))
+            assertNull(TvPlaybackRecoveryStore.read(files))
+        }
+        assertEquals(reads, TvPlaybackRecoveryStore.diskReadCount)
+        assertEquals(syncs + 10, TvPlaybackRecoveryStore.diskSyncCount)
+    }
+
+    @Test fun unchangedReadsLaunchesAndMissingAcksDoNotRewriteTheJournal() {
+        stage(checkpoint(1))
+        val syncs = TvPlaybackRecoveryStore.diskSyncCount
+        repeat(3) {
+            assertNotNull(TvPlaybackRecoveryStore.read(files))
+            assertTrue(TvPlaybackRecoveryStore.acknowledge(files, session, 999))
+            TvPlaybackRecoveryStore.begin(files, TvPlaybackRecoveryStore.allocateSessionId(files))
+        }
+        assertEquals(syncs, TvPlaybackRecoveryStore.diskSyncCount)
+    }
+
+    @Test fun failedAckKeepsBothTheDiskAndCacheRetryable() {
+        stage(checkpoint(1, completed = true))
+        stage(checkpoint(2, episode = 5))
+        val blockedTemp = File(files, "tv_playback_recovery.json.tmp")
+        assertTrue(blockedTemp.mkdir())
+        val blocker = File(blockedTemp, "blocker").apply { writeText("test") }
+        assertFalse(TvPlaybackRecoveryStore.acknowledge(files, session, 2))
+        assertEquals(1, journal().getJSONArray("latest").length())
+        assertTrue(blocker.delete())
+        assertTrue(blockedTemp.delete())
+        assertTrue(TvPlaybackRecoveryStore.acknowledge(files, session, 2))
+        TvPlaybackRecoveryStore.clearMemoryCache()
+        assertEquals(1, journal().getJSONArray("completions").length())
+        assertEquals(0, journal().getJSONArray("latest").length())
+    }
+
+    @Test fun discardInvalidatesTheHotCacheWithoutDeletingANewerCheckpoint() {
+        stage(checkpoint(1))
+        val first = TvPlaybackRecoveryStore.read(files)!!
+        stage(checkpoint(2))
+        assertFalse(TvPlaybackRecoveryStore.discard(files, first))
+        assertEquals(2L, journal().getJSONArray("latest").getJSONObject(0).getLong("sequence"))
+        assertTrue(TvPlaybackRecoveryStore.discard(files, TvPlaybackRecoveryStore.read(files)!!))
+        assertNull(TvPlaybackRecoveryStore.read(files))
     }
 }
