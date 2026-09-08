@@ -55,7 +55,7 @@ class TvPlaybackRecovery {
       if (validAge && checkpoint.isResumable) {
         changed = await ProfileRuntime.withCapturedScope(
           scope,
-          () => _apply(checkpoint, allowCreate: returning),
+          () => _apply(checkpoint, sameProcessReturn: returning),
         );
       }
       await _ack(checkpoint);
@@ -96,7 +96,7 @@ class TvPlaybackRecovery {
 
   static Future<bool> _apply(
     TvPlaybackCheckpoint checkpoint, {
-    required bool allowCreate,
+    required bool sameProcessReturn,
   }) async {
     final position = checkpoint.positionMs;
     final duration = checkpoint.durationMs;
@@ -117,7 +117,10 @@ class TvPlaybackRecovery {
             season: season,
             episode: episode,
           );
-          if (checkpoint.shouldDeepen(existing, allowCreate: allowCreate)) {
+          if (checkpoint.shouldApply(
+            existing,
+            sameProcessReturn: sameProcessReturn,
+          )) {
             await StorageService.saveSeriesPlaybackState(
               seriesTitle: seriesTitle,
               season: season,
@@ -140,7 +143,10 @@ class TvPlaybackRecovery {
         season: 0,
         episode: episode,
       );
-      if (checkpoint.shouldDeepen(existing, allowCreate: allowCreate)) {
+      if (checkpoint.shouldApply(
+        existing,
+        sameProcessReturn: sameProcessReturn,
+      )) {
         await StorageService.saveSeriesPlaybackState(
           seriesTitle: checkpoint.seriesTitle!,
           season: 0,
@@ -170,7 +176,10 @@ class TvPlaybackRecovery {
       if (!movieFinished &&
           url != null &&
           url.isNotEmpty &&
-          checkpoint.shouldDeepen(existing, allowCreate: allowCreate)) {
+          checkpoint.shouldApply(
+            existing,
+            sameProcessReturn: sameProcessReturn,
+          )) {
         await StorageService.saveVideoPlaybackState(
           videoTitle: resumeId,
           videoUrl: url,
@@ -186,7 +195,10 @@ class TvPlaybackRecovery {
       if (checkpoint.contentType == 'single') {
         final resume = await StorageService.getVideoResume(resumeId);
         if (!movieFinished &&
-            checkpoint.shouldDeepen(resume, allowCreate: allowCreate)) {
+            checkpoint.shouldApply(
+              resume,
+              sameProcessReturn: sameProcessReturn,
+            )) {
           await StorageService.upsertVideoResume(resumeId, {
             'positionMs': position,
             'durationMs': duration,
@@ -246,6 +258,7 @@ class TvPlaybackCheckpoint {
     required this.itemIndex,
     required this.completed,
     required this.localCompleted,
+    required this.localCompletionEligible,
     this.title,
     this.seriesTitle,
     this.imdbId,
@@ -275,6 +288,7 @@ class TvPlaybackCheckpoint {
   final String aspect;
   final bool completed;
   final bool localCompleted;
+  final bool localCompletionEligible;
 
   bool belongsTo(ProfileScope scope) =>
       profileId == scope.profileId && dataGeneration == scope.dataGeneration;
@@ -286,13 +300,18 @@ class TvPlaybackCheckpoint {
       durationMs > 0 &&
       !completed &&
       !localCompleted &&
+      !localCompletionEligible &&
       positionMs * 100.0 / durationMs < 95.0;
 
-  bool shouldDeepen(
+  bool shouldApply(
     Map<String, dynamic>? existing, {
-    required bool allowCreate,
+    required bool sameProcessReturn,
   }) {
-    if (existing == null) return allowCreate;
+    // The process-memory handoff proves this is the newest position from the
+    // same playback, including an intentional rewind. A cold-process journal
+    // remains conservative: it may only deepen an existing owned record.
+    if (sameProcessReturn) return true;
+    if (existing == null) return false;
     return _int(existing['positionMs']) < positionMs;
   }
 
@@ -329,6 +348,7 @@ class TvPlaybackCheckpoint {
         aspect: _string(decoded['aspect']) ?? 'contain',
         completed: decoded['completed'] == true,
         localCompleted: decoded['localCompleted'] == true,
+        localCompletionEligible: decoded['localCompletionEligible'] == true,
       );
     } catch (_) {
       return null;

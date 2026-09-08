@@ -575,10 +575,6 @@ Future<void> _bestEffortStartupStep(
 }
 
 Future<void> _continueApplicationStartup() async {
-  // A Sony/Android lifecycle can reclaim MainActivity while the separate
-  // native player remains foreground. Recover its one-shot profile return and
-  // last position before ProfileGate paints the recreated session.
-  await TvPlaybackRecovery.initialize();
   // This common path is also entered after registry recovery and interactive
   // Linux vault unlock; both must receive the same native lock authority as a
   // normal bootstrap.
@@ -586,6 +582,11 @@ Future<void> _continueApplicationStartup() async {
   // Resume a crash-interrupted CircleAdoption before any profile database or
   // preference warm can observe a half-copied target generation.
   await WebDavSyncRuntime.instance.initialize();
+  // A Sony/Android lifecycle can reclaim MainActivity while the separate
+  // native player remains foreground. Recover only after WebDAV has finished
+  // any crash-interrupted generation adoption, but still before ProfileGate
+  // paints the recreated session.
+  await TvPlaybackRecovery.initialize();
   // These initializers may touch profile-sensitive state and therefore start
   // only after the immutable runtime mode and active scope are installed.
   unawaited(AnalyticsService.init());

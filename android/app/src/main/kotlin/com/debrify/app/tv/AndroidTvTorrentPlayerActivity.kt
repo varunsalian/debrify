@@ -16174,6 +16174,10 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             .put("aspect", progress["aspect"] ?: "contain")
             .put("completed", progress["completed"] == true)
             .put("localCompleted", progress["localCompleted"] == true)
+            // localCompleted is an edge-trigger (true only on the first tick
+            // crossing the threshold). Keep the level-triggered eligibility
+            // too, so a later checkpoint cannot resurrect completed content.
+            .put("localCompletionEligible", progress["localCompletionEligible"] == true)
             .toString()
 
         if (synchronous) {

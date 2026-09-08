@@ -56,22 +56,31 @@ void main() {
     );
   });
 
-  test('recovery deepens state and only creates on a same-process return', () {
-    final checkpoint = TvPlaybackCheckpoint.tryParse(
-      jsonEncode(_checkpoint()),
-    )!;
+  test(
+    'cold recovery only deepens but same-process return is authoritative',
+    () {
+      final checkpoint = TvPlaybackCheckpoint.tryParse(
+        jsonEncode(_checkpoint()),
+      )!;
 
-    expect(checkpoint.shouldDeepen(null, allowCreate: false), isFalse);
-    expect(checkpoint.shouldDeepen(null, allowCreate: true), isTrue);
-    expect(
-      checkpoint.shouldDeepen({'positionMs': 1_700_000}, allowCreate: false),
-      isTrue,
-    );
-    expect(
-      checkpoint.shouldDeepen({'positionMs': 2_100_000}, allowCreate: true),
-      isFalse,
-    );
-  });
+      expect(checkpoint.shouldApply(null, sameProcessReturn: false), isFalse);
+      expect(checkpoint.shouldApply(null, sameProcessReturn: true), isTrue);
+      expect(
+        checkpoint.shouldApply({
+          'positionMs': 1_700_000,
+        }, sameProcessReturn: false),
+        isTrue,
+      );
+      // A proven return must preserve an intentional rewind rather than leave
+      // the older, deeper bookmark behind.
+      expect(
+        checkpoint.shouldApply({
+          'positionMs': 2_100_000,
+        }, sameProcessReturn: true),
+        isTrue,
+      );
+    },
+  );
 
   test('completion territory is never resurrected as Continue Watching', () {
     final completed = TvPlaybackCheckpoint.tryParse(
@@ -80,9 +89,13 @@ void main() {
     final nearEnd = TvPlaybackCheckpoint.tryParse(
       jsonEncode(_checkpoint(positionMs: 2_980_000)),
     )!;
+    final crossedLocalThreshold = TvPlaybackCheckpoint.tryParse(
+      jsonEncode(_checkpoint(localCompletionEligible: true)),
+    )!;
 
     expect(completed.isResumable, isFalse);
     expect(nearEnd.isResumable, isFalse);
+    expect(crossedLocalThreshold.isResumable, isFalse);
   });
 
   test('malformed or unsupported checkpoints fail closed', () {
@@ -105,6 +118,7 @@ void main() {
 Map<String, Object?> _checkpoint({
   int positionMs = 2_084_494,
   bool completed = false,
+  bool localCompletionEligible = false,
 }) => <String, Object?>{
   'version': 1,
   'sessionId': 7,
@@ -127,4 +141,5 @@ Map<String, Object?> _checkpoint({
   'aspect': 'contain',
   'completed': completed,
   'localCompleted': false,
+  'localCompletionEligible': localCompletionEligible,
 };
