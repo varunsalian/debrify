@@ -647,7 +647,8 @@ class _CollectionsSettingsPageState extends State<CollectionsSettingsPage> {
                 const SizedBox(height: 16),
                 SettingsSection(
                   title: 'Collection GIF playback',
-                  blurb: 'Choose how folder GIFs play on this device. Video previews are unchanged.',
+                  blurb:
+                      'Choose how folder GIFs play on this device. Video previews are unchanged.',
                   children: [
                     IgnorePointer(
                       ignoring: _busy,
@@ -677,9 +678,8 @@ class _CollectionsSettingsPageState extends State<CollectionsSettingsPage> {
                 SettingsSection(
                   title: 'Folder layout',
                   blurb:
-                      'How a folder shows its lists when you open it. Rows '
-                      'stack every list; Tabs show one list at a time '
-                      'behind a selector, like Nuvio.',
+                      'Gallery shows each list as an artwork card. Tabbed folders '
+                      'show one list at a time behind a selector.',
                   children: [
                     IgnorePointer(
                       ignoring: _busy,
@@ -692,7 +692,7 @@ class _CollectionsSettingsPageState extends State<CollectionsSettingsPage> {
                             title: 'Tabbed folders',
                             subtitle: _layout == CollectionFolderLayout.tabs
                                 ? 'One list at a time, pick it from the List chip'
-                                : 'Lists stacked as rows (each with See all)',
+                                : 'Gallery cards that open each list’s full grid',
                             value: _layout == CollectionFolderLayout.tabs,
                             onChanged: _setTabbed,
                           ),

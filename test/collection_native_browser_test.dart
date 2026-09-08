@@ -9,6 +9,7 @@ import 'package:debrify/services/home_collections_store.dart';
 import 'package:debrify/services/main_page_bridge.dart';
 import 'package:debrify/services/stremio_service.dart';
 import 'package:debrify/widgets/see_all/see_all_poster_grid.dart';
+import 'package:debrify/widgets/collections/collection_list_gallery.dart';
 import 'package:debrify/widgets/see_all/stremio_dropdown.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -112,36 +113,39 @@ void main() {
     );
   }
 
-  testWidgets('native See all pushes a grid and Back restores its rail', (
-    tester,
-  ) async {
-    final native = service();
-    addTearDown(native.close);
-    await tester.pumpWidget(
-      MaterialApp(
-        home: CollectionFolderScreen(
-          collection: collection(viewMode: 'FOLLOW_LAYOUT'),
-          nativeSources: native,
-          onOpenItem: (_) {},
+  testWidgets(
+    'native gallery card pushes a grid and Back restores its gallery',
+    (tester) async {
+      final native = service();
+      addTearDown(native.close);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: CollectionFolderScreen(
+            collection: collection(viewMode: 'FOLLOW_LAYOUT'),
+            nativeSources: native,
+            onOpenItem: (_) {},
+          ),
         ),
-      ),
-    );
-    await tester.pumpAndSettle();
-    expect(find.text('See all'), findsOneWidget);
-    await tester.tap(find.text('See all'));
-    await tester.pumpAndSettle();
-    final child = tester.widget<CollectionFolderScreen>(
-      find.byType(CollectionFolderScreen),
-    );
-    expect(child.sourceKey, collection().folders.single.sources.single.key);
-    expect(find.text('See all'), findsNothing);
-    final grid = tester.widget<SeeAllPosterGrid>(find.byType(SeeAllPosterGrid));
-    expect(grid.items.single.name, 'Native movie');
-    Navigator.of(tester.element(find.byType(SeeAllPosterGrid))).pop();
-    await tester.pumpAndSettle();
-    expect(find.text('See all'), findsOneWidget);
-    expect(tester.takeException(), isNull);
-  });
+      );
+      await tester.pumpAndSettle();
+      expect(find.byType(CollectionListGallery), findsOneWidget);
+      await tester.tap(find.text('New movies'));
+      await tester.pumpAndSettle();
+      final child = tester.widget<CollectionFolderScreen>(
+        find.byType(CollectionFolderScreen),
+      );
+      expect(child.sourceKey, collection().folders.single.sources.single.key);
+      expect(find.text('See all'), findsNothing);
+      final grid = tester.widget<SeeAllPosterGrid>(
+        find.byType(SeeAllPosterGrid),
+      );
+      expect(grid.items.single.name, 'Native movie');
+      Navigator.of(tester.element(find.byType(SeeAllPosterGrid))).pop();
+      await tester.pumpAndSettle();
+      expect(find.byType(CollectionListGallery), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   for (final action in ['cancel', 'replace', 'refresh']) {
     final cancel = action == 'cancel';
@@ -295,5 +299,108 @@ void main() {
     expect(find.textContaining('TMDB denied access'), findsOneWidget);
     expect(find.text('No matching addon installed'), findsNothing);
     expect(find.text('Retry'), findsOneWidget);
+  });
+  testWidgets(
+    'TV gallery opens a list with poster focus and restores its card',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(960, 540));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final native = service();
+      addTearDown(native.close);
+      final opened = <String>[];
+      await tester.pumpWidget(
+        MaterialApp(
+          home: CollectionFolderScreen(
+            collection: collection(),
+            nativeSources: native,
+            isTelevision: true,
+            onOpenItem: (item) => opened.add(item.id),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pumpAndSettle();
+      expect(
+        FocusManager.instance.primaryFocus?.debugLabel,
+        startsWith('collection_list_'),
+      );
+      await tester.sendKeyEvent(LogicalKeyboardKey.numpadEnter);
+      await tester.pumpAndSettle();
+      expect(find.byType(SeeAllPosterGrid), findsOneWidget);
+      expect(
+        FocusManager.instance.primaryFocus?.debugLabel,
+        startsWith('seeall_grid_'),
+      );
+      await tester.sendKeyEvent(LogicalKeyboardKey.numpadEnter);
+      await tester.pumpAndSettle();
+      expect(opened, ['tmdb:42']);
+      Navigator.of(tester.element(find.byType(SeeAllPosterGrid))).pop();
+      await tester.pumpAndSettle();
+      expect(find.byType(CollectionListGallery), findsOneWidget);
+      expect(
+        FocusManager.instance.primaryFocus?.debugLabel,
+        startsWith('collection_list_'),
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('opened gallery list paginates on touch scroll', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final pages = <int>[];
+    final native = CollectionNativeSourceService(
+      tmdbToken: 'dummy',
+      resolveIds: false,
+      client: MockClient((request) async {
+        final page = int.parse(request.url.queryParameters['page'] ?? '1');
+        pages.add(page);
+        return http.Response(
+          jsonEncode({
+            'results': [
+              for (var i = 0; i < 20; i++)
+                {'id': page * 100 + i, 'title': 'Movie $page $i'},
+            ],
+            'total_pages': 2,
+          }),
+          200,
+        );
+      }),
+    );
+    addTearDown(native.close);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: CollectionFolderScreen(
+          collection: collection(),
+          nativeSources: native,
+          onOpenItem: (_) {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('New movies'));
+    await tester.pumpAndSettle();
+    final scroll = find
+        .descendant(
+          of: find.byType(SeeAllPosterGrid),
+          matching: find.byType(Scrollable),
+        )
+        .first;
+    tester
+        .state<ScrollableState>(scroll)
+        .position
+        .jumpTo(tester.state<ScrollableState>(scroll).position.maxScrollExtent);
+    await tester.pumpAndSettle();
+    expect(pages, contains(2));
+    expect(
+      tester
+          .widget<SeeAllPosterGrid>(find.byType(SeeAllPosterGrid))
+          .items
+          .length,
+      40,
+    );
+    expect(find.text('Load more'), findsNothing);
+    expect(tester.takeException(), isNull);
   });
 }

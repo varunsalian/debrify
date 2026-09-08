@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../models/home_collection.dart';
+import '../../widgets/collections/collection_list_gallery.dart';
+import '../../widgets/collections/collection_browser_hero.dart';
 import '../../models/stremio_addon.dart';
 import '../../services/analytics_service.dart';
 import '../../services/collection_folder_loader.dart';
@@ -15,40 +17,16 @@ import '../../services/home_collections_store.dart';
 import '../../services/storage_service.dart';
 import '../../services/stremio_service.dart';
 import '../../theme/app_theme_scope.dart';
-import '../../utils/home_rail_metrics.dart';
-import '../../widgets/collections/folder_hero_band.dart';
 import '../../services/collection_native_source_service.dart';
-import '../../widgets/collections/rail_see_all_pill.dart';
-import '../../widgets/home/row_tag_pill.dart';
-import '../../widgets/see_all/discover_shelf_scope.dart';
 import '../../widgets/see_all/discover_card_settings_scope.dart';
 import '../../widgets/see_all/see_all_filter_bar.dart';
 import '../../widgets/see_all/see_all_filter_focus.dart';
-import '../../widgets/see_all/see_all_header.dart';
 import '../../widgets/see_all/see_all_poster_grid.dart';
 import '../../widgets/see_all/stremio_dropdown.dart';
 import '../../widgets/skeleton_poster.dart';
-import '../see_all/catalog_see_all_screen.dart';
 
-/// Full-screen browser for one folder of an imported collection — where a
-/// folder tile on the Home board and the collection row's "See All" land.
-///
-/// Each catalog in a folder is its own list. Two layouts, chosen in
-/// Settings › Home Screen › Collections:
-///
-///  * **Rows** — one horizontal rail per list, each with its own See All
-///    into the regular catalog browser; a collection with `showAllTab` also
-///    offers an "All" view that pages every list into one merged grid.
-///  * **Tabs** — one list at a time as a full poster grid, picked from a
-///    List chip (plus "All" when the collection enables it).
-///
-/// Lists switched off in the Home Rows manager (`collectionlist:` ids in the
-/// disabled set) are left out of every view.
-///
-/// Rails reuse [SeeAllPosterGrid] in shelf mode (under a
-/// [DiscoverShelfScope]), so focus walking, paging and card chrome are the
-/// Discover stage's own; this screen only adds the vertical DPAD ladder
-/// between rails (See-All pill → cards → next rail's pill).
+/// Collection folders open as artwork galleries; each list opens a full grid.
+/// Existing tabbed and merged views retain their paging and filter semantics.
 class CollectionFolderScreen extends StatefulWidget {
   final HomeCollection collection;
   final int initialFolderIndex;
@@ -77,7 +55,7 @@ class CollectionFolderScreen extends StatefulWidget {
   State<CollectionFolderScreen> createState() => _CollectionFolderScreenState();
 }
 
-/// Rows layout: stacked rails, or the merged grid.
+/// Gallery layout: list cards, or the merged title grid.
 enum _View { lists, all }
 
 /// Tabs layout: the merged grid's value in the List chip.
@@ -125,11 +103,7 @@ class _Rail {
   final CollectionCatalogSource source;
   final StremioAddon? addon;
   final StremioAddonCatalog? catalog;
-  final GlobalKey<SeeAllPosterGridState> gridKey = GlobalKey();
-  final GlobalKey containerKey = GlobalKey();
-  final FocusNode seeAllNode = FocusNode(debugLabel: 'collection_rail_seeall');
   final List<StremioMeta> items = [];
-  int get nextSkip => pager.skip;
   bool loadingInitial = true;
   bool loadingMore = false;
   bool get exhausted => pager.exhausted;
@@ -143,11 +117,6 @@ class _Rail {
     final genre = source.genre;
     return genre == null ? base : '$base · $genre';
   }
-
-  /// Hidden once loaded empty — an empty rail is noise, like on Home.
-  bool get visible => loadingInitial || items.isNotEmpty;
-
-  void dispose() => seeAllNode.dispose();
 }
 
 class _CollectionFolderScreenState extends State<CollectionFolderScreen> {
@@ -169,7 +138,8 @@ class _CollectionFolderScreenState extends State<CollectionFolderScreen> {
 
   List<_Rail> _rails = const [];
   List<String> _unresolved = const [];
-  final ScrollController _railsScroll = ScrollController();
+  GlobalKey<CollectionListGalleryState> _galleryKey = GlobalKey();
+  bool _initialGridFocus = false;
   GlobalKey<SeeAllPosterGridState> _tabGridKey = GlobalKey();
 
   // The All (merged grid) view, shared by both layouts.
@@ -199,7 +169,8 @@ class _CollectionFolderScreenState extends State<CollectionFolderScreen> {
   String? _configurationSignature;
   bool get _hasFolders => _collection.folders.isNotEmpty;
   HomeCollectionFolder get _folder => _collection.folders[_folderIndex];
-  bool get _tabs => _layout == CollectionFolderLayout.tabs;
+  bool get _tabs =>
+      widget.sourceKey != null || _layout == CollectionFolderLayout.tabs;
 
   /// The folder's lists minus the ones switched off in Home Rows.
   List<CollectionCatalogSource> get _enabledSources => [
@@ -321,10 +292,6 @@ class _CollectionFolderScreenState extends State<CollectionFolderScreen> {
   void dispose() {
     MainPageBridge.removeHomeSettingsListener(_onConfigurationChanged);
     _stremio.removeAddonsChangedListener(_onConfigurationChanged);
-    for (final r in _rails) {
-      r.dispose();
-    }
-    _railsScroll.dispose();
     _backNode.dispose();
     _folderNode.dispose();
     _viewNode.dispose();
@@ -348,9 +315,6 @@ class _CollectionFolderScreenState extends State<CollectionFolderScreen> {
     final token = ++_reqToken;
     _openRequest++;
     _openingTitle = null;
-    for (final r in _rails) {
-      r.dispose();
-    }
     final rails = <_Rail>[];
     final unresolved = <String>[];
     final resolved = <String>{};
@@ -401,6 +365,7 @@ class _CollectionFolderScreenState extends State<CollectionFolderScreen> {
           ? _kAllTab
           : (index < 0 ? 0 : index);
       _tabGridKey = GlobalKey();
+      _galleryKey = GlobalKey();
       _allGridKey = GlobalKey();
       if (!_collection.showAllTab || rails.length < 2) _view = _View.lists;
     });
@@ -409,7 +374,12 @@ class _CollectionFolderScreenState extends State<CollectionFolderScreen> {
     if (autoFocus && widget.isTelevision) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted || token != _reqToken) return;
-        _folderNode.requestFocus();
+        if (widget.sourceKey == null) {
+          _folderNode.requestFocus();
+        } else {
+          _sortNode.requestFocus();
+          _focusLoadedGrid();
+        }
       });
     }
   }
@@ -436,6 +406,25 @@ class _CollectionFolderScreenState extends State<CollectionFolderScreen> {
     setState(() {
       r.items.addAll(page);
       r.loadingInitial = false;
+    });
+    _focusLoadedGrid();
+  }
+
+  void _focusLoadedGrid() {
+    if (widget.sourceKey == null || !widget.isTelevision || _initialGridFocus) {
+      return;
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted ||
+          _initialGridFocus ||
+          ModalRoute.of(context)?.isCurrent != true) {
+        return;
+      }
+      final grid = _tabGridKey.currentState;
+      if (grid != null && _sortNode.hasFocus) {
+        _initialGridFocus = true;
+        grid.focusFirst();
+      }
     });
   }
 
@@ -677,82 +666,48 @@ class _CollectionFolderScreenState extends State<CollectionFolderScreen> {
     setState(() => _sort = sort);
   }
 
-  /// The regular catalog browser on this rail's catalog, seeded with what the
-  /// rail already loaded (paging continues rather than restarts) and opened
-  /// on the source's genre.
-  void _openRailSeeAll(_Rail r) {
-    if (r.source.isNative) {
-      final settings = DiscoverCardSettingsScope.maybeOf(context);
-      Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) {
-            final screen = CollectionFolderScreen(
-              collection: _collection,
-              initialFolderIndex: _folderIndex,
-              sourceKey: r.source.key,
-              nativeSources: widget.nativeSources,
-              isTelevision: widget.isTelevision,
-              onOpenItem: widget.onOpenItem,
-              onQuickPlay: widget.onQuickPlay,
-              onItemFocused: widget.onItemFocused,
-              isBound: widget.isBound,
-            );
-            return settings == null
-                ? screen
-                : DiscoverCardSettingsScope(
-                    showTitles: settings.showTitles,
-                    showRatings: settings.showRatings,
-                    showTypeTags: settings.showTypeTags,
-                    child: screen,
-                  );
-          },
-        ),
-      );
-      return;
-    }
+  Future<void> _openList(_Rail r, int index) async {
+    final token = _reqToken;
     final settings = DiscoverCardSettingsScope.maybeOf(context);
-    Navigator.of(context).push(
-      MaterialPageRoute(
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
         builder: (_) {
-          final screen = CatalogSeeAllScreen(
-            addon: r.addon!,
-            initialCatalog: r.catalog!,
-            initialGenre: r.catalog!.supportsGenre ? r.source.genre : null,
-            seedItems: List<StremioMeta>.of(r.items),
-            seedNextSkip: r.nextSkip,
+          final screen = CollectionFolderScreen(
+            collection: _collection,
+            initialFolderIndex: _folderIndex,
+            sourceKey: r.source.key,
+            nativeSources: widget.nativeSources,
             isTelevision: widget.isTelevision,
             onOpenItem: widget.onOpenItem,
             onQuickPlay: widget.onQuickPlay,
             onItemFocused: widget.onItemFocused,
             isBound: widget.isBound,
           );
-          return settings == null
-              ? screen
-              : DiscoverCardSettingsScope(
-                  showTitles: settings.showTitles,
-                  showRatings: settings.showRatings,
-                  showTypeTags: settings.showTypeTags,
-                  child: screen,
-                );
+          return DiscoverCardSettingsScope(
+            showTitles: settings?.showTitles ?? true,
+            showRatings: settings?.showRatings ?? true,
+            showTypeTags: settings?.showTypeTags ?? true,
+            child: screen,
+          );
         },
       ),
     );
+    if (mounted && token == _reqToken) {
+      _galleryKey.currentState?.focusIndex(index);
+    }
   }
 
   // ── TV focus ladder ────────────────────────────────────────────────────
 
-  List<_Rail> get _visibleRails => [
-    for (final r in _rails)
-      if (r.visible) r,
-  ];
+  List<_Rail> get _visibleRails => _rails;
 
   _Rail? get _tabRail =>
       _tab >= 0 && _tab < _rails.length ? _rails[_tab] : null;
 
   List<FocusNode> get _filterNodes => [
-    _folderNode,
+    if (widget.sourceKey == null) _folderNode,
     if (_tabs) ...[
-      if (_rails.isNotEmpty) _listNode,
+      if (_rails.isNotEmpty && widget.sourceKey == null) _listNode,
       _sortNode,
     ] else ...[
       if (_offersAll) _viewNode,
@@ -772,8 +727,8 @@ class _CollectionFolderScreenState extends State<CollectionFolderScreen> {
     return _visibleRails.isEmpty;
   }
 
-  /// DPAD-down from the filter line: the first rail's See-All pill (Rows) or
-  /// the grid on screen (Tabs / All); the Retry button when there's nothing.
+  /// Down from filters returns to the selected gallery card or title grid;
+  /// empty pages offer Retry.
   void _enterContent() {
     if (_showingEmpty) {
       _retryNode.requestFocus();
@@ -792,43 +747,17 @@ class _CollectionFolderScreenState extends State<CollectionFolderScreen> {
       _retryNode.requestFocus();
       return;
     }
-    rails.first.seeAllNode.requestFocus();
+    _galleryKey.currentState?.focusFirst();
   }
 
   /// The chip the grid hands focus back to on DPAD-up.
-  FocusNode get _gridExitNode =>
-      _tabs && _rails.isNotEmpty ? _listNode : _folderNode;
-
-  void _focusRailAbove(_Rail r) {
-    final rails = _visibleRails;
-    final i = rails.indexOf(r);
-    if (i <= 0) {
-      _folderNode.requestFocus();
-      return;
-    }
-    rails[i - 1].gridKey.currentState?.focusFirst();
-  }
-
-  void _focusRailBelow(_Rail r) {
-    final rails = _visibleRails;
-    final i = rails.indexOf(r);
-    if (i < 0 || i + 1 >= rails.length) return;
-    rails[i + 1].seeAllNode.requestFocus();
-  }
-
-  void _ensureRailVisible(_Rail r) {
-    final ctx = r.containerKey.currentContext;
-    if (ctx == null) return;
-    Scrollable.ensureVisible(
-      ctx,
-      alignment: 0.15,
-      duration: const Duration(milliseconds: 180),
-      curve: Curves.easeOut,
-    );
-  }
+  FocusNode get _gridExitNode => widget.sourceKey != null
+      ? _sortNode
+      : _tabs && _rails.isNotEmpty
+      ? _listNode
+      : _folderNode;
 
   KeyEventResult _handleFilterKeys(FocusNode _, KeyEvent event) {
-    if (!widget.isTelevision) return KeyEventResult.ignored;
     return handleSeeAllFilterArrows(
       event,
       _filterNodes,
@@ -841,30 +770,29 @@ class _CollectionFolderScreenState extends State<CollectionFolderScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final subtitle = !_hasFolders
-        ? 'No folders'
-        : '${_folder.title} · ${_rails.length} '
-              'list${_rails.length == 1 ? '' : 's'}';
     return Scaffold(
       backgroundColor: AppThemeScope.of(context).seeAll.bg,
       body: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            SeeAllHeader(
-              title: _collection.title,
-              subtitle: subtitle,
-              isTelevision: widget.isTelevision,
+            CollectionBrowserHero(
+              collectionTitle: _collection.title,
+              folder: _hasFolders ? _folder : null,
+              listTitle: widget.sourceKey != null ? _tabRail?.title : null,
+              source: widget.sourceKey != null
+                  ? _tabRail?.source.provider.toUpperCase()
+                  : null,
+              listCount: _rails.length,
+              backdrop: _collection.backdropImageUrl,
+              item:
+                  widget.sourceKey != null &&
+                      (_tabRail?.items.isNotEmpty ?? false)
+                  ? _tabRail!.items.first
+                  : null,
               backNode: _backNode,
-              onFilterDown: () => _folderNode.requestFocus(),
+              onDown: () => _filterNodes.first.requestFocus(),
             ),
-            if (_hasFolders)
-              FolderHeroBand(
-                key: ValueKey('folder-hero-${_folder.id}'),
-                folder: _folder,
-                collectionBackdropUrl: _collection.backdropImageUrl,
-                isTelevision: widget.isTelevision,
-              ),
             _buildFilterBar(),
             if (_openingTitle != null)
               Row(
@@ -968,20 +896,21 @@ class _CollectionFolderScreenState extends State<CollectionFolderScreen> {
           isTelevision: widget.isTelevision,
           activeCount: _sort != _sortDefault && (_tabs || _showingAll) ? 1 : 0,
           buildChips: () => [
-            StremioDropdown<int>(
-              label: 'Folder',
-              value: _folderIndex,
-              isTelevision: widget.isTelevision,
-              focusNode: _folderNode,
-              options: [
-                for (var i = 0; i < folders.length; i++)
-                  if (widget.sourceKey == null || i == _folderIndex)
-                    StremioDropdownOption(i, folders[i].title),
-              ],
-              onSelected: _onFolderChanged,
-            ),
+            if (widget.sourceKey == null)
+              StremioDropdown<int>(
+                label: 'Folder',
+                value: _folderIndex,
+                isTelevision: widget.isTelevision,
+                focusNode: _folderNode,
+                options: [
+                  for (var i = 0; i < folders.length; i++)
+                    if (widget.sourceKey == null || i == _folderIndex)
+                      StremioDropdownOption(i, folders[i].title),
+                ],
+                onSelected: _onFolderChanged,
+              ),
             if (_tabs) ...[
-              if (_rails.isNotEmpty)
+              if (_rails.isNotEmpty && widget.sourceKey == null)
                 StremioDropdown<int>(
                   label: 'List',
                   value: _tab,
@@ -1004,7 +933,7 @@ class _CollectionFolderScreenState extends State<CollectionFolderScreen> {
                   isTelevision: widget.isTelevision,
                   focusNode: _viewNode,
                   options: const [
-                    StremioDropdownOption(_View.lists, 'Lists'),
+                    StremioDropdownOption(_View.lists, 'Gallery'),
                     StremioDropdownOption(_View.all, 'All'),
                   ],
                   onSelected: _onViewChanged,
@@ -1015,16 +944,6 @@ class _CollectionFolderScreenState extends State<CollectionFolderScreen> {
         ),
       ),
     );
-  }
-
-  /// Same poster geometry as a Home board rail, so a folder reads as Home
-  /// with different lists.
-  DiscoverShelfMetrics _railMetrics(BuildContext context) {
-    final posterW = homeRailPosterWidth(
-      context,
-      isTelevision: widget.isTelevision,
-    );
-    return DiscoverShelfMetrics(cardHeight: posterW * 1.5, hPad: 24);
   }
 
   bool get _hasVisibleLoadFailure {
@@ -1061,83 +980,21 @@ class _CollectionFolderScreenState extends State<CollectionFolderScreen> {
   Widget _buildLists() {
     final rails = _visibleRails;
     if (rails.isEmpty) return _buildEmpty();
-    final m = _railMetrics(context);
-    return ListView.builder(
-      controller: _railsScroll,
-      padding: const EdgeInsets.only(bottom: 24),
-      itemCount: rails.length,
-      itemBuilder: (context, i) => _buildRail(rails[i], m),
-    );
-  }
-
-  Widget _buildRail(_Rail r, DiscoverShelfMetrics m) {
-    final app = AppThemeScope.of(context);
-    final tv = widget.isTelevision;
-    return Column(
-      key: r.containerKey,
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Padding(
-          padding: EdgeInsets.fromLTRB(m.hPad, 14, m.hPad, 0),
-          child: Row(
-            children: [
-              Flexible(
-                child: Text(
-                  r.title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: app.core.tx,
-                    fontSize: tv ? 18 : 16,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: -0.2,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Flexible(
-                child: RowTagPill(
-                  r.addon?.name ?? r.source.provider.toUpperCase(),
-                ),
-              ),
-              const Spacer(),
-              RailSeeAllPill(
-                node: r.seeAllNode,
-                isTelevision: tv,
-                onPressed: () => _openRailSeeAll(r),
-                onUp: () => _focusRailAbove(r),
-                onDown: () => r.gridKey.currentState?.focusFirst(),
-                onFocused: () => _ensureRailVisible(r),
-              ),
-            ],
+    return CollectionListGallery(
+      key: _galleryKey,
+      lists: [
+        for (final r in rails)
+          CollectionListPreview(
+            id: r.source.key,
+            title: r.title,
+            source: r.addon?.name ?? r.source.provider.toUpperCase(),
+            items: r.items,
+            loading: r.loadingInitial,
+            failed: r.error != null,
           ),
-        ),
-        SizedBox(
-          height: m.columnHeight,
-          child: DiscoverShelfScope(
-            metrics: m,
-            child: r.loadingInitial
-                ? SkeletonPosterGrid(isTelevision: tv)
-                : SeeAllPosterGrid(
-                    key: r.gridKey,
-                    items: r.items,
-                    isTelevision: tv,
-                    loadingMore: r.loadingMore,
-                    exhausted: r.exhausted,
-                    onOpen: _openItem,
-                    onQuickPlay: widget.onQuickPlay == null ? null : _quickPlay,
-                    onItemFocused: (item) {
-                      widget.onItemFocused?.call(item);
-                    },
-                    isBound: widget.isBound,
-                    onLoadMore: () => _loadMoreRail(r),
-                    onExitTop: tv ? () => r.seeAllNode.requestFocus() : null,
-                    onExitBottom: tv ? () => _focusRailBelow(r) : null,
-                  ),
-          ),
-        ),
       ],
+      onOpen: (index) => _openList(rails[index], index),
+      onExitTop: () => _folderNode.requestFocus(),
     );
   }
 
