@@ -7,6 +7,28 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
 void main() {
+  test('transport failures are retryable, missing mappings are not', () async {
+    final prefs = MetadataPreferences(
+      providers: {MetadataCategory.posters: 'tmdb'},
+    );
+    final failure = MetadataProviderService(
+      tmdb: TmdbMetadataRepository(
+        token: 'test',
+        clientFactory: () => throw StateError('offline'),
+      ),
+    );
+    final result = await failure.present(
+      const StremioMeta(id: 'tmdb:1', type: 'movie', name: 'A'),
+      preferences: prefs,
+    );
+    expect(result.retryable, true);
+    final unmapped = await failure.present(
+      const StremioMeta(id: 'custom', type: 'movie', name: 'A'),
+      preferences: prefs,
+    );
+    expect(unmapped.retryable, false);
+  });
+
   const original = StremioMeta(
     id: 'tmdb:550',
     imdbId: 'tt0137523',

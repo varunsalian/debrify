@@ -1,3 +1,4 @@
+import '../recoverable_network_image.dart';
 import '../../models/metadata_preferences.dart';
 import '../metadata_presentation_mixin.dart';
 import 'dart:async';
@@ -2534,9 +2535,17 @@ class _CardState extends State<_Card> with MetadataPresentationMixin<_Card> {
         .clamp(100, 1000);
     final meta = presentedMetadata;
     final changed = meta != null && !identical(meta, originalMetadata);
-    final url = c.imageForPresentation(meta, metadataPreferences);
+    final pending = !c.episodeArtwork && metadataArtworkPending(
+      c.shape == SpotlightCardShape.wide ? MetadataCategory.backgrounds : MetadataCategory.posters);
+    final url = pending ? null : c.imageForPresentation(meta, metadataPreferences);
     final displayedTitle = changed ? meta.name : c.title;
     final fallbackUrl = c.imageErrorFallback(meta, metadataPreferences);
+    Widget artPlaceholder() => Center(child: Padding(
+      padding: const EdgeInsets.all(12),
+      child: Text(displayedTitle, maxLines: 2, overflow: TextOverflow.ellipsis,
+        textAlign: TextAlign.center,
+        style: TextStyle(color: app.core.tx.withValues(alpha: 0.5))),
+    ));
     final contained = c.shape.fit == BoxFit.contain;
     // The caption's second line — kind and/or rating, dot-joined. One line
     // whatever it carries, so the caption bed math stays two-state.
@@ -2648,6 +2657,8 @@ class _CardState extends State<_Card> with MetadataPresentationMixin<_Card> {
               ),
               if (c.coverEmoji != null)
                 Center(child: Padding(padding: const EdgeInsets.all(20), child: FittedBox(child: Text(c.coverEmoji!, style: const TextStyle(fontSize: 64))))),
+              if ((url == null || url.isEmpty) && c.metadata != null)
+                artPlaceholder(),
               if (url != null && url.isNotEmpty)
                 Padding(
                   // The breathing room around a contained mark keys off the
@@ -2658,7 +2669,7 @@ class _CardState extends State<_Card> with MetadataPresentationMixin<_Card> {
                         ? (w < widget.height ? w : widget.height) * 0.14
                         : 0,
                   ),
-                  child: CachedNetworkImage(
+                  child: RecoverableNetworkImage(
                     imageUrl: url,
                     fit: c.shape.fit,
                     cacheManager: DebrifyImageCache.manager,
@@ -2675,27 +2686,27 @@ class _CardState extends State<_Card> with MetadataPresentationMixin<_Card> {
                     // GPU actually pays for.
                     fadeInDuration: PlatformUtil.isAndroidTvCached
                         ? const Duration(milliseconds: 220)
-                        : const Duration(milliseconds: 500),
+                        : const Duration(milliseconds: 180),
                     fadeOutDuration: PlatformUtil.isAndroidTvCached
                         ? const Duration(milliseconds: 180)
-                        : const Duration(milliseconds: 1000),
-                    placeholder: (_, __) => const SizedBox.shrink(),
+                        : const Duration(milliseconds: 100),
+                    placeholder: (_, __) => artPlaceholder(),
                     errorWidget: (_, __, ___) =>
                         fallbackUrl != null &&
                             fallbackUrl.isNotEmpty &&
                             fallbackUrl != url
-                        ? CachedNetworkImage(
+                        ? RecoverableNetworkImage(
                             imageUrl: fallbackUrl,
                             fit: c.shape.fit,
                             cacheManager: DebrifyImageCache.manager,
                             memCacheWidth: decodeW,
                             fadeInDuration:
                                 const Duration(milliseconds: 220),
-                            placeholder: (_, __) => const SizedBox.shrink(),
+                            placeholder: (_, __) => artPlaceholder(),
                             errorWidget: (_, __, ___) =>
-                                const SizedBox.shrink(),
+                                artPlaceholder(),
                           )
-                        : const SizedBox.shrink(),
+                        : artPlaceholder(),
                   ),
                 ),
               if (c.collectionGifUrl != null || c.collectionVideoUrl != null)

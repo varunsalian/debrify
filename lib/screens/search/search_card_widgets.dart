@@ -139,7 +139,8 @@ class _StremioCardState extends State<_StremioCard>
       overrideUrl: widget.artUrl,
       collection: folder != null,
     );
-    final poster = artwork.primary;
+    final poster = metadataArtworkPending(wide ? MetadataCategory.backgrounds : MetadataCategory.posters)
+        ? null : artwork.primary;
     final fallbackPoster = artwork.fallback;
     final isMovie = item.type.toLowerCase() == 'movie';
     final supportsWatched = isMovie || item.type.toLowerCase() == 'series';
@@ -148,7 +149,7 @@ class _StremioCardState extends State<_StremioCard>
     // [CardFocusRise] so tuning lands once for every board card.
     final List<Widget> layers = [
       if (poster != null && poster.isNotEmpty)
-        CachedNetworkImage(
+        RecoverableNetworkImage(
           imageUrl: poster,
           fit: BoxFit.cover,
           // Decode board posters at a capped width — tiles are small,
@@ -169,7 +170,7 @@ class _StremioCardState extends State<_StremioCard>
           errorWidget: (_, __, ___) =>
               poster != fallbackPoster &&
                   fallbackPoster != null && fallbackPoster.isNotEmpty
-              ? CachedNetworkImage(
+              ? RecoverableNetworkImage(
                   imageUrl: fallbackPoster,
                   fit: BoxFit.cover,
                   memCacheWidth: widget.isTelevision ? 320 : 480,

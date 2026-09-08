@@ -8,7 +8,12 @@ import 'metadata_preferences_service.dart';
 import 'tmdb_metadata_repository.dart';
 
 class MetadataPresentation {
-  const MetadataPresentation(this.item, {this.unavailable = const {}});
+  const MetadataPresentation(
+    this.item, {
+    this.unavailable = const {},
+    this.retryable = false,
+  });
+  final bool retryable;
   final StremioMeta item;
   final Set<MetadataCategory> unavailable;
 }
@@ -133,6 +138,7 @@ class MetadataProviderService {
       return MetadataPresentation(item);
     }
     final sources = <String, StremioMeta?>{};
+    var retryable = false;
     final needed = categories
         .map(prefs.provider)
         .where((p) => p != MetadataPreferences.current)
@@ -174,7 +180,9 @@ class MetadataProviderService {
                       data[field] = english[field];
                     }
                   }
-                } catch (_) {}
+                } catch (_) {
+                  retryable = true;
+                }
               }
               if (prefs.artworkLanguage == 'original' &&
                   data['original_language'] is String &&
@@ -191,7 +199,9 @@ class MetadataProviderService {
                     },
                     isRelevant,
                   );
-                } catch (_) {}
+                } catch (_) {
+                  retryable = true;
+                }
               }
               sources[provider] = fromTmdb(item, data, prefs);
             }
@@ -199,6 +209,7 @@ class MetadataProviderService {
             sources[provider] = await _boundedAddon(provider, item, isRelevant);
           }
         } catch (_) {
+          retryable = true;
           // Preserve the usable initial display; callers can show the explicit
           // unavailable-category state rather than blocking the entire page.
         }
@@ -257,6 +268,7 @@ class MetadataProviderService {
         sourceAddon: item.sourceAddon,
       ),
       unavailable: Set.unmodifiable(missing),
+      retryable: retryable,
     );
   }
 

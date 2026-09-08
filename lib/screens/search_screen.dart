@@ -1,3 +1,4 @@
+import '../widgets/recoverable_network_image.dart';
 import '../models/metadata_card_artwork.dart';
 import '../models/hero_metadata_presentation.dart';
 import '../services/profiles/profile_runtime.dart';

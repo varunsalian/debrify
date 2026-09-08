@@ -1,7 +1,8 @@
+import '../models/metadata_preferences.dart';
 import 'metadata_presentation_mixin.dart';
 import 'dart:async';
 
-import 'package:cached_network_image/cached_network_image.dart';
+import 'recoverable_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -110,7 +111,7 @@ class _CatalogItemTileState extends State<CatalogItemTile>
   Widget build(BuildContext context) {
     final app = AppThemeScope.of(context);
     final item = presentedMetadata!;
-    final poster = item.poster;
+    final poster = metadataArtworkPending(MetadataCategory.posters) ? null : item.poster;
     final rating = item.imdbRating;
     final typeLabel = item.type == 'series' ? 'SERIES' : 'MOVIE';
     final isMovie = item.type.toLowerCase() == 'movie';
@@ -136,7 +137,7 @@ class _CatalogItemTileState extends State<CatalogItemTile>
     // where a filter layer per poster would not be.
     List<Widget> artwork((Color, BlendMode)? blend) => <Widget>[
       if (poster != null && poster.isNotEmpty)
-        CachedNetworkImage(
+        RecoverableNetworkImage(
           imageUrl: poster,
           fit: BoxFit.cover,
           color: blend?.$1,
