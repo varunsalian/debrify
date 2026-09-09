@@ -812,15 +812,15 @@ void main() {
     'sorted LIST retries incomplete snapshot before showing any titles',
     () async {
       final pages = <int>[];
-      var fail = true;
+      var failuresRemaining = 2;
       final service = CollectionNativeSourceService(
         tmdbToken: 'dummy',
         resolveIds: false,
         client: MockClient((request) async {
           final page = int.parse(request.url.queryParameters['page']!);
           pages.add(page);
-          if (page == 2 && fail) {
-            fail = false;
+          if (page == 2 && failuresRemaining > 0) {
+            failuresRemaining--;
             return http.Response('{}', 503);
           }
           return http.Response(
@@ -845,7 +845,7 @@ void main() {
         throwsA(isA<CollectionSourceException>()),
       );
       final first = await service.fetch(ref, 1);
-      expect(pages, [1, 2, 2]);
+      expect(pages, [1, 2, 2, 2]);
       expect(first.items.map((m) => m.id), [
         for (var id = 40; id >= 21; id--) 'tmdb:$id',
       ]);
@@ -854,15 +854,15 @@ void main() {
 
   test('local LIST retry preserves buffered items and remote cursor', () async {
     final calls = <int>[];
-    var fail = true;
+    var failuresRemaining = 2;
     final service = CollectionNativeSourceService(
       tmdbToken: 'dummy',
       resolveIds: false,
       client: MockClient((request) async {
         final page = int.parse(request.url.queryParameters['page']!);
         calls.add(page);
-        if (page == 2 && fail) {
-          fail = false;
+        if (page == 2 && failuresRemaining > 0) {
+          failuresRemaining--;
           return http.Response('{}', 503);
         }
         return http.Response(
@@ -892,7 +892,7 @@ void main() {
     final retried = await pager.nextPage();
     expect(retried.first.id, 'tmdb:21');
     expect(retried.last.id, 'tmdb:40');
-    expect(calls, [1, 2, 2]);
+    expect(calls, [1, 2, 2, 2]);
     expect((await pager.nextPage()).last.id, 'tmdb:60');
     expect(pager.exhausted, true);
   });

@@ -19,6 +19,7 @@ class CollectionFolderLoader {
     CatalogFetch? fetch,
     CollectionNativeSourceService? native,
     bool forceRefresh = false,
+    bool previews = false,
     bool Function(StremioMeta)? hides,
   }) {
     final load =
@@ -43,8 +44,13 @@ class CollectionFolderLoader {
         if (!resolved.add(source.key)) continue;
         _sources.add(
           NativeCollectionPager(
-            fetch: (page) => (native ?? CollectionNativeSourceService.instance)
-                .fetch(source, page),
+            fetch: (page) => previews
+                ? (native ?? CollectionNativeSourceService.instance)
+                      .fetchPreview(source, page)
+                : (native ?? CollectionNativeSourceService.instance).fetch(
+                    source,
+                    page,
+                  ),
             hides: hides ?? WatchedFilter.predicate,
           ),
         );

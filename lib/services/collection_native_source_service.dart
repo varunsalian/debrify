@@ -1,7 +1,9 @@
 import 'dart:convert';
 import 'dart:async';
 import 'dart:collection';
+import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 import '../models/home_collection.dart';
@@ -16,22 +18,56 @@ import 'trakt/trakt_item_transformer.dart';
 class CollectionNativeSourceService {
   CollectionNativeSourceService({
     http.Client? client,
+    http.Client Function()? tmdbClientFactory,
     String? tmdbToken,
     this.resolveIds = true,
     this.enrichmentBudget = const Duration(seconds: 3),
+    this.requestBudget = const Duration(seconds: 25),
+    this.retryDelay = const Duration(milliseconds: 200),
   }) : _client = client ?? http.Client(),
-       _tmdbClient = client ?? TmdbHttpClient(),
+       _tmdbClientFactory =
+           tmdbClientFactory ??
+           (client != null
+               ? (() => client)
+               : (() => TmdbHttpClient(dnsCache: _dnsCache))),
+       _ownsTmdbClients = tmdbClientFactory != null || client == null,
        _tmdbToken =
            tmdbToken ?? const String.fromEnvironment('TMDB_READ_ACCESS_TOKEN');
 
   static final instance = CollectionNativeSourceService();
   final http.Client _client;
-  final http.Client _tmdbClient;
+  static final _dnsCache = TmdbDnsCache();
+  final http.Client Function() _tmdbClientFactory;
+  final bool _ownsTmdbClients;
+  final _activeClients = <http.Client>{};
+  final _idleClients = <http.Client>[];
+  bool _closed = false;
+  final Duration requestBudget;
+  final Duration retryDelay;
+  DateTime? _rateLimitedUntil;
+  final identityChanges = ValueNotifier<int>(0);
+  final _responses = <String, ({DateTime expires, String body})>{};
+  final _pendingResponses = <String, Future<Map<String, dynamic>>>{};
+  int _responseBytes = 0;
   final String _tmdbToken;
   void close() {
+    if (_closed) return;
+    _closed = true;
+    _identityQueue.clear();
     _client.close();
-    if (!identical(_client, _tmdbClient)) _tmdbClient.close();
+    if (_ownsTmdbClients) {
+      for (final client in _activeClients.toList()) {
+        client.close();
+      }
+      for (final client in _idleClients) {
+        client.close();
+      }
+      _idleClients.clear();
+    }
+    _responses.clear();
+    identityChanges.dispose();
   }
+
   static const pageSize = 50;
   static const tmdbLocalPageSize = 20;
   final _localTmdbLists = <String, _TmdbListCursor>{};
@@ -39,13 +75,25 @@ class CollectionNativeSourceService {
   final Duration enrichmentBudget;
   final _identityGate = _NativeRequestGate(2);
   final _externalIds = <String, String?>{};
+  // Tie completed hydration to the lifetime of each loaded card, rather than
+  // to the bounded cross-page ID cache. Weak keys release unloaded cards.
+  // A value identical to the key records a successful "no IMDb ID" lookup.
+  final _hydratedItems = Expando<StremioMeta>();
   final _pendingIds = <String, Future<String?>>{};
+  final _identityQueue = <String, StremioMeta>{};
+  final _identityRetryAfter = <String, DateTime>{};
+  final _prefetching = <String>{};
+  int _identityWorkers = 0;
   final _catalogGate = _NativeRequestGate(4);
 
   /// IMDb identities make native titles work with watched state, metadata
   /// addons, and stream addons. Preserve TMDB-only titles when no mapping exists.
   Future<StremioMeta> resolveIdentity(StremioMeta meta) async {
-    if (!meta.id.startsWith('tmdb:') || meta.imdbId != null) return meta;
+    if (!meta.id.startsWith('tmdb:')) return meta;
+    meta = withCachedIdentity(meta);
+    if (meta.imdbId != null) {
+      return StremioMeta.fromJson({...meta.toJson(), 'id': meta.imdbId});
+    }
     final numericId = int.tryParse(meta.id.substring(5));
     if (numericId == null || numericId <= 0) return meta;
     final key = '${meta.type}:$numericId';
@@ -61,6 +109,8 @@ class CollectionNativeSourceService {
         _externalIds.remove(_externalIds.keys.first);
       }
       _externalIds[key] = value;
+      _retainIdentity(meta, value);
+      if (!_closed && value != null) identityChanges.value++;
       return value;
     }
 
@@ -73,6 +123,7 @@ class CollectionNativeSourceService {
                 _pendingIds.remove(key);
               }),
             );
+      _retainIdentity(meta, id);
       if (id == null) return meta;
       return StremioMeta.fromJson({
         ...meta.toJson(),
@@ -96,7 +147,8 @@ class CollectionNativeSourceService {
     var next = 0;
     var finished = false;
     Future<void> worker() async {
-      while (!finished &&
+      while (!_closed &&
+          !finished &&
           next < items.length &&
           elapsed.elapsed < enrichmentBudget) {
         final index = next++;
@@ -121,16 +173,193 @@ class CollectionNativeSourceService {
     );
   }
 
+  /// Browsing never waits for external IDs. Bounded enrichment runs
+  /// separately, and listeners can refresh watched markers from the cache.
+  Future<CollectionSourcePage> fetchPreview(
+    CollectionCatalogSource source,
+    int page,
+  ) async {
+    final result = source.provider == 'tmdb'
+        ? await _tmdb(source, page, enrich: false)
+        : source.provider == 'trakt'
+        ? await _trakt(source, page, enrich: false)
+        : throw CollectionSourceException(
+            'Unsupported collection provider: ${source.provider}.',
+          );
+    prefetchIdentities(result.items);
+    return result;
+  }
+
+  /// Keep optional work bounded and off the catalog path. Visible lists can
+  /// offer their unresolved items again as capacity becomes available.
+  void prefetchIdentities(List<StremioMeta> items) {
+    if (!resolveIds || _closed) return;
+    for (final item in items) {
+      if (_identityQueue.length >= 128) break;
+      if (!item.id.startsWith('tmdb:') || item.imdbId != null) continue;
+      withCachedIdentity(item);
+      if (_hydratedItems[item] != null) continue;
+      final key = '${item.type}:${item.id.substring(5)}';
+      if (_externalIds.containsKey(key) ||
+          _prefetching.contains(key) ||
+          (_identityRetryAfter[key]?.isAfter(DateTime.now()) ?? false)) {
+        continue;
+      }
+      _identityQueue[key] = item;
+    }
+    while (_identityWorkers < 2 && _identityQueue.isNotEmpty) {
+      _identityWorkers++;
+      unawaited(_runIdentityWorker());
+    }
+  }
+
+  Future<void> _runIdentityWorker() async {
+    try {
+      while (!_closed && _identityQueue.isNotEmpty) {
+        final key = _identityQueue.keys.first;
+        final item = _identityQueue.remove(key)!;
+        _prefetching.add(key);
+        try {
+          await resolveIdentity(item);
+          if (!_externalIds.containsKey(key)) {
+            if (_identityRetryAfter.length >= 128) {
+              _identityRetryAfter.remove(_identityRetryAfter.keys.first);
+            }
+            _identityRetryAfter[key] = DateTime.now().add(
+              const Duration(seconds: 30),
+            );
+          }
+        } finally {
+          _prefetching.remove(key);
+        }
+      }
+    } finally {
+      _identityWorkers--;
+    }
+  }
+
+  /// Preserve the catalog ID so late identity enrichment cannot move focus.
+  StremioMeta withCachedIdentity(StremioMeta item) {
+    if (!item.id.startsWith('tmdb:') || item.imdbId != null) return item;
+    final retained = _hydratedItems[item];
+    if (retained != null) return retained;
+    final key = '${item.type}:${item.id.substring(5)}';
+    if (!_externalIds.containsKey(key)) return item;
+    return _retainIdentity(item, _externalIds[key]);
+  }
+
+  StremioMeta _retainIdentity(StremioMeta item, String? id) {
+    final retained = _hydratedItems[item];
+    if (retained != null && (id == null || retained.imdbId == id)) {
+      return retained;
+    }
+    return _hydratedItems[item] = id == null
+        ? item
+        : StremioMeta.fromJson({
+            ...item.toJson(),
+            'id': item.id,
+            'imdb_id': id,
+          });
+  }
+
+  Future<http.Response> _readTmdb(
+    Uri uri,
+    Map<String, String> headers,
+    Duration budget,
+  ) async {
+    final elapsed = Stopwatch()..start();
+    for (var attempt = 0; attempt < 2; attempt++) {
+      if (_closed) throw const SocketException('Collection client is closed');
+      final remaining = budget - elapsed.elapsed;
+      if (remaining <= Duration.zero) throw TimeoutException('TMDB timed out');
+      // Lease one client per active request: healthy connections are reused,
+      // while a timeout can close its transport without cancelling siblings.
+      final client = _idleClients.isEmpty
+          ? _tmdbClientFactory()
+          : _idleClients.removeLast();
+      var reusable = false;
+      _activeClients.add(client);
+      final canRetry = attempt == 0 && remaining > retryDelay * 2;
+      try {
+        // Catalog requests can reserve a retry window. Identity lookups have
+        // only three seconds: a healthy two-second response must still finish.
+        // Fast failures can retry using whatever remains of that full budget.
+        final identity = uri.path.endsWith('/external_ids');
+        final limit = canRetry && !identity ? remaining ~/ 2 : remaining;
+        final response = await (() async {
+          final request = http.Request('GET', uri)..headers.addAll(headers);
+          final streamed = await client.send(request);
+          final bytes = <int>[];
+          await for (final chunk in streamed.stream) {
+            if (bytes.length + chunk.length > 4 * 1024 * 1024) {
+              throw const CollectionSourceException(
+                'TMDB response is too large.',
+              );
+            }
+            bytes.addAll(chunk);
+          }
+          return http.Response.bytes(
+            bytes,
+            streamed.statusCode,
+            headers: streamed.headers,
+          );
+        })().timeout(limit);
+        reusable = response.statusCode == 200;
+        if (response.statusCode == 429) {
+          final seconds =
+              int.tryParse(response.headers['retry-after'] ?? '') ?? 30;
+          _rateLimitedUntil = DateTime.now().add(
+            Duration(seconds: seconds.clamp(1, 300)),
+          );
+        }
+        if (!canRetry ||
+            !const {500, 502, 503, 504}.contains(response.statusCode)) {
+          return response;
+        }
+      } on http.ClientException {
+        if (!canRetry) rethrow;
+      } on SocketException {
+        if (!canRetry) rethrow;
+      } on TimeoutException {
+        if (!canRetry) rethrow;
+      } finally {
+        _activeClients.remove(client);
+        if (_ownsTmdbClients) {
+          if (reusable && !_closed && _idleClients.length < 6) {
+            _idleClients.add(client);
+          } else {
+            client.close();
+          }
+        }
+      }
+      if (budget - elapsed.elapsed <= retryDelay) {
+        throw TimeoutException('TMDB timed out');
+      }
+      await Future<void>.delayed(retryDelay);
+    }
+    throw const CollectionSourceException('TMDB could not load this list.');
+  }
+
   Future<http.Response> _get(Uri uri, Map<String, String> headers) async {
     final identity = uri.path.endsWith('/external_ids');
-    final client = uri.host == 'api.themoviedb.org' ? _tmdbClient : _client;
-    Future<http.Response> request() => client
-        .get(uri, headers: headers)
-        .timeout(identity ? enrichmentBudget : const Duration(seconds: 25));
+    final tmdb = uri.host == 'api.themoviedb.org';
+    final budget = identity ? enrichmentBudget : requestBudget;
+    Future<http.Response> request() {
+      if (_closed) throw const SocketException('Collection client is closed');
+      if (tmdb && (_rateLimitedUntil?.isAfter(DateTime.now()) ?? false)) {
+        throw const CollectionSourceException(
+          'TMDB is receiving too many requests. Wait a moment, then retry.',
+        );
+      }
+      return tmdb
+          ? _readTmdb(uri, headers, budget)
+          : _client.get(uri, headers: headers).timeout(budget);
+    }
+
     // Background metadata never occupies the catalog request gate.
     final response = identity
         ? await _identityGate.run(request, enrichmentBudget)
-        : await _catalogGate.run(request, const Duration(seconds: 25));
+        : await _catalogGate.run(request, requestBudget);
     final provider = uri.host == 'api.themoviedb.org' ? 'TMDB' : 'Trakt';
     if (response.statusCode == 401 || response.statusCode == 403) {
       throw CollectionSourceException(
@@ -156,6 +385,47 @@ class CollectionNativeSourceService {
   }
 
   Future<Map<String, dynamic>> _tmdbGet(
+    String path, [
+    Map<String, String> query = const {},
+  ]) async {
+    if (_closed) throw const SocketException('Collection client is closed');
+    if (path.endsWith('/external_ids')) return _loadTmdb(path, query);
+    final key = jsonEncode([path, SplayTreeMap<String, String>.from(query)]);
+    final cached = _responses.remove(key);
+    if (cached != null) {
+      if (cached.expires.isAfter(DateTime.now())) {
+        _responses[key] = cached;
+        return jsonDecode(cached.body) as Map<String, dynamic>;
+      }
+      _responseBytes -= cached.body.length * 2;
+    }
+    final pending = _pendingResponses[key];
+    if (pending != null) {
+      return jsonDecode(jsonEncode(await pending)) as Map<String, dynamic>;
+    }
+    final work = _loadTmdb(path, query);
+    _pendingResponses[key] = work;
+    try {
+      final data = await work;
+      if (!_closed) {
+        final body = jsonEncode(data);
+        _responses[key] = (
+          expires: DateTime.now().add(const Duration(minutes: 5)),
+          body: body,
+        );
+        _responseBytes += body.length * 2;
+        while (_responses.length > 128 || _responseBytes > 8 * 1024 * 1024) {
+          _responseBytes -=
+              _responses.remove(_responses.keys.first)!.body.length * 2;
+        }
+      }
+      return data;
+    } finally {
+      _pendingResponses.remove(key);
+    }
+  }
+
+  Future<Map<String, dynamic>> _loadTmdb(
     String path, [
     Map<String, String> query = const {},
   ]) async {
@@ -228,7 +498,17 @@ class CollectionNativeSourceService {
         'year' => tv ? 'first_air_date_year' : 'primary_release_year',
         _ => _filterNames[entry.key],
       };
-      if (key != null && !(tv && const {'certification_country', 'certification', 'with_cast', 'with_crew', 'with_people'}.contains(key))) query[key] = '${entry.value}';
+      if (key != null &&
+          !(tv &&
+              const {
+                'certification_country',
+                'certification',
+                'with_cast',
+                'with_crew',
+                'with_people',
+              }.contains(key))) {
+        query[key] = '${entry.value}';
+      }
     }
     if (source.tmdbSourceType == 'COMPANY') {
       query['with_companies'] = '${source.tmdbId}';
@@ -247,15 +527,19 @@ class CollectionNativeSourceService {
       query.putIfAbsent('watch_region', () => 'US');
     }
     if (query.containsKey('with_watch_providers')) {
-      query.putIfAbsent('with_watch_monetization_types', () => 'flatrate|free|ads|rent|buy');
+      query.putIfAbsent(
+        'with_watch_monetization_types',
+        () => 'flatrate|free|ads|rent|buy',
+      );
     }
     return query;
   }
 
   Future<CollectionSourcePage> _tmdb(
     CollectionCatalogSource source,
-    int page,
-  ) async {
+    int page, {
+    bool enrich = true,
+  }) async {
     final kind = source.tmdbSourceType;
     if (!const {
       'LIST',
@@ -306,7 +590,9 @@ class CollectionNativeSourceService {
             meta,
     ];
     return CollectionSourcePage(
-      items: resolveIds ? await _enrichPage(items) : items,
+      items: resolveIds && enrich
+          ? await _enrichPage(items)
+          : items.map(withCachedIdentity).toList(),
       rawCount: raw.length,
       hasMore: hasMore,
     );
@@ -479,8 +765,9 @@ class CollectionNativeSourceService {
 
   Future<CollectionSourcePage> _trakt(
     CollectionCatalogSource source,
-    int page,
-  ) async {
+    int page, {
+    bool enrich = true,
+  }) async {
     if (source.traktListId == null || source.traktListId! <= 0) {
       throw const CollectionSourceException(
         'This Trakt source needs a valid numeric list ID.',
@@ -533,7 +820,9 @@ class CollectionNativeSourceService {
           if (_traktMeta(item, type) case final meta?) meta,
     ];
     return CollectionSourcePage(
-      items: resolveIds ? await _enrichPage(items) : items,
+      items: resolveIds && enrich
+          ? await _enrichPage(items)
+          : items.map(withCachedIdentity).toList(),
       rawCount: raw.length,
       hasMore: pageCount != null ? page < pageCount : raw.length >= pageSize,
     );

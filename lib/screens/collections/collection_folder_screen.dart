@@ -73,7 +73,7 @@ class _Rail {
   }) {
     if (source.isNative) {
       pager = NativeCollectionPager(
-        fetch: (page) => native.fetch(source, page),
+        fetch: (page) => native.fetchPreview(source, page),
         hides: WatchedFilter.predicate,
       );
       return;
@@ -120,6 +120,56 @@ class _Rail {
 }
 
 class _CollectionFolderScreenState extends State<CollectionFolderScreen> {
+  CollectionNativeSourceService get _native =>
+      widget.nativeSources ?? CollectionNativeSourceService.instance;
+
+  void _identitiesChanged() {
+    if (mounted) setState(() {});
+  }
+
+  final _emptyPageContinuations = <Object>{};
+
+  void _continueEmptyPage(
+    Object owner,
+    bool Function() isCurrent,
+    Future<void> Function() load,
+  ) {
+    if (!_emptyPageContinuations.add(owner)) return;
+    final token = _reqToken;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _emptyPageContinuations.remove(owner);
+      if (mounted && token == _reqToken && isCurrent()) {
+        unawaited(load());
+      }
+    });
+  }
+
+  bool _railCanContinue(_Rail rail) => !rail.exhausted && rail.error == null;
+  bool get _allCanContinue =>
+      _loader != null && !_allExhausted && !_loader!.hasErrors;
+
+  List<StremioMeta> _displayItems(List<StremioMeta> items) {
+    _native.prefetchIdentities(items);
+    final seen = <String>{};
+    return [
+      for (final item in items.map(_native.withCachedIdentity))
+        if (!WatchedFilter.hides(item) &&
+            seen.add('${item.type}:${item.effectiveImdbId ?? item.id}'))
+          item,
+    ];
+  }
+
+  @override
+  void didUpdateWidget(covariant CollectionFolderScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final previous =
+        oldWidget.nativeSources ?? CollectionNativeSourceService.instance;
+    if (previous != _native) {
+      previous.identityChanges.removeListener(_identitiesChanged);
+      _native.identityChanges.addListener(_identitiesChanged);
+    }
+  }
+
   final StremioService _stremio = StremioService.instance;
 
   static const String _sortDefault = 'default';
@@ -197,6 +247,7 @@ class _CollectionFolderScreenState extends State<CollectionFolderScreen> {
   @override
   void initState() {
     super.initState();
+    _native.identityChanges.addListener(_identitiesChanged);
     AnalyticsService.screenView('collection_folder');
     _collection = widget.collection;
     MainPageBridge.addHomeSettingsListener(_onConfigurationChanged);
@@ -290,6 +341,7 @@ class _CollectionFolderScreenState extends State<CollectionFolderScreen> {
 
   @override
   void dispose() {
+    _native.identityChanges.removeListener(_identitiesChanged);
     MainPageBridge.removeHomeSettingsListener(_onConfigurationChanged);
     _stremio.removeAddonsChangedListener(_onConfigurationChanged);
     _backNode.dispose();
@@ -522,6 +574,7 @@ class _CollectionFolderScreenState extends State<CollectionFolderScreen> {
       folder: _folder.copyWith(sources: _enabledSources),
       installedAddons: _addons,
       forceRefresh: forceRefresh,
+      previews: true,
       native: widget.nativeSources,
     );
     setState(() {
@@ -719,10 +772,17 @@ class _CollectionFolderScreenState extends State<CollectionFolderScreen> {
 
   bool get _showingEmpty {
     if (!_booted) return false;
-    if (_showingAll) return !_allLoadingInitial && _allItems.isEmpty;
+    if (_showingAll) {
+      return !_allLoadingInitial &&
+          !_allCanContinue &&
+          _displayItems(_allItems).isEmpty;
+    }
     if (_tabs) {
       final r = _tabRail;
-      return r == null || (!r.loadingInitial && r.items.isEmpty);
+      return r == null ||
+          (!r.loadingInitial &&
+              !_railCanContinue(r) &&
+              _displayItems(r.items).isEmpty);
     }
     return _visibleRails.isEmpty;
   }
@@ -988,7 +1048,7 @@ class _CollectionFolderScreenState extends State<CollectionFolderScreen> {
             id: r.source.key,
             title: r.title,
             source: r.addon?.name ?? r.source.provider.toUpperCase(),
-            items: r.items,
+            items: _displayItems(r.items),
             loading: r.loadingInitial,
             failed: r.error != null,
           ),
@@ -1005,12 +1065,23 @@ class _CollectionFolderScreenState extends State<CollectionFolderScreen> {
     if (r.loadingInitial) {
       return SkeletonPosterGrid(isTelevision: widget.isTelevision);
     }
-    if (r.items.isEmpty) return _buildEmpty();
+    final items = _displayItems(r.items);
+    if (items.isEmpty) {
+      if (!_railCanContinue(r)) return _buildEmpty();
+      if (!r.loadingMore) {
+        _continueEmptyPage(
+          r,
+          () => !_showingAll && identical(_tabRail, r),
+          () => _loadMoreRail(r),
+        );
+      }
+      return SkeletonPosterGrid(isTelevision: widget.isTelevision);
+    }
     return SeeAllPosterGrid(
       // Keyed per list so switching tabs remounts the grid (fresh scroll and
       // focus memory) instead of morphing one list into another.
       key: _tabGridKey,
-      items: _sorted(r.items),
+      items: _sorted(items),
       isTelevision: widget.isTelevision,
       loadingMore: r.loadingMore,
       exhausted: r.exhausted,
@@ -1029,10 +1100,22 @@ class _CollectionFolderScreenState extends State<CollectionFolderScreen> {
     if (_allLoadingInitial || (!_allStarted && _rails.isNotEmpty)) {
       return SkeletonPosterGrid(isTelevision: widget.isTelevision);
     }
-    if (_allItems.isEmpty) return _buildEmpty();
+    final items = _displayItems(_allItems);
+    if (items.isEmpty) {
+      if (!_allCanContinue) return _buildEmpty();
+      final loader = _loader!;
+      if (!_allLoadingMore) {
+        _continueEmptyPage(
+          loader,
+          () => _showingAll && identical(_loader, loader),
+          _loadMoreAll,
+        );
+      }
+      return SkeletonPosterGrid(isTelevision: widget.isTelevision);
+    }
     return SeeAllPosterGrid(
       key: _allGridKey,
-      items: _sorted(_allItems),
+      items: _sorted(items),
       isTelevision: widget.isTelevision,
       loadingMore: _allLoadingMore,
       exhausted: _allExhausted,

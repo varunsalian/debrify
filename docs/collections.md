@@ -362,3 +362,28 @@ The TLS handshake retains its raw transport until completion; timeout and client
 closure close that transport, and late TLS results are disposed. The TLS
 regression test requires OpenSSL on PATH and generates an isolated temporary CA
 and server certificate for each run, so no checked-in certificate can expire.
+
+### Fast native previews and transient recovery
+
+Collection rails and merged grids use `fetchPreview`: catalog cards are returned
+before IMDb external-ID lookups. Two background workers fill a bounded queue
+(128 pending identities); visible lists refresh cached identities for watched
+markers, hiding, and cross-provider deduplication. Catalog IDs stay stable to
+preserve focus. Opening a title still resolves its addon-compatible IMDb ID.
+Hydrated metadata is memoized per loaded card using weak keys. Rebuilds reuse
+the same object, and shared ID-cache eviction does not requeue completed cards
+(including confirmed missing IMDb IDs) or remove their watched-state mapping.
+Failed background identities have a 30-second prefetch cooldown.
+
+TMDB catalog GETs coalesce identical requests and cache successful JSON for five
+minutes (128 entries / 8 MiB of string storage). Errors and invalid JSON are not
+cached. Each request leases a reusable client; a failed or timed-out transport
+is closed without cancelling sibling requests. Transient connection failures,
+timeouts, and HTTP 500/502/503/504 get one automatic retry within the request
+budget. Authorization/not-found errors are not retried, and HTTP 429 establishes
+a cooldown. This does not promise recovery from a persistent outage.
+
+The opt-in `live Kaptain previews cold and cached` test in
+`test/collection_native_live_test.dart` samples 48 real fixture sources, first
+with four concurrent loads and then with twelve warm loads. Run with the local
+TMDB dart-defines and `COLLECTION_LIVE_TESTS=true`; tokens are never printed.

@@ -7,6 +7,8 @@ import 'package:debrify/screens/collections/collection_folder_screen.dart';
 import 'package:debrify/services/collection_native_source_service.dart';
 import 'package:debrify/services/home_collections_store.dart';
 import 'package:debrify/services/main_page_bridge.dart';
+import 'package:debrify/services/hide_watched_prefs.dart';
+import 'package:debrify/services/watched_status_service.dart';
 import 'package:debrify/services/stremio_service.dart';
 import 'package:debrify/widgets/see_all/see_all_poster_grid.dart';
 import 'package:debrify/widgets/collections/collection_list_gallery.dart';
@@ -67,6 +69,213 @@ void main() {
           ),
         ),
       );
+
+  for (final all in [false, true]) {
+    testWidgets(
+      'late watched filtering automatically reaches unwatched next page (All $all)',
+      (tester) async {
+        await tester.runAsync(() async {
+          SharedPreferences.setMockInitialValues({
+            HideWatchedPrefs.key: true,
+            'finished_movies_v1': ['tt1234567'],
+          });
+          HideWatchedPrefs.debugReset();
+          await HideWatchedPrefs.warmUp();
+          WatchedStatusService.instance.resetProfileScope();
+          WatchedStatusService.instance.ensureStarted();
+          await WatchedStatusService.instance.firstSnapshot;
+        });
+        addTearDown(() {
+          HideWatchedPrefs.debugReset();
+          WatchedStatusService.instance.resetProfileScope();
+        });
+        final identity = Completer<http.Response>();
+        var secondPageRequests = 0;
+        final native = CollectionNativeSourceService(
+          tmdbToken: 'dummy',
+          client: MockClient((request) async {
+            if (request.url.path.endsWith('/external_ids')) {
+              if (request.url.path.contains('/100/')) {
+                return http.Response('{"imdb_id":"tt9999999"}', 200);
+              }
+              return identity.future;
+            }
+            final page = int.parse(request.url.queryParameters['page']!);
+            if (page == 2) secondPageRequests++;
+            return http.Response(
+              jsonEncode({
+                'results': page == 1
+                    ? [
+                        for (var id = 1; id <= 40; id++)
+                          {'id': id, 'title': 'Watched $id'},
+                      ]
+                    : [
+                        {'id': 100, 'title': 'Unwatched next page'},
+                      ],
+                'total_pages': 2,
+              }),
+              200,
+            );
+          }),
+        );
+        addTearDown(native.close);
+        final base = collection(viewMode: 'TABBED_GRID');
+        final sample = HomeCollection(
+          id: base.id,
+          title: base.title,
+          viewMode: base.viewMode,
+          folders: [
+            base.folders.single.copyWith(
+              sources: [
+                ...base.folders.single.sources,
+                CollectionCatalogSource.fromJson({
+                  'provider': 'tmdb',
+                  'tmdbSourceType': 'COMPANY',
+                  'tmdbId': 420,
+                  'title': 'Company',
+                })!,
+              ],
+            ),
+          ],
+        );
+        await tester.pumpWidget(
+          MaterialApp(
+            home: CollectionFolderScreen(
+              collection: sample,
+              isTelevision: true,
+              nativeSources: native,
+              onOpenItem: (_) {},
+            ),
+          ),
+        );
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 100));
+        if (all) {
+          final list = tester
+              .widgetList<StremioDropdown<int>>(
+                find.byType(StremioDropdown<int>),
+              )
+              .firstWhere((d) => d.label == 'List');
+          list.onSelected(
+            list.options.firstWhere((o) => o.label == 'All').value,
+          );
+          await tester.pump();
+        }
+        expect(find.byType(SeeAllPosterGrid), findsOneWidget);
+        expect(secondPageRequests, 0);
+        identity.complete(http.Response('{"imdb_id":"tt1234567"}', 200));
+        await tester.pumpAndSettle();
+        expect(secondPageRequests, greaterThan(0));
+        expect(find.text('Retry'), findsNothing);
+        final grid = tester.widget<SeeAllPosterGrid>(
+          find.byType(SeeAllPosterGrid),
+        );
+        expect(grid.items.map((m) => m.name), ['Unwatched next page']);
+        expect(grid.exhausted, isTrue);
+        await tester.pumpWidget(const SizedBox());
+      },
+    );
+  }
+  for (final all in [false, true]) {
+    testWidgets(
+      'late watched identities show empty state and retain TV navigation (All $all)',
+      (tester) async {
+        await tester.runAsync(() async {
+          SharedPreferences.setMockInitialValues({
+            HideWatchedPrefs.key: true,
+            'finished_movies_v1': ['tt1234567'],
+          });
+          HideWatchedPrefs.debugReset();
+          await HideWatchedPrefs.warmUp();
+          WatchedStatusService.instance.resetProfileScope();
+          WatchedStatusService.instance.ensureStarted();
+          await WatchedStatusService.instance.firstSnapshot;
+        });
+        addTearDown(() {
+          HideWatchedPrefs.debugReset();
+          WatchedStatusService.instance.resetProfileScope();
+        });
+        final identity = Completer<http.Response>();
+        final native = CollectionNativeSourceService(
+          tmdbToken: 'dummy',
+          client: MockClient((request) async {
+            if (request.url.path.endsWith('/external_ids')) {
+              return identity.future;
+            }
+            return http.Response(
+              '{"results":[{"id":42,"title":"Film"}],"total_pages":1}',
+              200,
+            );
+          }),
+        );
+        addTearDown(native.close);
+        final base = collection(viewMode: 'TABBED_GRID');
+        final sample = HomeCollection(
+          id: base.id,
+          title: base.title,
+          viewMode: base.viewMode,
+          folders: [
+            base.folders.single.copyWith(
+              sources: [
+                ...base.folders.single.sources,
+                CollectionCatalogSource.fromJson({
+                  'provider': 'tmdb',
+                  'tmdbSourceType': 'COMPANY',
+                  'tmdbId': 420,
+                  'title': 'Company',
+                })!,
+              ],
+            ),
+          ],
+        );
+        await tester.pumpWidget(
+          MaterialApp(
+            home: CollectionFolderScreen(
+              collection: sample,
+              isTelevision: true,
+              nativeSources: native,
+              onOpenItem: (_) {},
+            ),
+          ),
+        );
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 100));
+        if (all) {
+          final list = tester
+              .widgetList<StremioDropdown<int>>(
+                find.byType(StremioDropdown<int>),
+              )
+              .firstWhere((d) => d.label == 'List');
+          list.onSelected(
+            list.options.firstWhere((o) => o.label == 'All').value,
+          );
+          await tester.pump();
+        }
+        expect(find.byType(SeeAllPosterGrid), findsOneWidget);
+        identity.complete(http.Response('{"imdb_id":"tt1234567"}', 200));
+        await tester.pumpAndSettle();
+        expect(find.byType(SeeAllPosterGrid), findsNothing);
+        expect(
+          find.text(all ? 'Nothing in this folder' : 'Nothing in this list'),
+          findsOneWidget,
+        );
+        final sort = tester
+            .widgetList<StremioDropdown<String>>(
+              find.byType(StremioDropdown<String>),
+            )
+            .firstWhere((d) => d.label == 'Sort');
+        sort.focusNode!.requestFocus();
+        await tester.pump();
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+        await tester.pump();
+        final retry = tester.widget<OutlinedButton>(
+          find.widgetWithText(OutlinedButton, 'Retry'),
+        );
+        expect(retry.focusNode!.hasFocus, isTrue);
+        await tester.pumpWidget(const SizedBox());
+      },
+    );
+  }
 
   for (final tv in [false, true]) {
     testWidgets(
@@ -218,6 +427,55 @@ void main() {
       expect(find.textContaining('Opening '), findsNothing);
       expect(tester.takeException(), isNull);
     });
+  }
+
+  for (final tv in [false, true]) {
+    testWidgets(
+      'cards precede slow IDs and update without changing focus IDs (TV $tv)',
+      (tester) async {
+        final identity = Completer<http.Response>();
+        final native = CollectionNativeSourceService(
+          tmdbToken: 'dummy',
+          client: MockClient((request) async {
+            if (request.url.path.endsWith('/external_ids')) {
+              return identity.future;
+            }
+            return http.Response(
+              '{"results":[{"id":42,"title":"Film"}],"total_pages":1}',
+              200,
+            );
+          }),
+        );
+        addTearDown(native.close);
+        StremioMeta? opened;
+        await tester.pumpWidget(
+          MaterialApp(
+            home: CollectionFolderScreen(
+              collection: collection(viewMode: 'TABBED_GRID'),
+              isTelevision: tv,
+              nativeSources: native,
+              onOpenItem: (item) => opened = item,
+            ),
+          ),
+        );
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 100));
+        var grid = tester.widget<SeeAllPosterGrid>(
+          find.byType(SeeAllPosterGrid),
+        );
+        expect(grid.items.single.id, 'tmdb:42');
+        expect(grid.items.single.effectiveImdbId, isNull);
+        identity.complete(http.Response('{"imdb_id":"tt1234567"}', 200));
+        await tester.pumpAndSettle();
+        grid = tester.widget<SeeAllPosterGrid>(find.byType(SeeAllPosterGrid));
+        expect(grid.items.single.id, 'tmdb:42');
+        expect(grid.items.single.effectiveImdbId, 'tt1234567');
+        grid.onOpen(grid.items.single);
+        await tester.pumpAndSettle();
+        expect(opened?.id, 'tt1234567');
+        await tester.pumpWidget(const SizedBox());
+      },
+    );
   }
 
   testWidgets('opening a native title retries failed IMDb enrichment', (
