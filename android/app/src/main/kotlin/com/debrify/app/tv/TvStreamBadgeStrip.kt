@@ -7,6 +7,7 @@ import android.view.ViewGroup
 import android.widget.ImageView
 import android.widget.TextView
 import com.bumptech.glide.Glide
+import com.bumptech.glide.load.engine.DiskCacheStrategy
 
 /** Non-focusable bounded wrapping chips. Matching is performed by Flutter's
  * cancellable worker; the native UI receives only finished display records. */
@@ -57,9 +58,24 @@ class TvStreamBadgeStrip(context: Context, private val chipHeightDp: Int = 24) :
                     layoutParams = LayoutParams(LayoutParams.WRAP_CONTENT, dp(chipHeightDp))
                     // Decode at display density, retaining aspect ratio. The
                     // drawable's dimensions determine width after loading.
-                    Glide.with(this).load(image).fitCenter().override(dp(chipHeightDp * 7), dp(chipHeightDp - 4))
-                        .placeholder(BadgeLabelDrawable(label, foreground, dp(chipHeightDp) * .55f))
-                        .error(BadgeLabelDrawable(label, foreground, dp(chipHeightDp) * .55f)).into(this)
+                    val fallback = BadgeLabelDrawable(label, foreground, dp(chipHeightDp) * .55f)
+                    fun svgRequest(): com.bumptech.glide.RequestBuilder<android.graphics.drawable.Drawable> {
+                        StreamBadgeSvg.register(context)
+                        return Glide.with(this).asDrawable().load(BadgeSvgUrl(image))
+                            .fitCenter().override(dp(chipHeightDp * 7), dp(chipHeightDp - 4))
+                            .timeout(8000).diskCacheStrategy(DiskCacheStrategy.RESOURCE)
+                            .placeholder(fallback).error(fallback)
+                    }
+                    if (isBadgeSvgUrl(image)) {
+                        svgRequest().into(this)
+                    } else {
+                        // Also recognize extensionless SVGs when the normal
+                        // bitmap decoder cannot handle the downloaded artwork.
+                        val request = Glide.with(this).load(image).fitCenter().override(dp(chipHeightDp * 7), dp(chipHeightDp - 4))
+                            .placeholder(fallback).error(fallback)
+                        if (!isBadgeBitmapUrl(image)) request.error(svgRequest())
+                        request.into(this)
+                    }
                 }
             }
             chip.isFocusable = false

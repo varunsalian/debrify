@@ -5,7 +5,9 @@ import 'package:flutter/material.dart';
 import '../models/stream_badge_rules.dart';
 import '../services/stream_badge_matcher.dart';
 import '../services/stream_badges_service.dart';
+import '../services/stream_badge_svg_image.dart';
 import '../utils/stream_badge_appearance.dart';
+import '../utils/stream_badge_svg.dart';
 
 /// A row of stream badge chips, in ruleset order.
 ///
@@ -164,20 +166,42 @@ class StreamBadgeChip extends StatelessWidget {
             minHeight: inner,
             maxHeight: inner,
           ),
-          child: CachedNetworkImage(
-            imageUrl: image,
-            height: inner,
-            fit: BoxFit.contain,
-            memCacheHeight: (inner * 3).round(),
-            fadeInDuration: Duration.zero,
-            placeholder: (_, __) => _imageLabel(appearance),
-            // The backing already frames the fallback; no second chip.
-            errorWidget: (_, __, ___) => _imageLabel(appearance),
-          ),
+          child: isBadgeSvgUrl(image)
+              ? _svgImage(image, inner, appearance)
+              : CachedNetworkImage(
+                  imageUrl: image,
+                  height: inner,
+                  fit: BoxFit.contain,
+                  memCacheHeight: (inner * 3).round(),
+                  fadeInDuration: Duration.zero,
+                  placeholder: (_, __) => _imageLabel(appearance),
+                  // The backing already frames the fallback; no second chip.
+                  errorWidget: (_, __, ___) => isBadgeBitmapUrl(image)
+                      ? _imageLabel(appearance)
+                      : _svgImage(image, inner, appearance),
+                ),
         ),
       ),
     );
   }
+
+  Widget _svgImage(
+    String url,
+    double inner,
+    StreamBadgeAppearance appearance,
+  ) => Image(
+    image: StreamBadgeSvgImage(
+      url,
+      maxWidth: (height * 7 * 3).round(),
+      maxHeight: (inner * 3).round(),
+    ),
+    height: inner,
+    fit: BoxFit.contain,
+    gaplessPlayback: true,
+    frameBuilder: (_, child, frame, synchronous) =>
+        frame == null ? _imageLabel(appearance) : child,
+    errorBuilder: (_, __, ___) => _imageLabel(appearance),
+  );
 
   Widget _imageLabel(StreamBadgeAppearance appearance) => Align(
     widthFactor: 1,

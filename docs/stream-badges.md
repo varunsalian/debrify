@@ -56,6 +56,51 @@ The Nuvio Badge Studio format, unchanged:
   fully transparent values count as absent.
 - `isEnabled: false` rules are kept but inactive.
 
+## SVG artwork
+
+`imageURL` supports ordinary bitmap images and static SVG badges in both
+Flutter source lists and Android TV's native source picker. SVG links can
+include query parameters; extensionless artwork links also try SVG decoding
+if bitmap decoding fails. Existing PNG and other bitmap rendering is unchanged.
+
+SVGs are decoded off the UI thread and rasterized to small, aspect-ratio-preserving
+bitmaps, shared through the platform's image cache. Moving focus does not parse
+the artwork again. Flutter also caches up to 64 downloaded SVG files; native TV
+caches the rendered bitmaps on disk.
+
+This supports simple self-contained vector artwork, including paths, gradients,
+and clipping, rather than every browser SVG feature. Files must be UTF-8 and
+at most 128 KiB. Scripts, animation, document entities, external resources,
+embedded images, `use`, patterns, markers, and filters are not supported. SVGs
+containing `<style>` stylesheets are rejected on both platforms: the Flutter
+renderer ignores those rules, which would silently change the artwork's colours.
+Presentation attributes and inline `style` colours/local references are supported;
+inline declarations are converted to presentation attributes before validation
+and rendering. Comments never reach a renderer's CSS parser, inline colours win
+over presentation attributes regardless of XML order, and `!important` precedence
+is preserved. CSS cannot supply structural SVG attributes such as `id` or `href`.
+CSS escapes are rejected. Markers are excluded because their per-vertex and
+inherited rendering work is not covered by the reference budget.
+Dash patterns are also rejected in attributes and inline styles, including on
+ancestors: a tiny SVG can expand into an arbitrarily large vector path before
+bitmap sizing. The explicit solid-stroke setting `stroke-dasharray="none"`
+remains supported.
+Both paths preflight XML depth before building a tree, normalize namespaces and
+local references, and reject duplicate IDs. Editor annotations cannot accidentally
+become rendering attributes. Structure and reference-expansion limits include
+geometry size, repeated uses, and the native renderer's two passes per mask,
+rejecting expensive mask chains. Only the resulting normalized XML is rendered.
+Unsupported,
+oversized, or unavailable artwork shows the rule's text label, keeping the badge
+and navigation usable.
+
+The shared `test/fixtures/stream_badge_svg_contract.json` corpus is exercised by
+both the Flutter compiler/pixel tests and Android's real SVG decoder. These cover
+comment/namespace bypasses, reference cycles, colour precedence, quoted references,
+and ordinary artwork. Separate tests retain network limits, fallback, warm-cache,
+and D-pad focus coverage. Native tests also select Android's DOM implementation
+explicitly for the deep-XML regression; the desktop JDK parser behaves differently.
+
 ## Why `Torrent` carries the addon's label and description
 
 `Torrent.name` on its own is not enough to match against. It holds the
@@ -75,6 +120,7 @@ alone.
 | Matcher (name-or-description, memoised) | `lib/services/stream_badge_matcher.dart` |
 | Store, import (link/file/paste), refresh, backup, live matcher | `lib/services/stream_badges_service.dart` |
 | Chip widgets (`StreamBadgeStrip`, `StreamBadgeStripFor`, `StreamBadgeChip`) | `lib/widgets/stream_badge_strip.dart` |
+| SVG validation and cached bitmap decoding | `lib/utils/stream_badge_svg.dart`, `lib/services/stream_badge_svg_image.dart`, `android/app/src/main/kotlin/com/debrify/app/tv/StreamBadgeSvg.kt` |
 | Settings page | `lib/screens/settings/stream_badges_settings_page.dart` |
 | Row model (`streamLabel`, `streamDescription`, `badgeDescription`) | `lib/models/torrent.dart`, `lib/services/stremio_service.dart` |
 | Rendering sites (`badgeName`/`badgeDescription` on `SourceRow`) | `lib/widgets/source_row.dart`, `lib/screens/video_player/widgets/source_sheet.dart` |

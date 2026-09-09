@@ -1,0 +1,149 @@
+[
+  {
+    "name": "commented dash cannot reach compiler",
+    "body": "<path d=\"M0 10H100\" stroke=\"red\" stroke-width=\"2\" style=\"/*a:b;stroke-dasharray:0.001 0.001;*/x:y\"/>",
+    "accept": true, "pixel": "ff0000ff"
+  },
+  {
+    "name": "inline style wins even before presentation attribute",
+    "body": "<rect style=\"fill: #00ff00\" fill=\"red\" width=\"100\" height=\"20\"/>",
+    "accept": true, "pixel": "00ff00ff"
+  },
+  {
+    "name": "inline style wins after presentation attribute",
+    "body": "<rect fill=\"red\" width=\"100\" height=\"20\" style=\"fill: #00ff00\"/>",
+    "accept": true, "pixel": "00ff00ff"
+  },
+  {
+    "name": "important declaration survives later normal declaration",
+    "body": "<rect width=\"100\" height=\"20\" style=\"fill: #00ff00 !important; fill: red\"/>",
+    "accept": true, "pixel": "00ff00ff"
+  },
+  {
+    "name": "last equally important declaration wins",
+    "body": "<rect width=\"100\" height=\"20\" style=\"fill: red !important; fill: #00ff00 !IMPORTANT\"/>",
+    "accept": true, "pixel": "00ff00ff"
+  },
+  {
+    "name": "comments in property names normalize before checking",
+    "body": "<path d=\"M0 10H100\" style=\"stroke-da/**/sharray: .001 .001\"/>",
+    "accept": false
+  },
+  {
+    "name": "comments cannot conceal a reference cycle",
+    "body": "<defs><clipPath id=\"c\" style=\"clip-path: u/**/rl(#c)\"><rect width=\"100\" height=\"20\"/></clipPath></defs><rect width=\"100\" height=\"20\" clip-path=\"url(#c)\"/>",
+    "accept": false
+  },
+  {
+    "name": "commented references are not interpreted by renderer",
+    "body": "<rect width=\"100\" height=\"20\" style=\"/*a:b;clip-path:url(#c);*/x:y;fill:red\"/>",
+    "accept": true, "pixel": "ff0000ff"
+  },
+  {
+    "name": "CSS cannot overwrite structural attributes",
+    "body": "<rect width=\"100\" height=\"20\" style=\"id:c; width:0; height:0; href:#c; d:M0 0; fill:red\"/>",
+    "accept": true, "pixel": "ff0000ff"
+  },
+  {
+    "name": "quoted punctuation stays inside a font value",
+    "body": "<rect width=\"100\" height=\"20\" style=\"font-family: 'a;stroke-dasharray:.001 .001;/*z*/'; fill:red\"/>",
+    "accept": true, "pixel": "ff0000ff"
+  },
+  {
+    "name": "editor namespaced style is not SVG CSS",
+    "root": "xmlns:editor=\"urn:editor\"",
+    "body": "<rect width=\"100\" height=\"20\" fill=\"red\" editor:style=\"stroke-dasharray:.001 .001;fill:blue\"/>",
+    "accept": true, "pixel": "ff0000ff"
+  },
+  {
+    "name": "editor namespaced id cannot replace SVG identity",
+    "root": "xmlns:editor=\"urn:editor\"",
+    "body": "<defs><linearGradient id=\"g\" editor:id=\"other\"><stop stop-color=\"red\"/><stop offset=\"1\" stop-color=\"red\"/></linearGradient></defs><rect width=\"100\" height=\"20\" fill=\"url(#g)\"/>",
+    "accept": true, "pixel": "ff0000ff"
+  },
+  {
+    "name": "entity decoded inline comments cannot hide work",
+    "body": "<rect width=\"100\" height=\"20\" style=\"&#47;*a:b;stroke-dasharray:.001 .001;*&#47;x:y; fill:red\"/>",
+    "accept": true, "pixel": "ff0000ff"
+  },
+  {
+    "name": "inherited inline fill still renders",
+    "body": "<g style=\"fill:red\"><rect width=\"100\" height=\"20\"/></g>",
+    "accept": true, "pixel": "ff0000ff"
+  },
+  {
+    "name": "inline clip and gradient references remain supported",
+    "body": "<defs><linearGradient id=\"g\"><stop stop-color=\"red\"/><stop offset=\"1\" stop-color=\"red\"/></linearGradient><clipPath id=\"c\"><rect width=\"100\" height=\"20\"/></clipPath></defs><rect width=\"100\" height=\"20\" style=\"fill:url('#g');clip-path:url(#c)\"/>",
+    "accept": true, "pixel": "ff0000ff"
+  },
+  {
+    "name": "xlink gradient references remain supported",
+    "root": "xmlns:xlink=\"http://www.w3.org/1999/xlink\"",
+    "body": "<defs><linearGradient id=\"g\"><stop stop-color=\"red\"/><stop offset=\"1\" stop-color=\"red\"/></linearGradient><linearGradient id=\"h\" xlink:href=\"#g\"/></defs><rect width=\"100\" height=\"20\" fill=\"url(#h)\"/>",
+    "accept": true, "pixel": "ff0000ff"
+  },
+  {
+    "name": "duplicate IDs do not give the renderers different graphs",
+    "body": "<defs><linearGradient id=\"g\"/><linearGradient id=\"g\"/></defs>",
+    "accept": false
+  },
+  {
+    "name": "unterminated comment cannot escape normalization",
+    "body": "<rect style=\"fill:red;/* unfinished\"/>",
+    "accept": false
+  },
+  {
+    "name": "unterminated string cannot escape normalization",
+    "body": "<rect style=\"font-family:'unfinished;fill:red\"/>",
+    "accept": false
+  },
+  {
+    "name": "external style references remain rejected",
+    "body": "<rect style=\"fill:url('https://example.invalid/image.svg')\"/>",
+    "accept": false
+  },
+  {
+    "name": "namespace declaration cannot become inline CSS",
+    "root": "xmlns:style=\"a:b;stroke-dasharray:.001,.001;x:y\"",
+    "body": "<path d=\"M0 10H100\" stroke=\"red\" stroke-width=\"2\"/>",
+    "accept": true, "pixel": "ff0000ff"
+  },
+  {
+    "name": "padded IDs use the same identity as the renderer",
+    "body": "<defs><clipPath id=\" c \" clip-path=\"url(#c)\"><rect width=\"100\" height=\"20\"/></clipPath></defs><rect width=\"100\" height=\"20\" clip-path=\"url(#c)\"/>",
+    "accept": false
+  },
+  {
+    "name": "prefixed SVG elements remain visible",
+    "root": "xmlns:s=\"http://www.w3.org/2000/svg\"",
+    "body": "<s:rect width=\"100\" height=\"20\" fill=\"red\"/>",
+    "accept": true, "pixel": "ff0000ff"
+  },
+  {
+    "name": "foreign editor metadata is not interpreted as SVG",
+    "root": "xmlns:editor=\"urn:editor\"",
+    "body": "<metadata><editor:style>ignored annotation</editor:style></metadata><rect width=\"100\" height=\"20\" fill=\"red\"/>",
+    "accept": true, "pixel": "ff0000ff"
+  },
+  {
+    "name": "duplicate XML attributes do not give different values",
+    "body": "<rect width=\"100\" width=\"0\" height=\"20\" fill=\"red\"/>",
+    "accept": false
+  },
+  {
+    "name": "SVG 2 href wins over xlink regardless of attribute order",
+    "root": "xmlns:l=\"http://www.w3.org/1999/xlink\"",
+    "body": "<defs><linearGradient id=\"g\"><stop stop-color=\"red\"/><stop offset=\"1\" stop-color=\"red\"/></linearGradient><linearGradient id=\"h\" href=\"#g\" l:href=\"#missing\"/></defs><rect width=\"100\" height=\"20\" fill=\"url(#h)\"/>",
+    "accept": true, "pixel": "ff0000ff"
+  },
+  {
+    "name": "quoted uppercase URL syntax has the same local target",
+    "body": "<defs><linearGradient id=\"g\"><stop stop-color=\"red\"/><stop offset=\"1\" stop-color=\"red\"/></linearGradient></defs><rect width=\"100\" height=\"20\" style=\"fill:URL( '#g' )\"/>",
+    "accept": true, "pixel": "ff0000ff"
+  },
+  {
+    "name": "escape sequences remain rejected",
+    "body": "<rect style=\"fill:u\\72l(#g)\"/>",
+    "accept": false
+  }
+]

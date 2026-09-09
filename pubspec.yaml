@@ -84,6 +84,8 @@ dependencies:
   
   # Image caching for episode posters
   cached_network_image: ^3.3.1
+  # Static imported stream-badge artwork, rasterized into the image cache.
+  flutter_svg: ^2.3.0
   # Direct dep so we can configure a bigger disk cache than the 200-object
   # default (already transitive via cached_network_image)
   flutter_cache_manager: ^3.4.1
