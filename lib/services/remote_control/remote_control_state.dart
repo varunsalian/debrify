@@ -114,6 +114,8 @@ class RemoteControlState extends ChangeNotifier {
   bool _debugReceiverBound = false;
   @visibleForTesting
   int debugReliablePort = RemoteReliableTransfer.defaultPort;
+  @visibleForTesting
+  int debugCommandPort = kCommandPort;
 
   // Callbacks for TV mode
   void Function(String action, String command, String? data)? onCommandReceived;
@@ -211,7 +213,8 @@ class RemoteControlState extends ChangeNotifier {
     if (_role == _RemoteRole.receiver &&
         _receiverName == deviceName &&
         (_debugReceiverBound ||
-            (_discoveryService != null && _commandService != null))) {
+            (_discoveryService?.isRunning == true &&
+                _commandService?.isRunning == true))) {
       return;
     }
     _isTv = true;
@@ -259,7 +262,6 @@ class RemoteControlState extends ChangeNotifier {
       isTv: true,
       tvDeviceName: deviceName,
     );
-    await _discoveryService!.start();
     // Advertise our static key once loaded so senders can pin this receiver.
     unawaited(
       RemotePairingStore.publicKeyBytes()
@@ -275,7 +277,11 @@ class RemoteControlState extends ChangeNotifier {
     );
 
     // Start command service (to receive commands)
-    _commandService = UdpCommandService(isTv: true);
+    _commandService = UdpCommandService(
+      isTv: true,
+      commandPort: debugCommandPort,
+    );
+    _commandService!.onError = _reportSocketError;
     _commandService!.onCommandReceived = _handleCommand;
     _commandService!.onHeartbeatReceived = () {
       if (_connectionState != RemoteConnectionState.connected) {
@@ -290,6 +296,8 @@ class RemoteControlState extends ChangeNotifier {
     };
     await _commandService!.start();
     await _wireSession(_commandService!);
+    // Advertise only after the receiving transport is ready.
+    await _discoveryService!.start();
 
     _role = _RemoteRole.receiver;
     _connectionState = RemoteConnectionState.disconnected;
@@ -389,7 +397,8 @@ class RemoteControlState extends ChangeNotifier {
     if (_role == _RemoteRole.receiver &&
         _receiverName == deviceName &&
         (_debugReceiverBound ||
-            (_discoveryService != null && _commandService != null))) {
+            (_discoveryService?.isRunning == true &&
+                _commandService?.isRunning == true))) {
       return;
     }
     if (_role != _RemoteRole.stopped ||
@@ -520,7 +529,19 @@ class RemoteControlState extends ChangeNotifier {
 
   /// Connect to a specific TV (for mobile)
   Future<void> connectToDevice(DiscoveredDevice device) async {
-    return _authorizedRemote(() => _connectToDeviceRaw(device));
+    return _authorizedRemote(
+      () => _enqueueRoleChange(() async {
+        try {
+          await _connectToDeviceRaw(device);
+        } catch (_) {
+          await _stopRaw();
+          _lastError =
+              'Could not start the connection. Check local network access and retry.';
+          notifyListeners();
+          rethrow;
+        }
+      }),
+    );
   }
 
   Future<void> _connectToDeviceRaw(DiscoveredDevice device) async {
@@ -542,12 +563,18 @@ class RemoteControlState extends ChangeNotifier {
     await _commandService?.stop();
     _commandService = null;
 
+    _teardownSessions();
+
     // Stop discovery (we've selected a device)
     await _discoveryService?.stop();
     _discoveryService = null;
 
     // Start command service
-    _commandService = UdpCommandService(isTv: false);
+    _commandService = UdpCommandService(
+      isTv: false,
+      commandPort: debugCommandPort,
+    );
+    _commandService!.onError = _reportSocketError;
     _commandService!.onHeartbeatReceived = () {
       if (_connectionState != RemoteConnectionState.connected) {
         _connectionState = RemoteConnectionState.connected;
@@ -564,20 +591,49 @@ class RemoteControlState extends ChangeNotifier {
     await _commandService!.start(targetIp: device.ip);
     await _wireSession(_commandService!);
 
-    // Opportunistic session: harmless against a v1 TV (hs1 is silently
-    // dropped); against a v2 TV every subsequent keypress rides encrypted
-    // and the credential flows find a session already warm.
-    unawaited(ensureEncryptedSession(device.ip));
+    unawaited(_probeConnection(device, _commandService!));
+  }
 
-    // Mark as connected after a short delay to allow heartbeat exchange
-    // (real heartbeats now arrive from v2 peers — this stays as the v1
-    // fallback).
-    Future.delayed(const Duration(milliseconds: 500), () {
-      if (_connectionState == RemoteConnectionState.connecting) {
-        _connectionState = RemoteConnectionState.connected;
-        notifyListeners();
-      }
-    });
+  Future<void> _probeConnection(
+    DiscoveredDevice device,
+    UdpCommandService service,
+  ) async {
+    RemoteSession? session;
+    try {
+      session = await ensureEncryptedSession(device.ip);
+    } catch (_) {
+      // Report below, only if this attempt still owns the selected device.
+    }
+    if (!identical(service, _commandService) ||
+        _connectedDevice?.ip != device.ip ||
+        _isTv) {
+      return;
+    }
+    // Discovered v1 receivers support one-way controls, but ignore handshakes
+    // and send heartbeats to fixed port 5556, not our ephemeral sender port.
+    // Only an explicitly known legacy peer gets this compatibility fallback:
+    // a manual address with unknown capabilities is not evidence of v1.
+    final legacyControlsAvailable =
+        device.protocolVersionKnown &&
+        device.protoVersion == 1 &&
+        !_encryptedPeerIps.contains(device.ip) &&
+        service.isRunning;
+    if (session != null || service.isConnected || legacyControlsAvailable) {
+      _connectionState = RemoteConnectionState.connected;
+      _lastError = null;
+    } else {
+      _connectionState = RemoteConnectionState.disconnected;
+      _lastError =
+          'The receiving device did not complete the connection. Check Receive mode and local network access, then retry.';
+    }
+    notifyListeners();
+  }
+
+  void _reportSocketError(String error) {
+    _lastError =
+        'Remote networking failed. Check local network access and retry.';
+    _connectionState = RemoteConnectionState.disconnected;
+    notifyListeners();
   }
 
   /// Send [command] through a current encrypted session when the peer supports
@@ -874,12 +930,14 @@ class RemoteControlState extends ChangeNotifier {
 
   /// Disconnect from current device (for mobile)
   Future<void> disconnect() async {
-    await _commandService?.stop();
-    _commandService = null;
-    _teardownSessions();
-    _connectionState = RemoteConnectionState.disconnected;
-    _connectedDevice = null;
-    notifyListeners();
+    return _enqueueRoleChange(() async {
+      await _commandService?.stop();
+      _commandService = null;
+      _teardownSessions();
+      _connectionState = RemoteConnectionState.disconnected;
+      _connectedDevice = null;
+      notifyListeners();
+    });
   }
 
   void _handleDeviceDiscovered(DiscoveredDevice device) {
@@ -1067,13 +1125,31 @@ class RemoteControlState extends ChangeNotifier {
 
   Future<void> _wireSession(UdpCommandService service) async {
     final reliable = await _ensureReliableTransfer();
+    if (!identical(_commandService, service)) {
+      await service.stop();
+      throw StateError('Remote connection was replaced during startup');
+    }
     _sessionManager ??= RemoteSessionManager(
       loadStaticKeyPair: RemotePairingStore.loadOrCreateKeypair,
       deviceName: () => _receiverName ?? 'Debrify',
       transferPort: reliable.port,
+      onEvent: (event, fields) =>
+          RemoteTransferDiagnostics.record(event, fields: fields),
     );
     _pairingGate ??= PairingGate(
       isRemembered: _rememberedFingerprints.contains,
+      onEnded: (session, reason) {
+        unawaited(
+          _sendOverSession(
+            session,
+            RemoteCommand(
+              action: RemoteAction.pair,
+              command: PairCommand.err,
+              data: reason,
+            ),
+          ),
+        );
+      },
     );
     service.onSessionMessage = (json, address, port) {
       unawaited(_onSessionMessage(service, json, address.address, port));
@@ -1127,6 +1203,10 @@ class RemoteControlState extends ChangeNotifier {
 
     if (type == RemoteMessageType.ecmd) {
       final opened = await manager.openCommand(json);
+      if (!identical(_sessionManager, manager) ||
+          !identical(_commandService, service)) {
+        return;
+      }
       if (opened.serr != null) {
         service.sendRaw(opened.serr!, ip, port: port);
         return;
@@ -1161,6 +1241,11 @@ class RemoteControlState extends ChangeNotifier {
     }
 
     final result = await manager.handle(json);
+    // A role/profile change may close this socket while key loading yields.
+    if (!identical(_sessionManager, manager) ||
+        !identical(_commandService, service)) {
+      return;
+    }
     // Cache the endpoint only when the manager ACCEPTED the message (it
     // produced a reply or a session). Merely knowing the sid is not enough:
     // session IDs cross the wire in the clear, so a LAN host could replay one
@@ -1651,7 +1736,7 @@ class RemoteControlState extends ChangeNotifier {
   Future<UdpCommandService> _ensureCommandService() async {
     var service = _commandService;
     if (service == null || !service.isRunning) {
-      service = UdpCommandService(isTv: _isTv);
+      service = UdpCommandService(isTv: _isTv, commandPort: debugCommandPort);
       _commandService = service;
       await service.start();
     }
@@ -1685,8 +1770,9 @@ class RemoteControlState extends ChangeNotifier {
     // very future — and whenComplete AWAITS a future-returning callback, so
     // the arrow form deadlocks the attempt on itself. Every caller (and the
     // dedup reusers) then hangs forever with the 6s timeout long fired.
-    final attempt = _ensureEncryptedSessionInner(ip, timeout).whenComplete(() {
-      _handshakesByIp.remove(ip);
+    late final Future<RemoteSession?> attempt;
+    attempt = _ensureEncryptedSessionInner(ip, timeout).whenComplete(() {
+      if (identical(_handshakesByIp[ip], attempt)) _handshakesByIp.remove(ip);
     });
     _handshakesByIp[ip] = attempt;
     return attempt;
@@ -1711,8 +1797,15 @@ class RemoteControlState extends ChangeNotifier {
     }
 
     final service = await _ensureCommandService();
+    // A fresh handshake targets the receiver listener, not a temporary port
+    // learned before a peer restart or role change.
+    service.forgetPeerEndpoint(ip);
     final manager = _sessionManager!;
     final hs1 = await manager.startHandshake();
+    if (!identical(manager, _sessionManager) ||
+        !identical(service, _commandService)) {
+      return null;
+    }
     final sid = hs1['sid'] as String;
     _sessionPeers[sid] = (ip: ip, port: service.portFor(ip));
     final completer = Completer<RemoteSession?>();
@@ -1724,8 +1817,9 @@ class RemoteControlState extends ChangeNotifier {
       return session;
     } on TimeoutException {
       debugPrint(
-        'RemoteHs: no reply within ${timeout.inSeconds}s — receiver unreachable',
+        'RemoteHs: handshake did not complete within ${timeout.inSeconds}s',
       );
+      RemoteTransferDiagnostics.record('handshake_timeout');
       _pendingHandshakes.remove(sid);
       return null;
     }
@@ -1749,6 +1843,7 @@ class RemoteControlState extends ChangeNotifier {
   }
 
   void _teardownSessions() {
+    _handshakesByIp.clear();
     _sessionTimer?.cancel();
     _sessionTimer = null;
     _sessionManager = null;

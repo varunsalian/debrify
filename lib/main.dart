@@ -1846,7 +1846,13 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
       }
 
       // Initialize remote control based on device type
-      _initializeRemoteControl(isTv);
+      unawaited(
+        _initializeRemoteControl(isTv).catchError((Object error) {
+          // Remote networking is optional at startup. The Remote screen owns
+          // retry and permission guidance if a listener cannot be opened.
+          debugPrint('Remote startup failed (${error.runtimeType})');
+        }),
+      );
     });
 
     // Initialize deep link service for magnet links

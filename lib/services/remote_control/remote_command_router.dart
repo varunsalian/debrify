@@ -3075,6 +3075,9 @@ class RemoteCommandRouter {
         }
       }
     } finally {
+      // Handlers report validation/login failures without throwing. Preserve
+      // those outcomes before the UI flush clears the batch collections.
+      hadFailure = hadFailure || _batchFailed.isNotEmpty;
       _flushBatch(prefix: 'Transfer applied');
     }
     return !destinationLost && !hadFailure;
@@ -4067,7 +4070,10 @@ class RemoteCommandRouter {
       if (result.added > 0 && result.failed == 0) {
         _showSnackBar(result.summary);
       } else if (result.added > 0) {
-        _showSnackBar('${result.summary}, ${result.failed} failed');
+        _showSnackBar(
+          '${result.summary}, ${result.failed} failed',
+          isError: true,
+        );
       } else if (result.failed > 0) {
         _showSnackBar(
           '$label: ${result.failed} rejected, nothing added',
@@ -4826,6 +4832,8 @@ class RemoteCommandRouter {
           case PairingRequestOutcome.busy:
             await reply(PairCommand.err, 'busy');
         }
+      case PairCommand.cancel:
+        gate.cancelSession(session);
       case PairCommand.confirm:
         if (data == null) return;
         List<int> proof;

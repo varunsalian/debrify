@@ -509,6 +509,7 @@ class RemoteSessionManager {
   final List<int> Function(int) randomBytes;
   final int protocolVersion;
   final int transferPort;
+  final void Function(String event, Map<String, Object?> fields)? onEvent;
 
   final Map<String, _SenderHandshake> _senderHandshakes = {};
   final Map<String, _ReceiverPending> _receiverPending = {};
@@ -521,6 +522,7 @@ class RemoteSessionManager {
     List<int> Function(int)? randomBytes,
     this.protocolVersion = kProtoVersion,
     this.transferPort = kReliableTransferPort,
+    this.onEvent,
   }) : assert(protocolVersion >= 2),
        now = now ?? DateTime.now,
        randomBytes = randomBytes ?? _secureRandomBytes;
@@ -607,8 +609,51 @@ class RemoteSessionManager {
 
   /// Route an inbound v2 message (hs1..hs4, serr). Unknown/invalid input is
   /// dropped silently — this is a UDP port on a LAN.
-  Future<SessionHandleResult> handle(Map<String, dynamic> json) async {
+  final Map<String, Future<SessionHandleResult>> _handling = {};
+  final Map<String, int> _queued = {};
+
+  Future<SessionHandleResult> handle(Map<String, dynamic> json) {
+    final sid = json['sid'];
+    if (sid is! String ||
+        sid.length > 128 ||
+        (_queued[sid] ?? 0) >= 8 ||
+        (!_handling.containsKey(sid) && _handling.length >= kMaxSessions * 2)) {
+      return Future.value(SessionHandleResult());
+    }
+    // Reserve the lane before key loading yields. Retransmissions must see
+    // the same ephemeral keys, including while the first request is loading.
+    final previous = _handling[sid];
+    _queued[sid] = (_queued[sid] ?? 0) + 1;
+    late final Future<SessionHandleResult> pending;
+    pending =
+        (previous == null
+                ? _handleMessage(json)
+                : previous.then((_) => _handleMessage(json)))
+            .whenComplete(() {
+              final remaining = (_queued[sid] ?? 1) - 1;
+              if (remaining == 0) {
+                _queued.remove(sid);
+              } else {
+                _queued[sid] = remaining;
+              }
+              if (identical(_handling[sid], pending)) _handling.remove(sid);
+            });
+    _handling[sid] = pending;
+    return pending;
+  }
+
+  Future<SessionHandleResult> _handleMessage(Map<String, dynamic> json) async {
     final result = SessionHandleResult();
+    final type = json['type'];
+    if (!const {
+      RemoteMessageType.hs1,
+      RemoteMessageType.hs2,
+      RemoteMessageType.hs3,
+      RemoteMessageType.hs4,
+    }.contains(type)) {
+      return result;
+    }
+    onEvent?.call('handshake_received', {'stage': type});
     try {
       switch (json['type']) {
         case RemoteMessageType.hs1:
@@ -624,10 +669,23 @@ class RemoteSessionManager {
           await _onHs4(json, result);
           break;
       }
-    } catch (_) {
+    } catch (error) {
       debugPrint('RemoteSessionManager: dropped malformed message');
+      onEvent?.call('handshake_rejected', {
+        'stage': type,
+        'errorType': error.runtimeType,
+      });
     }
     return result;
+  }
+
+  Future<SimpleKeyPair> _loadIdentity() async {
+    try {
+      return await loadStaticKeyPair();
+    } catch (error) {
+      onEvent?.call('identity_load_failed', {'errorType': error.runtimeType});
+      rethrow;
+    }
   }
 
   Future<void> _onHs2(
@@ -649,7 +707,7 @@ class RemoteSessionManager {
     final peerProtocolVersion = _readProtocolVersion(json['v']);
     final peerTransferPort = _readTransferPort(json['transferPort']);
 
-    final statics = await loadStaticKeyPair();
+    final statics = await _loadIdentity();
     final spkS = (await statics.extractPublicKey()).bytes;
 
     final ee = await _dh(handshake.ephemeral, epkR);
@@ -677,6 +735,7 @@ class RemoteSessionManager {
       'drc2 hs3 sender',
     );
 
+    if (!identical(_senderHandshakes[sidB64], handshake)) return;
     handshake.hs3 = {
       'type': RemoteMessageType.hs3,
       'sid': handshake.sidB64,
@@ -724,6 +783,7 @@ class RemoteSessionManager {
     final tag = base64Decode(json['tag'] as String);
     if (!RemoteSessionCrypto.constantTimeEquals(expected, tag)) {
       debugPrint('RemoteSessionManager: hs4 tag mismatch, dropping');
+      onEvent?.call('handshake_tag_mismatch', {'stage': 'hs4'});
       return;
     }
     final session = RemoteSession(
@@ -738,6 +798,7 @@ class RemoteSessionManager {
       sasCode: await RemoteSessionCrypto.sasCode(derived.keys.sas),
       establishedAt: now(),
     );
+    if (!identical(_senderHandshakes[sidB64], handshake)) return;
     sessions[session.sidB64] = session;
     _senderHandshakes.remove(sidB64);
     _senderDerived.remove(sidB64);
@@ -771,10 +832,13 @@ class RemoteSessionManager {
       return;
     }
 
-    final statics = await loadStaticKeyPair();
+    final statics = await _loadIdentity();
     final spkR = (await statics.extractPublicKey()).bytes;
     final ephemeral = await RemoteSessionCrypto.x25519.newKeyPair();
     final epkR = (await ephemeral.extractPublicKey()).bytes;
+    // Other handshake IDs may have filled the pending table while key
+    // generation yielded. The preflight cap alone cannot bound that race.
+    if (_receiverPending.length >= kMaxSessions * 2) return;
     final pending = _ReceiverPending(
       sid: base64Decode(sidB64),
       com: com,
@@ -823,7 +887,7 @@ class RemoteSessionManager {
       return;
     }
 
-    final statics = await loadStaticKeyPair();
+    final statics = await _loadIdentity();
     final spkR = (await statics.extractPublicKey()).bytes;
     final ee = await _dh(pending.ephemeral, epkS);
     final es = await _dh(statics, epkS);
@@ -851,6 +915,7 @@ class RemoteSessionManager {
     );
     if (!RemoteSessionCrypto.constantTimeEquals(expectedTag, tagS)) {
       debugPrint('RemoteSessionManager: hs3 tag mismatch, dropping');
+      onEvent?.call('handshake_tag_mismatch', {'stage': 'hs3'});
       return;
     }
 
@@ -858,6 +923,7 @@ class RemoteSessionManager {
       keys.conf,
       'drc2 hs4 receiver',
     );
+    if (!identical(_receiverPending[sidB64], pending)) return;
     pending.hs4 = {
       'type': RemoteMessageType.hs4,
       'sid': sidB64,
@@ -877,6 +943,7 @@ class RemoteSessionManager {
       sasCode: await RemoteSessionCrypto.sasCode(keys.sas),
       establishedAt: now(),
     );
+    if (!identical(_receiverPending[sidB64], pending)) return;
     sessions[session.sidB64] = session;
     _expireSessions(now());
     result.outgoing.add(pending.hs4!);
@@ -1014,9 +1081,13 @@ class PairingDisplay {
 class PairingGate extends ChangeNotifier {
   final DateTime Function() now;
   final bool Function(String fingerprint) isRemembered;
+  final void Function(RemoteSession session, String reason)? onEnded;
 
-  PairingGate({required this.isRemembered, DateTime Function()? now})
-    : now = now ?? DateTime.now;
+  PairingGate({
+    required this.isRemembered,
+    DateTime Function()? now,
+    this.onEnded,
+  }) : now = now ?? DateTime.now;
 
   PairingDisplay? _current;
   PairingDisplay? get current => _current;
@@ -1053,6 +1124,16 @@ class PairingGate extends ChangeNotifier {
     RemoteSession session,
     List<int> proof,
   ) async {
+    tick();
+    if (session.authorized) {
+      final expected = await RemoteSessionCrypto.pairProof(
+        session.keys.conf,
+        session.sasCode,
+      );
+      return RemoteSessionCrypto.constantTimeEquals(expected, proof)
+          ? PairProofOutcome.ok
+          : PairProofOutcome.wrong;
+    }
     final display = _current;
     if (display == null || display.session.sidB64 != session.sidB64) {
       return PairProofOutcome.noRequest;
@@ -1084,9 +1165,19 @@ class PairingGate extends ChangeNotifier {
   }
 
   void cancel() {
+    _end('cancelled');
+  }
+
+  void cancelSession(RemoteSession session) {
+    if (_current?.session.sidB64 == session.sidB64) cancel();
+  }
+
+  void _end(String reason) {
     if (_current == null) return;
+    final session = _current!.session;
     _current = null;
     notifyListeners();
+    onEnded?.call(session, reason);
   }
 
   /// Expire a stale code (call on a timer).
@@ -1094,8 +1185,7 @@ class PairingGate extends ChangeNotifier {
     final display = _current;
     if (display != null &&
         now().difference(display.shownAt) > kPairingCodeTimeout) {
-      _current = null;
-      notifyListeners();
+      _end('expired');
     }
   }
 }

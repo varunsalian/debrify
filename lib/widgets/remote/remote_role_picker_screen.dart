@@ -71,9 +71,14 @@ class _RemoteRolePickerScreenState extends State<RemoteRolePickerScreen> {
   Future<void> _openSender() async {
     HapticFeedback.mediumImpact();
     final state = RemoteControlState();
-    if (state.isTv) {
-      _didSwitch = true;
-      await state.switchToSenderMode();
+    try {
+      if (!state.isConnected || state.isTv) {
+        _didSwitch = true;
+        await state.startMobileDiscovery();
+      }
+    } catch (_) {
+      _showNetworkError();
+      return;
     }
     if (!mounted) return;
     await Navigator.of(
@@ -87,14 +92,28 @@ class _RemoteRolePickerScreenState extends State<RemoteRolePickerScreen> {
     name ??= await PlatformUtil.getDeviceName();
     name ??= 'This device';
     final state = RemoteControlState();
-    if (!state.isTv) {
+    try {
       _didSwitch = true;
       await state.switchToReceiverMode(name);
+    } catch (_) {
+      _showNetworkError();
+      return;
     }
     if (!mounted) return;
     await Navigator.of(
       context,
     ).push(MaterialPageRoute(builder: (_) => const RemoteReceiveScreen()));
+  }
+
+  void _showNetworkError() {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+          'Could not start Remote. Allow local network access and retry.',
+        ),
+      ),
+    );
   }
 
   @override

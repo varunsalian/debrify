@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 
 import 'remote_constants.dart';
+import 'remote_transfer_diagnostics.dart';
 
 /// Represents a remote control command
 class RemoteCommand {
@@ -96,6 +97,7 @@ class UdpCommandService {
   Timer? _connectionCheckTimer;
   DateTime? _lastHeartbeatReceived;
   final bool _isTv;
+  final int commandPort;
   String? _connectedIp;
   final Map<String, _PeerEndpoint> _peerEndpoints = {};
 
@@ -123,7 +125,10 @@ class UdpCommandService {
   void Function(Map<String, dynamic> json, InternetAddress address, int port)?
   onSessionMessage;
 
-  UdpCommandService({required bool isTv}) : _isTv = isTv;
+  UdpCommandService({required bool isTv, this.commandPort = kCommandPort})
+    : _isTv = isTv;
+
+  int? get boundPort => _socket?.port;
 
   /// Start the command service
   Future<void> start({String? targetIp}) async {
@@ -134,18 +139,25 @@ class UdpCommandService {
 
       _socket = await RawDatagramSocket.bind(
         InternetAddress.anyIPv4,
-        _isTv ? kCommandPort : 0, // TV uses fixed port, mobile uses any
+        _isTv ? commandPort : 0, // receiver uses its listener port
         reuseAddress: true,
         reusePort: true,
       );
 
-      _socket!.listen(
+      final socket = _socket!;
+      socket.listen(
         _handleDatagram,
         onError: (error) {
           debugPrint('UdpCommandService: Socket error (${error.runtimeType})');
           onError?.call(error.toString());
         },
         onDone: () {
+          if (identical(_socket, socket)) {
+            _socket = null;
+            _heartbeatTimer?.cancel();
+            _connectionCheckTimer?.cancel();
+            onConnectionLost?.call();
+          }
           debugPrint('UdpCommandService: Socket closed');
         },
       );
@@ -157,9 +169,17 @@ class UdpCommandService {
       _startConnectionCheck();
 
       debugPrint('UdpCommandService: Started ${_isTv ? "TV" : "Mobile"} mode');
-    } catch (_) {
+    } catch (error) {
+      await stop();
+      RemoteTransferDiagnostics.record(
+        'command_socket_start_failed',
+        fields: {'errorType': error.runtimeType,
+          if (error is SocketException) 'osErrorCode': error.osError?.errorCode,
+        },
+      );
       debugPrint('UdpCommandService: Failed to start');
       onError?.call('Remote connection could not be started');
+      rethrow;
     }
   }
 
@@ -201,7 +221,9 @@ class UdpCommandService {
   /// session layer has vouched for one, else the fixed command port (v1
   /// compat — packets to a phone's closed temp port just vanish, which
   /// matches today's behavior).
-  int portFor(String ip) => _peerEndpoints[ip]?.port ?? kCommandPort;
+  int portFor(String ip) => _peerEndpoints[ip]?.port ?? commandPort;
+
+  void forgetPeerEndpoint(String ip) => _peerEndpoints.remove(ip);
 
   /// Record where [ip] actually talks from. Called by the session layer ONLY
   /// after a message from that endpoint authenticated (opened ecmd, accepted
@@ -218,14 +240,15 @@ class UdpCommandService {
     final socket = _socket;
     if (socket == null) return false;
     try {
-      socket.send(
-        utf8.encode(jsonEncode(json)),
-        InternetAddress(ip),
-        port ?? portFor(ip),
-      );
-      return true;
-    } catch (_) {
+      final bytes = utf8.encode(jsonEncode(json));
+      return socket.send(bytes, InternetAddress(ip), port ?? portFor(ip)) ==
+          bytes.length;
+    } catch (error) {
       debugPrint('UdpCommandService: Failed to send raw message');
+      RemoteTransferDiagnostics.record('command_send_failed', fields: {
+        'errorType': error.runtimeType,
+        if (error is SocketException) 'osErrorCode': error.osError?.errorCode,
+      });
       return false;
     }
   }
@@ -332,6 +355,7 @@ class UdpCommandService {
       if (type != null && _sessionTypes.contains(type)) {
         onSessionMessage?.call(json, datagram.address, datagram.port);
       } else if (type == RemoteMessageType.heartbeat) {
+        if (!_isTv && datagram.address.address != _connectedIp) return;
         _lastHeartbeatReceived = DateTime.now();
         onHeartbeatReceived?.call();
       } else if (type == RemoteMessageType.command) {

@@ -5,6 +5,8 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 
 import 'remote_constants.dart';
+import 'remote_network_addresses.dart';
+import 'remote_transfer_diagnostics.dart';
 
 /// Represents a discovered TV device
 class DiscoveredDevice {
@@ -85,6 +87,8 @@ class UdpDiscoveryService {
   RawDatagramSocket? _socket;
   Timer? _broadcastTimer;
   Timer? _discoveryTimeoutTimer;
+  bool _broadcastInFlight = false;
+  bool _initialScanDone = false;
   final String _deviceId;
   final bool _isTv;
   String? _tvDeviceName;
@@ -135,7 +139,8 @@ class UdpDiscoveryService {
 
       _socket!.broadcastEnabled = true;
 
-      _socket!.listen(
+      final socket = _socket!;
+      socket.listen(
         _handleDatagram,
         onError: (error) {
           debugPrint(
@@ -144,6 +149,12 @@ class UdpDiscoveryService {
           onError?.call('Discovery socket failed');
         },
         onDone: () {
+          if (identical(_socket, socket)) {
+            _socket = null;
+            _broadcastTimer?.cancel();
+            _discoveryTimeoutTimer?.cancel();
+            onError?.call('Discovery stopped. Check local network access and retry.');
+          }
           debugPrint('UdpDiscoveryService: Socket closed');
         },
       );
@@ -155,14 +166,21 @@ class UdpDiscoveryService {
         _startBroadcasting();
         _startDiscoveryTimeout();
       }
-    } catch (_) {
+    } catch (error) {
+      await stop();
+      RemoteTransferDiagnostics.record(
+        'discovery_start_failed',
+        fields: {'errorType': error.runtimeType},
+      );
       debugPrint('UdpDiscoveryService: Failed to start');
       onError?.call('Discovery could not start');
+      rethrow;
     }
   }
 
   /// Stop discovery/listening
   Future<void> stop() async {
+    _initialScanDone = false;
     _broadcastTimer?.cancel();
     _broadcastTimer = null;
     _discoveryTimeoutTimer?.cancel();
@@ -174,7 +192,9 @@ class UdpDiscoveryService {
 
   /// Send a single discovery broadcast (for mobile)
   void sendDiscoveryBroadcast() async {
-    if (_socket == null || _isTv) return;
+    if (_socket == null || _isTv || _broadcastInFlight) return;
+    final listeningSocket = _socket;
+    _broadcastInFlight = true;
 
     final message = jsonEncode({
       'type': RemoteMessageType.discovery,
@@ -189,40 +209,40 @@ class UdpDiscoveryService {
     try {
       _socket!.send(data, InternetAddress(kBroadcastAddress), kDiscoveryPort);
       debugPrint('UdpDiscoveryService: Sent discovery broadcast');
-    } catch (_) {
+    } catch (error) {
       debugPrint('UdpDiscoveryService: Failed to send discovery broadcast');
+      RemoteTransferDiagnostics.record('discovery_broadcast_failed', fields: {
+        'errorType': error.runtimeType,
+        if (error is SocketException) 'osErrorCode': error.osError?.errorCode,
+      });
     }
 
-    // Also send to subnet broadcast addresses (needed for macOS/desktop)
+    // Send limited broadcast from each local address. Let the OS deliver it
+    // on that network; inventing a /24 directed-broadcast address fails on
+    // other subnet sizes. Responses still arrive on our fixed discovery port.
     try {
-      final interfaces = await NetworkInterface.list(
-        type: InternetAddressType.IPv4,
-        includeLoopback: false,
-      );
-
-      for (final interface in interfaces) {
-        for (final addr in interface.addresses) {
-          // Calculate subnet broadcast (assume /24 subnet - most common)
-          final parts = addr.address.split('.');
-          if (parts.length == 4) {
-            final subnetBroadcast = '${parts[0]}.${parts[1]}.${parts[2]}.255';
-            try {
-              _socket!.send(
-                data,
-                InternetAddress(subnetBroadcast),
-                kDiscoveryPort,
-              );
-              debugPrint(
-                'UdpDiscoveryService: Sent subnet discovery broadcast',
-              );
-            } catch (_) {
-              debugPrint('UdpDiscoveryService: Subnet broadcast failed');
-            }
-          }
+      for (final address in await RemoteNetworkAddress.list()) {
+        if (!identical(_socket, listeningSocket)) return;
+        RawDatagramSocket? source;
+        try {
+          source = await RawDatagramSocket.bind(
+            InternetAddress(address.address),
+            0,
+          );
+          if (!identical(_socket, listeningSocket)) return;
+          source.broadcastEnabled = true;
+          source.send(data, InternetAddress(kBroadcastAddress), kDiscoveryPort);
+        } on SocketException catch (error) {
+          debugPrint('UdpDiscoveryService: Interface broadcast unavailable');
+          RemoteTransferDiagnostics.record('discovery_interface_failed', fields: {'osErrorCode': error.osError?.errorCode});
+        } finally {
+          source?.close();
         }
       }
     } catch (_) {
       debugPrint('UdpDiscoveryService: Network interface discovery failed');
+    } finally {
+      _broadcastInFlight = false;
     }
   }
 
@@ -231,7 +251,14 @@ class UdpDiscoveryService {
     sendDiscoveryBroadcast();
 
     // Then every 2 seconds
+    var ticks = 0;
     _broadcastTimer = Timer.periodic(const Duration(seconds: 2), (_) {
+      if (_initialScanDone && ++ticks % 5 != 0) return;
+      final cutoff = DateTime.now().subtract(const Duration(seconds: 30));
+      _discoveredDevices.removeWhere(
+        (device) => device.discoveredAt.isBefore(cutoff),
+      );
+      onDevicesUpdated?.call(List.unmodifiable(_discoveredDevices));
       sendDiscoveryBroadcast();
     });
   }
@@ -241,9 +268,9 @@ class UdpDiscoveryService {
       debugPrint(
         'UdpDiscoveryService: Discovery complete (found ${_discoveredDevices.length} devices)',
       );
-      // Stop broadcasting after timeout
-      _broadcastTimer?.cancel();
-      _broadcastTimer = null;
+      // Keep a low-frequency scan alive for receivers opened later and for
+      // Wi-Fi changes; selecting a peer stops this service entirely.
+      _initialScanDone = true;
       onDiscoveryComplete?.call();
     });
   }

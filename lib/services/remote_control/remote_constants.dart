@@ -118,6 +118,7 @@ class PairCommand {
   static const String confirm = 'confirm'; // phone sends code proof
   static const String ok = 'ok'; // TV: session authorized
   static const String err = 'err'; // TV: refused (data = reason)
+  static const String cancel = 'cancel'; // sender abandons this session's code
 }
 
 /// Session liveness commands (action: sys)

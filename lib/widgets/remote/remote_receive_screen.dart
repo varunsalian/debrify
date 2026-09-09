@@ -1,11 +1,11 @@
 import 'remote_transfer_progress.dart';
 import 'dart:async';
-import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../services/remote_control/remote_control_state.dart';
+import '../../services/remote_control/remote_network_addresses.dart';
 import '../../utils/tv_keys.dart';
 import 'remote_pairing_dialog.dart';
 
@@ -23,7 +23,7 @@ class RemoteReceiveScreen extends StatefulWidget {
 class _RemoteReceiveScreenState extends State<RemoteReceiveScreen>
     with SingleTickerProviderStateMixin {
   late final AnimationController _pulse;
-  String? _localIp;
+  List<String> _localIps = [];
   Timer? _ipPoll;
 
   @override
@@ -55,27 +55,9 @@ class _RemoteReceiveScreenState extends State<RemoteReceiveScreen>
 
   Future<void> _resolveLocalIp() async {
     try {
-      final interfaces = await NetworkInterface.list(
-        type: InternetAddressType.IPv4,
-        includeLoopback: false,
-        includeLinkLocal: false,
-      );
-      String? best;
-      for (final ni in interfaces) {
-        for (final addr in ni.addresses) {
-          if (addr.isLoopback) continue;
-          best ??= addr.address;
-          // Prefer common LAN ranges.
-          if (addr.address.startsWith('192.168.') ||
-              addr.address.startsWith('10.') ||
-              addr.address.startsWith('172.')) {
-            best = addr.address;
-            break;
-          }
-        }
-      }
-      if (mounted && best != _localIp) {
-        setState(() => _localIp = best);
+      final addresses = await RemoteNetworkAddress.list();
+      if (mounted) {
+        setState(() => _localIps = addresses.map((a) => a.address).toList());
       }
     } catch (_) {
       // Best-effort; not critical.
@@ -143,7 +125,7 @@ class _RemoteReceiveScreenState extends State<RemoteReceiveScreen>
                               ),
                             ),
                             const SizedBox(height: 24),
-                            if (_localIp != null) _IpChip(ip: _localIp!),
+                            for (final ip in _localIps) _IpChip(ip: ip),
                             const RemoteTransferProgressPanel(),
                             // Pairing code, when a phone is asking to send
                             // credentials. Registers as the gate's presenter

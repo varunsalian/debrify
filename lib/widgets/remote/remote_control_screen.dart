@@ -173,7 +173,7 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
                               ? null
                               : () async {
                                   await state.disconnect();
-                                  await state.rescan();
+                                  await _connectSafely(state.rescan);
                                 },
                           child: const Text('Change'),
                         ),
@@ -319,7 +319,7 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
                   ? null
                   : () {
                       HapticFeedback.mediumImpact();
-                      state.rescan();
+                      _connectSafely(state.rescan);
                     },
               icon: Icon(
                 Icons.radar,
@@ -541,7 +541,22 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
     final ip = controller.text.trim();
     Navigator.of(dialogContext).pop();
     HapticFeedback.mediumImpact();
-    state.connectToManualIp(ip);
+    _connectSafely(() => state.connectToManualIp(ip));
+  }
+
+  Future<void> _connectSafely(Future<void> Function() connect) async {
+    try {
+      await connect();
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Could not start the connection. Check local network access and retry.',
+          ),
+        ),
+      );
+    }
   }
 
   String? _validateIpv4(String? value) {
@@ -571,7 +586,7 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
               ? null
               : () {
                   HapticFeedback.mediumImpact();
-                  state.connectToDevice(device);
+                  _connectSafely(() => state.connectToDevice(device));
                 },
           borderRadius: BorderRadius.circular(12),
           child: Container(

@@ -150,6 +150,7 @@ class _AutoDismissOnGateClearState extends State<_AutoDismissOnGateClear> {
   void initState() {
     super.initState();
     widget.gate.addListener(_onGate);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _onGate());
   }
 
   @override
@@ -160,7 +161,10 @@ class _AutoDismissOnGateClearState extends State<_AutoDismissOnGateClear> {
 
   void _onGate() {
     if (widget.gate.current == null && mounted) {
-      Navigator.of(context).maybePop();
+      final route = ModalRoute.of(context);
+      if (route != null && route.isActive) {
+        Navigator.of(context).removeRoute(route);
+      }
     }
   }
 
@@ -175,16 +179,26 @@ Future<String?> showPairingCodeEntrySheet(
   BuildContext context, {
   required String tvName,
   String? errorText,
+  ValueNotifier<String?>? ended,
 }) => showDialog<String>(
   context: context,
-  builder: (_) => _PairingCodeEntryDialog(tvName: tvName, errorText: errorText),
+  builder: (_) => _PairingCodeEntryDialog(
+    tvName: tvName,
+    errorText: errorText,
+    ended: ended,
+  ),
 );
 
 class _PairingCodeEntryDialog extends StatefulWidget {
   final String tvName;
   final String? errorText;
+  final ValueNotifier<String?>? ended;
 
-  const _PairingCodeEntryDialog({required this.tvName, this.errorText});
+  const _PairingCodeEntryDialog({
+    required this.tvName,
+    this.errorText,
+    this.ended,
+  });
 
   @override
   State<_PairingCodeEntryDialog> createState() =>
@@ -199,7 +213,22 @@ class _PairingCodeEntryDialogState extends State<_PairingCodeEntryDialog> {
   bool _closing = false;
 
   @override
+  void initState() {
+    super.initState();
+    widget.ended?.addListener(_checkEnded);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _checkEnded());
+  }
+
+  void _checkEnded() {
+    if (!mounted || _closing || widget.ended?.value == null) return;
+    _closing = true;
+    final route = ModalRoute.of(context);
+    if (route != null) Navigator.of(context).removeRoute(route);
+  }
+
+  @override
   void dispose() {
+    widget.ended?.removeListener(_checkEnded);
     _controller.dispose();
     _fieldFocus.dispose();
     _cancelFocus.dispose();
@@ -670,20 +699,54 @@ Future<bool> _runPairingFlow(
   bool requireSas = false,
 }) async {
   final responses = _PairResponseQueue();
+  final ended = ValueNotifier<String?>(null);
+  Timer? entryTimer;
   final previous = state.onPairMessage;
   state.onPairMessage = (s, command, data) {
-    if (s.sidB64 == session.sidB64) responses.add(command, data);
+    if (s.sidB64 != session.sidB64) {
+      previous?.call(s, command, data);
+      return;
+    }
+    if (command == PairCommand.err &&
+        const {'cancelled', 'expired'}.contains(data)) {
+      ended.value = data;
+    }
+    responses.add(command, data);
   };
-  try {
-    final sent = await state.sendEncryptedCommand(
-      session,
-      RemoteCommand(action: RemoteAction.pair, command: PairCommand.request),
-    );
-    if (!sent) return false;
 
+  Future<(String, String?)> exchange(String command, [String? data]) async {
+    for (var attempt = 0; attempt < 3; attempt++) {
+      if (ended.value != null) return (PairCommand.err, ended.value);
+      final sent = await state.sendEncryptedCommand(
+        session,
+        RemoteCommand(action: RemoteAction.pair, command: command, data: data),
+      );
+      if (!sent) throw TimeoutException('send failed');
+      final deadline = DateTime.now().add(const Duration(seconds: 3));
+      try {
+        while (true) {
+          final left = deadline.difference(DateTime.now());
+          if (left <= Duration.zero) throw TimeoutException('pairing response');
+          final response = await responses.next(left);
+          // A retried request can leave duplicate challenges in flight while
+          // the user is entering the code. They are not proof verdicts.
+          if (command == PairCommand.confirm &&
+              response.$1 == PairCommand.challenge) {
+            continue;
+          }
+          return response;
+        }
+      } on TimeoutException {
+        if (attempt == 2) rethrow;
+      }
+    }
+    throw TimeoutException('pairing response');
+  }
+
+  try {
     (String, String?) reply;
     try {
-      reply = await responses.next(const Duration(seconds: 10));
+      reply = await exchange(PairCommand.request);
     } on TimeoutException {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -728,14 +791,20 @@ Future<bool> _runPairingFlow(
       return false;
     }
     // challenge: the code is on the TV screen now.
+    // Bound the whole code-entry attempt, including incorrect-code retries.
+    entryTimer = Timer(kPairingCodeTimeout, () {
+      ended.value = 'expired';
+    });
 
     String? errorText;
     while (true) {
       if (!context.mounted) return false;
+      if (ended.value != null) return false;
       final code = await showPairingCodeEntrySheet(
         context,
         tvName: device.deviceName,
         errorText: errorText,
+        ended: ended,
       );
       if (code == null) return false; // user cancelled
 
@@ -753,21 +822,24 @@ Future<bool> _runPairingFlow(
       );
 
       Future<(String, String?)> sendProofAwaitVerdict() async {
-        final confirmed = await state.sendEncryptedCommand(
-          session,
-          RemoteCommand(
-            action: RemoteAction.pair,
-            command: PairCommand.confirm,
-            data: base64Encode(proof),
-          ),
-        );
-        if (!confirmed) throw TimeoutException('send failed');
-        return responses.next(const Duration(seconds: 10));
+        return exchange(PairCommand.confirm, base64Encode(proof));
       }
 
       (String, String?) verdict;
       try {
         verdict = await sendProofAwaitVerdict();
+        if (verdict.$1 == PairCommand.err && verdict.$2 == 'no_request') {
+          // Older receivers clear the proof request before replying OK. If
+          // that reply was lost, asking again reconciles their already-
+          // authorized session without asking the user to retype a vanished
+          // code. A fresh challenge means the old request really ended.
+          final status = await exchange(PairCommand.request);
+          if (status.$1 != PairCommand.ok) {
+            ended.value = 'expired';
+            return false;
+          }
+          verdict = status;
+        }
         // too_early: the proof landed inside the TV's minimum-display window.
         // The code is already verified locally — resend the SAME proof after
         // a beat instead of making the user retype it (and never feed
@@ -805,7 +877,24 @@ Future<bool> _runPairingFlow(
       }
     }
   } finally {
+    entryTimer?.cancel();
     state.onPairMessage = previous;
+    if (!session.authorized) {
+      try {
+        await state.sendEncryptedCommand(
+          session,
+          RemoteCommand(action: RemoteAction.pair, command: PairCommand.cancel),
+        );
+      } catch (_) {}
+    }
+    if (ended.value != null && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Pairing ended. Start again to get a new code.'),
+        ),
+      );
+    }
+    ended.dispose();
   }
 }
 
