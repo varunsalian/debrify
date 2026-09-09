@@ -539,6 +539,16 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
       : (MediaQuery.devicePixelRatioOf(context) * MediaQuery.sizeOf(context).width)
           .round().clamp(720, 1920);
 
+  Duration get _heroImageFadeIn =>
+      (MediaQuery.maybeOf(context)?.disableAnimations ?? false)
+      ? Duration.zero
+      : Duration(milliseconds: widget.dpad ? 180 : 420);
+
+  Duration get _heroImageFadeOut =>
+      widget.dpad || (MediaQuery.maybeOf(context)?.disableAnimations ?? false)
+      ? Duration.zero
+      : const Duration(milliseconds: 1000);
+
   @visibleForTesting
   ImageProvider heroWarmupProvider(String url) => ResizeImage.resizeIfNeeded(
       _heroDecodeWidth, null,
@@ -1638,7 +1648,8 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
               // so the one full-bleed image on the screen was the soft one.
               // Clamped: metahub art tops out around 1920.
               memCacheWidth: _heroDecodeWidth,
-              fadeInDuration: const Duration(milliseconds: 420),
+              fadeInDuration: _heroImageFadeIn,
+              fadeOutDuration: _heroImageFadeOut,
               placeholder: (_, __) => ColoredBox(color: ground),
               // Same guess-404 fallback as the wide backdrop: derived
               // metahub art can miss, and the poster beats a blank hero.
@@ -1825,7 +1836,8 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
             // upscaler and the decode budget there is the tighter constraint
             // (see TvHeroArtworkQuality).
             memCacheWidth: _heroDecodeWidth,
-            fadeInDuration: const Duration(milliseconds: 420),
+            fadeInDuration: _heroImageFadeIn,
+            fadeOutDuration: _heroImageFadeOut,
             placeholder: (_, __) => ColoredBox(color: ground),
             // The derived metahub URL is a GUESS — when it 404s (no still
             // for that title), fall back to the poster rather than a flat

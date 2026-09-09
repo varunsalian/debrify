@@ -106,6 +106,7 @@ import '../widgets/home/card_focus_rise.dart';
 import '../widgets/home/home_theme.dart';
 import '../widgets/home/row_tag_pill.dart';
 import '../widgets/home/spotlight_board.dart';
+import '../widgets/home/spotlight_catalog_card_cache.dart';
 import '../widgets/movie_watched_badge.dart';
 import '../widgets/search_loading_animation.dart';
 import '../widgets/skeleton_poster.dart';
@@ -748,6 +749,10 @@ class _SearchScreenState extends State<SearchScreen>
   List<HomeCollection> _homeCollections = const [];
   String _homeCollectionsSig = HomeCollectionsStore.signatureOf(const []);
   int _homeSettingsReloadGen = 0;
+  late final _spotlightCatalogCards = SpotlightCatalogCardCache(
+    wideArtwork: _wideArtUrl,
+    onOpen: (item, addon) => _openItem(item, addon),
+  );
 
   /// Stable ids in the user's global Home-row order. Rows not present append
   /// canonically; ids whose backing row is temporarily unavailable stay saved.
@@ -7231,7 +7236,7 @@ class _SearchScreenState extends State<SearchScreen>
       // The same destination the classic rails' "See All" link opens —
       // including the tracker-list rows, which _openCatalogSeeAll routes to
       // their own browser rather than the catalog pager.
-      onSeeAll: () => _openCatalogSeeAll(_sections[i]),
+      onSeeAll: () => _openCatalogSeeAll(section),
       // Catalog cards go caption-free off TV in PORTRAIT — the art is the
       // label; a caption repeating the poster's own title was the
       // reference's one piece of noise we added ourselves. That rationale
@@ -7240,21 +7245,8 @@ class _SearchScreenState extends State<SearchScreen>
       captions: _homeLandscapeCards,
       items: [
         for (final m in _sections[i].items)
-          SpotlightCard(
-            metadata: m,
-            image: _homeLandscapeCards ? _wideArtUrl(m) : m.poster,
-            fallbackImage: _homeLandscapeCards ? m.poster : null,
-            title: m.name,
-            rating: m.imdbRating,
-            shape: _homeLandscapeCards
-                ? SpotlightCardShape.wide
-                : SpotlightCardShape.poster,
-            watchedImdbId: m.type == 'movie' || m.type == 'series'
-                ? (m.effectiveImdbId ?? m.id)
-                : null,
-            watchedContentType: m.type,
-            onOpen: () => _openItem(m, _sections[i].addon),
-          ),
+          _spotlightCatalogCards.resolve(m, section.addon,
+            landscape: _homeLandscapeCards),
       ],
     );
   }

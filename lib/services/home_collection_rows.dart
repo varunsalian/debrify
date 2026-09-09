@@ -34,7 +34,7 @@ class HomeCollectionSection extends CatalogSection {
           type: 'folder',
           name: collection.title,
         ),
-        items: [for (final f in collection.folders) folderMeta(collection, f)],
+        items: _folderTiles(collection),
         exhausted: true,
       );
 
@@ -61,6 +61,20 @@ class HomeCollectionSection extends CatalogSection {
   }
 
   HomeCollectionFolder? folderOf(StremioMeta item) {
+    // Home's synthetic tiles already own their presentation data. Re-scanning
+    // the entire folder list for every artwork/shape/caption getter turns one
+    // large collection row rebuild into quadratic work (and ID allocations).
+    // Only trust tiles from this exact definition; copied or foreign metadata
+    // still resolves against this row by ID.
+    if (item is CollectionFolderMeta &&
+        identical(item._collection, collection)) {
+      final index = item._folderIndex;
+      if (index != null &&
+          index < collection.folders.length &&
+          identical(collection.folders[index], item.folder)) {
+        return item.folder;
+      }
+    }
     final i = folderIndexOf(item);
     return i < 0 ? null : collection.folders[i];
   }
@@ -88,13 +102,34 @@ class HomeCollectionSection extends CatalogSection {
 
   static StremioMeta folderMeta(HomeCollection c, HomeCollectionFolder f) =>
       CollectionFolderMeta(c, f);
+
+  static List<StremioMeta> _folderTiles(HomeCollection collection) {
+    final seen = <String>{};
+    return [
+      for (var i = 0; i < collection.folders.length; i++)
+        CollectionFolderMeta._(
+          collection,
+          collection.folders[i],
+          seen.add(collection.folders[i].id) ? i : null,
+        ),
+    ];
+  }
 }
 
 /// Folder-only presentation data travels with the card through every Home layout.
 class CollectionFolderMeta extends StremioMeta {
+  final HomeCollection _collection;
+  final int? _folderIndex;
   final HomeCollectionFolder folder;
-  CollectionFolderMeta(HomeCollection collection, this.folder)
-    : super(
+  CollectionFolderMeta(HomeCollection collection, HomeCollectionFolder folder)
+    : this._(collection, folder, null);
+
+  CollectionFolderMeta._(
+    HomeCollection collection,
+    this.folder,
+    this._folderIndex,
+  ) : _collection = collection,
+      super(
         id: HomeCollectionRowIds.folderMetaId(collection.id, folder.id),
         type: 'folder',
         name: folder.title,

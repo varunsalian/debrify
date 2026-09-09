@@ -1,5 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:debrify/utils/platform_util.dart';
 import 'package:file/local.dart';
 import 'package:debrify/widgets/recoverable_network_image.dart';
 import 'package:flutter/material.dart';
@@ -38,6 +40,7 @@ class Images extends Fake implements BaseCacheManager {
 }
 
 void main() {
+  tearDown(() => PlatformUtil.debugSetAndroidTvCached(null));
   late Directory temp;
   late File png;
   setUpAll(() async {
@@ -58,6 +61,43 @@ void main() {
       errorWidget: (_, __, ___) => const Text('failed'),
     ),
   );
+  testWidgets('TV image reveal uses one short fade and honors reduced motion', (
+    tester,
+  ) async {
+    for (final tv in [false, true]) {
+      PlatformUtil.debugSetAndroidTvCached(tv);
+      for (final reduced in [false, true]) {
+        await tester.pumpWidget(
+          MediaQuery(
+            data: MediaQueryData(disableAnimations: reduced),
+            child: Directionality(
+              textDirection: TextDirection.ltr,
+              child: RecoverableNetworkImage(
+                imageUrl: 'https://image.test/policy.png',
+                cacheManager: Images(png, alwaysFail: true),
+                fadeInDuration: const Duration(milliseconds: 420),
+                fadeOutDuration: const Duration(milliseconds: 180),
+                placeholder: (_, __) => const SizedBox(),
+                errorWidget: (_, __, ___) => const SizedBox(),
+              ),
+            ),
+          ),
+        );
+        final image = tester.widget<CachedNetworkImage>(
+          find.byType(CachedNetworkImage),
+        );
+        expect(
+          image.fadeInDuration,
+          reduced ? Duration.zero : Duration(milliseconds: tv ? 180 : 420),
+        );
+        expect(
+          image.fadeOutDuration,
+          reduced || tv ? Duration.zero : const Duration(milliseconds: 180),
+        );
+        await tester.pumpWidget(const SizedBox());
+      }
+    }
+  });
   testWidgets('failed image retries in the same mounted card', (tester) async {
     final images = Images(png);
     await tester.pumpWidget(app(images, 'https://image.test/recover.png'));

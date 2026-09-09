@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
+import '../utils/platform_util.dart';
 
 /// Retries a failed mounted image twice. A scroll/remount must not be required
 /// to recover from a transient download or corrupt cached image.
@@ -84,18 +85,32 @@ class _RecoverableNetworkImageState extends State<RecoverableNetworkImage> {
   }
 
   @override
-  Widget build(BuildContext context) => CachedNetworkImage(
-    key: ValueKey((widget.imageUrl, _imageKey)),
-    imageUrl: widget.imageUrl,
-    fit: widget.fit,
-    cacheManager: widget.cacheManager,
-    memCacheWidth: widget.memCacheWidth,
-    color: widget.color,
-    colorBlendMode: widget.colorBlendMode,
-    fadeInDuration: widget.fadeInDuration,
-    fadeOutDuration: widget.fadeOutDuration,
-    placeholder: widget.placeholder,
-    errorWidget: widget.errorWidget,
-    errorListener: _failed,
-  );
+  Widget build(BuildContext context) {
+    final reducedMotion =
+        MediaQuery.maybeOf(context)?.disableAnimations ?? false;
+    final tv = PlatformUtil.isTelevision;
+    // Reveal ready artwork with one short fade. Animating the placeholder too
+    // adds a second opacity layer to every arriving TV poster.
+    final fadeIn = reducedMotion
+        ? Duration.zero
+        : tv && widget.fadeInDuration > const Duration(milliseconds: 180)
+        ? const Duration(milliseconds: 180)
+        : widget.fadeInDuration;
+    return CachedNetworkImage(
+      key: ValueKey((widget.imageUrl, _imageKey)),
+      imageUrl: widget.imageUrl,
+      fit: widget.fit,
+      cacheManager: widget.cacheManager,
+      memCacheWidth: widget.memCacheWidth,
+      color: widget.color,
+      colorBlendMode: widget.colorBlendMode,
+      fadeInDuration: fadeIn,
+      fadeOutDuration: reducedMotion || tv
+          ? Duration.zero
+          : widget.fadeOutDuration,
+      placeholder: widget.placeholder,
+      errorWidget: widget.errorWidget,
+      errorListener: _failed,
+    );
+  }
 }

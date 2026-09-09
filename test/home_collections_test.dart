@@ -52,6 +52,88 @@ const _xperienceSample = '''
 StremioMeta _meta(String id) => StremioMeta(id: id, type: 'movie', name: id);
 
 void main() {
+  test('duplicate folder IDs retain the original first-match presentation', () {
+    const first = HomeCollectionFolder(id: 'same', title: 'First', sources: []);
+    const second = HomeCollectionFolder(
+      id: 'same',
+      title: 'Second',
+      sources: [],
+    );
+    final row = HomeCollectionSection(
+      collection: const HomeCollection(
+        id: 'duplicates',
+        title: 'Duplicates',
+        folders: [first, second],
+      ),
+    );
+    expect(row.folderOf(row.items.first), same(first));
+    expect(row.folderOf(row.items.last), same(first));
+  });
+  test(
+    'folder presentation reuses owned data without trusting foreign definitions',
+    () {
+      const folder = HomeCollectionFolder(
+        id: 'folder',
+        title: 'Current',
+        sources: [],
+      );
+      const collection = HomeCollection(
+        id: 'collection',
+        title: 'C',
+        folders: [folder],
+      );
+      const otherFolder = HomeCollectionFolder(
+        id: 'folder',
+        title: 'Stale',
+        sources: [],
+      );
+      const other = HomeCollection(
+        id: 'collection',
+        title: 'C',
+        folders: [otherFolder],
+      );
+      final row = HomeCollectionSection(collection: collection);
+      expect(identical(row.folderOf(row.items.single), folder), isTrue);
+      expect(
+        identical(
+          row.folderOf(CollectionFolderMeta(other, otherFolder)),
+          folder,
+        ),
+        isTrue,
+      );
+      expect(
+        row.folderOf(
+          StremioMeta(id: row.items.single.id, type: 'folder', name: 'Copy'),
+        ),
+        same(folder),
+      );
+      expect(row.folderOf(_meta('unknown')), isNull);
+      expect(
+        row.folderOf(
+          CollectionFolderMeta(
+            collection,
+            const HomeCollectionFolder(
+              id: 'foreign',
+              title: 'Foreign',
+              sources: [],
+            ),
+          ),
+        ),
+        isNull,
+      );
+      final mutableFolders = <HomeCollectionFolder>[folder];
+      final mutableRow = HomeCollectionSection(
+        collection: HomeCollection(
+          id: 'mutable',
+          title: 'M',
+          folders: mutableFolders,
+        ),
+      );
+      final previousItem = mutableRow.items.single;
+      mutableFolders[0] = otherFolder;
+      expect(mutableRow.folderOf(previousItem), same(otherFolder));
+    },
+  );
   test(
     'worker signature preserves collection content and order exactly',
     () async {

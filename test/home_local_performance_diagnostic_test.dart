@@ -9,6 +9,7 @@ import 'dart:ui' as ui;
 
 import 'package:debrify/models/home_collection_inventory.dart';
 import 'package:debrify/services/home_collections_store.dart';
+import 'package:debrify/services/home_collection_rows.dart';
 import 'package:debrify/utils/canonical_json.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/painting.dart';
@@ -45,6 +46,24 @@ void main() {
       final readMs = watch.elapsedMicroseconds / 1000;
       final collections = result.inventory.collections;
       final folders = collections.expand((c) => c.folders).toList();
+      final rows = [
+        for (final c in collections) HomeCollectionSection(collection: c),
+      ];
+      watch.reset();
+      for (var repeat = 0; repeat < 10; repeat++) {
+        for (final row in rows) {
+          for (final item in row.items) {
+            row.folderOf(item);
+            row.focusArtOf(item);
+            row.focusVideoOf(item);
+            row.tileAspectOf(item);
+            row.folderOf(item);
+          }
+        }
+      }
+      print(
+        'HOME_DIAG ten collection row presentations: ms=${watch.elapsedMicroseconds / 1000}',
+      );
       final sources = folders.expand((f) => f.sources).toList();
       print(
         'HOME_DIAG inventory: collections=${collections.length}, enabled=${collections.where((c) => c.enabled).length}, folders=${folders.length}, sources=${sources.length}, storedBytes=${encoded.length}, definitionBytes=${result.size}, asyncReadMs=$readMs',

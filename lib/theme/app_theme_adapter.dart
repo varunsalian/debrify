@@ -12,9 +12,9 @@ import 'app_type.dart';
 /// full-screen layer, and the default Material zoom transition (scale + fade +
 /// snapshotting) is visibly janky on weak TV GPUs — it's a big part of why the
 /// app doesn't feel native there. TV gets a plain fast fade instead: the
-/// incoming page fades in over the first 40% of the route animation (~120ms of
-/// the standard 300ms), which reads as an instant, native-style switch and
-/// costs one opacity layer. Phones keep the stock zoom transition untouched.
+/// route uses a short fade in both directions, with no trailing invisible
+/// animation delaying Back. It costs one opacity layer and no snapshots or
+/// blur. Phones keep the stock zoom transition untouched.
 ///
 /// The TV check reads [PlatformUtil.isTelevision] per transition build —
 /// warmed in main() before runApp — so the ThemeData stays const/synchronous.
@@ -28,6 +28,18 @@ class TvAwarePageTransitionsBuilder extends PageTransitionsBuilder {
       ZoomPageTransitionsBuilder();
 
   @override
+  Duration get transitionDuration => PlatformUtil.isTelevision
+      ? const Duration(milliseconds: 180)
+      : _phoneDefault.transitionDuration;
+
+  @override
+  Duration get reverseTransitionDuration => PlatformUtil.isTelevision
+      ? const Duration(milliseconds: 140)
+      : _phoneDefault.reverseTransitionDuration;
+
+  static final Animatable<double> _tvFade = CurveTween(curve: Curves.easeOut);
+
+  @override
   Widget buildTransitions<T>(
     PageRoute<T> route,
     BuildContext context,
@@ -36,11 +48,11 @@ class TvAwarePageTransitionsBuilder extends PageTransitionsBuilder {
     Widget child,
   ) {
     if (PlatformUtil.isTelevision) {
+      if (MediaQuery.maybeOf(context)?.disableAnimations ?? false) return child;
       return FadeTransition(
-        opacity: CurvedAnimation(
-          parent: animation,
-          curve: const Interval(0.0, 0.4, curve: Curves.easeOut),
-        ),
+        // Unlike a new CurvedAnimation on every build, drive() does not leave
+        // an undisposed status listener attached to the route controller.
+        opacity: animation.drive(_tvFade),
         child: child,
       );
     }
@@ -145,9 +157,7 @@ abstract final class AppThemeAdapter {
     // TvAwarePageTransitionsBuilder). Phones/desktop keep their defaults.
     pageTransitionsTheme: pageTransitions,
     colorScheme: const ColorScheme.dark(
-      primary: Color(
-        0xFF818CF8,
-      ), // Indigo 400 (brighter for contrast on dark)
+      primary: Color(0xFF818CF8), // Indigo 400 (brighter for contrast on dark)
       onPrimary: Colors.white,
       primaryContainer: Color(0xFF3730A3),
       onPrimaryContainer: Colors.white,
@@ -321,9 +331,8 @@ abstract final class AppThemeAdapter {
     Color mix(Color a, Color b, double t) => Color.lerp(a, b, t)!;
     Color step(double t) => mix(ground, tx, t);
     // Text/icon colour ON a filled swatch: the swatch's own opposite.
-    Color onFill(Color fill) => fill.computeLuminance() > 0.5
-        ? const Color(0xFF111114)
-        : Colors.white;
+    Color onFill(Color fill) =>
+        fill.computeLuminance() > 0.5 ? const Color(0xFF111114) : Colors.white;
 
     final line = Color.alphaBlend(core.hair, ground);
     // Secondary text, flattened opaque so Material controls can dim/blend it.
@@ -478,12 +487,14 @@ abstract final class AppThemeAdapter {
   static SystemUiOverlayStyle themedSystemBars(AppTheme theme) =>
       SystemUiOverlayStyle(
         statusBarColor: Colors.transparent,
-        statusBarIconBrightness:
-            theme.isLight ? Brightness.dark : Brightness.light,
+        statusBarIconBrightness: theme.isLight
+            ? Brightness.dark
+            : Brightness.light,
         statusBarBrightness: theme.brightness, // iOS reads this one.
         systemNavigationBarColor: Colors.transparent,
-        systemNavigationBarIconBrightness:
-            theme.isLight ? Brightness.dark : Brightness.light,
+        systemNavigationBarIconBrightness: theme.isLight
+            ? Brightness.dark
+            : Brightness.light,
       );
 
   /// The shipped type scale — shared verbatim by both paths.

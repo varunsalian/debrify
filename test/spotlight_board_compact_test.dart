@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:debrify/models/stremio_addon.dart';
 import 'package:debrify/theme/app_theme.dart';
@@ -53,6 +54,7 @@ void main() {
   late FocusNode hero;
 
   setUp(() {
+    SharedPreferences.setMockInitialValues({});
     hero = FocusNode(debugLabel: 'hero');
   });
 
