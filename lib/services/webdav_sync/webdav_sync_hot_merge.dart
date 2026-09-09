@@ -552,6 +552,32 @@ abstract final class WebDavSyncHotMerge {
     ),
   );
 
+  /// Merge and publication hashing share one bounded worker. Keep this closure
+  /// outside the engine so it cannot capture transports or live profile state.
+  /// The synchronous implementations remain the single source of wire semantics.
+  static Future<WebDavSyncMergeResult> mergeForPublicationAsync({
+    required WebDavSyncHotDocument local,
+    required List<WebDavSyncHotDocument> peers,
+    required List<WebDavSyncTombstoneDocument> tombstoneDocuments,
+    required int serverNowMs,
+    Duration tombstoneHorizon = const Duration(days: 90),
+    int? dormantSinceMs,
+  }) => TransferIo.largeWorker.synchronized(
+    () => Isolate.run(
+      () => clampForPublication(
+        merge(
+          local: local,
+          peers: peers,
+          tombstoneDocuments: tombstoneDocuments,
+          nowMs: serverNowMs,
+          tombstoneHorizon: tombstoneHorizon,
+          dormantSinceMs: dormantSinceMs,
+        ),
+        serverNowMs: serverNowMs,
+      ),
+    ),
+  );
+
   static WebDavSyncBuiltHotState build(WebDavSyncBuildInput input) {
     final previous = input.previous;
     if (previous != null && previous.circleProfileId != input.circleProfileId) {

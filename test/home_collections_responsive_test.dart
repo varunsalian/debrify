@@ -11,8 +11,7 @@ import 'package:debrify/services/stremio_service.dart';
 import 'package:debrify/widgets/see_all/see_all_poster_grid.dart';
 import 'package:debrify/widgets/see_all/stremio_dropdown.dart';
 import 'package:debrify/widgets/see_all/discover_card_settings_scope.dart';
-import 'package:debrify/widgets/collections/rail_see_all_pill.dart';
-import 'package:debrify/screens/see_all/catalog_see_all_screen.dart';
+import 'package:debrify/widgets/collections/collection_list_gallery.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -120,7 +119,7 @@ void main() {
         );
         await tester.pumpAndSettle();
         expect(tester.takeException(), isNull);
-        expect(find.byType(SeeAllPosterGrid), findsWidgets);
+        expect(find.byType(layout == 'rows' ? CollectionListGallery : SeeAllPosterGrid), findsWidgets);
         final narrow = size.width < 640;
         if (narrow) {
           await tester.tap(find.text('Filters'));
@@ -211,11 +210,11 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    expect(find.byType(SeeAllPosterGrid), findsOneWidget);
+    expect(tester.widget<CollectionListGallery>(find.byType(CollectionListGallery)).lists, hasLength(1));
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('rail See All preserves hidden Discover card details', (tester) async {
+  testWidgets('opening a list preserves hidden Discover card details', (tester) async {
     await seed(tester, 'rows');
     await tester.pumpWidget(MaterialApp(
       home: DiscoverCardSettingsScope(
@@ -226,10 +225,10 @@ void main() {
       ),
     ));
     await tester.pumpAndSettle();
-    tester.widget<RailSeeAllPill>(find.byType(RailSeeAllPill).first).onPressed();
+    tester.widget<CollectionListGallery>(find.byType(CollectionListGallery)).onOpen(0);
     await tester.pumpAndSettle();
-    expect(find.byType(CatalogSeeAllScreen), findsOneWidget);
-    final scope = DiscoverCardSettingsScope.maybeOf(tester.element(find.byType(CatalogSeeAllScreen)));
+    expect(find.byType(SeeAllPosterGrid), findsOneWidget);
+    final scope = DiscoverCardSettingsScope.maybeOf(tester.element(find.byType(SeeAllPosterGrid)));
     expect(scope, isNotNull);
     expect(scope!.showTitles, isFalse);
     expect(scope.showRatings, isFalse);

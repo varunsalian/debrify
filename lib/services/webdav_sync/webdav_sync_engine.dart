@@ -1049,22 +1049,20 @@ final class WebDavSyncEngine
                           tombstoneHorizon.inMilliseconds
                   ? lastSuccess
                   : null;
-              final replayed = WebDavSyncHotMerge.clampForPublication(
-                WebDavSyncHotMerge.merge(
-                  local: built.document,
-                  peers: <WebDavSyncHotDocument>[pending.target],
-                  tombstoneDocuments: <WebDavSyncTombstoneDocument>[
-                    WebDavSyncTombstoneDocument(
-                      circleProfileId: entry.key,
-                      items: localTombstones,
-                    ),
-                  ],
-                  nowMs: serverNowMs,
-                  tombstoneHorizon: tombstoneHorizon,
-                  dormantSinceMs: dormantSince,
-                ),
-                serverNowMs: serverNowMs,
-              );
+              final replayed =
+                  await WebDavSyncHotMerge.mergeForPublicationAsync(
+                    local: built.document,
+                    peers: <WebDavSyncHotDocument>[pending.target],
+                    tombstoneDocuments: <WebDavSyncTombstoneDocument>[
+                      WebDavSyncTombstoneDocument(
+                        circleProfileId: entry.key,
+                        items: localTombstones,
+                      ),
+                    ],
+                    tombstoneHorizon: tombstoneHorizon,
+                    dormantSinceMs: dormantSince,
+                    serverNowMs: serverNowMs,
+                  );
               final materializedValues =
                   await WebDavSyncHotMerge.materializePreferencesAsync(
                     document: replayed.document,
@@ -1637,18 +1635,15 @@ final class WebDavSyncEngine
                   serverNowMs - lastSuccess >= tombstoneHorizon.inMilliseconds
               ? lastSuccess
               : null;
-          final merged = WebDavSyncHotMerge.clampForPublication(
-            WebDavSyncHotMerge.merge(
-              local: built.document,
-              peers: peerData.hotDocuments,
-              tombstoneDocuments: <WebDavSyncTombstoneDocument>[
-                localTombstoneDocument,
-                ...peerData.tombstoneDocuments,
-              ],
-              nowMs: serverNowMs,
-              tombstoneHorizon: tombstoneHorizon,
-              dormantSinceMs: dormantSince,
-            ),
+          final merged = await WebDavSyncHotMerge.mergeForPublicationAsync(
+            local: built.document,
+            peers: peerData.hotDocuments,
+            tombstoneDocuments: <WebDavSyncTombstoneDocument>[
+              localTombstoneDocument,
+              ...peerData.tombstoneDocuments,
+            ],
+            tombstoneHorizon: tombstoneHorizon,
+            dormantSinceMs: dormantSince,
             serverNowMs: serverNowMs,
           );
           final materializedValues =

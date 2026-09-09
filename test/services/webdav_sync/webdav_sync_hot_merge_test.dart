@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:crypto/crypto.dart';
@@ -9,6 +10,97 @@ import 'package:debrify/services/webdav_sync/webdav_sync_hot_models.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('large publication allows the caller event loop to run', () async {
+    final local = _document(
+      device: 'device-a',
+      records: {
+        for (var i = 0; i < 5000; i++)
+          'completion/movie/$i': _value(100, 'device-a', {
+            'name': 'Title $i',
+            'watched': true,
+          }),
+      },
+    );
+    var eventRan = false;
+    Timer.run(() => eventRan = true);
+    final result = await WebDavSyncHotMerge.mergeForPublicationAsync(
+      local: local,
+      peers: [],
+      tombstoneDocuments: [],
+      serverNowMs: 200,
+    );
+    expect(eventRan, isTrue);
+    expect(result.document.watchState.records, hasLength(5000));
+    expect(local.watchState.records.values.first.stamp.normalizedTimeMs, 100);
+  });
+  test(
+    'worker publication matches synchronous conflicts, expiry and clamping',
+    () async {
+      final local = _document(
+        device: 'device-a',
+        scalarTime: 500,
+        scalars: {'theme': 'dark'},
+        records: {
+          'completion/movie/a': _value(500, 'device-a', true),
+          'completion/movie/b': _value(100, 'device-a', true),
+        },
+      );
+      final peer = _document(
+        device: 'device-b',
+        scalarTime: 1200,
+        scalars: {'theme': 'light'},
+        records: {'completion/movie/a': _value(1200, 'device-b', false)},
+      );
+      final tombstones = [
+        WebDavSyncTombstoneDocument(
+          circleProfileId: 'profile-circle',
+          items: {
+            'completion/movie/b': WebDavSyncTombstone(
+              key: 'completion/movie/b',
+              stamp: _stamp(600, 'device-b'),
+              firstPublishedAtMs: 600,
+            ),
+          },
+        ),
+      ];
+      for (final dormant in [null, 400]) {
+        final expected = WebDavSyncHotMerge.clampForPublication(
+          WebDavSyncHotMerge.merge(
+            local: local,
+            peers: [peer],
+            tombstoneDocuments: tombstones,
+            nowMs: 1000,
+            dormantSinceMs: dormant,
+          ),
+          serverNowMs: 1000,
+        );
+        final actual = await WebDavSyncHotMerge.mergeForPublicationAsync(
+          local: local,
+          peers: [peer],
+          tombstoneDocuments: tombstones,
+          serverNowMs: 1000,
+          dormantSinceMs: dormant,
+        );
+        expect(actual.document.toJson(), expected.document.toJson());
+        expect(
+          {for (final e in actual.tombstones.entries) e.key: e.value.toJson()},
+          {
+            for (final e in expected.tombstones.entries)
+              e.key: e.value.toJson(),
+          },
+        );
+      }
+      await expectLater(
+        WebDavSyncHotMerge.mergeForPublicationAsync(
+          local: local,
+          peers: [],
+          tombstoneDocuments: [],
+          serverNowMs: -1,
+        ),
+        throwsArgumentError,
+      );
+    },
+  );
   test('profile and resource identity spaces may never overlap', () {
     expect(
       () => WebDavSyncIdentityMaps(

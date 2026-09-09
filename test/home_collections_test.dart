@@ -52,6 +52,23 @@ const _xperienceSample = '''
 StremioMeta _meta(String id) => StremioMeta(id: id, type: 'movie', name: id);
 
 void main() {
+  test(
+    'worker signature preserves collection content and order exactly',
+    () async {
+      final collections = HomeCollectionParser.parse(_xperienceSample);
+      for (final input in [
+        <HomeCollection>[],
+        collections,
+        collections.reversed.toList(),
+        [for (var i = 0; i < 100; i++) ...collections],
+      ]) {
+        expect(
+          await HomeCollectionsStore.signatureOfAsync(input),
+          HomeCollectionsStore.signatureOf(input),
+        );
+      }
+    },
+  );
   group('HomeCollectionParser', () {
     test('parses the Nuvio / Xperience export shape', () {
       final collections = HomeCollectionParser.parse(_xperienceSample);

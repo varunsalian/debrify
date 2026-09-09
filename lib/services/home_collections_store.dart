@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:isolate';
 
 import 'package:crypto/crypto.dart';
 
@@ -178,6 +179,12 @@ class HomeCollectionsStore {
         utf8.encode(jsonEncode([for (final c in collections) c.toJson()])),
       )
       .toString();
+
+  /// Large imported packs must not serialize/hash on the Home UI isolate.
+  static Future<String> signatureOfAsync(List<HomeCollection> collections) =>
+      collections.isEmpty
+      ? Future.value(signatureOf(const []))
+      : Isolate.run(() => signatureOf(collections));
 
   Future<void> remove(String id) =>
       _mutate<void>(captureSession(), (current) => current.remove(id));

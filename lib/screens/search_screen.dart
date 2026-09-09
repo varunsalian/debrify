@@ -747,6 +747,7 @@ class _SearchScreenState extends State<SearchScreen>
   /// settings-changed listener diffs against.
   List<HomeCollection> _homeCollections = const [];
   String _homeCollectionsSig = HomeCollectionsStore.signatureOf(const []);
+  int _homeSettingsReloadGen = 0;
 
   /// Stable ids in the user's global Home-row order. Rows not present append
   /// canonically; ids whose backing row is temporarily unavailable stay saved.
@@ -2427,6 +2428,8 @@ class _SearchScreenState extends State<SearchScreen>
   /// settings.
   Future<void> _reloadForHomeSettings() async {
     if (!mounted) return;
+    final reloadGen = ++_homeSettingsReloadGen;
+    final reloadSession = HomeCollectionsStore.captureSession();
     final cardSettings = await Future.wait<Object>([
       StorageService.getHomeCardOrientation(),
       StorageService.getHomeHideCardTitlesAndRatings(),
@@ -2521,7 +2524,14 @@ class _SearchScreenState extends State<SearchScreen>
     if (!mounted) return;
     final hideWatched = HideWatchedPrefs.enabled;
     final hideWatchedUnchanged = hideWatched == _hideWatched;
-    final collectionsSig = HomeCollectionsStore.signatureOf(collections);
+    final collectionsSig = await HomeCollectionsStore.signatureOfAsync(
+      collections,
+    );
+    if (!mounted ||
+        reloadSession != HomeCollectionsStore.captureSession() ||
+        reloadGen != _homeSettingsReloadGen) {
+      return;
+    }
     final collectionsUnchanged = collectionsSig == _homeCollectionsSig;
     final disabledUnchanged =
         disabled.length == _homeDisabled.length &&
@@ -2669,6 +2679,9 @@ class _SearchScreenState extends State<SearchScreen>
           final rowOrder = await StorageService.getHomeRowOrder();
           final heroSource = await StorageService.getHomeHeroSource();
           final collections = await _readHomeCollections();
+          final collectionsSig = await HomeCollectionsStore.signatureOfAsync(
+            collections,
+          );
           // Commit the prefs and (crucially) start the tracker fan-out only if
           // this load still owns the board — a superseded run kicking off its own
           // resolve would double the concurrent tracker requests beside the
@@ -2680,7 +2693,7 @@ class _SearchScreenState extends State<SearchScreen>
           _heroSource = heroSource;
           _hideWatched = HideWatchedPrefs.enabled;
           _homeCollections = collections;
-          _homeCollectionsSig = HomeCollectionsStore.signatureOf(collections);
+          _homeCollectionsSig = collectionsSig;
           // Opt-in Trakt/Simkl list rows, resolved IN PARALLEL with the first
           // catalog batch below. Home board only — the Search tab runs _load just
           // to warm the catalog refs for its search, and Discover never comes
