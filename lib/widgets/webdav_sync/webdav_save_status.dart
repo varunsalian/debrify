@@ -4,7 +4,7 @@ import 'package:flutter/scheduler.dart';
 import '../../services/player_visibility.dart';
 import '../../services/webdav_sync/webdav_sync_save_feedback.dart';
 
-/// Global sender-only feedback; remote reads never create a local receipt.
+/// Quiet sender-only activity feedback; remote reads create no local receipt.
 class WebDavSaveStatus extends StatefulWidget {
   const WebDavSaveStatus({super.key, required this.child, this.feedback});
   final Widget child;
@@ -14,34 +14,51 @@ class WebDavSaveStatus extends StatefulWidget {
 }
 
 class _WebDavSaveStatusState extends State<WebDavSaveStatus> {
+  Timer? _visibilityTimer;
+  bool _syncing = false;
+  bool _expired = false;
+
+  void _updateActivity() {
+    final syncing =
+        feedback.enabled && feedback.phase == WebDavSavePhase.syncing;
+    if (syncing == _syncing) return;
+    _syncing = syncing;
+    _visibilityTimer?.cancel();
+    _expired = false;
+    if (syncing) {
+      // One budget per continuous activity episode, not per notification.
+      // Playback and rebuilds must not restart this deadline.
+      _visibilityTimer = Timer(const Duration(seconds: 10), () {
+        if (mounted) setState(() => _expired = true);
+      });
+    }
+  }
+
   WebDavSyncSaveFeedback get feedback =>
       widget.feedback ?? WebDavSyncSaveFeedback.instance;
-  Timer? _successTimer;
-  bool _hideSuccess = false;
-  bool _compact = false;
-  int _lastRevision = -1;
-  WebDavSavePhase? _lastPhase;
-  bool _lastTakingLonger = false;
-  Timer? _compactTimer;
-
-  void _expandBriefly() {
-    _compactTimer?.cancel();
-    _compact = false;
-    _compactTimer = Timer(const Duration(seconds: 3), () {
-      if (mounted) setState(() => _compact = true);
-    });
-  }
 
   @override
   void initState() {
     super.initState();
     feedback.addListener(_changed);
-    PlayerVisibility.visible.addListener(_playerChanged);
-    _changed();
+    PlayerVisibility.visible.addListener(_changed);
+    _updateActivity();
   }
 
-  void _playerChanged() {
-    // Flutter player routes acquire/release their owner during build/dispose.
+  @override
+  void didUpdateWidget(covariant WebDavSaveStatus oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final oldFeedback = oldWidget.feedback ?? WebDavSyncSaveFeedback.instance;
+    if (oldFeedback != feedback) {
+      oldFeedback.removeListener(_changed);
+      feedback.addListener(_changed);
+      _updateActivity();
+    }
+  }
+
+  void _changed() {
+    _updateActivity();
+    // Player routes may acquire/release visibility during build/dispose.
     if (SchedulerBinding.instance.schedulerPhase ==
         SchedulerPhase.persistentCallbacks) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -52,231 +69,93 @@ class _WebDavSaveStatusState extends State<WebDavSaveStatus> {
     }
   }
 
-  void _changed() {
-    if (feedback.revision != _lastRevision ||
-        feedback.phase != _lastPhase ||
-        feedback.takingLonger != _lastTakingLonger) {
-      _lastTakingLonger = feedback.takingLonger;
-      _lastRevision = feedback.revision;
-      _lastPhase = feedback.phase;
-      _expandBriefly();
-    }
-    _successTimer?.cancel();
-    _hideSuccess = false;
-    if (feedback.phase == WebDavSavePhase.synced) {
-      _successTimer = Timer(const Duration(seconds: 4), () {
-        if (mounted) setState(() => _hideSuccess = true);
-      });
-    }
-    if (mounted) setState(() {});
-  }
-
   @override
   void dispose() {
+    _visibilityTimer?.cancel();
     feedback.removeListener(_changed);
-    PlayerVisibility.visible.removeListener(_playerChanged);
-    _successTimer?.cancel();
-    _compactTimer?.cancel();
+    PlayerVisibility.visible.removeListener(_changed);
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final phase = feedback.phase;
     final visible =
         feedback.enabled &&
+        !_expired &&
         !PlayerVisibility.visible.value &&
-        phase != WebDavSavePhase.inactive &&
-        !_hideSuccess;
-    final phone = MediaQuery.sizeOf(context).shortestSide < 600;
+        feedback.phase == WebDavSavePhase.syncing;
     return Stack(
       children: [
         widget.child,
         if (visible)
           Positioned(
-            left: 12,
-            right: 12,
-            bottom: MediaQuery.viewInsetsOf(context).bottom + (phone ? 96 : 12),
-            child: SafeArea(
-              child: Align(
-                alignment: Alignment.bottomRight,
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 430),
-                  child: _compact && phase != WebDavSavePhase.synced
-                      ? Material(
-                          elevation: 6,
-                          borderRadius: BorderRadius.circular(24),
-                          child: Semantics(
-                            label: phase == WebDavSavePhase.pending
-                                ? 'Sync pending — tap for Retry'
-                                : 'Syncing to WebDAV — tap for details',
-                            button: true,
-                            child: IconButton(
-                              onPressed: () => setState(_expandBriefly),
-                              icon: Icon(
-                                phase == WebDavSavePhase.pending
-                                    ? Icons.cloud_upload_outlined
-                                    : Icons.sync,
-                              ),
-                            ),
-                          ),
-                        )
-                      : Material(
-                          elevation: 6,
-                          borderRadius: BorderRadius.circular(12),
-                          color: Theme.of(
-                            context,
-                          ).colorScheme.surfaceContainerHigh,
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 14,
-                              vertical: 8,
-                            ),
-                            child: Row(
-                              children: [
-                                if (phase == WebDavSavePhase.syncing)
-                                  const SizedBox(
-                                    width: 18,
-                                    height: 18,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                    ),
-                                  )
-                                else
-                                  Icon(
-                                    phase == WebDavSavePhase.synced
-                                        ? Icons.cloud_done_outlined
-                                        : Icons.cloud_upload_outlined,
-                                    size: 20,
-                                  ),
-                                const SizedBox(width: 10),
-                                Expanded(
-                                  child: Semantics(
-                                    liveRegion: true,
-                                    child: Text(
-                                      phase == WebDavSavePhase.synced
-                                          ? 'Synced to WebDAV'
-                                          : feedback.takingLonger
-                                          ? 'Sync is taking longer. Your change is saved locally.'
-                                          : phase == WebDavSavePhase.syncing
-                                          ? 'Saved locally · Syncing to WebDAV…'
-                                          : 'Saved locally · Sync pending',
-                                    ),
-                                  ),
-                                ),
-                                if (phase == WebDavSavePhase.pending)
-                                  TextButton(
-                                    onPressed: () =>
-                                        unawaited(feedback.retry()),
-                                    child: const Text('Retry'),
-                                  ),
-                              ],
-                            ),
-                          ),
-                        ),
-                ),
-              ),
-            ),
+            right: 20,
+            bottom: MediaQuery.viewInsetsOf(context).bottom + 20,
+            child: const SafeArea(child: IgnorePointer(child: _SyncDot())),
           ),
       ],
     );
   }
 }
 
-/// Call only after a successful local profile mutation. Timeout never cancels
-/// transport work or changes the result of the local save.
-Future<void> showWebDavSaveProgress(
-  BuildContext context,
-  int beforeRevision, {
-  WebDavSyncSaveFeedback? feedback,
-}) async {
-  final source = feedback ?? WebDavSyncSaveFeedback.instance;
-  if (PlayerVisibility.visible.value ||
-      !context.mounted ||
-      !source.enabled ||
-      source.revision <= beforeRevision ||
-      !source.hasPending ||
-      source.phase == WebDavSavePhase.pending) {
-    return;
-  }
-  try {
-    await showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => _SaveProgress(feedback: source, target: source.revision),
-    );
-  } catch (_) {
-    // Presentation must never turn a completed local save into a save error.
-  }
+class _SyncDot extends StatefulWidget {
+  const _SyncDot();
+
+  @override
+  State<_SyncDot> createState() => _SyncDotState();
 }
 
-class _SaveProgress extends StatefulWidget {
-  const _SaveProgress({required this.feedback, required this.target});
-  final WebDavSyncSaveFeedback feedback;
-  final int target;
-  @override
-  State<_SaveProgress> createState() => _SaveProgressState();
-}
+class _SyncDotState extends State<_SyncDot>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _pulse = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 900),
+  );
+  late final Animation<double> _opacity = Tween<double>(
+    begin: 0.3,
+    end: 1,
+  ).animate(CurvedAnimation(parent: _pulse, curve: Curves.easeInOut));
 
-class _SaveProgressState extends State<_SaveProgress> {
-  Timer? _timer;
-  bool _closing = false;
   @override
-  void initState() {
-    super.initState();
-    widget.feedback.addListener(_changed);
-    PlayerVisibility.visible.addListener(_changed);
-    _timer = Timer(const Duration(seconds: 15), () {
-      widget.feedback.timedOut();
-      _close();
-    });
-    WidgetsBinding.instance.addPostFrameCallback((_) => _changed());
-  }
-
-  void _changed() {
-    if (PlayerVisibility.visible.value ||
-        !widget.feedback.enabled ||
-        widget.feedback.confirmedRevision >= widget.target ||
-        widget.feedback.phase == WebDavSavePhase.pending) {
-      WidgetsBinding.instance.addPostFrameCallback((_) => _close());
-      WidgetsBinding.instance.ensureVisualUpdate();
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (MediaQuery.disableAnimationsOf(context)) {
+      _pulse.stop();
+      _pulse.value = 1;
+    } else if (!_pulse.isAnimating) {
+      _pulse.repeat(reverse: true);
     }
-  }
-
-  void _close() {
-    if (!mounted || _closing) return;
-    _closing = true;
-    final route = ModalRoute.of(context);
-    // Remove this exact dialog, never a route pushed above it meanwhile.
-    if (route != null) route.navigator?.removeRoute(route);
   }
 
   @override
   void dispose() {
-    _timer?.cancel();
-    widget.feedback.removeListener(_changed);
-    PlayerVisibility.visible.removeListener(_changed);
+    _pulse.dispose();
     super.dispose();
   }
 
   @override
-  Widget build(BuildContext context) => AlertDialog(
-    title: const Text('Syncing to WebDAV…'),
-    content: const Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        LinearProgressIndicator(),
-        SizedBox(height: 16),
-        Text(
-          'Your change is saved locally. Keep the app open to finish uploading.',
+  Widget build(BuildContext context) => Semantics(
+    label: 'Syncing to WebDAV',
+    child: FadeTransition(
+      opacity: _opacity,
+      child: const SizedBox(
+        key: ValueKey('webdav-sync-dot'),
+        width: 6,
+        height: 6,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: Color(0xFF88DDC5),
+            boxShadow: [
+              BoxShadow(
+                color: Color(0x5588DDC5),
+                blurRadius: 6,
+                spreadRadius: 1,
+              ),
+            ],
+          ),
         ),
-      ],
-    ),
-    actions: [
-      TextButton(
-        onPressed: _close,
-        child: const Text('Continue in background'),
       ),
-    ],
+    ),
   );
 }

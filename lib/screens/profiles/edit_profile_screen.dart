@@ -1,5 +1,3 @@
-import '../../services/webdav_sync/webdav_sync_save_feedback.dart';
-import '../../widgets/webdav_sync/webdav_save_status.dart';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -743,7 +741,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   }
 
   Future<void> _save() async {
-    final syncRevision = WebDavSyncSaveFeedback.instance.revision;
     if (_saving || _name.text.trim().isEmpty) return;
     if (_resources == null || _engines == null || _setupLoadError != null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -993,7 +990,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         await _showRecoveryCode(snapshot.name, recoveryCode);
         if (!mounted) return;
       }
-      await showWebDavSaveProgress(context, syncRevision);
       if (!mounted) return;
       Navigator.of(context).pop(true);
     } on ProfileAvatarRejected catch (rejected) {
@@ -2145,9 +2141,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   );
 
   Future<void> _removePinAsAdmin() async {
-    final revision = WebDavSyncSaveFeedback.instance.revision;
     await _removePinAsAdminLocally();
-    if (mounted) await showWebDavSaveProgress(context, revision);
   }
 
   Future<void> _removePinAsAdminLocally() async {

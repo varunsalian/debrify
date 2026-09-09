@@ -1,5 +1,3 @@
-import '../../services/webdav_sync/webdav_sync_save_feedback.dart';
-import '../../widgets/webdav_sync/webdav_save_status.dart';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -30,11 +28,7 @@ class ProfileRowActions {
   final ProfileAuthorizationContext authorization;
 
   Future<bool> delete(UserProfile profile) async {
-    final revision = WebDavSyncSaveFeedback.instance.revision;
     final changed = await _deleteLocally(profile);
-    if (changed && context.mounted) {
-      await showWebDavSaveProgress(context, revision);
-    }
     return changed;
   }
 
@@ -209,11 +203,7 @@ class ProfileRowActions {
   }
 
   Future<bool> toggleEnabled(UserProfile profile) async {
-    final revision = WebDavSyncSaveFeedback.instance.revision;
     final changed = await _toggleEnabledLocally(profile);
-    if (changed && context.mounted) {
-      await showWebDavSaveProgress(context, revision);
-    }
     return changed;
   }
 

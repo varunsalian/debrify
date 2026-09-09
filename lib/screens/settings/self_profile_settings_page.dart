@@ -1,5 +1,3 @@
-import '../../services/webdav_sync/webdav_sync_save_feedback.dart';
-import '../../widgets/webdav_sync/webdav_save_status.dart';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -153,9 +151,7 @@ class _SelfProfileSettingsPageState extends State<SelfProfileSettingsPage> {
   }
 
   Future<void> _saveIdentity() async {
-    final revision = WebDavSyncSaveFeedback.instance.revision;
     await _saveIdentityLocally();
-    if (mounted) await showWebDavSaveProgress(context, revision);
   }
 
   Future<void> _saveIdentityLocally() async {
@@ -216,9 +212,7 @@ class _SelfProfileSettingsPageState extends State<SelfProfileSettingsPage> {
   }
 
   Future<void> _changePin() async {
-    final revision = WebDavSyncSaveFeedback.instance.revision;
     await _changePinLocally();
-    if (mounted) await showWebDavSaveProgress(context, revision);
   }
 
   Future<void> _changePinLocally() async {
@@ -265,9 +259,7 @@ class _SelfProfileSettingsPageState extends State<SelfProfileSettingsPage> {
   }
 
   Future<void> _removePin() async {
-    final revision = WebDavSyncSaveFeedback.instance.revision;
     await _removePinLocally();
-    if (mounted) await showWebDavSaveProgress(context, revision);
   }
 
   Future<void> _removePinLocally() async {

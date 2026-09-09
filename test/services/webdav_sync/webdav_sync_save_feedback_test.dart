@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  final dot = find.byKey(const ValueKey('webdav-sync-dot'));
   testWidgets('both player owners hide all feedback without losing receipts', (
     tester,
   ) async {
@@ -27,10 +28,10 @@ void main() {
     );
     feedback.saved(1);
     await tester.pump();
-    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    expect(dot, findsOneWidget);
     PlayerVisibility.opened(flutterPlayer);
     await tester.pump();
-    expect(find.byType(CircularProgressIndicator), findsNothing);
+    expect(dot, findsNothing);
     feedback.saved(2);
     feedback.waiting();
     await tester.pump(const Duration(seconds: 4));
@@ -48,50 +49,16 @@ void main() {
     await tester.pump();
     PlayerVisibility.closed(nativePlayer);
     await tester.pump();
-    expect(find.text('Saved locally · Sync pending'), findsOneWidget);
-    expect(feedback.hasPending, isTrue);
-    await tester.pumpWidget(const SizedBox());
-  });
-
-  testWidgets('player opening dismisses save dialog and blocks new dialogs', (
-    tester,
-  ) async {
-    final feedback = WebDavSyncSaveFeedback()..setEnabled(true);
-    final owner = Object();
-    addTearDown(() {
-      PlayerVisibility.closed(owner);
-      feedback.dispose();
-    });
-    late BuildContext pageContext;
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Builder(
-          builder: (context) {
-            pageContext = context;
-            return const Scaffold();
-          },
-        ),
-      ),
-    );
-    feedback.saved(1);
-    final dialog = showWebDavSaveProgress(pageContext, 0, feedback: feedback);
+    expect(dot, findsNothing);
+    feedback.started();
     await tester.pump();
-      await tester.pump(const Duration(milliseconds: 300));
-    expect(find.byType(AlertDialog), findsOneWidget);
-    PlayerVisibility.opened(owner);
-    await tester.pump();
-      await tester.pump(const Duration(milliseconds: 300));
-    await dialog;
-    expect(find.byType(AlertDialog), findsNothing);
-    await showWebDavSaveProgress(pageContext, 0, feedback: feedback);
-    await tester.pump();
-    expect(find.byType(AlertDialog), findsNothing);
+    expect(dot, findsOneWidget);
     expect(feedback.hasPending, isTrue);
     await tester.pumpWidget(const SizedBox());
   });
 
   testWidgets(
-    'phone status clears navigation and collapses with accessible Retry',
+    'phone dot pulses without text or blocking navigation and hides when idle',
     (tester) async {
       tester.view.physicalSize = const Size(390, 844);
       tester.view.devicePixelRatio = 1;
@@ -115,26 +82,93 @@ void main() {
           ),
         ),
       );
+      expect(dot, findsNothing);
       feedback.saved(1);
       await tester.pump();
-      final banner = find.text('Saved locally · Syncing to WebDAV…');
-      expect(
-        tester.getRect(banner).bottom,
-        lessThan(tester.getRect(find.text('Discover')).top),
-      );
+      expect(dot, findsOneWidget);
+      expect(tester.getSize(dot), const Size(6, 6));
+      expect(tester.getRect(dot).right, 370);
+      expect(tester.getRect(dot).bottom, 824);
+      final fade = find
+          .ancestor(of: dot, matching: find.byType(FadeTransition))
+          .first;
+      final opacity = tester.widget<FadeTransition>(fade).opacity;
+      expect(opacity.value, closeTo(0.3, 0.001));
+      await tester.pump(const Duration(milliseconds: 900));
+      expect(opacity.value, closeTo(1, 0.001));
+      await tester.pump(const Duration(milliseconds: 900));
+      expect(opacity.value, closeTo(0.3, 0.001));
+      expect(find.textContaining('Saved locally'), findsNothing);
+      expect(find.byType(IconButton), findsNothing);
+      expect(find.byType(CircularProgressIndicator), findsNothing);
       await tester.tap(find.text('Discover'));
       expect(taps, 1);
-      await tester.pump(const Duration(seconds: 3));
-      expect(banner, findsNothing);
+      await tester.tapAt(tester.getCenter(dot));
+      expect(taps, 2);
       feedback.waiting();
       await tester.pump();
-      await tester.pump(const Duration(seconds: 3));
+      expect(dot, findsNothing);
       expect(find.text('Retry'), findsNothing);
-      await tester.pump(const Duration(milliseconds: 300));
-      await tester.tap(find.byType(IconButton));
+      feedback.started();
       await tester.pump();
-      expect(find.text('Retry'), findsOneWidget);
+      expect(dot, findsOneWidget);
+      feedback.finished(1, published: true);
+      await tester.pump();
+      expect(dot, findsNothing);
+      expect(find.text('Synced to WebDAV'), findsNothing);
+      feedback.saved(2);
+      feedback.setEnabled(false);
+      await tester.pump();
+      expect(dot, findsNothing);
       await tester.pumpWidget(const SizedBox());
+    },
+  );
+
+  testWidgets(
+    'reduced motion is steady and feedback replacement detaches listeners',
+    (tester) async {
+      final first = WebDavSyncSaveFeedback()
+        ..setEnabled(true)
+        ..saved(1);
+      final second = WebDavSyncSaveFeedback()..setEnabled(true);
+      addTearDown(first.dispose);
+      addTearDown(second.dispose);
+      Future<void> show(WebDavSyncSaveFeedback feedback, bool reduceMotion) =>
+          tester.pumpWidget(
+            MaterialApp(
+              home: MediaQuery(
+                data: MediaQueryData(disableAnimations: reduceMotion),
+                child: WebDavSaveStatus(
+                  feedback: feedback,
+                  child: const Scaffold(),
+                ),
+              ),
+            ),
+          );
+      await show(first, true);
+      final fade = find
+          .ancestor(of: dot, matching: find.byType(FadeTransition))
+          .first;
+      expect(tester.widget<FadeTransition>(fade).opacity.value, 1);
+      await tester.pump(const Duration(seconds: 2));
+      expect(tester.widget<FadeTransition>(fade).opacity.value, 1);
+      expect(tester.binding.hasScheduledFrame, isFalse);
+      await show(first, false);
+      await tester.pump(const Duration(milliseconds: 450));
+      expect(tester.binding.hasScheduledFrame, isTrue);
+      await show(second, false);
+      await tester.pumpAndSettle();
+      expect(dot, findsNothing);
+      first.saved(2);
+      expect(tester.binding.hasScheduledFrame, isFalse);
+      second.saved(1);
+      await tester.pump();
+      expect(dot, findsOneWidget);
+      await tester.pumpWidget(const SizedBox());
+      await tester.pumpAndSettle();
+      second.saved(2);
+      expect(tester.binding.hasScheduledFrame, isFalse);
+      expect(tester.takeException(), isNull);
     },
   );
 
@@ -209,75 +243,60 @@ void main() {
     feedback.dispose();
   });
 
-  for (final outcome in [
-    'timeout',
-    'continue',
-    'success',
-    'failure',
-    'disabled',
-  ]) {
+  for (final reducedMotion in [false, true]) {
     testWidgets(
-      'profile save dialog handles $outcome without canceling pending work',
+      'dot expires after ten seconds, reduced motion: $reducedMotion',
       (tester) async {
-        final feedback = WebDavSyncSaveFeedback()
-          ..setEnabled(outcome != 'disabled');
-        var returned = false;
+        final feedback = WebDavSyncSaveFeedback()..setEnabled(true);
+        final player = Object();
+        addTearDown(() {
+          PlayerVisibility.closed(player);
+          feedback.dispose();
+        });
         await tester.pumpWidget(
           MaterialApp(
-            builder: (_, child) =>
-                WebDavSaveStatus(feedback: feedback, child: child!),
-            home: Builder(
-              builder: (context) => Scaffold(
-                body: TextButton(
-                  onPressed: () async {
-                    final before = feedback.revision;
-                    if (feedback.enabled) feedback.saved(1);
-                    await showWebDavSaveProgress(
-                      context,
-                      before,
-                      feedback: feedback,
-                    );
-                    returned = true;
-                  },
-                  child: const Text('Save'),
-                ),
+            home: MediaQuery(
+              data: MediaQueryData(disableAnimations: reducedMotion),
+              child: WebDavSaveStatus(
+                feedback: feedback,
+                child: const Scaffold(),
               ),
             ),
           ),
         );
-        await tester.tap(find.text('Save'));
+        feedback.saved(1);
         await tester.pump();
-        await tester.pump(const Duration(milliseconds: 300));
-        if (outcome == 'disabled') {
-          expect(find.byType(AlertDialog), findsNothing);
-        } else {
-          expect(find.byType(AlertDialog), findsOneWidget);
-          switch (outcome) {
-            case 'timeout':
-              await tester.pump(const Duration(seconds: 15));
-            case 'continue':
-              await tester.tap(find.text('Continue in background'));
-            case 'success':
-              feedback.finished(1, published: true);
-            case 'failure':
-              feedback.finished(1, published: false);
-          }
-          await tester.pump();
-          await tester.pump(const Duration(milliseconds: 300));
-          expect(find.byType(AlertDialog), findsNothing);
-          expect(feedback.hasPending, outcome != 'success');
-          if (outcome == 'timeout') {
-            expect(
-              find.text('Sync is taking longer. Your change is saved locally.'),
-              findsOneWidget,
-            );
-          }
-          if (outcome == 'failure') expect(find.text('Retry'), findsOneWidget);
-        }
-        expect(returned, isTrue);
-        expect(tester.takeException(), isNull);
+        expect(dot, findsOneWidget);
+        await tester.pump(const Duration(seconds: 9));
+        feedback.saved(2);
+        feedback.started();
+        feedback.timedOut();
+        await tester.pump();
+        expect(dot, findsOneWidget);
+        await tester.pump(const Duration(seconds: 1));
+        expect(dot, findsNothing);
+        expect(feedback.phase, WebDavSavePhase.syncing);
+        expect(feedback.hasPending, isTrue);
+        feedback.saved(3);
+        PlayerVisibility.opened(player);
+        await tester.pump();
+        PlayerVisibility.closed(player);
+        await tester.pump(const Duration(seconds: 20));
+        expect(dot, findsNothing);
+        expect(find.byType(AlertDialog), findsNothing);
+        expect(find.byType(SnackBar), findsNothing);
+        expect(find.textContaining('saved locally'), findsNothing);
+        feedback.waiting();
+        feedback.started();
+        await tester.pump();
+        expect(dot, findsOneWidget);
+        await tester.pump(const Duration(seconds: 10));
+        expect(dot, findsNothing);
+        feedback.finished(3, published: true);
+        await tester.pump();
+        expect(find.byType(AlertDialog), findsNothing);
+        expect(find.byType(SnackBar), findsNothing);
         await tester.pumpWidget(const SizedBox());
-        feedback.dispose();
       },
     );
   }
