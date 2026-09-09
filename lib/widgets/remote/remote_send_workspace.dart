@@ -5,6 +5,7 @@ import '../../services/profiles/profile_async_authorization.dart';
 import '../../services/remote_control/remote_control_state.dart';
 import '../../services/remote_control/remote_constants.dart';
 import '../../services/stremio_service.dart';
+import '../../services/remote_control/remote_webdav_sync_account.dart';
 import '../../theme/app_theme_scope.dart';
 import 'remote_channel_export.dart';
 import 'remote_config_export.dart';
@@ -92,7 +93,9 @@ class _RemoteSendWorkspaceState extends State<RemoteSendWorkspace> {
         detail: item.id == ConfigCommand.webDav
             ? 'Browsing connections · Separate from WebDAV sync'
             : null,
-        group: RemoteSendGroup.setup,
+        group: item.id == remoteWebDavSyncAccountId
+            ? RemoteSendGroup.webDavSync
+            : RemoteSendGroup.setup,
       ),
     for (final channel in _channels.currentState?.channels ?? [])
       RemoteSendChoice(
@@ -180,7 +183,11 @@ class _RemoteSendWorkspaceState extends State<RemoteSendWorkspace> {
           throw StateError('The receiving device changed');
         }
         final setup = choices
-            .where((c) => c.group == RemoteSendGroup.setup)
+            .where(
+              (c) =>
+                  c.group == RemoteSendGroup.setup ||
+                  c.group == RemoteSendGroup.webDavSync,
+            )
             .map((c) => c.id.substring(6))
             .toSet();
         final addons = choices

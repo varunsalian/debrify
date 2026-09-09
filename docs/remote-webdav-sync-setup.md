@@ -1,11 +1,34 @@
 # WebDAV sync after remote credential import
 
+## Sender entry point
+
+The root Send screen has a separate **WebDAV Sync** category alongside
+**Send everything**, **Addons**, and **Accounts & setup**. Its account comes from
+the configured sync binding, not the media-server collection. An unlocked Admin
+can select **WebDAV Sync account** and send it even when no WebDAV media server
+is saved. Unconfigured accounts and uncommitted setup candidates are not exported.
+
+Only the server URL/login is sent through the existing encrypted WebDAV
+credential command; no profiles, databases, device identity or sync secret are
+included. The receiving device saves those server credentials and offers the
+sync setup described below. **Accounts & setup → WebDAV media servers** remains
+a separate selection for browsing connections.
+
+## Receiver setup
+
 Importing WebDAV server credentials now offers **Enable WebDAV Sync?** on the
 receiving device after configuration application and the transfer receipt finish.
 The server login is saved regardless of whether this optional offer is accepted.
 When several servers are imported, the receiver chooses one; the app does not
 join every server automatically. Resending an already-saved server can offer
 setup again using its saved credentials.
+
+Receiver deduplication matches the normalized endpoint **and** username/password.
+If an existing media connection uses a different login at the same endpoint, it
+is retained unchanged and the incoming login is saved separately. Only the
+matching incoming account is offered for sync, including after onboarding.
+The sender rechecks pending logout as well as the active binding before returning
+sync credentials; namespace-only logout changes cannot bypass revalidation.
 
 Setup reuses `WebDavSyncConnectController`: the folder is `Debrify`, a new sync
 secret is generated for an empty account, and an existing account supplies its

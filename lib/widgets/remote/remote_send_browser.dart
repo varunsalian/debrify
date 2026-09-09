@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../theme/app_theme_scope.dart';
 
-enum RemoteSendGroup { addons, channels, setup }
+enum RemoteSendGroup { addons, channels, setup, webDavSync }
 
 class RemoteSendChoice {
   const RemoteSendChoice({
@@ -70,6 +70,7 @@ class _RemoteSendBrowserState extends State<RemoteSendBrowser> {
     RemoteSendGroup.addons => 'Addons',
     RemoteSendGroup.channels => 'Debrify TV channels',
     RemoteSendGroup.setup => 'Accounts & setup',
+    RemoteSendGroup.webDavSync => 'WebDAV Sync',
   };
   @override
   Widget build(BuildContext context) {
@@ -108,6 +109,7 @@ class _RemoteSendBrowserState extends State<RemoteSendBrowser> {
                     RemoteSendGroup.addons => Icons.extension_outlined,
                     RemoteSendGroup.channels => Icons.live_tv_outlined,
                     RemoteSendGroup.setup => Icons.tune_rounded,
+                    RemoteSendGroup.webDavSync => Icons.sync,
                   },
                   name(group),
                   '${widget.choices.where((c) => c.group == group).length} available · ${selected.where((c) => c.group == group).length} selected',
@@ -215,7 +217,9 @@ class _RemoteSendBrowserState extends State<RemoteSendBrowser> {
                 Padding(
                   padding: const EdgeInsets.all(20),
                   child: Text(
-                    'No ${name(_group!).toLowerCase()} available for this profile.',
+                    _group == RemoteSendGroup.webDavSync
+                        ? 'Connect WebDAV Sync in Sync & Migrate first, then return here from an unlocked Admin profile.'
+                        : 'No ${name(_group!).toLowerCase()} available for this profile.',
                     style: TextStyle(color: t.dim),
                   ),
                 ),

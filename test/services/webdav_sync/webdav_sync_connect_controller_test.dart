@@ -1,6 +1,8 @@
 import 'dart:typed_data';
 
 import 'package:debrify/models/webdav_item.dart';
+import 'package:debrify/services/remote_control/remote_webdav_sync_account.dart';
+import 'package:debrify/services/webdav_sync/webdav_sync_feature.dart';
 import 'package:debrify/services/profiles/device_key_provider.dart';
 import 'package:debrify/services/webdav_protocol_client.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_activation.dart';
@@ -84,6 +86,77 @@ void main() {
     binding = await store.setLifecycle(binding.id, WebDavSyncLifecycle.active);
     await store.promoteStaged(binding.id);
     return (binding: binding, marker: marker);
+  }
+
+  test('remote sync account export needs no media-server entry', () async {
+    await installActiveBinding();
+    final exported = await readRemoteWebDavSyncAccount(
+      store: store,
+      authorization: authorization,
+    );
+    expect(exported!.baseUrl, credentials.endpoint.toString());
+    expect(exported.username, credentials.username);
+    expect(exported.password, credentials.password);
+    expect(exported.toTransferJson().containsKey('syncPassphrase'), isFalse);
+    expect(exported.toTransferJson().containsKey('profiles'), isFalse);
+  });
+
+  test(
+    'unconfigured or feature-disabled sync is not offered for remote send',
+    () async {
+      expect(
+        await readRemoteWebDavSyncAccount(
+          store: store,
+          authorization: authorization,
+        ),
+        isNull,
+      );
+      await installActiveBinding();
+      WebDavSyncFeature.debugOverride = false;
+      try {
+        expect(
+          await readRemoteWebDavSyncAccount(
+            store: store,
+            authorization: authorization,
+          ),
+          isNull,
+        );
+      } finally {
+        WebDavSyncFeature.debugOverride = null;
+      }
+    },
+  );
+
+  test('remote sync account export revalidates Admin authorization', () async {
+    await installActiveBinding();
+    authorization.beforeCommit = () async => throw StateError('locked');
+    await expectLater(
+      readRemoteWebDavSyncAccount(store: store, authorization: authorization),
+      throwsStateError,
+    );
+  });
+
+  for (final logoutOnCheck in [1, 2]) {
+    test(
+      'remote account export stops when logout starts at check $logoutOnCheck',
+      () async {
+        final installed = await installActiveBinding();
+        var checks = 0;
+        authorization.beforeCommit = () async {
+          if (++checks == logoutOnCheck) await store.beginLogout();
+        };
+        expect(
+          await readRemoteWebDavSyncAccount(
+            store: store,
+            authorization: authorization,
+          ),
+          isNull,
+        );
+        final snapshot = await store.load();
+        expect(snapshot.activeBinding!.id, installed.binding.id);
+        expect(WebDavSyncBindingStore.logoutPending(snapshot), isTrue);
+      },
+    );
   }
 
   test('cancelled login has no durable side effects', () async {

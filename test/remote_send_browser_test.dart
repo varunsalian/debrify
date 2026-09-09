@@ -15,6 +15,43 @@ const choices = [
 ];
 
 void main() {
+  testWidgets('WebDAV Sync is a root category independent of media servers', (
+    tester,
+  ) async {
+    final basket = RemoteSendBasket();
+    addTearDown(basket.dispose);
+    List<RemoteSendChoice>? sent;
+    const sync = RemoteSendChoice(
+      id: 'setup:webdav_sync_account',
+      label: 'WebDAV Sync account',
+      group: RemoteSendGroup.webDavSync,
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SingleChildScrollView(
+            child: RemoteSendBrowser(
+              choices: const [sync],
+              basket: basket,
+              onSend: (items) => sent = items,
+              onEverything: () {},
+              onPhoto: () {},
+            ),
+          ),
+        ),
+      ),
+    );
+    expect(find.text('Send everything'), findsOneWidget);
+    expect(find.text('Addons'), findsOneWidget);
+    expect(find.text('WebDAV Sync'), findsOneWidget);
+    await tester.tap(find.text('WebDAV Sync'));
+    await tester.pump();
+    expect(find.text('WebDAV Sync account'), findsOneWidget);
+    expect(find.text('WebDAV media servers'), findsNothing);
+    await tester.tap(find.bySemanticsLabel('Send WebDAV Sync account only'));
+    expect(sent, [sync]);
+  });
+
   testWidgets(
     'disconnected remote fits a narrow screen and preserves manual connection',
     (tester) async {

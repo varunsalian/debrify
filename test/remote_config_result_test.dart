@@ -29,6 +29,7 @@ import 'package:debrify/services/webdav_sync/webdav_sync_runtime.dart';
 import 'package:debrify/screens/profiles/profile_gate.dart';
 import 'package:debrify/screens/profiles/profile_wall_screen.dart';
 import 'package:debrify/services/main_page_bridge.dart';
+import 'package:debrify/models/webdav_item.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -134,14 +135,17 @@ void main() {
   );
 
   for (final scenario in [
-    (webDav: false, onboarding: false),
-    (webDav: true, onboarding: false),
-    (webDav: true, onboarding: true),
+    (webDav: false, onboarding: false, existingLogin: false),
+    (webDav: true, onboarding: false, existingLogin: false),
+    (webDav: true, onboarding: true, existingLogin: false),
+    (webDav: true, onboarding: true, existingLogin: true),
   ]) {
     final webDav = scenario.webDav;
     final onboarding = scenario.onboarding;
     testWidgets(
-      onboarding
+      scenario.existingLogin
+          ? 'incoming sync login survives existing media login and onboarding'
+          : onboarding
           ? 'WebDAV offer survives onboarding restart and profile entry'
           : webDav
           ? 'WebDAV receipt completes before optional sync setup'
@@ -185,7 +189,8 @@ void main() {
           await tester.tap(find.text('Admin'));
           await waitForText('Receiver');
         }
-        final requestId = 'config-probe-$webDav-$onboarding';
+        final requestId =
+            'config-probe-$webDav-$onboarding-${scenario.existingLogin}';
         Future<Map<String, dynamic>?> command(String kind, String data) async {
           final file = File('${root.path}/settings.gz');
           await RemoteTransferEncoding.writeCommand(
@@ -199,6 +204,17 @@ void main() {
         Object? failure;
         var finished = false;
         await tester.runAsync(() async {
+          if (scenario.existingLogin) {
+            await StorageService.saveWebDavServers(const [
+              WebDavConfig(
+                id: 'media',
+                name: 'Existing media account',
+                baseUrl: 'https://example.test/dav/',
+                username: 'media-user',
+                password: 'media-secret',
+              ),
+            ]);
+          }
           await StorageService.setInitialSetupComplete(!onboarding);
           await command(
             ConfigCommand.remoteTransferStart,
@@ -306,12 +322,30 @@ void main() {
             await tester.pump(const Duration(milliseconds: 20));
           }
           expect(find.text('Enable WebDAV Sync?'), findsOneWidget);
+          if (scenario.existingLogin) {
+            expect(find.text('Imported account'), findsOneWidget);
+            expect(find.text('Existing media account'), findsNothing);
+          }
           await tester.tap(find.text('Not now'));
           await tester.pumpAndSettle();
           final servers = await tester.runAsync(
             StorageService.getWebDavServers,
           );
-          expect(servers!.single.name, 'Imported account');
+          final imported = servers!.singleWhere(
+            (server) => server.name == 'Imported account',
+          );
+          expect(imported.username, 'alice');
+          expect(imported.password, 'secret');
+          if (scenario.existingLogin) {
+            expect(servers.length, 2);
+            final media = servers.singleWhere(
+              (server) => server.name == 'Existing media account',
+            );
+            expect(media.username, 'media-user');
+            expect(media.password, 'media-secret');
+          } else {
+            expect(servers.length, 1);
+          }
           if (onboarding) {
             await tester.runAsync(
               () => router.resumeWebDavSyncOfferAfterProfileEntry(

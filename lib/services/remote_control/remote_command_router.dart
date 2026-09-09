@@ -73,6 +73,7 @@ import '../webdav_sync/webdav_sync_models.dart';
 import '../webdav_sync/webdav_sync_runtime.dart';
 import '../webdav_sync/webdav_sync_feature.dart';
 import '../../widgets/webdav_sync/remote_webdav_sync_offer.dart';
+import 'remote_webdav_accounts.dart';
 
 /// Callback type for remote command handlers
 typedef RemoteCommandCallback =
@@ -3922,7 +3923,8 @@ class RemoteCommandRouter {
   }
 
   /// Handle WebDAV servers config — merges incoming entries into the local
-  /// list, de-duped by normalized base URL.
+  /// list, de-duped by endpoint AND credentials. A different login at an
+  /// existing endpoint must not be silently replaced with the saved login.
   Future<void> _handleWebDavConfig(String jsonData) async {
     try {
       debugPrint('RemoteCommandRouter: Configuring WebDAV servers...');
@@ -3933,13 +3935,7 @@ class RemoteCommandRouter {
         return;
       }
 
-      String normalize(String url) =>
-          url.trim().toLowerCase().replaceFirst(RegExp(r'/+$'), '');
-
       final existing = await StorageService.getWebDavServers();
-      final existingKeys = <String>{
-        for (final s in existing) normalize(s.baseUrl),
-      };
       final merged = List<WebDavConfig>.from(existing);
       final syncCandidates = <WebDavConfig>[];
       int imported = 0;
@@ -3957,17 +3953,16 @@ class RemoteCommandRouter {
             skipped++;
             continue;
           }
-          final key = normalize(config.baseUrl);
-          if (existingKeys.contains(key)) {
-            syncCandidates.add(
-              merged.firstWhere((item) => normalize(item.baseUrl) == key),
-            );
+          final matching = merged.where(
+            (item) => sameRemoteWebDavLogin(item, config),
+          );
+          if (matching.isNotEmpty) {
+            syncCandidates.add(matching.first);
             skipped++;
             continue;
           }
           merged.add(config);
           syncCandidates.add(config);
-          existingKeys.add(key);
           imported++;
         } catch (_) {
           debugPrint('RemoteCommandRouter: WebDAV entry failed');
@@ -3988,14 +3983,13 @@ class RemoteCommandRouter {
         _pendingWebDavSyncScope = scope;
         // Saving profile resources can remap incoming IDs. Queue the actual
         // saved identities so onboarding can resolve them after profile entry.
-        final candidateKeys = syncCandidates
-            .map((item) => normalize(item.baseUrl))
-            .toSet();
         for (final candidate in savedServers.where(
-          (item) => candidateKeys.contains(normalize(item.baseUrl)),
+          (item) => syncCandidates.any(
+            (incoming) => sameRemoteWebDavLogin(item, incoming),
+          ),
         )) {
           if (!_pendingWebDavSyncServers.any(
-            (item) => normalize(item.baseUrl) == normalize(candidate.baseUrl),
+            (item) => sameRemoteWebDavLogin(item, candidate),
           )) {
             _pendingWebDavSyncServers.add(candidate);
           }

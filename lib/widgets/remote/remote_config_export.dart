@@ -16,7 +16,10 @@ import '../../services/engine/local_engine_storage.dart';
 import '../../services/profiles/profile_async_authorization.dart';
 import '../../models/profiles/profile_policy.dart';
 import '../../models/stremio_addon.dart';
+import '../../models/webdav_item.dart';
 import '../../services/stremio_service.dart';
+import '../../services/remote_control/remote_webdav_sync_account.dart';
+import '../../services/remote_control/remote_webdav_accounts.dart';
 
 /// Widget for exporting setup/credentials to TV
 class RemoteConfigExport extends StatefulWidget {
@@ -96,6 +99,7 @@ class RemoteConfigExportState extends State<RemoteConfigExport> {
   _ConfigItem? _trackingPreferences;
   _ConfigItem? _searchEngines;
   _ConfigItem? _webDav;
+  _ConfigItem? _webDavSync;
   _ConfigItem? _indexerManagers;
   _ConfigItem? _iptvPlaylists;
   _ConfigItem? _iptvFavorites;
@@ -230,6 +234,12 @@ class RemoteConfigExportState extends State<RemoteConfigExport> {
         debugPrint('RemoteConfigExport: WebDAV inventory failed');
         _webDavCount = 0;
       }
+      var hasWebDavSync = false;
+      try {
+        hasWebDavSync = await readRemoteWebDavSyncAccount() != null;
+      } catch (_) {
+        // Sync account credentials are available only to an authorized Admin.
+      }
       try {
         final managers = await StorageService.getIndexerManagerConfigs(
           forSettings: false,
@@ -363,6 +373,12 @@ class RemoteConfigExportState extends State<RemoteConfigExport> {
           isConfigured: _webDavCount > 0,
           selected: _webDavCount > 0,
         );
+        _webDavSync = _ConfigItem(
+          id: remoteWebDavSyncAccountId,
+          name: 'WebDAV Sync account',
+          icon: 'wd',
+          isConfigured: hasWebDavSync,
+        );
 
         _indexerManagers = _ConfigItem(
           id: ConfigCommand.indexerManagers,
@@ -430,6 +446,7 @@ class RemoteConfigExportState extends State<RemoteConfigExport> {
       _trackingPreferences,
       _searchEngines,
       _webDav,
+      _webDavSync,
       _indexerManagers,
       _iptvPlaylists,
       _iptvFavorites,
@@ -712,14 +729,24 @@ class RemoteConfigExportState extends State<RemoteConfigExport> {
         },
       );
       await sendSelected(
-        _webDav?.selected == true,
-        'WebDAV',
+        _webDav?.selected == true || _webDavSync?.selected == true,
+        _webDavSync?.selected == true ? 'WebDAV Sync account' : 'WebDAV',
         ConfigCommand.webDav,
         () async {
-          final servers = await StorageService.getWebDavServers(
-            forSettings: false,
-            forRemoteTransfer: true,
-          );
+          var servers = <WebDavConfig>[
+            if (_webDav?.selected == true)
+              ...await StorageService.getWebDavServers(
+                forSettings: false,
+                forRemoteTransfer: true,
+              ),
+          ];
+          if (_webDavSync?.selected == true) {
+            final sync = await readRemoteWebDavSyncAccount();
+            if (sync == null) return false;
+            // Keep the selected sync login when a media connection shares its
+            // endpoint. Both selections still use one correlated wire command.
+            servers = preferRemoteWebDavSyncAccount(servers, sync);
+          }
           if (servers.isEmpty) return false;
           return state.sendConfigCommandToDevice(
             ConfigCommand.webDav,
