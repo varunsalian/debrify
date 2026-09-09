@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
@@ -25,6 +26,9 @@ import 'package:debrify/services/profiles/device_key_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_runtime.dart';
+import 'package:debrify/screens/profiles/profile_gate.dart';
+import 'package:debrify/screens/profiles/profile_wall_screen.dart';
+import 'package:debrify/services/main_page_bridge.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -129,77 +133,199 @@ void main() {
     metadata: metadata,
   );
 
-  testWidgets(
-    'invalid selected configuration returns a failed application receipt',
-    (tester) async {
-      final navigator = GlobalKey<NavigatorState>();
-      final router = RemoteCommandRouter()..setNavigatorKey(navigator);
-      await tester.pumpWidget(
-        MaterialApp(
-          navigatorKey: navigator,
-          home: const Scaffold(body: Text('Receiver')),
-        ),
-      );
-      const requestId = 'invalid-config-probe';
-      Future<Map<String, dynamic>?> command(String kind, String data) async {
-        final file = File('${root.path}/settings.gz');
-        await RemoteTransferEncoding.writeCommand(
-          file,
-          RemoteCommand.config(kind, configData: data).toJson(),
-        );
-        return send(file, {'format': 'command-gzip-v1'});
-      }
-
-      Map<String, dynamic>? outcome;
-      Object? failure;
-      var finished = false;
-      await tester.runAsync(() async {
-        await StorageService.setInitialSetupComplete(true);
-        await command(
-          ConfigCommand.remoteTransferStart,
-          remoteTransferRequestBody(requestId),
-        );
-        await command(
-          ConfigCommand.pikpak,
-          remoteTransferItemBody(requestId: requestId, payload: '{}'),
-        );
-        command(
-          ConfigCommand.complete,
-          remoteTransferRequestBody(
-            requestId,
-            expectedCommands: [ConfigCommand.pikpak],
+  for (final scenario in [
+    (webDav: false, onboarding: false),
+    (webDav: true, onboarding: false),
+    (webDav: true, onboarding: true),
+  ]) {
+    final webDav = scenario.webDav;
+    final onboarding = scenario.onboarding;
+    testWidgets(
+      onboarding
+          ? 'WebDAV offer survives onboarding restart and profile entry'
+          : webDav
+          ? 'WebDAV receipt completes before optional sync setup'
+          : 'invalid selected configuration returns a failed application receipt',
+      (tester) async {
+        final navigator = GlobalKey<NavigatorState>();
+        final router = RemoteCommandRouter()..setNavigatorKey(navigator);
+        var restarted = false;
+        router.setRestartCallback(() {
+          restarted = true;
+          unawaited(() async {
+            await WidgetsBinding.instance.endOfFrame;
+            MainPageBridge.showProfilePicker?.call();
+          }());
+        });
+        if (onboarding) {
+          await tester.runAsync(
+            () => ProfileGateStyle.set(ProfileGateStyle.classic),
+          );
+        }
+        await tester.pumpWidget(
+          MaterialApp(
+            navigatorKey: navigator,
+            home: onboarding
+                ? const ProfileGate(child: Scaffold(body: Text('Receiver')))
+                : const Scaffold(body: Text('Receiver')),
           ),
-        ).then(
-          (value) {
-            outcome = value;
-            finished = true;
-          },
-          onError: (Object error) {
-            failure = error;
-            finished = true;
-          },
         );
-      });
-      for (var i = 0; i < 60 && find.text('Import').evaluate().isEmpty; i++) {
-        await tester.runAsync(
-          () => Future<void>.delayed(const Duration(milliseconds: 20)),
-        );
-        await tester.pump(const Duration(milliseconds: 20));
-      }
-      expect(find.text('Import'), findsOneWidget);
-      await tester.tap(find.text('Import'));
-      for (var i = 0; i < 100 && !finished; i++) {
-        await tester.runAsync(
-          () => Future<void>.delayed(const Duration(milliseconds: 20)),
-        );
-        await tester.pump(const Duration(milliseconds: 20));
-      }
-      expect(failure, isNull);
-      expect(finished, isTrue);
-      expect(jsonDecode(outcome!['data'] as String)['ok'], isFalse);
-      await tester.pump(const Duration(seconds: 10));
-      router.setNavigatorKey(GlobalKey<NavigatorState>());
-      await tester.pumpWidget(const SizedBox.shrink());
-    },
-  );
+        Future<void> waitForText(String text) async {
+          for (var i = 0; i < 150 && find.text(text).evaluate().isEmpty; i++) {
+            await tester.runAsync(
+              () => Future<void>.delayed(const Duration(milliseconds: 20)),
+            );
+            await tester.pump(const Duration(milliseconds: 20));
+          }
+          expect(find.text(text), findsOneWidget);
+        }
+
+        if (onboarding) {
+          await waitForText('Admin');
+          await tester.tap(find.text('Admin'));
+          await waitForText('Receiver');
+        }
+        final requestId = 'config-probe-$webDav-$onboarding';
+        Future<Map<String, dynamic>?> command(String kind, String data) async {
+          final file = File('${root.path}/settings.gz');
+          await RemoteTransferEncoding.writeCommand(
+            file,
+            RemoteCommand.config(kind, configData: data).toJson(),
+          );
+          return send(file, {'format': 'command-gzip-v1'});
+        }
+
+        Map<String, dynamic>? outcome;
+        Object? failure;
+        var finished = false;
+        await tester.runAsync(() async {
+          await StorageService.setInitialSetupComplete(!onboarding);
+          await command(
+            ConfigCommand.remoteTransferStart,
+            remoteTransferRequestBody(requestId),
+          );
+          await command(
+            webDav ? ConfigCommand.webDav : ConfigCommand.pikpak,
+            remoteTransferItemBody(
+              requestId: requestId,
+              payload: webDav
+                  ? jsonEncode([
+                      {
+                        'id': 'webdav',
+                        'name': 'Imported account',
+                        'baseUrl': 'https://example.test/dav',
+                        'username': 'alice',
+                        'password': 'secret',
+                      },
+                    ])
+                  : '{}',
+            ),
+          );
+          command(
+            ConfigCommand.complete,
+            remoteTransferRequestBody(
+              requestId,
+              expectedCommands: [
+                webDav ? ConfigCommand.webDav : ConfigCommand.pikpak,
+              ],
+            ),
+          ).then(
+            (value) {
+              outcome = value;
+              finished = true;
+            },
+            onError: (Object error) {
+              failure = error;
+              finished = true;
+            },
+          );
+        });
+        for (var i = 0; i < 60 && find.text('Import').evaluate().isEmpty; i++) {
+          await tester.runAsync(
+            () => Future<void>.delayed(const Duration(milliseconds: 20)),
+          );
+          await tester.pump(const Duration(milliseconds: 20));
+        }
+        expect(find.text('Import'), findsOneWidget);
+        await tester.tap(find.text('Import'));
+        for (var i = 0; i < 100 && !finished; i++) {
+          await tester.runAsync(
+            () => Future<void>.delayed(const Duration(milliseconds: 20)),
+          );
+          await tester.pump(const Duration(milliseconds: 20));
+        }
+        expect(failure, isNull);
+        expect(finished, isTrue);
+        expect(jsonDecode(outcome!['data'] as String)['ok'], webDav);
+        if (onboarding) {
+          // The actual ProfileGate pops routes, relocks, and clears router
+          // session state as main.dart's deferred restart callback does.
+          await waitForText('Admin');
+          expect(restarted, isTrue);
+          expect(find.text('Enable WebDAV Sync?'), findsNothing);
+          await tester.runAsync(() async {
+            await router.resumeWebDavSyncOfferAfterProfileEntry(
+              isProfileEntered: () => false,
+            );
+            final current = ProfileRuntime.capture();
+            // Neither another profile nor a replacement data generation may
+            // consume the offer intended for the original import destination.
+            for (final other in [
+              ProfileScope(
+                profileId: 'different-profile',
+                dataGeneration: current.dataGeneration,
+                sessionEpoch: current.sessionEpoch,
+              ),
+              ProfileScope(
+                profileId: current.profileId,
+                dataGeneration: current.dataGeneration + 1,
+                sessionEpoch: current.sessionEpoch,
+              ),
+            ]) {
+              await ProfileRuntime.withCapturedScope(
+                other,
+                () => router.resumeWebDavSyncOfferAfterProfileEntry(
+                  isProfileEntered: () => true,
+                ),
+              );
+            }
+          });
+          expect(find.text('Enable WebDAV Sync?'), findsNothing);
+          await tester.tap(find.text('Admin'));
+          await waitForText('Receiver');
+        }
+        if (webDav) {
+          for (
+            var i = 0;
+            i < 50 && find.text('Enable WebDAV Sync?').evaluate().isEmpty;
+            i++
+          ) {
+            await tester.runAsync(
+              () => Future<void>.delayed(const Duration(milliseconds: 20)),
+            );
+            await tester.pump(const Duration(milliseconds: 20));
+          }
+          expect(find.text('Enable WebDAV Sync?'), findsOneWidget);
+          await tester.tap(find.text('Not now'));
+          await tester.pumpAndSettle();
+          final servers = await tester.runAsync(
+            StorageService.getWebDavServers,
+          );
+          expect(servers!.single.name, 'Imported account');
+          if (onboarding) {
+            await tester.runAsync(
+              () => router.resumeWebDavSyncOfferAfterProfileEntry(
+                isProfileEntered: () => true,
+              ),
+            );
+            await tester.pumpAndSettle();
+            expect(find.text('Enable WebDAV Sync?'), findsNothing);
+          }
+        }
+        await tester.pump(const Duration(seconds: 10));
+        router.setNavigatorKey(GlobalKey<NavigatorState>());
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+    );
+  }
 }

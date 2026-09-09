@@ -281,6 +281,7 @@ class _ProfileGateState extends State<ProfileGate> with WidgetsBindingObserver {
         TvosTopShelfService.instance.onProfileUnlocked();
         DeepLinkService().onProfileUnlocked();
         WatchedStatusService.instance.ensureStarted();
+        _resumeRemoteWebDavSyncOffer();
       } else {
         ProfileRemoteLease.instance.revoke();
         RemoteCommandRouter().clearProfileSessionState();
@@ -455,6 +456,18 @@ class _ProfileGateState extends State<ProfileGate> with WidgetsBindingObserver {
     // Explicit picker/PIN entry may unlock the already-active profile without
     // running a profile switch reset, so it still requires a forced refresh.
     WatchedStatusService.instance.refreshForActiveProfile();
+    _resumeRemoteWebDavSyncOffer();
+  }
+
+  void _resumeRemoteWebDavSyncOffer() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_entered) return;
+      unawaited(
+        RemoteCommandRouter().resumeWebDavSyncOfferAfterProfileEntry(
+          isProfileEntered: () => mounted && _entered && _pinTarget == null,
+        ),
+      );
+    });
   }
 
   Future<ProfilePinVerification> _verifyPin(String pin) async {

@@ -71,6 +71,8 @@ import '../../services/backup_restore_service.dart';
 import '../webdav_sync/webdav_sync_binding_store.dart';
 import '../webdav_sync/webdav_sync_models.dart';
 import '../webdav_sync/webdav_sync_runtime.dart';
+import '../webdav_sync/webdav_sync_feature.dart';
+import '../../widgets/webdav_sync/remote_webdav_sync_offer.dart';
 
 /// Callback type for remote command handlers
 typedef RemoteCommandCallback =
@@ -196,6 +198,85 @@ class RemoteCommandRouter {
   bool _batching = false;
   final List<String> _batchOk = [];
   final List<String> _batchFailed = [];
+  final List<WebDavConfig> _pendingWebDavSyncServers = [];
+  ProfileScope? _pendingWebDavSyncScope;
+  bool _webDavSyncOfferActive = false;
+  int _configCompletionsInFlight = 0;
+  // Onboarding restarts the route flow, not the process. Keep only references
+  // across that boundary; credentials are re-read after the same profile enters.
+  ({String profileId, int generation, List<String> serverIds})?
+  _onboardingWebDavSyncOffer;
+
+  Future<void> resumeWebDavSyncOfferAfterProfileEntry({
+    required bool Function() isProfileEntered,
+  }) async {
+    final pending = _onboardingWebDavSyncOffer;
+    if (pending == null ||
+        !isProfileEntered() ||
+        !ProfileRuntime.isInitialized ||
+        !ProfileRuntime.isProfileCommitted) {
+      return;
+    }
+    final scope = ProfileRuntime.capture();
+    if (scope.profileId != pending.profileId ||
+        scope.dataGeneration != pending.generation) {
+      return;
+    }
+    try {
+      final servers = await StorageService.getWebDavServers();
+      if (pending != _onboardingWebDavSyncOffer ||
+          !isProfileEntered() ||
+          ProfileRuntime.capture() != scope) {
+        return;
+      }
+      _onboardingWebDavSyncOffer = null;
+      _pendingWebDavSyncScope = scope;
+      _pendingWebDavSyncServers.addAll(
+        servers.where((server) => pending.serverIds.contains(server.id)),
+      );
+      _scheduleWebDavSyncOffer();
+    } catch (_) {
+      // Keep the reference-only intent for another profile entry.
+      debugPrint('Remote WebDAV sync offer could not resume');
+    }
+  }
+
+  void _scheduleWebDavSyncOffer() {
+    if (_pendingWebDavSyncServers.isEmpty || _webDavSyncOfferActive) return;
+    // Run outside the transfer's captured authority and only after its receipt.
+    unawaited(
+      Future<void>(
+        () => ProfileRuntime.withoutCapturedScope(() async {
+          if (_webDavSyncOfferActive ||
+              _configCompletionsInFlight > 0 ||
+              _applyingRemotePayload ||
+              _inFlightConfigWork.isNotEmpty ||
+              _remoteTransfersInFlight.isNotEmpty ||
+              _batching ||
+              _pendingWebDavSyncServers.isEmpty) {
+            return;
+          }
+          final scope = _pendingWebDavSyncScope;
+          final servers = List<WebDavConfig>.of(_pendingWebDavSyncServers);
+          _pendingWebDavSyncServers.clear();
+          _pendingWebDavSyncScope = null;
+          bool isCurrent() =>
+              ProfileRuntime.isInitialized &&
+              ProfileRuntime.isProfileCommitted &&
+              ProfileRuntime.capture() == scope;
+          final context = _navigatorKey?.currentContext;
+          if (context == null || !isCurrent()) return;
+          _webDavSyncOfferActive = true;
+          try {
+            await offerRemoteWebDavSync(context, servers, isCurrent: isCurrent);
+          } finally {
+            _webDavSyncOfferActive = false;
+            _scheduleWebDavSyncOffer();
+          }
+        }),
+      ),
+    );
+  }
 
   /// Open the collecting window, or push its deadline out because another
   /// packet just landed.
@@ -238,6 +319,7 @@ class RemoteCommandRouter {
     _batchIdleTimer?.cancel();
     _batchIdleTimer = null;
     _batching = false;
+    _scheduleWebDavSyncOffer();
 
     final ok = List<String>.from(_batchOk);
     final failed = List<String>.from(_batchFailed);
@@ -911,6 +993,7 @@ class RemoteCommandRouter {
           !_remoteTransfersInFlight.add(transferRequestId)) {
         return;
       }
+      _configCompletionsInFlight++;
       try {
         // `complete` can mark onboarding done and RESTART THE APP — honoring an
         // unsolicited one is a LAN denial-of-service. It only counts after
@@ -1026,12 +1109,14 @@ class RemoteCommandRouter {
         );
         await _handleConfigComplete();
       } finally {
+        _configCompletionsInFlight--;
         if (transferRequestId != null) {
           _remoteTransfersInFlight.remove(transferRequestId);
           if (_activeRemoteTransferRequestId == transferRequestId) {
             _clearActiveRemoteTransfer();
           }
         }
+        _scheduleWebDavSyncOffer();
       }
       return;
     }
@@ -2760,6 +2845,8 @@ class RemoteCommandRouter {
   }
 
   void clearProfileSessionState() {
+    _pendingWebDavSyncServers.clear();
+    _pendingWebDavSyncScope = null;
     clearProfileTransferBuffer();
     for (final buffer in _chunkBuffers.values) {
       buffer.timeout?.cancel();
@@ -3715,6 +3802,23 @@ class RemoteCommandRouter {
         'RemoteCommandRouter: privacy projection republish failed — $e',
       );
     }
+    // The restart opens ProfileGate, which intentionally clears session-bound
+    // work and dismisses dialogs. Resume this optional offer only after entry,
+    // never on top of the picker or before its deferred restart callback runs.
+    final offerScope = _pendingWebDavSyncScope;
+    if (_onRestartApp != null &&
+        offerScope != null &&
+        _pendingWebDavSyncServers.isNotEmpty) {
+      _onboardingWebDavSyncOffer = (
+        profileId: offerScope.profileId,
+        generation: offerScope.dataGeneration,
+        serverIds: _pendingWebDavSyncServers
+            .map((server) => server.id)
+            .toList(),
+      );
+      _pendingWebDavSyncServers.clear();
+      _pendingWebDavSyncScope = null;
+    }
     _flushBatch(prefix: 'Setup received — restarting');
 
     // Give snackbar time to show, then restart app
@@ -3837,6 +3941,7 @@ class RemoteCommandRouter {
         for (final s in existing) normalize(s.baseUrl),
       };
       final merged = List<WebDavConfig>.from(existing);
+      final syncCandidates = <WebDavConfig>[];
       int imported = 0;
       int skipped = 0;
       for (final raw in decoded) {
@@ -3854,10 +3959,14 @@ class RemoteCommandRouter {
           }
           final key = normalize(config.baseUrl);
           if (existingKeys.contains(key)) {
+            syncCandidates.add(
+              merged.firstWhere((item) => normalize(item.baseUrl) == key),
+            );
             skipped++;
             continue;
           }
           merged.add(config);
+          syncCandidates.add(config);
           existingKeys.add(key);
           imported++;
         } catch (_) {
@@ -3866,8 +3975,31 @@ class RemoteCommandRouter {
         }
       }
 
-      if (imported > 0) {
-        await StorageService.saveWebDavServers(merged);
+      final savedServers = imported > 0
+          ? await StorageService.saveWebDavServers(merged)
+          : merged;
+
+      if (WebDavSyncFeature.enabled &&
+          syncCandidates.isNotEmpty &&
+          ProfileRuntime.isInitialized &&
+          ProfileRuntime.isProfileCommitted) {
+        final scope = ProfileRuntime.capture();
+        if (_pendingWebDavSyncScope != scope) _pendingWebDavSyncServers.clear();
+        _pendingWebDavSyncScope = scope;
+        // Saving profile resources can remap incoming IDs. Queue the actual
+        // saved identities so onboarding can resolve them after profile entry.
+        final candidateKeys = syncCandidates
+            .map((item) => normalize(item.baseUrl))
+            .toSet();
+        for (final candidate in savedServers.where(
+          (item) => candidateKeys.contains(normalize(item.baseUrl)),
+        )) {
+          if (!_pendingWebDavSyncServers.any(
+            (item) => normalize(item.baseUrl) == normalize(candidate.baseUrl),
+          )) {
+            _pendingWebDavSyncServers.add(candidate);
+          }
+        }
       }
 
       if (imported > 0 && skipped == 0) {
