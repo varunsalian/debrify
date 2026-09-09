@@ -1,5 +1,19 @@
 part of '../search_screen.dart';
 
+/// Exercises the real source screen with controllable engine batches.
+@visibleForTesting
+Widget sourcesScreenForTesting({
+  required AdvancedSearchSelection selection,
+  required PlaybackMeta meta,
+  required Future<Map<String, dynamic>> Function(SearchBatchCallback onBatch)
+  search,
+}) => _SourcesScreen(
+  selection: selection,
+  meta: meta,
+  isTelevision: true,
+  searchOverride: search,
+);
+
 class _SourcesScreen extends StatefulWidget {
   final AdvancedSearchSelection selection;
   final PlaybackMeta meta;
@@ -24,6 +38,9 @@ class _SourcesScreen extends StatefulWidget {
   /// episode long-press, where no play intent was expressed.
   final bool forcePlayOnTap;
 
+  final Future<Map<String, dynamic>> Function(SearchBatchCallback onBatch)?
+  searchOverride;
+
   const _SourcesScreen({
     required this.selection,
     required this.meta,
@@ -31,6 +48,7 @@ class _SourcesScreen extends StatefulWidget {
     this.bindMode = false,
     this.keywordSeed,
     this.forcePlayOnTap = false,
+    this.searchOverride,
   });
 
   @override
@@ -55,6 +73,9 @@ class _SourcesScreenState extends State<_SourcesScreen> {
   String _sortBy = 'source'; // source | name | size | seeders | date
   bool _sortAsc = false;
   String? _sourceFilter; // null = all sources; else a normalized provider key
+
+  final _cinemaKey = GlobalKey<CinemaSourcesLayoutState>();
+  int _lastCinemaSource = 0;
 
   /// D-pad anchor for the redesigned toolbar: the filter funnel. Pressing UP
   /// from the first row focuses this on TV so the remote can reach the toolbar
@@ -423,7 +444,9 @@ class _SourcesScreenState extends State<_SourcesScreen> {
       // non-standard content types by contentType). Previously this path was
       // torrent-only, so addon direct links never appeared in the Search tab's
       // Sources list even though Home showed them.
-      final res = _keywordMode
+      final res = widget.searchOverride != null
+          ? await widget.searchOverride!(onBatch)
+          : _keywordMode
           ? await TorrentService.searchAllEngines(
               _query,
               onBatch: onBatch,
@@ -552,7 +575,11 @@ class _SourcesScreenState extends State<_SourcesScreen> {
       // batch instead of waiting for the slowest engine.
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted || _nodes.isEmpty || _streamFrozen) return;
-        if (_filterFocus.hasFocus || _pillFocus.hasFocus) return;
+        if (_filterFocus.hasFocus ||
+            _pillFocus.hasFocus ||
+            (_cinemaKey.currentState?.hasRailFocus ?? false)) {
+          return;
+        }
         _nodes.first.requestFocus();
       });
     }
@@ -600,10 +627,7 @@ class _SourcesScreenState extends State<_SourcesScreen> {
     if (_sourceFilter != null &&
         !fullSet.any(
           (t) =>
-              SourcePriority.keyForSource(
-                t.source,
-                aliases: _sourceAliases,
-              ) ==
+              SourcePriority.keyForSource(t.source, aliases: _sourceAliases) ==
               _sourceFilter,
         )) {
       _sourceFilter = null;
@@ -619,8 +643,7 @@ class _SourcesScreenState extends State<_SourcesScreen> {
       _loading = false;
     });
     _maybeCheckCache();
-    // On TV the list is the only content — give the D-pad an anchor to move
-    // from, otherwise the remote has nothing focused and can't select a row.
+    // On TV give the D-pad an initial anchor when nothing is focused yet.
     // With ZERO rows (e.g. a season scope with no packs) anchor the filter
     // funnel instead so the remote can still reach the toolbar and recover.
     // Never steal focus the user already placed somewhere mid-stream.
@@ -629,7 +652,8 @@ class _SourcesScreenState extends State<_SourcesScreen> {
         if (!mounted) return;
         if (_nodes.any((n) => n.hasFocus) ||
             _filterFocus.hasFocus ||
-            _pillFocus.hasFocus) {
+            _pillFocus.hasFocus ||
+            (_cinemaKey.currentState?.hasRailFocus ?? false)) {
           return;
         }
         if (_nodes.isNotEmpty) {
@@ -946,150 +970,277 @@ class _SourcesScreenState extends State<_SourcesScreen> {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return Scaffold(
-      backgroundColor: scheme.surface,
-      appBar: AppBar(
-        title: Text(
-          _keywordMode
-              ? 'Find a source for ${widget.selection.title}'
-              : widget.bindMode
-              ? 'Pick a source for ${widget.selection.title}'
-              : widget.selection.formattedLabel,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        ),
-        actions: [
-          // Pin an on-device file/folder as the source. Desktop only — hidden on
-          // Android/iOS (incl. Android TV) where local binding is unavailable, so
-          // it's never a dead-end D-pad stop.
-          if (_imdbId.isNotEmpty &&
-              TorrentPlaybackService.localBindingAvailable)
-            IconButton(
-              tooltip: 'Pin an on-device file or folder',
-              icon: const Icon(Icons.folder_open_rounded),
-              onPressed: () => unawaited(_pinLocal()),
-            ),
-        ],
-      ),
-      body: Column(
-        children: [
-          if (_keywordMode) _keywordSearchField(scheme),
-          Expanded(
-            child: _loading
-                ? const Center(child: CircularProgressIndicator())
-                : _error != null
-                ? _centered(scheme, 'Search failed.\n$_error')
-                : Column(
-                    children: [
-                      if (_redesign && !_keywordMode) _redesignHero(scheme),
-                      // Keep the toolbar when a season scope is available even
-                      // with zero results — otherwise a no-result season would
-                      // strand the user with no way to switch back.
-                      if (_redesign &&
-                          (_torrents.isNotEmpty ||
-                              _seasonChipVisible ||
-                              _hasRetryableAddon))
-                        _redesignToolbar(scheme),
-                      if (_searching) _searchingStrip(),
-                      Expanded(
-                        child: Stack(
-                          children: [
-                            Positioned.fill(
-                              child: _visible.isEmpty
-                                  ? _centered(
-                                      scheme,
-                                      _torrents.isEmpty
-                                          ? 'No sources found.'
-                                          : 'No matches for your filters.',
-                                    )
-                                  : NotificationListener<ScrollNotification>(
-                                      // A user drag (not the programmatic
-                                      // ensureVisible scrolls) freezes live
-                                      // reshuffling.
-                                      onNotification: (n) {
-                                        if (n is ScrollStartNotification &&
-                                            n.dragDetails != null) {
-                                          _freezeStreaming();
-                                        }
-                                        return false;
-                                      },
-                                      child: SourceListScrollAnchor(child: ListView.builder(
-                                        padding: EdgeInsets.symmetric(
-                                          // Spotlight expands the focused
-                                          // SourceRow beyond its layout box.
-                                          // At the top of the list there is no
-                                          // negative scroll extent to reveal
-                                          // it, so reserve TV focus room here.
-                                          vertical: widget.isTelevision
-                                              ? 24
-                                              : 8,
-                                          horizontal: _redesign ? 10 : 0,
-                                        ),
-                                        cacheExtent: 1200,
-                                        itemCount: _visible.length,
-                                        itemBuilder: (context, i) {
-                                          final t = _visible[i];
-                                          if (_redesign) {
-                                            return _redesignRow(t, i);
-                                          }
-                                          return TorrentResultRow(
-                                            torrent: t,
-                                            index: i,
-                                            focusNode: _nodes[i],
-                                            isTelevision: widget.isTelevision,
-                                            qualityTier: t.qualityTier,
-                                            onTap: () {
-                                              if (widget.bindMode) {
-                                                unawaited(_pin(t));
-                                              } else {
-                                                _play(t, i);
-                                              }
-                                            },
-                                            onLongPress: () =>
-                                                _showRowMenu(t, i),
-                                            onCopyMagnet: t.copyLink == null
-                                                ? null
-                                                : () => unawaited(
-                                                    _copySourceLink(t),
-                                                  ),
-                                            onNavigateUp: () {
-                                              _freezeStreaming();
-                                              if (i > 0) {
-                                                _nodes[i - 1].requestFocus();
-                                              } else if (_pendingNewCount > 0) {
-                                                _pillFocus.requestFocus();
-                                              }
-                                            },
-                                            onNavigateDown: () {
-                                              _freezeStreaming();
-                                              if (i < _nodes.length - 1) {
-                                                _nodes[i + 1].requestFocus();
-                                              }
-                                            },
-                                          );
-                                        },
-                                      )),
-                                    ),
-                            ),
-                            // Frozen-mode arrivals wait behind this pill so
-                            // the list never reshuffles under the user.
-                            if (_pendingNewCount > 0)
-                              Positioned(
-                                top: 10,
-                                left: 0,
-                                right: 0,
-                                child: Center(child: _newSourcesPill()),
-                              ),
-                          ],
-                        ),
-                      ),
-                    ],
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final cinema = useCinemaSourcesLayout(
+          constraints,
+          isTelevision: widget.isTelevision,
+        );
+        return Scaffold(
+          backgroundColor: scheme.surface,
+          appBar: cinema
+              ? null
+              : AppBar(
+                  title: Text(
+                    _keywordMode
+                        ? 'Find a source for ${widget.selection.title}'
+                        : widget.bindMode
+                        ? 'Pick a source for ${widget.selection.title}'
+                        : widget.selection.formattedLabel,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
-          ),
-        ],
-      ),
+                  actions: [
+                    // Pin an on-device file/folder as the source. Desktop only — hidden on
+                    // Android/iOS (incl. Android TV) where local binding is unavailable, so
+                    // it's never a dead-end D-pad stop.
+                    if (_imdbId.isNotEmpty &&
+                        TorrentPlaybackService.localBindingAvailable)
+                      IconButton(
+                        tooltip: 'Pin an on-device file or folder',
+                        icon: const Icon(Icons.folder_open_rounded),
+                        onPressed: () => unawaited(_pinLocal()),
+                      ),
+                  ],
+                ),
+          body: cinema
+              ? SafeArea(
+                  child: CinemaSourcesLayout(
+                    key: _cinemaKey,
+                    contextTitle: _keywordMode
+                        ? _query
+                        : widget.selection.title,
+                    contextLabel: !_keywordMode && widget.selection.isSeries
+                        ? widget.selection.formattedLabel
+                        : null,
+                    art: _keywordMode
+                        ? null
+                        : widget.meta.art ??
+                              PlayLoaderArt(
+                                posterUrl: widget.meta.posterUrl,
+                                yearLabel: widget.selection.year,
+                              ),
+                    title: _keywordMode
+                        ? 'Search results'
+                        : widget.bindMode
+                        ? 'Pick a source'
+                        : 'Choose a source',
+                    subtitle: _keywordMode
+                        ? 'Find a source for ${widget.selection.title}'
+                        : widget.selection.formattedLabel,
+                    onBack: () => Navigator.of(context).maybePop(),
+                    backLabel: _keywordMode ? 'Back' : 'Details',
+                    headerAction:
+                        _imdbId.isNotEmpty &&
+                            TorrentPlaybackService.localBindingAvailable
+                        ? IconButton(
+                            tooltip: 'Pin an on-device file or folder',
+                            icon: const Icon(Icons.folder_open_rounded),
+                            onPressed: () => unawaited(_pinLocal()),
+                          )
+                        : null,
+                    providers: _cinemaProviders,
+                    selectedProvider: _sourceFilter,
+                    onProviderSelected: _selectCinemaProvider,
+                    onFocusResults: () {
+                      if (_nodes.isNotEmpty) {
+                        _nodes[_lastCinemaSource.clamp(0, _nodes.length - 1)]
+                            .requestFocus();
+                      } else if (_filterFocus.context != null) {
+                        _filterFocus.requestFocus();
+                      }
+                    },
+                    isSourceFocused: () {
+                      final index = _nodes.indexWhere((node) => node.hasFocus);
+                      if (index >= 0) {
+                        _lastCinemaSource = index;
+                        _freezeStreaming();
+                      }
+                      return index >= 0;
+                    },
+                    resultCount: _visible.length,
+                    searching: _loading || _searching,
+                    failed: _error != null,
+                    isTelevision: widget.isTelevision,
+                    child: _sourcesBody(scheme, cinema: true),
+                  ),
+                )
+              : _sourcesBody(scheme),
+        );
+      },
     );
   }
+
+  List<CinemaSourceProvider> get _cinemaProviders {
+    final counts = <String, int>{};
+    final names = <String, String>{};
+    for (final t in _torrents) {
+      final key = SourcePriority.keyForSource(
+        t.source,
+        aliases: _sourceAliases,
+      );
+      counts[key] = (counts[key] ?? 0) + 1;
+      names.putIfAbsent(key, () => _prettySource(t.source));
+    }
+    for (final status in _addonStatuses) {
+      names.putIfAbsent(status.sourceKey, () => status.name);
+    }
+    final keys = SourcePriority.orderBy(
+      names.keys.toList()..sort(),
+      (key) => key,
+      _sourcePriority,
+    );
+    return [
+      CinemaSourceProvider(
+        id: null,
+        label: 'All sources',
+        count: _torrents.length,
+      ),
+      for (final key in keys)
+        CinemaSourceProvider(
+          id: key,
+          label: names[key]!.isEmpty ? 'Other sources' : names[key]!,
+          count: counts[key] ?? 0,
+          failed: _addonStatuses.any((s) => s.sourceKey == key && s.failed),
+          loading: _addonStatuses.any(
+            (s) => s.sourceKey == key && _retryingAddons.contains(s.addonId),
+          ),
+        ),
+    ];
+  }
+
+  void _selectCinemaProvider(String? key) {
+    _sourceFilter = key;
+    _lastCinemaSource = 0;
+    _rebuildVisible();
+    for (final status in _addonStatuses) {
+      if (status.sourceKey == key && _statusActionable(status)) {
+        unawaited(_retryAddon(status));
+      }
+    }
+  }
+
+  Widget _sourcesBody(ColorScheme scheme, {bool cinema = false}) => Column(
+    children: [
+      if (_keywordMode) _keywordSearchField(scheme),
+      Expanded(
+        child: _loading
+            ? const Center(child: CircularProgressIndicator())
+            : _error != null
+            ? _centered(scheme, 'Search failed.\n$_error')
+            : Column(
+                children: [
+                  if (_redesign && !_keywordMode && !cinema)
+                    _redesignHero(scheme),
+                  // Keep the toolbar when a season scope is available even
+                  // with zero results — otherwise a no-result season would
+                  // strand the user with no way to switch back.
+                  if (_redesign &&
+                      (_torrents.isNotEmpty ||
+                          _seasonChipVisible ||
+                          _hasRetryableAddon))
+                    _redesignToolbar(scheme, showProviders: !cinema),
+                  if (_searching && !cinema) _searchingStrip(),
+                  Expanded(
+                    child: Stack(
+                      children: [
+                        Positioned.fill(
+                          child: _visible.isEmpty
+                              ? _centered(
+                                  scheme,
+                                  _torrents.isEmpty
+                                      ? 'No sources found.'
+                                      : 'No matches for your filters.',
+                                )
+                              : NotificationListener<ScrollNotification>(
+                                  // A user drag (not the programmatic
+                                  // ensureVisible scrolls) freezes live
+                                  // reshuffling.
+                                  onNotification: (n) {
+                                    if (n is ScrollStartNotification &&
+                                        n.dragDetails != null) {
+                                      _freezeStreaming();
+                                    }
+                                    return false;
+                                  },
+                                  child: SourceListScrollAnchor(
+                                    child: ListView.builder(
+                                      padding: EdgeInsets.symmetric(
+                                        // Spotlight expands the focused
+                                        // SourceRow beyond its layout box.
+                                        // At the top of the list there is no
+                                        // negative scroll extent to reveal
+                                        // it, so reserve TV focus room here.
+                                        vertical: widget.isTelevision ? 24 : 8,
+                                        horizontal: _redesign ? 10 : 0,
+                                      ),
+                                      cacheExtent: 1200,
+                                      itemCount: _visible.length,
+                                      itemBuilder: (context, i) {
+                                        final t = _visible[i];
+                                        if (_redesign) {
+                                          return _redesignRow(
+                                            t,
+                                            i,
+                                            cinema: cinema,
+                                          );
+                                        }
+                                        return TorrentResultRow(
+                                          torrent: t,
+                                          index: i,
+                                          focusNode: _nodes[i],
+                                          isTelevision: widget.isTelevision,
+                                          qualityTier: t.qualityTier,
+                                          onTap: () {
+                                            if (widget.bindMode) {
+                                              unawaited(_pin(t));
+                                            } else {
+                                              _play(t, i);
+                                            }
+                                          },
+                                          onLongPress: () => _showRowMenu(t, i),
+                                          onCopyMagnet: t.copyLink == null
+                                              ? null
+                                              : () => unawaited(
+                                                  _copySourceLink(t),
+                                                ),
+                                          onNavigateUp: () {
+                                            _freezeStreaming();
+                                            if (i > 0) {
+                                              _nodes[i - 1].requestFocus();
+                                            } else if (_pendingNewCount > 0) {
+                                              _pillFocus.requestFocus();
+                                            }
+                                          },
+                                          onNavigateDown: () {
+                                            _freezeStreaming();
+                                            if (i < _nodes.length - 1) {
+                                              _nodes[i + 1].requestFocus();
+                                            }
+                                          },
+                                        );
+                                      },
+                                    ),
+                                  ),
+                                ),
+                        ),
+                        // Frozen-mode arrivals wait behind this pill so
+                        // the list never reshuffles under the user.
+                        if (_pendingNewCount > 0)
+                          Positioned(
+                            top: 10,
+                            left: 0,
+                            right: 0,
+                            child: Center(child: _newSourcesPill()),
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+      ),
+    ],
+  );
 
   /// Whether a chip is worth pressing: a failed addon retries, and a
   /// zero-result addon re-asks (transient upstream failures often read as
@@ -1347,7 +1498,7 @@ class _SourcesScreenState extends State<_SourcesScreen> {
 
   /// The redesigned toolbar: source-group pills + sort + filter funnel, then the
   /// active-filter pills row when filters are applied.
-  Widget _redesignToolbar(ColorScheme scheme) {
+  Widget _redesignToolbar(ColorScheme scheme, {bool showProviders = true}) {
     final app = AppThemeScope.of(context);
     final accent = app.home.chromeAccent;
     final line = app.fade(app.core.tx, 0.08);
@@ -1403,7 +1554,7 @@ class _SourcesScreenState extends State<_SourcesScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (sortedKeys.length > 1 || retryByKey.isNotEmpty)
+        if (showProviders && (sortedKeys.length > 1 || retryByKey.isNotEmpty))
           SizedBox(
             height: 44,
             child: ListView(
@@ -1481,9 +1632,7 @@ class _SourcesScreenState extends State<_SourcesScreen> {
                       child: Text(
                         _prettySource(source),
                         style: TextStyle(
-                          color: _sourceFilter == key
-                              ? app.inkOn(accent)
-                              : dim,
+                          color: _sourceFilter == key ? app.inkOn(accent) : dim,
                           fontSize: 12.5,
                           fontWeight: FontWeight.w600,
                         ),
@@ -1901,13 +2050,14 @@ class _SourcesScreenState extends State<_SourcesScreen> {
   /// for detail-screen Sources, or a compact quality-tag row for keyword search
   /// and addon direct/external streams. Reuses the exact tap/pin/menu wiring of
   /// the classic row so behaviour is identical; only the presentation differs.
-  Widget _redesignRow(Torrent t, int i) {
+  Widget _redesignRow(Torrent t, int i, {bool cinema = false}) {
     final isStream = t.isDirectStream || t.isExternalStream;
     final tags = (_keywordMode || isStream)
         ? const <FormatTag>[]
         : FormatTagDetector.detect(t.name);
     return SourceRow(
       listIndex: i,
+      cinemaLayout: cinema,
       title: t.displayTitle,
       titleMaxLines: 6,
       subtitle: _rowSubtitle(t),

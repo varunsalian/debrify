@@ -25,7 +25,8 @@ import 'dart:math';
 import 'dart:ui' as ui show ImageFilter;
 
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:flutter/foundation.dart' show ValueListenable, listEquals;
+import 'package:flutter/foundation.dart'
+    show ValueListenable, listEquals, visibleForTesting;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -113,6 +114,7 @@ import '../widgets/movie_watched_badge.dart';
 import '../widgets/search_loading_animation.dart';
 import '../widgets/skeleton_poster.dart';
 import '../widgets/source_row.dart';
+import '../widgets/cinema_sources_layout.dart';
 import '../widgets/source_list_scroll_anchor.dart';
 import '../widgets/torrent_filters_sheet.dart';
 import '../widgets/torrent_result_row.dart';
@@ -521,6 +523,8 @@ class _SearchScreenState extends State<SearchScreen>
   List<Torrent> _kwAll = []; // unfiltered results from the last search
   List<Torrent> _kwResults = []; // filtered + sorted view actually rendered
   final List<FocusNode> _kwNodes = [];
+  final _kwCinemaKey = GlobalKey<CinemaSourcesLayoutState>();
+  int _lastKeywordCinemaSource = 0;
   // Keyboard/DPAD focus targets for the keyword toolbar pills (Sort / Filters /
   // Providers / Sources / Select). A fixed pool of 5 covers the most pills ever
   // shown.
@@ -16320,7 +16324,16 @@ class _SearchScreenState extends State<SearchScreen>
     }
   }
 
-  Widget _buildKeyword() {
+  Widget _buildKeyword() => LayoutBuilder(
+    builder: (context, constraints) => _buildKeywordContent(
+      cinema: useCinemaSourcesLayout(
+        constraints,
+        isTelevision: widget.isTelevision,
+      ),
+    ),
+  );
+
+  Widget _buildKeywordContent({required bool cinema}) {
     if (_kwLoading) {
       // Branded phased loader (parity with the old screen) instead of a bare
       // spinner. Keyword search is never series-aware, so isSeries stays false.
@@ -16374,9 +16387,9 @@ class _SearchScreenState extends State<SearchScreen>
         // Tabs are suppressed during multi-select: switching source mid-select
         // would hide checked rows under the user while "Add · N" still counts
         // them (matching the toolbar's own selection lock-out).
-        if (_kwTabsVisible && !_kwSelectionMode) _kwSourceTabs(),
+        if (!cinema && _kwTabsVisible && !_kwSelectionMode) _kwSourceTabs(),
         _buildKeywordToolbar(floatingSelect: narrow),
-        if (_kwSearching) _kwSearchingStrip(),
+        if (_kwSearching && !cinema) _kwSearchingStrip(),
         if (_kwCachedOnly && _kwAll.isNotEmpty) _kwCachedOnlyNotice(),
         Expanded(
           child: Stack(
@@ -16433,6 +16446,7 @@ class _SearchScreenState extends State<SearchScreen>
                               subtitle: _kwRowSubtitle(t),
                               focusNode: _kwNodes[i],
                               isTelevision: widget.isTelevision,
+                              cinemaLayout: cinema,
                               showPlayPill: widget.isTelevision,
                               formatTags: tags,
                               badgeName: t.name,
@@ -16536,6 +16550,61 @@ class _SearchScreenState extends State<SearchScreen>
       ],
     );
 
+    if (cinema) {
+      final counts = <String, int>{};
+      for (final torrent in _kwFullSet) {
+        final source = _kwSourceOf(torrent);
+        counts[source] = (counts[source] ?? 0) + 1;
+      }
+      return CinemaSourcesLayout(
+        key: _kwCinemaKey,
+        contextTitle: _kwQuery,
+        title: _kwSelectionMode ? 'Select sources' : 'Search results',
+        subtitle: _kwSelectionMode
+            ? '${_kwSelected.length} selected'
+            : 'Torrents matching your keyword',
+        providers: [
+          CinemaSourceProvider(
+            id: null,
+            label: 'All sources',
+            count: _kwFullSet.length,
+          ),
+          for (final source in _kwSourceList)
+            CinemaSourceProvider(
+              id: source,
+              label: _SourcesScreenState._prettySource(source),
+              count: counts[source] ?? 0,
+            ),
+        ],
+        selectedProvider: _kwSourceTab,
+        providersEnabled: !_kwSelectionMode,
+        onProviderSelected: (source) {
+          _lastKeywordCinemaSource = 0;
+          _setKwSourceTab(source);
+        },
+        onFocusAbove: () => _searchFocusNode.requestFocus(),
+        onFocusResults: () {
+          if (_kwNodes.isNotEmpty) {
+            _kwNodes[_lastKeywordCinemaSource.clamp(0, _kwNodes.length - 1)]
+                .requestFocus();
+          } else {
+            _kwToolbarNodes.first.requestFocus();
+          }
+        },
+        isSourceFocused: () {
+          final index = _kwNodes.indexWhere((node) => node.hasFocus);
+          if (index >= 0) {
+            _lastKeywordCinemaSource = index;
+            _kwFreeze();
+          }
+          return index >= 0;
+        },
+        resultCount: _kwResults.length,
+        searching: _kwSearching,
+        isTelevision: widget.isTelevision,
+        child: content,
+      );
+    }
     if (!narrow) return content;
     // Small screens: Home-style floating select FAB / selection bar overlaid
     // on the results, instead of the toolbar "Select" pill.
@@ -17176,6 +17245,10 @@ class _SearchScreenState extends State<SearchScreen>
       // Source tabs sit between the toolbar and the search field — land on
       // the active tab so the strip context is obvious. Hidden during
       // multi-select (the strip is suppressed then — see _buildKeyword).
+      if (!_kwSelectionMode && _kwCinemaKey.currentState != null) {
+        _kwCinemaKey.currentState!.focusSelectedProvider();
+        return KeyEventResult.handled;
+      }
       if (!_kwSelectionMode && _kwTabsVisible && _kwTabNodes.isNotEmpty) {
         final tabs = _kwSourceList;
         final active = _kwSourceTab == null

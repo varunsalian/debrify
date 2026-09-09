@@ -41,6 +41,7 @@ class SourceRow extends StatefulWidget {
     this.coverageBadge,
     this.streamBadge,
     this.isTelevision = false,
+    this.cinemaLayout = false,
     this.showPlayPill = false,
     this.isSelectionMode = false,
     this.isSelected = false,
@@ -82,6 +83,10 @@ class SourceRow extends StatefulWidget {
   final String? streamBadge;
 
   final bool isTelevision;
+
+  /// Larger typography and spacing in the two-pane source browser. Badge
+  /// matching, replacement, wrapping, and stable focus geometry stay shared.
+  final bool cinemaLayout;
 
   /// Show the "Play" pill when focused (TV). The tap still runs the configured
   /// activate action; the pill is an affordance, not a promise of "play".
@@ -277,7 +282,9 @@ class _SourceRowState extends State<SourceRow> {
             : null,
       ),
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
+        padding: widget.cinemaLayout
+            ? const EdgeInsets.fromLTRB(18, 16, 16, 16)
+            : const EdgeInsets.fromLTRB(14, 12, 12, 12),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
@@ -360,7 +367,7 @@ class _SourceRowState extends State<SourceRow> {
     );
 
     final row = Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
+      padding: EdgeInsets.symmetric(vertical: widget.cinemaLayout ? 5 : 2),
       child: widget.isTelevision
           ? focusable
           : GestureDetector(
@@ -419,7 +426,11 @@ class _SourceRowState extends State<SourceRow> {
           overflow: TextOverflow.ellipsis,
           style: TextStyle(
             color: _fg,
-            fontSize: widget.formatTags.isEmpty ? 13 : 15,
+            fontSize: widget.cinemaLayout
+                ? (widget.isTelevision ? 17 : 16)
+                : widget.formatTags.isEmpty
+                ? 13
+                : 15,
             fontWeight: widget.formatTags.isEmpty
                 ? FontWeight.w500
                 : FontWeight.w700,
@@ -433,7 +444,11 @@ class _SourceRowState extends State<SourceRow> {
               widget.subtitle,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: TextStyle(color: _dim, fontSize: 12, height: 1.3),
+              style: TextStyle(
+                color: _dim,
+                fontSize: widget.cinemaLayout ? 13 : 12,
+                height: 1.3,
+              ),
             ),
           ),
         if (!customBadgesConfigured && widget.formatTags.isNotEmpty)
