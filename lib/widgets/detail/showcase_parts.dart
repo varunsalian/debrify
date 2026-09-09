@@ -16,6 +16,7 @@ import '../../utils/tv_keys.dart';
 import '../../utils/wide_touch_scale.dart';
 import '../episodes_panel.dart';
 import '../tracker_brand_marks.dart';
+import '../viewport_artwork_scope.dart';
 import 'detail_model.dart';
 
 /// Card metrics as FRACTIONS of the viewport.
@@ -1573,7 +1574,9 @@ class ShowcaseEpisodeCell extends StatelessWidget {
   Widget build(BuildContext context) {
     final p = progress ?? 0;
     final watched = p >= 100;
-    final url = episode.thumbnailUrl ?? fallbackImage;
+    final url = ViewportArtworkScope.enabledOf(context)
+        ? episode.thumbnailUrl ?? fallbackImage
+        : null;
 
     final m = ShowcaseMetrics.of(context);
     // The plate goes behind the CAPTION, not around the whole cell.
@@ -1748,7 +1751,9 @@ class ShowcaseEpisodeCardCompact extends StatelessWidget {
     final app = AppThemeScope.of(context);
     final p = progress ?? 0;
     final watched = p >= 100;
-    final url = episode.thumbnailUrl ?? fallbackImage;
+    final url = ViewportArtworkScope.enabledOf(context)
+        ? episode.thumbnailUrl ?? fallbackImage
+        : null;
     final slot = _slotFill(app);
 
     return ParallaxFocus(
@@ -2012,7 +2017,9 @@ class _CastTileState extends State<_CastTile> {
 
   @override
   Widget build(BuildContext context) {
-    final url = widget.member.imageUrl;
+    final url = ViewportArtworkScope.enabledOf(context)
+        ? widget.member.imageUrl
+        : null;
     final k = ShowcaseMetrics.of(context).k;
     return Focus(
       focusNode: widget.node,
@@ -2317,7 +2324,9 @@ class _PosterState extends State<_Poster> {
 
   @override
   Widget build(BuildContext context) {
-    final url = widget.item.poster;
+    final url = ViewportArtworkScope.enabledOf(context)
+        ? widget.item.poster
+        : null;
     final slot = _slotFill(AppThemeScope.of(context));
     return Focus(
       focusNode: widget.node,
@@ -2899,7 +2908,7 @@ class _UniverseCardState extends State<_UniverseCard> {
     final m = ShowcaseMetrics.of(context);
     final u = widget.item;
     final slot = _slotFill(AppThemeScope.of(context));
-    final url = u.posterUrl;
+    final url = ViewportArtworkScope.enabledOf(context) ? u.posterUrl : null;
     return Focus(
       focusNode: widget.node,
       onFocusChange: (v) {

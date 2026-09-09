@@ -20,6 +20,7 @@ import '../../utils/dominant_color.dart';
 import '../../utils/dialog_tap_guard.dart';
 import '../../utils/tv_keys.dart';
 import 'row_tag_pill.dart';
+import 'home_row_focus.dart';
 import '../collections/collection_focus_glow.dart';
 import '../collections/collection_focus_art.dart';
 import '../movie_watched_badge.dart';
@@ -283,6 +284,10 @@ class SpotlightBoard extends StatefulWidget {
   /// being swallowed at the old end of the board.
   final Future<bool> Function()? onLoadMoreShelves;
 
+  /// The host has already reserved rows that can still arrive independently.
+  /// Keep a DPAD-down pending if requesting another batch cannot start yet.
+  final bool pendingShelves;
+
   /// The hero has been resting on [item] long enough to be worth a trailer.
   ///
   /// The board owns the CADENCE; the host owns the video. That split is why
@@ -336,6 +341,7 @@ class SpotlightBoard extends StatefulWidget {
     required this.heroAddon,
     this.onLoadMoreRow,
     this.onLoadMoreShelves,
+    this.pendingShelves = false,
     this.onDwell,
     this.onTrailerStop,
     this.trailer,
@@ -514,6 +520,7 @@ class _M {
 }
 
 class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentationMixin<SpotlightBoard> {
+  _M? _lastMetrics;
   @override
   bool get prioritizeMetadata => true;
   @override
@@ -681,6 +688,7 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
   /// While true, repeated key events cannot start duplicate loads and the
   /// board paints a visible acknowledgement instead of looking exhausted.
   bool _loadingMoreShelves = false;
+  ({FocusNode origin, DateTime at})? _pendingProgressiveDown;
 
   /// Left-third luminance per backdrop URL. Probed once; the result decides
   /// which side the identity sits on.
@@ -894,6 +902,20 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
   @override
   void didUpdateWidget(SpotlightBoard old) {
     super.didUpdateWidget(old);
+    _finishProgressiveDown();
+    if (widget.dpad && PlatformUtil.isAndroidTvCached && _lastMetrics != null) {
+      for (final section in old.sections) {
+        if (section.id == null || !section.nodes.any((node) => node.hasFocus)) continue;
+        preserveHomeInsertionAnchor(scroll: _scroll,
+          previous: [for (final s in old.sections) s.id ?? ''],
+          next: [for (final s in widget.sections) s.id ?? ''],
+          anchor: section.id!,
+          extentOf: (id) => _tvShelfExtent(
+            widget.sections.firstWhere((s) => s.id == id), _lastMetrics!),
+        );
+        break;
+      }
+    }
     if (old.hero.length != widget.hero.length ||
         List.generate(widget.hero.length, (i) => i).any((i) =>
             !identical(old.hero[i], widget.hero[i]))) {
@@ -1126,6 +1148,36 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
     _restartCadence();
   }
 
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!(ModalRoute.isCurrentOf(context) ?? true)) {
+      _pendingProgressiveDown = null;
+    }
+  }
+
+  void _finishProgressiveDown() {
+    if (_pendingProgressiveDown == null) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final pending = _pendingProgressiveDown;
+      if (!mounted || pending == null) return;
+      if (!(ModalRoute.isCurrentOf(context) ?? true) ||
+          !identical(FocusManager.instance.primaryFocus, pending.origin) ||
+          DateTime.now().difference(pending.at) > const Duration(seconds: 3)) {
+        _pendingProgressiveDown = null;
+        return;
+      }
+      final row = widget.sections.indexWhere((s) => s.nodes.contains(pending.origin));
+      if (row < 0 || row + 1 >= widget.sections.length) {
+        if (!widget.pendingShelves) _pendingProgressiveDown = null;
+        return;
+      }
+      _pendingProgressiveDown = null;
+      setState(() => _row = row + 1);
+      _focusRow(_row, const Offset(0, 1));
+    });
+  }
+
   Future<void> _loadShelvesAndFinishDown() async {
     final load = widget.onLoadMoreShelves;
     if (load == null || _loadingMoreShelves) return;
@@ -1143,7 +1195,13 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
     }
     if (!mounted) return;
     setState(() => _loadingMoreShelves = false);
-    if (!appended) return;
+    if (!appended) {
+      if (widget.pendingShelves && origin != null) {
+        _pendingProgressiveDown = (origin: origin, at: DateTime.now());
+        _finishProgressiveDown();
+      }
+      return;
+    }
 
     // The host's setState that appended the shelves mounts their focus nodes
     // on the next frame. Complete the original DOWN only if the user is still
@@ -1418,6 +1476,7 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
   }
 
   Widget _board(_M m, double heroH) {
+    _lastMetrics = m;
     _heroBandH = heroH;
     final app = AppThemeScope.of(context);
     final ground = SpotlightBoard.groundOf(app);
@@ -2116,13 +2175,13 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
   /// rail paginates as focus walks it — there is nothing to tap. The
   /// provenance pill is the one piece BOTH inputs wear: which addon fills a
   /// row is a fact on every device.
-  Widget _shelfTitle(SpotlightShelf section, _M m) {
+  TextStyle _shelfTitleStyle(_M m) {
     final fontSize = widget.dpad
         ? m.title
         : m.compact
             ? 22.0
             : (m.title < 24.0 ? 24.0 : m.title);
-    final style = TextStyle(
+    return TextStyle(
       fontSize: fontSize,
       fontWeight: widget.dpad ? FontWeight.w600 : FontWeight.w700,
       letterSpacing: widget.dpad ? 0.0 : -0.2,
@@ -2135,6 +2194,35 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
           .tx
           .withValues(alpha: widget.dpad ? 0.84 : 0.96),
     );
+  }
+
+  double _tvShelfExtent(SpotlightShelf section, _M m) {
+    double textHeight(String text, TextStyle style) {
+      final painter = TextPainter(
+        text: TextSpan(text: text, style: DefaultTextStyle.of(context).style.merge(style)),
+        textDirection: Directionality.of(context),
+        textScaler: MediaQuery.textScalerOf(context),
+        maxLines: 1,
+      )..layout();
+      final height = painter.height;
+      painter.dispose();
+      return height;
+    }
+    var header = textHeight(section.title, _shelfTitleStyle(m));
+    final tag = section.tag;
+    if (tag != null && tag.isNotEmpty) {
+      final size = m.title * .72;
+      final tagHeight = textHeight(tag.toUpperCase(), RowTagPill.textStyle(size)) +
+          size * .56 + 2; // vertical padding and the two 1px borders
+      if (tagHeight > header) header = tagHeight;
+    }
+    final cardHeight = _shelfCardHeight(section, m);
+    return 20 + header + m.liftUpFor(cardHeight) + cardHeight + m.liftDownFor(cardHeight);
+  }
+
+  Widget _shelfTitle(SpotlightShelf section, _M m) {
+    final style = _shelfTitleStyle(m);
+    final fontSize = style.fontSize!;
     final onSeeAll = section.onSeeAll;
     final Widget heading = (widget.dpad || onSeeAll == null)
         ? Text(
@@ -2174,9 +2262,7 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
     );
   }
 
-  Widget _shelf(int i, _M m) {
-    final section = widget.sections[i];
-    final nodes = section.nodes;
+  double _shelfCardHeight(SpotlightShelf section, _M m) {
     // Wide cards use their own rail width. Keeping the portrait card's
     // width makes a 16:9 tile too short to read, while keeping its height
     // makes it enormous and leaves only two titles on a TV row. The rule is
@@ -2185,9 +2271,15 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
     final uniformlyWide =
         section.items.isNotEmpty &&
         section.items.every((item) => item.shape.aspect > 1);
-    final cardHeight = uniformlyWide
+    return uniformlyWide
         ? m.wideCardW / SpotlightCardShape.wide.aspect
         : m.posterH;
+  }
+
+  Widget _shelf(int i, _M m) {
+    final section = widget.sections[i];
+    final nodes = section.nodes;
+    final cardHeight = _shelfCardHeight(section, m);
     // Caption-free rows off TV (see [SpotlightShelf.captions]); TV keeps its
     // overlay captions everywhere. Compact must also keep a caption whenever
     // a card carries metadata: otherwise portrait mode discards ratings and

@@ -37,7 +37,12 @@ class PlatformUtil {
   /// system name is the only reliable discriminator.
   ///
   /// `static final` so the string compare happens once, not per call.
-  static final bool isTvOS = Platform.operatingSystem == 'tvos';
+  static final bool _isTvOS = Platform.operatingSystem == 'tvos';
+  static bool? _tvOSOverride;
+  static bool get isTvOS => _tvOSOverride ?? _isTvOS;
+
+  @visibleForTesting
+  static void debugSetTvOS(bool? value) => _tvOSOverride = value;
 
   /// iPhone / iPad ONLY — the thing `Platform.isIOS` is usually meant to say.
   ///

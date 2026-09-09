@@ -1,4 +1,5 @@
 import 'package:cached_network_image/cached_network_image.dart';
+import '../viewport_artwork_scope.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -271,7 +272,7 @@ class _AvailabilityTileState extends State<_AvailabilityTile> {
       height: 66 * s,
       child: ClipRRect(
         borderRadius: BorderRadius.circular(12 * s),
-        child: entry.logo == null
+        child: entry.logo == null || !ViewportArtworkScope.enabledOf(context)
             ? fallback()
             : CachedNetworkImage(
                 imageUrl: entry.logo!,

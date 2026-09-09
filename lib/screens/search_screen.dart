@@ -12,6 +12,7 @@ import '../widgets/collections/collection_focus_glow.dart';
 import '../widgets/see_all/discover_browsing_input.dart';
 import '../services/home_catalog_refresh.dart';
 import '../services/home_load_deadline.dart';
+import '../services/home_load_progress.dart';
 import '../widgets/home/home_row_focus.dart';
 import '../widgets/home/home_continuation_focus.dart';
 import '../widgets/home/catalog_continuation_button.dart';
@@ -19,6 +20,7 @@ import '../services/home_row_refresh.dart';
 import '../services/profiles/connection_resource_service.dart';
 import 'dart:async';
 import 'dart:convert';
+import 'dart:developer' as developer;
 import 'dart:math';
 import 'dart:ui' as ui show ImageFilter;
 
@@ -776,6 +778,63 @@ class _SearchScreenState extends State<SearchScreen>
   /// stale sections nor advance the new load's cursor.
   int _boardLoadGen = 0;
   bool _boardRefreshing = false;
+  bool _progressiveHomeLoadPending = false;
+  bool _homePaginationDeferred = false;
+  double _classicAnchorTailPadding = 0;
+  ({List<CatalogSection> rows, bool first, int generation, Object? scope})?
+      _deferredHomeProgress;
+  bool _homeProgressApplyScheduled = false;
+
+  void _publishHomeProgress(List<CatalogSection> rows, bool first,
+      int generation, Object? scope) {
+    if (!mounted || generation != _boardLoadGen || scope != ProfileRuntime.scope.value) return;
+    _homeSections = rows;
+    if (_catalogQuery.isNotEmpty || _catalogSearching) return;
+    if (!(ModalRoute.of(context)?.isCurrent ?? true)) {
+      // Keep data, not new image widgets, while a detail page/player covers
+      // Home. Returning first restores the old focused row, then inserts the
+      // arrivals with the same scroll-anchor protection as foreground loads.
+      _deferredHomeProgress = (rows: rows,
+        first: _deferredHomeProgress?.first ?? first,
+        generation: generation, scope: scope);
+      return;
+    }
+    _deferredHomeProgress = null;
+    if (!first && _boardHasFocus()) _autoFocusSettled = true;
+    setState(() => _loading = false);
+    _applySections(rows, preserveFocus: !first, incremental: !first);
+    MainPageBridge.homeBoardReady.value = true;
+    _maybeAutoFocusBoard();
+    _maybeCompleteDeferredDown();
+    _maybeCompleteStageAdvance();
+  }
+
+  void _resumeHomeProgress() {
+    if (_homeProgressApplyScheduled) return;
+    _homeProgressApplyScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _homeProgressApplyScheduled = false;
+      if (!mounted || !(ModalRoute.of(context)?.isCurrent ?? true)) return;
+      final pending = _deferredHomeProgress;
+      _deferredHomeProgress = null;
+      if (pending != null) {
+        if (pending.generation != _boardLoadGen || pending.scope != ProfileRuntime.scope.value) return;
+        _publishHomeProgress(pending.rows, pending.first, pending.generation, pending.scope);
+      }
+      // Applying rows above only scheduled their rebuild. Measure the new
+      // viewport on the NEXT frame, including returns with no new rows.
+      _maybeAutoFillBoard(resumeDeferred: true);
+    });
+  }
+
+  void _resumeDeferredHomePagination() {
+    if (!_homePaginationDeferred || _boardRefreshing || !mounted ||
+        !(ModalRoute.of(context)?.isCurrent ?? true)) {
+      return;
+    }
+    _homePaginationDeferred = false;
+    if (_boardHasMore) unawaited(_loadMoreBoard());
+  }
 
   /// A triggered board reload arrived while a catalog search was showing its
   /// results — running [_load] then would stomp the search view, so it's
@@ -802,6 +861,19 @@ class _SearchScreenState extends State<SearchScreen>
       _catalogQuery.isEmpty &&
       !_catalogSearching &&
       _boardCursor < _boardRefs.length;
+
+  /// Reserving a batch advances the cursor before all its rows arrive. This
+  /// affects deferred navigation, not whether another batch should be fetched.
+  bool get _boardRowsPending =>
+      _catalogQuery.isEmpty && !_catalogSearching &&
+      (_progressiveHomeLoadPending || _boardLoadingMore);
+
+  bool get _boardCanAdvance => _boardHasMore || _boardRowsPending;
+
+  bool get _canPageHome => mounted &&
+      (!PlatformUtil.isAndroidTvCached ||
+        ((ModalRoute.of(context)?.isCurrent ?? true) &&
+          _deferredHomeProgress == null && !_homeProgressApplyScheduled));
 
   // LOCAL Continue Watching rows. Reads the SAME local store Home writes to
   // (StorageService `continue_watching_v1`) — read-only here, so Home is never
@@ -2652,27 +2724,60 @@ class _SearchScreenState extends State<SearchScreen>
           if (row is! HomeListSection) _sectionRowId(row): row,
     };
     final gen = ++_boardLoadGen;
+    _deferredHomeProgress = null;
+    final scope = ProfileRuntime.scope.value;
+    bool current() => mounted && gen == _boardLoadGen &&
+        scope == ProfileRuntime.scope.value;
+    // Refreshes already preserve visible rows. Only the Android TV initial
+    // Home path changes publication behavior; Search, Discover and tvOS keep
+    // their existing loading contract.
+    final progressive = PlatformUtil.isAndroidTvCached &&
+        !widget.searchMode && !widget.discoverMode && !keepRows;
+    final progress = progressive ? HomeLoadProgress(
+      isCurrent: current,
+      rowId: _sectionRowId,
+      onPublish: (rows, first) {
+        if (first) developer.Timeline.instantSync('Home.contentPublished');
+        _publishHomeProgress(rows, first, gen, scope);
+      },
+    ) : null;
+    if (progressive) developer.Timeline.instantSync('Home.loadStarted');
     var completionGen = gen;
     var expired = false;
     // A superseded pagination request may never return. Its finally block is
     // generation-guarded, so it cannot clear a newer request's loading flag.
     _boardLoadingMore = false;
+    _homePaginationDeferred = false;
+    _progressiveHomeLoadPending = progressive;
     _boardRefreshing = true;
     setState(() {
-      if (!keepRows) _loading = true;
+      if (!keepRows) {
+        _loading = true;
+        _classicAnchorTailPadding = 0;
+      }
       _error = null;
     });
     unawaited(_refreshPikpakOnly());
     try {
       await runHomeLoadWithDeadline(
         retire: () {
-          if (!mounted || gen != _boardLoadGen) return;
+          if (!current()) return;
           expired = true;
+          _progressiveHomeLoadPending = false;
           completionGen = ++_boardLoadGen;
+          final pending = _deferredHomeProgress;
+          if (pending != null && pending.generation == gen) {
+            // Already accepted data remains valid after retiring requests,
+            // including when a detail route currently covers the Home board.
+            _deferredHomeProgress = (rows: pending.rows, first: pending.first,
+              generation: completionGen, scope: pending.scope);
+          }
           // Retiring the generation stops stale batches. A refresh timeout
           // must restore the paging state belonging to the still-visible rows.
-          if (previousBoard != null) {
-            _boardCursor = previousBoard.restore(_boardRefs, _addonsById);
+          final recovery = progress?.hasPublished == true
+              ? _committedBoard : previousBoard;
+          if (recovery != null) {
+            _boardCursor = recovery.restore(_boardRefs, _addonsById);
           } else {
             _boardRefs.clear();
             _boardCursor = 0;
@@ -2691,7 +2796,7 @@ class _SearchScreenState extends State<SearchScreen>
           // this load still owns the board — a superseded run kicking off its own
           // resolve would double the concurrent tracker requests beside the
           // winning generation's and stale-write the shared settings fields.
-          if (!mounted || gen != _boardLoadGen) return;
+          if (!current()) return;
           _homeDisabled = disabled;
           _homeExtras = extras;
           _homeRowOrder = rowOrder;
@@ -2699,6 +2804,13 @@ class _SearchScreenState extends State<SearchScreen>
           _hideWatched = HideWatchedPrefs.enabled;
           _homeCollections = collections;
           _homeCollectionsSig = collectionsSig;
+          if (progress != null) {
+            _boardRefs.clear();
+            _boardCursor = 0;
+            _addonsById.clear();
+            _commitBoardSnapshot();
+            progress.collections(_buildCollectionSections());
+          }
           // Opt-in Trakt/Simkl list rows, resolved IN PARALLEL with the first
           // catalog batch below. Home board only — the Search tab runs _load just
           // to warm the catalog refs for its search, and Discover never comes
@@ -2715,6 +2827,9 @@ class _SearchScreenState extends State<SearchScreen>
               : HomeListRowsService.instance
                     .resolve(_homeExtras, deadline: const Duration(seconds: 5))
                     .catchError((_) => const <HomeListSection>[]);
+          if (progress != null) {
+            unawaited(listRowsFuture.then(progress.lists));
+          }
           // With hide-watched on, wait briefly for the local watched snapshot so
           // the first rows paint already filtered instead of losing titles a beat
           // later. Tracker histories fold in asynchronously and apply from the
@@ -2725,10 +2840,10 @@ class _SearchScreenState extends State<SearchScreen>
               const Duration(milliseconds: 1500),
               onTimeout: () {},
             );
-            if (!mounted || gen != _boardLoadGen) return;
+            if (!current()) return;
           }
           final addons = await _stremio.getCatalogAddons();
-          if (!mounted || gen != _boardLoadGen) return;
+          if (!current()) return;
           // Enumerate every BROWSABLE catalog across all addons — no global row cap.
           // This is cheap (manifest data); items are pulled lazily in batches on
           // scroll. Catalogs that require a `search` extra are search-only: browsing
@@ -2763,6 +2878,12 @@ class _SearchScreenState extends State<SearchScreen>
           for (final a in addons) {
             _addonsById.putIfAbsent(a.id, () => a);
           }
+          if (progress != null) {
+            progress.catalogOrder(_boardRefs.map(_catalogRefRowId).toList());
+            // This cursor is safe to resume even if only some of the first
+            // batch publishes. Never commit a reserved/in-flight cursor.
+            _commitBoardSnapshot();
+          }
           // Resolve the Spotlight hero's own reel in parallel with the first
           // batch — its catalog may sit far down the board (or be hidden as a
           // row), so it can't wait for a batch to happen to include it. Home
@@ -2772,14 +2893,26 @@ class _SearchScreenState extends State<SearchScreen>
           }
           // First batch is blocking so the board isn't empty on first paint; skip
           // runs of empty catalogs so we always land on some visible rows.
-          final first = await _fetchBoardBatchUntilNonEmpty(gen, previousRows: previousRows);
+          final first = await _fetchBoardBatchUntilNonEmpty(
+            gen,
+            previousRows: previousRows,
+            onSection: progress?.catalog,
+            onBatchComplete: progress == null ? null : _commitBoardSnapshot,
+            pauseWhenCovered: progress != null,
+          );
           // Keep the previously loaded vertical extent when addons change.
           while (gen == _boardLoadGen && _boardCursor < previouslyLoaded &&
               _boardCursor < _boardRefs.length) {
             first.addAll(await _fetchBoardBatch(_kBoardBatchSize, gen, previousRows: previousRows));
           }
           final listRows = await listRowsFuture;
-          if (!mounted || gen != _boardLoadGen) return;
+          if (!current()) return;
+          if (progress != null) {
+            progress.lists(listRows);
+            progress.flush(allowEmpty: true);
+            _commitBoardSnapshot();
+            return;
+          }
           // List rows lead the sections — after the favourites rows, before every
           // addon catalog row. Batching appends after them untouched.
           // Pinned collections lead their family. The shared Home ordering
@@ -2812,7 +2945,10 @@ class _SearchScreenState extends State<SearchScreen>
         },
       );
     } catch (e) {
-      if (!mounted || completionGen != _boardLoadGen) return;
+      if (!mounted || completionGen != _boardLoadGen ||
+          scope != ProfileRuntime.scope.value) {
+        return;
+      }
       // Mid-search, the error screen must not replace the search results
       // (_buildBoard renders _error before anything else) — latch a retry
       // for _restoreHome instead.
@@ -2823,7 +2959,7 @@ class _SearchScreenState extends State<SearchScreen>
         return;
       }
       setState(() {
-        if (!keepRows) {
+        if (!keepRows && progress?.hasPublished != true) {
           _error = expired
               ? 'Home took too long to load. Please try again.'
               : e.toString();
@@ -2847,9 +2983,13 @@ class _SearchScreenState extends State<SearchScreen>
       // loading phase just because it ended in an error screen.
       MainPageBridge.homeBoardReady.value = true;
     } finally {
-      if (completionGen == _boardLoadGen) {
+      progress?.dispose();
+      if (completionGen == _boardLoadGen && scope == ProfileRuntime.scope.value) {
         _boardRefreshing = false;
-        if (mounted && !expired) _maybeAutoFillBoard();
+        _progressiveHomeLoadPending = false;
+        if (mounted && !expired) {
+          _maybeAutoFillBoard(resumeDeferred: true);
+        }
       }
     }
   }
@@ -2857,10 +2997,25 @@ class _SearchScreenState extends State<SearchScreen>
   /// runs of empty catalogs, and return the non-empty sections (advancing the
   /// cursor as it goes). Empty result ⇒ the board is exhausted — or [gen] went
   /// stale (a newer [_load] owns the cursor now; stop without touching it).
-  Future<List<CatalogSection>> _fetchBoardBatchUntilNonEmpty(int gen, {Map<String, CatalogSection> previousRows = const {}}) async {
-    while (gen == _boardLoadGen && _boardCursor < _boardRefs.length) {
-      final batch = await _fetchBoardBatch(_kBoardBatchSize, gen, previousRows: previousRows);
-      if (batch.isNotEmpty) return batch;
+  Future<List<CatalogSection>> _fetchBoardBatchUntilNonEmpty(int gen, {
+    Map<String, CatalogSection> previousRows = const {},
+    void Function(CatalogSection)? onSection,
+    VoidCallback? onBatchComplete,
+    Set<String> excludeRows = const {},
+    bool pauseWhenCovered = false,
+  }) async {
+    final scope = ProfileRuntime.scope.value;
+    while (mounted && gen == _boardLoadGen &&
+        scope == ProfileRuntime.scope.value && _boardCursor < _boardRefs.length) {
+      final batch = await _fetchBoardBatch(_kBoardBatchSize, gen,
+        previousRows: previousRows, onSection: onSection);
+      if (!mounted || gen != _boardLoadGen || scope != ProfileRuntime.scope.value) {
+        return const [];
+      }
+      onBatchComplete?.call();
+      final additions = batch.where((row) => !excludeRows.contains(_sectionRowId(row))).toList();
+      if (additions.isNotEmpty) return additions;
+      if (pauseWhenCovered && !_canPageHome) return const [];
     }
     return const [];
   }
@@ -2869,8 +3024,14 @@ class _SearchScreenState extends State<SearchScreen>
   /// [_boardCursor], and return the non-empty ones (order preserved). No-ops
   /// when [gen] is stale so a superseded load can't advance the fresh load's
   /// cursor.
-  Future<List<CatalogSection>> _fetchBoardBatch(int n, int gen, {Map<String, CatalogSection> previousRows = const {}}) async {
+  Future<List<CatalogSection>> _fetchBoardBatch(int n, int gen, {
+    Map<String, CatalogSection> previousRows = const {},
+    void Function(CatalogSection)? onSection,
+  }) async {
     if (gen != _boardLoadGen) return const [];
+    final scope = ProfileRuntime.scope.value;
+    bool current() => mounted && gen == _boardLoadGen &&
+        scope == ProfileRuntime.scope.value;
     final end = (_boardCursor + n).clamp(0, _boardRefs.length);
     final slice = _boardRefs.sublist(_boardCursor, end);
     _boardCursor = end;
@@ -2878,16 +3039,19 @@ class _SearchScreenState extends State<SearchScreen>
       slice.map((ref) async {
         final (addon, catalog) = ref;
         try {
-          return await loadHomeCatalogSection(
+          final row = await loadHomeCatalogSection(
             addon: addon,
             catalog: catalog,
             previous: previousRows[_catalogRefRowId(ref)],
-            isCurrent: () => mounted && gen == _boardLoadGen,
+            isCurrent: current,
             hides: WatchedFilter.predicate,
             fetch: (skip, onRawCount) => _stremio.fetchCatalog(
               addon, catalog, skip: skip, onRawCount: onRawCount,
             ),
           );
+          if (!current()) return null;
+          if (row != null) onSection?.call(row);
+          return row;
         } catch (_) {
           return null;
         }
@@ -2899,10 +3063,12 @@ class _SearchScreenState extends State<SearchScreen>
   /// After a batch lands, if the board still doesn't fill the viewport (so the
   /// user can't scroll to trigger more) keep pulling batches until it does or
   /// the board is exhausted. No-ops outside board mode (search sets no cursor).
-  void _maybeAutoFillBoard() {
-    if (!_boardHasMore || _boardLoadingMore) return;
+  void _maybeAutoFillBoard({bool resumeDeferred = false}) {
+    if (!_canPageHome || !_boardHasMore || _boardLoadingMore) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || !_boardHasMore || _boardLoadingMore) return;
+      if (!_canPageHome || !_boardHasMore || _boardLoadingMore) return;
+      if (resumeDeferred) _resumeDeferredHomePagination();
+      if (_boardLoadingMore) return;
       if (!_boardScroll.hasClients) return;
       final pos = _boardScroll.position;
       if (pos.maxScrollExtent <= 0 || pos.pixels >= pos.maxScrollExtent - 600) {
@@ -2913,7 +3079,7 @@ class _SearchScreenState extends State<SearchScreen>
 
   /// Fire off the next batch as the user nears the bottom of the board.
   void _onBoardScroll() {
-    if (!_boardHasMore || _boardLoadingMore) return;
+    if (!_canPageHome || !_boardHasMore || _boardLoadingMore) return;
     if (!_boardScroll.hasClients) return;
     final pos = _boardScroll.position;
     if (pos.pixels >= pos.maxScrollExtent - 600) {
@@ -2923,7 +3089,14 @@ class _SearchScreenState extends State<SearchScreen>
 
   /// Load and append the next batch of board rows (deduped against re-entry).
   Future<bool> _loadMoreBoard() async {
-    if (_boardRefreshing || _boardLoadingMore ||
+    if (!_canPageHome) return false;
+    if (_boardRefreshing) {
+      if (PlatformUtil.isAndroidTvCached && _boardHasMore) {
+        _homePaginationDeferred = true;
+      }
+      return false;
+    }
+    if (_boardLoadingMore ||
         _boardCursor >= _boardRefs.length) {
       return false;
     }
@@ -2931,21 +3104,39 @@ class _SearchScreenState extends State<SearchScreen>
     // if a full reload lands mid-fetch, the stale batch must not append onto
     // (or advance) the fresh board.
     final gen = _boardLoadGen;
+    final scope = ProfileRuntime.scope.value;
     var appended = false;
     setState(() => _boardLoadingMore = true);
     try {
-      final more = await _fetchBoardBatchUntilNonEmpty(gen);
-      if (!mounted || gen != _boardLoadGen) return false;
+      final existingRows = {
+        for (final row in _homeSections) _sectionRowId(row): row,
+      };
+      final more = await _fetchBoardBatchUntilNonEmpty(gen,
+        previousRows: existingRows, excludeRows: existingRows.keys.toSet(),
+        pauseWhenCovered: PlatformUtil.isAndroidTvCached);
+      if (!mounted || gen != _boardLoadGen || scope != ProfileRuntime.scope.value) return false;
       _commitBoardSnapshot();
       if (more.isNotEmpty) {
+        final merged = mergeHomeCatalogRows(previous: _homeSections,
+          additions: more,
+          catalogOrder: _boardRefs.map(_catalogRefRowId).toList(),
+          rowId: _sectionRowId);
+        final appendOnly = merged.length == _homeSections.length + more.length &&
+            Iterable<int>.generate(_homeSections.length)
+                .every((i) => identical(merged[i], _homeSections[i]));
         // Always keep the board cache growing so nothing is lost…
-        _homeSections = [..._homeSections, ...more];
+        _homeSections = merged;
         // …but only fold into the live view when the board is still what's
         // shown. If a catalog search started while this batch was in flight,
         // `_sections`/`_rowNodes` now hold search results — appending board rows
         // there would corrupt the search view. They'll reappear on _restoreHome.
         if (_catalogQuery.isEmpty && !_catalogSearching) {
-          _appendSections(more);
+          if (appendOnly && !(PlatformUtil.isAndroidTvCached &&
+              !(ModalRoute.of(context)?.isCurrent ?? true))) {
+            _appendSections(more);
+          } else {
+            _publishHomeProgress(merged, false, gen, scope);
+          }
           appended = true;
           // A DPAD-down past the last row may be waiting on this batch —
           // classic's deferred move, and the stage layouts' rail advance.
@@ -2954,7 +3145,7 @@ class _SearchScreenState extends State<SearchScreen>
         }
       }
     } finally {
-      if (mounted && gen == _boardLoadGen) {
+      if (mounted && gen == _boardLoadGen && scope == ProfileRuntime.scope.value) {
         setState(() => _boardLoadingMore = false);
         _maybeAutoFillBoard();
       }
@@ -2988,6 +3179,10 @@ class _SearchScreenState extends State<SearchScreen>
     if (_catalogQuery.isNotEmpty || _catalogSearching) return;
     if (rowIndex < 0 || rowIndex >= _sections.length) return;
     final section = _sections[rowIndex];
+    final scope = ProfileRuntime.scope.value;
+    int currentIndex() => !mounted || scope != ProfileRuntime.scope.value ||
+        _catalogQuery.isNotEmpty || _catalogSearching
+        ? -1 : _sections.indexWhere((row) => identical(row, section));
     if (section.pagingPaused && !resume) return;
     if (section.loadingMore || section.exhausted) return;
     // Android TV: flip the guard silently. The setState exists to show the
@@ -3009,7 +3204,9 @@ class _SearchScreenState extends State<SearchScreen>
       // page of watched titles doesn't end the row early.
       final seen = section.items.map((m) => m.id).toSet();
       final page = await fetchFilteredPage(
-        (skip, onRaw) => _stremio.fetchCatalog(
+        (skip, onRaw) => currentIndex() < 0
+            ? Future.value(const <StremioMeta>[])
+            : _stremio.fetchCatalog(
           section.addon,
           section.catalog,
           skip: skip,
@@ -3019,22 +3216,20 @@ class _SearchScreenState extends State<SearchScreen>
         hides: WatchedFilter.predicate,
         seenIds: seen,
       );
-      if (!mounted) return;
-      // The row may have been swapped out (a search started) while in flight.
-      if (rowIndex >= _sections.length ||
-          !identical(_sections[rowIndex], section)) {
-        return;
-      }
+      // Progressive arrivals can move the SAME row. Only a removed/replaced
+      // row or a changed session invalidates its page, not a new numeric index.
+      final index = currentIndex();
+      if (index < 0) return;
       section.nextSkip = page.nextSkip;
       if (page.exhausted) section.exhausted = true;
       final fresh = page.items;
       section.pagingPaused = fresh.isEmpty && !page.exhausted;
       if (fresh.isEmpty) return;
       // Grow this row's focus nodes in lockstep with the new items.
-      final nodes = _rowNodes[rowIndex];
+      final nodes = _rowNodes[index];
       final base = nodes.length;
       for (var i = 0; i < fresh.length; i++) {
-        nodes.add(FocusNode(debugLabel: 'search_r${rowIndex}_c${base + i}'));
+        nodes.add(FocusNode(debugLabel: 'search_r${index}_c${base + i}'));
       }
       setState(() => section.items.addAll(fresh));
       // A DPAD-right that ran off the end of this row may be waiting on it.
@@ -3043,7 +3238,7 @@ class _SearchScreenState extends State<SearchScreen>
     } catch (_) {
       // Transient fetch failure — leave the row as-is so a later scroll retries.
     } finally {
-      if (mounted) {
+      if (currentIndex() >= 0) {
         setState(() => section.loadingMore = false);
       } else {
         section.loadingMore = false;
@@ -3584,7 +3779,7 @@ class _SearchScreenState extends State<SearchScreen>
     String? homeRowId,
     required int column,
   }) {
-    if (!_boardHasMore && !_boardLoadingMore && _focusCatalogContinuation()) return;
+    if (!_boardCanAdvance && _focusCatalogContinuation()) return;
     _pendingDownOrigin = FocusManager.instance.primaryFocus;
     if (_pendingDownOrigin == null) return;
     _pendingDownRowIndex = rowIndex;
@@ -5670,14 +5865,64 @@ class _SearchScreenState extends State<SearchScreen>
 
   /// Swap the displayed sections (homepage or search results): rebuild the
   /// per-row focus nodes and reset the hero to the first item.
-  void _applySections(List<CatalogSection> sections, {bool preserveFocus = false}) {
-    _boardGen++;
-    _boardAppliedAt = DateTime.now();
-    // Rail keys are content-addressed by stable Home-row id, so a reload can
-    // preserve the active rail even when its numeric section index changes.
-    _pendingStageAdvanceKey = null;
-    _pendingStageAdvanceAt = null;
-    _stageGeneration++;
+  void _applySections(List<CatalogSection> sections, {
+    bool preserveFocus = false,
+    bool incremental = false,
+  }) {
+    String? anchor;
+    double? anchorHeight;
+    double anchorTailPadding = 0;
+    List<String> previousOrder = const [];
+    if (incremental && _homeStyleEffective == 'classic') {
+      final rails = _classicHomeRails;
+      for (final rail in rails) {
+        if (rail.traktSkeletonIndex >= 0) continue;
+        final focused = _canvasRailNodes(rail).where((node) => node.hasFocus);
+        if (focused.isEmpty) continue;
+        anchor = _canvasRailRowId(rail);
+        // Newly published rows are catalog/list/collection rows even if the
+        // focused anchor is Continue Watching or a favourite in a custom order.
+        if (rail.sectionIndex != null) {
+          anchorHeight = homeRowHeight(focused.first.context,
+            ValueKey('board-reveal-$_boardGen-$anchor'));
+        }
+        anchorHeight ??= _classicCatalogRowExtent(focused.first.context ?? context);
+        break;
+      }
+      previousOrder = rails.map(_canvasRailRowId).toList();
+      if (anchor != null && _boardScroll.hasClients &&
+          _boardScroll.position.maxScrollExtent <= 0) {
+        // A short first batch leaves unused viewport space below its rows.
+        // Retain that space as tail padding when rows are inserted above the
+        // anchor, otherwise scroll physics clamps away the preserved offset.
+        final heights = <double>[];
+        for (final rail in rails) {
+          if (rail.traktSkeletonIndex >= 0) break;
+          final nodes = _canvasRailNodes(rail);
+          final height = nodes.map((node) => homeRowHeight(node.context,
+            ValueKey('board-reveal-$_boardGen-${_canvasRailRowId(rail)}')))
+            .whereType<double>().firstOrNull;
+          if (height == null) break;
+          heights.add(height);
+        }
+        if (heights.length == rails.length) {
+          anchorTailPadding = max(_classicAnchorTailPadding,
+            _boardScroll.position.viewportDimension - 38 -
+                heights.fold<double>(0, (sum, height) => sum + height));
+        }
+      }
+    }
+    // Streaming arrivals are not a fresh board: preserve keyed row elements,
+    // entrance state, and any pending user-directed move to the next rail.
+    if (!incremental) {
+      _boardGen++;
+      _boardAppliedAt = DateTime.now();
+      // Rail keys are content-addressed by stable Home-row id, so a reload can
+      // preserve the active rail even when its numeric section index changes.
+      _pendingStageAdvanceKey = null;
+      _pendingStageAdvanceAt = null;
+      _stageGeneration++;
+    }
     if (preserveFocus) {
       List<List<String>> identities(List<CatalogSection> rows) => [
         for (final row in rows) [
@@ -5690,8 +5935,18 @@ class _SearchScreenState extends State<SearchScreen>
         previousNodes: _rowNodes,
         nextIds: identities(sections),
       );
+      final columns = {
+        if (incremental)
+          for (var i = 0; i < _sections.length; i++)
+            _sectionRowId(_sections[i]): _rowCol[i],
+      };
       _rowNodes..clear()..addAll(nextNodes);
-      _rowCol.clear();
+      _rowCol
+        ..clear()
+        ..addAll({
+          for (var i = 0; i < sections.length; i++)
+            if (columns[_sectionRowId(sections[i])] case final column?) i: column,
+        });
     } else {
       _disposeNodes();
       for (final section in sections) {
@@ -5703,7 +5958,20 @@ class _SearchScreenState extends State<SearchScreen>
         );
       }
     }
-    setState(() => _sections = sections);
+    setState(() {
+      _sections = sections;
+      if (anchor != null && anchorHeight != null) {
+        final nextOrder = _classicHomeRails.map(_canvasRailRowId).toList();
+        if (nextOrder.takeWhile((id) => id != anchor)
+            .any((id) => !previousOrder.contains(id))) {
+          _classicAnchorTailPadding = max(_classicAnchorTailPadding, anchorTailPadding);
+        }
+        preserveHomeInsertionAnchor(scroll: _boardScroll,
+          previous: previousOrder,
+          next: nextOrder,
+          anchor: anchor, extentOf: (_) => anchorHeight!);
+      }
+    });
     _publishTopShelfSpotlight();
     unawaited(_refreshBoundSources());
     if (preserveFocus && _heroItem.value != null && sections.any((section) =>
@@ -7473,6 +7741,7 @@ class _SearchScreenState extends State<SearchScreen>
         if (catalogRow != null) unawaited(_loadMoreRow(catalogRow));
       },
       onLoadMoreShelves: _loadMoreBoard,
+      pendingShelves: PlatformUtil.isAndroidTvCached && _boardRowsPending,
       // The board owns the CADENCE; the resolve and the video stay here.
       //
       // Every other entry into `_scheduleHeroTrailer` is still excluded for
@@ -7812,10 +8081,10 @@ class _SearchScreenState extends State<SearchScreen>
     final current = _resolveCanvasRailIndex(rails);
     final next = (current + delta).clamp(0, rails.length - 1);
     if (next == current) {
-      if (delta > 0 && !_boardLoadingMore && _focusCatalogContinuation()) {
+      if (delta > 0 && !_boardRowsPending && _focusCatalogContinuation()) {
         return;
       }
-      if (delta > 0 && _boardHasMore) {
+      if (delta > 0 && _boardCanAdvance) {
         // Remember the move so it COMPLETES when the batch lands — otherwise
         // the keypress is silently eaten and the user has to press again.
         _deferStageAdvance(_canvasRailKeyOf(rails[current]));
@@ -8181,13 +8450,19 @@ class _SearchScreenState extends State<SearchScreen>
     final fillLower = _pendingStageAdvanceFillsLower;
     final origin = _pendingStageOrigin;
     if (key == null || at == null) return;
+    final rails = _stageRails;
+    final i = rails.indexWhere((r) => _canvasRailKeyOf(r) == key);
+    if (_boardRowsPending && i >= 0 && i + 1 >= rails.length &&
+        _stageDeferralStillValid(at, origin)) {
+      // A partial arrival above this rail hasn't supplied the requested next
+      // row yet. Keep the user's move pending for the rest of the batch.
+      return;
+    }
     _pendingStageAdvanceKey = null;
     _pendingStageAdvanceAt = null;
     _pendingStageAdvanceFillsLower = false;
     _pendingStageOrigin = null;
     if (!_stageDeferralStillValid(at, origin)) return;
-    final rails = _stageRails;
-    final i = rails.indexWhere((r) => _canvasRailKeyOf(r) == key);
     if (i < 0 || i + 1 >= rails.length) return;
     // Still where the key was pressed? On Atrium that means the focused ROW,
     // everywhere else the active rail.
@@ -8219,11 +8494,17 @@ class _SearchScreenState extends State<SearchScreen>
       return;
     }
     setState(() => _canvasRailKey = _canvasRailKeyOf(rails[i + 1]));
-    _stagePostFrameFocus(
-      () => identical(FocusManager.instance.primaryFocus, origin)
-          ? _stageFocusTarget()
-          : null,
-    );
+    _stagePostFrameFocus(() {
+      if (!(ModalRoute.of(context)?.isCurrent ?? true)) return null;
+      final primary = FocusManager.instance.primaryFocus;
+      // Deck/Mosaic replace the entire rail. That intentional replacement
+      // detaches the origin before this frame callback and leaves route-scope
+      // focus. A different attached card still means the user moved elsewhere.
+      final detachedBySwap = origin?.parent == null &&
+          (primary == null || identical(primary, FocusScope.of(context)));
+      return identical(primary, origin) || detachedBySwap
+          ? _stageFocusTarget() : null;
+    });
   }
 
   /// A rail strip reserves ONE box height for every rail kind (invariant: a
@@ -8690,7 +8971,7 @@ class _SearchScreenState extends State<SearchScreen>
     if (cur + 2 >= rails.length) {
       // Nothing below the bottom row yet — pull the next catalog batch and
       // remember the move so it completes when the rail lands.
-      if (_boardHasMore) {
+      if (_boardCanAdvance) {
         _deferStageAdvance(
           _canvasRailKeyOf(rails[min(cur + 1, rails.length - 1)]),
         );
@@ -8980,7 +9261,7 @@ class _SearchScreenState extends State<SearchScreen>
                     : () {
                         // No lower row YET — remember the move so focus drops into
                         // it when the batch lands, instead of eating the keypress.
-                        if (_boardHasMore) {
+                        if (_boardCanAdvance) {
                           _deferStageAdvance(railKey, fillsLower: true);
                           _loadMoreBoard();
                         }
@@ -8997,6 +9278,9 @@ class _SearchScreenState extends State<SearchScreen>
           overflow: TextOverflow.ellipsis,
           style: TextStyle(
             fontSize: _kAtriumLabelFontSize,
+            // Match the reserved wall-label extent on the partial Android TV
+            // board. tvOS keeps its existing typography and opening behavior.
+            height: PlatformUtil.isAndroidTvCached ? 1.35 : null,
             fontWeight: FontWeight.w800,
             letterSpacing: 1.6,
             color: app.fade(app.core.tx, 0.86),
@@ -11074,6 +11358,17 @@ class _SearchScreenState extends State<SearchScreen>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    if (PlatformUtil.isAndroidTvCached) {
+      if (ModalRoute.of(context)?.isCurrent ?? true) {
+        _resumeHomeProgress();
+      } else {
+        _clearDeferredDown();
+        _pendingStageAdvanceKey = null;
+        _pendingStageAdvanceAt = null;
+        _pendingStageOrigin = null;
+        _pendingStageAdvanceFillsLower = false;
+      }
+    }
     if (_heroTrailerActive) {
       final route = ModalRoute.of(context);
       if (route is PageRoute) appRouteObserver.subscribe(this, route);
@@ -18181,7 +18476,8 @@ class _SearchScreenState extends State<SearchScreen>
                             findChildIndexCallback: orderedHome
                                 ? findHomeRailIndex
                                 : null,
-                            padding: const EdgeInsets.only(top: 6, bottom: 32),
+                            padding: EdgeInsets.only(top: 6,
+                              bottom: 32 + _classicAnchorTailPadding),
                             // ~1.5 rows of pre-build. Smaller extent means
                             // smaller, more frequent builds on weak TV chips.
                             cacheExtent: 300,
@@ -18967,12 +19263,34 @@ class _SearchScreenState extends State<SearchScreen>
   /// source riding beside it as a small [RowTagPill]. The "See All" link is a
   /// mouse/tap affordance shown on desktop only — TV keeps the rail
   /// chrome-free and paginates as the user scrolls.
+  TextStyle _railTitleStyle({required double fontSize}) => GoogleFonts.poppins(
+    fontSize: fontSize, fontWeight: FontWeight.w600, letterSpacing: 0,
+    color: AppThemeScope.of(context).fade(AppThemeScope.of(context).core.tx, 0.92),
+  );
+
+  double _classicCatalogRowExtent(BuildContext context) {
+    double lineHeight(TextStyle style) {
+      final painter = TextPainter(
+        text: TextSpan(text: 'Ag', style: DefaultTextStyle.of(context).style.merge(style)),
+        textDirection: Directionality.of(context),
+        textScaler: MediaQuery.textScalerOf(context), maxLines: 1,
+      )..layout();
+      final height = painter.height;
+      painter.dispose();
+      return height;
+    }
+    var header = lineHeight(_railTitleStyle(fontSize: 15));
+    if (!_hideHomeCatalogAddonNames) {
+      header = max(header, lineHeight(RowTagPill.textStyle(9.5)) + 9.5 * .56 + 2);
+    }
+    return 14 + header + 10 + _railTitleCardH(context) + 14;
+  }
+
   Widget _railHeader({
     required String title,
     String? tag,
     VoidCallback? onSeeAll,
   }) {
-    final app = AppThemeScope.of(context);
     final tv = widget.isTelevision;
     final compact = !tv && MediaQuery.sizeOf(context).width < 480;
     return Padding(
@@ -19005,12 +19323,7 @@ class _SearchScreenState extends State<SearchScreen>
                     // display face. TV runs them quieter (15px) — the hero
                     // carries the weight, the row title just labels the shelf
                     // (Nuvio's row grammar).
-                    style: GoogleFonts.poppins(
-                      fontSize: tv || compact ? 15 : 17,
-                      fontWeight: FontWeight.w600,
-                      letterSpacing: 0,
-                      color: app.fade(app.core.tx, 0.92),
-                    ),
+                    style: _railTitleStyle(fontSize: tv || compact ? 15 : 17),
                   ),
                 ),
                 if (tag != null) ...[

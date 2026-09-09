@@ -1,4 +1,5 @@
 import 'package:debrify/services/metadata_explore_service.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:debrify/widgets/detail/showcase_availability.dart';
 import 'package:debrify/models/metadata_preferences.dart';
 import 'package:debrify/screens/metadata_explore_page.dart';
@@ -84,6 +85,7 @@ DetailModel _model({
   VoidCallback? onExplore,
   VoidCallback? onPrimaryLongPress,
   bool openingDataReady = true,
+  DetailFocusCoordinator? focus,
   bool peopleEnabled = false,
   Set<MetadataFeature>? features,
 }) {
@@ -151,7 +153,7 @@ DetailModel _model({
     onRecommendationTap: (_) {},
     onAmbientStill: (_) {},
     onDepth: onDepth,
-    focus: DetailFocusCoordinator(
+    focus: focus ?? DetailFocusCoordinator(
       backNode: FocusNode(debugLabel: 'test-back'),
       primaryEntry: FocusNode(debugLabel: 'test-primary'),
     ),
@@ -398,10 +400,10 @@ void main() {
   });
 
   testWidgets(
-    'TV holds a composed opening skeleton before revealing Showcase',
+    'tvOS holds a composed opening skeleton before revealing Showcase',
     (tester) async {
-      PlatformUtil.debugSetAndroidTvCached(true);
-      addTearDown(() => PlatformUtil.debugSetAndroidTvCached(null));
+      PlatformUtil.debugSetTvOS(true);
+      addTearDown(() => PlatformUtil.debugSetTvOS(null));
       _surface(tester, _tv);
       final model = _model();
 
@@ -427,11 +429,11 @@ void main() {
     },
   );
 
-  testWidgets('TV reveal preserves focus deliberately moved to shell chrome', (
+  testWidgets('tvOS reveal preserves focus deliberately moved to shell chrome', (
     tester,
   ) async {
-    PlatformUtil.debugSetAndroidTvCached(true);
-    addTearDown(() => PlatformUtil.debugSetAndroidTvCached(null));
+    PlatformUtil.debugSetTvOS(true);
+    addTearDown(() => PlatformUtil.debugSetTvOS(null));
     _surface(tester, _tv);
     final model = _model();
 
@@ -453,11 +455,11 @@ void main() {
     expect(model.focus.primaryEntry.hasFocus, isFalse);
   });
 
-  testWidgets('TV gate stays composed while opening metadata is pending', (
+  testWidgets('tvOS gate stays composed while opening metadata is pending', (
     tester,
   ) async {
-    PlatformUtil.debugSetAndroidTvCached(true);
-    addTearDown(() => PlatformUtil.debugSetAndroidTvCached(null));
+    PlatformUtil.debugSetTvOS(true);
+    addTearDown(() => PlatformUtil.debugSetTvOS(null));
     _surface(tester, _tv);
     final loading = _model(openingDataReady: false);
 
@@ -468,6 +470,57 @@ void main() {
       find.byKey(const ValueKey('showcase-tv-opening-skeleton')),
       findsOneWidget,
     );
+  });
+
+  testWidgets('Android TV can activate details before opening metadata arrives', (
+    tester,
+  ) async {
+    PlatformUtil.debugSetAndroidTvCached(true);
+    addTearDown(() => PlatformUtil.debugSetAndroidTvCached(null));
+    _surface(tester, _tv);
+    var plays = 0;
+    final model = _model(openingDataReady: false, onPrimary: () => plays++);
+    await tester.pumpWidget(_host(model));
+    await tester.pump();
+    expect(find.byKey(const ValueKey('showcase-tv-opening-skeleton')), findsNothing);
+    expect(model.focus.primaryEntry.hasFocus, isTrue);
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    expect(plays, 1);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Android TV late metadata does not steal shell focus', (tester) async {
+    PlatformUtil.debugSetAndroidTvCached(true);
+    addTearDown(() => PlatformUtil.debugSetAndroidTvCached(null));
+    _surface(tester, _tv);
+    final model = _model(openingDataReady: false, withCast: false);
+    await tester.pumpWidget(_host(model));
+    await tester.pump();
+    model.focus.backNode.requestFocus();
+    await tester.pump();
+    await tester.pumpWidget(_host(_model(focus: model.focus)));
+    await tester.pumpAndSettle();
+    expect(model.focus.backNode.hasFocus, isTrue);
+    expect(model.focus.primaryEntry.hasFocus, isFalse);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Android TV mounts distant recommendation controls without requesting their images', (tester) async {
+    PlatformUtil.debugSetAndroidTvCached(true);
+    addTearDown(() => PlatformUtil.debugSetAndroidTvCached(null));
+    _surface(tester, _tv);
+    final model = _model(isMovie: true, recs: [
+      for (var i = 0; i < 6; i++) StremioMeta(
+        id: 'fixture:$i', type: 'movie', name: 'Recommendation $i',
+        poster: 'https://example.invalid/poster-$i.jpg'),
+    ]);
+    await tester.pumpWidget(_host(model));
+    await tester.pumpAndSettle();
+    expect(find.byType(ShowcaseRecs, skipOffstage: false), findsOneWidget);
+    expect(find.byType(CachedNetworkImage, skipOffstage: false), findsNothing);
+    expect(model.focus.primaryEntry.hasFocus, isTrue);
+    await tester.pumpWidget(const SizedBox());
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('a series walks identity → seasons → episodes → cast → sources', (

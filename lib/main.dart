@@ -93,6 +93,7 @@ import 'widgets/window_drag_area.dart';
 import 'widgets/mobile_floating_nav.dart';
 import 'widgets/mobile_classic_nav.dart';
 import 'widgets/tv_ambient_art_stage.dart';
+import 'widgets/app_tab_switcher.dart';
 import 'widgets/tv_sidebar_nav.dart';
 import 'widgets/desktop_pill_nav.dart';
 import 'widgets/desktop_sidebar_nav.dart';
@@ -3258,37 +3259,14 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     }
   }
 
-  /// Shared fade + slide page switcher used by every layout (TV, desktop
-  /// sidebar, top-bar/mobile). Keyed by [_selectedIndex] so tab swaps
-  /// animate. Each layout wraps this in its own SafeArea/Column as needed.
+  /// Keyed shell tab transitions. Android TV uses a single incoming fade;
+  /// other platforms retain their existing animations.
   Widget _buildAnimatedPage() {
-    return FadeTransition(
-      opacity: _fadeAnimation,
-      child: AnimatedSwitcher(
-        // TV: short fade-only swap — the 350ms fade+slide animates two
-        // full-screen layers at once, which reads as lag on weak TV GPUs.
-        duration: Duration(milliseconds: _isAndroidTv ? 150 : 350),
-        transitionBuilder: (child, animation) {
-          if (_isAndroidTv) {
-            return FadeTransition(opacity: animation, child: child);
-          }
-          final offsetAnimation =
-              Tween<Offset>(
-                begin: const Offset(0.02, 0.02),
-                end: Offset.zero,
-              ).animate(
-                CurvedAnimation(parent: animation, curve: Curves.easeOutCubic),
-              );
-          return FadeTransition(
-            opacity: animation,
-            child: SlideTransition(position: offsetAnimation, child: child),
-          );
-        },
-        child: KeyedSubtree(
-          key: ValueKey<int>(_selectedIndex),
-          child: _buildPage(_selectedIndex),
-        ),
-      ),
+    return AppTabSwitcher(
+      selectedIndex: _selectedIndex,
+      isTelevision: _isAndroidTv,
+      entranceAnimation: _fadeAnimation,
+      child: _buildPage(_selectedIndex),
     );
   }
 
@@ -3629,9 +3607,13 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
                         // focused title art, tiny-decode blurred, behind BOTH
                         // the content and the sidebar rail (the board's
                         // scaffold is transparent over it). Flat page ink
-                        // when nothing is published; other tabs' opaque
-                        // scaffolds simply cover it.
-                        const Positioned.fill(child: TvAmbientArtStage()),
+                        // when nothing is published. Android TV removes the
+                        // art immediately off Home, including during fades.
+                        Positioned.fill(
+                          child: TvAmbientArtStage(
+                            homeActive: _selectedIndex == 15,
+                          ),
+                        ),
                         Positioned.fill(
                           // Through the helper, not the constant: 'pill' draws
                           // no rail at rest, and a hardcoded 64 would leave a

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:developer' as developer;
 import '../../services/metadata_explore_service.dart';
 import '../../services/profiles/profile_runtime.dart';
 import 'showcase_availability.dart';
@@ -18,6 +19,7 @@ import '../../utils/artwork_url.dart';
 import '../../utils/platform_util.dart';
 import '../episodes_panel.dart';
 import '../section_reveal.dart';
+import '../viewport_artwork_scope.dart';
 import 'detail_episode_cells.dart';
 import 'detail_model.dart';
 import 'detail_style.dart';
@@ -284,7 +286,7 @@ class _DetailShowcaseState extends State<DetailShowcase> {
   final ScrollController _scroll = ScrollController();
   final DetailCellNodes _cells = DetailCellNodes('showcase');
 
-  /// A TV opens on one composed frame, instead of asking the GPU to reveal a
+  /// Apple TV opens on one composed frame, instead of asking the GPU to reveal a
   /// backdrop, wordmark and several off-screen rails independently. The shell
   /// starts its backdrop decode before this body builds; this gate warms the
   /// matching image-cache keys, then lets the page crossfade in once the first
@@ -422,6 +424,12 @@ class _DetailShowcaseState extends State<DetailShowcase> {
     if (!widget.dpad) _scroll.addListener(_onScrollDepth);
     ProfileRuntime.scope.addListener(_scopeChanged);
     _loadExplore();
+    if (widget.dpad && PlatformUtil.isAndroidTvCached) {
+      developer.Timeline.instantSync('Showcase.mounted');
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) developer.Timeline.instantSync('Showcase.firstContentFrame');
+      });
+    }
   }
 
   @override
@@ -435,7 +443,10 @@ class _DetailShowcaseState extends State<DetailShowcase> {
     }
   }
 
-  bool get _usesTvOpeningGate => widget.dpad && PlatformUtil.isTelevision;
+  // Android TV publishes usable controls immediately and admits nearby band
+  // artwork separately. Preserve Apple TV's composed opening and animation.
+  bool get _usesTvOpeningGate =>
+      widget.dpad && PlatformUtil.isTelevision && !PlatformUtil.isAndroidTvCached;
 
   Future<void> _warmTvOpening() async {
     if (!mounted || !_usesTvOpeningGate) return;
@@ -777,7 +788,13 @@ class _DetailShowcaseState extends State<DetailShowcase> {
   /// once their data lands, and without a key the arriving band would inherit
   /// the state of whatever sat at its index before.
   Widget _band(String id, Widget child) => widget.dpad
-      ? child
+      ? PlatformUtil.isAndroidTvCached
+          ? ViewportArtworkScope(
+              key: ValueKey('showcase-artwork-$id'),
+              focused: _bandKey == id,
+              child: child,
+            )
+          : child
       : SectionReveal(
           key: ValueKey('showcase-band-$id'),
           startWhenVisible: true,
