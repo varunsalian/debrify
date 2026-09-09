@@ -44,7 +44,7 @@ class StreamBadgeStrip extends StatelessWidget {
 ///
 /// [name] and [description] are the two halves of
 /// [StreamBadgeMatcher.matchesFor]; a rule fires when it matches either.
-class StreamBadgeStripFor extends StatelessWidget {
+class StreamBadgeStripFor extends StatefulWidget {
   final String name;
   final String? description;
   final double height;
@@ -64,24 +64,50 @@ class StreamBadgeStripFor extends StatelessWidget {
   });
 
   @override
+  State<StreamBadgeStripFor> createState() => _StreamBadgeStripForState();
+}
+
+class _StreamBadgeStripForState extends State<StreamBadgeStripFor> {
+  List<StreamBadgeRule>? _renderedBadges;
+  Widget? _strip;
+
+  @override
+  void didUpdateWidget(covariant StreamBadgeStripFor oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.height != widget.height ||
+        oldWidget.spacing != widget.spacing ||
+        oldWidget.builder != widget.builder) {
+      _strip = null;
+    }
+  }
+
+  Widget _render(List<StreamBadgeRule> badges) {
+    if (badges.isEmpty) return const SizedBox.shrink();
+    if (!identical(badges, _renderedBadges) || _strip == null) {
+      _renderedBadges = badges;
+      final strip = StreamBadgeStrip(
+        badges: badges,
+        height: widget.height,
+        spacing: widget.spacing,
+      );
+      _strip = widget.builder?.call(strip) ?? strip;
+    }
+    // Focus-only parent rebuilds reuse the actual widget tree, so the image
+    // widgets do not need to rebuild or re-resolve their image providers.
+    return _strip!;
+  }
+
+  @override
   Widget build(BuildContext context) {
     return ValueListenableBuilder<StreamBadgeMatcher>(
       valueListenable: StreamBadgesService.instance.matcher,
       builder: (context, matcher, _) {
         return _MatchedBadgeStrip(
-          key: ValueKey((matcher, name, description)),
+          key: ValueKey((matcher, widget.name, widget.description)),
           matcher: matcher,
-          name: name,
-          description: description,
-          render: (badges) {
-            if (badges.isEmpty) return const SizedBox.shrink();
-            final strip = StreamBadgeStrip(
-              badges: badges,
-              height: height,
-              spacing: spacing,
-            );
-            return builder?.call(strip) ?? strip;
-          },
+          name: widget.name,
+          description: widget.description,
+          render: _render,
         );
       },
     );
@@ -219,7 +245,15 @@ class _MatchedBadgeStripState extends State<_MatchedBadgeStrip> {
   @override
   void initState() {
     super.initState();
-    _request();
+    final cached = widget.matcher.cachedMatchesFor(
+      name: widget.name,
+      description: widget.description,
+    );
+    if (cached != null) {
+      _badges = cached;
+    } else {
+      _request();
+    }
   }
 
   Future<void> _request() async {

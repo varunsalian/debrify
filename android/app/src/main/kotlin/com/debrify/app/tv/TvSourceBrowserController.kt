@@ -104,13 +104,27 @@ class TvSourceBrowserController(
     private var customBadgesConfigured = false
     private data class BadgeSlot(
         val entry: TvSourceBrowserEntry,
+        val title: TextView,
         val view: TvStreamBadgeStrip,
         val builtIn: TvStreamBadgeStrip,
-        val quality: Map<String, Any>?,
-        val metadata: List<Map<String, Any>>,
+        val current: Boolean,
+        var active: Boolean,
     ) {
         fun showBuiltIn(configured: Boolean) {
-            builtIn.show(if (configured) metadata else listOfNotNull(quality) + metadata)
+            fun badge(label: String): Map<String, Any> = mapOf(
+                "label" to label,
+                "textColor" to if (current && label == "▮▮▮") {
+                    if (active) 0xFFAB2733.toInt() else 0xFFE23D4C.toInt()
+                } else if (active) Color.BLACK else 0xCCFFFFFF.toInt(),
+                "fillColor" to if (active) 0x0F000000 else 0x14FFFFFF,
+            )
+            builtIn.show(buildList {
+                if (!configured && entry.quality.isNotBlank()) add(badge(entry.quality))
+                entry.size?.let { add(badge(it)) }
+                if (!entry.direct && entry.seeders > 0) add(badge("${entry.seeders} seeders"))
+                if (entry.direct) add(badge("DIRECT"))
+                if (current) add(badge("▮▮▮"))
+            })
         }
     }
     private fun updateBadgeMode(configured: Boolean) {
@@ -318,13 +332,19 @@ class TvSourceBrowserController(
         if (event.action != KeyEvent.ACTION_DOWN) return true
         when (event.keyCode) {
             KeyEvent.KEYCODE_BACK, KeyEvent.KEYCODE_ESCAPE -> hide()
-            KeyEvent.KEYCODE_DPAD_LEFT -> if (zone == Zone.RESULTS) { zone = Zone.RAIL; render() }
-            KeyEvent.KEYCODE_DPAD_RIGHT -> if (zone == Zone.RAIL) { zone = Zone.RESULTS; render() }
+            KeyEvent.KEYCODE_DPAD_LEFT -> if (zone == Zone.RESULTS) changeZone(Zone.RAIL)
+            KeyEvent.KEYCODE_DPAD_RIGHT -> if (zone == Zone.RAIL) changeZone(Zone.RESULTS)
             KeyEvent.KEYCODE_DPAD_UP -> move(-1)
             KeyEvent.KEYCODE_DPAD_DOWN -> move(1)
             KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_NUMPAD_ENTER -> activate()
         }
         return true
+    }
+
+    private fun changeZone(next: Zone) {
+        zone = next
+        renderRail()
+        if (visible().isEmpty()) renderResults() else refreshResultSelection(selectedResult)
     }
 
     private fun move(delta: Int) {
@@ -341,7 +361,7 @@ class TvSourceBrowserController(
     }
 
     private fun activate() {
-        if (zone == Zone.RAIL) { zone = Zone.RESULTS; render(); return }
+        if (zone == Zone.RAIL) { changeZone(Zone.RESULTS); return }
         val entry = visible().getOrNull(selectedResult)
         if (entry != null) {
             callbacks.onSourceSelected(entry.index)
@@ -448,22 +468,18 @@ class TvSourceBrowserController(
     }
 
     private fun refreshResultSelection(oldSelection: Int) {
-        val entries = visible()
         listOf(oldSelection, selectedResult).distinct().forEach { index ->
-            val entry = entries.getOrNull(index) ?: return@forEach
-            val replacement = sourceRow(
-                entry,
-                index == selectedResult,
-                entry.index == callbacks.currentIndex(),
-            ) {
-                selectedResult = index
-                callbacks.onSourceSelected(entry.index)
-            }
-            results.removeViewAt(index)
-            results.addView(replacement, index)
+            val row = results.getChildAt(index) ?: return@forEach
+            val slot = row.tag as? BadgeSlot ?: return@forEach
+            val active = zone == Zone.RESULTS && index == selectedResult
+            if (slot.active == active) return@forEach
+            slot.active = active
+            (row.background as GradientDrawable).setColor(if (active) Color.WHITE else 0x07FFFFFF)
+            slot.title.setTextColor(if (active) Color.BLACK else 0xE6FFFFFF.toInt())
+            slot.showBuiltIn(customBadgesConfigured)
         }
         resultsScroll.post {
-            animateSourceFocus()
+            if (zone == Zone.RESULTS) animateSourceFocus()
             requestVisibleBadges()
         }
     }
@@ -498,20 +514,13 @@ class TvSourceBrowserController(
         setPadding(dp(18), dp(11), dp(18), dp(11))
         background = bg(active, false)
         setOnClickListener { click() }
-        addView(TextView(activity).apply {
+        val title = TextView(activity).apply {
             text = entry.title
             setTextColor(if (active) Color.BLACK else 0xE6FFFFFF.toInt())
             textSize = 14f
             setTypeface(typeface, 1)
-        }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
-        val tags = listOfNotNull(entry.size,
-            if (!entry.direct && entry.seeders > 0) "${entry.seeders} seeders" else null,
-            if (entry.direct) "DIRECT" else null, if (current) "▮▮▮" else null)
-        fun builtInTag(label: String): Map<String, Any> = mapOf("label" to label,
-                "textColor" to if (current && label == "▮▮▮") {
-                    if (active) 0xFFAB2733.toInt() else 0xFFE23D4C.toInt()
-                } else if (active) Color.BLACK else 0xCCFFFFFF.toInt(),
-                "fillColor" to if (active) 0x0F000000 else 0x14FFFFFF)
+        }
+        addView(title, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
         val builtIn = TvStreamBadgeStrip(activity, chipHeightDp = 22)
         addView(builtIn, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
         val badges = TvStreamBadgeStrip(activity)
@@ -521,8 +530,7 @@ class TvSourceBrowserController(
         addOnLayoutChangeListener { view, _, top, _, _, _, oldTop, _, oldBottom ->
             preserveBadgeAnchor(view, top, oldTop, oldBottom - oldTop)
         }
-        val slot = BadgeSlot(entry, badges, builtIn,
-            entry.quality.takeIf { it.isNotBlank() }?.let(::builtInTag), tags.map(::builtInTag))
+        val slot = BadgeSlot(entry, title, badges, builtIn, current, active)
         tag = slot
         slot.showBuiltIn(customBadgesConfigured)
         badgeCache[badgeKey(entry)]?.let { badges.show(it) }

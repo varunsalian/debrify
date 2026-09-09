@@ -233,10 +233,10 @@ void main() {
     oldNode.dispose();
     await tester.pumpAndSettle(); // let the Focus widget attach the new node
 
-    expect(find.text('Play'), findsNothing);
+    expect(find.text('Play').hitTestable(), findsNothing);
     node.requestFocus();
     await tester.pumpAndSettle();
-    expect(find.text('Play'), findsOneWidget,
+    expect(find.text('Play').hitTestable(), findsOneWidget,
         reason: 'listener must have migrated to the new node');
   });
 
@@ -255,9 +255,9 @@ void main() {
         qualityTag: '4K',
       ),
     );
-    expect(find.text('Play'), findsNothing);
+    expect(find.text('Play').hitTestable(), findsNothing);
     node.requestFocus();
     await tester.pump();
-    expect(find.text('Play'), findsOneWidget);
+    expect(find.text('Play').hitTestable(), findsOneWidget);
   });
 }

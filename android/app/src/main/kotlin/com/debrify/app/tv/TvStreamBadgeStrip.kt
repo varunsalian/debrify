@@ -16,16 +16,25 @@ class TvStreamBadgeStrip(context: Context, private val chipHeightDp: Int = 24) :
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
 
     fun show(badges: List<Map<*, *>>) {
-        if (shown === badges) return
+        if (shown == badges) return
+        val previous = shown
         shown = badges
+        // Selection only changes built-in text colours. Keep those views and
+        // their measured bounds, just as we keep imported artwork on focus.
+        if (previous != null && previous.size == badges.size && childCount == badges.size &&
+            badges.indices.all { i ->
+                getChildAt(i) is TextView && previous[i]["label"] == badges[i]["label"] &&
+                    (badges[i]["imageUrl"] as? String).isNullOrBlank()
+            }) {
+            badges.forEachIndexed { i, badge -> styleChip(getChildAt(i), badge) }
+            return
+        }
         clearImages()
         removeAllViews()
         for (badge in badges) {
             val label = badge["label"] as? String ?: continue
             val image = badge["imageUrl"] as? String
-            val fill = (badge["fillColor"] as? Number)?.toInt() ?: 0xFF2A2A2A.toInt()
             val foreground = (badge["textColor"] as? Number)?.toInt() ?: -1
-            val border = (badge["borderColor"] as? Number)?.toInt()
             val chip: View = if (image.isNullOrBlank()) {
                 TextView(context).apply {
                     text = label.uppercase()
@@ -55,14 +64,21 @@ class TvStreamBadgeStrip(context: Context, private val chipHeightDp: Int = 24) :
             }
             chip.isFocusable = false
             chip.isClickable = false
-            chip.background = GradientDrawable().apply {
-                setColor(fill)
-                cornerRadius = dp(chipHeightDp).toFloat() * .23f
-                if (border != null) setStroke(dp(1), border)
-            }
+            styleChip(chip, badge)
             addView(chip)
         }
         requestLayout()
+    }
+
+    private fun styleChip(chip: View, badge: Map<*, *>) {
+        if (chip is TextView) chip.setTextColor((badge["textColor"] as? Number)?.toInt() ?: -1)
+        val background = chip.background as? GradientDrawable ?: GradientDrawable().also {
+            it.cornerRadius = dp(chipHeightDp).toFloat() * .23f
+            chip.background = it
+        }
+        background.setColor((badge["fillColor"] as? Number)?.toInt() ?: 0xFF2A2A2A.toInt())
+        val border = (badge["borderColor"] as? Number)?.toInt()
+        background.setStroke(if (border == null) 0 else dp(1), border ?: 0)
     }
 
     private fun clearImages() {

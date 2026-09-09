@@ -1013,7 +1013,7 @@ class _SourcesScreenState extends State<_SourcesScreen> {
                                         }
                                         return false;
                                       },
-                                      child: ListView.builder(
+                                      child: SourceListScrollAnchor(child: ListView.builder(
                                         padding: EdgeInsets.symmetric(
                                           // Spotlight expands the focused
                                           // SourceRow beyond its layout box.
@@ -1068,7 +1068,7 @@ class _SourcesScreenState extends State<_SourcesScreen> {
                                             },
                                           );
                                         },
-                                      ),
+                                      )),
                                     ),
                             ),
                             // Frozen-mode arrivals wait behind this pill so
@@ -1907,6 +1907,7 @@ class _SourcesScreenState extends State<_SourcesScreen> {
         ? const <FormatTag>[]
         : FormatTagDetector.detect(t.name);
     return SourceRow(
+      listIndex: i,
       title: t.displayTitle,
       titleMaxLines: 6,
       subtitle: _rowSubtitle(t),

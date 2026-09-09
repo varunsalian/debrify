@@ -80,6 +80,26 @@ class StreamBadgeMatcher {
   }) async =>
       (await matchResultFor(name: name, description: description)).badges;
 
+  /// Already resolved badges, including a resolved empty list. A synchronous
+  /// cache hit lets remounted source rows keep their very first layout instead
+  /// of briefly collapsing the strip while awaiting an already completed job.
+  /// This never runs patterns or starts work on the calling isolate.
+  List<StreamBadgeRule>? cachedMatchesFor({
+    required String name,
+    String? description,
+  }) {
+    if (_disposed ||
+        _failed ||
+        name.length > maxInputLength ||
+        (description?.length ?? 0) > maxInputLength) {
+      return null;
+    }
+    final key = '$name\u0000${description ?? ''}';
+    final hit = _cache.remove(key);
+    if (hit != null) _cache[key] = hit;
+    return hit;
+  }
+
   Future<StreamBadgeMatchResult> matchResultFor({
     required String name,
     String? description,
@@ -97,9 +117,8 @@ class StreamBadgeMatcher {
       );
     }
     final key = '$name\u0000${description ?? ''}';
-    final hit = _cache.remove(key);
+    final hit = cachedMatchesFor(name: name, description: description);
     if (hit != null) {
-      _cache[key] = hit;
       return Future.value(
         StreamBadgeMatchResult(StreamBadgeMatchStatus.resolved, hit),
       );

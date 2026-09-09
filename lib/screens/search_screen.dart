@@ -113,6 +113,7 @@ import '../widgets/movie_watched_badge.dart';
 import '../widgets/search_loading_animation.dart';
 import '../widgets/skeleton_poster.dart';
 import '../widgets/source_row.dart';
+import '../widgets/source_list_scroll_anchor.dart';
 import '../widgets/torrent_filters_sheet.dart';
 import '../widgets/torrent_result_row.dart';
 import '../widgets/tv_text_field.dart';
@@ -16400,7 +16401,7 @@ class _SearchScreenState extends State<SearchScreen>
                           }
                           return false;
                         },
-                        child: ListView.builder(
+                        child: SourceListScrollAnchor(child: ListView.builder(
                           controller: _kwScroll,
                           // A focused SourceRow can scale and rise in
                           // Spotlight. The first item starts at scroll offset
@@ -16423,6 +16424,7 @@ class _SearchScreenState extends State<SearchScreen>
                                 ? const <FormatTag>[]
                                 : FormatTagDetector.detect(t.name);
                             return SourceRow(
+                              listIndex: i,
                               key: ValueKey(
                                 '${t.infohash}_${_kwSelectionMode}_${_kwSelected.contains(t.infohash)}',
                               ),
@@ -16515,7 +16517,7 @@ class _SearchScreenState extends State<SearchScreen>
                               },
                             );
                           },
-                        ),
+                        )),
                       ),
               ),
               // Frozen-mode arrivals wait behind this pill so the list never

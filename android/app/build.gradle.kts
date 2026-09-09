@@ -47,6 +47,10 @@ android {
         jvmTarget = JavaVersion.VERSION_11.toString()
     }
 
+    testOptions {
+        unitTests.isIncludeAndroidResources = true
+    }
+
     defaultConfig {
         applicationId = "com.debrify.app"
         minSdk = flutter.minSdkVersion
@@ -127,6 +131,7 @@ dependencies {
     // JVM unit tests (subtitle auto-sync aligner) — run via :app:testDebugUnitTest
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.json:json:20180813")
+    testImplementation("org.robolectric:robolectric:4.15.1")
     implementation("androidx.core:core-ktx:1.13.1")
     implementation("androidx.appcompat:appcompat:1.7.0")
     implementation("com.google.android.material:material:1.11.0")
