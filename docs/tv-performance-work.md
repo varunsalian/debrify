@@ -111,3 +111,94 @@ provider responses, video playback and OS scheduling can still affect perceived
 responsiveness. Neither this test run nor the changes establish universal
 60 FPS or a guarantee of no future crashes. Artwork resolution and the final
 stationary focus appearance were preserved.
+
+## Follow-up: mixed-direction browsing, September 9
+
+The vertical-only result above was not sufficient. A new cold-cache run mixed
+horizontal and vertical Home navigation with collection galleries and details.
+It reproduced intermittent stalls and TMDB lists requiring Retry.
+
+### Confirmed causes and changes
+
+- VM CPU samples exposed additional synchronous sync work outside Flutter's
+  frame-build measurements: publication change-detection hashes, incoming hot
+  document parsing/authentication, and decoded section-cache size accounting.
+  These now run in the bounded large-I/O worker, including unchanged sync
+  cycles. Digest, schema, timestamp, content-hash and read-back validation are
+  retained. Session validation follows publication preparation. Pending cache
+  sizing cannot repopulate a cache cleared by a profile/session change.
+- Android TV collection halos now cache the static blur independently and
+  animate opacity. A rendered pixel comparison matches the original fully
+  focused appearance exactly. Disabled halos skip the decoration entirely;
+  reduced motion is respected. The non-Android path, including tvOS, is unchanged.
+- Background IMDb identity enrichment yields to active catalog requests.
+  Catalog retries use fresh transports, bounded backoff and the existing total
+  deadline; identity requests retain their full three-second completion budget.
+  Authentication errors and rate limits are not blindly retried.
+- The Mi Box resolved the main TMDB hostname to `49.44.79.236`. A credential-free
+  Android Java HTTPS probe timed out three times, while `api.tmdb.org` returned
+  the expected unauthenticated 401 three times (753–1180 ms). Public-DNS routes
+  to the original hostname also suffered HTTP connection resets in Debrify;
+  rotating IPs alone did not fix this. This establishes a route/hostname-specific
+  problem on this network, not the precise upstream cause or owner of the reset.
+- Idempotent TMDB v3 reads now opt into a short-lived alternate-host fallback
+  after transport failure. Both hosts use their own normal TLS hostname and
+  certificate verification. No third-party API proxy is used. The alternate
+  hostname is under TMDB's `tmdb.org` domain (also used by its documented
+  [image service](https://developer.themoviedb.org/docs/image-basics)); its root
+  redirects to TMDB's API documentation. Other providers, image requests,
+  HTTP URLs, nonstandard ports and credential-bearing authority URLs are not
+  rewritten. Failure of the alternate permits return to the primary route,
+  with a cooldown; healthy normal routes need no failover.
+
+### Measured and tested
+
+- Matched 14-key mixed-navigation profile traces: UI-frame p95 6.46 → 6.19 ms;
+  raster p95 17.38 → 16.36 ms, maximum 52.68 → 35.66 ms. The final 366-frame
+  trace had no UI frames over 16.67 ms or raster frames over 50 ms. The expensive
+  sync hash/parse stacks no longer dominated main-isolate CPU samples.
+  This is profile-mode evidence, not a guarantee of 60 FPS; CPU work outside
+  frames, GC, input cadence and OS scheduling require separate interpretation.
+- A&E's three-list gallery and Action's eight-list gallery loaded on the Mi Box
+  without Retry after failover, including the lower rows. Previously A&E failed
+  repeatedly. The Mac's 48-source Kaptain cold/warm integration check also passed;
+  Mac success alone was not accepted as evidence of TV network reliability.
+- Final focused gate: 239 tests passed across collection reliability, native
+  sources, TLS/routing, metadata, glow pixels and sync engine/worker/shard tests.
+  The broad suite reported 5,812 passes, 10 skips and 18 failures: the 17 known
+  baseline failures plus an unrelated UDP-transfer temporary-file cleanup race.
+  All 17 transfer tests passed on isolated rerun. Analysis of changed production
+  modules found no errors/warnings and three brace-style informational notices.
+- Cache-only clearing was verified again: 107 MB → 36.86 kB. Profiles/settings
+  and the original 38,798,238-byte backup archive remain. Release APK installed
+  in place at 16:35:27; Android flags confirm it is not debuggable. TMDB build
+  configuration was checked in its ARM binary without printing credentials.
+  APK SHA-256: `ee12b5cf4579956bef327a4a318626b3a6fa5ee6faa52bedde3ceefed48bc664`.
+
+Follow-up changes are not yet committed or pushed. The earlier release hashes
+and review rounds above describe earlier work, not this follow-up patch.
+
+### Follow-up release browsing gate
+
+- After the second cache clear, the release retained PID 8948 through more
+  than six minutes of mixed-direction Home browsing, Hulu gallery, its New
+  Series grid, Soy Luna details, horizontal episode/cast navigation, return to
+  Home, A&E and Adventure galleries. No Debrify crash, ANR or process-death event
+  appeared in the captured event log. No playback or setting changes were made.
+- Hulu's visible TMDB/Trakt cards, all three A&E lists, and Adventure's visible
+  TMDB lists (including all eight after scrolling) loaded without manual Retry.
+  Series artwork, episode descriptions
+  and cast loaded. Returning to Home and pressing OK reopened Hulu, confirming
+  the originating collection focus was retained. One transient UI-dump failure
+  was retried and verified rather than treating stale labels as evidence.
+- Sampled release PSS was approximately 229–282 MB across those destinations;
+  returning to Home measured 255 MB and reopening Hulu 235 MB. This is a short
+  navigation soak, not a long-session leak guarantee.
+- A first episode-navigation pass still had a SurfaceFlinger desired-to-present
+  maximum of 140 ms (p95 81 ms); the subsequent warm pass measured maximum
+  58 ms (p95 42 ms). These include compositor queuing and are not Flutter
+  build/raster times or direct input-latency measurements. A remaining cold-load
+  hitch is therefore explicitly not claimed fixed or proven to have a single
+  cause. The device is improved, not universally lag-free.
+- An additional 21 transition, image recovery and Spotlight policy tests passed.
+  Combined with the main focused gate, 260 focused tests passed.

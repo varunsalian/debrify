@@ -9,12 +9,14 @@ import 'package:debrify/services/tmdb_http_client.dart';
 class _Socket extends Fake implements Socket {
   bool destroyed = false;
   @override
+  InternetAddress get remoteAddress => InternetAddress('13.1.2.3');
+  @override
   void destroy() {
     destroyed = true;
   }
 }
 
-Future<Directory> _tlsFixture() async {
+Future<Directory> _tlsFixture({String host = 'api.themoviedb.org'}) async {
   final dir = await Directory.systemTemp.createTemp('debrify-tmdb-tls-');
   addTearDown(() => dir.delete(recursive: true));
   Future<void> openssl(List<String> args) async {
@@ -56,10 +58,10 @@ Future<Directory> _tlsFixture() async {
     '-out',
     'server.csr',
     '-subj',
-    '/CN=api.themoviedb.org',
+    '/CN=$host',
   ]);
   await File('${dir.path}/extensions').writeAsString(
-    'subjectAltName=DNS:api.themoviedb.org\nbasicConstraints=critical,CA:FALSE\n'
+    'subjectAltName=DNS:$host\nbasicConstraints=critical,CA:FALSE\n'
     'keyUsage=critical,digitalSignature,keyEncipherment\nextendedKeyUsage=serverAuth\n',
   );
   await openssl([
@@ -97,6 +99,170 @@ void main() {
       );
   ConnectionTask<Socket> success() =>
       ConnectionTask.fromSocket(Future.value(_Socket()), () {});
+
+  test(
+    'read failover is scoped, shared, expires, and can return to primary',
+    () {
+      var now = DateTime.utc(2026, 9, 9);
+      final cache = TmdbDnsCache();
+      final first = TmdbConnections(dnsCache: cache, now: () => now);
+      final read = uri.replace(query: 'page=2&with_genres=28%2C12');
+      expect(first.readUri(read), read);
+      first.reportTransportFailure(read);
+      first.close();
+      final next = TmdbConnections(dnsCache: cache, now: () => now);
+      addTearDown(next.close);
+      final alternate = read.replace(host: TmdbConnections.alternateHost);
+      expect(next.readUri(read), alternate);
+      for (final excluded in [
+        read.replace(host: 'image.tmdb.org'),
+        read.replace(host: 'addon.example'),
+        read.replace(scheme: 'http'),
+        read.replace(port: 8443),
+        read.replace(userInfo: 'user:secret'),
+        read.replace(path: '/not-api'),
+      ]) {
+        expect(next.readUri(excluded), excluded);
+      }
+      next.reportTransportFailure(alternate);
+      expect(next.readUri(read), read);
+      next.reportTransportFailure(read);
+      expect(
+        next.readUri(read),
+        read,
+        reason: 'alternate failure has a cooldown',
+      );
+      now = now.add(const Duration(seconds: 31));
+      next.reportTransportFailure(read);
+      expect(next.readUri(read), alternate);
+      now = now.add(const Duration(minutes: 5));
+      expect(next.readUri(read), read);
+    },
+  );
+
+  test(
+    'alternate read uses its own verified TLS hostname and Host header',
+    () async {
+      final fixture = await _tlsFixture(host: TmdbConnections.alternateHost);
+      final server = await HttpServer.bindSecure(
+        InternetAddress.loopbackIPv4,
+        0,
+        SecurityContext()
+          ..useCertificateChain('${fixture.path}/server.pem')
+          ..usePrivateKey('${fixture.path}/server.key'),
+      );
+      addTearDown(() => server.close(force: true));
+      final hosts = <String>[];
+      server.listen((request) {
+        hosts.add(request.headers.host!);
+        request.response.write('ok');
+        request.response.close();
+      }, onError: (_) {});
+      final routes = TmdbConnections(
+        startConnect: (_, __) => TmdbConnections.startSocket(
+          InternetAddress.loopbackIPv4,
+          server.port,
+        ),
+      );
+      addTearDown(routes.close);
+      final client = routes.httpClient(
+        context: SecurityContext(withTrustedRoots: false)
+          ..setTrustedCertificates('${fixture.path}/root.pem'),
+      );
+      addTearDown(() => client.close(force: true));
+      routes.reportTransportFailure(uri);
+      final response = await (await client.getUrl(routes.readUri(uri))).close();
+      expect(await response.transform(utf8.decoder).join(), 'ok');
+      expect(hosts, [TmdbConnections.alternateHost]);
+      await expectLater(client.getUrl(uri), throwsA(isA<HandshakeException>()));
+    },
+  );
+
+  test(
+    'HTTP resets rotate a cached edge instead of retrying the same address',
+    () async {
+      final cache = TmdbDnsCache()
+        ..addresses = [InternetAddress('13.1.2.3'), InternetAddress('13.1.2.4')]
+        ..expires = DateTime.now().add(const Duration(minutes: 1));
+      final targets = <String>[];
+      final c = TmdbConnections(
+        dnsCache: cache,
+        startConnect: (host, _) async {
+          targets.add((host as InternetAddress).address);
+          return success();
+        },
+      );
+      addTearDown(c.close);
+      await (await c.connect(uri, null, null)).socket;
+      c.reportTransportFailure(uri);
+      await (await c.connect(uri, null, null)).socket;
+      expect(targets, ['13.1.2.3', '13.1.2.4']);
+    },
+  );
+
+  test(
+    'TLS or HTTP route failure survives client replacement and tries public DNS first',
+    () async {
+      final cache = TmdbDnsCache();
+      final first = TmdbConnections(
+        dnsCache: cache,
+        startConnect: (_, __) async => success(),
+      );
+      await (await first.connect(uri, null, null)).socket;
+      // TCP succeeded, but the request transport subsequently reported failure.
+      first.reportTransportFailure(uri);
+      first.close();
+      final targets = <dynamic>[];
+      var lookups = 0;
+      var now = DateTime.now();
+      final second = TmdbConnections(
+        dnsCache: cache,
+        now: () => now,
+        dnsClientFactory: () => MockClient((_) async {
+          lookups++;
+          return answer();
+        }),
+        startConnect: (host, _) async {
+          targets.add(host);
+          return success();
+        },
+      );
+      addTearDown(second.close);
+      await (await second.connect(uri, null, null)).socket;
+      expect(lookups, 1);
+      expect((targets.single as InternetAddress).address, '13.1.2.3');
+      now = now.add(const Duration(minutes: 6));
+      targets.clear();
+      await (await second.connect(uri, null, null)).socket;
+      expect(targets, [TmdbConnections.host]);
+    },
+  );
+
+  test('blocked public DNS can still use a healthy local route', () async {
+    final c = TmdbConnections(
+      dnsClientFactory: () => MockClient((_) async => http.Response('', 503)),
+      startConnect: (host, _) async {
+        expect(host, TmdbConnections.host);
+        return success();
+      },
+    );
+    addTearDown(c.close);
+    c.reportTransportFailure(uri);
+    await (await c.connect(uri, null, null)).socket;
+  });
+
+  test(
+    'cancelled clients and unrelated origins do not poison shared routing',
+    () {
+      final cache = TmdbDnsCache();
+      final c = TmdbConnections(dnsCache: cache);
+      c.reportTransportFailure(Uri.https('example.com', '/'));
+      expect(cache.preferPublicUntil, isNull);
+      c.close();
+      c.reportTransportFailure(uri);
+      expect(cache.preferPublicUntil, isNull);
+    },
+  );
 
   test(
     'fallback retains TLS hostname verification and API Host header',
@@ -222,11 +388,17 @@ void main() {
       request.response.statusCode = 407;
       request.response.close();
     });
-    final c = TmdbConnections(dnsClientFactory: () => MockClient((_) async {
-      fail('Proxy connections must not use public DNS');
-    }));
-    final client = c.httpClient()..findProxy = (_) => 'PROXY 127.0.0.1:${proxy.port}';
-    addTearDown(() { client.close(force: true); c.close(); });
+    final c = TmdbConnections(
+      dnsClientFactory: () => MockClient((_) async {
+        fail('Proxy connections must not use public DNS');
+      }),
+    );
+    final client = c.httpClient()
+      ..findProxy = (_) => 'PROXY 127.0.0.1:${proxy.port}';
+    addTearDown(() {
+      client.close(force: true);
+      c.close();
+    });
     await expectLater(client.getUrl(uri), throwsA(isA<HttpException>()));
     expect(methods, ['CONNECT']);
   });
@@ -291,23 +463,32 @@ void main() {
     },
   );
 
-  test('short-lived clients share DNS answers without sharing socket ownership', () async {
-    final cache = TmdbDnsCache();
-    var lookups = 0;
-    TmdbConnections client() => TmdbConnections(dnsCache: cache,
-      dnsClientFactory: () => MockClient((_) async { lookups++; return answer(); }),
-      startConnect: (host, port) async {
-        if (host is String) throw const SocketException('system DNS unavailable');
-        return success();
-      });
-    final first = client();
-    await (await first.connect(uri, null, null)).socket;
-    first.close();
-    final second = client();
-    addTearDown(second.close);
-    await (await second.connect(uri, null, null)).socket;
-    expect(lookups, 1);
-  });
+  test(
+    'short-lived clients share DNS answers without sharing socket ownership',
+    () async {
+      final cache = TmdbDnsCache();
+      var lookups = 0;
+      TmdbConnections client() => TmdbConnections(
+        dnsCache: cache,
+        dnsClientFactory: () => MockClient((_) async {
+          lookups++;
+          return answer();
+        }),
+        startConnect: (host, port) async {
+          if (host is String)
+            throw const SocketException('system DNS unavailable');
+          return success();
+        },
+      );
+      final first = client();
+      await (await first.connect(uri, null, null)).socket;
+      first.close();
+      final second = client();
+      addTearDown(second.close);
+      await (await second.connect(uri, null, null)).socket;
+      expect(lookups, 1);
+    },
+  );
 
   test('proxy and other hosts bypass fallback', () async {
     final destinations = <String>[];

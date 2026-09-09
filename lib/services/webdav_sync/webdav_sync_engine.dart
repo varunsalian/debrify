@@ -23,6 +23,7 @@ import 'webdav_sync_graph.dart';
 import 'webdav_sync_hot_merge.dart';
 import 'webdav_sync_hot_models.dart';
 import 'webdav_sync_collection_sections.dart';
+import 'webdav_sync_publication_digests.dart';
 import 'webdav_sync_models.dart';
 import 'webdav_sync_local_adapter.dart';
 import 'webdav_sync_large_section_io.dart';
@@ -168,6 +169,7 @@ final class WebDavSyncSectionCache {
 
   final Map<String, _CachedSection> _entries = <String, _CachedSection>{};
   int _bytes = 0;
+  int _generation = 0;
 
   int get entryCount =>
       _entries.length +
@@ -194,8 +196,24 @@ final class WebDavSyncSectionCache {
 
   void put(String key, Object value, int encodedBytes) {
     if (_isCollection(key)) return _collections.put(key, value, encodedBytes);
-    remove(key);
-    if (encodedBytes <= 0 || encodedBytes > maxBytes) return;
+    _putMeasured(key, value, _retainedSize(value, encodedBytes, maxBytes));
+  }
+
+  Future<void> putAsync(String key, Object value, int encodedBytes) async {
+    if (_isCollection(key))
+      return _collections.putAsync(key, value, encodedBytes);
+    final generation = _generation;
+    final limit = maxBytes;
+    final retained = await TransferIo.largeWorker.synchronized(
+      () => Isolate.run(
+        () => WebDavSyncSectionCache._retainedSize(value, encodedBytes, limit),
+      ),
+    );
+    if (generation == _generation) _putMeasured(key, value, retained);
+  }
+
+  static int _retainedSize(Object value, int encodedBytes, int maxBytes) {
+    if (encodedBytes <= 0 || encodedBytes > maxBytes) return 0;
     // The wire is compressed; its length can undercount retained objects by
     // orders of magnitude. Account for decoded data with room for Dart maps
     // and strings, stopping measurement as soon as this entry cannot fit.
@@ -205,16 +223,24 @@ final class WebDavSyncSectionCache {
       WebDavSyncProfilesDocument v => v.toJson(),
       WebDavSyncResourcesDocument v => v.toJson(),
       WebDavSyncLibraryDocument v => v.toJson(),
+      Map v => v,
+      List v => v,
       _ => null,
     };
     if (json != null) {
       var retained = 0;
       for (final fragment in canonicalJsonFragments(json)) {
         retained += fragment.length * 16;
-        if (retained > maxBytes) return;
+        if (retained > maxBytes) return 0;
       }
       encodedBytes = encodedBytes > retained ? encodedBytes : retained;
     }
+    return encodedBytes;
+  }
+
+  void _putMeasured(String key, Object value, int encodedBytes) {
+    remove(key);
+    if (encodedBytes <= 0 || encodedBytes > maxBytes) return;
     while (_entries.isNotEmpty &&
         (_entries.length >= entryLimit || _bytes + encodedBytes > maxBytes)) {
       remove(_entries.keys.first);
@@ -224,6 +250,7 @@ final class WebDavSyncSectionCache {
   }
 
   void clear() {
+    _generation++;
     _encoded.clear();
     _encodedBytes = 0;
     if (partitionCollections) _collections.clear();
@@ -2088,7 +2115,7 @@ final class WebDavSyncEngine
               maxBytes: WebDavSyncLimits.maxManifestBytes,
             );
             stage = WebDavSyncManifestReadStage.parse;
-            final manifest = WebDavSyncManifest.fromJson(payload);
+            final manifest = await _parseManifest(payload);
             stage = WebDavSyncManifestReadStage.identity;
             if (manifest.deviceId != deviceId ||
                 manifest.circleId != context.root!.document.circleId) {
@@ -2403,16 +2430,7 @@ final class WebDavSyncEngine
           maxBytes: WebDavSyncLimits.maxHotDocumentBytes,
           instrumentation: instrumentation,
         );
-        profiles = WebDavSyncProfilesDocument.fromJson(payload);
-        if (profiles.semanticDigest != profilesRef.semanticDigest) {
-          throw const FormatException(
-            'WebDAV sync profiles section digest mismatch',
-          );
-        }
-        _requireCircleStampBounds(
-          _profileStamps(profiles),
-          profilesRef.updatedAtMs,
-        );
+        profiles = await _parseProfilesSection(payload, profilesRef);
         if (deviceId != ownDeviceId) {
           readReferences.add(
             _PeerSectionReference(deviceId: deviceId, reference: profilesRef),
@@ -2453,16 +2471,7 @@ final class WebDavSyncEngine
           maxBytes: WebDavSyncLimits.maxGraphDocumentBytes,
           instrumentation: instrumentation,
         );
-        resources = WebDavSyncResourcesDocument.fromJson(payload);
-        if (resources.semanticDigest != resourcesRef.semanticDigest) {
-          throw const FormatException(
-            'WebDAV sync resources section digest mismatch',
-          );
-        }
-        _requireCircleStampBounds(
-          _resourceStamps(resources),
-          resourcesRef.updatedAtMs,
-        );
+        resources = await _parseResourcesSection(payload, resourcesRef);
         if (deviceId != ownDeviceId) {
           readReferences.add(
             _PeerSectionReference(deviceId: deviceId, reference: resourcesRef),
@@ -2519,8 +2528,7 @@ final class WebDavSyncEngine
             maxBytes: maxBytes,
           )).bytes;
     instrumentation.received(encoded.length);
-    if (encoded.length != reference.size ||
-        contentHashOf(encoded) != reference.contentHash) {
+    if (!await _sectionContentMatches(encoded, reference)) {
       throw const FormatException('WebDAV sync section content mismatch');
     }
     final payload = await _codec.openDocument(
@@ -2531,11 +2539,9 @@ final class WebDavSyncEngine
       logicalName: reference.name,
       schemaVersion: reference.schemaVersion,
       maxBytes: maxBytes,
-      runInBackground:
-          maxBytes == WebDavSyncLimits.maxGraphDocumentBytes ||
-          reference.name.startsWith(WebDavSyncCollectionSections.prefix),
+      runInBackground: true,
     );
-    _cache(cacheKey, payload as Object, reference.size);
+    await _cache(cacheKey, payload as Object, reference.size);
     return payload;
   }
 
@@ -2870,9 +2876,89 @@ final class WebDavSyncEngine
       throw const FormatException('WebDAV sync library section mismatch');
     }
     _requireLibraryPublicationBounds(document, reference.updatedAtMs);
-    _cache(cacheKey, document, reference.size);
+    await _cache(cacheKey, document, reference.size);
     return document;
   }
+
+  // Keep typed parsing, semantic authentication and stamp validation together
+  // in an isolated worker. openDocument decrypts off-thread, but returning a
+  // JSON map alone does not move these additional full-document passes.
+  static Future<WebDavSyncHotDocument> _parseHotSection(
+    Object? payload,
+    WebDavSyncSectionReference reference,
+    String profileId,
+  ) => TransferIo.largeWorker.synchronized(
+    () => Isolate.run(() {
+      if (payload is! Map || payload['version'] != reference.schemaVersion) {
+        throw const FormatException('WebDAV sync hot schema claim mismatch');
+      }
+      final document = WebDavSyncHotDocument.fromJson(payload);
+      if (document.circleProfileId != profileId ||
+          semanticDigestOf(payload) != reference.semanticDigest) {
+        throw const FormatException('WebDAV sync hot section digest mismatch');
+      }
+      _requireHotPublicationBounds(document, reference.updatedAtMs);
+      return document;
+    }),
+  );
+
+  static Future<WebDavSyncTombstoneDocument> _parseTombstoneSection(
+    Object? payload,
+    WebDavSyncSectionReference reference,
+    String profileId,
+  ) => TransferIo.largeWorker.synchronized(
+    () => Isolate.run(() {
+      final document = payload is WebDavSyncTombstoneDocument
+          ? payload
+          : WebDavSyncTombstoneDocument.fromJson(payload);
+      if (document.circleProfileId != profileId ||
+          document.semanticDigest != reference.semanticDigest) {
+        throw const FormatException(
+          'WebDAV sync tombstone section digest mismatch',
+        );
+      }
+      _requireTombstonePublicationBounds(document, reference.updatedAtMs);
+      return document;
+    }),
+  );
+
+  static Future<WebDavSyncProfilesDocument> _parseProfilesSection(
+    Object? payload,
+    WebDavSyncSectionReference reference,
+  ) => TransferIo.largeWorker.synchronized(
+    () => Isolate.run(() {
+      final document = WebDavSyncProfilesDocument.fromJson(payload);
+      if (document.semanticDigest != reference.semanticDigest) {
+        throw const FormatException(
+          'WebDAV sync profiles section digest mismatch',
+        );
+      }
+      _requireCircleStampBounds(
+        _profileStamps(document),
+        reference.updatedAtMs,
+      );
+      return document;
+    }),
+  );
+
+  static Future<WebDavSyncResourcesDocument> _parseResourcesSection(
+    Object? payload,
+    WebDavSyncSectionReference reference,
+  ) => TransferIo.largeWorker.synchronized(
+    () => Isolate.run(() {
+      final document = WebDavSyncResourcesDocument.fromJson(payload);
+      if (document.semanticDigest != reference.semanticDigest) {
+        throw const FormatException(
+          'WebDAV sync resources section digest mismatch',
+        );
+      }
+      _requireCircleStampBounds(
+        _resourceStamps(document),
+        reference.updatedAtMs,
+      );
+      return document;
+    }),
+  );
 
   Future<WebDavSyncHotDocument> _readHotSection(
     WebDavSyncTransport transport,
@@ -2903,16 +2989,12 @@ final class WebDavSyncEngine
       maxBytes: _maxBytesFor(reference.name),
       instrumentation: instrumentation,
     );
-    if (payload is! Map || payload['version'] != reference.schemaVersion) {
-      throw const FormatException('WebDAV sync hot schema claim mismatch');
-    }
-    final document = WebDavSyncHotDocument.fromJson(payload);
-    if (document.circleProfileId != circleProfileId ||
-        semanticDigestOf(payload) != reference.semanticDigest) {
-      throw const FormatException('WebDAV sync hot section digest mismatch');
-    }
-    _requireHotPublicationBounds(document, reference.updatedAtMs);
-    _cache(cacheKey, document, reference.size);
+    final document = await _parseHotSection(
+      payload,
+      reference,
+      circleProfileId,
+    );
+    await _cache(cacheKey, document, reference.size);
     return document;
   }
 
@@ -2932,10 +3014,8 @@ final class WebDavSyncEngine
     );
     final cached = _cached(cacheKey);
     if (cached is WebDavSyncTombstoneDocument &&
-        cached.circleProfileId == circleProfileId &&
-        cached.semanticDigest == reference.semanticDigest) {
-      _requireTombstonePublicationBounds(cached, reference.updatedAtMs);
-      return cached;
+        cached.circleProfileId == circleProfileId) {
+      return _parseTombstoneSection(cached, reference, circleProfileId);
     }
     _removeCached(cacheKey);
     final payload = await _readAndOpenSection(
@@ -2946,15 +3026,12 @@ final class WebDavSyncEngine
       maxBytes: WebDavSyncLimits.maxTombstoneDocumentBytes,
       instrumentation: instrumentation,
     );
-    final document = WebDavSyncTombstoneDocument.fromJson(payload);
-    if (document.circleProfileId != circleProfileId ||
-        document.semanticDigest != reference.semanticDigest) {
-      throw const FormatException(
-        'WebDAV sync tombstone section digest mismatch',
-      );
-    }
-    _requireTombstonePublicationBounds(document, reference.updatedAtMs);
-    _cache(cacheKey, document, reference.size);
+    final document = await _parseTombstoneSection(
+      payload,
+      reference,
+      circleProfileId,
+    );
+    await _cache(cacheKey, document, reference.size);
     return document;
   }
 
@@ -2982,8 +3059,7 @@ final class WebDavSyncEngine
       );
       instrumentation.received(read.bytes.length);
       encoded = read.bytes;
-      if (encoded.length != reference.size ||
-          contentHashOf(encoded) != reference.contentHash) {
+      if (!await _sectionContentMatches(encoded, reference)) {
         throw const FormatException('WebDAV sync section content mismatch');
       }
     }
@@ -2995,7 +3071,7 @@ final class WebDavSyncEngine
       logicalName: reference.name,
       schemaVersion: reference.schemaVersion,
       maxBytes: maxBytes,
-      runInBackground: maxBytes > WebDavSyncLimits.maxHotDocumentBytes,
+      runInBackground: true,
     );
     _sectionCache._putEncoded(cacheKey, encoded);
     return payload;
@@ -3085,12 +3161,25 @@ final class WebDavSyncEngine
     final retainedCollectionReferences = <String, WebDavSyncSectionReference>{};
     final librariesToPush = <String, WebDavSyncLibraryDocument>{};
     final published = <String, _PublishedProfile>{};
+    final digests = await preparePublicationDigests(
+      profiles: {
+        for (final entry in profiles.entries)
+          entry.key: (
+            hot: entry.value.document,
+            library: entry.value.library,
+            tombstones: entry.value.tombstones,
+          ),
+      },
+      serverNowMs: serverNowMs,
+      profileDefinitions: circle?.profiles,
+      resources: circle?.resources,
+    );
+    session.validate();
     final hotDigests = {
-      for (final entry in profiles.entries)
-        entry.key: entry.value.document.semanticDigest,
+      for (final entry in digests.profiles.entries) entry.key: entry.value.hot,
     };
-    final profilesDigest = circle?.profiles.semanticDigest;
-    final resourcesDigest = circle?.resources.semanticDigest;
+    final profilesDigest = digests.profileDefinitions;
+    final resourcesDigest = digests.resources;
     final pushProfiles =
         circle != null &&
         (forceCompressionMigration ||
@@ -3148,21 +3237,10 @@ final class WebDavSyncEngine
       final profileState =
           state.profiles[entry.key] ?? const WebDavSyncProfileEngineState();
       final hotDigest = hotDigests[entry.key]!;
-      final publishedTombstones = <String, WebDavSyncTombstone>{
-        for (final tombstone in entry.value.tombstones.entries)
-          tombstone.key: tombstone.value.copyWith(
-            firstPublishedAtMs:
-                tombstone.value.firstPublishedAtMs ?? serverNowMs,
-            rawLocalTime: false,
-          ),
-      };
-      final tombstoneDocument = WebDavSyncTombstoneDocument(
-        circleProfileId: entry.key,
-        items: Map<String, WebDavSyncTombstone>.unmodifiable(
-          publishedTombstones,
-        ),
-      );
-      final tombstoneDigest = tombstoneDocument.semanticDigest;
+      final profileDigests = digests.profiles[entry.key]!;
+      final tombstoneDocument = profileDigests.tombstones;
+      final publishedTombstones = tombstoneDocument.items;
+      final tombstoneDigest = profileDigests.tombstoneDigest;
       final hasCollections =
           entry.value.document.watchState.records.keys.any(
             WebDavSyncCollectionSections.isCollectionRecord,
@@ -3247,14 +3325,14 @@ final class WebDavSyncEngine
       final library = entry.value.library;
       if (library != null &&
           (forceCompressionMigration ||
-              profileState.lastPushedLibraryDigest != library.semanticDigest ||
+              profileState.lastPushedLibraryDigest != profileDigests.library ||
               state.ownManifest?.section('library/${entry.key}') == null)) {
         librariesToPush[entry.key] = library;
       }
       published[entry.key] = _PublishedProfile(
         hotDigest: hotDigest,
         tombstoneDigest: tombstoneDigest,
-        libraryDigest: entry.value.library?.semanticDigest,
+        libraryDigest: profileDigests.library,
         tombstones: Map<String, WebDavSyncTombstone>.unmodifiable(
           publishedTombstones,
         ),
@@ -3312,9 +3390,11 @@ final class WebDavSyncEngine
             maxBytes: _maxBytesFor(section.reference.name),
           );
           instrumentation.received(readBack.bytes.length);
-          if (readBack.bytes.length != section.reference.size ||
-              contentHashOf(readBack.bytes) != section.reference.contentHash ||
-              !_bytesEqual(readBack.bytes, section.bytes)) {
+          if (!await _sectionContentMatches(
+            readBack.bytes,
+            section.reference,
+            expected: section.bytes,
+          )) {
             throw StateError(
               'WebDAV sync section read-back verification failed',
             );
@@ -3363,7 +3443,7 @@ final class WebDavSyncEngine
               schemaVersion: WebDavSyncLibraryDocument.schemaVersion,
               payload: document,
               payloadEncoder: encodeWebDavSyncLibraryDocument,
-              semanticDigest: document.semanticDigest,
+              semanticDigest: digests.profiles[entry.key]!.library!,
               updatedAtMs: serverNowMs,
               maxBytes: WebDavSyncLibraryDocument.maxEncodedBytes,
             );
@@ -3492,7 +3572,7 @@ final class WebDavSyncEngine
     } finally {
       instrumentation.finishPhase(_CyclePhase.readBack, phaseStarted);
     }
-    final verifiedManifest = WebDavSyncManifest.fromJson(opened);
+    final verifiedManifest = await _parseManifest(opened);
     return _PushResult(
       sectionsPushed:
           changed.length +
@@ -3520,7 +3600,9 @@ final class WebDavSyncEngine
   }) async {
     final logicalName = 'tv-library/$circleProfileId';
     final currentReference = manifest.section(logicalName);
-    if (currentReference?.semanticDigest == document.semanticDigest) {
+    final digest = await libraryPublicationDigest(document);
+    session.validate();
+    if (currentReference?.semanticDigest == digest) {
       return _TvLibraryPushResult(manifest: manifest, sectionsPushed: 0);
     }
     final deviceId = context.deviceId!;
@@ -3538,7 +3620,7 @@ final class WebDavSyncEngine
           schemaVersion: WebDavSyncLibraryDocument.schemaVersion,
           payload: document,
           payloadEncoder: encodeWebDavSyncLibraryDocument,
-          semanticDigest: document.semanticDigest,
+          semanticDigest: digest,
           updatedAtMs: serverNowMs,
           maxBytes: WebDavSyncLibraryDocument.maxEncodedBytes,
         );
@@ -3597,8 +3679,8 @@ final class WebDavSyncEngine
       schemaVersion: WebDavSyncManifest.schemaVersion,
       maxBytes: WebDavSyncLimits.maxManifestBytes,
     );
-    final verified = WebDavSyncManifest.fromJson(opened);
-    _cache(
+    final verified = await _parseManifest(opened);
+    await _cache(
       _sectionCacheKey(root.document.circleId, deviceId, reference, 'library'),
       document,
       reference.size,
@@ -3624,15 +3706,13 @@ final class WebDavSyncEngine
       schemaVersion: schemaVersion,
       payload: payload,
       maxBytes: maxBytes,
-      runInBackground:
-          maxBytes == WebDavSyncLimits.maxGraphDocumentBytes ||
-          name.startsWith(WebDavSyncCollectionSections.prefix),
+      runInBackground: true,
     );
     return _SealedSection(
       bytes: bytes,
       reference: WebDavSyncSectionReference(
         name: name,
-        contentHash: contentHashOf(bytes),
+        contentHash: await _contentHash(bytes),
         semanticDigest: semanticDigest,
         updatedAtMs: updatedAtMs,
         schemaVersion: schemaVersion,
@@ -3836,14 +3916,35 @@ final class WebDavSyncEngine
     return Map<String, WebDavSyncTombstone>.unmodifiable(result);
   }
 
+  static Future<String> _contentHash(Uint8List bytes) => TransferIo.largeWorker
+      .synchronized(() => Isolate.run(() => contentHashOf(bytes)));
+
+  static Future<bool> _sectionContentMatches(
+    Uint8List bytes,
+    WebDavSyncSectionReference reference, {
+    Uint8List? expected,
+  }) => TransferIo.largeWorker.synchronized(
+    () => Isolate.run(
+      () =>
+          bytes.length == reference.size &&
+          contentHashOf(bytes) == reference.contentHash &&
+          (expected == null || _bytesEqual(bytes, expected)),
+    ),
+  );
+
+  static Future<WebDavSyncManifest> _parseManifest(Object? payload) =>
+      TransferIo.largeWorker.synchronized(
+        () => Isolate.run(() => WebDavSyncManifest.fromJson(payload)),
+      );
+
   Object? _cached(String key) {
     return _sectionCache.take(key);
   }
 
   void _removeCached(String key) => _sectionCache.remove(key);
 
-  void _cache(String key, Object value, int encodedBytes) =>
-      _sectionCache.put(key, value, encodedBytes);
+  Future<void> _cache(String key, Object value, int encodedBytes) =>
+      _sectionCache.putAsync(key, value, encodedBytes);
 
   static String _sectionCacheKey(
     String circleId,

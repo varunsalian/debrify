@@ -7,9 +7,68 @@ import 'package:debrify/services/webdav_sync/webdav_sync_codec.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_engine_state.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_hot_merge.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_hot_models.dart';
+import 'package:debrify/services/webdav_sync/webdav_sync_publication_digests.dart';
+import 'package:debrify/services/webdav_sync/webdav_sync_circle_models.dart';
+import 'package:debrify/services/webdav_sync/webdav_sync_library_models.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test(
+    'publication change detection hashes in worker without changing wire values',
+    () async {
+      final hot = _document(
+        device: 'a',
+        records: {
+          for (var i = 0; i < 5000; i++)
+            'record/$i': _value(100, 'a', {'value': 'x' * 300}),
+        },
+      );
+      final tombstone = WebDavSyncTombstone(
+        key: 'gone',
+        stamp: _stamp(50, 'a'),
+      );
+      const library = WebDavSyncLibraryDocument(
+        circleProfileId: 'p',
+        records: {},
+      );
+      const definitions = WebDavSyncProfilesDocument(profiles: {});
+      const resources = WebDavSyncResourcesDocument(
+        resources: {},
+        grants: {},
+        settings: {},
+        bindings: {},
+      );
+      var eventRan = false;
+      Timer.run(() => eventRan = true);
+      final result = await preparePublicationDigests(
+        profiles: {
+          'p': (hot: hot, library: library, tombstones: {'gone': tombstone}),
+        },
+        serverNowMs: 200,
+        profileDefinitions: definitions,
+        resources: resources,
+      );
+      expect(eventRan, isTrue);
+      final profile = result.profiles['p']!;
+      expect(profile.hot, hot.semanticDigest);
+      expect(profile.library, library.semanticDigest);
+      expect(result.profileDefinitions, definitions.semanticDigest);
+      expect(result.resources, resources.semanticDigest);
+      expect(profile.tombstones.items['gone']!.firstPublishedAtMs, 200);
+      expect(tombstone.firstPublishedAtMs, isNull);
+      expect(profile.tombstoneDigest, profile.tombstones.semanticDigest);
+      expect(await libraryPublicationDigest(library), library.semanticDigest);
+      final again = await preparePublicationDigests(
+        profiles: {
+          'p': (hot: hot, library: null, tombstones: profile.tombstones.items),
+        },
+        serverNowMs: 300,
+      );
+      expect(again.profiles['p']!.tombstoneDigest, profile.tombstoneDigest);
+      expect(again.profiles['p']!.library, isNull);
+      expect(again.resources, isNull);
+    },
+  );
   test('large publication allows the caller event loop to run', () async {
     final local = _document(
       device: 'device-a',

@@ -812,7 +812,7 @@ void main() {
     'sorted LIST retries incomplete snapshot before showing any titles',
     () async {
       final pages = <int>[];
-      var failuresRemaining = 2;
+      var failuresRemaining = 4;
       final service = CollectionNativeSourceService(
         tmdbToken: 'dummy',
         resolveIds: false,
@@ -845,7 +845,7 @@ void main() {
         throwsA(isA<CollectionSourceException>()),
       );
       final first = await service.fetch(ref, 1);
-      expect(pages, [1, 2, 2, 2]);
+      expect(pages, [1, 2, 2, 2, 2, 2]);
       expect(first.items.map((m) => m.id), [
         for (var id = 40; id >= 21; id--) 'tmdb:$id',
       ]);
@@ -854,7 +854,7 @@ void main() {
 
   test('local LIST retry preserves buffered items and remote cursor', () async {
     final calls = <int>[];
-    var failuresRemaining = 2;
+    var failuresRemaining = 4;
     final service = CollectionNativeSourceService(
       tmdbToken: 'dummy',
       resolveIds: false,
@@ -892,7 +892,7 @@ void main() {
     final retried = await pager.nextPage();
     expect(retried.first.id, 'tmdb:21');
     expect(retried.last.id, 'tmdb:40');
-    expect(calls, [1, 2, 2, 2]);
+    expect(calls, [1, 2, 2, 2, 2, 2]);
     expect((await pager.nextPage()).last.id, 'tmdb:60');
     expect(pager.exhausted, true);
   });

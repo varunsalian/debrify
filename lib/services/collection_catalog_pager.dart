@@ -1,4 +1,7 @@
+import 'package:flutter/foundation.dart';
+
 import '../models/stremio_addon.dart';
+import 'diagnostic_log.dart';
 
 typedef CatalogFetch =
     Future<List<StremioMeta>> Function(
@@ -76,7 +79,19 @@ class NativeCollectionPager implements CollectionPager {
       } on CollectionSourceException catch (e) {
         error = e.message;
         return const [];
-      } catch (_) {
+      } catch (failure, stack) {
+        DiagnosticLog.instance.recordError(
+          source: 'collections',
+          event: 'native_page_failed',
+          error: failure,
+          stackTrace: stack,
+          flushImmediately: false,
+        );
+        if (!kReleaseMode) {
+          debugPrint(
+            'Native collection failure (${failure.runtimeType}):\n$stack',
+          );
+        }
         error = 'This list could not load. Retry to continue.';
         return const [];
       }

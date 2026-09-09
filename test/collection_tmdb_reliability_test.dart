@@ -33,6 +33,85 @@ class ClosingClient extends MockClient {
 }
 
 void main() {
+  test('retry does not borrow another pooled keep-alive connection', () async {
+    final warmed = Completer<void>();
+    var clients = 0;
+    final retryTransports = <int>[];
+    final service = CollectionNativeSourceService(
+      tmdbToken: 'test',
+      resolveIds: false,
+      retryDelay: Duration.zero,
+      tmdbClientFactory: () {
+        final id = clients++;
+        return MockClient((request) async {
+          if (request.url.queryParameters['page'] != '3') {
+            await warmed.future;
+            return catalog();
+          }
+          retryTransports.add(id);
+          if (id < 2) throw http.ClientException('stale connection');
+          return catalog();
+        });
+      },
+    );
+    addTearDown(service.close);
+    final a = service.fetchPreview(source, 1);
+    final b = service.fetchPreview(source, 2);
+    await Future<void>.delayed(Duration.zero);
+    expect(clients, 2);
+    warmed.complete();
+    await Future.wait([a, b]);
+    expect((await service.fetchPreview(source, 3)).items, hasLength(1));
+    expect(retryTransports, hasLength(2));
+    expect(retryTransports.first, lessThan(2));
+    expect(retryTransports.last, 2);
+  });
+  test(
+    'background identities wait for active catalogs without blocking previews',
+    () async {
+      final slowCatalog = Completer<http.Response>();
+      final identityStarted = Completer<void>();
+      final service = CollectionNativeSourceService(
+        tmdbToken: 'test',
+        client: MockClient((request) async {
+          if (request.url.path.endsWith('/external_ids')) {
+            if (!identityStarted.isCompleted) identityStarted.complete();
+            return http.Response('{"imdb_id":"tt42"}', 200);
+          }
+          if (request.url.queryParameters['page'] == '2')
+            return slowCatalog.future;
+          return catalog();
+        }),
+      );
+      addTearDown(service.close);
+      final pending = service.fetchPreview(source, 2);
+      final first = await service.fetchPreview(source, 1);
+      expect(first.items, hasLength(1));
+      await Future<void>.delayed(Duration.zero);
+      expect(identityStarted.isCompleted, isFalse);
+      slowCatalog.complete(catalog());
+      await pending;
+      await identityStarted.future.timeout(const Duration(seconds: 1));
+    },
+  );
+  test(
+    'catalog survives three consecutive transient resets automatically',
+    () async {
+      var calls = 0;
+      final service = CollectionNativeSourceService(
+        tmdbToken: 'test',
+        resolveIds: false,
+        retryDelay: Duration.zero,
+        client: MockClient((_) async {
+          if (++calls <= 3) throw http.ClientException('reset');
+          return catalog();
+        }),
+      );
+      addTearDown(service.close);
+      expect((await service.fetchPreview(source, 1)).items, hasLength(1));
+      expect(calls, 4);
+    },
+  );
   test(
     'hydrated preview objects stay identical across repeated reads',
     () async {
@@ -234,7 +313,7 @@ void main() {
   }
 
   test(
-    'persistent resets stop after two attempts; failures are not cached',
+    'persistent resets stop after four attempts; failures are not cached',
     () async {
       var calls = 0;
       final service = CollectionNativeSourceService(
@@ -243,7 +322,7 @@ void main() {
         retryDelay: Duration.zero,
         client: MockClient((r) async {
           calls++;
-          if (calls <= 2) throw http.ClientException('reset');
+          if (calls <= 4) throw http.ClientException('reset');
           return catalog();
         }),
       );
@@ -252,9 +331,9 @@ void main() {
         service.fetchPreview(source, 1),
         throwsA(isA<http.ClientException>()),
       );
-      expect(calls, 2);
+      expect(calls, 4);
       expect((await service.fetchPreview(source, 1)).items, hasLength(1));
-      expect(calls, 3);
+      expect(calls, 5);
     },
   );
 

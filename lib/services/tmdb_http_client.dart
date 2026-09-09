@@ -17,6 +17,27 @@ class TmdbHttpClient extends IOClient {
   TmdbHttpClient._(super.client, this._connections);
   final TmdbConnections _connections;
 
+  /// Only callers performing idempotent API reads opt into host failover.
+  Uri readUri(Uri uri) => _connections.readUri(uri);
+  void reportTransportFailure(Uri uri) =>
+      _connections.reportTransportFailure(uri);
+
+  @override
+  Future<IOStreamedResponse> send(http.BaseRequest request) async {
+    try {
+      return await super.send(request);
+    } on http.ClientException {
+      _connections.reportTransportFailure(request.url);
+      rethrow;
+    } on SocketException {
+      _connections.reportTransportFailure(request.url);
+      rethrow;
+    } on TlsException {
+      _connections.reportTransportFailure(request.url);
+      rethrow;
+    }
+  }
+
   @override
   void close() {
     _connections.close();
@@ -31,6 +52,9 @@ class TmdbDnsCache {
   List<InternetAddress> addresses = [];
   DateTime? expires;
   DateTime? retryAt;
+  DateTime? preferPublicUntil;
+  DateTime? alternateUntil;
+  DateTime? alternateRetryAt;
 }
 
 /// TMDB API only: never intercept proxies, artwork, addons, or other providers.
@@ -55,6 +79,7 @@ class TmdbConnections {
        _now = now ?? DateTime.now;
 
   static const host = 'api.themoviedb.org';
+  static const alternateHost = 'api.tmdb.org';
   final http.Client Function() _dnsFactory;
   final _dnsClients = <http.Client>{};
   final Future<ConnectionTask<Socket>> Function(dynamic, int) _startConnect;
@@ -68,6 +93,52 @@ class TmdbConnections {
   final bool _ownsDnsCache;
   Future<List<InternetAddress>>? _resolving;
   bool _closed = false;
+  String? _lastConnectedAddress;
+
+  Uri readUri(Uri uri) {
+    if (!_closed &&
+        uri.scheme == 'https' &&
+        uri.host == host &&
+        uri.port == 443 &&
+        uri.userInfo.isEmpty &&
+        uri.path.startsWith('/3/') &&
+        (_dnsCache.alternateUntil?.isAfter(_now()) ?? false)) {
+      return uri.replace(host: alternateHost);
+    }
+    return uri;
+  }
+
+  /// Some DNS interception endpoints accept TCP and reset TLS/HTTP instead
+  /// of refusing the connection. Remember that failure across request leases
+  /// so retries don't repeatedly reconnect to the same intercepted route.
+  void reportTransportFailure(Uri uri) {
+    if (_closed || uri.scheme != 'https' || uri.port != 443) {
+      return;
+    }
+    if (uri.host == alternateHost) {
+      // A network may block either hostname. Let the next bounded attempt
+      // return to the primary/public-DNS route if the alternate also fails.
+      _dnsCache.alternateUntil = null;
+      _dnsCache.alternateRetryAt = _now().add(const Duration(seconds: 30));
+      return;
+    }
+    if (uri.host != host) return;
+    if (!(_dnsCache.alternateRetryAt?.isAfter(_now()) ?? false)) {
+      _dnsCache.alternateUntil = _now().add(const Duration(minutes: 5));
+    }
+    _dnsCache.preferPublicUntil = _now().add(const Duration(minutes: 5));
+    // A successful TCP connect is not proof that this edge can serve HTTP.
+    // Move the failed route behind its alternatives, rather than making every
+    // retry choose the same cached address again.
+    final addresses = List<InternetAddress>.of(_dnsCache.addresses);
+    final index = addresses.indexWhere(
+      (a) => a.address == _lastConnectedAddress,
+    );
+    if (index >= 0 && addresses.length > 1) {
+      addresses.add(addresses.removeAt(index));
+      _dnsCache.addresses = addresses;
+    }
+  }
 
   static Future<ConnectionTask<Socket>> startSocket(
     dynamic host,
@@ -193,6 +264,9 @@ class TmdbConnections {
           throw const SocketException('TMDB connection cancelled');
         }
         connected = true;
+        _lastConnectedAddress = address is InternetAddress
+            ? address.address
+            : socket.remoteAddress.address;
         return socket;
       })().timeout(connectBudget);
     } finally {
@@ -205,8 +279,12 @@ class TmdbConnections {
   }
 
   Future<Socket> _connect(_ConnectionAttempt attempt) async {
-    final cached = _dnsCache.expires != null && _now().isBefore(_dnsCache.expires!)
+    final preferPublic = _dnsCache.preferPublicUntil?.isAfter(_now()) ?? false;
+    final cached =
+        _dnsCache.expires != null && _now().isBefore(_dnsCache.expires!)
         ? _dnsCache.addresses
+        : preferPublic
+        ? await _resolve()
         : const <InternetAddress>[];
     for (final address in cached.take(2)) {
       try {
@@ -221,12 +299,14 @@ class TmdbConnections {
       _dnsCache.addresses = [];
       _dnsCache.expires = null;
     }
-    try {
-      return await _open(host, attempt);
-    } on SocketException {
-      attempt.check();
-    } on TimeoutException {
-      attempt.check();
+    if (!preferPublic) {
+      try {
+        return await _open(host, attempt);
+      } on SocketException {
+        attempt.check();
+      } on TimeoutException {
+        attempt.check();
+      }
     }
     final addresses = await _resolve();
     attempt.check();
@@ -239,13 +319,18 @@ class TmdbConnections {
         attempt.check();
       }
     }
+    // Public DNS can itself be blocked. Do not permanently exclude a working
+    // local route merely because an earlier connection was interrupted.
+    if (preferPublic) return _open(host, attempt);
     throw const SocketException('TMDB connection failed after DNS fallback');
   }
 
   Future<List<InternetAddress>> _resolve() async {
     if (_closed) throw const SocketException('TMDB client is closed');
-    if (_dnsCache.expires != null && _now().isBefore(_dnsCache.expires!)) return _dnsCache.addresses;
-    if (_dnsCache.retryAt != null && _now().isBefore(_dnsCache.retryAt!)) return [];
+    if (_dnsCache.expires != null && _now().isBefore(_dnsCache.expires!))
+      return _dnsCache.addresses;
+    if (_dnsCache.retryAt != null && _now().isBefore(_dnsCache.retryAt!))
+      return [];
     final pending = _resolving;
     if (pending != null) return pending;
     final work = _lookup();

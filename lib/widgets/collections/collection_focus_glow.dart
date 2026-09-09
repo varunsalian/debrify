@@ -2,6 +2,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
 import '../../utils/dominant_color.dart';
+import '../../utils/platform_util.dart';
 
 /// A cover-colored halo, independent of the theme's normal focus indicator.
 /// Only active tiles request a tiny color decode; stale completions are ignored.
@@ -63,6 +64,51 @@ class _CollectionFocusGlowState extends State<CollectionFocusGlow> {
   @override
   Widget build(BuildContext context) {
     final color = _color ?? Theme.of(context).colorScheme.primary;
+    if (PlatformUtil.isAndroidTvCached) {
+      if (!widget.enabled) return widget.child;
+      // Cache the blurred halo independently of the card. Animating its
+      // opacity avoids repainting an evolving blurred shadow on every focus
+      // frame. Keep the same color, geometry and fully focused appearance.
+      return Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Positioned(
+            top: -64,
+            bottom: -64,
+            left: -64,
+            right: -64,
+            child: IgnorePointer(
+              child: AnimatedOpacity(
+                opacity: widget.active ? 1 : 0,
+                duration:
+                    (MediaQuery.maybeOf(context)?.disableAnimations ?? false)
+                    ? Duration.zero
+                    : const Duration(milliseconds: 160),
+                child: RepaintBoundary(
+                  // Include the blur's overflow in the raster-cache bounds.
+                  child: Padding(
+                    padding: const EdgeInsets.all(64),
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(widget.radius),
+                        boxShadow: [
+                          BoxShadow(
+                            color: color.withValues(alpha: 0.65),
+                            blurRadius: 28,
+                            spreadRadius: 3,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          widget.child,
+        ],
+      );
+    }
     return AnimatedContainer(
       duration: (MediaQuery.maybeOf(context)?.disableAnimations ?? false)
           ? Duration.zero

@@ -216,6 +216,11 @@ class CollectionNativeSourceService {
   Future<void> _runIdentityWorker() async {
     try {
       while (!_closed && _identityQueue.isNotEmpty) {
+        // Optional enrichment must not compete with a gallery's initial list
+        // requests. Keep the separate gate for explicit title opens, but let
+        // queued catalogs drain before starting another background lookup.
+        await _catalogGate.whenIdle;
+        if (_closed || _identityQueue.isEmpty) break;
         final key = _identityQueue.keys.first;
         final item = _identityQueue.remove(key)!;
         _prefetching.add(key);
@@ -268,26 +273,31 @@ class CollectionNativeSourceService {
     Duration budget,
   ) async {
     final elapsed = Stopwatch()..start();
-    for (var attempt = 0; attempt < 2; attempt++) {
+    final identity = uri.path.endsWith('/external_ids');
+    final attempts = identity ? 2 : 4;
+    for (var attempt = 0; attempt < attempts; attempt++) {
       if (_closed) throw const SocketException('Collection client is closed');
       final remaining = budget - elapsed.elapsed;
       if (remaining <= Duration.zero) throw TimeoutException('TMDB timed out');
       // Lease one client per active request: healthy connections are reused,
       // while a timeout can close its transport without cancelling siblings.
-      final client = _idleClients.isEmpty
+      // A retry must not cycle through other stale keep-alive connections.
+      final client = attempt > 0 || _idleClients.isEmpty
           ? _tmdbClientFactory()
           : _idleClients.removeLast();
+      final requestUri = client is TmdbHttpClient ? client.readUri(uri) : uri;
       var reusable = false;
       _activeClients.add(client);
-      final canRetry = attempt == 0 && remaining > retryDelay * 2;
+      final retryWait = retryDelay * (1 << attempt);
+      final canRetry = attempt + 1 < attempts && remaining > retryWait * 2;
       try {
         // Catalog requests can reserve a retry window. Identity lookups have
         // only three seconds: a healthy two-second response must still finish.
         // Fast failures can retry using whatever remains of that full budget.
-        final identity = uri.path.endsWith('/external_ids');
         final limit = canRetry && !identity ? remaining ~/ 2 : remaining;
         final response = await (() async {
-          final request = http.Request('GET', uri)..headers.addAll(headers);
+          final request = http.Request('GET', requestUri)
+            ..headers.addAll(headers);
           final streamed = await client.send(request);
           final bytes = <int>[];
           await for (final chunk in streamed.stream) {
@@ -317,10 +327,16 @@ class CollectionNativeSourceService {
           return response;
         }
       } on http.ClientException {
+        if (client is TmdbHttpClient) client.reportTransportFailure(requestUri);
         if (!canRetry) rethrow;
       } on SocketException {
+        if (client is TmdbHttpClient) client.reportTransportFailure(requestUri);
+        if (!canRetry) rethrow;
+      } on TlsException {
+        if (client is TmdbHttpClient) client.reportTransportFailure(requestUri);
         if (!canRetry) rethrow;
       } on TimeoutException {
+        if (client is TmdbHttpClient) client.reportTransportFailure(requestUri);
         if (!canRetry) rethrow;
       } finally {
         _activeClients.remove(client);
@@ -332,10 +348,10 @@ class CollectionNativeSourceService {
           }
         }
       }
-      if (budget - elapsed.elapsed <= retryDelay) {
+      if (budget - elapsed.elapsed <= retryWait) {
         throw TimeoutException('TMDB timed out');
       }
-      await Future<void>.delayed(retryDelay);
+      await Future<void>.delayed(retryWait);
     }
     throw const CollectionSourceException('TMDB could not load this list.');
   }
@@ -863,6 +879,9 @@ class _NativeRequestGate {
   _NativeRequestGate(this.limit);
   final int limit;
   int active = 0;
+  Completer<void>? _idle;
+  Future<void> get whenIdle =>
+      active == 0 ? Future<void>.value() : (_idle ??= Completer<void>()).future;
   final waiters = Queue<Completer<void>>();
   Future<T> run<T>(Future<T> Function() operation, Duration budget) async {
     if (active >= limit) {
@@ -882,6 +901,10 @@ class _NativeRequestGate {
     } finally {
       if (waiters.isEmpty) {
         active--;
+        if (active == 0) {
+          _idle?.complete();
+          _idle = null;
+        }
       } else {
         waiters.removeFirst().complete();
       }

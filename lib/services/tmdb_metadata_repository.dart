@@ -239,9 +239,17 @@ class TmdbMetadataRepository {
       final remaining = timeout - elapsed.elapsed;
       if (remaining <= Duration.zero) throw TimeoutException('TMDB timed out');
       final client = _clientFactory();
+      final requestUri = client is TmdbHttpClient ? client.readUri(uri) : uri;
       try {
-        return await _read(client, uri).timeout(remaining);
-      } on http.ClientException {
+        return await _read(client, requestUri).timeout(remaining);
+      } catch (error) {
+        final transportFailure = error is http.ClientException ||
+            error is SocketException || error is TlsException;
+        if (client is TmdbHttpClient &&
+            (transportFailure || error is TimeoutException)) {
+          client.reportTransportFailure(requestUri);
+        }
+        if (!transportFailure) rethrow;
         // These are public, idempotent GETs. A reset on a cold connection may
         // succeed immediately on a fresh transport; never retry API errors,
         // timeouts, or a request whose subscribers have left.

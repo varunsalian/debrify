@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:debrify/models/stremio_addon.dart';
 import 'package:debrify/services/tmdb_metadata_repository.dart';
@@ -18,24 +19,58 @@ class _TrackedClient extends MockClient {
 }
 
 void main() {
-  test('hero promotes a queued shared request without increasing concurrency', () async {
-    final release = Completer<void>();
-    final order = <String>[];
-    final repository = TmdbMetadataRepository(token: 'test', clientFactory: () => MockClient((request) async {
-      order.add(request.url.path);
-      if (order.length <= 4) await release.future;
-      return http.Response('{}', 200);
-    }));
-    final jobs = [for (var i = 0; i < 7; i++) repository.get('movie/$i')];
-    final hero = TmdbMetadataRepository.withHeroPriority(() => repository.get('movie/6'));
-    await Future<void>.delayed(Duration.zero);
-    expect(order.length, 4);
-    release.complete();
-    await Future.wait([...jobs, hero]);
-    expect(order[4], '/3/movie/6');
-    expect(order.length, 7);
-  });
+  test(
+    'hero promotes a queued shared request without increasing concurrency',
+    () async {
+      final release = Completer<void>();
+      final order = <String>[];
+      final repository = TmdbMetadataRepository(
+        token: 'test',
+        clientFactory: () => MockClient((request) async {
+          order.add(request.url.path);
+          if (order.length <= 4) await release.future;
+          return http.Response('{}', 200);
+        }),
+      );
+      final jobs = [for (var i = 0; i < 7; i++) repository.get('movie/$i')];
+      final hero = TmdbMetadataRepository.withHeroPriority(
+        () => repository.get('movie/6'),
+      );
+      await Future<void>.delayed(Duration.zero);
+      expect(order.length, 4);
+      release.complete();
+      await Future.wait([...jobs, hero]);
+      expect(order[4], '/3/movie/6');
+      expect(order.length, 7);
+    },
+  );
 
+  for (final failure in [
+    const SocketException('reset'),
+    const HandshakeException('reset'),
+  ]) {
+    test(
+      'metadata retries ${failure.runtimeType} on a new transport',
+      () async {
+        var clients = 0;
+        var closes = 0;
+        final repository = TmdbMetadataRepository(
+          token: 'test',
+          clientFactory: () {
+            final attempt = ++clients;
+            if (attempt == 2) expect(closes, 1);
+            return _TrackedClient((_) async {
+              if (attempt == 1) throw failure;
+              return http.Response('{"id":1}', 200);
+            }, () => closes++);
+          },
+        );
+        expect((await repository.get('movie/1'))['id'], 1);
+        expect(clients, 2);
+        expect(closes, 2);
+      },
+    );
+  }
   test(
     'queued requests for discarded cards do not consume network slots',
     () async {

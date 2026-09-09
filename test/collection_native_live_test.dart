@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
 import 'package:debrify/models/home_collection.dart';
 import 'package:debrify/services/collection_native_source_service.dart';
 
@@ -10,7 +11,12 @@ import 'package:debrify/services/collection_native_source_service.dart';
 ///   --dart-define=COLLECTION_LIVE_TESTS=true test/collection_native_live_test.dart
 void main() {
   const enabled = bool.fromEnvironment('COLLECTION_LIVE_TESTS');
-  final service = CollectionNativeSourceService();
+  final service = CollectionNativeSourceService(
+    resolveIds: !const bool.fromEnvironment('COLLECTION_NO_ENRICHMENT'),
+    tmdbClientFactory: const bool.fromEnvironment('COLLECTION_STOCK_TRANSPORT')
+        ? http.Client.new
+        : null,
+  );
   tearDownAll(service.close);
   test(
     'live Kaptain previews cold and cached',
@@ -53,11 +59,12 @@ void main() {
                 page.items.every((m) => m.id.isNotEmpty && m.name.isNotEmpty),
                 isTrue,
               );
-            } catch (error) {
+            } catch (error, stack) {
               failures++;
               debugPrint(
                 'Kaptain source failed: ${source.tmdbSourceType}: ${error.runtimeType}',
               );
+              debugPrint('$error\n$stack');
             }
             times.add(watch.elapsedMilliseconds);
           }

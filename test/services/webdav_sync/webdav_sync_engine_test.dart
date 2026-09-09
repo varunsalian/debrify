@@ -4250,6 +4250,30 @@ void main() {
     },
   );
 
+  test(
+    'async cache sizing counts decoded JSON and cannot repopulate after clear',
+    () async {
+      final cache = WebDavSyncSectionCache(maxBytes: 1024);
+      await cache.putAsync('oversized', {'data': 'x' * 1024}, 20);
+      expect(cache.take('oversized'), isNull);
+      expect(cache.byteCount, 0);
+      final small = {'data': 'ok'};
+      await cache.putAsync('small', small, 20);
+      expect(cache.take('small'), same(small));
+      expect(cache.byteCount, greaterThan(20));
+      final pending = cache.putAsync('late', small, 20);
+      final collection = cache.putAsync(
+        'circle:device:collections-v2/p/0',
+        small,
+        20,
+      );
+      cache.clear();
+      await Future.wait([pending, collection]);
+      expect(cache.entryCount, 0);
+      expect(cache.byteCount, 0);
+    },
+  );
+
   test('section cache stays within its entry and byte budgets', () async {
     final padding = 'x' * (256 * 1024);
     for (var index = 0; index < 20; index++) {
