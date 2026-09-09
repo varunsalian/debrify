@@ -6,6 +6,8 @@ import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 import 'package:xml/xml.dart';
 
+import 'transfer/transfer_io.dart';
+
 /// Credentials consumed by the profile-independent WebDAV protocol layer.
 ///
 /// Profile-facing callers must authorize access to the connection resource
@@ -90,11 +92,13 @@ final class WebDavFileResult {
     required this.file,
     required this.bytesWritten,
     required this.metadata,
+    this.sha256Hex,
   });
 
   final File file;
   final int bytesWritten;
   final WebDavResponseMetadata metadata;
+  final String? sha256Hex;
 }
 
 final class WebDavExistenceResult {
@@ -338,46 +342,126 @@ final class WebDavProtocolClient {
     return WebDavBytesResult(bytes: bytes, metadata: _metadata(response));
   }
 
+  /// Optional resume is restricted to content-addressed data with an expected
+  /// SHA-256. A range or cache hit is never trusted until the whole file hashes
+  /// correctly. Servers without Range support restart with a normal 200 body.
   Future<WebDavFileResult> downloadToFile({
     required String path,
     required File destination,
     required int maxBytes,
     Future<void> Function()? beforeSend,
+    String? resumeExpectedSha256,
+    void Function()? checkCancelled,
   }) async {
+    if (maxBytes < 0 ||
+        (resumeExpectedSha256 != null &&
+            !RegExp(r'^[0-9a-f]{64}$').hasMatch(resumeExpectedSha256))) {
+      throw ArgumentError('Invalid download limit or content address');
+    }
+    checkCancelled?.call();
+    var offset = resumeExpectedSha256 != null && await destination.exists()
+        ? await destination.length()
+        : 0;
+    if (offset >= maxBytes) offset = 0;
     final response = await _sendFollowingRedirects(
       method: 'GET',
       initialUri: uriForPath(path),
-      headers: authorizationHeaders,
+      headers: {
+        ...authorizationHeaders,
+        HttpHeaders.acceptEncodingHeader: 'identity',
+        if (offset > 0) HttpHeaders.rangeHeader: 'bytes=$offset-',
+      },
       beforeSend: beforeSend,
     );
     await _throwUnlessAccepted(response, _isSuccess);
-    if (maxBytes < 0 ||
-        (response.contentLength != null &&
-            response.contentLength! > maxBytes)) {
+    int? expectedLength = response.contentLength;
+    var validRange = false;
+    if (response.statusCode == HttpStatus.partialContent && offset > 0) {
+      final range = RegExp(
+        r'^bytes (\d+)-(\d+)/(\d+)$',
+      ).firstMatch(response.headers[HttpHeaders.contentRangeHeader] ?? '');
+      if (range != null) {
+        final start = int.tryParse(range.group(1)!);
+        final end = int.tryParse(range.group(2)!);
+        final total = int.tryParse(range.group(3)!);
+        validRange =
+            start == offset &&
+            end != null &&
+            total != null &&
+            end >= offset &&
+            end == total - 1 &&
+            total <= maxBytes &&
+            (response.contentLength == null ||
+                response.contentLength == total - offset);
+        if (validRange) expectedLength = total;
+      }
+    } else if (response.statusCode == HttpStatus.ok) {
+      offset = 0;
+      validRange = true;
+    }
+    if (!validRange || (expectedLength != null && expectedLength > maxBytes)) {
       await response.stream.listen(null).cancel();
-      throw const WebDavException(
-        kind: WebDavErrorKind.invalidRequest,
-        message: 'WebDAV download exceeds its byte limit',
+      if (await destination.exists()) await destination.delete();
+      throw WebDavException(
+        kind: validRange
+            ? WebDavErrorKind.invalidRequest
+            : WebDavErrorKind.malformedResponse,
+        message: 'WebDAV download has an invalid size or byte range',
       );
     }
-
-    await destination.parent.create(recursive: true);
-    IOSink? sink;
-    var written = 0;
+    RandomAccessFile? sink;
+    var bodyStarted = false;
+    var written = offset;
+    final digest = TransferDigest();
     try {
-      sink = destination.openWrite(mode: FileMode.writeOnly);
+      await destination.parent.create(recursive: true);
+      if (offset > 0) {
+        final prefix = await destination.open();
+        try {
+          var remaining = offset;
+          while (remaining > 0) {
+            checkCancelled?.call();
+            final count = remaining < TransferIo.bufferBytes
+                ? remaining
+                : TransferIo.bufferBytes;
+            digest.add(await TransferIo.readExactly(prefix, count));
+            remaining -= count;
+          }
+        } finally {
+          await prefix.close();
+        }
+      }
+      sink = await destination.open(
+        mode: offset > 0 ? FileMode.writeOnlyAppend : FileMode.writeOnly,
+      );
+      bodyStarted = true;
       await for (final chunk in _responseChunks(
         response,
         totalTimeout: _bodyDeadline(response.contentLength ?? maxBytes),
       )) {
+        checkCancelled?.call();
         if (written > maxBytes - chunk.length) {
           throw const WebDavException(
             kind: WebDavErrorKind.invalidRequest,
             message: 'WebDAV download exceeds its byte limit',
           );
         }
-        sink.add(chunk);
+        await sink.writeFrom(chunk);
+        digest.add(chunk);
         written += chunk.length;
+      }
+      if (expectedLength != null && written != expectedLength) {
+        throw const WebDavException(
+          kind: WebDavErrorKind.network,
+          message: 'WebDAV download is truncated',
+        );
+      }
+      final hash = digest.finish();
+      if (resumeExpectedSha256 != null && hash != resumeExpectedSha256) {
+        throw const WebDavException(
+          kind: WebDavErrorKind.malformedResponse,
+          message: 'WebDAV download does not match its content address',
+        );
       }
       await sink.flush();
       await sink.close();
@@ -386,10 +470,21 @@ final class WebDavProtocolClient {
         file: destination,
         bytesWritten: written,
         metadata: _metadata(response),
+        sha256Hex: hash,
       );
-    } catch (_) {
+    } catch (error) {
+      // Prefix hashing and opening local storage can fail before the body
+      // loop owns a subscription. Release the response in that case too.
+      if (!bodyStarted) await response.stream.listen(null).cancel();
       await sink?.close();
-      if (await destination.exists()) await destination.delete();
+      // Keep only an interrupted network prefix, never invalid/corrupt bytes.
+      final resumable =
+          resumeExpectedSha256 != null &&
+          error is WebDavException &&
+          (error.kind == WebDavErrorKind.network ||
+              error.kind == WebDavErrorKind.timeout ||
+              error.kind == WebDavErrorKind.transient);
+      if (!resumable && await destination.exists()) await destination.delete();
       rethrow;
     }
   }

@@ -8,6 +8,7 @@ import '../../models/home_collection_inventory.dart';
 import 'webdav_sync_codec.dart';
 import 'webdav_sync_hot_models.dart';
 import '../playlist_dedupe_key.dart';
+import '../transfer/transfer_io.dart';
 
 abstract final class WebDavSyncRecordKey {
   static String homeCollection(String id) => 'homecollection/${_part(id)}';
@@ -529,7 +530,9 @@ abstract final class WebDavSyncHotMerge {
 
   static Future<WebDavSyncBuiltHotState> buildAsync(
     WebDavSyncBuildInput input,
-  ) => Isolate.run(() => build(input));
+  ) => TransferIo.largeWorker.synchronized(
+    () => Isolate.run(() => build(input)),
+  );
 
   static Future<Map<String, Object>> materializePreferencesAsync({
     required WebDavSyncHotDocument document,
@@ -537,13 +540,15 @@ abstract final class WebDavSyncHotMerge {
     Map<String, Object?> localRichRecords = const {},
     Map<String, WebDavSyncStampedValue> localPortableRecords = const {},
     Set<String> protectedPreferenceKeys = const {},
-  }) => Isolate.run(
-    () => materializePreferences(
-      document: document,
-      identityMaps: identityMaps,
-      localRichRecords: localRichRecords,
-      localPortableRecords: localPortableRecords,
-      protectedPreferenceKeys: protectedPreferenceKeys,
+  }) => TransferIo.largeWorker.synchronized(
+    () => Isolate.run(
+      () => materializePreferences(
+        document: document,
+        identityMaps: identityMaps,
+        localRichRecords: localRichRecords,
+        localPortableRecords: localPortableRecords,
+        protectedPreferenceKeys: protectedPreferenceKeys,
+      ),
     ),
   );
 

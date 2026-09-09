@@ -41,8 +41,8 @@ class _FakeSource extends WebDavFilesDataSource {
   ) async => const [
     WebDavItem(name: 'Folder', path: 'Folder/', isDirectory: true),
     WebDavItem(
-      name: 'debrify-profile.json',
-      path: 'debrify-profile.json',
+      name: 'debrify-profile.debrify.enc',
+      path: 'debrify-profile.debrify.enc',
       isDirectory: false,
       sizeBytes: 42,
     ),
@@ -93,7 +93,7 @@ void main() {
 
     expect(find.text('Choose server root'), findsOneWidget);
     expect(find.text('Folder'), findsWidgets);
-    expect(find.text('debrify-profile.json'), findsNothing);
+    expect(find.text('debrify-profile.debrify.enc'), findsNothing);
     expect(
       FocusManager.instance.primaryFocus?.debugLabel,
       'webdav-choose-folder',
@@ -101,13 +101,13 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('backup picker exposes folders and JSON packages, not media', (
+  testWidgets('backup picker exposes folders and encrypted archives', (
     tester,
   ) async {
     await _pumpPicker(tester, WebDavPickerMode.selectBackup);
 
     expect(find.text('Folder'), findsWidgets);
-    expect(find.text('debrify-profile.json'), findsOneWidget);
+    expect(find.text('debrify-profile.debrify.enc'), findsOneWidget);
     expect(find.text('movie.mp4'), findsNothing);
     expect(FocusManager.instance.primaryFocus?.debugLabel, 'webdav-first-item');
     expect(tester.takeException(), isNull);

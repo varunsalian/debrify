@@ -115,6 +115,27 @@ void main() {
     );
   });
 
+  test(
+    'root cache reuses only an exact authenticated marker and key',
+    () async {
+      final encoded = await createRoot();
+      final first = await codec.openRoot(encoded, 'correct horse');
+      final second = await WebDavSyncCodec().openRoot(encoded, 'correct horse');
+      expect(identical(first, second), isTrue);
+      await expectLater(
+        codec.openRoot(encoded, 'wrong password'),
+        throwsA(isA<WebDavSyncWrongPassphraseException>()),
+      );
+      WebDavSyncCodec.clearRootKeyCache();
+      final reopened = await codec.openRoot(encoded, 'correct horse');
+      expect(identical(first, reopened), isFalse);
+      expect(
+        await reopened.key.secretKey.extractBytes(),
+        await first.key.secretKey.extractBytes(),
+      );
+    },
+  );
+
   test('wrong root passphrase is typed', () async {
     final encoded = await createRoot();
 

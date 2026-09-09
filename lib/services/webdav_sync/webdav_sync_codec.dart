@@ -6,8 +6,11 @@ import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:cryptography/cryptography.dart';
+import 'package:cryptography/dart.dart' show DartArgon2id;
+import 'package:crypto/crypto.dart' as hashes;
 
 import 'webdav_sync_models.dart';
+import '../transfer/transfer_io.dart';
 
 typedef WebDavSyncRandomBytes = Uint8List Function(int length);
 typedef WebDavSyncPayloadTransformer = Object? Function(Object? payload);
@@ -90,6 +93,7 @@ final class WebDavSyncCodec {
     int parallelism = defaultArgonParallelism,
     bool runInBackground = false,
   }) async {
+    final cacheGeneration = _rootCacheGeneration;
     validatePassphrase(passphrase);
     _validateIdentifier(circleId, 'circle ID');
     _validateSchemaFloor(schemaFloor);
@@ -99,35 +103,43 @@ final class WebDavSyncCodec {
     if (salt.length != 16 || nonce.length != 12) {
       throw StateError('Secure random source returned the wrong byte count');
     }
-    if (runInBackground) {
-      return Isolate.run(
-        () => WebDavSyncCodec()._sealRoot(
-          passphrase: passphrase,
-          circleId: circleId,
-          createdAt: createdAt,
-          schemaFloor: schemaFloor,
-          memoryKiB: memoryKiB,
-          iterations: iterations,
-          parallelism: parallelism,
-          salt: salt,
-          nonce: nonce,
-        ),
+    final sealed = runInBackground
+        ? await TransferIo.largeWorker.synchronized(
+            () => Isolate.run(
+              () => WebDavSyncCodec()._sealRoot(
+                passphrase: passphrase,
+                circleId: circleId,
+                createdAt: createdAt,
+                schemaFloor: schemaFloor,
+                memoryKiB: memoryKiB,
+                iterations: iterations,
+                parallelism: parallelism,
+                salt: salt,
+                nonce: nonce,
+              ),
+            ),
+          )
+        : await _sealRoot(
+            passphrase: passphrase,
+            circleId: circleId,
+            createdAt: createdAt,
+            schemaFloor: schemaFloor,
+            memoryKiB: memoryKiB,
+            iterations: iterations,
+            parallelism: parallelism,
+            salt: salt,
+            nonce: nonce,
+          );
+    if (cacheGeneration == _rootCacheGeneration) {
+      _rootCache = (
+        id: _rootCacheId(sealed.encoded, passphrase),
+        opened: Future.value(sealed.opened),
       );
     }
-    return _sealRoot(
-      passphrase: passphrase,
-      circleId: circleId,
-      createdAt: createdAt,
-      schemaFloor: schemaFloor,
-      memoryKiB: memoryKiB,
-      iterations: iterations,
-      parallelism: parallelism,
-      salt: salt,
-      nonce: nonce,
-    );
+    return sealed.encoded;
   }
 
-  Future<Uint8List> _sealRoot({
+  Future<({Uint8List encoded, OpenedWebDavSyncRoot opened})> _sealRoot({
     required String passphrase,
     required String circleId,
     required DateTime createdAt,
@@ -185,21 +197,62 @@ final class WebDavSyncCodec {
     if (result.length > rootMarkerMaxBytes) {
       throw const FormatException('WebDAV sync root marker exceeds its limit');
     }
-    return result;
+    return (
+      encoded: result,
+      opened: OpenedWebDavSyncRoot(
+        document: WebDavSyncRootDocument(
+          circleId: circleId,
+          createdAt: createdAt.toUtc(),
+          schemaFloor: schemaFloor,
+          kdfSalt: Uint8List.fromList(salt),
+        ),
+        key: WebDavSyncCircleKey._(key),
+      ),
+    );
   }
 
   Future<OpenedWebDavSyncRoot> openRoot(
     List<int> encoded,
     String passphrase, {
     bool runInBackground = false,
-  }) {
-    final immutableBytes = Uint8List.fromList(encoded);
-    if (runInBackground) {
-      return Isolate.run(
-        () => WebDavSyncCodec()._openRoot(immutableBytes, passphrase),
+  }) async {
+    validatePassphrase(passphrase);
+    if (encoded.isEmpty || encoded.length > rootMarkerMaxBytes) {
+      return Future.error(
+        const FormatException('Invalid WebDAV sync root marker size'),
       );
     }
-    return _openRoot(immutableBytes, passphrase);
+    final immutableBytes = Uint8List.fromList(encoded);
+    final id = _rootCacheId(immutableBytes, passphrase);
+    final cached = _rootCache;
+    if (cached?.id == id) return cached!.opened;
+    final opened = runInBackground
+        ? TransferIo.largeWorker.synchronized(
+            () => Isolate.run(
+              () => WebDavSyncCodec()._openRoot(immutableBytes, passphrase),
+            ),
+          )
+        : _openRoot(immutableBytes, passphrase);
+    _rootCache = (id: id, opened: opened);
+    return opened.onError((Object error, StackTrace stack) {
+      if (identical(_rootCache?.opened, opened)) _rootCache = null;
+      Error.throwWithStackTrace(error, stack);
+    });
+  }
+
+  // One exact marker+key pair, shared across setup/discovery/publishing. Root
+  // checks still happen at every network commit. No raw password is a cache key.
+  static ({String id, Future<OpenedWebDavSyncRoot> opened})? _rootCache;
+  static int _rootCacheGeneration = 0;
+
+  static String _rootCacheId(List<int> marker, String passphrase) =>
+      '${hashes.sha256.convert(marker)}:${hashes.sha256.convert(utf8.encode(passphrase))}';
+
+  /// Release the reference on logout, credential changes, or memory pressure.
+  /// Existing operations may finish using their already-authenticated key.
+  static void clearRootKeyCache() {
+    _rootCacheGeneration++;
+    _rootCache = null;
   }
 
   Future<({WebDavSyncAuthorityFile authority, OpenedWebDavSyncRoot root})>
@@ -387,20 +440,22 @@ final class WebDavSyncCodec {
       throw StateError('Secure random source returned the wrong byte count');
     }
     if (runInBackground) {
-      final keyBytes = Uint8List.fromList(await key.secretKey.extractBytes());
-      return Isolate.run(
-        () => WebDavSyncCodec()._sealDocument(
-          key: WebDavSyncCircleKey._(SecretKey(keyBytes)),
-          circleId: circleId,
-          deviceId: deviceId,
-          logicalName: logicalName,
-          schemaVersion: schemaVersion,
-          payload: payload,
-          payloadEncoder: payloadEncoder,
-          maxBytes: maxBytes,
-          nonce: nonce,
-        ),
-      );
+      return TransferIo.largeWorker.synchronized(() async {
+        final keyBytes = Uint8List.fromList(await key.secretKey.extractBytes());
+        return Isolate.run(
+          () => WebDavSyncCodec()._sealDocument(
+            key: WebDavSyncCircleKey._(SecretKey(keyBytes)),
+            circleId: circleId,
+            deviceId: deviceId,
+            logicalName: logicalName,
+            schemaVersion: schemaVersion,
+            payload: payload,
+            payloadEncoder: payloadEncoder,
+            maxBytes: maxBytes,
+            nonce: nonce,
+          ),
+        );
+      });
     }
     return _sealDocument(
       key: key,
@@ -488,25 +543,27 @@ final class WebDavSyncCodec {
       throw const FormatException('Invalid WebDAV sync document size');
     }
     if (runInBackground) {
-      final keyBytes = Uint8List.fromList(await key.secretKey.extractBytes());
-      final encodedBytes = encoded is Uint8List
-          ? encoded
-          : Uint8List.fromList(encoded);
-      final transferred = TransferableTypedData.fromList(<TypedData>[
-        encodedBytes,
-      ]);
-      return Isolate.run(
-        () => WebDavSyncCodec()._openDocument(
-          key: WebDavSyncCircleKey._(SecretKey(keyBytes)),
-          encoded: transferred.materialize().asUint8List(),
-          circleId: circleId,
-          deviceId: deviceId,
-          logicalName: logicalName,
-          schemaVersion: schemaVersion,
-          payloadDecoder: payloadDecoder,
-          maxBytes: maxBytes,
-        ),
-      );
+      return TransferIo.largeWorker.synchronized(() async {
+        final keyBytes = Uint8List.fromList(await key.secretKey.extractBytes());
+        final encodedBytes = encoded is Uint8List
+            ? encoded
+            : Uint8List.fromList(encoded);
+        final transferred = TransferableTypedData.fromList(<TypedData>[
+          encodedBytes,
+        ]);
+        return Isolate.run(
+          () => WebDavSyncCodec()._openDocument(
+            key: WebDavSyncCircleKey._(SecretKey(keyBytes)),
+            encoded: transferred.materialize().asUint8List(),
+            circleId: circleId,
+            deviceId: deviceId,
+            logicalName: logicalName,
+            schemaVersion: schemaVersion,
+            payloadDecoder: payloadDecoder,
+            maxBytes: maxBytes,
+          ),
+        );
+      });
     }
     return _openDocument(
       key: key,
@@ -662,11 +719,14 @@ final class WebDavSyncCodec {
     required int memoryKiB,
     required int iterations,
     required int parallelism,
-  }) => Argon2id(
+  }) => DartArgon2id(
     parallelism: parallelism,
     memory: memoryKiB,
     iterations: iterations,
     hashLength: 32,
+    // Root operations already run in the shared heavy worker in production.
+    // Managed KDF memory stays visible to GC, and no nested worker is needed.
+    maxIsolates: 0,
   ).deriveKey(secretKey: SecretKey(utf8.encode(passphrase)), nonce: salt);
 
   static Future<String> _keyCheck(SecretKey key) async {

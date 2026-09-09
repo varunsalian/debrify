@@ -49,6 +49,7 @@ final class WebDavSyncExistingRootConnector {
     bool completeOnboarding = false,
   }) async {
     var authorityCommitted = false;
+    WebDavSyncExistingRootSnapshot? discovered;
     try {
       if (!replacementConfirmed) {
         throw StateError(
@@ -86,8 +87,18 @@ final class WebDavSyncExistingRootConnector {
                 currentAuthorization.profileId,
               );
 
-      final snapshot = await _discovery.discover(bindingId: bindingId);
-      final secrets = await _bindingStore.readSecrets(snapshot.binding);
+      final snapshot = await _discovery.discover(
+        bindingId: bindingId,
+        // Durable adoption has already published these profiles. A retry
+        // still authenticates root, manifests and descriptor, but needs no
+        // second archive download, decryption or extraction.
+        materializeBootstrap:
+            !(state.hasAuthenticatedMaps &&
+                state.circleToLocalProfiles!.containsValue(
+                  currentAuthorization.profileId,
+                )),
+      );
+      discovered = snapshot;
       state = await _stateRepository.load(snapshot.namespace.id);
 
       final bootstrapDigest = snapshot.bootstrap.document.semanticDigest;
@@ -125,9 +136,15 @@ final class WebDavSyncExistingRootConnector {
             mode: WebDavSyncAdoptionMode.firstJoin,
             package: snapshot.bootstrap.document.package,
             graphSemanticDigest: bootstrapDigest,
-            profileMap: snapshot.bootstrap.manifest.profileMap,
-            resourceMap: snapshot.bootstrap.manifest.resourceMap,
-            passphrase: secrets.syncPassphrase,
+            profileMap:
+                snapshot.bootstrap.document.snapshot?.profileMap ??
+                snapshot.bootstrap.manifest.profileMap,
+            resourceMap:
+                snapshot.bootstrap.document.snapshot?.resourceMap ??
+                snapshot.bootstrap.manifest.resourceMap,
+            databaseFileResolver:
+                snapshot.bootstrap.document.restoreStage?.resolveDatabase,
+            snapshot: snapshot.bootstrap.document.snapshot,
             authorization: currentAuthorization,
             replacementConfirmed: true,
             completeOnboarding: completeOnboarding,
@@ -194,6 +211,8 @@ final class WebDavSyncExistingRootConnector {
         WebDavSyncPostHandoffException(error),
         stackTrace,
       );
+    } finally {
+      await discovered?.bootstrap.document.dispose();
     }
   }
 

@@ -1,8 +1,8 @@
 import 'dart:convert';
 
-import 'package:crypto/crypto.dart' as crypto;
+import '../../utils/canonical_json.dart';
 
-import 'webdav_sync_codec.dart';
+import 'package:crypto/crypto.dart' as crypto;
 
 abstract final class WebDavSyncLimits {
   static const int maxPeers = 64;
@@ -493,6 +493,14 @@ final class WebDavSyncManifest {
   WebDavSyncSectionReference? section(String name) =>
       sections.where((entry) => entry.name == name).firstOrNull;
 
+  /// Apply the reader's constraints before a publisher can replace the remote
+  /// manifest. Constructor/toJson intentionally remain usable for data models.
+  Map<String, Object?> toValidatedJson() {
+    final json = toJson();
+    WebDavSyncManifest.fromJson(json);
+    return json;
+  }
+
   factory WebDavSyncManifest.fromJson(Object? source) {
     final json = _object(source, 'manifest');
     _onlyKeys(json, const <String>{
@@ -555,8 +563,7 @@ final class WebDavSyncManifest {
   }
 }
 
-String semanticDigestOf(Object? value) =>
-    crypto.sha256.convert(WebDavSyncCodec.canonicalJsonBytes(value)).toString();
+String semanticDigestOf(Object? value) => measureCanonicalJson(value).sha256;
 
 String contentHashOf(List<int> bytes) =>
     crypto.sha256.convert(bytes).toString();

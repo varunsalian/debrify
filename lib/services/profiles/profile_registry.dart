@@ -4931,7 +4931,7 @@ class ProfileRegistry {
         const <WebDavSyncRegistryRecordId>[],
   }) async {
     for (final item in resources) {
-      _guardTvOsEnvelopeBound(item.sealedSecretPayload);
+      _guardTvOsEnvelopeBound(await item.readSealedSecret());
     }
     await authorityWillChangeCallback?.call();
     final now = DateTime.now().millisecondsSinceEpoch;
@@ -5023,15 +5023,15 @@ class ProfileRegistry {
         if (!profileIds.contains(item.ownerProfileId)) {
           throw StateError('Imported resource owner is not staged');
         }
+        final sealedPayload = await item.readSealedSecret();
+        _guardTvOsEnvelopeBound(sealedPayload);
         await txn.insert('connection_resources', <String, Object?>{
           'id': item.id,
           'type': item.type.name,
           'label': item.label,
           'owner_profile_id': item.ownerProfileId,
           'public_config_json': jsonEncode(item.publicConfig),
-          'sealed_secret_payload': _encodeEnvelopeColumn(
-            item.sealedSecretPayload,
-          ),
+          'sealed_secret_payload': _encodeEnvelopeColumn(sealedPayload),
           'secret_payload_version': item.secretPayloadVersion,
           'secret_pending': 0,
           'authorization_revision': 1,
@@ -5043,7 +5043,7 @@ class ProfileRegistry {
           txn,
           'resource_secret_chunks',
           <String, Object?>{'resource_id': item.id},
-          item.sealedSecretPayload,
+          sealedPayload,
         );
         for (final grant in item.grants) {
           if (!profileIds.contains(grant.profileId)) {
@@ -6628,6 +6628,7 @@ class StagedGraphResource {
   final String ownerProfileId;
   final Map<String, dynamic> publicConfig;
   final String sealedSecretPayload;
+  final File? sealedSecretFile;
   final int secretPayloadVersion;
   final bool enabled;
   final List<StagedGraphGrant> grants;
@@ -6641,12 +6642,21 @@ class StagedGraphResource {
     required this.ownerProfileId,
     required this.publicConfig,
     required this.sealedSecretPayload,
+    this.sealedSecretFile,
     required this.secretPayloadVersion,
     this.enabled = true,
     required this.grants,
     required this.bindings,
     this.settings = const <StagedGraphSettings>[],
   });
+  Future<String> readSealedSecret() async {
+    final file = sealedSecretFile;
+    if (file == null) return sealedSecretPayload;
+    if (await file.length() > 128 * 1024 * 1024) {
+      throw StateError('Staged resource secret exceeds its size limit');
+    }
+    return file.readAsString();
+  }
 }
 
 /// An existing receiver addon grant inherited while an imported profile was

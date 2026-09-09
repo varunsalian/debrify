@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:crypto/crypto.dart';
 import 'package:debrify/models/webdav_item.dart';
 import 'package:debrify/services/webdav_protocol_client.dart';
 import 'package:debrify/services/webdav_service.dart';
@@ -678,6 +679,112 @@ void main() {
     expect(items.last.sizeBytes, 14);
   });
 
+  for (final supportsRange in [false, true]) {
+    test(
+      'content-addressed download resumes with range=$supportsRange',
+      () async {
+        final bytes = List<int>.generate(800003, (i) => i % 251);
+        final hash = sha256.convert(bytes).toString();
+        final destination = File('${tempDirectory.path}/resume.part');
+        await destination.writeAsBytes(bytes.sublist(0, 300007));
+        handler = (request) async {
+          expect(
+            request.headers.value(HttpHeaders.rangeHeader),
+            'bytes=300007-',
+          );
+          if (supportsRange) {
+            request.response.statusCode = 206;
+            request.response.headers.set(
+              'Content-Range',
+              'bytes 300007-800002/800003',
+            );
+            request.response.contentLength = bytes.length - 300007;
+            request.response.add(bytes.sublist(300007));
+          } else {
+            request.response.contentLength = bytes.length;
+            request.response.add(bytes);
+          }
+          await request.response.close();
+        };
+        final result = await client.downloadToFile(
+          path: hash,
+          destination: destination,
+          maxBytes: bytes.length,
+          resumeExpectedSha256: hash,
+        );
+        expect(result.sha256Hex, hash);
+        expect(result.bytesWritten, bytes.length);
+        expect(await destination.readAsBytes(), bytes);
+      },
+    );
+  }
+
+  for (final invalidRange in [false, true]) {
+    test(
+      'rejects ${invalidRange ? 'wrong range' : 'corrupt prefix'} on resume',
+      () async {
+        final bytes = List<int>.generate(1000, (i) => i % 251);
+        final destination = File('${tempDirectory.path}/resume.part');
+        await destination.writeAsBytes(List.filled(300, 9));
+        handler = (request) async {
+          request.response.statusCode = 206;
+          request.response.headers.set(
+            'Content-Range',
+            invalidRange ? 'bytes 301-999/1000' : 'bytes 300-999/1000',
+          );
+          request.response.add(bytes.sublist(300));
+          await request.response.close();
+        };
+        await expectLater(
+          client.downloadToFile(
+            path: 'object',
+            destination: destination,
+            maxBytes: bytes.length,
+            resumeExpectedSha256: sha256.convert(bytes).toString(),
+          ),
+          throwsA(isA<WebDavException>()),
+        );
+        expect(await destination.exists(), isFalse);
+      },
+    );
+  }
+
+  test(
+    'interrupted response keeps its prefix for a content-addressed retry',
+    () async {
+      client.close();
+      final bytes = List<int>.generate(1000, (i) => i % 251);
+      final destination = File('${tempDirectory.path}/interrupted.part');
+      Stream<List<int>> interrupted() async* {
+        yield bytes.sublist(0, 300);
+        throw const SocketException('connection lost');
+      }
+
+      client = WebDavProtocolClient(
+        endpoint: await endpointFor(server),
+        credentials: const WebDavCredentials(username: '', password: ''),
+        client: _StreamingClient(
+          (request) async => http.StreamedResponse(
+            interrupted(),
+            200,
+            contentLength: 1000,
+            request: request,
+          ),
+        ),
+      );
+      await expectLater(
+        client.downloadToFile(
+          path: 'object',
+          destination: destination,
+          maxBytes: 1000,
+          resumeExpectedSha256: sha256.convert(bytes).toString(),
+        ),
+        throwsA(isA<WebDavException>()),
+      );
+      expect(await destination.readAsBytes(), bytes.sublist(0, 300));
+    },
+  );
+
   for (final download in [false, true]) {
     test(
       'oversized ${download ? "file" : "bytes"} response cancels without draining',
@@ -722,6 +829,43 @@ void main() {
       },
     );
   }
+
+  test('cancelling prefix hashing releases an unread response', () async {
+    client.close();
+    var cancelled = false;
+    var checks = 0;
+    final body = StreamController<List<int>>(onCancel: () => cancelled = true);
+    addTearDown(body.close);
+    final destination = File('${tempDirectory.path}/resume-cancel.part');
+    await destination.writeAsBytes([1, 2, 3]);
+    client = WebDavProtocolClient(
+      endpoint: await endpointFor(server),
+      credentials: const WebDavCredentials(username: '', password: ''),
+      client: _StreamingClient(
+        (request) async => http.StreamedResponse(
+          body.stream,
+          206,
+          contentLength: 3,
+          request: request,
+          headers: {HttpHeaders.contentRangeHeader: 'bytes 3-5/6'},
+        ),
+      ),
+    );
+    await expectLater(
+      client.downloadToFile(
+        path: 'object',
+        destination: destination,
+        maxBytes: 6,
+        resumeExpectedSha256: sha256.convert([1, 2, 3, 4, 5, 6]).toString(),
+        checkCancelled: () {
+          if (++checks == 2) throw StateError('cancelled');
+        },
+      ),
+      throwsStateError,
+    );
+    expect(cancelled, isTrue);
+    expect(await destination.exists(), isFalse);
+  });
 
   for (final status in [200, 503]) {
     test(

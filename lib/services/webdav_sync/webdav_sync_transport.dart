@@ -7,6 +7,7 @@ import 'package:xml/xml.dart';
 import 'package:http/http.dart' as http;
 
 import '../webdav_protocol_client.dart';
+import '../transfer/transfer_io.dart';
 import 'webdav_sync_diagnostics.dart';
 import 'webdav_sync_hot_models.dart';
 import 'webdav_sync_models.dart';
@@ -239,6 +240,24 @@ abstract interface class WebDavSyncFileTransport {
   });
 }
 
+/// Shared immutable snapshot objects survive device retirement/deletion.
+/// Only descriptors live in device manifests; archive bytes are never copied
+/// into another device directory during a join.
+abstract interface class WebDavSyncSharedObjectTransport {
+  Future<WebDavExistenceResult> probeSharedObject(String contentHash);
+  Future<WebDavFileResult> readSharedObject(
+    String contentHash,
+    File destination, {
+    required int maxBytes,
+    void Function()? checkCancelled,
+  });
+  Future<WebDavResponseMetadata> writeSharedObject(
+    String contentHash,
+    File file, {
+    required int maxBytes,
+  });
+}
+
 final class WebDavSyncStoredSection {
   const WebDavSyncStoredSection({
     required this.contentHash,
@@ -290,6 +309,7 @@ final class ProtocolWebDavSyncTransport
         WebDavSyncActivationTransport,
         WebDavSyncRegistrationTransport,
         WebDavSyncFileTransport,
+        WebDavSyncSharedObjectTransport,
         WebDavSyncSectionGcTransport,
         WebDavSyncLinearizabilityProbeTransport {
   ProtocolWebDavSyncTransport({
@@ -320,6 +340,55 @@ final class ProtocolWebDavSyncTransport
 
   String get _syncRoot => _join(_location.folderPath, 'debrify-sync');
   String get _devices => _join(_syncRoot, 'devices');
+  bool _objectsReady = false;
+
+  @override
+  Future<WebDavExistenceResult> probeSharedObject(String contentHash) {
+    _validateHash(contentHash);
+    return _client.exists(path: _join(_syncRoot, 'objects/$contentHash.enc'));
+  }
+
+  @override
+  Future<WebDavFileResult> readSharedObject(
+    String contentHash,
+    File destination, {
+    required int maxBytes,
+    void Function()? checkCancelled,
+  }) {
+    _validateHash(contentHash);
+    if (maxBytes > TransferIo.maxFileBytes) {
+      throw ArgumentError('Shared object size exceeds its disk limit');
+    }
+    return _client.downloadToFile(
+      path: _join(_syncRoot, 'objects/$contentHash.enc'),
+      destination: destination,
+      maxBytes: maxBytes,
+      resumeExpectedSha256: contentHash,
+      checkCancelled: checkCancelled,
+    );
+  }
+
+  @override
+  Future<WebDavResponseMetadata> writeSharedObject(
+    String contentHash,
+    File file, {
+    required int maxBytes,
+  }) async {
+    _validateHash(contentHash);
+    if (maxBytes > TransferIo.maxFileBytes) {
+      throw ArgumentError('Shared object size exceeds its disk limit');
+    }
+    if (!_objectsReady) {
+      await _client.ensureCollection(_join(_syncRoot, 'objects'));
+      _objectsReady = true;
+    }
+    return _client.uploadFile(
+      path: _join(_syncRoot, 'objects/$contentHash.enc'),
+      file: file,
+      maxBytes: maxBytes,
+      ifNoneMatch: '*',
+    );
+  }
 
   @override
   Future<void> verifyLinearizability({

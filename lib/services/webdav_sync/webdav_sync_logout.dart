@@ -85,6 +85,7 @@ final class WebDavSyncLogout {
         final root = await codec.openRoot(
           webDavSyncInnerMarker(rootBytes.bytes),
           secrets.syncPassphrase,
+          runInBackground: true,
         );
         // A setup that never published a manifest has no device to unregister.
         try {

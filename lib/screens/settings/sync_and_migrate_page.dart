@@ -252,9 +252,7 @@ class _SyncAndMigratePageState extends State<SyncAndMigratePage>
         }
         _tvManualAvailability = tvAvailability;
         _syncStateMessage = status.adminPruneBlocked
-            ? status.safetyCleanupBlocked
-                  ? 'Safety backup unavailable; kept ${status.pruneBlockingProfiles.join(', ')} on this device'
-                  : 'Profile cleanup is pending for ${status.pruneBlockingProfiles.join(', ')}; activity sync continues'
+            ? 'Profile cleanup is pending for ${status.pruneBlockingProfiles.join(', ')}; activity sync continues'
             : status.statusHint;
       });
     } catch (_) {
@@ -344,8 +342,8 @@ class _SyncAndMigratePageState extends State<SyncAndMigratePage>
             title: const Text('Use sync data from this account?'),
             content: const Text(
               'Existing profiles and connections on this device will be '
-              'replaced. Debrify creates and verifies an encrypted local '
-              'safety backup before changing anything. IPTV channel and '
+              'replaced. Create a manual backup first if you want to keep '
+              'a copy of your current data. IPTV channel and '
               'guide caches rebuild; Debrify TV channels are not included.',
             ),
             actions: [

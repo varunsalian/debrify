@@ -21,6 +21,7 @@ import 'webdav_sync_large_section_io.dart';
 import 'webdav_sync_local_adapter.dart';
 import 'webdav_sync_models.dart';
 import 'webdav_sync_transport.dart';
+import 'webdav_sync_snapshot_models.dart';
 
 final class WebDavSyncSeedSection {
   const WebDavSyncSeedSection({
@@ -65,6 +66,14 @@ final class WebDavSyncSeedMaterial {
   final Map<String, Map<String, WebDavSyncTombstone>> originalProfileTombstones;
   final WebDavSyncProfilesDocument? circleProfiles;
   final WebDavSyncResourcesDocument? circleResources;
+
+  Future<void> dispose() async {
+    for (final section in sections) {
+      if (section.payload case final WebDavSyncPreparedSnapshot snapshot) {
+        await snapshot.dispose();
+      }
+    }
+  }
 
   /// Reject a snapshot already stale before publication, without holding the
   /// preference barrier across remote I/O. Edits made during publication stay
@@ -131,6 +140,8 @@ abstract interface class WebDavSyncSeedSource {
     required int clockOffsetMs,
     String? circleId,
     WebDavSyncCircleKey? circleKey,
+    WebDavSyncSnapshotDescriptor? reuseBootstrap,
+    WebDavSyncPreparedGraph? preparedBootstrap,
   });
 }
 
@@ -160,6 +171,8 @@ final class DefaultWebDavSyncSeedSource implements WebDavSyncSeedSource {
     required int clockOffsetMs,
     String? circleId,
     WebDavSyncCircleKey? circleKey,
+    WebDavSyncSnapshotDescriptor? reuseBootstrap,
+    WebDavSyncPreparedGraph? preparedBootstrap,
   }) async {
     if ((circleId == null) != (circleKey == null)) {
       throw ArgumentError('WebDAV sync circle seed context is incomplete');
@@ -175,6 +188,8 @@ final class DefaultWebDavSyncSeedSource implements WebDavSyncSeedSource {
       circleId: circleId,
       circleKey: circleKey,
       mutationToken: mutationToken,
+      reuseBootstrap: reuseBootstrap,
+      preparedBootstrap: preparedBootstrap,
     );
   }
 
@@ -188,6 +203,8 @@ final class DefaultWebDavSyncSeedSource implements WebDavSyncSeedSource {
     required String? circleId,
     required WebDavSyncCircleKey? circleKey,
     required ProfilePreferenceMutationToken mutationToken,
+    required WebDavSyncSnapshotDescriptor? reuseBootstrap,
+    required WebDavSyncPreparedGraph? preparedBootstrap,
   }) async {
     var state = await _stateRepository.load(namespaceId);
     final registry = _graphBuilder.packageService.registry;
@@ -206,165 +223,255 @@ final class DefaultWebDavSyncSeedSource implements WebDavSyncSeedSource {
         circleToLocalResources: plan.maps.circleToLocalResources,
       ),
     );
-    final bootstrap = await _graphBuilder.build(
-      kind: WebDavSyncGraphKind.bootstrap,
-      authorization: authorization,
-      identityMaps: plan.maps,
-    );
-    final sections = <WebDavSyncSeedSection>[
-      WebDavSyncSeedSection(
-        name: WebDavSyncGraphKind.bootstrap.logicalName,
-        schemaVersion: WebDavSyncGraphBuilder.schemaVersion,
-        payload: bootstrap.payload,
-        semanticDigest: bootstrap.semanticDigest,
-        maxBytes: WebDavSyncLimits.maxGraphDocumentBytes,
-      ),
-    ];
-    final seededStates = <String, WebDavSyncProfileEngineState>{};
-    final originalTombstones = <String, Map<String, WebDavSyncTombstone>>{};
-    final session = await _localAdapter.beginCycle();
-    if (_localAdapter is! WebDavSyncCircleLocalAdapter) {
-      throw StateError('WebDAV sync circle seed support is unavailable');
-    }
-    final circle = await (_localAdapter as WebDavSyncCircleLocalAdapter)
-        .buildCircleState(
-          session,
-          WebDavSyncCircleBuildRequest(
-            identityMaps: plan.maps,
+    final bootstrap = reuseBootstrap != null
+        ? null
+        : preparedBootstrap ??
+              await _graphBuilder.build(
+                kind: WebDavSyncGraphKind.bootstrap,
+                authorization: authorization,
+                identityMaps: plan.maps,
+              );
+    try {
+      final sections = <WebDavSyncSeedSection>[
+        WebDavSyncSeedSection(
+          name: WebDavSyncGraphKind.bootstrap.logicalName,
+          schemaVersion: reuseBootstrap != null || bootstrap!.snapshot != null
+              ? WebDavSyncSnapshotDescriptor.schemaVersion
+              : WebDavSyncGraphBuilder.schemaVersion,
+          payload:
+              reuseBootstrap?.toJson() ??
+              bootstrap!.snapshot ??
+              bootstrap!.payload,
+          semanticDigest:
+              reuseBootstrap?.semanticDigest ?? bootstrap!.semanticDigest,
+          maxBytes: reuseBootstrap != null || bootstrap!.snapshot != null
+              ? WebDavSyncSnapshotDescriptor.maxDescriptorBytes
+              : WebDavSyncLimits.maxGraphDocumentBytes,
+        ),
+      ];
+      final seededStates = <String, WebDavSyncProfileEngineState>{};
+      final originalTombstones = <String, Map<String, WebDavSyncTombstone>>{};
+      final session = await _localAdapter.beginCycle();
+      if (_localAdapter is! WebDavSyncCircleLocalAdapter) {
+        throw StateError('WebDAV sync circle seed support is unavailable');
+      }
+      // A restored snapshot is an observation, not a fresh local edit. Give
+      // imported values an old baseline before preparing the first publication;
+      // authenticated peer records/tombstones then win the first merge. Persist
+      // it before network I/O so edits during a retry are compared normally.
+      if (reuseBootstrap != null && state.circleProfilesBaseline == null) {
+        final importedCircle =
+            await (_localAdapter as WebDavSyncCircleLocalAdapter)
+                .buildCircleState(
+                  session,
+                  WebDavSyncCircleBuildRequest(
+                    identityMaps: plan.maps,
+                    deviceId: deviceId,
+                    circleId: circleId,
+                    circleKey: circleKey,
+                    localNowMs: 0,
+                    clockOffsetMs: 0,
+                    serverNowMs: 0,
+                  ),
+                );
+        final importedProfiles = <String, WebDavSyncProfileEngineState>{};
+        for (final mapping in plan.maps.circleToLocalProfiles.entries) {
+          final previous =
+              state.profiles[mapping.key] ??
+              const WebDavSyncProfileEngineState();
+          if (previous.baseline != null) {
+            importedProfiles[mapping.key] = previous;
+            continue;
+          }
+          final local = await _localAdapter.readProfile(session, mapping.value);
+          final built = await WebDavSyncHotMerge.buildAsync(
+            WebDavSyncBuildInput(
+              circleProfileId: mapping.key,
+              deviceId: deviceId,
+              rawPreferences: local.rawPreferences,
+              portablePreferences: local.portablePreferences,
+              identityMaps: plan.maps,
+              localNowMs: 0,
+              clockOffsetMs: 0,
+              serverNowMs: 0,
+            ),
+          );
+          importedProfiles[mapping.key] = previous.copyWith(
+            baseline: built.document,
+          );
+        }
+        await ProfilePreferences.runIfMutationSnapshotCurrent(
+          mutationToken,
+          () async {
+            state = await _stateRepository.update(
+              namespaceId,
+              (current) => current.copyWith(
+                circleProfilesBaseline: importedCircle.profiles,
+                circleResourcesBaseline: importedCircle.resources,
+                profiles: {
+                  ...current.profiles,
+                  for (final entry in importedProfiles.entries)
+                    entry.key: (current.profiles[entry.key] ?? entry.value)
+                        .copyWith(baseline: entry.value.baseline),
+                },
+              ),
+            );
+          },
+        );
+      }
+      final circle = await (_localAdapter as WebDavSyncCircleLocalAdapter)
+          .buildCircleState(
+            session,
+            WebDavSyncCircleBuildRequest(
+              identityMaps: plan.maps,
+              deviceId: deviceId,
+              circleId: circleId,
+              circleKey: circleKey,
+              localNowMs: localNowMs,
+              clockOffsetMs: clockOffsetMs,
+              serverNowMs: serverNowMs,
+              previousProfiles: state.circleProfilesBaseline,
+              previousResources: state.circleResourcesBaseline,
+            ),
+          );
+      sections
+        ..add(
+          WebDavSyncSeedSection(
+            name: 'profiles',
+            schemaVersion: WebDavSyncProfilesDocument.schemaVersion,
+            payload: circle.profiles.toJson(),
+            semanticDigest: circle.profiles.semanticDigest,
+            maxBytes: WebDavSyncLimits.maxHotDocumentBytes,
+          ),
+        )
+        ..add(
+          WebDavSyncSeedSection(
+            name: 'resources',
+            schemaVersion: WebDavSyncResourcesDocument.schemaVersion,
+            payload: circle.resources.toJson(),
+            semanticDigest: circle.resources.semanticDigest,
+            maxBytes: WebDavSyncLimits.maxGraphDocumentBytes,
+          ),
+        );
+      for (final mapping in plan.maps.circleToLocalProfiles.entries) {
+        final prior =
+            state.profiles[mapping.key] ?? const WebDavSyncProfileEngineState();
+        originalTombstones[mapping.key] =
+            Map<String, WebDavSyncTombstone>.unmodifiable(prior.tombstones);
+        final local = await _localAdapter.readProfile(session, mapping.value);
+        final built = await WebDavSyncHotMerge.buildAsync(
+          WebDavSyncBuildInput(
+            circleProfileId: mapping.key,
             deviceId: deviceId,
-            circleId: circleId,
-            circleKey: circleKey,
+            rawPreferences: local.rawPreferences,
+            portablePreferences: local.portablePreferences,
+            identityMaps: plan.maps,
             localNowMs: localNowMs,
             clockOffsetMs: clockOffsetMs,
             serverNowMs: serverNowMs,
-            previousProfiles: state.circleProfilesBaseline,
-            previousResources: state.circleResourcesBaseline,
+            previous: prior.baseline,
+            deferredCollectionLocal: prior.deferredCollectionLocal,
           ),
         );
-    sections
-      ..add(
-        WebDavSyncSeedSection(
-          name: 'profiles',
-          schemaVersion: WebDavSyncProfilesDocument.schemaVersion,
-          payload: circle.profiles.toJson(),
-          semanticDigest: circle.profiles.semanticDigest,
-          maxBytes: WebDavSyncLimits.maxHotDocumentBytes,
-        ),
-      )
-      ..add(
-        WebDavSyncSeedSection(
-          name: 'resources',
-          schemaVersion: WebDavSyncResourcesDocument.schemaVersion,
-          payload: circle.resources.toJson(),
-          semanticDigest: circle.resources.semanticDigest,
-          maxBytes: WebDavSyncLimits.maxGraphDocumentBytes,
-        ),
-      );
-    for (final mapping in plan.maps.circleToLocalProfiles.entries) {
-      final prior =
-          state.profiles[mapping.key] ?? const WebDavSyncProfileEngineState();
-      originalTombstones[mapping.key] =
-          Map<String, WebDavSyncTombstone>.unmodifiable(prior.tombstones);
-      final local = await _localAdapter.readProfile(session, mapping.value);
-      final built = await WebDavSyncHotMerge.buildAsync(
-        WebDavSyncBuildInput(
-          circleProfileId: mapping.key,
-          deviceId: deviceId,
-          rawPreferences: local.rawPreferences,
-          portablePreferences: local.portablePreferences,
+        final tombstones = _publishableTombstones(
+          prior.tombstones,
           identityMaps: plan.maps,
-          localNowMs: localNowMs,
+          currentRecordKeys: built.document.watchState.records.keys.toSet(),
+          deviceId: deviceId,
           clockOffsetMs: clockOffsetMs,
           serverNowMs: serverNowMs,
-          previous: prior.baseline,
-          deferredCollectionLocal: prior.deferredCollectionLocal,
-        ),
-      );
-      final tombstones = _publishableTombstones(
-        prior.tombstones,
-        identityMaps: plan.maps,
-        currentRecordKeys: built.document.watchState.records.keys.toSet(),
-        deviceId: deviceId,
-        clockOffsetMs: clockOffsetMs,
-        serverNowMs: serverNowMs,
-      );
-      final tombstoneDocument = WebDavSyncTombstoneDocument(
-        circleProfileId: mapping.key,
-        items: tombstones,
-      );
-      plan.maps.assertContainsNoLocalIds(built.document.toJson());
-      plan.maps.assertContainsNoLocalIds(tombstoneDocument.toJson());
-      for (final part in WebDavSyncCollectionSections.split(
-        built.document,
-      ).entries) {
+        );
+        final tombstoneDocument = WebDavSyncTombstoneDocument(
+          circleProfileId: mapping.key,
+          items: tombstones,
+        );
+        plan.maps.assertContainsNoLocalIds(built.document.toJson());
+        plan.maps.assertContainsNoLocalIds(tombstoneDocument.toJson());
         sections.add(
           WebDavSyncSeedSection(
-            name: part.key,
-            schemaVersion: WebDavSyncHotDocument.schemaVersion,
-            payload: part.value.toJson(),
-            semanticDigest: part.value.semanticDigest,
-            maxBytes: part.key.startsWith(WebDavSyncCollectionSections.prefix)
-                ? WebDavSyncCollectionSections.maxBytes
-                : WebDavSyncLimits.maxHotDocumentBytes,
+            name: 'tombstones/${mapping.key}',
+            schemaVersion: WebDavSyncTombstoneDocument.schemaVersion,
+            payload: tombstoneDocument.toJson(),
+            semanticDigest: tombstoneDocument.semanticDigest,
+            maxBytes: WebDavSyncLimits.maxTombstoneDocumentBytes,
           ),
+        );
+        seededStates[mapping.key] = prior.copyWith(
+          baseline: built.document,
+          tombstones: tombstones,
+          lastPushedHotDigest: built.document.semanticDigest,
+          lastPushedTombstoneDigest: tombstoneDocument.semanticDigest,
         );
       }
-      sections.add(
-        WebDavSyncSeedSection(
-          name: 'tombstones/${mapping.key}',
-          schemaVersion: WebDavSyncTombstoneDocument.schemaVersion,
-          payload: tombstoneDocument.toJson(),
-          semanticDigest: tombstoneDocument.semanticDigest,
-          maxBytes: WebDavSyncLimits.maxTombstoneDocumentBytes,
+      final collectionPlan = await WebDavSyncCollectionSections.plan(
+        seededStates.values.map((state) => state.baseline!),
+        reservedSections: WebDavSyncCollectionSections.reservedSectionCount(
+          plan.maps.circleToLocalProfiles.keys,
         ),
       );
-      seededStates[mapping.key] = prior.copyWith(
-        baseline: built.document,
-        tombstones: tombstones,
-        lastPushedHotDigest: built.document.semanticDigest,
-        lastPushedTombstoneDigest: tombstoneDocument.semanticDigest,
-      );
-    }
-    _requireCompleteSeedSections(plan.maps, sections);
-    return WebDavSyncSeedMaterial(
-      identityMaps: plan.maps,
-      profileMap: bootstrap.profileMap,
-      resourceMap: bootstrap.resourceMap,
-      sections: List<WebDavSyncSeedSection>.unmodifiable(sections),
-      profileStates: Map<String, WebDavSyncProfileEngineState>.unmodifiable(
-        seededStates,
-      ),
-      bootstrapDatabaseDigest:
-          bootstrap.bootstrapDatabaseDigest ??
-          (throw StateError('WebDAV sync bootstrap digest is missing')),
-      preferenceMutationToken: mutationToken,
-      originalProfileTombstones:
-          Map<String, Map<String, WebDavSyncTombstone>>.unmodifiable(
-            originalTombstones,
-          ),
-      circleProfiles: circle.profiles,
-      circleResources: circle.resources,
-      beforeRootCommit: () async {
-        await authorization.validate(registry);
-        final currentProfiles = await registry.listProfiles(
-          includeDisabled: true,
-        );
-        final currentResources = await registry
-            .listAllResourcesIncludingDisabled();
-        if (!_sameSet(
-              currentProfiles.map((profile) => profile.id),
-              plan.maps.localToCircleProfiles.keys,
-            ) ||
-            !_sameSet(
-              currentResources.map((resource) => resource.id),
-              plan.maps.localToCircleResources.keys,
-            )) {
-          throw StateError(
-            'Profiles or connections changed while WebDAV sync was preparing',
+      for (final state in seededStates.values) {
+        for (final part in WebDavSyncCollectionSections.split(
+          state.baseline!,
+          targetBytes: collectionPlan.targetBytes,
+        ).entries) {
+          sections.add(
+            WebDavSyncSeedSection(
+              name: part.key,
+              schemaVersion: WebDavSyncHotDocument.schemaVersion,
+              payload: part.value.toJson(),
+              semanticDigest: part.value.semanticDigest,
+              maxBytes: part.key.startsWith(WebDavSyncCollectionSections.prefix)
+                  ? WebDavSyncCollectionSections.maxBytes
+                  : WebDavSyncLimits.maxHotDocumentBytes,
+            ),
           );
         }
-      },
-    );
+      }
+      _requireCompleteSeedSections(plan.maps, sections);
+      return WebDavSyncSeedMaterial(
+        identityMaps: plan.maps,
+        profileMap: reuseBootstrap?.profileMap ?? bootstrap!.profileMap,
+        resourceMap: reuseBootstrap?.resourceMap ?? bootstrap!.resourceMap,
+        sections: List<WebDavSyncSeedSection>.unmodifiable(sections),
+        profileStates: Map<String, WebDavSyncProfileEngineState>.unmodifiable(
+          seededStates,
+        ),
+        bootstrapDatabaseDigest:
+            reuseBootstrap?.databaseDigest ??
+            bootstrap!.bootstrapDatabaseDigest ??
+            (throw StateError('WebDAV sync bootstrap digest is missing')),
+        preferenceMutationToken: mutationToken,
+        originalProfileTombstones:
+            Map<String, Map<String, WebDavSyncTombstone>>.unmodifiable(
+              originalTombstones,
+            ),
+        circleProfiles: circle.profiles,
+        circleResources: circle.resources,
+        beforeRootCommit: () async {
+          await authorization.validate(registry);
+          final currentProfiles = await registry.listProfiles(
+            includeDisabled: true,
+          );
+          final currentResources = await registry
+              .listAllResourcesIncludingDisabled();
+          if (!_sameSet(
+                currentProfiles.map((profile) => profile.id),
+                plan.maps.localToCircleProfiles.keys,
+              ) ||
+              !_sameSet(
+                currentResources.map((resource) => resource.id),
+                plan.maps.localToCircleResources.keys,
+              )) {
+            throw StateError(
+              'Profiles or connections changed while WebDAV sync was preparing',
+            );
+          }
+        },
+      );
+    } catch (_) {
+      await bootstrap?.snapshot?.dispose();
+      rethrow;
+    }
   }
 
   static Map<String, WebDavSyncTombstone> _publishableTombstones(
@@ -615,6 +722,7 @@ final class WebDavSyncNewRootInitializer {
     }
     final secrets = await _bindingStore.readSecrets(binding);
     final transport = _transportFactory(binding: binding, secrets: secrets);
+    WebDavSyncSeedMaterial? preparedSeed;
     try {
       // MKCOL 405 alone is ambiguous on several WebDAV providers, so verify
       // the collection and then prove exact read-after-write behavior with a
@@ -681,6 +789,7 @@ final class WebDavSyncNewRootInitializer {
         circleId: circleId,
         circleKey: root.key,
       );
+      preparedSeed = seed;
       _requireCompleteSeedSections(seed.identityMaps, seed.sections);
       // A prior attempt may have committed the candidate marker immediately
       // before the process stopped, or another initializer may have won while
@@ -723,19 +832,20 @@ final class WebDavSyncNewRootInitializer {
         deviceId: namespace.deviceId,
         updatedAtMs: clockDecision.serverNowMs!,
         clockOffsetMs: clockDecision.state.acceptedOffsetMs!,
-        graphSchemaClaim: WebDavSyncGraphBuilder.schemaVersion,
+        graphSchemaClaim: WebDavSyncGraphBuilder.bootstrapSchemaVersion,
         profileMap: seed.profileMap,
         resourceMap: seed.resourceMap,
         sections: List<WebDavSyncSectionReference>.unmodifiable(references),
       );
-      seed.identityMaps.assertContainsNoLocalIds(manifest.toJson());
+      final manifestJson = manifest.toValidatedJson();
+      seed.identityMaps.assertContainsNoLocalIds(manifestJson);
       final manifestBytes = await _codec.sealDocument(
         key: root.key,
         circleId: circleId,
         deviceId: namespace.deviceId,
         logicalName: 'manifest',
         schemaVersion: WebDavSyncManifest.schemaVersion,
-        payload: manifest.toJson(),
+        payload: manifestJson,
         maxBytes: WebDavSyncLimits.maxManifestBytes,
       );
       await seed.validatePreferencesUnchanged();
@@ -819,6 +929,7 @@ final class WebDavSyncNewRootInitializer {
         serverNowMs: clockDecision.serverNowMs!,
       );
     } finally {
+      await preparedSeed?.dispose();
       transport.close();
     }
   }
@@ -1091,7 +1202,8 @@ void _requireCompleteSeedSections(
       throw StateError('WebDAV sync seed contains duplicate sections');
     }
   }
-  if (!names.contains(WebDavSyncGraphKind.bootstrap.logicalName) ||
+  if (names.length > WebDavSyncLimits.maxSectionsPerManifest ||
+      !names.contains(WebDavSyncGraphKind.bootstrap.logicalName) ||
       !names.contains('profiles') ||
       !names.contains('resources') ||
       identityMaps.circleToLocalProfiles.keys.any(

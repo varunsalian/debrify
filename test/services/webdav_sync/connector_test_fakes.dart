@@ -1,6 +1,7 @@
 import 'package:debrify/services/profiles/profile_authorization.dart';
 import 'package:debrify/services/profiles/profile_preferences.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_activation.dart';
+import 'package:debrify/services/webdav_sync/webdav_sync_graph.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_adoption.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_adoption_models.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_binding_store.dart';
@@ -27,15 +28,18 @@ final class ConnectorMemoryStateRepository
 }
 
 final class ConnectorFakeDiscovery implements WebDavSyncExistingRootDiscoverer {
-  const ConnectorFakeDiscovery(this.snapshot, this.events);
+  ConnectorFakeDiscovery(this.snapshot, this.events);
 
   final WebDavSyncExistingRootSnapshot snapshot;
   final List<String> events;
+  bool? lastMaterializeBootstrap;
 
   @override
   Future<WebDavSyncExistingRootSnapshot> discover({
     required String bindingId,
+    bool materializeBootstrap = true,
   }) async {
+    lastMaterializeBootstrap = materializeBootstrap;
     events.add('discover');
     return snapshot;
   }
@@ -75,10 +79,6 @@ final class ConnectorFakeAdoption implements WebDavSyncAdoptionRunner {
       phase: WebDavSyncAdoptionPhase.complete,
       graphSemanticDigest: request.graphSemanticDigest,
       preRestoreProfileIds: const <String>{'local-before'},
-      backupPath: '/backup',
-      backupSha256:
-          'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
-      backupVerified: true,
     );
   }
 
@@ -117,6 +117,7 @@ final class ConnectorFakePublisher implements WebDavSyncSeedPublisher {
   Future<WebDavSyncPublishedSeed> publish({
     required String bindingId,
     required ProfileAuthorizationContext authorization,
+    WebDavSyncPreparedGraph? preparedBootstrap,
   }) async {
     events.add('publish');
     publishCalls++;

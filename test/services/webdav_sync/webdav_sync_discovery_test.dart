@@ -242,7 +242,7 @@ void main() {
       deviceId: 'future-bootstrap-device',
       manifestTime: now,
       bootstrapTime: now,
-      bootstrapSchemaVersion: 2,
+      bootstrapSchemaVersion: 3,
     );
 
     await expectLater(
@@ -250,7 +250,7 @@ void main() {
       throwsA(isA<WebDavSyncBootstrapUpgradeRequiredException>()),
     );
 
-    expect(states.state.schemaRatchet, 2);
+    expect(states.state.schemaRatchet, 3);
     expect(transport.sectionReads, isEmpty);
   });
 

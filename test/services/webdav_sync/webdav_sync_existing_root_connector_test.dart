@@ -196,6 +196,7 @@ void main() {
   });
 
   WebDavSyncExistingRootConnector connector({
+    ConnectorFakeDiscovery? discovery,
     ConnectorFakeAdoption? adoption,
     ConnectorFakePublisher? publisher,
     ConnectorPinCheckingEngine? engine,
@@ -203,7 +204,7 @@ void main() {
     return WebDavSyncExistingRootConnector(
       bindingStore: bindingStore,
       stateRepository: states,
-      discovery: ConnectorFakeDiscovery(snapshot, events),
+      discovery: discovery ?? ConnectorFakeDiscovery(snapshot, events),
       adoption: adoption ?? ConnectorFakeAdoption(states, events),
       publisher: publisher ?? ConnectorFakePublisher(states, snapshot, events),
       engine: engine ?? ConnectorPinCheckingEngine(bindingStore, events),
@@ -375,7 +376,8 @@ void main() {
       circleToLocalResources: const <String, String>{},
     );
 
-    await connector().connect(
+    final discovery = ConnectorFakeDiscovery(snapshot, events);
+    await connector(discovery: discovery).connect(
       bindingId: binding.id,
       authorization: authorization,
       recaptureAuthorization: () async => authorization,
@@ -383,6 +385,7 @@ void main() {
     );
 
     expect(events, <String>['discover', 'publish', 'merge']);
+    expect(discovery.lastMaterializeBootstrap, isFalse);
   });
 
   test(
@@ -525,8 +528,4 @@ WebDavSyncAdoptionRecord _adoptionRecord() => WebDavSyncAdoptionRecord(
   phase: WebDavSyncAdoptionPhase.complete,
   graphSemanticDigest: _graphDigest,
   preRestoreProfileIds: const <String>{'local-before'},
-  backupPath: '/backup',
-  backupSha256:
-      'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
-  backupVerified: true,
 );

@@ -762,6 +762,35 @@ class PortableProfilePackage {
     }
   }
 
+  /// File-backed preferences bypass the package's inline tree, so validate
+  /// each decoded value at the same boundary before any preference writes.
+  static void validateFileBackedPreferences(Map values) {
+    final counter = _Counter();
+    for (final entry in values.entries) {
+      if (entry.key is! String) {
+        throw const FormatException('Non-string preference key');
+      }
+      _validateTree(entry.key, 1, counter, path: 'preferences.<key>');
+      // Collections already have their own compressed-inventory format and
+      // size limits. Ordinary values retain the portable package limits.
+      if (entry.key == 'remote_home_collections_v2') {
+        if (entry.value is! String ||
+            (entry.value as String).length > maxEnvelopeBytes) {
+          throw const FormatException(
+            'Invalid file-backed collection inventory',
+          );
+        }
+      } else {
+        _validateTree(
+          entry.value,
+          1,
+          counter,
+          path: 'preferences.${entry.key}',
+        );
+      }
+    }
+  }
+
   static bool _supportsVersion(Object? value) =>
       value is int && value >= oldestSupportedVersion && value <= version;
 
@@ -893,6 +922,17 @@ class PortableProfilePackage {
             section['values'] is! Map ||
             section['recordCount'] is! int) {
           throw const FormatException('Invalid profile preference section');
+        }
+        final pages = section['preferencePages'];
+        if (pages != null &&
+            (!allowFileBackedDatabases ||
+                pages is! Map ||
+                pages['recordCount'] is! int ||
+                pages['parts'] is! List ||
+                (pages['parts'] as List).isEmpty ||
+                (pages['parts'] as List).length > 2048 ||
+                (section['values'] as Map).isNotEmpty)) {
+          throw const FormatException('Invalid file-backed preferences');
         }
         final collections = section['collectionInventory'];
         if (collections != null &&

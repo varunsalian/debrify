@@ -1,3 +1,4 @@
+import 'package:debrify/services/webdav_sync/webdav_sync_snapshot_models.dart';
 import 'connector_test_fakes.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_discovery.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_existing_root_connector.dart';
@@ -132,6 +133,61 @@ void main() {
     clock: () => DateTime.utc(2026, 9, 1),
     diagnostic: diagnostic,
   );
+
+  for (final republish in [false, true]) {
+    for (final overflow in [false, true]) {
+      test(
+        '${republish ? 'publisher' : 'initializer'} preserves the remote manifest on ${overflow ? 'section overflow' : 'invalid reference metadata'}',
+        () async {
+          if (republish) {
+            await initializer().initialize(
+              bindingId: binding.id,
+              authorization: authorization,
+            );
+          }
+          final previous = transport.manifest;
+          transport.events.clear();
+          seeds.extraSections = [
+            for (
+              var i = 0;
+              i < (overflow ? WebDavSyncLimits.maxSectionsPerManifest : 1);
+              i++
+            )
+              WebDavSyncSeedSection(
+                name: 'extra/$i',
+                schemaVersion: 1,
+                payload: const {'value': true},
+                semanticDigest: overflow ? 'a' * 64 : 'invalid',
+                maxBytes: 1024,
+              ),
+          ];
+          final publisher = WebDavSyncOwnManifestPublisher(
+            bindingStore: bindingStore,
+            stateRepository: states,
+            seedSource: seeds,
+            transportFactory: ({required binding, required secrets}) =>
+                transport,
+            clock: () => DateTime.utc(2026, 9, 1),
+          );
+          await expectLater(
+            republish
+                ? publisher.publish(
+                    bindingId: binding.id,
+                    authorization: authorization,
+                  )
+                : initializer().initialize(
+                    bindingId: binding.id,
+                    authorization: authorization,
+                  ),
+            throwsA(anyOf(isA<StateError>(), isA<FormatException>())),
+          );
+          expect(seeds.prepareCalls, republish ? 2 : 1);
+          expect(transport.events, isNot(contains('write:manifest')));
+          expect(transport.manifest, previous);
+        },
+      );
+    }
+  }
 
   test('non-linearizable store failure aborts before root mutation', () async {
     transport.linearizabilityProbeError =
@@ -1213,6 +1269,7 @@ final class _FakeSeedSource implements WebDavSyncSeedSource {
   bool guardPreferences = false;
   Map<String, WebDavSyncProfileEngineState> profileStates = {};
   String? omittedSection;
+  List<WebDavSyncSeedSection> extraSections = [];
   String? seenCircleId;
   WebDavSyncCircleKey? seenCircleKey;
   int prepareCalls = 0;
@@ -1235,6 +1292,8 @@ final class _FakeSeedSource implements WebDavSyncSeedSource {
     required int clockOffsetMs,
     String? circleId,
     WebDavSyncCircleKey? circleKey,
+    WebDavSyncSnapshotDescriptor? reuseBootstrap,
+    WebDavSyncPreparedGraph? preparedBootstrap,
   }) async {
     prepareCalls++;
     seenCircleId = circleId;
@@ -1296,7 +1355,7 @@ final class _FakeSeedSource implements WebDavSyncSeedSource {
                 '4444444444444444444444444444444444444444444444444444444444444444',
             maxBytes: 1024 * 1024,
           ),
-        ].where((section) => section.name != omittedSection),
+        ].where((section) => section.name != omittedSection).followedBy(extraSections),
       ),
       profileStates: profileStates,
       bootstrapDatabaseDigest:

@@ -294,7 +294,8 @@ class _WebDavFilesScreenState extends State<WebDavFilesScreen> {
         items
             .where(
               (item) =>
-                  item.isDirectory || item.name.toLowerCase().endsWith('.json'),
+                  item.isDirectory ||
+                  item.name.toLowerCase().endsWith('.debrify.enc'),
             )
             .toList(),
       WebDavPickerMode.browse =>

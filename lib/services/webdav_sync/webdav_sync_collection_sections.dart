@@ -1,8 +1,9 @@
 import 'dart:convert';
 import 'dart:isolate';
-import 'package:collection/collection.dart';
 
+import '../../utils/canonical_json.dart';
 import 'webdav_sync_hot_models.dart';
+import '../transfer/transfer_io.dart';
 
 /// Collections have their own bounded sections. Legacy clients keep reading the
 /// small hot section, and never parse/rewrite the richer collection payloads.
@@ -11,65 +12,164 @@ typedef PreparedCollectionSection = ({
   String digest,
 });
 
-final class WebDavSyncCollectionSections {
-  final _cache =
-      <
-        String,
-        ({
-          WebDavSyncHotDocument source,
-          Map<String, PreparedCollectionSection> parts,
-        })
-      >{};
+final class WebDavSyncCollectionPlan {
+  const WebDavSyncCollectionPlan(this.targetBytes, this.sectionCounts);
+  final int targetBytes;
+  // Upper bounds in the fast path; exact greedy shard counts after sizing.
+  final Map<String, int> sectionCounts;
+}
 
+final class WebDavSyncCollectionSections {
   Future<Map<String, PreparedCollectionSection>> prepare(
     String key,
-    WebDavSyncHotDocument source,
-  ) async {
-    final cached = _cache.remove(key);
-    Map<String, Object?> projection(WebDavSyncHotDocument doc) => {
-      'records': {
-        for (final e in doc.watchState.records.entries)
-          if (isCollectionRecord(e.key)) e.key: e.value.toJson(),
-      },
-      'orders': {
-        for (final e in doc.watchState.orders.entries)
-          if (isCollectionOrder(e.key)) e.key: e.value.toJson(),
-      },
-    };
-    if (cached != null &&
-        const DeepCollectionEquality().equals(
-          projection(cached.source),
-          projection(source),
-        )) {
-      _cache[key] = cached;
-      final hot = await _prepareInWorker(source, false);
-      return {...hot, ...cached.parts};
-    }
-    final parts = await _prepareInWorker(source, true);
-    if (_cache.length >= 4) _cache.remove(_cache.keys.first);
-    _cache[key] = (
-      source: source,
-      parts: {
-        for (final e in parts.entries)
-          if (e.key.startsWith(prefix)) e.key: e.value,
-      },
-    );
-    return parts;
-  }
+    WebDavSyncHotDocument source, {
+    int? targetBytes,
+  }) => _prepareInWorker(source, true, targetBytes);
 
   static Future<Map<String, PreparedCollectionSection>> _prepareInWorker(
     WebDavSyncHotDocument source,
     bool collections,
-  ) => Isolate.run(
-    () => {
-      for (final e in split(source, includeCollections: collections).entries)
-        e.key: (document: e.value, digest: e.value.semanticDigest),
-    },
+    int? targetBytes,
+  ) => TransferIo.largeWorker.synchronized(
+    () => Isolate.run(
+      () => {
+        for (final e in split(
+          source,
+          includeCollections: collections,
+          targetBytes: targetBytes,
+        ).entries)
+          e.key: (document: e.value, digest: e.value.semanticDigest),
+      },
+    ),
   );
 
   static const prefix = 'collections-v2/';
   static const maxBytes = 32 * 1024 * 1024;
-  static const _targetBytes = 8 * 1024 * 1024;
+  static const _targetBytes = 512 * 1024;
+  static const _maxRecordBytes = maxBytes - 1024 * 1024;
+
+  /// Reserve current and future non-collection sections before sharing the
+  /// remaining manifest slots between profiles. Unknown retained sections and
+  /// collection sections belonging to profiles outside this cycle also count.
+  static int reservedSectionCount(
+    Iterable<String> profileIds, {
+    Iterable<WebDavSyncSectionReference> retained = const [],
+  }) {
+    final profiles = profileIds.toSet();
+    final replacedPrefixes = profiles.map((id) => '$prefix$id/').toList();
+    return {
+      'bootstrap',
+      'profiles',
+      'resources',
+      for (final id in profiles) ...[
+        'hot/$id',
+        'tombstones/$id',
+        'library/$id',
+        'tv-library/$id',
+      ],
+      for (final section in retained)
+        if (section.name != 'graph' &&
+            !replacedPrefixes.any(section.name.startsWith))
+          section.name,
+    }.length;
+  }
+
+  /// Ordinary inventories need no byte scan. Only when one shard per record
+  /// could exceed the shared budget do we measure, one profile worker at a time.
+  static Future<WebDavSyncCollectionPlan> plan(
+    Iterable<WebDavSyncHotDocument> sources, {
+    required int reservedSections,
+    // These profiles keep their published partition unless fitting the shared
+    // budget requires fewer shards. Avoid scanning large unchanged inventories.
+    Map<String, int> unchangedSectionCounts = const {},
+  }) async {
+    final documents = sources.toList();
+    final counts = {
+      for (final source in documents)
+        source.circleProfileId:
+            unchangedSectionCounts[source.circleProfileId] ??
+            _recordCount(source),
+    };
+    final available =
+        WebDavSyncLimits.maxSectionsPerManifest - reservedSections;
+    if (counts.values.fold(0, (a, b) => a + b) <= available) {
+      return WebDavSyncCollectionPlan(_targetBytes, counts);
+    }
+    final sizes = <String, List<int>>{};
+    for (final source in documents) {
+      sizes[source.circleProfileId] = await _measureInWorker(source);
+    }
+    return _fit(sizes, available);
+  }
+
+  static Future<List<int>> _measureInWorker(WebDavSyncHotDocument source) =>
+      TransferIo.largeWorker.synchronized(
+        () => Isolate.run(() => _sizes(source)),
+      );
+
+  static int _recordCount(WebDavSyncHotDocument source) {
+    final records = source.watchState.records.keys
+        .where(isCollectionRecord)
+        .length;
+    return records == 0 && source.watchState.orders.keys.any(isCollectionOrder)
+        ? 1
+        : records;
+  }
+
+  static List<int> _sizes(WebDavSyncHotDocument source) {
+    final keys =
+        source.watchState.records.keys.where(isCollectionRecord).toList()
+          ..sort();
+    if (keys.isEmpty) return _recordCount(source) == 0 ? [] : [0];
+    return [
+      for (final key in keys)
+        _recordBytes(key, source.watchState.records[key]!),
+    ];
+  }
+
+  static int _recordBytes(String key, WebDavSyncStampedValue value) {
+    var bytes = 0;
+    for (final fragment in canonicalJsonFragments({key: value.toJson()})) {
+      bytes += utf8.encode(fragment).length;
+      if (bytes > _maxRecordBytes) {
+        throw const FormatException(
+          'A collection exceeds its sync section limit.',
+        );
+      }
+    }
+    return bytes;
+  }
+
+  static WebDavSyncCollectionPlan _fit(
+    Map<String, List<int>> sizes,
+    int available,
+  ) {
+    var target = _targetBytes;
+    while (true) {
+      final counts = <String, int>{};
+      for (final entry in sizes.entries) {
+        var count = 0;
+        var size = 0;
+        for (final bytes in entry.value) {
+          if (count == 0 || size + bytes > target) {
+            count++;
+            size = 0;
+          }
+          size += bytes;
+        }
+        counts[entry.key] = count;
+      }
+      if (counts.values.fold(0, (a, b) => a + b) <= available) {
+        return WebDavSyncCollectionPlan(target, counts);
+      }
+      if (target == _maxRecordBytes) {
+        throw const FormatException(
+          'Collections exceed the sync manifest capacity.',
+        );
+      }
+      target = target * 2 > _maxRecordBytes ? _maxRecordBytes : target * 2;
+    }
+  }
 
   static bool isCollectionRecord(String key) =>
       key.startsWith('homecollection/');
@@ -78,6 +178,7 @@ final class WebDavSyncCollectionSections {
   static Map<String, WebDavSyncHotDocument> split(
     WebDavSyncHotDocument source, {
     bool includeCollections = true,
+    int? targetBytes,
   }) {
     final result = <String, WebDavSyncHotDocument>{};
     WebDavSyncHotDocument part(
@@ -137,6 +238,19 @@ final class WebDavSyncCollectionSections {
         !source.watchState.orders.keys.any(isCollectionOrder)) {
       return result;
     }
+    final available =
+        WebDavSyncLimits.maxSectionsPerManifest -
+        reservedSectionCount([source.circleProfileId]);
+    final target =
+        targetBytes ??
+        (_recordCount(source) <= available
+            ? _targetBytes
+            : _fit({
+                source.circleProfileId: _sizes(source),
+              }, available).targetBytes);
+    if (target < _targetBytes || target > _maxRecordBytes) {
+      throw ArgumentError.value(target, 'targetBytes');
+    }
     var batch = <String, WebDavSyncStampedValue>{};
     var orders = <String, WebDavSyncOrderValue>{
       for (final e in source.watchState.orders.entries)
@@ -159,13 +273,8 @@ final class WebDavSyncCollectionSections {
           ..sort();
     for (final key in keys) {
       final value = source.watchState.records[key]!;
-      final bytes = utf8.encode(jsonEncode({key: value.toJson()})).length;
-      if (bytes > maxBytes - 1024 * 1024) {
-        throw const FormatException(
-          'A collection exceeds its sync section limit.',
-        );
-      }
-      if (size + bytes > _targetBytes && batch.isNotEmpty) flush();
+      final bytes = _recordBytes(key, value);
+      if (size + bytes > target && batch.isNotEmpty) flush();
       batch[key] = value;
       size += bytes;
     }

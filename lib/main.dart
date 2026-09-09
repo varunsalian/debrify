@@ -370,7 +370,12 @@ Future<void> _mainUnchecked(List<String> launchArguments) async {
     // Scratch left behind by an interrupted local backup/restore is only
     // ever intermediate state; finished backups live in the download
     // destination. Nothing can be running yet, so sweep it unconditionally.
-    unawaited(LocalBackupScratch.cleanAbandoned());
+    await LocalBackupScratch.cleanAbandoned().catchError((Object _) {
+      DiagnosticLog.instance.recordEvent(
+        source: 'local_backup',
+        event: 'scratch_cleanup_deferred',
+      );
+    });
   } on ProfileBootstrapRecoveryRequired {
     runApp(
       MaterialApp(

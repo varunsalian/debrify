@@ -12,7 +12,6 @@ import 'webdav_sync_engine_state.dart';
 import 'webdav_sync_graph.dart';
 import 'webdav_sync_hot_merge.dart';
 import 'webdav_sync_hot_models.dart';
-import 'webdav_sync_large_section_io.dart';
 import 'webdav_sync_manifest_publisher.dart';
 import 'webdav_sync_logout.dart';
 import 'webdav_sync_models.dart';
@@ -117,7 +116,7 @@ final class WebDavSyncGraphTier {
     final active = await _activeBinding();
     var state = await _stateRepository.load(active.namespaceId);
     // The legacy field now ratchets bootstrap schema versions only.
-    if (state.schemaRatchet > WebDavSyncGraphBuilder.schemaVersion) {
+    if (state.schemaRatchet > WebDavSyncGraphBuilder.bootstrapSchemaVersion) {
       return const WebDavSyncGraphTierReport(
         disposition: WebDavSyncGraphTierDisposition.updateRequired,
       );
@@ -198,29 +197,34 @@ final class WebDavSyncGraphTier {
         authorization: authorization,
         identityMaps: maps,
       );
-      final publishedBootstrap = ownManifest!.section(
-        WebDavSyncGraphKind.bootstrap.logicalName,
-      );
-      final databaseDigest =
-          bootstrap.bootstrapDatabaseDigest ??
-          (throw StateError('WebDAV sync bootstrap digest is missing'));
-      if (publishedBootstrap == null ||
-          state.publishedBootstrapDatabaseDigest != databaseDigest) {
-        await _publisher.publish(
-          bindingId: active.id,
-          authorization: authorization,
+      try {
+        final publishedBootstrap = ownManifest!.section(
+          WebDavSyncGraphKind.bootstrap.logicalName,
         );
-        return const WebDavSyncGraphTierReport(
-          disposition: WebDavSyncGraphTierDisposition.localPublished,
+        final databaseDigest =
+            bootstrap.bootstrapDatabaseDigest ??
+            (throw StateError('WebDAV sync bootstrap digest is missing'));
+        if (publishedBootstrap == null ||
+            state.publishedBootstrapDatabaseDigest != databaseDigest) {
+          await _publisher.publish(
+            bindingId: active.id,
+            authorization: authorization,
+            preparedBootstrap: bootstrap,
+          );
+          return const WebDavSyncGraphTierReport(
+            disposition: WebDavSyncGraphTierDisposition.localPublished,
+          );
+        }
+        await _stateRepository.update(
+          active.namespaceId,
+          (current) => current.copyWith(
+            lastBootstrapCheckMs: nowMs,
+            publishedBootstrapDatabaseDigest: databaseDigest,
+          ),
         );
+      } finally {
+        await bootstrap.snapshot?.dispose();
       }
-      await _stateRepository.update(
-        active.namespaceId,
-        (current) => current.copyWith(
-          lastBootstrapCheckMs: nowMs,
-          publishedBootstrapDatabaseDigest: databaseDigest,
-        ),
-      );
     }
     return const WebDavSyncGraphTierReport(
       disposition: WebDavSyncGraphTierDisposition.unchanged,
@@ -362,23 +366,18 @@ final class WebDavSyncGraphTier {
     required WebDavSyncManifest manifest,
     required WebDavSyncSectionReference reference,
   }) async {
-    final encoded = await WebDavSyncLargeSectionIo(codec: _codec).readVerified(
+    final graph = await WebDavSyncGraphReader.read(
       transport: transport,
-      deviceId: manifest.deviceId,
-      reference: reference,
-      maxBytes: WebDavSyncLimits.maxGraphDocumentBytes,
-    );
-    await WebDavSyncGraphReader.open(
       codec: _codec,
       key: scan.root.key,
       circleId: scan.root.document.circleId,
       deviceId: manifest.deviceId,
       kind: WebDavSyncGraphKind.bootstrap,
       reference: reference,
-      encoded: encoded,
       profileMap: manifest.profileMap,
       resourceMap: manifest.resourceMap,
     );
+    await graph.dispose();
   }
 
   Future<WebDavSyncBinding> _activeBinding() async {

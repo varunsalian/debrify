@@ -33,10 +33,12 @@ import '../../services/profiles/profile_pin_service.dart';
 import '../../services/profiles/profile_restore_coordinator.dart';
 import '../../services/profiles/profile_runtime.dart';
 import '../../services/webdav_backup_transport.dart';
+import '../../services/webdav_backup_archive.dart';
+import '../../services/transfer/streaming_encrypted_file.dart';
+import '../../services/transfer/transfer_io.dart';
 import '../../services/webdav_protocol_client.dart';
 import '../../services/webdav_service.dart';
 import '../../utils/platform_util.dart';
-import '../../utils/tvos_device.dart';
 import '../../widgets/tv_text_field.dart';
 import '../webdav/webdav_files_screen.dart';
 import 'widgets/settings_widgets.dart';
@@ -55,8 +57,6 @@ class ProfileBackupRestoreResult {
   final String authorizingProfileId;
   final ProfileGraphRestoreReport? graphReport;
 }
-
-const int _lowMemoryTvosRestoreLimit = 32 * 1024 * 1024;
 
 enum _ProfileBackupSource { localFile, webDav }
 
@@ -108,22 +108,8 @@ class ProfileBackupFlows {
     }
   }
 
-  /// WebDAV manual backup: the passphrase-encrypted JSON package on its
-  /// existing format and path. Local files use [_createLocalArchiveBackup].
+  /// File-backed snapshots wrapped in bounded encryption for WebDAV storage.
   Future<void> _createWebDavProfileBackupUnchecked() async {
-    if (PlatformUtil.isTvOS && TvosDevice.isLowMemoryCached) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Backup packaging is deferred on this low-memory Apple TV. Use '
-            'Remote transfer or create the backup on another enrolled device.',
-          ),
-          duration: Duration(seconds: 7),
-        ),
-      );
-      return;
-    }
-
     final webDavTarget = await Navigator.of(context).push<WebDavPickerResult>(
       MaterialPageRoute(
         builder: (_) => const WebDavFilesScreen(
@@ -208,126 +194,74 @@ class ProfileBackupFlows {
     if (confirmed != true) return;
     if (!await reauthenticateSensitiveProfile(actor)) return;
 
-    final resourceService = ConnectionResourceService(
-      registry: registry,
-      cipher: DeviceKeyProvider.cipher,
-    );
-    final service = ProfilePackageService(
-      registry: registry,
-      resources: resourceService,
-    );
-    Future<PortableProfilePackage> export({required bool compact}) =>
-        _runIfCurrent(
-          migrateAuthorization,
-          () => service.exportAllProfiles(
-            context: authorization,
-            includeSecrets: true,
-            compactDatabaseSnapshots: compact,
-          ),
-        );
-
-    PortableProfilePackage? package;
-    Uint8List? encodedBytes;
-    var compactRetryRequired = false;
-    await _profileBackupProgress<void>('Packaging profile data…', (
-      setStage,
-    ) async {
-      package = await export(compact: false);
-      // An automatic raw-database compaction can already have produced an
-      // omitted package. Size it here, but obtain consent before saving it.
-      setStage('Encrypting backup — this can take a minute…');
-      try {
-        encodedBytes = await PortableProfilePackage.encodeEncryptedBytes(
-          package!,
-          password,
-        );
-      } catch (error) {
-        if (!PortableProfilePackage.isExportTooLarge(error)) rethrow;
-        compactRetryRequired = true;
-      }
-    });
-    if (compactRetryRequired) {
-      package = await _profileBackupProgress<PortableProfilePackage>(
-        'Compacting the backup…',
-        (setStage) async {
-          final compacted = await export(compact: true);
-          setStage('Encrypting compacted backup — this can take a minute…');
-          encodedBytes = await PortableProfilePackage.encodeEncryptedBytes(
-            compacted,
-            password,
-          );
-          return compacted;
-        },
-      );
-    }
-    final debrifyTvOmission = DebrifyTvBackupOmission.fromOmissions(
-      package!.omissions,
-    );
-    if (debrifyTvOmission?.isEmpty == false) {
-      final continueWithoutChannels = await _confirmDebrifyTvOmission(
-        debrifyTvOmission!,
-        allProfiles: true,
-      );
-      if (!continueWithoutChannels) return;
-    }
-    encodedBytes ??= await _profileBackupProgress<Uint8List>(
-      'Encrypting backup — this can take a minute…',
-      (_) => PortableProfilePackage.encodeEncryptedBytes(package!, password),
-    );
-    final databaseCachesCompacted = package!.omissions.containsKey(
-      'rebuildableDatabaseCachesOmitted',
-    );
-    // Nothing below needs the plaintext export graph. Clear the captured
-    // reference explicitly before any local-file or WebDAV I/O so a large
-    // database snapshot can be collected on memory-constrained tvOS devices.
-    package = null;
-    late final String destinationLabel;
-    final target = webDavTarget;
-    final stagingDirectory = await _createPrivateStagingDirectory('upload');
-    try {
-      final stagedFile = File(
-        p.join(stagingDirectory.path, 'profile-backup.json'),
-      );
-      await stagedFile.writeAsBytes(encodedBytes!, flush: true);
-      // The transport reads from disk. Drop the encrypted envelope reference
-      // before the network transfer as well.
-      encodedBytes = null;
-      final uploaded = await _profileBackupProgress(
-        'Uploading and verifying backup…',
-        (_) => _runIfCurrentAsOutbound(
-          migrateAuthorization,
-          () => WebDavBackupTransport().uploadVerified(
-            config: target.config,
-            directoryPath: target.path,
-            stagedFile: stagedFile,
-            scratchDirectory: stagingDirectory,
-            fileNamePrefix: 'debrify-profiles',
-            beforeSend: ProfileAsyncAuthorization.currentOutboundBarrier,
+    final exporter = WebDavBackupArchive(
+      LocalBackupExporter(
+        service: ProfilePackageService(
+          registry: registry,
+          resources: ConnectionResourceService(
+            registry: registry,
+            cipher: DeviceKeyProvider.cipher,
           ),
         ),
-      );
-      destinationLabel =
-          'uploaded to ${target.config.name}/${uploaded.remotePath}';
-    } finally {
-      await _deletePrivateStagingDirectory(stagingDirectory);
-    }
-    if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          'All-profile backup '
-          '$destinationLabel'
-          '${debrifyTvOmission?.isEmpty == false
-              ? '. Debrify TV was excluded as confirmed; restore it from a channel ZIP or Remote.'
-              : databaseCachesCompacted
-              ? '. Rebuildable catalog/EPG caches were compacted.'
-              : ''}',
-        ),
-        duration: debrifyTvOmission?.isEmpty == false || databaseCachesCompacted
-            ? const Duration(seconds: 7)
-            : const Duration(seconds: 4),
       ),
     );
+    await LocalBackupOperationGuard.run(() async {
+      final staging = await LocalBackupScratch.create('webdav-export');
+      final cancellation = LocalBackupCancellation();
+      try {
+        final archive = await _profileBackupProgress<WebDavArchiveExport>(
+          'Preparing backup…',
+          (setStage) => _runIfCurrent(
+            migrateAuthorization,
+            () => WebDavSyncRuntime.instance.withBackupSnapshot(
+              () => exporter.export(
+                context: authorization,
+                staging: staging,
+                passphrase: password,
+                onStage: setStage,
+                onBytes: _byteStageReporter(setStage),
+                cancellation: cancellation,
+                captureSync: WebDavSyncRuntime.instance.captureBackupConnection,
+              ),
+            ),
+          ),
+          cancellation: cancellation,
+        );
+        cancellation.throwIfCancelled();
+        final uploaded = await _profileBackupProgress(
+          'Uploading and verifying backup…',
+          (_) => _runIfCurrentAsOutbound(
+            migrateAuthorization,
+            () => WebDavBackupTransport().uploadVerified(
+              config: webDavTarget.config,
+              directoryPath: webDavTarget.path,
+              stagedFile: archive.file,
+              stagedSha256Hex: archive.transfer.sha256Hex,
+              scratchDirectory: staging,
+              fileNamePrefix: 'debrify-profiles',
+              beforeSend: ProfileAsyncAuthorization.currentOutboundBarrier,
+            ),
+          ),
+        );
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'All-profile backup uploaded to '
+              '${webDavTarget.config.name}/${uploaded.remotePath}'
+              '${archive.cachesPruned ? '. Provider channel lists and TV guides will refresh after a restore.' : '.'}',
+            ),
+          ),
+        );
+      } on LocalBackupCancelledException {
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Backup cancelled')));
+      } finally {
+        await LocalBackupScratch.delete(staging);
+      }
+    });
   }
 
   /// Manual local backups use the streamed `.debrify` archive: databases and
@@ -520,46 +454,6 @@ class ProfileBackupFlows {
     }
   }
 
-  Future<bool> _confirmDebrifyTvOmission(
-    DebrifyTvBackupOmission omission, {
-    required bool allProfiles,
-  }) async {
-    if (!context.mounted) return false;
-    return await showSettingsDialog<bool>(
-          context: context,
-          barrierDismissible: false,
-          builder: (dialogContext) => AlertDialog(
-            title: const Text('Continue without Debrify TV?'),
-            content: Text(
-              'This backup had to be compacted to fit. Debrify TV will not '
-              'be included: ${omission.contentsLabel} will be left out. No '
-              'empty channels will be created when it is restored.\n\n'
-              'Before continuing, you can cancel and open Debrify TV → '
-              'Export to save the channels and their playable pools as a '
-              'ZIP. After restoring, use Debrify TV → Import → From storage. '
-              'Remote → Debrify TV Channels remains available for direct '
-              'device transfer.'
-              '${allProfiles && omission.profilesAffected > 1 ? ' Repeat the ZIP export/import or Remote transfer for each affected profile.' : ''}',
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(dialogContext).pop(false),
-                child: const Text('Cancel and export ZIP'),
-              ),
-              FilledButton(
-                onPressed: () => Navigator.of(dialogContext).pop(true),
-                child: const Text('Continue without Debrify TV'),
-              ),
-            ],
-          ),
-        ) ??
-        false;
-  }
-
-  /// Saves portable bytes through the same destination policy as downloads.
-  /// Generated artifacts never enter the download queue or history, but they
-  /// honor Downloads/Debrify, desktop custom folders, and Android SAF.
-  /// Returns a filesystem path or Android content URI.
   Future<String?> saveBackupFile({
     required String fileName,
     required Uint8List bytes,
@@ -717,6 +611,9 @@ class ProfileBackupFlows {
       try {
         // Route by header, not extension: a `.debrify` archive starts with
         // the ZIP magic, legacy backups are JSON objects.
+        if (await StreamingEncryptedFile.looksLike(File(path))) {
+          return await _restoreEncryptedArchive(path);
+        }
         if (await LocalBackupZip.looksLikeArchive(File(path))) {
           return await _restoreLocalArchive(path);
         }
@@ -750,18 +647,16 @@ class ProfileBackupFlows {
     final migrateAuthorization = await _captureWebDavAuthorization(
       target.config,
     );
-    final maxBytes = PlatformUtil.isTvOS && TvosDevice.isLowMemoryCached
-        ? _lowMemoryTvosRestoreLimit
-        : PortableProfilePackage.maxEnvelopeBytes;
+    const maxBytes = TransferIo.maxFileBytes;
     if ((target.item?.sizeBytes ?? 0) > maxBytes) {
       throw const FormatException(
-        'This backup is too large to restore safely on this Apple TV',
+        'Backup exceeds the supported file size limit',
       );
     }
     final stagingDirectory = await _createPrivateStagingDirectory('restore');
     try {
       final stagedFile = File(
-        p.join(stagingDirectory.path, 'profile-backup.json'),
+        p.join(stagingDirectory.path, 'profile-backup.debrify.enc'),
       );
       await _profileBackupProgress(
         'Downloading backup…',
@@ -777,12 +672,63 @@ class ProfileBackupFlows {
           ),
         ),
       );
-      return await _restoreProfileBackupFromPath(
+      return await _restoreEncryptedArchive(
         stagedFile.path,
         migrateAuthorization: migrateAuthorization,
       );
     } finally {
       await _deletePrivateStagingDirectory(stagingDirectory);
+    }
+  }
+
+  Future<ProfileBackupRestoreResult?> _restoreEncryptedArchive(
+    String path, {
+    ProfileAsyncAuthorization? migrateAuthorization,
+  }) async {
+    final staging = await LocalBackupScratch.create('webdav-unlock');
+    final archive = File(p.join(staging.path, 'backup.debrify'));
+    String? errorText;
+    try {
+      while (context.mounted) {
+        final passphrase = await _promptProfileBackupPassphrase(
+          errorText: errorText,
+        );
+        if (passphrase == null || !context.mounted) return null;
+        if (passphrase.length < 8) {
+          errorText = 'Enter the backup passphrase (at least 8 characters)';
+          continue;
+        }
+        final cancellation = LocalBackupCancellation();
+        try {
+          await _profileBackupProgress(
+            'Unlocking backup…',
+            (setStage) => _runIfCurrent(
+              migrateAuthorization,
+              () => WebDavBackupArchive.decrypt(
+                source: File(path),
+                destination: archive,
+                passphrase: passphrase,
+                cancellation: cancellation,
+                onBytes: _byteStageReporter(setStage),
+              ),
+            ),
+            cancellation: cancellation,
+          );
+        } on LocalBackupCancelledException {
+          return null;
+        } on FormatException {
+          errorText = 'Wrong passphrase or damaged backup — try again';
+          continue;
+        }
+        if (!context.mounted) return null;
+        return await _restoreLocalArchive(
+          archive.path,
+          migrateAuthorization: migrateAuthorization,
+        );
+      }
+      return null;
+    } finally {
+      await LocalBackupScratch.delete(staging);
     }
   }
 
@@ -856,7 +802,10 @@ class ProfileBackupFlows {
   /// Reads only the archive directory and manifest, obtains confirmation and
   /// authorization, and only then extracts into private staging. A cancelled
   /// or unauthorized restore never pays for a multi-gigabyte extraction.
-  Future<ProfileBackupRestoreResult?> _restoreLocalArchive(String path) {
+  Future<ProfileBackupRestoreResult?> _restoreLocalArchive(
+    String path, {
+    ProfileAsyncAuthorization? migrateAuthorization,
+  }) {
     return LocalBackupOperationGuard.run(() async {
       final inspection = await _profileBackupProgress<LocalBackupInspection>(
         'Reading backup…',
@@ -894,6 +843,7 @@ class ProfileBackupFlows {
             archive: File(path),
             staging: staging,
             inspection: inspection,
+            lazyAttachments: true,
             onStage: setStage,
             onBytes: _byteStageReporter(setStage),
             cancellation: cancellation,
@@ -907,6 +857,7 @@ class ProfileBackupFlows {
         Future<ProfileBackupRestoreResult?> restore() => _performRestore(
           prepared.package,
           confirmation,
+          migrateAuthorization: migrateAuthorization,
           databaseFileResolver: prepared.resolveDatabase,
           syncBackup: prepared.manifest.webDavSync,
         );

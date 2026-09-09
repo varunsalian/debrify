@@ -3,10 +3,12 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
 import 'dart:math';
+import 'dart:typed_data';
 
 import 'package:path/path.dart' as p;
 
 import '../../../utils/app_storage.dart';
+import '../../../utils/canonical_json.dart';
 import '../../../utils/streamed_file_copy.dart';
 import '../../diagnostic_log.dart';
 import '../../webdav_sync/webdav_sync_backup.dart';
@@ -57,10 +59,11 @@ class LocalBackupManifest {
     required this.package,
     required this.entries,
     this.webDavSync,
+    this.archiveVersion = 1,
   });
 
   static const String format = 'debrify-local-backup';
-  static const int version = 1;
+  static const int version = 2;
   static const String manifestEntry = 'manifest.json';
   static const String digestEntry = 'manifest.sha256';
   static const String fileExtension = '.debrify';
@@ -75,6 +78,7 @@ class LocalBackupManifest {
   /// much free space plus the archive itself.
   static const int maxTotalDataBytes = 16 * 1024 * 1024 * 1024;
 
+  final int archiveVersion;
   final WebDavSyncBackup? webDavSync;
   final DateTime createdAt;
   final String mode;
@@ -83,7 +87,7 @@ class LocalBackupManifest {
 
   Map<String, dynamic> toJson() => <String, dynamic>{
     'format': format,
-    'version': version,
+    'version': archiveVersion,
     'createdAt': createdAt.toUtc().toIso8601String(),
     'mode': mode,
     'entries': <Map<String, Object?>>[
@@ -143,9 +147,15 @@ class LocalBackupManifest {
           'Backup archive content exceeds the supported size',
         );
       }
+      if (entry.kind == LocalBackupEntryKind.metadata && version < 2) {
+        throw const LocalBackupFormatException(
+          'Paged metadata requires archive version 2',
+        );
+      }
       entries.add(entry);
     }
     return LocalBackupManifest(
+      archiveVersion: version,
       createdAt: DateTime.tryParse(createdAt)?.toUtc() ?? DateTime.utc(1970),
       mode: mode,
       webDavSync: json['webDavSync'] == null
@@ -159,7 +169,7 @@ class LocalBackupManifest {
   }
 }
 
-enum LocalBackupEntryKind { database, attachment }
+enum LocalBackupEntryKind { database, attachment, metadata }
 
 class LocalBackupManifestEntry {
   const LocalBackupManifestEntry({
@@ -298,7 +308,8 @@ class LocalBackupExportResult {
 }
 
 /// Builds a `.debrify` archive from a profile export without holding any
-/// database or playlist in memory. Only manual local backups use this.
+/// database in memory. Local, WebDAV, and sync bootstrap archives share this
+/// writer. Large metadata/playlist restoration is handled separately.
 class LocalBackupExporter {
   LocalBackupExporter({required this.service});
 
@@ -310,6 +321,7 @@ class LocalBackupExporter {
     required ProfileAuthorizationContext context,
     required Directory staging,
     required bool allProfiles,
+    bool separateMetadata = false,
     ProfileScope? scope,
     LocalBackupStageCallback? onStage,
     LocalBackupByteProgress? onBytes,
@@ -320,6 +332,8 @@ class LocalBackupExporter {
       Map<String, String>,
     )?
     captureSync,
+    Future<PortableProfilePackage> Function(ProfilePackageFileSinks sinks)?
+    packageSource,
   }) async {
     if (!allProfiles && scope == null) {
       throw ArgumentError('Single-profile export needs a scope');
@@ -361,6 +375,51 @@ class LocalBackupExporter {
     }
 
     final sinks = ProfilePackageFileSinks(
+      preferencePages: !separateMetadata
+          ? null
+          : (profileBackupId, values) async {
+              const pageBytes = 128 * 1024;
+              final parts = <Map<String, Object?>>[];
+              var page = BytesBuilder(copy: false);
+              var index = 0;
+              var total = 0;
+              Future<void> flush() async {
+                if (page.isEmpty) return;
+                cancellation?.throwIfCancelled();
+                final bytes = page.takeBytes();
+                total += bytes.length;
+                if (total > PortableProfilePackage.maxEnvelopeBytes) {
+                  throw const LocalBackupLimitException(
+                    'Profile preferences exceed their size limit',
+                  );
+                }
+                final hash = (StreamedSha256()..add(bytes)).finish();
+                final name = 'metadata/$profileBackupId/${index++}.json-part';
+                final file = File(p.join(staging.path, name));
+                await file.parent.create(recursive: true);
+                await file.writeAsBytes(bytes, flush: true);
+                final entry = LocalBackupManifestEntry(
+                  name: name,
+                  kind: LocalBackupEntryKind.metadata,
+                  bytes: bytes.length,
+                  sha256: hash,
+                );
+                addEntry(entry, file);
+                parts.add({
+                  'entry': name,
+                  'bytes': bytes.length,
+                  'sha256': hash,
+                });
+              }
+
+              for (final fragment in canonicalJsonFragments(values)) {
+                final bytes = utf8.encode(fragment);
+                if (page.length + bytes.length > pageBytes) await flush();
+                page.add(bytes);
+              }
+              await flush();
+              return {'recordCount': values.length, 'parts': parts};
+            },
       databaseFile:
           (
             profileBackupId,
@@ -446,7 +505,9 @@ class LocalBackupExporter {
       cancellation?.throwIfCancelled();
       ProfileGraphPackageExport? identities;
       final package = await _mapStorageErrors(
-        () => allProfiles
+        () => packageSource != null
+            ? packageSource(sinks)
+            : allProfiles
             ? service.exportAllProfiles(
                 context: context,
                 includeSecrets: true,
@@ -489,6 +550,7 @@ class LocalBackupExporter {
         createdAt: createdAt,
         entries: manifestEntries,
         webDavSync: syncBackup,
+        archiveVersion: separateMetadata ? 2 : 1,
       );
       final manifestBytes = encoded.bytes;
       if (manifestBytes.length > LocalBackupManifest.maxManifestBytes) {
@@ -649,10 +711,12 @@ class LocalBackupExporter {
     required DateTime createdAt,
     required List<LocalBackupManifestEntry> entries,
     WebDavSyncBackup? webDavSync,
+    required int archiveVersion,
   }) {
     return Isolate.run(() async {
       final envelope = await PortableProfilePackage.withIntegrity(package);
       final manifest = LocalBackupManifest(
+        archiveVersion: archiveVersion,
         createdAt: createdAt,
         mode: package.mode,
         package: envelope,
@@ -803,6 +867,7 @@ class LocalBackupRestorer {
     required File archive,
     required Directory staging,
     required LocalBackupInspection inspection,
+    bool lazyAttachments = false,
     LocalBackupStageCallback? onStage,
     LocalBackupByteProgress? onBytes,
     LocalBackupCancellation? cancellation,
@@ -861,6 +926,8 @@ class LocalBackupRestorer {
               databaseFiles[entry.name] = destination;
             case LocalBackupEntryKind.attachment:
               attachmentFiles[entry.name] = destination;
+            case LocalBackupEntryKind.metadata:
+              databaseFiles[entry.name] = destination;
           }
         }
       } finally {
@@ -870,6 +937,7 @@ class LocalBackupRestorer {
       stageLabel('Checking backup…');
       cancellation?.throwIfCancelled();
       _checkDatabaseReferences(manifest.package, databaseFiles);
+      _checkPreferenceReferences(manifest, databaseFiles);
       // The integrity digest covers the package as stored, with playlist
       // text still referenced. Decode first (off the UI isolate; the decoder
       // copies what it keeps), then put the text back.
@@ -880,6 +948,7 @@ class LocalBackupRestorer {
         attachmentFiles,
         manifest,
         cancellation: cancellation,
+        materialize: !lazyAttachments,
       );
       stopwatch.stop();
       stageLabel('Backup verified', <String, Object?>{
@@ -891,7 +960,7 @@ class LocalBackupRestorer {
         package: package,
         manifest: manifest,
         staging: staging,
-        databaseFiles: databaseFiles,
+        databaseFiles: {...databaseFiles, ...attachmentFiles},
       );
     } catch (error, stackTrace) {
       DiagnosticLog.instance.recordError(
@@ -944,6 +1013,7 @@ class LocalBackupRestorer {
       final prefix = switch (entry.kind) {
         LocalBackupEntryKind.database => 'databases/',
         LocalBackupEntryKind.attachment => 'attachments/',
+        LocalBackupEntryKind.metadata => 'metadata/',
       };
       if (!entry.name.startsWith(prefix)) {
         throw LocalBackupFormatException(
@@ -960,6 +1030,7 @@ class LocalBackupRestorer {
     Map<String, File> attachmentFiles,
     LocalBackupManifest manifest, {
     LocalBackupCancellation? cancellation,
+    bool materialize = true,
   }) async {
     final byName = <String, LocalBackupManifestEntry>{
       for (final entry in manifest.entries) entry.name: entry,
@@ -997,12 +1068,59 @@ class LocalBackupRestorer {
           'An imported playlist in this backup is too large to restore',
         );
       }
+      if (!materialize) continue;
       final content = await file.readAsString();
       cancellation?.throwIfCancelled();
       final replaced = Map<String, dynamic>.from(secret)
         ..remove(ProfilePackageFileSinks.contentAttachmentKey)
         ..['content'] = content;
       resource['secretConfig'] = replaced;
+    }
+  }
+
+  static void _checkPreferenceReferences(
+    LocalBackupManifest manifest,
+    Map<String, File> files,
+  ) {
+    final sections = manifest.package['sections'];
+    if (sections is! Map) return;
+    final byName = {for (final entry in manifest.entries) entry.name: entry};
+    final used = <String>{};
+    for (final section in sections.values) {
+      if (section is! Map || section['preferencePages'] == null) continue;
+      final pages = section['preferencePages'];
+      if (pages is! Map ||
+          pages['recordCount'] is! int ||
+          pages['parts'] is! List) {
+        throw const LocalBackupFormatException('Invalid preference page index');
+      }
+      for (final part in pages['parts'] as List) {
+        if (part is! Map || part['entry'] is! String) {
+          throw const LocalBackupFormatException(
+            'Invalid preference page reference',
+          );
+        }
+        final name = part['entry'] as String;
+        final entry = byName[name];
+        if (entry == null ||
+            entry.kind != LocalBackupEntryKind.metadata ||
+            !files.containsKey(name) ||
+            !used.add(name) ||
+            part['bytes'] != entry.bytes ||
+            part['sha256'] != entry.sha256 ||
+            entry.bytes > 128 * 1024) {
+          throw const LocalBackupFormatException(
+            'Preference page does not match its manifest',
+          );
+        }
+      }
+    }
+    if (manifest.entries.any(
+      (e) => e.kind == LocalBackupEntryKind.metadata && !used.contains(e.name),
+    )) {
+      throw const LocalBackupFormatException(
+        'Backup has unreferenced preference pages',
+      );
     }
   }
 

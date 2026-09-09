@@ -1,4 +1,7 @@
 import 'dart:io';
+
+import 'package:debrify/services/transfer/streaming_encrypted_file.dart';
+import 'package:debrify/services/webdav_sync/webdav_sync_snapshot_models.dart';
 import 'dart:typed_data';
 
 import 'package:debrify/models/profiles/profile_policy.dart';
@@ -295,13 +298,29 @@ void main() {
       authorization: authorization,
       identityMaps: maps,
     );
+    addTearDown(() => bootstrap.snapshot?.dispose());
+    final sharedObject = File('${bootstrap.snapshot!.staging.path}/remote.enc');
+    final sealed = await StreamingEncryptedFile.encrypt(
+      source: bootstrap.snapshot!.archive,
+      destination: sharedObject,
+      context: 'debrify/sync-snapshot/v2/${snapshot.root.document.circleId}',
+      key: snapshot.root.key.secretKey,
+    );
+    final descriptor = WebDavSyncSnapshotDescriptor(
+      contentHash: sealed.sha256Hex,
+      size: sealed.bytes,
+      semanticDigest: bootstrap.semanticDigest,
+      databaseDigest: bootstrap.bootstrapDatabaseDigest!,
+      profileMap: bootstrap.profileMap,
+      resourceMap: bootstrap.resourceMap,
+    );
     final bootstrapBytes = await codec.sealDocument(
       key: snapshot.root.key,
       circleId: snapshot.root.document.circleId,
       deviceId: snapshot.namespace.deviceId,
       logicalName: 'bootstrap',
-      schemaVersion: 1,
-      payload: bootstrap.payload,
+      schemaVersion: 2,
+      payload: descriptor.toJson(),
       maxBytes: WebDavSyncLimits.maxGraphDocumentBytes,
     );
     final bootstrapReference = WebDavSyncSectionReference(
@@ -309,7 +328,7 @@ void main() {
       contentHash: contentHashOf(bootstrapBytes),
       semanticDigest: bootstrap.semanticDigest,
       updatedAtMs: _now.millisecondsSinceEpoch,
-      schemaVersion: 1,
+      schemaVersion: 2,
       size: bootstrapBytes.length,
     );
     final ownManifest = _completeManifest(
@@ -359,6 +378,7 @@ void main() {
       registration: registration,
       marker: snapshot.markerBytes,
       bootstrap: bootstrapBytes,
+      sharedObject: sharedObject,
       targetManifest: targetBytes,
       events: events,
     );
@@ -476,6 +496,7 @@ final class _FakePublisher implements WebDavSyncSeedPublisher {
   Future<WebDavSyncPublishedSeed> publish({
     required String bindingId,
     required ProfileAuthorizationContext authorization,
+    WebDavSyncPreparedGraph? preparedBootstrap,
   }) async {
     events.add('publish');
     final current = snapshot();
@@ -546,14 +567,44 @@ final class _FakeCycleRunner implements WebDavSyncCycleRunner {
 }
 
 final class _ForgetTransport
-    implements WebDavSyncActivationTransport, WebDavSyncRegistrationTransport {
+    implements
+        WebDavSyncActivationTransport,
+        WebDavSyncRegistrationTransport,
+        WebDavSyncSharedObjectTransport {
   const _ForgetTransport({
     required this.marker,
     required this.bootstrap,
+    required this.sharedObject,
     required this.targetManifest,
     required this.events,
     this.registration,
   });
+
+  final File sharedObject;
+  @override
+  Future<WebDavExistenceResult> probeSharedObject(String contentHash) =>
+      throw UnimplementedError();
+  @override
+  Future<WebDavResponseMetadata> writeSharedObject(
+    String contentHash,
+    File file, {
+    required int maxBytes,
+  }) => throw UnimplementedError();
+  @override
+  Future<WebDavFileResult> readSharedObject(
+    String contentHash,
+    File destination, {
+    required int maxBytes,
+    void Function()? checkCancelled,
+  }) async {
+    checkCancelled?.call();
+    await sharedObject.copy(destination.path);
+    return WebDavFileResult(
+      file: destination,
+      bytesWritten: await destination.length(),
+      metadata: _metadata,
+    );
+  }
 
   final Uint8List? registration;
   @override

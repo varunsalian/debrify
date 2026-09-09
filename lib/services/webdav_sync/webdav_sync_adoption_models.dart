@@ -1,3 +1,5 @@
+import 'webdav_sync_snapshot_models.dart';
+
 enum WebDavSyncAdoptionMode { firstJoin, refresh }
 
 enum WebDavSyncAdoptionPhase {
@@ -18,11 +20,8 @@ final class WebDavSyncAdoptionRecord {
     required this.phase,
     required this.graphSemanticDigest,
     required this.preRestoreProfileIds,
-    required this.backupPath,
-    required this.backupSha256,
-    required this.backupVerified,
     this.completeOnboarding = false,
-    this.safetyBackupRetained = true,
+    this.snapshot,
     this.circleProfileToNewLocal = const <String, String>{},
     this.circleResourceToNewLocal = const <String, String>{},
     this.oldToNewProfiles = const <String, String>{},
@@ -41,11 +40,8 @@ final class WebDavSyncAdoptionRecord {
   final WebDavSyncAdoptionPhase phase;
   final String graphSemanticDigest;
   final Set<String> preRestoreProfileIds;
-  final String backupPath;
-  final String backupSha256;
-  final bool backupVerified;
   final bool completeOnboarding;
-  final bool safetyBackupRetained;
+  final WebDavSyncSnapshotDescriptor? snapshot;
   final Map<String, String> circleProfileToNewLocal;
   final Map<String, String> circleResourceToNewLocal;
   final Map<String, String> oldToNewProfiles;
@@ -73,18 +69,14 @@ final class WebDavSyncAdoptionRecord {
     Set<String>? prunedProfileIds,
     Set<String>? prunePendingProfileIds,
     String? targetAdminProfileId,
-    bool? safetyBackupRetained,
   }) => WebDavSyncAdoptionRecord(
     adoptionId: adoptionId,
     mode: mode,
     phase: phase ?? this.phase,
     graphSemanticDigest: graphSemanticDigest,
     preRestoreProfileIds: preRestoreProfileIds,
-    backupPath: backupPath,
-    backupSha256: backupSha256,
-    backupVerified: backupVerified,
     completeOnboarding: completeOnboarding,
-    safetyBackupRetained: safetyBackupRetained ?? this.safetyBackupRetained,
+    snapshot: snapshot,
     circleProfileToNewLocal:
         circleProfileToNewLocal ?? this.circleProfileToNewLocal,
     circleResourceToNewLocal:
@@ -111,11 +103,8 @@ final class WebDavSyncAdoptionRecord {
     'phase': phase.name,
     'graphSemanticDigest': graphSemanticDigest,
     'preRestoreProfileIds': preRestoreProfileIds.toList()..sort(),
-    'backupPath': backupPath,
-    'backupSha256': backupSha256,
-    'backupVerified': backupVerified,
     if (completeOnboarding) 'completeOnboarding': true,
-    if (!safetyBackupRetained) 'safetyBackupRetained': false,
+    if (snapshot != null) 'snapshot': snapshot!.toJson(),
     'circleProfileToNewLocal': circleProfileToNewLocal,
     'circleResourceToNewLocal': circleResourceToNewLocal,
     'oldToNewProfiles': oldToNewProfiles,
@@ -138,19 +127,12 @@ final class WebDavSyncAdoptionRecord {
     if (json['version'] != 1 ||
         json['adoptionId'] is! String ||
         json['graphSemanticDigest'] is! String ||
-        json['backupPath'] is! String ||
-        json['backupSha256'] is! String ||
-        json['backupVerified'] is! bool ||
-        (json['completeOnboarding'] ?? false) is! bool ||
-        (json['safetyBackupRetained'] ?? true) is! bool) {
+        (json['completeOnboarding'] ?? false) is! bool) {
       throw const FormatException('Invalid WebDAV sync adoption record');
     }
     final adoptionId = json['adoptionId'] as String;
     final digest = json['graphSemanticDigest'] as String;
-    final backupHash = json['backupSha256'] as String;
-    if (!_id.hasMatch(adoptionId) ||
-        !_digest.hasMatch(digest) ||
-        !_digest.hasMatch(backupHash)) {
+    if (!_id.hasMatch(adoptionId) || !_digest.hasMatch(digest)) {
       throw const FormatException('Invalid WebDAV sync adoption identity');
     }
     final mode = WebDavSyncAdoptionMode.values
@@ -177,11 +159,10 @@ final class WebDavSyncAdoptionRecord {
         json['preRestoreProfileIds'],
         'pre-restore profiles',
       ),
-      backupPath: json['backupPath'] as String,
-      backupSha256: backupHash,
-      backupVerified: json['backupVerified'] as bool,
       completeOnboarding: (json['completeOnboarding'] ?? false) as bool,
-      safetyBackupRetained: (json['safetyBackupRetained'] ?? true) as bool,
+      snapshot: json['snapshot'] == null
+          ? null
+          : WebDavSyncSnapshotDescriptor.fromJson(json['snapshot']),
       circleProfileToNewLocal: _stringMap(
         json['circleProfileToNewLocal'],
         'profile map',
@@ -218,7 +199,7 @@ final class WebDavSyncAdoptionRecord {
       ),
       targetAdminProfileId: rawTargetAdminProfileId as String?,
     );
-    if (!record.backupVerified || record.preRestoreProfileIds.isEmpty) {
+    if (record.preRestoreProfileIds.isEmpty) {
       throw const FormatException('Incomplete WebDAV sync adoption guard');
     }
     return record;

@@ -31,12 +31,13 @@ final class ProfileGraphPackageExport {
 /// Additive hooks for the local archive exporter. When supplied, database
 /// snapshots leave the package as file references instead of base64, and an
 /// IPTV resource's imported M3U text leaves its secret record as an attachment
-/// reference. Nothing else about the package changes; WebDAV and remote
-/// callers never pass this.
+/// reference. Local and WebDAV archives share these sinks; legacy remote
+/// transfer callers continue to use inline packages.
 final class ProfilePackageFileSinks {
   const ProfilePackageFileSinks({
     required this.databaseFile,
     required this.resourceContent,
+    this.preferencePages,
     this.pruneRebuildableCaches = true,
   });
 
@@ -58,6 +59,13 @@ final class ProfilePackageFileSinks {
     String content,
   )
   resourceContent;
+
+  /// Archives can store each profile's settings in bounded metadata pages.
+  final Future<Map<String, Object?>> Function(
+    String profileBackupId,
+    Map<String, Object?> values,
+  )?
+  preferencePages;
 
   /// Drop rebuildable IPTV catalog/EPG caches from the snapshots. Debrify TV
   /// is never omitted on this path regardless of size.
@@ -140,7 +148,11 @@ class ProfilePackageService {
       sanitized: sanitized,
       includeCredentialEngineSettings: includeSecrets,
     );
-    final preferenceSection = await _backupPreferenceSection(preferences);
+    final preferenceSection = await _backupPreferenceSection(
+      preferences,
+      profileBackupId: 'profile-0',
+      fileSinks: fileSinks,
+    );
     final pinRecord = sanitized ? null : await _exportPinRecord(profile.id);
     final databaseExport = sanitized
         ? null
@@ -327,6 +339,7 @@ class ProfilePackageService {
     required Map<String, String> resourceIdProjection,
     required bool includeDatabases,
     required bool includePreferences,
+    ProfilePackageFileSinks? fileSinks,
   }) => _exportAllProfiles(
     context: context,
     includeSecrets: true,
@@ -335,6 +348,7 @@ class ProfilePackageService {
     includePreferences: includePreferences,
     profileIdProjection: profileIdProjection,
     resourceIdProjection: resourceIdProjection,
+    fileSinks: fileSinks,
   );
 
   Future<ProfileGraphPackageExport> _exportAllProfiles({
@@ -406,6 +420,8 @@ class ProfilePackageService {
             sanitized: false,
             includeCredentialEngineSettings: true,
           ),
+          profileBackupId: backupId,
+          fileSinks: fileSinks,
         );
       }
       if (includeDatabases) {
@@ -645,8 +661,20 @@ class ProfilePackageService {
   // beside that map, covered by the whole package integrity digest, so they
   // cannot leak into an old client's 1 MiB recurring hot payload.
   static Future<Map<String, dynamic>> _backupPreferenceSection(
-    Map<String, Object?> source,
-  ) async {
+    Map<String, Object?> source, {
+    required String profileBackupId,
+    ProfilePackageFileSinks? fileSinks,
+  }) async {
+    if (fileSinks?.preferencePages != null) {
+      PortableProfilePackage.validateFileBackedPreferences(source);
+      return {
+        ...await PortableProfilePackage.buildSection(const {}),
+        'preferencePages': await fileSinks!.preferencePages!(
+          profileBackupId,
+          source,
+        ),
+      };
+    }
     final values = Map<String, Object?>.from(source);
     final saved =
         values.remove(HomeCollectionInventory.prefsKey) ??

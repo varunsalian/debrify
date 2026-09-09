@@ -1,34 +1,31 @@
+import 'package:debrify/services/profiles/profile_database_snapshot.dart';
 import 'package:debrify/services/profiles/portable_profile_package.dart';
 import 'package:debrify/services/profiles/profile_authorization.dart';
 import 'package:debrify/services/profiles/profile_restore_coordinator.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_adoption.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_adoption_models.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_engine_state.dart';
-import 'package:debrify/services/webdav_sync/webdav_sync_safety_backup.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   late _MemoryStateRepository states;
   late List<String> events;
-  late _FakeSafetyBackups backups;
   late _FakeAdoptionOperations operations;
   late WebDavSyncCircleAdoption adoption;
 
   setUp(() {
     states = _MemoryStateRepository();
     events = <String>[];
-    backups = _FakeSafetyBackups(events);
     operations = _FakeAdoptionOperations(events, states);
     adoption = WebDavSyncCircleAdoption(
       stateRepository: states,
-      safetyBackups: backups,
       operations: operations,
       adoptionIdFactory: () => 'adoption-1',
     );
   });
 
   test(
-    'first join backs up, journals, restores, hands off, then prunes',
+    'first join journals, restores, hands off, then prunes without a backup',
     () async {
       final result = await adoption.adopt(
         _request(mode: WebDavSyncAdoptionMode.firstJoin),
@@ -37,7 +34,6 @@ void main() {
       expect(result.phase, WebDavSyncAdoptionPhase.complete);
       expect(events, <String>[
         'list',
-        'backup',
         'gate:hold',
         'restore:restoring',
         'select-admin',
@@ -153,34 +149,6 @@ void main() {
     },
   );
 
-  test(
-    'lost safety backup quarantines predecessors instead of pruning',
-    () async {
-      backups.retained = false;
-
-      final result = await adoption.adopt(
-        _request(mode: WebDavSyncAdoptionMode.firstJoin),
-      );
-
-      expect(result.phase, WebDavSyncAdoptionPhase.complete);
-      expect(events, isNot(contains('prune:old-admin')));
-      expect(events, isNot(contains('prune:old-kid')));
-      expect(
-        events,
-        containsAll(<String>['quarantine:old-admin', 'quarantine:old-kid']),
-      );
-      expect(states.state.prunePendingProfileIds, <String>{
-        'old-admin',
-        'old-kid',
-      });
-      expect(states.state.safetyProtectedProfileIds, <String>{
-        'old-admin',
-        'old-kid',
-      });
-      expect(states.state.blocksSeedPushes, isTrue);
-    },
-  );
-
   test('restoring crash rolls back every post-snapshot profile', () async {
     states.state = WebDavSyncEngineState(
       adoption: WebDavSyncAdoptionRecord(
@@ -189,9 +157,6 @@ void main() {
         phase: WebDavSyncAdoptionPhase.restoring,
         graphSemanticDigest: 'a' * 64,
         preRestoreProfileIds: const <String>{'old-admin', 'old-kid'},
-        backupPath: '/backup.json',
-        backupSha256: 'b' * 64,
-        backupVerified: true,
       ),
     );
     operations.profileIds.add('orphan-import');
@@ -219,7 +184,6 @@ void main() {
 
       expect(events, <String>[
         'list',
-        'backup',
         'gate:hold',
         'restore:restoring',
         'rollback:orphan-import',
@@ -279,9 +243,7 @@ void main() {
           phase: WebDavSyncAdoptionPhase.carryingLocalState,
           graphSemanticDigest: 'a' * 64,
           preRestoreProfileIds: const <String>{'old-admin', 'old-kid'},
-          backupPath: '/backup.json',
-          backupSha256: 'b' * 64,
-          backupVerified: true,
+
           circleProfileToNewLocal: const <String, String>{
             'circle-admin': 'new-admin',
             'circle-kid': 'new-kid',
@@ -357,7 +319,6 @@ void main() {
             'profile-1': 'circle-kid',
           },
           resourceMap: const <String, String>{'resource-0': 'circle-resource'},
-          passphrase: 'circle-secret',
           authorization: _authorization,
           replacementConfirmed: false,
         ),
@@ -398,7 +359,6 @@ void main() {
             'profile-admin': 'circle-admin',
           },
           resourceMap: const <String, String>{'resource-0': 'circle-resource'},
-          passphrase: 'circle-secret',
           authorization: _authorization,
           replacementConfirmed: true,
         ),
@@ -422,7 +382,7 @@ void main() {
       expect(await adoption.retryPendingPrunes('circle:one'), const <String>{
         'old-kid',
       });
-      expect(events, <String>['list', 'prune:old-kid', 'quarantine:old-kid']);
+      expect(events, <String>['prune:old-kid', 'quarantine:old-kid']);
 
       operations.pruneFailures.clear();
       expect(await adoption.retryPendingPrunes('circle:one'), isEmpty);
@@ -445,7 +405,6 @@ WebDavSyncAdoptionRequest _request({
     'profile-1': 'circle-kid',
   },
   resourceMap: const <String, String>{'resource-0': 'circle-resource'},
-  passphrase: 'circle-secret',
   authorization: _authorization,
   replacementConfirmed: true,
   completeOnboarding: completeOnboarding,
@@ -495,29 +454,6 @@ final class _MemoryStateRepository implements WebDavSyncEngineStateRepository {
   ) async => state = update(state);
 }
 
-final class _FakeSafetyBackups implements WebDavSyncSafetyBackupStore {
-  _FakeSafetyBackups(this.events);
-
-  final List<String> events;
-  bool retained = true;
-
-  @override
-  Future<WebDavSyncSafetyBackup> createVerified({
-    required String adoptionId,
-    required String passphrase,
-    required ProfileAuthorizationContext authorization,
-  }) async {
-    events.add('backup');
-    return WebDavSyncSafetyBackup(
-      path: '/backups/$adoptionId.json',
-      sha256Hex: 'b' * 64,
-    );
-  }
-
-  @override
-  Future<bool> verifyRetained(WebDavSyncSafetyBackup backup) async => retained;
-}
-
 final class _FakeAdoptionOperations implements WebDavSyncAdoptionOperations {
   _FakeAdoptionOperations(this.events, this.states);
 
@@ -550,6 +486,7 @@ final class _FakeAdoptionOperations implements WebDavSyncAdoptionOperations {
   Future<ProfileGraphRestoreReport> restoreGraph({
     required PortableProfilePackage package,
     required ProfileAuthorizationContext authorization,
+    ProfileDatabaseFileResolver? databaseFileResolver,
   }) async {
     events.add('restore:${states.state.adoption?.phase.name}');
     if (restoreFailure != null) {

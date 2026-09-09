@@ -1,6 +1,9 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:crypto/crypto.dart';
+import 'package:debrify/services/profiles/local_backup/local_backup_zip.dart';
 import 'package:debrify/services/webdav_protocol_client.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_hot_models.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_models.dart';
@@ -14,6 +17,126 @@ void main() {
     endpoint: 'https://example.test/dav',
     folderPath: 'Family',
     serverName: 'Test',
+  );
+
+  Future<File> partialFile() async {
+    final directory = await Directory.systemTemp.createTemp(
+      'shared-object-test-',
+    );
+    addTearDown(() => directory.delete(recursive: true));
+    return File('${directory.path}/download.part');
+  }
+
+  test(
+    'shared object adapter resumes an existing prefix and verifies its hash',
+    () async {
+      final bytes = [1, 2, 3, 4, 5, 6];
+      final hash = sha256.convert(bytes).toString();
+      final destination = await partialFile();
+      await destination.writeAsBytes(bytes.take(3).toList());
+      final transport = ProtocolWebDavSyncTransport(
+        location: location(),
+        credentials: const WebDavCredentials(username: '', password: ''),
+        client: MockClient((request) async {
+          expect(request.url.path, endsWith('/objects/$hash.enc'));
+          expect(request.headers[HttpHeaders.rangeHeader], 'bytes=3-');
+          return http.Response.bytes(
+            bytes.sublist(3),
+            206,
+            headers: {HttpHeaders.contentRangeHeader: 'bytes 3-5/6'},
+          );
+        }),
+      );
+      addTearDown(transport.close);
+      final result = await transport.readSharedObject(
+        hash,
+        destination,
+        maxBytes: 6,
+      );
+      expect(await destination.readAsBytes(), bytes);
+      expect(result.sha256Hex, hash);
+    },
+  );
+
+  test(
+    'shared object adapter retains an interrupted prefix for the next GET',
+    () async {
+      final bytes = [1, 2, 3, 4, 5, 6];
+      final hash = sha256.convert(bytes).toString();
+      final destination = await partialFile();
+      var requests = 0;
+      Stream<List<int>> interrupted() async* {
+        yield bytes.sublist(0, 3);
+        throw const SocketException('interrupted transfer');
+      }
+
+      final transport = ProtocolWebDavSyncTransport(
+        location: location(),
+        credentials: const WebDavCredentials(username: '', password: ''),
+        client: _StreamingClient((request) async {
+          if (requests++ == 0) {
+            expect(request.headers[HttpHeaders.rangeHeader], isNull);
+            return http.StreamedResponse(
+              interrupted(),
+              200,
+              contentLength: 6,
+              request: request,
+            );
+          }
+          expect(request.headers[HttpHeaders.rangeHeader], 'bytes=3-');
+          return http.StreamedResponse(
+            Stream.value(bytes.sublist(3)),
+            206,
+            contentLength: 3,
+            request: request,
+            headers: {HttpHeaders.contentRangeHeader: 'bytes 3-5/6'},
+          );
+        }),
+      );
+      addTearDown(transport.close);
+      await expectLater(
+        transport.readSharedObject(hash, destination, maxBytes: 6),
+        throwsA(
+          isA<WebDavException>().having(
+            (e) => e.kind,
+            'kind',
+            WebDavErrorKind.network,
+          ),
+        ),
+      );
+      expect(await destination.readAsBytes(), bytes.sublist(0, 3));
+      await transport.readSharedObject(hash, destination, maxBytes: 6);
+      expect(await destination.readAsBytes(), bytes);
+      expect(requests, 2);
+    },
+  );
+
+  test(
+    'shared object adapter observes cancellation during the response body',
+    () async {
+      final bytes = [1, 2, 3];
+      final destination = await partialFile();
+      var checks = 0;
+      final transport = ProtocolWebDavSyncTransport(
+        location: location(),
+        credentials: const WebDavCredentials(username: '', password: ''),
+        client: MockClient((_) async => http.Response.bytes(bytes, 200)),
+      );
+      addTearDown(transport.close);
+      await expectLater(
+        transport.readSharedObject(
+          sha256.convert(bytes).toString(),
+          destination,
+          maxBytes: bytes.length,
+          checkCancelled: () {
+            if (++checks > 1) throw const LocalBackupCancelledException();
+          },
+        ),
+        throwsA(isA<LocalBackupCancelledException>()),
+      );
+      expect(checks, 2);
+      expect(await destination.exists(), isFalse);
+    },
   );
 
   test(

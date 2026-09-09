@@ -50,7 +50,6 @@ import 'webdav_sync_library_models.dart';
 import 'webdav_sync_manifest_publisher.dart';
 import 'webdav_sync_models.dart';
 import 'webdav_sync_operation_coordinator.dart';
-import 'webdav_sync_safety_backup.dart';
 import 'webdav_sync_scheduler.dart';
 import 'webdav_sync_save_feedback.dart';
 import 'webdav_sync_setup_service.dart';
@@ -291,7 +290,6 @@ final class WebDavSyncRuntimeStatus {
     this.automaticSyncActive = false,
     this.localStateMissing = false,
     this.pruneBlockingProfiles = const <String>[],
-    this.safetyCleanupBlocked = false,
     this.statusHint,
     this.tvChangesPending = false,
     this.lastTvSyncMs,
@@ -308,7 +306,6 @@ final class WebDavSyncRuntimeStatus {
   final bool automaticSyncActive;
   final bool localStateMissing;
   final List<String> pruneBlockingProfiles;
-  final bool safetyCleanupBlocked;
   final String? statusHint;
   final bool tvChangesPending;
   final int? lastTvSyncMs;
@@ -844,7 +841,6 @@ final class WebDavSyncRuntime
             ? WebDavSyncPollState.gated
             : (_scheduler?.pollState ?? WebDavSyncPollState.gated),
         pruneBlockingProfiles: List<String>.unmodifiable(blockingNames),
-        safetyCleanupBlocked: state.safetyProtectedProfileIds.isNotEmpty,
         statusHint: state.statusHint,
         tvChangesPending: tvMetadata.changesPending,
         lastTvSyncMs: tvMetadata.lastSyncedMs,
@@ -1629,6 +1625,7 @@ final class WebDavSyncRuntime
   }
 
   void _clearCachedRoot() {
+    WebDavSyncCodec.clearRootKeyCache();
     _cachedRoot = null;
     _cachedRootRevision = null;
     _cachedRootMarker = null;
@@ -1705,9 +1702,6 @@ final class WebDavSyncRuntime
     final participant = ProfileAppLifecycleParticipant();
     return WebDavSyncCircleAdoption(
       stateRepository: stateStore,
-      safetyBackups: LocalWebDavSyncSafetyBackupStore(
-        source: DefaultWebDavSyncSafetyBackupSource(components.packageService),
-      ),
       operations: DefaultWebDavSyncAdoptionOperations(
         registry: registry,
         restoreCoordinator: ProfileRestoreCoordinator(

@@ -36,6 +36,7 @@ abstract interface class WebDavSyncSeedPublisher {
   Future<WebDavSyncPublishedSeed> publish({
     required String bindingId,
     required ProfileAuthorizationContext authorization,
+    WebDavSyncPreparedGraph? preparedBootstrap,
   });
 }
 
@@ -78,6 +79,7 @@ final class WebDavSyncOwnManifestPublisher implements WebDavSyncSeedPublisher {
   Future<WebDavSyncPublishedSeed> publish({
     required String bindingId,
     required ProfileAuthorizationContext authorization,
+    WebDavSyncPreparedGraph? preparedBootstrap,
   }) async {
     final stored = await _bindingStore.load();
     final binding = stored.bindings[bindingId];
@@ -103,6 +105,7 @@ final class WebDavSyncOwnManifestPublisher implements WebDavSyncSeedPublisher {
       throw const WebDavSyncRootChangedException();
     }
     final transport = _transportFactory(binding: binding, secrets: secrets);
+    WebDavSyncSeedMaterial? preparedSeed;
     try {
       final rootRead = await transport.readRootMarker();
       _requireMarker(namespace.pinnedAuthorityHash!, rootRead.bytes);
@@ -145,7 +148,10 @@ final class WebDavSyncOwnManifestPublisher implements WebDavSyncSeedPublisher {
         clockOffsetMs: clockDecision.state.acceptedOffsetMs!,
         circleId: root.document.circleId,
         circleKey: root.key,
+        reuseBootstrap: state.adoptedSnapshot,
+        preparedBootstrap: preparedBootstrap,
       );
+      preparedSeed = material;
       _requireCompleteSeed(material);
       await transport.ensureOwnLayout(namespace.deviceId);
       final references = <WebDavSyncSectionReference>[];
@@ -174,19 +180,20 @@ final class WebDavSyncOwnManifestPublisher implements WebDavSyncSeedPublisher {
         deviceId: namespace.deviceId,
         updatedAtMs: clockDecision.serverNowMs!,
         clockOffsetMs: clockDecision.state.acceptedOffsetMs!,
-        graphSchemaClaim: WebDavSyncGraphBuilder.schemaVersion,
+        graphSchemaClaim: WebDavSyncGraphBuilder.bootstrapSchemaVersion,
         profileMap: material.profileMap,
         resourceMap: material.resourceMap,
         sections: List<WebDavSyncSectionReference>.unmodifiable(references),
       );
-      material.identityMaps.assertContainsNoLocalIds(manifest.toJson());
+      final manifestJson = manifest.toValidatedJson();
+      material.identityMaps.assertContainsNoLocalIds(manifestJson);
       final manifestBytes = await _codec.sealDocument(
         key: root.key,
         circleId: root.document.circleId,
         deviceId: namespace.deviceId,
         logicalName: 'manifest',
         schemaVersion: WebDavSyncManifest.schemaVersion,
-        payload: manifest.toJson(),
+        payload: manifestJson,
         maxBytes: WebDavSyncLimits.maxManifestBytes,
       );
       // The marker is immutable by protocol, but re-read it at the actual
@@ -235,6 +242,7 @@ final class WebDavSyncOwnManifestPublisher implements WebDavSyncSeedPublisher {
           ownManifest: verifiedManifest,
           lastBootstrapCheckMs: localNowMs,
           publishedBootstrapDatabaseDigest: material.bootstrapDatabaseDigest,
+          clearAdoptedSnapshot: true,
           lastSuccessfulSyncMs: clockDecision.serverNowMs!,
         ),
       );
@@ -244,6 +252,8 @@ final class WebDavSyncOwnManifestPublisher implements WebDavSyncSeedPublisher {
         serverNowMs: clockDecision.serverNowMs!,
       );
     } finally {
+      await preparedSeed?.dispose();
+      await preparedBootstrap?.snapshot?.dispose();
       transport.close();
     }
   }
@@ -253,6 +263,7 @@ final class WebDavSyncOwnManifestPublisher implements WebDavSyncSeedPublisher {
     final hasCircleProfiles = material.circleProfiles != null;
     final hasCircleResources = material.circleResources != null;
     if (material.sections.isEmpty ||
+        material.sections.length > WebDavSyncLimits.maxSectionsPerManifest ||
         !names.contains(WebDavSyncGraphKind.bootstrap.logicalName) ||
         names.contains(WebDavSyncGraphKind.graph.logicalName) ||
         !hasCircleProfiles ||

@@ -1,4 +1,18 @@
+import 'package:debrify/services/webdav_sync/webdav_sync_activation.dart';
+import 'package:debrify/services/webdav_sync/webdav_sync_hot_merge.dart';
+import 'package:debrify/services/webdav_sync/webdav_sync_local_adapter.dart';
+import 'package:debrify/services/profiles/profile_preferences.dart';
+import '../services/webdav_sync/connector_test_fakes.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_backup.dart';
+import 'package:debrify/services/webdav_backup_archive.dart';
+import 'package:debrify/services/transfer/streaming_encrypted_file.dart';
+import 'package:debrify/services/webdav_protocol_client.dart';
+import 'package:debrify/services/webdav_sync/webdav_sync_codec.dart';
+import 'package:debrify/services/webdav_sync/webdav_sync_graph.dart';
+import 'package:debrify/services/webdav_sync/webdav_sync_large_section_io.dart';
+import 'package:debrify/services/webdav_sync/webdav_sync_models.dart';
+import 'package:debrify/services/webdav_sync/webdav_sync_snapshot_models.dart';
+import 'package:debrify/services/webdav_sync/webdav_sync_transport.dart';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
@@ -98,6 +112,151 @@ void main() {
     await temporaryDirectory.delete(recursive: true);
   });
 
+  test(
+    'first join baselines preserve peer updates and subsequent local edits',
+    () async {
+      final repository = ConnectorMemoryStateRepository();
+      const circleProfile = 'profile-circle';
+      final maps = WebDavSyncIdentityMaps(
+        circleToLocalProfiles: {circleProfile: profileId},
+        circleToLocalResources: const {},
+      );
+      final prefs = await ProfilePreferences.instance();
+      await prefs.setString('theme_mode', 'dark');
+      repository.state = repository.state.copyWith(
+        circleToLocalProfiles: maps.circleToLocalProfiles,
+        circleToLocalResources: maps.circleToLocalResources,
+      );
+      final descriptor = WebDavSyncSnapshotDescriptor(
+        contentHash: 'a' * 64,
+        size: 1000,
+        semanticDigest: 'b' * 64,
+        databaseDigest: 'c' * 64,
+        profileMap: {'profile-0': circleProfile},
+        resourceMap: const {},
+      );
+      final source = DefaultWebDavSyncSeedSource(
+        graphBuilder: WebDavSyncGraphBuilder(packages),
+        stateRepository: repository,
+        localAdapter: ProfileWebDavSyncLocalAdapter(registry),
+      );
+      final auth = await ProfileAuthorizationContext.capture(registry);
+      final first = await source.prepare(
+        namespaceId: 'join',
+        deviceId: 'new-device',
+        authorization: auth,
+        localNowMs: 10000,
+        serverNowMs: 10000,
+        clockOffsetMs: 0,
+        reuseBootstrap: descriptor,
+      );
+      final imported = first.profileStates[circleProfile]!.baseline!;
+      expect(imported.scalars.entries['theme_mode']!.stamp.normalizedTimeMs, 0);
+      final peer = WebDavSyncHotMerge.build(
+        WebDavSyncBuildInput(
+          circleProfileId: circleProfile,
+          deviceId: 'older-peer',
+          rawPreferences: const {'theme_mode': 'light'},
+          portablePreferences: const {'theme_mode': 'light'},
+          identityMaps: maps,
+          localNowMs: 5000,
+          serverNowMs: 5000,
+          clockOffsetMs: 0,
+        ),
+      ).document;
+      final merged = WebDavSyncHotMerge.merge(
+        local: imported,
+        peers: [peer],
+        tombstoneDocuments: const [],
+        nowMs: 10000,
+      ).document;
+      expect(merged.scalars.values['theme_mode'], 'light');
+      await prefs.setString('theme_mode', 'system');
+      final retry = await source.prepare(
+        namespaceId: 'join',
+        deviceId: 'new-device',
+        authorization: auth,
+        localNowMs: 11000,
+        serverNowMs: 11000,
+        clockOffsetMs: 0,
+        reuseBootstrap: descriptor,
+      );
+      final edited = retry.profileStates[circleProfile]!.baseline!;
+      expect(edited.scalars.values['theme_mode'], 'system');
+      expect(
+        edited.scalars.entries['theme_mode']!.stamp.normalizedTimeMs,
+        11000,
+      );
+      expect(
+        await (await LocalBackupScratch.root()).exists(),
+        isFalse,
+        reason: 'reused bootstrap must not export another archive',
+      );
+    },
+  );
+
+  test(
+    'paged Unicode preferences restore and reject a changed page before publication',
+    () async {
+      final value = '${'x' * 16383}😀中\n' * 24;
+      final prefs = await ProfilePreferences.instance();
+      await prefs.setString('saved_search_notes', value);
+      final auth = await ProfileAuthorizationContext.capture(registry);
+      final exported = await LocalBackupExporter(service: packages).export(
+        context: auth,
+        staging: await LocalBackupScratch.create('paged-export'),
+        allProfiles: true,
+        separateMetadata: true,
+      );
+      final inspection = await LocalBackupRestorer.inspect(exported.archive);
+      final pages = inspection.manifest.entries
+          .where((entry) => entry.kind == LocalBackupEntryKind.metadata)
+          .toList();
+      expect(inspection.manifest.archiveVersion, 2);
+      expect(pages.length, greaterThan(2));
+      expect(pages.every((entry) => entry.bytes <= 128 * 1024), isTrue);
+      expect(jsonEncode(inspection.manifest.toJson()).length, lessThan(16000));
+      final staged = await LocalBackupRestorer.stage(
+        archive: exported.archive,
+        staging: await LocalBackupScratch.create('paged-restore'),
+        inspection: inspection,
+      );
+      final coordinator = ProfileRestoreCoordinator(
+        registry: registry,
+        cipher: cipher,
+      );
+      final report = await coordinator.restoreDeviceGraph(
+        package: staged.package,
+        authorization: auth,
+        databaseFileResolver: staged.resolveDatabase,
+      );
+      final restoredPrefs = await ProfilePreferences.forCapturedScope(
+        ProfileScope(
+          profileId: report.importedProfileIds.single,
+          dataGeneration: 1,
+          sessionEpoch: 0,
+        ),
+        CapturedProfilePreferenceAccess.diagnosticsReadOnly,
+      );
+      expect(restoredPrefs.getString('saved_search_notes'), value);
+      final before = (await registry.listProfiles()).map((p) => p.id).toSet();
+      final changed = staged.resolveDatabase(pages.first.name)!;
+      final bytes = await changed.readAsBytes();
+      bytes[bytes.length ~/ 2] ^= 1;
+      await changed.writeAsBytes(bytes);
+      await expectLater(
+        coordinator.restoreDeviceGraph(
+          package: staged.package,
+          authorization: await ProfileAuthorizationContext.capture(registry),
+          databaseFileResolver: staged.resolveDatabase,
+        ),
+        throwsFormatException,
+      );
+      expect((await registry.listProfiles()).map((p) => p.id).toSet(), before);
+      await staged.dispose();
+    },
+  );
+
   Future<void> seedDebrifyTv(ProfileScope target, {int hashes = 400}) async {
     final file = target.fileIn(documents, 'documents', 'debrify_tv.db');
     await file.parent.create(recursive: true);
@@ -178,6 +337,62 @@ void main() {
     return created.id;
   }
 
+  test(
+    'large playlist attachments stay lazy and publish valid sealed secrets',
+    () async {
+      final playlist = bigPlaylist(lines: 2000);
+      final resourceId = await createImportedPlaylist(playlist);
+      final exported = await LocalBackupExporter(service: packages).export(
+        context: await ProfileAuthorizationContext.capture(registry),
+        staging: await LocalBackupScratch.create('lazy-export'),
+        allProfiles: true,
+        separateMetadata: true,
+      );
+      final stage = await LocalBackupRestorer.stage(
+        archive: exported.archive,
+        staging: await LocalBackupScratch.create('lazy-restore'),
+        inspection: await LocalBackupRestorer.inspect(exported.archive),
+        lazyAttachments: true,
+      );
+      for (final resource in stage.package.resources) {
+        expect(resource['secretConfig'] as Map, isNot(contains('content')));
+      }
+      final report =
+          await ProfileRestoreCoordinator(
+            registry: registry,
+            cipher: cipher,
+          ).restoreDeviceGraph(
+            package: stage.package,
+            authorization: await ProfileAuthorizationContext.capture(registry),
+            databaseFileResolver: stage.resolveDatabase,
+          );
+      final original = stage.package.resources.singleWhere(
+        (r) => r['sourceResourceId'] == resourceId,
+      );
+      final id = report.importedResourceIdsByBackupId[original['backupId']]!;
+      final record = await registry.getResource(id);
+      final importedScope = ProfileScope(
+        profileId: record!.ownerProfileId,
+        dataGeneration: 1,
+        sessionEpoch: scope.sessionEpoch + 1,
+      );
+      await registry.setActiveProfile(record.ownerProfileId);
+      ProfileRuntime.publish(importedScope);
+      final revealed = await resources.revealOwnedSecretForProfileBackup(
+        context: await ProfileAuthorizationContext.capture(registry),
+        resourceId: id,
+      );
+      expect(revealed['content'], playlist);
+      expect(
+        (await LocalBackupScratch.root()).list().where(
+          (e) => p.basename(e.path).startsWith('restore-secrets-'),
+        ),
+        emitsDone,
+      );
+      await stage.dispose();
+    },
+  );
+
   Future<Map<String, Object?>> tableRows(File file, String table) async {
     final db = await openDatabase(file.path, readOnly: true);
     try {
@@ -189,6 +404,273 @@ void main() {
       await db.close();
     }
   }
+
+  test(
+    'WebDAV encrypted archive restores file-backed databases and prunes only caches',
+    () async {
+      await seedDebrifyTv(scope);
+      await seedCatalog(scope);
+      await createImportedPlaylist(
+        '#EXTM3U\n#EXTINF:-1,News\nhttps://example.test/live\n',
+      );
+      final authorization = await ProfileAuthorizationContext.capture(registry);
+      final staging = await LocalBackupScratch.create('webdav-export');
+      final exported =
+          await WebDavBackupArchive(
+            LocalBackupExporter(service: packages),
+          ).export(
+            context: authorization,
+            staging: staging,
+            passphrase: 'archive-passphrase',
+            captureSync: (_, _) async => const WebDavSyncBackup(),
+          );
+      expect(exported.cachesPruned, isTrue);
+      expect(await StreamingEncryptedFile.looksLike(exported.file), isTrue);
+      expect(
+        await File(
+          exported.file.path.replaceFirst(RegExp(r'\.enc$'), ''),
+        ).exists(),
+        isFalse,
+      );
+      final archive = File('${staging.path}/unlocked.debrify');
+      await WebDavBackupArchive.decrypt(
+        source: exported.file,
+        destination: archive,
+        passphrase: 'archive-passphrase',
+      );
+      final inspection = await LocalBackupRestorer.inspect(archive);
+      expect(inspection.manifest.webDavSync, isNotNull);
+      final restored = await LocalBackupRestorer.stage(
+        archive: archive,
+        staging: await LocalBackupScratch.create('webdav-restore'),
+        inspection: inspection,
+      );
+      addTearDown(restored.dispose);
+      addTearDown(() => LocalBackupScratch.delete(staging));
+      final databaseSection = restored.package.sections.values
+          .whereType<Map>()
+          .firstWhere(
+            (section) =>
+                (section['values'] as Map?)?.containsKey('debrify_tv.db') ==
+                true,
+          );
+      final records = databaseSection['values'] as Map;
+      expect((records['debrify_tv.db'] as Map)['encoding'], 'file');
+      final tv = await openDatabase(
+        restored
+            .resolveDatabase(
+              (records['debrify_tv.db'] as Map)['entry'] as String,
+            )!
+            .path,
+      );
+      expect(
+        (await tv.rawQuery(
+          'SELECT COUNT(*) AS count FROM tv_cached_torrents',
+        )).single['count'],
+        400,
+      );
+      await tv.close();
+      final catalog = await openDatabase(
+        restored
+            .resolveDatabase(
+              (records['iptv_catalog.db'] as Map)['entry'] as String,
+            )!
+            .path,
+      );
+      expect(
+        (await catalog.rawQuery(
+          'SELECT COUNT(*) AS count FROM channels',
+        )).single['count'],
+        0,
+      );
+      await catalog.close();
+      final report =
+          await ProfileRestoreCoordinator(
+            registry: registry,
+            cipher: cipher,
+          ).restoreDeviceGraph(
+            package: restored.package,
+            authorization: authorization,
+            databaseFileResolver: restored.resolveDatabase,
+          );
+      expect(report.importedProfileIds, hasLength(1));
+    },
+  );
+
+  test(
+    'a second device reuses the shared bootstrap after the original device is deleted',
+    () async {
+      await seedDebrifyTv(scope);
+      await createImportedPlaylist('#EXTM3U\nhttps://example.test/live\n');
+      final allResources = await registry.listAllResourcesIncludingDisabled();
+      final maps = WebDavSyncGraphIdentityPlanner.ensure(
+        localProfileIds: [profileId],
+        localResourceIds: allResources.map((resource) => resource.id),
+      ).maps;
+      final graph = await WebDavSyncGraphBuilder(packages).build(
+        kind: WebDavSyncGraphKind.bootstrap,
+        authorization: await ProfileAuthorizationContext.capture(registry),
+        identityMaps: maps,
+      );
+      expect(graph.snapshot, isNotNull);
+      addTearDown(graph.snapshot!.dispose);
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => server.close(force: true));
+      final stored = <String, File>{};
+      var archiveUploads = 0;
+      var archiveDownloads = 0;
+      server.listen((request) async {
+        final path = request.uri.path;
+        try {
+          switch (request.method) {
+            case 'MKCOL':
+              request.response.statusCode = HttpStatus.created;
+            case 'PUT':
+              if (stored.containsKey(path) &&
+                  request.headers.value(HttpHeaders.ifNoneMatchHeader) == '*') {
+                await request.drain<void>();
+                request.response.statusCode = HttpStatus.preconditionFailed;
+              } else {
+                final file = File(
+                  '${temporaryDirectory.path}/remote-${stored.length}',
+                );
+                final sink = file.openWrite();
+                await sink.addStream(request);
+                await sink.close();
+                stored[path] = file;
+                if (path.contains('/objects/')) archiveUploads++;
+                request.response.statusCode = HttpStatus.created;
+              }
+            case 'GET':
+              if (path.contains('/objects/')) archiveDownloads++;
+              final file = stored[path];
+              if (file == null) {
+                request.response.statusCode = HttpStatus.notFound;
+              } else {
+                request.response.contentLength = await file.length();
+                await request.response.addStream(file.openRead());
+              }
+            case 'DELETE':
+              stored.removeWhere(
+                (key, _) => key == path || key.startsWith('$path/'),
+              );
+              request.response.statusCode = HttpStatus.noContent;
+            default:
+              request.response.statusCode = HttpStatus.methodNotAllowed;
+          }
+        } catch (_) {
+          request.response.statusCode = HttpStatus.internalServerError;
+        }
+        await request.response.close();
+      });
+      final transport = ProtocolWebDavSyncTransport(
+        location: WebDavSyncFolderLocation(
+          endpoint: 'http://${server.address.address}:${server.port}/dav',
+          folderPath: '',
+          serverName: 'Test',
+        ),
+        credentials: const WebDavCredentials(username: '', password: ''),
+      );
+      addTearDown(transport.close);
+      final codec = WebDavSyncCodec();
+      final marker = await codec.sealRoot(
+        passphrase: 'sync-secret',
+        circleId: 'circle-test',
+        createdAt: DateTime.utc(2026),
+        memoryKiB: 8,
+        iterations: 1,
+      );
+      final root = await codec.openRoot(marker, 'sync-secret');
+      final io = WebDavSyncLargeSectionIo(codec: codec);
+      final first = await io.sealWriteVerify(
+        transport: transport,
+        key: root.key,
+        circleId: 'circle-test',
+        deviceId: 'device-first',
+        logicalName: 'bootstrap',
+        schemaVersion: WebDavSyncSnapshotDescriptor.schemaVersion,
+        payload: graph.snapshot!,
+        semanticDigest: graph.semanticDigest,
+        updatedAtMs: 1,
+        maxBytes: WebDavSyncSnapshotDescriptor.maxDescriptorBytes,
+      );
+      final downloadsBeforeRetry = archiveDownloads;
+      final retryReference = await WebDavSyncGraphReader.read(
+        transport: transport,
+        codec: codec,
+        key: root.key,
+        circleId: 'circle-test',
+        deviceId: 'device-first',
+        kind: WebDavSyncGraphKind.bootstrap,
+        reference: first,
+        profileMap: graph.profileMap,
+        resourceMap: graph.resourceMap,
+        materializeBootstrap: false,
+      );
+      expect(retryReference.snapshot, isNotNull);
+      expect(retryReference.restoreStage, isNull);
+      expect(() => retryReference.package, throwsStateError);
+      expect(archiveDownloads, downloadsBeforeRetry);
+      final opened = await WebDavSyncGraphReader.read(
+        transport: transport,
+        codec: codec,
+        key: root.key,
+        circleId: 'circle-test',
+        deviceId: 'device-first',
+        kind: WebDavSyncGraphKind.bootstrap,
+        reference: first,
+        profileMap: graph.profileMap,
+        resourceMap: graph.resourceMap,
+      );
+      addTearDown(opened.dispose);
+      expect(opened.restoreStage, isNotNull);
+      final second = await io.sealWriteVerify(
+        transport: transport,
+        key: root.key,
+        circleId: 'circle-test',
+        deviceId: 'device-second',
+        logicalName: 'bootstrap',
+        schemaVersion: WebDavSyncSnapshotDescriptor.schemaVersion,
+        payload: opened.snapshot!.toJson(),
+        semanticDigest: graph.semanticDigest,
+        updatedAtMs: 2,
+        maxBytes: WebDavSyncSnapshotDescriptor.maxDescriptorBytes,
+      );
+      await transport.deleteDeviceDirectory('device-first');
+      await Directory(
+        '${support.path}/webdav-sync/object-cache',
+      ).delete(recursive: true);
+      final joined = await WebDavSyncGraphReader.read(
+        transport: transport,
+        codec: codec,
+        key: root.key,
+        circleId: 'circle-test',
+        deviceId: 'device-second',
+        kind: WebDavSyncGraphKind.bootstrap,
+        reference: second,
+        profileMap: const {},
+        resourceMap: const {},
+      );
+      addTearDown(joined.dispose);
+      expect(joined.semanticDigest, graph.semanticDigest);
+      expect(joined.snapshot!.contentHash, opened.snapshot!.contentHash);
+      expect(archiveUploads, 1);
+      expect(
+        stored.keys.where((key) => key.contains('/objects/')),
+        hasLength(1),
+      );
+      final report =
+          await ProfileRestoreCoordinator(
+            registry: registry,
+            cipher: cipher,
+          ).restoreDeviceGraph(
+            package: joined.package,
+            authorization: await ProfileAuthorizationContext.capture(registry),
+            databaseFileResolver: joined.restoreStage!.resolveDatabase,
+          );
+      expect(report.importedProfileIds, hasLength(1));
+    },
+  );
 
   for (final allProfiles in [false, true]) {
     test(

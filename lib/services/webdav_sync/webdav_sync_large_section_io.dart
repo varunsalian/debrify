@@ -8,6 +8,8 @@ import '../webdav_protocol_client.dart';
 import 'webdav_sync_codec.dart';
 import 'webdav_sync_hot_models.dart';
 import 'webdav_sync_transport.dart';
+import 'webdav_sync_snapshot_models.dart';
+import 'webdav_sync_snapshot_io.dart';
 
 typedef WebDavSyncStagingDirectoryProvider = Future<Directory> Function();
 typedef WebDavSyncScratchCleaner = Future<void> Function(Directory directory);
@@ -41,6 +43,30 @@ final class WebDavSyncLargeSectionIo {
     required int updatedAtMs,
     required int maxBytes,
   }) async {
+    if (payload is WebDavSyncPreparedSnapshot) {
+      if (logicalName != 'bootstrap' ||
+          schemaVersion != WebDavSyncSnapshotDescriptor.schemaVersion) {
+        throw ArgumentError('A shared archive must be a bootstrap snapshot');
+      }
+      final descriptor = await const WebDavSyncSnapshotIo().publish(
+        transport: transport,
+        key: key,
+        circleId: circleId,
+        snapshot: payload,
+      );
+      return sealWriteVerify(
+        transport: transport,
+        key: key,
+        circleId: circleId,
+        deviceId: deviceId,
+        logicalName: logicalName,
+        schemaVersion: schemaVersion,
+        payload: descriptor.toJson(),
+        semanticDigest: semanticDigest,
+        updatedAtMs: updatedAtMs,
+        maxBytes: maxBytes,
+      );
+    }
     final WebDavSyncFileTransport? fileTransport =
         transport is WebDavSyncFileTransport &&
             (logicalName == 'bootstrap' ||
@@ -135,20 +161,13 @@ final class WebDavSyncLargeSectionIo {
           maxBytes: maxBytes,
         );
         if (result.bytesWritten != staged.size ||
-            await _sha256File(download) != staged.contentHash) {
+            (result.sha256Hex ?? await _sha256File(download)) !=
+                staged.contentHash) {
           throw StateError('WebDAV sync section read-back verification failed');
         }
-        final verified = await _readBounded(download, maxBytes);
-        await _codec.openDocument(
-          key: key,
-          encoded: verified,
-          circleId: circleId,
-          deviceId: deviceId,
-          logicalName: logicalName,
-          schemaVersion: schemaVersion,
-          maxBytes: maxBytes,
-          runInBackground: true,
-        );
+        // The ciphertext hash proves this is the exact envelope just sealed
+        // locally. Decrypting our own upload adds a full allocation and parse
+        // without strengthening that equality check.
       } on Object {
         if (writeFailure != null) {
           Error.throwWithStackTrace(writeFailure, writeFailureStackTrace!);
@@ -207,7 +226,8 @@ final class WebDavSyncLargeSectionIo {
         maxBytes: maxBytes,
       );
       if (result.bytesWritten != reference.size ||
-          await _sha256File(download) != reference.contentHash) {
+          (result.sha256Hex ?? await _sha256File(download)) !=
+              reference.contentHash) {
         throw const FormatException('WebDAV sync section content mismatch');
       }
       // Keep the read inside this try. Returning its Future directly lets the

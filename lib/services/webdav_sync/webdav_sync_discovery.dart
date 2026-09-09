@@ -8,7 +8,6 @@ import 'webdav_sync_codec.dart';
 import 'webdav_sync_engine_state.dart';
 import 'webdav_sync_graph.dart';
 import 'webdav_sync_hot_models.dart';
-import 'webdav_sync_large_section_io.dart';
 import 'webdav_sync_models.dart';
 import 'webdav_sync_setup_service.dart';
 import 'webdav_sync_transport.dart';
@@ -89,11 +88,14 @@ final class WebDavSyncActiveRootSnapshot {
   final int schemaRatchet;
 
   bool get requiresBootstrapUpgrade =>
-      schemaRatchet > WebDavSyncGraphBuilder.schemaVersion;
+      schemaRatchet > WebDavSyncGraphBuilder.bootstrapSchemaVersion;
 }
 
 abstract interface class WebDavSyncExistingRootDiscoverer {
-  Future<WebDavSyncExistingRootSnapshot> discover({required String bindingId});
+  Future<WebDavSyncExistingRootSnapshot> discover({
+    required String bindingId,
+    bool materializeBootstrap = true,
+  });
 }
 
 abstract interface class WebDavSyncActiveRootDiscoverer {
@@ -244,6 +246,7 @@ final class WebDavSyncExistingRootDiscovery
   @override
   Future<WebDavSyncExistingRootSnapshot> discover({
     required String bindingId,
+    bool materializeBootstrap = true,
   }) async {
     final stored = await _bindingStore.load();
     final binding = stored.bindings[bindingId];
@@ -260,6 +263,7 @@ final class WebDavSyncExistingRootDiscovery
     }
     final secrets = await _bindingStore.readSecrets(binding);
     final transport = _transportFactory(binding: binding, secrets: secrets);
+    WebDavSyncDiscoveredGraph? ownedBootstrap;
     try {
       final rootRead = await _readRequiredRoot(transport);
       if (!namespace.matchesAuthority(rootRead.bytes)) {
@@ -307,7 +311,7 @@ final class WebDavSyncExistingRootDiscovery
         manifests.values,
         state.schemaRatchet,
       );
-      if (schemaRatchet > WebDavSyncGraphBuilder.schemaVersion) {
+      if (schemaRatchet > WebDavSyncGraphBuilder.bootstrapSchemaVersion) {
         await _stateRepository.update(
           namespace.id,
           (current) => current.copyWith(
@@ -320,6 +324,7 @@ final class WebDavSyncExistingRootDiscovery
         transport: transport,
         root: root,
         kind: WebDavSyncGraphKind.bootstrap,
+        materializeBootstrap: materializeBootstrap,
         candidates: WebDavSyncGraphArbitration.bootstrapCandidates(
           manifests.values,
         ),
@@ -327,6 +332,7 @@ final class WebDavSyncExistingRootDiscovery
       if (bootstrap == null) {
         throw const WebDavSyncBootstrapUnavailableException();
       }
+      ownedBootstrap = bootstrap;
 
       final highWater = Map<String, int>.from(state.peerManifestHighWater);
       for (final entry in manifests.entries) {
@@ -355,6 +361,7 @@ final class WebDavSyncExistingRootDiscovery
               binding.id,
               WebDavSyncLifecycle.awaitingAdoption,
             );
+      ownedBootstrap = null;
       return WebDavSyncExistingRootSnapshot(
         binding: awaiting,
         namespace: namespace,
@@ -375,6 +382,7 @@ final class WebDavSyncExistingRootDiscovery
       await _bindingStore.markError(binding.id, error);
       rethrow;
     } finally {
+      await ownedBootstrap?.document.dispose();
       transport.close();
     }
   }
@@ -458,29 +466,24 @@ final class WebDavSyncExistingRootDiscovery
     required OpenedWebDavSyncRoot root,
     required WebDavSyncGraphKind kind,
     required Iterable<WebDavSyncGraphCandidate> candidates,
+    required bool materializeBootstrap,
   }) async {
     for (final candidate in candidates) {
       try {
         if (candidate.reference.size > WebDavSyncLimits.maxGraphDocumentBytes) {
           throw const FormatException('WebDAV sync graph exceeds its limit');
         }
-        final encoded = await WebDavSyncLargeSectionIo(codec: _codec)
-            .readVerified(
-              transport: transport,
-              deviceId: candidate.manifest.deviceId,
-              reference: candidate.reference,
-              maxBytes: WebDavSyncLimits.maxGraphDocumentBytes,
-            );
-        final opened = await WebDavSyncGraphReader.open(
+        final opened = await WebDavSyncGraphReader.read(
+          transport: transport,
           codec: _codec,
           key: root.key,
           circleId: root.document.circleId,
           deviceId: candidate.manifest.deviceId,
           kind: kind,
           reference: candidate.reference,
-          encoded: encoded,
           profileMap: candidate.manifest.profileMap,
           resourceMap: candidate.manifest.resourceMap,
+          materializeBootstrap: materializeBootstrap,
         );
         return WebDavSyncDiscoveredGraph(
           manifest: candidate.manifest,

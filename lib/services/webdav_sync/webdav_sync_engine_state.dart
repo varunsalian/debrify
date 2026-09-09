@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
 
+import 'webdav_sync_snapshot_models.dart';
+
 import 'package:path/path.dart' as p;
 import 'package:synchronized/synchronized.dart';
 
@@ -470,8 +472,8 @@ final class WebDavSyncEngineState {
     this.lastBootstrapCheckMs,
     this.publishedBootstrapDatabaseDigest,
     this.adoption,
+    this.adoptedSnapshot,
     this.prunePendingProfileIds = const <String>{},
-    this.safetyProtectedProfileIds = const <String>{},
     this.sealedCompressionMigrated = false,
   });
 
@@ -507,8 +509,8 @@ final class WebDavSyncEngineState {
   final int? lastBootstrapCheckMs;
   final String? publishedBootstrapDatabaseDigest;
   final WebDavSyncAdoptionRecord? adoption;
+  final WebDavSyncSnapshotDescriptor? adoptedSnapshot;
   final Set<String> prunePendingProfileIds;
-  final Set<String> safetyProtectedProfileIds;
   final bool sealedCompressionMigrated;
 
   bool get blocksAllPushes => adoption?.blocksPushes ?? false;
@@ -555,8 +557,9 @@ final class WebDavSyncEngineState {
     String? publishedBootstrapDatabaseDigest,
     WebDavSyncAdoptionRecord? adoption,
     bool clearAdoption = false,
+    WebDavSyncSnapshotDescriptor? adoptedSnapshot,
+    bool clearAdoptedSnapshot = false,
     Set<String>? prunePendingProfileIds,
-    Set<String>? safetyProtectedProfileIds,
     bool? sealedCompressionMigrated,
   }) => WebDavSyncEngineState(
     circleToLocalProfiles: circleToLocalProfiles ?? this.circleToLocalProfiles,
@@ -605,10 +608,11 @@ final class WebDavSyncEngineState {
         publishedBootstrapDatabaseDigest ??
         this.publishedBootstrapDatabaseDigest,
     adoption: clearAdoption ? null : (adoption ?? this.adoption),
+    adoptedSnapshot: clearAdoptedSnapshot
+        ? null
+        : adoptedSnapshot ?? this.adoptedSnapshot,
     prunePendingProfileIds:
         prunePendingProfileIds ?? this.prunePendingProfileIds,
-    safetyProtectedProfileIds:
-        safetyProtectedProfileIds ?? this.safetyProtectedProfileIds,
     sealedCompressionMigrated:
         sealedCompressionMigrated ?? this.sealedCompressionMigrated,
   );
@@ -673,9 +677,8 @@ final class WebDavSyncEngineState {
     if (publishedBootstrapDatabaseDigest != null)
       'publishedBootstrapDatabaseDigest': publishedBootstrapDatabaseDigest,
     if (adoption != null) 'adoption': adoption!.toJson(),
+    if (adoptedSnapshot != null) 'adoptedSnapshot': adoptedSnapshot!.toJson(),
     'prunePendingProfileIds': prunePendingProfileIds.toList()..sort(),
-    if (safetyProtectedProfileIds.isNotEmpty)
-      'safetyProtectedProfileIds': safetyProtectedProfileIds.toList()..sort(),
     if (sealedCompressionMigrated) 'sealedCompressionMigrated': true,
   };
 
@@ -1042,8 +1045,10 @@ final class WebDavSyncEngineState {
       adoption: json['adoption'] == null
           ? null
           : WebDavSyncAdoptionRecord.fromJson(json['adoption']),
+      adoptedSnapshot: json['adoptedSnapshot'] == null
+          ? null
+          : WebDavSyncSnapshotDescriptor.fromJson(json['adoptedSnapshot']),
       prunePendingProfileIds: idSet('prunePendingProfileIds'),
-      safetyProtectedProfileIds: idSet('safetyProtectedProfileIds'),
       sealedCompressionMigrated: sealedCompressionMigrated,
     );
   }

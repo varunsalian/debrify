@@ -28,10 +28,30 @@ final class LocalBackupCancelledException implements Exception {
 /// Cooperative cancellation shared between UI and the streaming loops.
 class LocalBackupCancellation {
   bool _cancelled = false;
+  final Set<void Function()> _listeners = {};
 
   bool get isCancelled => _cancelled;
 
-  void cancel() => _cancelled = true;
+  void cancel() {
+    if (_cancelled) return;
+    _cancelled = true;
+    final listeners = _listeners.toList(growable: false);
+    _listeners.clear();
+    for (final listener in listeners) {
+      listener();
+    }
+  }
+
+  /// Returns an unsubscribe callback. Worker isolates subscribe only for the
+  /// lifetime of their operation; cancellation never leaves a polling timer.
+  void Function() listen(void Function() listener) {
+    if (_cancelled) {
+      listener();
+      return () {};
+    }
+    _listeners.add(listener);
+    return () => _listeners.remove(listener);
+  }
 
   void throwIfCancelled() {
     if (_cancelled) throw const LocalBackupCancelledException();

@@ -5,10 +5,11 @@ import 'package:synchronized/synchronized.dart';
 import '../profiles/portable_profile_package.dart';
 import '../profiles/profile_authorization.dart';
 import '../profiles/profile_restore_coordinator.dart';
+import '../profiles/profile_database_snapshot.dart';
 import 'webdav_sync_adoption_models.dart';
 import 'webdav_sync_engine_state.dart';
 import 'webdav_sync_models.dart';
-import 'webdav_sync_safety_backup.dart';
+import 'webdav_sync_snapshot_models.dart';
 
 final class WebDavSyncAdoptionRequest {
   const WebDavSyncAdoptionRequest({
@@ -18,10 +19,11 @@ final class WebDavSyncAdoptionRequest {
     required this.graphSemanticDigest,
     required this.profileMap,
     required this.resourceMap,
-    required this.passphrase,
     required this.authorization,
     required this.replacementConfirmed,
     this.completeOnboarding = false,
+    this.databaseFileResolver,
+    this.snapshot,
   });
 
   final String namespaceId;
@@ -30,10 +32,11 @@ final class WebDavSyncAdoptionRequest {
   final String graphSemanticDigest;
   final Map<String, String> profileMap;
   final Map<String, String> resourceMap;
-  final String passphrase;
   final ProfileAuthorizationContext authorization;
   final bool replacementConfirmed;
   final bool completeOnboarding;
+  final ProfileDatabaseFileResolver? databaseFileResolver;
+  final WebDavSyncSnapshotDescriptor? snapshot;
 }
 
 abstract interface class WebDavSyncAdoptionOperations {
@@ -44,6 +47,7 @@ abstract interface class WebDavSyncAdoptionOperations {
   Future<ProfileGraphRestoreReport> restoreGraph({
     required PortableProfilePackage package,
     required ProfileAuthorizationContext authorization,
+    ProfileDatabaseFileResolver? databaseFileResolver,
   });
 
   Future<String> selectTargetAdmin(Set<String> importedProfileIds);
@@ -120,18 +124,15 @@ abstract interface class WebDavSyncAdoptionRunner {
 final class WebDavSyncCircleAdoption implements WebDavSyncAdoptionRunner {
   WebDavSyncCircleAdoption({
     required WebDavSyncEngineStateRepository stateRepository,
-    required WebDavSyncSafetyBackupStore safetyBackups,
     required WebDavSyncAdoptionOperations operations,
     WebDavSyncAdoptionIdFactory? adoptionIdFactory,
     WebDavSyncAdoptionDiagnostic? diagnostic,
   }) : _stateRepository = stateRepository,
-       _safetyBackups = safetyBackups,
        _operations = operations,
        _adoptionIdFactory = adoptionIdFactory ?? _mintAdoptionId,
        _diagnostic = diagnostic ?? _ignoreDiagnostic;
 
   final WebDavSyncEngineStateRepository _stateRepository;
-  final WebDavSyncSafetyBackupStore _safetyBackups;
   final WebDavSyncAdoptionOperations _operations;
   final WebDavSyncAdoptionIdFactory _adoptionIdFactory;
   final WebDavSyncAdoptionDiagnostic _diagnostic;
@@ -164,21 +165,14 @@ final class WebDavSyncCircleAdoption implements WebDavSyncAdoptionRunner {
       }
     }
     final adoptionId = _adoptionIdFactory();
-    final backup = await _safetyBackups.createVerified(
-      adoptionId: adoptionId,
-      passphrase: request.passphrase,
-      authorization: request.authorization,
-    );
     var record = WebDavSyncAdoptionRecord(
       adoptionId: adoptionId,
       mode: request.mode,
       phase: WebDavSyncAdoptionPhase.restoring,
       graphSemanticDigest: request.graphSemanticDigest,
       preRestoreProfileIds: Set<String>.unmodifiable(preRestore),
-      backupPath: backup.path,
-      backupSha256: backup.sha256Hex,
-      backupVerified: true,
       completeOnboarding: request.completeOnboarding,
+      snapshot: request.snapshot,
     );
     await _stateRepository.update(request.namespaceId, (current) {
       if (current.adoption != null) {
@@ -191,6 +185,7 @@ final class WebDavSyncCircleAdoption implements WebDavSyncAdoptionRunner {
       final restored = await _operations.restoreGraph(
         package: request.package,
         authorization: request.authorization,
+        databaseFileResolver: request.databaseFileResolver,
       );
       final newProfileMap = _mapRestoredProfiles(
         package: request.package,
@@ -293,28 +288,7 @@ final class WebDavSyncCircleAdoption implements WebDavSyncAdoptionRunner {
             'WebDAV sync adoption must finish before cleanup can retry',
           );
         }
-        final existingProfiles = await _operations.listProfileIds();
-        final removedProtected = state.safetyProtectedProfileIds.difference(
-          existingProfiles,
-        );
-        if (removedProtected.isNotEmpty) {
-          state = await _stateRepository.update(
-            namespaceId,
-            (current) => current.copyWith(
-              prunePendingProfileIds: Set<String>.unmodifiable(
-                current.prunePendingProfileIds.difference(removedProtected),
-              ),
-              safetyProtectedProfileIds: Set<String>.unmodifiable(
-                current.safetyProtectedProfileIds.difference(removedProtected),
-              ),
-            ),
-          );
-        }
-        final pending =
-            state.prunePendingProfileIds
-                .difference(state.safetyProtectedProfileIds)
-                .toList()
-              ..sort();
+        final pending = state.prunePendingProfileIds.toList()..sort();
         for (final profileId in pending) {
           try {
             await _operations.pruneProfile(profileId);
@@ -527,16 +501,7 @@ final class WebDavSyncCircleAdoption implements WebDavSyncAdoptionRunner {
       }
       authorityCommitted = true;
 
-      final backupRetained = await _safetyBackups.verifyRetained(
-        WebDavSyncSafetyBackup(
-          path: record.backupPath,
-          sha256Hex: record.backupSha256,
-        ),
-      );
-      record = record.copyWith(
-        phase: WebDavSyncAdoptionPhase.pruning,
-        safetyBackupRetained: backupRetained,
-      );
+      record = record.copyWith(phase: WebDavSyncAdoptionPhase.pruning);
       await _replaceRecord(namespaceId, record);
       final pruneSet = record.mode == WebDavSyncAdoptionMode.firstJoin
           ? record.preRestoreProfileIds
@@ -551,34 +516,20 @@ final class WebDavSyncCircleAdoption implements WebDavSyncAdoptionRunner {
                 !record.preRestoreProfileIds.contains(profileId))) {
           throw StateError('WebDAV sync refresh prune guard is incomplete');
         }
-        if (!record.safetyBackupRetained) {
-          await _operations.quarantineProfile(profileId);
-          _diagnostic(
-            'WebDAV sync retained the predecessor because its safety backup is unavailable',
-            null,
+        try {
+          await _operations.pruneProfile(profileId);
+          record = record.copyWith(
+            prunedProfileIds: <String>{...record.prunedProfileIds, profileId},
           );
+        } catch (error) {
+          await _operations.quarantineProfile(profileId);
+          _diagnostic('WebDAV sync profile prune is pending', error);
           record = record.copyWith(
             prunePendingProfileIds: <String>{
               ...record.prunePendingProfileIds,
               profileId,
             },
           );
-        } else {
-          try {
-            await _operations.pruneProfile(profileId);
-            record = record.copyWith(
-              prunedProfileIds: <String>{...record.prunedProfileIds, profileId},
-            );
-          } catch (error) {
-            await _operations.quarantineProfile(profileId);
-            _diagnostic('WebDAV sync profile prune is pending', error);
-            record = record.copyWith(
-              prunePendingProfileIds: <String>{
-                ...record.prunePendingProfileIds,
-                profileId,
-              },
-            );
-          }
         }
         await _replaceRecord(namespaceId, record);
       }
@@ -671,16 +622,11 @@ final class WebDavSyncCircleAdoption implements WebDavSyncAdoptionRunner {
         (current) => current.copyWith(
           circleToLocalProfiles: record.circleProfileToNewLocal,
           circleToLocalResources: record.circleResourceToNewLocal,
+          adoptedSnapshot: record.snapshot,
           prunePendingProfileIds: <String>{
             ...current.prunePendingProfileIds,
             ...record.prunePendingProfileIds,
           },
-          safetyProtectedProfileIds: record.safetyBackupRetained
-              ? current.safetyProtectedProfileIds
-              : <String>{
-                  ...current.safetyProtectedProfileIds,
-                  ...record.prunePendingProfileIds,
-                },
           clearAdoption: true,
         ),
       );

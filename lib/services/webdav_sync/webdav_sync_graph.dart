@@ -3,12 +3,17 @@ import 'dart:isolate';
 import 'dart:math';
 
 import '../profiles/portable_profile_package.dart';
+import '../profiles/local_backup/local_backup_archive.dart';
 import '../profiles/profile_authorization.dart';
 import '../profiles/profile_package_service.dart';
 import 'webdav_sync_codec.dart';
 import 'webdav_sync_graph_omissions.dart';
 import 'webdav_sync_hot_merge.dart';
 import 'webdav_sync_hot_models.dart';
+import 'webdav_sync_snapshot_models.dart';
+import 'webdav_sync_snapshot_io.dart';
+import 'webdav_sync_transport.dart';
+import 'webdav_sync_large_section_io.dart';
 
 enum WebDavSyncGraphKind {
   bootstrap('bootstrap'),
@@ -196,6 +201,7 @@ final class WebDavSyncPreparedGraph {
     required this.bootstrapDatabaseDigest,
     required this.profileMap,
     required this.resourceMap,
+    this.snapshot,
   });
 
   final WebDavSyncGraphKind kind;
@@ -205,6 +211,7 @@ final class WebDavSyncPreparedGraph {
   final String? bootstrapDatabaseDigest;
   final Map<String, String> profileMap;
   final Map<String, String> resourceMap;
+  final WebDavSyncPreparedSnapshot? snapshot;
 }
 
 /// Produces graph packages whose identities and semantic digest are stable
@@ -213,6 +220,8 @@ final class WebDavSyncGraphBuilder {
   const WebDavSyncGraphBuilder(this.packageService);
 
   static const int schemaVersion = 1;
+  static const int bootstrapSchemaVersion =
+      WebDavSyncSnapshotDescriptor.schemaVersion;
 
   final ProfilePackageService packageService;
 
@@ -221,6 +230,12 @@ final class WebDavSyncGraphBuilder {
     required ProfileAuthorizationContext authorization,
     required WebDavSyncIdentityMaps identityMaps,
   }) async {
+    if (kind == WebDavSyncGraphKind.bootstrap) {
+      return _buildArchive(
+        authorization: authorization,
+        identityMaps: identityMaps,
+      );
+    }
     final exported = await packageService.exportAllProfilesForSync(
       context: authorization,
       profileIdProjection: identityMaps.localToCircleProfiles,
@@ -285,6 +300,95 @@ final class WebDavSyncGraphBuilder {
       profileMap: Map<String, String>.unmodifiable(profileMap),
       resourceMap: Map<String, String>.unmodifiable(resourceMap),
     );
+  }
+
+  Future<WebDavSyncPreparedGraph> _buildArchive({
+    required ProfileAuthorizationContext authorization,
+    required WebDavSyncIdentityMaps identityMaps,
+  }) async {
+    final staging = await LocalBackupScratch.create('sync-bootstrap');
+    final profileMap = <String, String>{};
+    final resourceMap = <String, String>{};
+    try {
+      final exported = await LocalBackupExporter(service: packageService)
+          .export(
+            context: authorization,
+            staging: staging,
+            allProfiles: true,
+            separateMetadata: true,
+            packageSource: (sinks) async {
+              final graph = await packageService.exportAllProfilesForSync(
+                context: authorization,
+                profileIdProjection: identityMaps.localToCircleProfiles,
+                resourceIdProjection: identityMaps.localToCircleResources,
+                includeDatabases: true,
+                includePreferences: true,
+                fileSinks: ProfilePackageFileSinks(
+                  databaseFile: sinks.databaseFile,
+                  resourceContent: sinks.resourceContent,
+                  preferencePages: (id, values) => sinks.preferencePages!(
+                    id,
+                    Map<String, Object?>.from(
+                      identityMaps.toWire(values)! as Map,
+                    ),
+                  ),
+                ),
+              );
+              _requireExactLocalSet(
+                graph.profileBackupIdsByLocalId.keys,
+                identityMaps.localToCircleProfiles.keys,
+                'profile',
+              );
+              _requireExactLocalSet(
+                graph.resourceBackupIdsByLocalId.keys,
+                identityMaps.localToCircleResources.keys,
+                'resource',
+              );
+              profileMap.addAll({
+                for (final entry in graph.profileBackupIdsByLocalId.entries)
+                  entry.value: identityMaps.localToCircleProfiles[entry.key]!,
+              });
+              resourceMap.addAll({
+                for (final entry in graph.resourceBackupIdsByLocalId.entries)
+                  entry.value: identityMaps.localToCircleResources[entry.key]!,
+              });
+              final projected = await _projectPackage(
+                graph.package,
+                identityMaps,
+              );
+              WebDavSyncGraphValidation.requireComplete(
+                kind: WebDavSyncGraphKind.bootstrap,
+                package: projected,
+                profileMap: profileMap,
+                resourceMap: resourceMap,
+              );
+              identityMaps.assertContainsNoLocalIds(projected.toJson());
+              return projected;
+            },
+          );
+      final digest = semanticDigest(exported.package);
+      final databaseDigest = bootstrapDatabaseDigest(exported.package);
+      return WebDavSyncPreparedGraph(
+        kind: WebDavSyncGraphKind.bootstrap,
+        package: exported.package,
+        payload: '',
+        semanticDigest: digest,
+        bootstrapDatabaseDigest: databaseDigest,
+        profileMap: Map.unmodifiable(profileMap),
+        resourceMap: Map.unmodifiable(resourceMap),
+        snapshot: WebDavSyncPreparedSnapshot(
+          archive: exported.archive,
+          staging: staging,
+          semanticDigest: digest,
+          databaseDigest: databaseDigest,
+          profileMap: Map.unmodifiable(profileMap),
+          resourceMap: Map.unmodifiable(resourceMap),
+        ),
+      );
+    } catch (_) {
+      await LocalBackupScratch.delete(staging);
+      rethrow;
+    }
   }
 
   static String semanticDigest(PortableProfilePackage package) {
@@ -526,10 +630,16 @@ final class WebDavSyncGraphBuilder {
       if (schema is! int || schema < 1) {
         throw const FormatException('Invalid projected graph section');
       }
-      sections[entry.key] = await PortableProfilePackage.buildSection(
-        values,
-        schemaVersion: schema,
-      );
+      sections[entry.key] = {
+        ...await PortableProfilePackage.buildSection(
+          values,
+          schemaVersion: schema,
+        ),
+        if (section['preferencePages'] != null)
+          'preferencePages': section['preferencePages'],
+        if (section['collectionInventory'] != null)
+          'collectionInventory': section['collectionInventory'],
+      };
     }
     return PortableProfilePackage(
       mode: projected['mode']! as String,
@@ -645,16 +755,129 @@ extension on Set<String> {
 final class OpenedWebDavSyncGraph {
   const OpenedWebDavSyncGraph({
     required this.kind,
-    required this.package,
+    required PortableProfilePackage package,
     required this.semanticDigest,
-  });
+    this.snapshot,
+    this.restoreStage,
+  }) : _package = package;
+
+  /// An authenticated descriptor for a bootstrap already adopted locally.
+  /// It deliberately has no decrypted archive or restorable package.
+  const OpenedWebDavSyncGraph.reference({
+    required this.kind,
+    required this.semanticDigest,
+    required this.snapshot,
+  }) : _package = null,
+       restoreStage = null;
 
   final WebDavSyncGraphKind kind;
-  final PortableProfilePackage package;
+  final PortableProfilePackage? _package;
+  PortableProfilePackage get package =>
+      _package ?? (throw StateError('Bootstrap was not materialized'));
   final String semanticDigest;
+  final WebDavSyncSnapshotDescriptor? snapshot;
+  final LocalBackupRestoreStage? restoreStage;
+
+  Future<void> dispose() async => restoreStage?.dispose();
 }
 
 abstract final class WebDavSyncGraphReader {
+  static Future<OpenedWebDavSyncGraph> read({
+    required WebDavSyncTransport transport,
+    required WebDavSyncCodec codec,
+    required WebDavSyncCircleKey key,
+    required String circleId,
+    required String deviceId,
+    required WebDavSyncGraphKind kind,
+    required WebDavSyncSectionReference reference,
+    required Map<String, String> profileMap,
+    required Map<String, String> resourceMap,
+    bool materializeBootstrap = true,
+  }) async {
+    final archiveSnapshot =
+        kind == WebDavSyncGraphKind.bootstrap &&
+        reference.schemaVersion == WebDavSyncSnapshotDescriptor.schemaVersion;
+    final encoded = await WebDavSyncLargeSectionIo(codec: codec).readVerified(
+      transport: transport,
+      deviceId: deviceId,
+      reference: reference,
+      maxBytes: archiveSnapshot
+          ? WebDavSyncSnapshotDescriptor.maxDescriptorBytes
+          : WebDavSyncLimits.maxGraphDocumentBytes,
+    );
+    if (!archiveSnapshot) {
+      return open(
+        codec: codec,
+        key: key,
+        circleId: circleId,
+        deviceId: deviceId,
+        kind: kind,
+        reference: reference,
+        encoded: encoded,
+        profileMap: profileMap,
+        resourceMap: resourceMap,
+      );
+    }
+    if (reference.name != kind.logicalName) {
+      throw const FormatException('Invalid WebDAV sync snapshot reference');
+    }
+    final clear = await codec.openDocument(
+      key: key,
+      encoded: encoded,
+      circleId: circleId,
+      deviceId: deviceId,
+      logicalName: kind.logicalName,
+      schemaVersion: reference.schemaVersion,
+      maxBytes: WebDavSyncSnapshotDescriptor.maxDescriptorBytes,
+    );
+    final descriptor = WebDavSyncSnapshotDescriptor.fromJson(clear);
+    if (descriptor.semanticDigest != reference.semanticDigest) {
+      throw const FormatException('WebDAV sync snapshot descriptor mismatch');
+    }
+    if (!materializeBootstrap) {
+      return OpenedWebDavSyncGraph.reference(
+        kind: kind,
+        semanticDigest: descriptor.semanticDigest,
+        snapshot: descriptor,
+      );
+    }
+    final stage = await const WebDavSyncSnapshotIo().read(
+      transport: transport,
+      key: key,
+      circleId: circleId,
+      descriptor: descriptor,
+    );
+    try {
+      WebDavSyncGraphValidation.requireComplete(
+        kind: kind,
+        package: stage.package,
+        profileMap: descriptor.profileMap,
+        resourceMap: descriptor.resourceMap,
+      );
+      // Check the stored package before playlist attachments are reinserted.
+      final semantic = Map<String, dynamic>.from(stage.manifest.package)
+        ..remove('createdAt')
+        ..remove('integrity');
+      if (semanticDigestOf(semantic) != descriptor.semanticDigest ||
+          WebDavSyncGraphBuilder.bootstrapDatabaseDigest(stage.package) !=
+              descriptor.databaseDigest) {
+        throw const FormatException(
+          'WebDAV sync snapshot semantic digest mismatch',
+        );
+      }
+      return OpenedWebDavSyncGraph(
+        kind: kind,
+        package: stage.package,
+        semanticDigest: descriptor.semanticDigest,
+        snapshot: descriptor,
+        restoreStage: stage,
+      );
+    } catch (_) {
+      await stage.dispose();
+      rethrow;
+    }
+  }
+
   static Future<OpenedWebDavSyncGraph> open({
     required WebDavSyncCodec codec,
     required WebDavSyncCircleKey key,

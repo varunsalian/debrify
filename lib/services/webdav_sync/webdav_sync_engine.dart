@@ -1,3 +1,5 @@
+import '../../utils/canonical_json.dart';
+import '../transfer/transfer_io.dart';
 import 'dart:async';
 import 'dart:isolate';
 
@@ -127,7 +129,7 @@ final class WebDavSyncCycleReport {
 final class WebDavSyncSectionCache {
   static const int entryLimit = 32;
   static const int byteLimit = 4 * 1024 * 1024;
-  static const int collectionByteLimit = 64 * 1024 * 1024;
+  static const int collectionByteLimit = 8 * 1024 * 1024;
   WebDavSyncSectionCache({
     this.maxBytes = byteLimit,
     this.partitionCollections = true,
@@ -141,13 +143,40 @@ final class WebDavSyncSectionCache {
   bool _isCollection(String key) =>
       partitionCollections && key.contains(':collections-v2/');
 
+  static const int encodedByteLimit = 8 * 1024 * 1024;
+  final Map<String, Uint8List> _encoded = {};
+  int _encodedBytes = 0;
+
+  Uint8List? _takeEncoded(String key) {
+    final bytes = _encoded.remove(key);
+    if (bytes != null) _encoded[key] = bytes;
+    return bytes;
+  }
+
+  void _putEncoded(String key, Uint8List bytes) {
+    final old = _encoded.remove(key);
+    if (old != null) _encodedBytes -= old.length;
+    if (bytes.length > encodedByteLimit) return;
+    while (_encoded.isNotEmpty &&
+        (_encodedBytes + bytes.length > encodedByteLimit ||
+            _encoded.length >= entryLimit)) {
+      _encodedBytes -= _encoded.remove(_encoded.keys.first)!.length;
+    }
+    _encoded[key] = bytes;
+    _encodedBytes += bytes.length;
+  }
+
   final Map<String, _CachedSection> _entries = <String, _CachedSection>{};
   int _bytes = 0;
 
   int get entryCount =>
-      _entries.length + (partitionCollections ? _collections.entryCount : 0);
+      _entries.length +
+      _encoded.length +
+      (partitionCollections ? _collections.entryCount : 0);
   int get byteCount =>
-      _bytes + (partitionCollections ? _collections.byteCount : 0);
+      _bytes +
+      _encodedBytes +
+      (partitionCollections ? _collections.byteCount : 0);
 
   Object? take(String key) {
     if (_isCollection(key)) return _collections.take(key);
@@ -167,6 +196,25 @@ final class WebDavSyncSectionCache {
     if (_isCollection(key)) return _collections.put(key, value, encodedBytes);
     remove(key);
     if (encodedBytes <= 0 || encodedBytes > maxBytes) return;
+    // The wire is compressed; its length can undercount retained objects by
+    // orders of magnitude. Account for decoded data with room for Dart maps
+    // and strings, stopping measurement as soon as this entry cannot fit.
+    final Object? json = switch (value) {
+      WebDavSyncHotDocument v => v.toJson(),
+      WebDavSyncTombstoneDocument v => v.toJson(),
+      WebDavSyncProfilesDocument v => v.toJson(),
+      WebDavSyncResourcesDocument v => v.toJson(),
+      WebDavSyncLibraryDocument v => v.toJson(),
+      _ => null,
+    };
+    if (json != null) {
+      var retained = 0;
+      for (final fragment in canonicalJsonFragments(json)) {
+        retained += fragment.length * 16;
+        if (retained > maxBytes) return;
+      }
+      encodedBytes = encodedBytes > retained ? encodedBytes : retained;
+    }
     while (_entries.isNotEmpty &&
         (_entries.length >= entryLimit || _bytes + encodedBytes > maxBytes)) {
       remove(_entries.keys.first);
@@ -176,6 +224,8 @@ final class WebDavSyncSectionCache {
   }
 
   void clear() {
+    _encoded.clear();
+    _encodedBytes = 0;
     if (partitionCollections) _collections.clear();
     _entries.clear();
     _bytes = 0;
@@ -268,7 +318,7 @@ final class WebDavSyncEngine
     DateTime Function()? clock,
     WebDavSyncDiagnostic? diagnostic,
     WebDavSyncAppliedKeysCallback? appliedKeysCallback,
-    this.readConcurrency = 4,
+    this.readConcurrency = TransferIo.metadataConcurrency,
   }) : _stateRepository = stateRepository,
        _localAdapter = localAdapter,
        _transportFactory = transportFactory,
@@ -2116,7 +2166,7 @@ final class WebDavSyncEngine
             _PeerProfileData
           >(
             entries,
-            limit: readConcurrency,
+            limit: 1,
             operation: (entry) => _readOnePeerProfileData(
               transport: transport,
               root: root,
@@ -2248,7 +2298,7 @@ final class WebDavSyncEngine
           _TvLibraryRead
         >(
           entries,
-          limit: readConcurrency,
+          limit: 1,
           operation: (entry) => readOne(
             entry.key,
             entry.value,
@@ -2288,7 +2338,7 @@ final class WebDavSyncEngine
     try {
       peers = await _mapConcurrentOrdered(
         entries,
-        limit: readConcurrency,
+        limit: 1,
         operation: (entry) => _readOneCirclePeer(
           transport: transport,
           root: root,
@@ -2921,26 +2971,39 @@ final class WebDavSyncEngine
     required int maxBytes,
     required _CycleInstrumentation instrumentation,
   }) async {
-    instrumentation.requestStarted();
-    final read = await transport.readSection(
+    final cacheKey = _sectionCacheKey(
+      root.document.circleId,
       deviceId,
       reference,
-      maxBytes: maxBytes,
+      'encoded',
     );
-    instrumentation.received(read.bytes.length);
-    if (read.bytes.length != reference.size ||
-        contentHashOf(read.bytes) != reference.contentHash) {
-      throw const FormatException('WebDAV sync section content mismatch');
+    var encoded = _sectionCache._takeEncoded(cacheKey);
+    if (encoded == null) {
+      instrumentation.requestStarted();
+      final read = await transport.readSection(
+        deviceId,
+        reference,
+        maxBytes: maxBytes,
+      );
+      instrumentation.received(read.bytes.length);
+      encoded = read.bytes;
+      if (encoded.length != reference.size ||
+          contentHashOf(encoded) != reference.contentHash) {
+        throw const FormatException('WebDAV sync section content mismatch');
+      }
     }
-    return _codec.openDocument(
+    final payload = await _codec.openDocument(
       key: root.key,
-      encoded: read.bytes,
+      encoded: encoded,
       circleId: root.document.circleId,
       deviceId: deviceId,
       logicalName: reference.name,
       schemaVersion: reference.schemaVersion,
       maxBytes: maxBytes,
+      runInBackground: maxBytes > WebDavSyncLimits.maxHotDocumentBytes,
     );
+    _sectionCache._putEncoded(cacheKey, encoded);
+    return payload;
   }
 
   Future<void> _markOwnSectionDirty(String namespaceId, String sectionName) =>
@@ -3027,6 +3090,10 @@ final class WebDavSyncEngine
     final retainedCollectionReferences = <String, WebDavSyncSectionReference>{};
     final librariesToPush = <String, WebDavSyncLibraryDocument>{};
     final published = <String, _PublishedProfile>{};
+    final hotDigests = {
+      for (final entry in profiles.entries)
+        entry.key: entry.value.document.semanticDigest,
+    };
     final profilesDigest = circle?.profiles.semanticDigest;
     final resourcesDigest = circle?.resources.semanticDigest;
     final pushProfiles =
@@ -3039,6 +3106,30 @@ final class WebDavSyncEngine
         (forceCompressionMigration ||
             state.lastPushedResourcesDigest != resourcesDigest ||
             state.ownManifest?.section('resources') == null);
+    final collectionPlan = await WebDavSyncCollectionSections.plan(
+      profiles.values.map((profile) => profile.document),
+      unchangedSectionCounts: {
+        if (!forceCompressionMigration)
+          for (final entry in profiles.entries)
+            if (state.profiles[entry.key]?.lastPushedHotDigest ==
+                    hotDigests[entry.key] &&
+                state.ownManifest?.section(
+                      '${WebDavSyncCollectionSections.prefix}${entry.key}/0',
+                    ) !=
+                    null)
+              entry.key: state.ownManifest!.sections
+                  .where(
+                    (section) => section.name.startsWith(
+                      '${WebDavSyncCollectionSections.prefix}${entry.key}/',
+                    ),
+                  )
+                  .length,
+      },
+      reservedSections: WebDavSyncCollectionSections.reservedSectionCount(
+        profiles.keys,
+        retained: state.ownManifest?.sections ?? const [],
+      ),
+    );
     if (pushProfiles) {
       final phaseStarted = instrumentation.startPhase();
       try {
@@ -3061,7 +3152,7 @@ final class WebDavSyncEngine
     for (final entry in profiles.entries) {
       final profileState =
           state.profiles[entry.key] ?? const WebDavSyncProfileEngineState();
-      final hotDigest = entry.value.document.semanticDigest;
+      final hotDigest = hotDigests[entry.key]!;
       final publishedTombstones = <String, WebDavSyncTombstone>{
         for (final tombstone in entry.value.tombstones.entries)
           tombstone.key: tombstone.value.copyWith(
@@ -3084,7 +3175,17 @@ final class WebDavSyncEngine
           entry.value.document.watchState.orders.keys.any(
             WebDavSyncCollectionSections.isCollectionOrder,
           );
+      final priorCollectionCount =
+          state.ownManifest?.sections
+              .where(
+                (section) => section.name.startsWith(
+                  '${WebDavSyncCollectionSections.prefix}${entry.key}/',
+                ),
+              )
+              .length ??
+          0;
       if (forceCompressionMigration ||
+          priorCollectionCount > collectionPlan.sectionCounts[entry.key]! ||
           (hasCollections &&
               state.ownManifest?.section(
                     '${WebDavSyncCollectionSections.prefix}${entry.key}/0',
@@ -3096,6 +3197,7 @@ final class WebDavSyncEngine
           final parts = await _collectionSections.prepare(
             '${context.namespaceId}/${entry.key}',
             entry.value.document,
+            targetBytes: collectionPlan.targetBytes,
           );
           replacedCollectionProfiles.add(entry.key);
           for (final part in parts.entries) {
@@ -3325,7 +3427,7 @@ final class WebDavSyncEngine
       deviceId: deviceId,
       updatedAtMs: serverNowMs,
       clockOffsetMs: clockOffsetMs,
-      graphSchemaClaim: WebDavSyncGraphBuilder.schemaVersion,
+      graphSchemaClaim: WebDavSyncGraphBuilder.bootstrapSchemaVersion,
       profileMap: context.wireProfileMap.isNotEmpty
           ? context.wireProfileMap
           : (priorManifest?.profileMap ?? const <String, String>{}),
@@ -3336,7 +3438,8 @@ final class WebDavSyncEngine
         sections.values.toList()..sort((a, b) => a.name.compareTo(b.name)),
       ),
     );
-    identityMaps.assertContainsNoLocalIds(manifest.toJson());
+    final manifestJson = manifest.toValidatedJson();
+    identityMaps.assertContainsNoLocalIds(manifestJson);
     late final Uint8List manifestBytes;
     phaseStarted = instrumentation.startPhase();
     try {
@@ -3346,7 +3449,7 @@ final class WebDavSyncEngine
         deviceId: deviceId,
         logicalName: 'manifest',
         schemaVersion: WebDavSyncManifest.schemaVersion,
-        payload: manifest.toJson(),
+        payload: manifestJson,
         maxBytes: WebDavSyncLimits.maxManifestBytes,
       );
     } finally {
@@ -3466,14 +3569,15 @@ final class WebDavSyncEngine
         }),
       ),
     );
-    identityMaps.assertContainsNoLocalIds(updated.toJson());
+    final manifestJson = updated.toValidatedJson();
+    identityMaps.assertContainsNoLocalIds(manifestJson);
     final encodedManifest = await _codec.sealDocument(
       key: root.key,
       circleId: root.document.circleId,
       deviceId: deviceId,
       logicalName: 'manifest',
       schemaVersion: WebDavSyncManifest.schemaVersion,
-      payload: updated.toJson(),
+      payload: manifestJson,
       maxBytes: WebDavSyncLimits.maxManifestBytes,
     );
     final commitRoot = await _readRequiredRoot(transport, instrumentation);
@@ -3753,7 +3857,7 @@ final class WebDavSyncEngine
     String kind,
   ) =>
       '$circleId:$deviceId:${reference.name}:${reference.schemaVersion}:'
-      '${reference.contentHash}:${reference.size}:${reference.updatedAtMs}:$kind';
+      '${reference.contentHash}:${reference.semanticDigest}:${reference.size}:${reference.updatedAtMs}:$kind';
 
   static int _maxBytesFor(String name) {
     if (name.startsWith(WebDavSyncCollectionSections.prefix)) {

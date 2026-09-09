@@ -10,8 +10,8 @@ void main() {
   test(
     'local backup and restore retain their original transport entry points',
     () {
-      // Local files use the streamed .debrify archive; WebDAV keeps the
-      // encrypted JSON package. Neither transport borrows the other's path.
+      // Both transports use file-backed archives; WebDAV wraps its archive
+      // in authenticated binary encryption before uploading.
       expect(source, contains('await _createLocalArchiveBackup();'));
       expect(source, contains('_createWebDavProfileBackupUnchecked()'));
       expect(source, contains('saveBackupFile('));
@@ -35,7 +35,7 @@ void main() {
     'local and WebDAV restore converge before package validation/commit',
     () {
       expect(
-        RegExp(r'_restoreProfileBackupFromPath\(').allMatches(source).length,
+        RegExp(r'_restoreLocalArchive\(').allMatches(source).length,
         greaterThanOrEqualTo(3),
       );
       expect(source, contains('PortableProfilePackage.probeFile(path)'));
@@ -49,11 +49,12 @@ void main() {
     expect(source, contains("root.createTemp('debrify-migrate-\$purpose-')"));
     expect(
       RegExp(r'_deletePrivateStagingDirectory\(').allMatches(source).length,
-      greaterThanOrEqualTo(3),
+      greaterThanOrEqualTo(2),
     );
-    expect(source, contains('PortableProfilePackage.maxEnvelopeBytes'));
-    expect(source, contains('_lowMemoryTvosRestoreLimit'));
-    expect(source, contains('TvosDevice.isLowMemoryCached'));
+    expect(source, contains('TransferIo.maxFileBytes'));
+    expect(source, contains('StreamingEncryptedFile.looksLike'));
+    expect(source, contains('WebDavBackupArchive.decrypt'));
+    expect(source, contains('LocalBackupScratch.delete(staging)'));
   });
 
   test('WebDAV migration binds backup permission and resource authority', () {

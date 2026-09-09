@@ -58,9 +58,11 @@ final class DefaultWebDavSyncAdoptionOperations
   Future<ProfileGraphRestoreReport> restoreGraph({
     required PortableProfilePackage package,
     required ProfileAuthorizationContext authorization,
+    ProfileDatabaseFileResolver? databaseFileResolver,
   }) => restoreCoordinator.restoreDeviceGraph(
     package: package,
     authorization: authorization,
+    databaseFileResolver: databaseFileResolver,
   );
 
   @override

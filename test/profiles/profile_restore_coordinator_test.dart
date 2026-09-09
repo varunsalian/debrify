@@ -1,3 +1,4 @@
+import 'package:debrify/services/profiles/local_backup/local_backup_archive.dart';
 import 'dart:convert';
 import 'dart:math';
 import 'package:debrify/models/home_collection.dart';
@@ -14,7 +15,6 @@ import 'package:debrify/services/webdav_sync/webdav_sync_adoption_models.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_adoption_operations.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_engine_state.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_graph.dart';
-import 'package:debrify/services/webdav_sync/webdav_sync_safety_backup.dart';
 
 import 'package:cryptography/cryptography.dart';
 import 'package:debrify/models/profiles/connection_resource.dart';
@@ -572,20 +572,26 @@ void main() {
       final states = _JoinStateRepository();
       final adoption = WebDavSyncCircleAdoption(
         stateRepository: states,
-        // Only the backup filesystem is substituted; restore, registry
-        // publication, handoff, resource remapping and predecessor prune are real.
-        safetyBackups: _JoinSafetyBackups(),
+        // Restore, registry publication, handoff, remapping and prune are real.
         operations: operations,
       );
+      final archive = seed.snapshot!.archive;
+      final stage = await LocalBackupRestorer.stage(
+        archive: archive,
+        staging: await LocalBackupScratch.create('join-test'),
+        inspection: await LocalBackupRestorer.inspect(archive),
+      );
+      addTearDown(stage.dispose);
+      addTearDown(seed.snapshot!.dispose);
       final joined = await adoption.adopt(
         WebDavSyncAdoptionRequest(
           namespaceId: 'circle:regression',
           mode: WebDavSyncAdoptionMode.firstJoin,
-          package: seed.package,
+          package: stage.package,
+          databaseFileResolver: stage.resolveDatabase,
           graphSemanticDigest: seed.semanticDigest,
           profileMap: seed.profileMap,
           resourceMap: seed.resourceMap,
-          passphrase: 'test-circle-passphrase',
           authorization: await ProfileAuthorizationContext.capture(registry),
           replacementConfirmed: true,
         ),
@@ -2491,18 +2497,4 @@ final class _JoinStateRepository implements WebDavSyncEngineStateRepository {
     String namespaceId,
     WebDavSyncEngineState Function(WebDavSyncEngineState) update,
   ) async => state = update(state);
-}
-
-final class _JoinSafetyBackups implements WebDavSyncSafetyBackupStore {
-  @override
-  Future<WebDavSyncSafetyBackup> createVerified({
-    required String adoptionId,
-    required String passphrase,
-    required ProfileAuthorizationContext authorization,
-  }) async => WebDavSyncSafetyBackup(
-    path: '/test-backup/$adoptionId',
-    sha256Hex: 'b' * 64,
-  );
-  @override
-  Future<bool> verifyRetained(WebDavSyncSafetyBackup backup) async => true;
 }

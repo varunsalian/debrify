@@ -1,0 +1,7 @@
+{"mib":64,"data":"compressible","sourceBytes":67108864,"transferredBytes":8772335,"encryptMs":579,"decryptMs":850,"initialRss":15761408,"peakRss":63766528,"sampledPeakWorkingBytes":150177108,"verified":true}
+{"pipeline":"legacy","mib":64,"data":"compressible","sourceBytes":67108864,"transferredBytes":11602813,"encryptMs":1196,"decryptMs":668,"initialRss":15761408,"peakRss":591855616,"sampledPeakWorkingBytes":145820541,"verified":true}
+{"mib":64,"data":"compressible","sourceBytes":67108864,"transferredBytes":8772335,"encryptMs":582,"decryptMs":848,"initialRss":15728640,"peakRss":63340544,"sampledPeakWorkingBytes":151087869,"verified":true}
+{"pipeline":"legacy","mib":64,"data":"compressible","sourceBytes":67108864,"transferredBytes":11602813,"encryptMs":1191,"decryptMs":682,"initialRss":15712256,"peakRss":591839232,"sampledPeakWorkingBytes":145820541,"verified":true}
+{"mib":64,"data":"compressible","sourceBytes":67108864,"transferredBytes":8772335,"encryptMs":576,"decryptMs":853,"initialRss":15745024,"peakRss":63340544,"sampledPeakWorkingBytes":150900445,"verified":true}
+{"pipeline":"legacy","mib":64,"data":"compressible","sourceBytes":67108864,"transferredBytes":11602813,"encryptMs":1184,"decryptMs":666,"initialRss":15777792,"peakRss":591872000,"sampledPeakWorkingBytes":145820541,"verified":true}
+{"mib":512,"data":"compressible","sourceBytes":536870912,"transferredBytes":70173151,"encryptMs":4617,"decryptMs":6742,"initialRss":15712256,"peakRss":68288512,"sampledPeakWorkingBytes":1209947736,"verified":true}

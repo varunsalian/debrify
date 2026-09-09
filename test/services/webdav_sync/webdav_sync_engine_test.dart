@@ -83,6 +83,7 @@ void main() {
     },
     Map<String, String>? resources = const <String, String>{},
     OpenedWebDavSyncRoot? rootOverride,
+    Map<String, String> wireProfileMap = const {},
   }) => WebDavSyncCycleContext(
     namespaceId: 'circle:circle-1',
     deviceId: 'device-a',
@@ -91,6 +92,7 @@ void main() {
     circleToLocalProfiles: profiles,
     circleToLocalResources: resources,
     active: active,
+    wireProfileMap: wireProfileMap,
   );
 
   Future<WebDavSyncCycleReport> runFixture(WebDavSyncCycleContext value) =>
@@ -110,6 +112,23 @@ void main() {
   }
 
   test(
+    'invalid outgoing manifest metadata preserves the working remote manifest',
+    () async {
+      await runFixture(context());
+      final previous = Uint8List.fromList(transport.manifests['device-a']!);
+      transport.events.clear();
+      local.preferences = {'theme': 'light'};
+      await expectLater(
+        runFixture(context(wireProfileMap: {'bad key': 'profile-circle'})),
+        throwsFormatException,
+      );
+      expect(transport.events, isNot(contains('write:manifest')));
+      expect(transport.manifests['device-a'], previous);
+      expect(await openManifest('device-a'), isA<WebDavSyncManifest>());
+    },
+  );
+
+  test(
     'corrupt collection inventory cannot stop a multi-profile cycle',
     () async {
       local.preferences = {
@@ -127,6 +146,101 @@ void main() {
       expect(report.disposition, WebDavSyncCycleDisposition.completed);
       expect(report.profilesApplied, 2);
       expect(local.preferences['theme'], 'dark');
+    },
+  );
+
+  test(
+    'engine repacks unchanged collections when retained sections consume the budget',
+    () async {
+      final inventory = HomeCollectionInventory();
+      for (var i = 0; i < 3; i++) {
+        inventory.put(HomeCollection(id: '$i', title: 'x' * (382 * 1024)));
+      }
+      local.preferences[HomeCollectionInventory.prefsKey] = inventory.encode();
+      await runFixture(context());
+      final first = await openManifest('device-a');
+      expect(
+        first.sections.where(
+          (s) => s.name.startsWith(WebDavSyncCollectionSections.prefix),
+        ),
+        hasLength(3),
+      );
+      final crowded = WebDavSyncManifest(
+        circleId: first.circleId,
+        deviceId: first.deviceId,
+        updatedAtMs: first.updatedAtMs,
+        clockOffsetMs: first.clockOffsetMs,
+        graphSchemaClaim: first.graphSchemaClaim,
+        profileMap: first.profileMap,
+        resourceMap: first.resourceMap,
+        sections: [
+          ...first.sections,
+          for (var i = 0; i < 503; i++)
+            WebDavSyncSectionReference(
+              name: 'reserved/$i',
+              contentHash: 'a' * 64,
+              semanticDigest: 'b' * 64,
+              updatedAtMs: first.updatedAtMs,
+              schemaVersion: 1,
+              size: 100,
+            ),
+        ],
+      );
+      transport.manifests['device-a'] = await codec.sealDocument(
+        key: root.key,
+        circleId: root.document.circleId,
+        deviceId: 'device-a',
+        logicalName: 'manifest',
+        schemaVersion: 1,
+        payload: crowded.toValidatedJson(),
+        maxBytes: WebDavSyncLimits.maxManifestBytes,
+      );
+      states.state = states.state.copyWith(ownManifest: crowded);
+      expect(
+        (await runFixture(context())).disposition,
+        WebDavSyncCycleDisposition.completed,
+      );
+      final after = await openManifest('device-a');
+      expect(after.sections, hasLength(crowded.sections.length - 1));
+      expect(
+        after.sections.where(
+          (s) => s.name.startsWith(WebDavSyncCollectionSections.prefix),
+        ),
+        hasLength(2),
+      );
+      expect(
+        after.sections.where((s) => s.name.startsWith('reserved/')),
+        hasLength(503),
+      );
+      final mergedRecords = <String, WebDavSyncStampedValue>{};
+      for (final section in after.sections.where(
+        (s) => s.name.startsWith(WebDavSyncCollectionSections.prefix),
+      )) {
+        final clear = await codec.openDocument(
+          key: root.key,
+          encoded: transport.sections['device-a:${section.contentHash}']!,
+          circleId: root.document.circleId,
+          deviceId: 'device-a',
+          logicalName: section.name,
+          schemaVersion: section.schemaVersion,
+          maxBytes: WebDavSyncCollectionSections.maxBytes,
+        );
+        mergedRecords.addAll(
+          WebDavSyncHotDocument.fromJson(clear).watchState.records,
+        );
+      }
+      expect(mergedRecords.keys.toSet(), {
+        WebDavSyncRecordKey.homeCollection('0'),
+        WebDavSyncRecordKey.homeCollection('1'),
+        WebDavSyncRecordKey.homeCollection('2'),
+      });
+      final writes = transport.writeCount;
+      await runFixture(context());
+      expect(
+        transport.writeCount,
+        writes,
+        reason: 'the new partition must be stable on the next cycle',
+      );
     },
   );
 
@@ -4156,8 +4270,15 @@ void main() {
 
     await runFixture(context());
 
-    expect(engine.debugSectionCacheEntries, lessThanOrEqualTo(32));
-    expect(engine.debugSectionCacheBytes, lessThanOrEqualTo(4 * 1024 * 1024));
+    // This fixture exercises the ordinary decoded and encrypted caches.
+    expect(engine.debugSectionCacheEntries, lessThanOrEqualTo(64));
+    expect(
+      engine.debugSectionCacheBytes,
+      lessThanOrEqualTo(
+        WebDavSyncSectionCache.byteLimit +
+            WebDavSyncSectionCache.encodedByteLimit,
+      ),
+    );
   });
 
   test('a peer manifest network failure aborts before any publish', () async {
@@ -4339,9 +4460,6 @@ void main() {
         phase: WebDavSyncAdoptionPhase.restoring,
         graphSemanticDigest: 'a' * 64,
         preRestoreProfileIds: const <String>{'local-profile'},
-        backupPath: 'pre-join-backups/backup.enc',
-        backupSha256: 'b' * 64,
-        backupVerified: true,
       ),
     );
 
@@ -4364,9 +4482,6 @@ void main() {
           phase: WebDavSyncAdoptionPhase.restoring,
           graphSemanticDigest: 'c' * 64,
           preRestoreProfileIds: const <String>{'local-profile'},
-          backupPath: 'pre-join-backups/backup.enc',
-          backupSha256: 'd' * 64,
-          backupVerified: true,
         ),
       );
     };

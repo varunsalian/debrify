@@ -5,7 +5,8 @@ import 'package:crypto/crypto.dart';
 
 import '../models/profiles/profile_policy.dart';
 import '../models/webdav_item.dart';
-import 'profiles/portable_profile_package.dart';
+import 'transfer/streaming_encrypted_file.dart';
+import 'transfer/transfer_io.dart';
 import 'webdav_protocol_client.dart';
 import 'webdav_service.dart';
 
@@ -57,6 +58,7 @@ final class WebDavBackupTransport {
     required File stagedFile,
     required Directory scratchDirectory,
     required String fileNamePrefix,
+    String? stagedSha256Hex,
     Future<void> Function()? beforeSend,
   }) async {
     if (maxCreateAttempts <= 0) {
@@ -66,10 +68,13 @@ final class WebDavBackupTransport {
       );
     }
     final length = await stagedFile.length();
-    if (length > PortableProfilePackage.maxEnvelopeBytes) {
+    if (length > TransferIo.maxFileBytes) {
       throw const FormatException('Backup exceeds the supported size limit');
     }
-    final localHash = await sha256File(stagedFile);
+    final localHash = stagedSha256Hex ?? await sha256File(stagedFile);
+    if (!RegExp(r'^[0-9a-f]{64}$').hasMatch(localHash)) {
+      throw ArgumentError('Invalid staged backup digest');
+    }
 
     WebDavException? lastCollision;
     for (var attempt = 0; attempt < maxCreateAttempts; attempt++) {
@@ -81,8 +86,8 @@ final class WebDavBackupTransport {
           config: config,
           path: remotePath,
           file: stagedFile,
-          maxBytes: PortableProfilePackage.maxEnvelopeBytes,
-          contentType: 'application/json',
+          maxBytes: TransferIo.maxFileBytes,
+          contentType: 'application/octet-stream',
           ifNoneMatch: '*',
           feature: ProfileFeature.backupRestore,
           beforeSend: beforeSend,
@@ -97,7 +102,7 @@ final class WebDavBackupTransport {
 
       final verificationFile = File(
         '${scratchDirectory.path}${Platform.pathSeparator}'
-        'webdav-readback-$attempt-${_randomSuffix()}.json',
+        'webdav-readback-$attempt-${_randomSuffix()}.enc',
       );
       try {
         if (uploaded.statusCode != HttpStatus.created) {
@@ -108,15 +113,16 @@ final class WebDavBackupTransport {
         }
         late final String remoteHash;
         try {
-          await WebDavService.downloadToFile(
+          final downloaded = await WebDavService.downloadToFile(
             config: config,
             path: remotePath,
             destination: verificationFile,
-            maxBytes: PortableProfilePackage.maxEnvelopeBytes,
+            maxBytes: TransferIo.maxFileBytes,
             feature: ProfileFeature.backupRestore,
             beforeSend: beforeSend,
           );
-          remoteHash = await sha256File(verificationFile);
+          remoteHash =
+              downloaded.sha256Hex ?? await sha256File(verificationFile);
         } catch (error) {
           throw WebDavBackupVerificationException(
             'The backup was uploaded to "$remotePath", but its read-back '
@@ -186,7 +192,7 @@ final class WebDavBackupTransport {
         .toIso8601String()
         .replaceAll(':', '-')
         .replaceAll('.', '-');
-    return '$prefix-$stamp-${_randomSuffix()}.json';
+    return '$prefix-$stamp-${_randomSuffix()}${StreamingEncryptedFile.extension}';
   }
 
   static String _joinRemotePath(String directory, String name) {
