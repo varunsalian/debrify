@@ -33,13 +33,15 @@ void main() {
       await loader.load();
     }
   });
-  for (final (android, style) in [
-    (true, 'classic'),
-    (false, 'classic'),
-    (true, 'spotlight'),
+  for (final (android, style, outcome) in [
+    (true, 'classic', 'empty'),
+    (false, 'classic', 'empty'),
+    (true, 'spotlight', 'hero'),
+    (true, 'spotlight', 'empty'),
+    (true, 'spotlight', 'error'),
   ]) {
     testWidgets(
-      'saved collections load before catalogs only on Android TV (android=$android, style=$style)',
+      'Home initial reveal (android=$android, style=$style, outcome=$outcome)',
       (tester) async {
         final previousTab = MainPageBridge.activeTvTabIndex;
         if (style == 'spotlight') {
@@ -104,28 +106,18 @@ void main() {
         await tester.pump(const Duration(milliseconds: 100));
         expect(
           find.text('Saved collection'),
-          android ? findsWidgets : findsNothing,
+          android && style != 'spotlight' ? findsWidgets : findsNothing,
         );
-        FocusNode? earlyCard;
         if (style == 'spotlight') {
-          final board = tester.widget<SpotlightBoard>(
-            find.byType(SpotlightBoard),
-          );
-          expect(board.hero, isEmpty);
-          earlyCard = FocusManager.instance.primaryFocus;
-          expect(board.sections.expand((s) => s.nodes), contains(earlyCard));
-          expect(earlyCard, isNot(isA<FocusScopeNode>()));
-          await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
-          await tester.pump();
-          expect(FocusManager.instance.primaryFocus, same(earlyCard));
+          expect(find.byType(SpotlightBoard), findsNothing);
         }
         await tester.runAsync(() async {
           slow.complete(
             http.Response(
-              style == 'spotlight'
+              outcome == 'hero'
                   ? '{"metas":[{"id":"late-hero","type":"movie","name":"Late hero"}]}'
                   : '{"metas":[]}',
-              200,
+              outcome == 'error' ? 500 : 200,
             ),
           );
           await Future<void>.delayed(const Duration(milliseconds: 50));
@@ -136,11 +128,16 @@ void main() {
           final board = tester.widget<SpotlightBoard>(
             find.byType(SpotlightBoard),
           );
-          expect(board.hero, isNotEmpty);
-          expect(FocusManager.instance.primaryFocus, same(earlyCard));
-          await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
-          await tester.pump(const Duration(milliseconds: 500));
-          expect(board.heroNode.hasFocus, isTrue);
+          if (outcome == 'hero') {
+            expect(board.hero, isNotEmpty);
+            expect(board.heroNode.hasFocus, isTrue);
+            await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+            await tester.pump(const Duration(milliseconds: 500));
+          } else {
+            expect(board.hero, isEmpty);
+          }
+          expect(board.sections.expand((s) => s.nodes),
+              contains(FocusManager.instance.primaryFocus));
         }
         await tester.pumpWidget(const SizedBox());
         await tester.pump(const Duration(seconds: 2));

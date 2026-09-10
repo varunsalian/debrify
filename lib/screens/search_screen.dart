@@ -2993,6 +2993,12 @@ class _SearchScreenState extends State<SearchScreen>
       if (completionGen == _boardLoadGen && scope == ProfileRuntime.scope.value) {
         _boardRefreshing = false;
         _progressiveHomeLoadPending = false;
+        // Empty/failed catalogs can end without another content publication.
+        // Rebuild the initial Spotlight gate so its cards fallback is shown.
+        if (mounted && !_spotlightEntryRevealed &&
+            widget.isTelevision && _homeStyleEffective == 'spotlight') {
+          setState(() {});
+        }
         if (mounted && !expired) {
           _maybeAutoFillBoard(resumeDeferred: true);
         }
@@ -7302,6 +7308,8 @@ class _SearchScreenState extends State<SearchScreen>
   /// Guards [_resolveSpotlightHeroSource] against overlapping runs (a Home
   /// Rows save landing mid-load): only the newest run may commit.
   int _heroSourceResolveGen = 0;
+  bool _heroSourceResolving = false;
+  bool _spotlightEntryRevealed = false;
 
   /// Fetch the hero reel for the current [_heroSource] pref.
   ///
@@ -7314,6 +7322,22 @@ class _SearchScreenState extends State<SearchScreen>
   /// override, which IS the auto fallback.
   Future<void> _resolveSpotlightHeroSource(List<StremioAddon> addons) async {
     final gen = ++_heroSourceResolveGen;
+    _heroSourceResolving = true;
+    try {
+      // The initial presentation must not wait forever on a dead hero source.
+      // A late result may still populate the reel after the cards fallback.
+      await _fetchSpotlightHeroSource(addons, gen).timeout(
+        const Duration(seconds: 25),
+        onTimeout: () {},
+      );
+    } finally {
+      if (mounted && gen == _heroSourceResolveGen) {
+        setState(() => _heroSourceResolving = false);
+      }
+    }
+  }
+
+  Future<void> _fetchSpotlightHeroSource(List<StremioAddon> addons, int gen) async {
     final source = _heroSource;
     if (source.mode != HomeHeroSourceMode.auto) {
       final all = [
@@ -18325,6 +18349,19 @@ class _SearchScreenState extends State<SearchScreen>
   }
 
   Widget _buildBoardContent() {
+    if (!_loading && !_spotlightEntryRevealed && widget.isTelevision &&
+        !widget.searchMode && !widget.discoverMode &&
+        _catalogQuery.isEmpty && !_catalogSearching &&
+        _homeStyleEffective == 'spotlight') {
+      if (_spotlightHero.isEmpty && (_boardRefreshing || _heroSourceResolving)) {
+        return BrandLoadingStage(isTelevision: true);
+      }
+      // Reveal once: background refreshes must not hide an already usable
+      // board. Hero success enters on the hero; exhaustion enters on a card.
+      _spotlightEntryRevealed = true;
+      _autoFocusSettled = false;
+      _maybeAutoFocusBoard();
+    }
     if (_loading) {
       // The brand moment: DEBRIFY centred on the ink while catalogs load —
       // replaces the old skeleton-rail wall, which read as a broken app.
