@@ -74,6 +74,7 @@ final class WebDavSyncScheduler {
     this.localChangeObserver,
     this.saveFeedback,
     this.localChangeDeferredObserver,
+    this.repairSeed,
     DateTime Function()? clock,
   }) : _runner = runner,
        _gate = gate,
@@ -98,6 +99,10 @@ final class WebDavSyncScheduler {
   final WebDavSyncLocalChangeObserver? localChangeObserver;
   final WebDavSyncSaveFeedback? saveFeedback;
   final WebDavSyncLocalChangeDeferredObserver? localChangeDeferredObserver;
+
+  /// Required recovery, independent of the optional idle-maintenance gate.
+  /// Returns true only when the seed is ready for a fresh ordinary cycle.
+  final Future<bool> Function()? repairSeed;
 
   WebDavSyncContextProvider? _contextProvider;
   WebDavSyncRemotePollContextProvider? _remotePollContextProvider;
@@ -134,10 +139,14 @@ final class WebDavSyncScheduler {
   int _consecutivePollFailures = 0;
   bool _pollBackoffHoldsThroughCycles = false;
   int _pollGeneration = 0;
+  int _cycleGeneration = 0;
+  int _lastSuccessfulCycleGeneration = 0;
   int _pollTimerGeneration = 0;
   Completer<void>? _pollCompletion;
 
   bool get isArmed => _contextProvider != null;
+
+  bool get hasPendingWork => _running || _pendingLocalChangeSequence != null;
 
   /// Unlike poll readiness, normal in-flight work does not make sync inactive.
   bool get automaticSyncActive =>
@@ -533,6 +542,7 @@ final class WebDavSyncScheduler {
     }
 
     final generation = _pollGeneration;
+    final cycleGeneration = _cycleGeneration;
     _polling = true;
     final completion = Completer<void>();
     _pollCompletion = completion;
@@ -576,13 +586,18 @@ final class WebDavSyncScheduler {
       }
       final completedOutcomes = outcomes.cast<_PollOutcome>();
       if (completedOutcomes.any((outcome) => outcome.error != null)) {
-        _recordPollFailure(
-          completedOutcomes
-              .firstWhere((outcome) => outcome.error != null)
-              .error,
-        );
+        for (final outcome in completedOutcomes) {
+          final error = outcome.error;
+          if (error != null && _isCurrentPollFailure(error, cycleGeneration)) {
+            _recordPollFailure(error);
+            break;
+          }
+        }
         return;
       }
+      // The full cycle has fresher data. Keep server failure backoff above,
+      // but discard obsolete change hints and validator capability results.
+      if (cycleGeneration != _cycleGeneration) return;
       _resetPollBackoff();
       final changed = completedOutcomes.any((outcome) {
         final probe = outcome.probe!;
@@ -607,7 +622,12 @@ final class WebDavSyncScheduler {
     } catch (error) {
       // A metadata hint never becomes a sync error. The ordinary lifecycle
       // and 15-minute cycles remain the durable retry and reporting path.
-      _recordPollFailure(error);
+      if (generation == _pollGeneration &&
+          _remotePollingForeground &&
+          (context?.hasCurrentClientGeneration ?? true) &&
+          _isCurrentPollFailure(error, cycleGeneration)) {
+        _recordPollFailure(error);
+      }
     } finally {
       context?.transport.close();
       _polling = false;
@@ -615,6 +635,10 @@ final class WebDavSyncScheduler {
       if (!completion.isCompleted) completion.complete();
     }
   }
+
+  bool _isCurrentPollFailure(Object error, int cycleGeneration) =>
+      _lastSuccessfulCycleGeneration <= cycleGeneration ||
+      (error is WebDavException && error.statusCode != null);
 
   void _recordPollFailure(Object? error) {
     // A failure the server ANSWERED (429/5xx) is the server asking for
@@ -689,14 +713,15 @@ final class WebDavSyncScheduler {
     int requestedSequence,
     int requestedEpoch,
   ) async {
-    // A local change never queues behind an in-flight poll probe: the probe
+    // A local change or explicit sync never queues behind a poll probe: it
     // can hold its completer for a full request deadline, which is exactly
     // the window an OS process freeze eats after a lifecycle handoff. The
     // overlap is benign — the poll owns a private transport, and a
     // late 'remote changed' conclusion is swallowed by the running guard.
     final pollCompletion =
         trigger == WebDavSyncTrigger.remoteChange ||
-            trigger == WebDavSyncTrigger.localChange
+            trigger == WebDavSyncTrigger.localChange ||
+            trigger == WebDavSyncTrigger.manual
         ? null
         : _pollCompletion;
     if (pollCompletion != null) await pollCompletion.future;
@@ -759,6 +784,9 @@ final class WebDavSyncScheduler {
       );
     }
     _running = true;
+    // The full cycle supersedes metadata hints captured before it started.
+    // A late probe must not start another cycle from an obsolete change hint.
+    final cycleGeneration = ++_cycleGeneration;
     final cycleResult =
         Completer<({WebDavSyncCycleReport report, int? sequence})>();
     _activeCycleResult = cycleResult;
@@ -794,10 +822,45 @@ final class WebDavSyncScheduler {
           }
         }
       }
-      final report = await _runner.runCycle(context, trigger: trigger);
+      var report = await _runner.runCycle(context, trigger: trigger);
+      final repair = repairSeed;
+      if (report.disposition == WebDavSyncCycleDisposition.seedRepairRequired &&
+          repair != null &&
+          requestedEpoch == _armEpoch &&
+          !_gateHolds) {
+        // Recovery must run even with unpublished local intent. Keep _running
+        // held so manual callers join this attempt and ordinary cycles cannot
+        // overlap it. The runtime also rechecks its gates under the shared lock.
+        final ready = await repair();
+        if (requestedEpoch != _armEpoch || _gateHolds) {
+          report = const WebDavSyncCycleReport(
+            disposition: WebDavSyncCycleDisposition.inactive,
+          );
+        } else if (ready) {
+          final refreshed = await provider();
+          if (requestedEpoch != _armEpoch ||
+              _gateHolds ||
+              refreshed == null ||
+              !refreshed.active ||
+              !refreshed.isComplete) {
+            report = const WebDavSyncCycleReport(
+              disposition: WebDavSyncCycleDisposition.inactive,
+            );
+          } else {
+            // One verified follow-up only. A failed repair or another missing
+            // seed retains the save and uses the normal bounded retry timer.
+            report = await _runner.runCycle(refreshed, trigger: trigger);
+          }
+        }
+      }
       intentCycleCompleted =
           report.disposition == WebDavSyncCycleDisposition.completed ||
           report.disposition == WebDavSyncCycleDisposition.capacityBlocked;
+      if (intentCycleCompleted) {
+        // Match the connectivity proof that clears existing poll backoff.
+        // Merely starting a cycle cannot invalidate a later probe failure.
+        _lastSuccessfulCycleGeneration = cycleGeneration;
+      }
       intentCycleRequestedFollowUp = report.localChangeFollowUp;
       publicationCompleted =
           report.disposition == WebDavSyncCycleDisposition.completed &&

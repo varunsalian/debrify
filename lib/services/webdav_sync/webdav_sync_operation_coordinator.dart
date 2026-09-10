@@ -6,9 +6,16 @@ import 'package:synchronized/synchronized.dart';
 /// circle state. The lock is re-entrant because graph adoption finishes by
 /// invoking one hot merge inside the already-exclusive adoption operation.
 final class WebDavSyncOperationCoordinator {
+  final Zone _outsideOperationZone = Zone.current;
   final Lock _lock = Lock(reentrant: true);
 
   bool get isRunning => _lock.locked;
+
+  /// Deferred callbacks must not inherit an operation's reentrant lock level:
+  /// that scope expires when the operation completes. Retain the surrounding
+  /// application/test zone instead of escaping all the way to Zone.root.
+  Timer createDeferredTimer(Duration delay, void Function() callback) =>
+      _outsideOperationZone.run(() => Timer(delay, callback));
 
   Future<T> run<T>(FutureOr<T> Function() operation) =>
       _lock.synchronized(operation);

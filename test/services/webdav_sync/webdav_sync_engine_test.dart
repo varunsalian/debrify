@@ -29,6 +29,7 @@ import 'package:debrify/services/webdav_sync/webdav_sync_hot_models.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_collection_sections.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_local_adapter.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_library_models.dart';
+import 'package:debrify/services/webdav_sync/webdav_sync_models.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_runtime.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_setup_service.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_transport.dart';
@@ -110,6 +111,28 @@ void main() {
     );
     return WebDavSyncManifest.fromJson(payload);
   }
+
+  test(
+    'completed cycles carry the verified published manifest for maintenance',
+    () async {
+      final first = await runFixture(context());
+      final proof = first.verifiedMaintenance!;
+      expect(proof.namespaceId, context().namespaceId);
+      expect(proof.authorityContentHash, webDavSyncAuthorityHash(marker));
+      expect(proof.syncedAtMs, states.state.lastSuccessfulSyncMs);
+      expect(proof.checkedAtMs, now.millisecondsSinceEpoch);
+      expect(
+        proof.ownManifest!.toJson(),
+        (await openManifest('device-a')).toJson(),
+      );
+      final second = await runFixture(context());
+      expect(second.sectionsPushed, 0);
+      expect(
+        second.verifiedMaintenance!.ownManifest!.toJson(),
+        proof.ownManifest!.toJson(),
+      );
+    },
+  );
 
   test(
     'invalid outgoing manifest metadata preserves the working remote manifest',

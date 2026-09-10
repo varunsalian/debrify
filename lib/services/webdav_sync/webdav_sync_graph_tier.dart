@@ -107,6 +107,8 @@ final class WebDavSyncGraphTier {
     required ProfileAuthorizationContext authorization,
     bool force = false,
     bool runBootstrapMaintenance = true,
+    bool bootstrapOnly = false,
+    WebDavSyncVerifiedMaintenance? verifiedCycle,
   }) async {
     if (!await _isManagingAdmin(authorization)) {
       return const WebDavSyncGraphTierReport(
@@ -138,6 +140,11 @@ final class WebDavSyncGraphTier {
             lastBootstrapCheck == null ||
             nowMs < lastBootstrapCheck ||
             nowMs - lastBootstrapCheck >= bootstrapCadence.inMilliseconds);
+    if (bootstrapOnly && !bootstrapDue) {
+      return const WebDavSyncGraphTierReport(
+        disposition: WebDavSyncGraphTierDisposition.unchanged,
+      );
+    }
 
     // An unresolved adoption or predecessor prune remains a seed blocker.
     if (state.blocksSeedPushes) {
@@ -168,13 +175,45 @@ final class WebDavSyncGraphTier {
       );
     }
 
-    final scan = await _discovery.scanActive(bindingId: active.id);
-    if (scan.requiresBootstrapUpgrade) {
+    // Only an immediate, unchanged local continuation may reuse a completed
+    // cycle's authenticated scan. Deferred work always discovers afresh.
+    final namespace = (await _bindingStore.load()).namespaceFor(active);
+    final ageMs = verifiedCycle == null
+        ? -1
+        : nowMs - verifiedCycle.checkedAtMs;
+    final canReuse =
+        !force &&
+        !bootstrapOnly &&
+        verifiedCycle != null &&
+        ageMs >= 0 &&
+        ageMs <= const Duration(seconds: 30).inMilliseconds &&
+        verifiedCycle.namespaceId == active.namespaceId &&
+        namespace?.pinnedAuthorityHash == verifiedCycle.authorityContentHash &&
+        state.lastSuccessfulSyncMs == verifiedCycle.syncedAtMs &&
+        WebDavSyncCodec.canonicalJson(state.ownManifest?.toJson()) ==
+            WebDavSyncCodec.canonicalJson(verifiedCycle.ownManifest?.toJson());
+    final scan = canReuse
+        ? null
+        : await _discovery.scanActive(bindingId: active.id);
+    final schemaRatchet = canReuse
+        ? verifiedCycle.schemaRatchet
+        : scan!.schemaRatchet;
+    if (schemaRatchet > state.schemaRatchet) {
+      state = await _stateRepository.update(
+        active.namespaceId,
+        (current) => current.copyWith(
+          schemaRatchet: max(current.schemaRatchet, schemaRatchet),
+        ),
+      );
+    }
+    if (schemaRatchet > WebDavSyncGraphBuilder.bootstrapSchemaVersion) {
       return const WebDavSyncGraphTierReport(
         disposition: WebDavSyncGraphTierDisposition.updateRequired,
       );
     }
-    final ownManifest = scan.manifests[scan.namespace.deviceId];
+    final ownManifest = canReuse
+        ? verifiedCycle.ownManifest
+        : scan!.manifests[scan.namespace.deviceId];
     if (!_isCompleteOwnManifest(ownManifest, maps)) {
       await _publisher.publish(
         bindingId: active.id,

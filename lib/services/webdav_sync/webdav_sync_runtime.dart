@@ -48,6 +48,7 @@ import 'webdav_sync_local_adapter.dart';
 import 'webdav_sync_library_mutation.dart';
 import 'webdav_sync_library_models.dart';
 import 'webdav_sync_manifest_publisher.dart';
+import 'webdav_sync_maintenance.dart';
 import 'webdav_sync_models.dart';
 import 'webdav_sync_operation_coordinator.dart';
 import 'webdav_sync_scheduler.dart';
@@ -348,6 +349,18 @@ final class WebDavSyncRuntime
 
   WebDavSyncScheduler? _scheduler;
   Timer? _maintenanceTimer;
+  int _maintenanceGeneration = 0;
+  late final _idleMaintenance = WebDavSyncIdleMaintenance(
+    operations: _operations,
+    canRun: () =>
+        !_reconfigurationPaused &&
+        _joinForeground &&
+        _scheduler?.isArmed == true &&
+        _scheduler?.hasPendingWork == false &&
+        !playbackActive &&
+        !tvOsLowMemory,
+    maintain: () => _runSeedMaintenance(force: false, bootstrapOnly: true),
+  );
   Timer? _firstJoinRetryTimer;
   Future<void>? _firstJoinResuming;
   @visibleForTesting
@@ -437,6 +450,8 @@ final class WebDavSyncRuntime
         gate: this,
         localChangeObserver: recordWebDavSyncLocalChangeTrigger,
         localChangeDeferredObserver: recordWebDavSyncLocalChangeDeferred,
+        repairSeed: () =>
+            _runSeedMaintenance(force: true, runBootstrapMaintenance: false),
       );
       WidgetsBinding.instance.addObserver(this);
       MainPageBridge.addPlayerLaunchListener(_onPlaybackStarted);
@@ -694,18 +709,23 @@ final class WebDavSyncRuntime
 
   @override
   Future<WebDavSyncCycleReport> syncNow() async {
-    await initialize();
-    final scheduler = _scheduler;
-    if (scheduler == null) return _inactiveReport;
-    final report = await scheduler.signal(WebDavSyncTrigger.manual);
-    if (report.disposition == WebDavSyncCycleDisposition.completed ||
-        report.disposition == WebDavSyncCycleDisposition.seedRepairRequired) {
-      await _runSeedMaintenance(
-        force:
-            report.disposition == WebDavSyncCycleDisposition.seedRepairRequired,
+    final stopwatch = Stopwatch()..start();
+    var disposition = 'failed';
+    try {
+      await initialize();
+      final report = await _signalWithMaintenance(WebDavSyncTrigger.manual);
+      disposition = report.disposition.name;
+      return report;
+    } finally {
+      app_diagnostics.DiagnosticLog.instance.recordEvent(
+        source: 'webdav_sync',
+        event: 'manual_sync',
+        fields: {
+          'totalMs': stopwatch.elapsedMilliseconds,
+          'disposition': app_diagnostics.DiagnosticLabel(disposition),
+        },
       );
     }
-    return report;
   }
 
   @override
@@ -1501,8 +1521,9 @@ final class WebDavSyncRuntime
     webDavSyncRemoteWatchActivityHook = () => _scheduler?.extendWarmSession();
     _maintenanceTimer?.cancel();
     _maintenanceTimer = Timer.periodic(WebDavSyncGraphTier.cadence, (_) {
-      unawaited(_maintainSeed(force: false));
+      _idleMaintenance.schedule();
     });
+    _idleMaintenance.schedule();
   }
 
   void _onLocalProfileChange(String _, String logicalKey) {
@@ -1510,6 +1531,8 @@ final class WebDavSyncRuntime
   }
 
   void _disarmScheduler() {
+    _maintenanceGeneration++;
+    _idleMaintenance.cancel();
     ProfilePreferences.webDavSyncLocalChangeSink = null;
     webDavSyncRemoteWatchActivityHook = null;
     _scheduler?.disarm();
@@ -1520,15 +1543,20 @@ final class WebDavSyncRuntime
   ) async {
     final scheduler = _scheduler;
     if (scheduler == null) return _inactiveReport;
-    final report = await scheduler.signal(trigger);
-    if (report.disposition == WebDavSyncCycleDisposition.completed ||
-        report.disposition == WebDavSyncCycleDisposition.seedRepairRequired) {
-      await _maintainSeed(
+    final generation = _maintenanceGeneration;
+    return runWebDavSyncWithMaintenance(
+      sync: () => scheduler.signal(trigger),
+      isCurrent: () =>
+          generation == _maintenanceGeneration && !_reconfigurationPaused,
+      maintainRequired: (report) => _runSeedMaintenance(
         force:
             report.disposition == WebDavSyncCycleDisposition.seedRepairRequired,
-      );
-    }
-    return report;
+        runBootstrapMaintenance: false,
+        verifiedCycle: report.verifiedMaintenance,
+        expectedGeneration: generation,
+      ),
+      scheduleOptional: _idleMaintenance.schedule,
+    );
   }
 
   Future<void> _signalAutomatically(WebDavSyncTrigger trigger) async {
@@ -1541,26 +1569,40 @@ final class WebDavSyncRuntime
     }
   }
 
-  Future<void> _maintainSeed({required bool force}) async {
-    if (playbackActiveOnTelevision || tvOsLowMemory) return;
-    try {
-      await _runSeedMaintenance(force: force);
-    } on StateError {
-      // A non-Admin/locked session pauses bootstrap maintenance only.
-    } on WebDavException {
-      // Routine LAN/offline failures remain settings status, never banners.
-    } catch (_) {
-      // Automatic maintenance must not surface failures during playback/home.
-    }
-  }
-
-  Future<void> _runSeedMaintenance({required bool force}) =>
-      _operations.run(() async {
-        final authorization = await ProfileAuthorizationContext.capture(
-          ProfileBootstrap.registry,
+  Future<bool> _runSeedMaintenance({
+    required bool force,
+    bool runBootstrapMaintenance = true,
+    bool bootstrapOnly = false,
+    WebDavSyncVerifiedMaintenance? verifiedCycle,
+    int? expectedGeneration,
+  }) async {
+    final generation = expectedGeneration ?? _maintenanceGeneration;
+    var ready = false;
+    await runWebDavSyncMaintenanceAfterLockGate(
+      operations: _operations,
+      gate: this,
+      isCurrent: () =>
+          generation == _maintenanceGeneration && !_reconfigurationPaused,
+      isForeground: () => _joinForeground,
+      bootstrapOnly: bootstrapOnly,
+      prepare: () =>
+          ProfileAuthorizationContext.capture(ProfileBootstrap.registry),
+      maintain: (authorization) async {
+        final report = await _graphTier().maintain(
+          authorization: authorization,
+          force: force,
+          runBootstrapMaintenance: runBootstrapMaintenance,
+          bootstrapOnly: bootstrapOnly,
+          verifiedCycle: verifiedCycle,
         );
-        await _graphTier().maintain(authorization: authorization, force: force);
-      });
+        ready =
+            report.disposition ==
+                WebDavSyncGraphTierDisposition.localPublished ||
+            report.disposition == WebDavSyncGraphTierDisposition.unchanged;
+      },
+    );
+    return ready;
+  }
 
   Future<WebDavSyncCycleContext?> _activeContext() async {
     final stored = await bindingStore.load();
@@ -1651,6 +1693,8 @@ final class WebDavSyncRuntime
 
   @visibleForTesting
   void debugResetInitialization() {
+    _maintenanceGeneration++;
+    _idleMaintenance.cancel();
     ProfilePreferences.webDavSyncLocalChangeSink = null;
     webDavSyncRemoteWatchActivityHook = null;
     _scheduler?.dispose();

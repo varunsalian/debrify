@@ -103,6 +103,7 @@ final class WebDavSyncCycleReport {
     this.localChangeFollowUp = false,
     this.localPublicationConfirmed = false,
     this.localProfilesSuppressed = false,
+    this.verifiedMaintenance,
   });
 
   final WebDavSyncCycleDisposition disposition;
@@ -122,6 +123,28 @@ final class WebDavSyncCycleReport {
   /// Profile records were withheld from the snapshot by a local safety hold.
   /// Other families may still have been published successfully.
   final bool localProfilesSuppressed;
+
+  /// Short-lived evidence for the immediately following maintenance check.
+  /// Never persisted or reused by deferred maintenance.
+  final WebDavSyncVerifiedMaintenance? verifiedMaintenance;
+}
+
+final class WebDavSyncVerifiedMaintenance {
+  const WebDavSyncVerifiedMaintenance({
+    required this.namespaceId,
+    required this.authorityContentHash,
+    required this.ownManifest,
+    required this.schemaRatchet,
+    required this.syncedAtMs,
+    required this.checkedAtMs,
+  });
+
+  final String namespaceId;
+  final String authorityContentHash;
+  final WebDavSyncManifest? ownManifest;
+  final int schemaRatchet;
+  final int syncedAtMs;
+  final int checkedAtMs;
 }
 
 /// Bounded cache shared by successive production engine instances. Transport
@@ -200,8 +223,9 @@ final class WebDavSyncSectionCache {
   }
 
   Future<void> putAsync(String key, Object value, int encodedBytes) async {
-    if (_isCollection(key))
+    if (_isCollection(key)) {
       return _collections.putAsync(key, value, encodedBytes);
+    }
     final generation = _generation;
     final limit = maxBytes;
     final retained = await TransferIo.largeWorker.synchronized(
@@ -2009,6 +2033,20 @@ final class WebDavSyncEngine
             circlePublicationAllowed &&
             !cycleConflicted &&
             !localChangeFollowUp,
+        verifiedMaintenance: WebDavSyncVerifiedMaintenance(
+          namespaceId: namespaceId,
+          authorityContentHash: webDavSyncAuthorityHash(rootRead.bytes),
+          ownManifest: push.manifest ?? verifiedOwnManifest,
+          schemaRatchet: manifests.values.fold<int>(state.schemaRatchet, (
+            version,
+            manifest,
+          ) {
+            final next = manifest.section('bootstrap')?.schemaVersion ?? 0;
+            return next > version ? next : version;
+          }),
+          syncedAtMs: serverNowMs,
+          checkedAtMs: _clock().toUtc().millisecondsSinceEpoch,
+        ),
       );
     } finally {
       transport.close();

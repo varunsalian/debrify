@@ -219,6 +219,133 @@ void main() {
     expect(snapshot.manifests['peer-device']!.section('graph'), isNotNull);
   });
 
+  WebDavSyncVerifiedMaintenance verifiedCycle({
+    String? namespaceId,
+    String? authorityHash,
+    int? checkedAtMs,
+    int schemaRatchet = 1,
+  }) {
+    states.state = states.state.copyWith(
+      lastSuccessfulSyncMs: _now.millisecondsSinceEpoch,
+    );
+    return WebDavSyncVerifiedMaintenance(
+      namespaceId: namespaceId ?? binding.namespaceId,
+      authorityContentHash:
+          authorityHash ?? snapshot.namespace.pinnedAuthorityHash!,
+      ownManifest: states.state.ownManifest,
+      schemaRatchet: schemaRatchet,
+      syncedAtMs: _now.millisecondsSinceEpoch,
+      checkedAtMs: checkedAtMs ?? _now.millisecondsSinceEpoch,
+    );
+  }
+
+  test(
+    'immediate maintenance reuses a verified cycle and leaves daily work due',
+    () async {
+      final report = await tier().maintain(
+        authorization: authorization,
+        runBootstrapMaintenance: false,
+        verifiedCycle: verifiedCycle(),
+      );
+      expect(report.disposition, WebDavSyncGraphTierDisposition.unchanged);
+      expect(events, isEmpty, reason: 'zero additional server requests');
+      expect(states.state.lastBootstrapCheckMs, isNull);
+      expect(states.state.publishedBootstrapDatabaseDigest, _digest);
+    },
+  );
+
+  for (final changed in [
+    'namespace',
+    'authority',
+    'age',
+    'clock',
+    'state',
+    'manifest',
+    'force',
+  ]) {
+    test(
+      'maintenance rescans when verified cycle cannot be reused: $changed',
+      () async {
+        final proof = verifiedCycle(
+          namespaceId: changed == 'namespace' ? 'old-namespace' : null,
+          authorityHash: changed == 'authority' ? 'old-authority' : null,
+          checkedAtMs: changed == 'age'
+              ? _now
+                    .subtract(const Duration(seconds: 31))
+                    .millisecondsSinceEpoch
+              : changed == 'clock'
+              ? _now.add(const Duration(seconds: 1)).millisecondsSinceEpoch
+              : null,
+        );
+        if (changed == 'state') {
+          states.state = states.state.copyWith(lastSuccessfulSyncMs: 1);
+        }
+        if (changed == 'manifest') {
+          states.state = states.state.copyWith(
+            ownManifest: snapshot.manifests['peer-device'],
+          );
+        }
+        await tier().maintain(
+          authorization: authorization,
+          runBootstrapMaintenance: false,
+          force: changed == 'force',
+          verifiedCycle: proof,
+        );
+        expect(events, contains('scan'));
+      },
+    );
+  }
+
+  test(
+    'verified future bootstrap schema still blocks publication and ratchets',
+    () async {
+      final futureVersion = WebDavSyncGraphBuilder.bootstrapSchemaVersion + 1;
+      final report = await tier().maintain(
+        authorization: authorization,
+        runBootstrapMaintenance: false,
+        verifiedCycle: verifiedCycle(schemaRatchet: futureVersion),
+      );
+      expect(report.disposition, WebDavSyncGraphTierDisposition.updateRequired);
+      expect(states.state.schemaRatchet, futureVersion);
+      expect(events, isEmpty);
+    },
+  );
+
+  test(
+    'an incomplete verified manifest still requires foreground repair',
+    () async {
+      states.state = states.state.copyWith(
+        ownManifest: _completeManifest(
+          circleId: snapshot.root.document.circleId,
+          deviceId: snapshot.namespace.deviceId,
+          includeLegacyGraph: true,
+        ),
+      );
+      final report = await tier().maintain(
+        authorization: authorization,
+        runBootstrapMaintenance: false,
+        verifiedCycle: verifiedCycle(),
+      );
+      expect(report.disposition, WebDavSyncGraphTierDisposition.localPublished);
+      expect(events, ['publish']);
+    },
+  );
+
+  test(
+    'idle maintenance skips server and archive work when its durable check is current',
+    () async {
+      states.state = states.state.copyWith(
+        lastBootstrapCheckMs: _now.millisecondsSinceEpoch,
+      );
+      final report = await tier().maintain(
+        authorization: authorization,
+        bootstrapOnly: true,
+      );
+      expect(report.disposition, WebDavSyncGraphTierDisposition.unchanged);
+      expect(events, isEmpty);
+    },
+  );
+
   test('identity reconciliation republishes the complete seed', () async {
     await registry.createProfile(
       name: 'Member',

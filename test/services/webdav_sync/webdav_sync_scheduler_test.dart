@@ -688,6 +688,86 @@ void main() {
     });
   });
 
+  for (final lateFailure in ['none', 'http', 'connectivity', 'failedCycle']) {
+    test(
+      'manual sync discards obsolete connectivity failures but retains current failures ($lateFailure)',
+      () {
+        fakeAsync((async) {
+          final start = DateTime.utc(2026, 9, 1);
+          final probe = Completer<void>();
+          final transport = _PollTransport(
+            clock: () => start.add(async.elapsed),
+            probes: const {
+              'device-b': WebDavSyncManifestProbe(
+                exists: true,
+                validator: WebDavSyncManifestValidator.etag('"changed"'),
+              ),
+            },
+          )..probeBlocker = probe;
+          final runner = _Runner()
+            ..failuresRemaining = lateFailure == 'failedCycle' ? 1 : 0;
+          final scheduler = WebDavSyncScheduler(
+            runner: runner,
+            gate: _Gate(),
+            clock: () => start.add(async.elapsed),
+          );
+          scheduler.arm(
+            () async => context(),
+            remotePollContextProvider: () async => WebDavSyncRemotePollContext(
+              transport: transport,
+              peerDeviceIds: const ['device-b'],
+              validators: const {
+                'device-b': WebDavSyncManifestValidator.etag('"old"'),
+              },
+            ),
+          );
+          async.elapse(const Duration(seconds: 15));
+          expect(transport.probedDeviceIds, ['device-b']);
+          WebDavSyncCycleReport? manual;
+          Object? manualError;
+          scheduler
+              .signal(WebDavSyncTrigger.manual)
+              .then<void>(
+                (r) => manual = r,
+                onError: (Object error) => manualError = error,
+              );
+          async.flushMicrotasks();
+          if (lateFailure == 'failedCycle') {
+            expect(manualError, isStateError);
+          } else {
+            expect(manual?.disposition, WebDavSyncCycleDisposition.completed);
+          }
+          expect(runner.runs, 1);
+          if (lateFailure != 'none') {
+            transport.failuresRemaining = 1;
+            transport.failWithoutStatus = lateFailure != 'http';
+          }
+          probe.complete();
+          async.flushMicrotasks();
+          expect(
+            runner.runs,
+            1,
+            reason: 'an obsolete changed hint must be discarded',
+          );
+          expect(
+            scheduler.pollState,
+            lateFailure == 'http' || lateFailure == 'failedCycle'
+                ? WebDavSyncPollState.pausedBackoff
+                : WebDavSyncPollState.active,
+          );
+          // A fresh probe still detects subsequent changes normally.
+          async.elapse(const Duration(seconds: 5));
+          if (lateFailure == 'http' || lateFailure == 'failedCycle') {
+            expect(runner.runs, 1);
+            async.elapse(const Duration(seconds: 55));
+          }
+          expect(runner.runs, 2);
+          scheduler.dispose();
+        });
+      },
+    );
+  }
+
   test('flush during a covering cycle adds no redundant follow-up', () {
     fakeAsync((async) {
       final firstRun = Completer<void>();
@@ -1678,6 +1758,237 @@ void main() {
   });
 
   group('durable local-change intent', () {
+    for (final periodic in [false, true]) {
+      test(
+        'automatic seed repair releases pending saves (periodic=$periodic)',
+        () {
+          fakeAsync((async) {
+            final feedback = WebDavSyncSaveFeedback();
+            final runner = _Runner()
+              ..nextDisposition = WebDavSyncCycleDisposition.seedRepairRequired;
+            var repairs = 0;
+            var contextReads = 0;
+            late WebDavSyncScheduler scheduler;
+            scheduler = WebDavSyncScheduler(
+              runner: runner,
+              gate: _Gate(),
+              saveFeedback: feedback,
+              localChangeDebounce: periodic
+                  ? const Duration(hours: 1)
+                  : const Duration(seconds: 2),
+              repairSeed: () async {
+                expect(scheduler.hasPendingWork, isTrue);
+                expect(feedback.hasPending, isTrue);
+                repairs++;
+                runner.nextDisposition = WebDavSyncCycleDisposition.completed;
+                return true;
+              },
+            );
+            scheduler.arm(() async {
+              contextReads++;
+              return context();
+            });
+            scheduler.notifyLocalChange('theme');
+            async.elapse(
+              periodic
+                  ? const Duration(minutes: 15)
+                  : const Duration(seconds: 2),
+            );
+            expect(repairs, 1);
+            expect(
+              contextReads,
+              2,
+              reason: 'refresh the context after seed publication',
+            );
+            expect(runner.runs, 2);
+            expect(
+              runner.triggers,
+              everyElement(
+                periodic
+                    ? WebDavSyncTrigger.periodic
+                    : WebDavSyncTrigger.localChange,
+              ),
+            );
+            expect(feedback.hasPending, isFalse);
+            expect(feedback.phase, WebDavSavePhase.synced);
+            expect(scheduler.hasPendingWork, isFalse);
+            async.elapse(const Duration(minutes: 3));
+            expect(repairs, 1);
+            scheduler.dispose();
+            feedback.dispose();
+          });
+        },
+      );
+    }
+
+    for (final outcome in ['blocked', 'failed', 'stillMissing']) {
+      test(
+        'unsuccessful seed repair retains and retries the save ($outcome)',
+        () {
+          fakeAsync((async) {
+            final feedback = WebDavSyncSaveFeedback();
+            final runner = _Runner()
+              ..nextDisposition = WebDavSyncCycleDisposition.seedRepairRequired;
+            var repairs = 0;
+            var allowRepair = false;
+            final scheduler = WebDavSyncScheduler(
+              runner: runner,
+              gate: _Gate(),
+              saveFeedback: feedback,
+              repairSeed: () async {
+                repairs++;
+                if (allowRepair) {
+                  runner.nextDisposition = WebDavSyncCycleDisposition.completed;
+                  return true;
+                }
+                if (outcome == 'failed') throw StateError('upload failed');
+                return outcome == 'stillMissing';
+              },
+            );
+            scheduler.arm(() async => context());
+            scheduler.notifyLocalChange('theme');
+            async.elapse(const Duration(seconds: 2));
+            expect(
+              repairs,
+              1,
+              reason: 'at most one repair per scheduler attempt',
+            );
+            expect(runner.runs, outcome == 'stillMissing' ? 2 : 1);
+            expect(feedback.hasPending, isTrue);
+            expect(scheduler.hasPendingWork, isTrue);
+            allowRepair = true;
+            async.elapse(const Duration(seconds: 3));
+            expect(repairs, 2);
+            expect(feedback.hasPending, isFalse);
+            expect(scheduler.hasPendingWork, isFalse);
+            scheduler.dispose();
+            feedback.dispose();
+          });
+        },
+      );
+    }
+
+    for (final hold in ['playback', 'memory', 'reconfiguration']) {
+      test('seed repair continuation respects $hold', () {
+        fakeAsync((async) {
+          final feedback = WebDavSyncSaveFeedback();
+          final runner = _Runner()
+            ..nextDisposition = WebDavSyncCycleDisposition.seedRepairRequired;
+          final gate = _Gate();
+          final repaired = Completer<bool>();
+          var repairs = 0;
+          final scheduler = WebDavSyncScheduler(
+            runner: runner,
+            gate: gate,
+            saveFeedback: feedback,
+            repairSeed: () {
+              repairs++;
+              return repaired.future;
+            },
+          );
+          scheduler.arm(() async => context());
+          scheduler.notifyLocalChange('theme');
+          async.elapse(const Duration(seconds: 2));
+          expect(repairs, 1);
+          gate.televisionPlayback = hold == 'playback';
+          gate.lowMemory = hold == 'memory';
+          if (hold == 'reconfiguration') scheduler.disarm();
+          runner.nextDisposition = WebDavSyncCycleDisposition.completed;
+          repaired.complete(true);
+          async.flushMicrotasks();
+          expect(runner.runs, 1, reason: 'no follow-up cycle through a hold');
+          expect(feedback.hasPending, isTrue);
+          gate.televisionPlayback = false;
+          gate.lowMemory = false;
+          if (hold == 'reconfiguration') scheduler.arm(() async => context());
+          async.elapse(
+            hold == 'playback'
+                ? scheduler.playbackDebounce
+                : const Duration(seconds: 3),
+          );
+          expect(feedback.hasPending, isFalse);
+          scheduler.dispose();
+          feedback.dispose();
+        });
+      });
+    }
+
+    test(
+      'manual sync joins an automatic seed repair through verified follow-up',
+      () {
+        fakeAsync((async) {
+          final feedback = WebDavSyncSaveFeedback();
+          final runner = _Runner()
+            ..nextDisposition = WebDavSyncCycleDisposition.seedRepairRequired;
+          final repaired = Completer<bool>();
+          var repairs = 0;
+          final scheduler = WebDavSyncScheduler(
+            runner: runner,
+            gate: _Gate(),
+            saveFeedback: feedback,
+            repairSeed: () {
+              repairs++;
+              return repaired.future;
+            },
+          );
+          scheduler.arm(() async => context());
+          scheduler.notifyLocalChange('theme');
+          async.elapse(const Duration(seconds: 2));
+          WebDavSyncCycleReport? manual;
+          scheduler.signal(WebDavSyncTrigger.manual).then((r) => manual = r);
+          async.flushMicrotasks();
+          expect(repairs, 1);
+          expect(manual, isNull);
+          expect(feedback.hasPending, isTrue);
+          runner.nextDisposition = WebDavSyncCycleDisposition.completed;
+          repaired.complete(true);
+          async.flushMicrotasks();
+          expect(manual?.disposition, WebDavSyncCycleDisposition.completed);
+          expect(runner.runs, 2);
+          expect(repairs, 1);
+          expect(feedback.hasPending, isFalse);
+          scheduler.dispose();
+          feedback.dispose();
+        });
+      },
+    );
+
+    test(
+      'TV playback starting during the detecting cycle defers seed repair',
+      () {
+        fakeAsync((async) {
+          final feedback = WebDavSyncSaveFeedback();
+          final gate = _Gate();
+          var repairs = 0;
+          final runner = _Runner()
+            ..nextDisposition = WebDavSyncCycleDisposition.seedRepairRequired
+            ..onRun = (_) => gate.televisionPlayback = true;
+          final scheduler = WebDavSyncScheduler(
+            runner: runner,
+            gate: gate,
+            saveFeedback: feedback,
+            repairSeed: () async {
+              repairs++;
+              runner.nextDisposition = WebDavSyncCycleDisposition.completed;
+              return true;
+            },
+          );
+          scheduler.arm(() async => context());
+          scheduler.notifyLocalChange('theme');
+          async.elapse(const Duration(seconds: 2));
+          expect(repairs, 0);
+          expect(feedback.hasPending, isTrue);
+          runner.onRun = null;
+          gate.televisionPlayback = false;
+          async.elapse(scheduler.playbackDebounce);
+          expect(repairs, 1);
+          expect(feedback.hasPending, isFalse);
+          scheduler.dispose();
+          feedback.dispose();
+        });
+      },
+    );
+
     for (final television in [true, false]) {
       for (final heldAtSave in [true, false]) {
         test(
