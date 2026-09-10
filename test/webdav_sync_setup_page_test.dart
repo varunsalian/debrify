@@ -34,6 +34,7 @@ const _config = WebDavConfig(
 );
 
 void main() {
+  final lastSyncLabel = RegExp(r'^Last synced 9/10/2026 5:30\sAM$');
   late WebDavSyncBindingStore store;
   late WebDavSyncCodec codec;
   late _FakeTransport transport;
@@ -174,6 +175,111 @@ void main() {
       await tester.pumpAndSettle();
     });
   }
+
+  testWidgets('reopening waits for saved sync history before showing status', (
+    tester,
+  ) async {
+    await installActiveBinding();
+    final activation = _FakeActivation(store)
+      ..lastSuccessfulSyncMs = DateTime(
+        2026,
+        9,
+        10,
+        5,
+        30,
+      ).millisecondsSinceEpoch;
+    await pumpPage(tester, enabled: true, activation: activation);
+    expect(find.textContaining(lastSyncLabel), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    final release = Completer<void>();
+    activation.statusRelease = release;
+    await pumpPage(tester, enabled: true, activation: activation);
+    await tester.pump(const Duration(seconds: 6));
+
+    expect(find.text('Connected to Family server'), findsOneWidget);
+    expect(find.text('Loading sync status…'), findsOneWidget);
+    expect(find.text('Waiting for the first completed sync'), findsNothing);
+
+    release.complete();
+    await tester.pumpAndSettle();
+    expect(find.textContaining(lastSyncLabel), findsOneWidget);
+    expect(find.text('Loading sync status…'), findsNothing);
+    expect(find.text('Waiting for the first completed sync'), findsNothing);
+  });
+
+  testWidgets('first-sync message requires successfully loaded empty history', (
+    tester,
+  ) async {
+    await installActiveBinding();
+    final release = Completer<void>();
+    final activation = _FakeActivation(store)..statusRelease = release;
+    await pumpPage(tester, enabled: true, activation: activation);
+
+    expect(find.text('Loading sync status…'), findsOneWidget);
+    expect(find.text('Waiting for the first completed sync'), findsNothing);
+
+    release.complete();
+    await tester.pumpAndSettle();
+    expect(find.text('Loading sync status…'), findsNothing);
+    expect(find.text('Waiting for the first completed sync'), findsOneWidget);
+  });
+
+  testWidgets('failed status read is unavailable until a refresh succeeds', (
+    tester,
+  ) async {
+    await installActiveBinding();
+    final activation = _FakeActivation(store)
+      ..lastSuccessfulSyncMs = DateTime(
+        2026,
+        9,
+        10,
+        5,
+        30,
+      ).millisecondsSinceEpoch
+      ..statusError = StateError('status temporarily unavailable');
+    await pumpPage(tester, enabled: true, activation: activation);
+
+    expect(find.text('Sync status unavailable'), findsOneWidget);
+    expect(find.text('Loading sync status…'), findsNothing);
+    expect(find.text('Waiting for the first completed sync'), findsNothing);
+
+    activation.statusError = null;
+    await tester.pump(const Duration(seconds: 2));
+    await tester.pumpAndSettle();
+    expect(find.textContaining(lastSyncLabel), findsOneWidget);
+    expect(find.text('Sync status unavailable'), findsNothing);
+  });
+
+  testWidgets('status refresh keeps the last known sync time during failure', (
+    tester,
+  ) async {
+    await installActiveBinding();
+    final activation = _FakeActivation(store)
+      ..lastSuccessfulSyncMs = DateTime(
+        2026,
+        9,
+        10,
+        5,
+        30,
+      ).millisecondsSinceEpoch;
+    await pumpPage(tester, enabled: true, activation: activation);
+    expect(find.textContaining(lastSyncLabel), findsOneWidget);
+
+    final release = Completer<void>();
+    activation
+      ..statusRelease = release
+      ..statusError = StateError('status temporarily unavailable');
+    await tester.pump(const Duration(seconds: 2));
+    expect(find.textContaining(lastSyncLabel), findsOneWidget);
+    expect(find.text('Loading sync status…'), findsNothing);
+
+    release.complete();
+    await tester.pumpAndSettle();
+    expect(find.textContaining(lastSyncLabel), findsOneWidget);
+    expect(find.text('Sync status unavailable'), findsNothing);
+    expect(find.text('Waiting for the first completed sync'), findsNothing);
+  });
 
   testWidgets('logout requires confirmation and returns to connect', (
     tester,
@@ -1174,6 +1280,9 @@ final class _FakeActivation
   int pauses = 0;
   int resumes = 0;
   int statusReads = 0;
+  Completer<void>? statusRelease;
+  Object? statusError;
+  int? lastSuccessfulSyncMs;
   Object? syncError;
   String? statusHint;
   bool tvChangesPending = false;
@@ -1233,8 +1342,10 @@ final class _FakeActivation
   @override
   Future<WebDavSyncRuntimeStatus> status() async {
     statusReads++;
+    await statusRelease?.future;
+    if (statusError case final error?) throw error;
     return WebDavSyncRuntimeStatus(
-      lastSuccessfulSyncMs: null,
+      lastSuccessfulSyncMs: lastSuccessfulSyncMs,
       peerCount: 0,
       adminPruneBlocked: false,
       deviceClockWarning: false,

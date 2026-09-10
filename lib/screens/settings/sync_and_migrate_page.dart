@@ -63,6 +63,7 @@ class _SyncAndMigratePageState extends State<SyncAndMigratePage>
   bool _logoutPending = false;
   Timer? _statusTimer;
   Future<void>? _statusLoading;
+  bool _statusReadFailed = false;
   bool _tvSyncLaunching = false;
   _DebrifyTvSyncOperation? _tvSyncOperation;
   WebDavSyncTvManualAvailability _tvManualAvailability =
@@ -229,6 +230,7 @@ class _SyncAndMigratePageState extends State<SyncAndMigratePage>
           _syncBinding = snapshot.stagedBinding ?? snapshot.activeBinding;
           _logoutPending = WebDavSyncBindingStore.logoutPending(snapshot);
           _runtimeStatus = status;
+          _statusReadFailed = false;
           if (_logBindingId != _syncBinding?.id) {
             unawaited(_loadLogUploadSetting());
           }
@@ -244,6 +246,7 @@ class _SyncAndMigratePageState extends State<SyncAndMigratePage>
         _syncBinding = snapshot.stagedBinding ?? snapshot.activeBinding;
         _logoutPending = WebDavSyncBindingStore.logoutPending(snapshot);
         _runtimeStatus = status;
+        _statusReadFailed = false;
         if (_logBindingId != _syncBinding?.id) {
           unawaited(_loadLogUploadSetting());
         }
@@ -254,6 +257,7 @@ class _SyncAndMigratePageState extends State<SyncAndMigratePage>
       });
     } catch (_) {
       // Active sync remains usable offline; manual Sync now surfaces errors.
+      if (mounted) setState(() => _statusReadFailed = true);
     }
   }
 
@@ -911,7 +915,13 @@ class _SyncAndMigratePageState extends State<SyncAndMigratePage>
                     : finishingFirstSync
                     ? 'Setting up sync. Keep the app open while this finishes.'
                     : active
-                    ? lastSync == null
+                    ? _runtimeStatus == null
+                          ? _statusReadFailed || _management == null
+                                ? 'Sync status unavailable'
+                                : 'Loading sync status…'
+                          : _runtimeStatus!.localStateMissing
+                          ? 'Sync status unavailable'
+                          : lastSync == null
                           ? 'Waiting for the first completed sync'
                           : 'Last synced ${_formatSyncTime(lastSync)}'
                     : _syncBinding == null
@@ -1101,9 +1111,7 @@ class _SyncAndMigratePageState extends State<SyncAndMigratePage>
             constraints: const BoxConstraints(maxWidth: kSettingsMaxWidth),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                if (_syncFeatureEnabled) _buildSyncSection(),
-              ],
+              children: [if (_syncFeatureEnabled) _buildSyncSection()],
             ),
           ),
         ),
