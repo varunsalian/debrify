@@ -16566,6 +16566,10 @@ class _SearchScreenState extends State<SearchScreen>
         providersEnabled: !_kwSelectionMode,
         onProviderSelected: (source) {
           _lastKeywordCinemaSource = 0;
+          // Keep the rail's row-zero target mounted after a source switch.
+          _pendingKwScroll = null;
+          _kwLastScroll = 0;
+          if (_kwScroll.hasClients) _kwScroll.jumpTo(0);
           _setKwSourceTab(source);
         },
         onFocusAbove: () => _searchFocusNode.requestFocus(),

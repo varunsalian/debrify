@@ -66,6 +66,9 @@ class _SourcesScreenState extends State<_SourcesScreen> {
   /// in lock-step with THIS list, never [_torrents].
   List<Torrent> _visible = [];
   final List<FocusNode> _nodes = [];
+  final ScrollController _resultsScroll = ScrollController(
+    keepScrollOffset: false,
+  );
   List<SeriesSource> _bound = [];
 
   // --- redesign toolbar state (unused when _redesign is false) ---
@@ -299,6 +302,7 @@ class _SourcesScreenState extends State<_SourcesScreen> {
   @override
   void dispose() {
     _kwCtrl.dispose();
+    _resultsScroll.dispose();
     _filterFocus.removeListener(_onFilterFocusChanged);
     _filterFocus.dispose();
     _pillFocus.dispose();
@@ -1112,6 +1116,10 @@ class _SourcesScreenState extends State<_SourcesScreen> {
   void _selectCinemaProvider(String? key) {
     _sourceFilter = key;
     _lastCinemaSource = 0;
+    // The rail returns to row zero after changing providers. Mount that row
+    // before Right can request its focus; a lazy list left at the previous
+    // provider's offset has no attached focus target at index zero.
+    if (_resultsScroll.hasClients) _resultsScroll.jumpTo(0);
     _rebuildVisible();
     for (final status in _addonStatuses) {
       if (status.sourceKey == key && _statusActionable(status)) {
@@ -1165,6 +1173,7 @@ class _SourcesScreenState extends State<_SourcesScreen> {
                                   },
                                   child: SourceListScrollAnchor(
                                     child: ListView.builder(
+                                      controller: _resultsScroll,
                                       padding: EdgeInsets.symmetric(
                                         // Spotlight expands the focused
                                         // SourceRow beyond its layout box.

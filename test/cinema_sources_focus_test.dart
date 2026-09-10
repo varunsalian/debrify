@@ -96,6 +96,69 @@ void main() {
     await tester.pumpWidget(const SizedBox());
   });
 
+  testWidgets('switching providers after scrolling can return to results', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    await tester.runAsync(TorrentService.ensureInitialized);
+    tester.view.physicalSize = const Size(960, 540);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData.dark(),
+        home: AppThemeScope(
+          theme: AppThemes.legacy,
+          child: sourcesScreenForTesting(
+            selection: const AdvancedSearchSelection(
+              imdbId: '',
+              isSeries: false,
+              title: 'Movie',
+            ),
+            meta: const PlaybackMeta(),
+            search: (_) async => {
+              'torrents': [
+                for (var i = 0; i < 100; i++)
+                  _torrent('Movie A $i', 'torrentio'),
+                for (var i = 0; i < 100; i++) _torrent('Movie B $i', 'jackett'),
+              ],
+            },
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final list = find.descendant(
+      of: find.byKey(const ValueKey('cinema-sources-results')),
+      matching: find.byType(ListView),
+    );
+    await tester.drag(list, const Offset(0, -4000));
+    await tester.pumpAndSettle();
+    final rows = tester.widgetList<SourceRow>(find.byType(SourceRow)).toList();
+    final row = rows.firstWhere((row) => row.focusNode.debugLabel != 'src_0');
+    row.focusNode.requestFocus();
+    await tester.pumpAndSettle();
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+    await tester.pumpAndSettle();
+    expect(
+      FocusManager.instance.primaryFocus?.debugLabel,
+      'cinema-provider-all',
+    );
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    await tester.pumpAndSettle();
+    expect(
+      FocusManager.instance.primaryFocus?.debugLabel,
+      startsWith('cinema-provider-'),
+    );
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pumpAndSettle();
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'src_0');
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
+  });
+
   for (final (back, earlyBatch) in [
     (false, true),
     (true, true),
