@@ -108,6 +108,11 @@ abstract final class SettingsRows {
     title: 'Collections',
     subtitle: 'Import Nuvio-style folder collections as Home rows',
   );
+  static const badges = SettingsRowContent(
+    icon: Icons.sell_rounded,
+    title: 'Badges',
+    subtitle: 'Import and manage stream badge rules',
+  );
   static const player = SettingsRowContent(
     icon: Icons.play_circle_outline_rounded,
     title: 'Playback',

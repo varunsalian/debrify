@@ -36,6 +36,8 @@ SettingsTvLayout _layout(
   firstFocusNode: entry,
   onOpenSearch: _voidNoop,
   onOpenMetadataSettings: () async {},
+  onOpenCollectionsSettings: _noop,
+  onOpenBadgesSettings: _noop,
   onOpenHomePageSettings: _noop,
   onOpenExternalPlayerSettings: _noop,
   onOpenRemoteControl: _voidNoop,
@@ -166,13 +168,13 @@ void main() {
 
     entry.requestFocus();
     await tester.pump();
-    for (var index = 0; index < 11; index++) {
+    for (var index = 0; index < 13; index++) {
       await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
       await tester.pump();
     }
     expect(
       FocusManager.instance.primaryFocus?.debugLabel,
-      'settings-tv-rail-11',
+      'settings-tv-rail-13',
     );
     expect(find.text('Sync and Migrate'), findsWidgets);
 

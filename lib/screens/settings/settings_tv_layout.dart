@@ -47,6 +47,8 @@ class SettingsTvLayout extends StatefulWidget {
 
   final Future<void> Function() onOpenHomePageSettings;
   final Future<void> Function() onOpenMetadataSettings;
+  final Future<void> Function() onOpenCollectionsSettings;
+  final Future<void> Function() onOpenBadgesSettings;
   final Future<void> Function() onOpenExternalPlayerSettings;
   final VoidCallback onOpenRemoteControl;
   final bool showSwitchProfile;
@@ -159,6 +161,8 @@ class SettingsTvLayout extends StatefulWidget {
     required this.onOpenSearch,
     required this.onOpenHomePageSettings,
     required this.onOpenMetadataSettings,
+    required this.onOpenCollectionsSettings,
+    required this.onOpenBadgesSettings,
     required this.onOpenExternalPlayerSettings,
     required this.onOpenRemoteControl,
     this.showSwitchProfile = false,
@@ -286,6 +290,20 @@ const List<_Category> _kCategories = [
     'Home screen rows & keyboard',
     'Shape the room you come home to.',
     'Arrange the home screen and tune this television for the room.',
+  ),
+  _Category(
+    Icons.collections_bookmark_rounded,
+    'Collections',
+    'Import and manage folder collections',
+    'Collections',
+    'Import and manage folder collections.',
+  ),
+  _Category(
+    Icons.sell_rounded,
+    'Badges',
+    'Import and manage stream badge rules',
+    'Badges',
+    'Import and manage stream badge rules.',
   ),
   _Category(
     Icons.info_outline_rounded,
@@ -922,7 +940,33 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
             ],
           ),
         ];
-      case 3: // Metadata
+      case 3:
+        return [
+          SettingsSection(
+            title: '',
+            children: [
+              SettingsTile.spec(
+                SettingsRows.collections,
+                onTap: widget.onOpenCollectionsSettings,
+                focusNode: _paneNodes[0],
+              ),
+            ],
+          ),
+        ];
+      case 4:
+        return [
+          SettingsSection(
+            title: '',
+            children: [
+              SettingsTile.spec(
+                SettingsRows.badges,
+                onTap: widget.onOpenBadgesSettings,
+                focusNode: _paneNodes[0],
+              ),
+            ],
+          ),
+        ];
+      case 5: // Metadata
         return [
           SettingsSection(
             title: '',
@@ -935,7 +979,7 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
             ],
           ),
         ];
-      case 4: // Appearance — grouped by the QUESTION each row answers.
+      case 6: // Appearance — grouped by the QUESTION each row answers.
         // Four groups, not one list of fifteen. The rows used to interleave
         // four different kinds of decision — a global theme, a per-screen
         // layout, a per-device performance cap and a preset that sets several
@@ -1114,7 +1158,7 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
             ),
           ],
         ];
-      case 5: // Playback
+      case 7: // Playback
         return [
           SettingsSection(
             title: '',
@@ -1127,7 +1171,7 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
             ],
           ),
         ];
-      case 6: // Search
+      case 8: // Search
         return [
           SettingsSection(
             title: '',
@@ -1155,7 +1199,7 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
             ],
           ),
         ];
-      case 7: // Discover
+      case 9: // Discover
         return [
           SettingsSection(
             title: '',
@@ -1168,7 +1212,7 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
             ],
           ),
         ];
-      case 8: // Live TV & DVR
+      case 10: // Live TV & DVR
         return [
           SettingsSection(
             title: '',
@@ -1191,7 +1235,7 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
             ],
           ),
         ];
-      case 9: // Devices
+      case 11: // Devices
         return [
           SettingsSection(
             title: '',
@@ -1204,7 +1248,7 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
             ],
           ),
         ];
-      case 10: // Profiles — its own card (it was a tenant row under Devices).
+      case 12: // Profiles — its own card (it was a tenant row under Devices).
         return [
           SettingsSection(
             title: '',
@@ -1246,7 +1290,7 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
             ],
           ),
         ];
-      case 11: // Sync and Migrate
+      case 13: // Sync and Migrate
         return [
           SettingsSection(
             title: '',
@@ -1260,7 +1304,7 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
             ],
           ),
         ];
-      case 12: // Data & Backup
+      case 14: // Data & Backup
         {
           // Focus nodes are claimed sequentially so the optional
           // download-location row doesn't shift hardcoded indices.
@@ -1331,7 +1375,7 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
             ],
           ];
         }
-      case 13: // About (Updates + Support merged — matches the phone layout)
+      case 15: // About (Updates + Support merged — matches the phone layout)
         {
           // The donation row is conditional, so index the pane nodes off a
           // running counter to keep Up/Down wiring contiguous.
@@ -1400,7 +1444,7 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
             ),
           ];
         }
-      case 14: // Danger Zone
+      case 16: // Danger Zone
         return [
           SettingsSection(
             title: '',

@@ -17,7 +17,7 @@ import '../../widgets/text_prompt_dialog.dart';
 import '../collections/collection_editor_screen.dart';
 import 'widgets/settings_widgets.dart';
 
-/// Settings › Home Screen › Collections: import Nuvio / Xperience-style
+/// Settings › Collections: import Nuvio / Xperience-style
 /// collection JSON files and manage what has been imported.
 ///
 /// This page owns the data (import, enable/disable, delete); showing and

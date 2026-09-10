@@ -105,6 +105,7 @@ import 'settings/real_debrid_settings_page.dart';
 import 'settings/iptv_settings_page.dart';
 import 'settings/iptv_channel_order_page.dart';
 import 'settings/collections_settings_page.dart';
+import 'settings/stream_badges_settings_page.dart';
 import 'settings/home_page_settings_page.dart';
 import 'settings/torbox_settings_page.dart';
 import 'settings/premiumize_settings_page.dart';
@@ -1278,6 +1279,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       onOpenSearch: _openSettingsSearch,
       onOpenHomePageSettings: _openHomePageSettings,
       onOpenMetadataSettings: _openMetadataSettings,
+      onOpenCollectionsSettings: _openCollectionsSettings,
+      onOpenBadgesSettings: _openBadgesSettings,
       onOpenExternalPlayerSettings: _openExternalPlayerSettings,
       onOpenRemoteControl: _openRemoteControl,
       showSwitchProfile:
@@ -1400,6 +1403,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       onOpenPikPakSettings: _openPikPakSettings,
       onOpenHomePageSettings: _openHomePageSettings,
       onOpenMetadataSettings: _openMetadataSettings,
+      onOpenCollectionsSettings: _openCollectionsSettings,
+      onOpenBadgesSettings: _openBadgesSettings,
       onOpenExternalPlayerSettings: _openExternalPlayerSettings,
       onOpenRemoteControl: _openRemoteControl,
       showSwitchProfile:
@@ -1819,8 +1824,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ],
       ),
       nav(
+        SettingsRows.badges,
+        'Badges',
+        _openBadgesSettings,
+        keywords: const ['stream badges', 'rules', 'nuvio'],
+      ),
+      nav(
         SettingsRows.collections,
-        'Home & Display',
+        'Collections',
         _openCollectionsSettings,
         keywords: const [
           'collections',
@@ -5019,6 +5030,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await pushSettingsPage(context, const MetadataSettingsPage());
   }
 
+  Future<void> _openBadgesSettings() async {
+    await pushSettingsPage(context, const StreamBadgesSettingsPage());
+  }
+
   Future<void> _openCollectionsSettings() async {
     await pushSettingsPage(context, const CollectionsSettingsPage());
   }
@@ -7240,12 +7255,29 @@ const List<SettingsCategoryDefinition> _kAdaptiveSettingsCategories = [
         'device.',
   ),
   SettingsCategoryDefinition(
+    icon: Icons.collections_bookmark_rounded,
+    label: 'Collections',
+    subtitle: 'Import and manage folder collections',
+    eyebrow: 'Collections',
+    title: 'Collections',
+    description: 'Import and manage folder collections.',
+  ),
+  SettingsCategoryDefinition(
+    icon: Icons.sell_rounded,
+    label: 'Badges',
+    subtitle: 'Import and manage stream badge rules',
+    eyebrow: 'Badges',
+    title: 'Badges',
+    description: 'Import and manage stream badge rules.',
+  ),
+  SettingsCategoryDefinition(
     icon: Icons.info_outline_rounded,
     label: 'Metadata',
     subtitle: 'Providers, artwork, languages & discovery',
     eyebrow: 'Metadata',
     title: 'Choose your metadata.',
-    description: 'Choose providers for title information, artwork and trailers, and set your preferred languages.',
+    description:
+        'Choose providers for title information, artwork and trailers, and set your preferred languages.',
   ),
   SettingsCategoryDefinition(
     icon: Icons.auto_awesome_rounded,
@@ -7371,6 +7403,8 @@ class _SettingsLayout extends StatelessWidget {
   final Future<void> Function() onOpenPikPakSettings;
   final Future<void> Function() onOpenHomePageSettings;
   final Future<void> Function() onOpenMetadataSettings;
+  final Future<void> Function() onOpenCollectionsSettings;
+  final Future<void> Function() onOpenBadgesSettings;
   final Future<void> Function() onOpenExternalPlayerSettings;
   final VoidCallback onOpenRemoteControl;
   final bool showSwitchProfile;
@@ -7464,6 +7498,8 @@ class _SettingsLayout extends StatelessWidget {
     required this.onOpenPikPakSettings,
     required this.onOpenHomePageSettings,
     required this.onOpenMetadataSettings,
+    required this.onOpenCollectionsSettings,
+    required this.onOpenBadgesSettings,
     required this.onOpenExternalPlayerSettings,
     required this.onOpenRemoteControl,
     required this.showSwitchProfile,
@@ -7660,12 +7696,29 @@ class _SettingsLayout extends StatelessWidget {
           title: '',
           children: [
             SettingsTile.spec(
+              SettingsRows.collections,
+              onTap: onOpenCollectionsSettings,
+            ),
+          ],
+        );
+      case 4:
+        return SettingsSection(
+          title: '',
+          children: [
+            SettingsTile.spec(SettingsRows.badges, onTap: onOpenBadgesSettings),
+          ],
+        );
+      case 5:
+        return SettingsSection(
+          title: '',
+          children: [
+            SettingsTile.spec(
               SettingsRows.metadata,
               onTap: onOpenMetadataSettings,
             ),
           ],
         );
-      case 4:
+      case 6:
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -7756,7 +7809,7 @@ class _SettingsLayout extends StatelessWidget {
             ),
           ],
         );
-      case 5:
+      case 7:
         return SettingsSection(
           title: '',
           children: [
@@ -7766,7 +7819,7 @@ class _SettingsLayout extends StatelessWidget {
             ),
           ],
         );
-      case 6:
+      case 8:
         return SettingsSection(
           title: '',
           children: [
@@ -7788,7 +7841,7 @@ class _SettingsLayout extends StatelessWidget {
             ),
           ],
         );
-      case 7:
+      case 9:
         return SettingsSection(
           title: '',
           children: [
@@ -7798,7 +7851,7 @@ class _SettingsLayout extends StatelessWidget {
             ),
           ],
         );
-      case 8:
+      case 10:
         return SettingsSection(
           title: '',
           children: [
@@ -7813,7 +7866,7 @@ class _SettingsLayout extends StatelessWidget {
             ),
           ],
         );
-      case 9:
+      case 11:
         return SettingsSection(
           title: '',
           children: [
@@ -7823,7 +7876,7 @@ class _SettingsLayout extends StatelessWidget {
             ),
           ],
         );
-      case 10:
+      case 12:
         // Profiles' own card (it used to be a tenant row under Devices). A
         // legacy-mode install keeps the card but says why it's empty rather
         // than presenting actions that would fail.
@@ -7852,7 +7905,7 @@ class _SettingsLayout extends StatelessWidget {
               ),
           ],
         );
-      case 11:
+      case 13:
         return SettingsSection(
           title: '',
           children: [
@@ -7863,7 +7916,7 @@ class _SettingsLayout extends StatelessWidget {
             ),
           ],
         );
-      case 12:
+      case 14:
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -7921,7 +7974,7 @@ class _SettingsLayout extends StatelessWidget {
             ],
           ],
         );
-      case 13:
+      case 15:
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -7976,7 +8029,7 @@ class _SettingsLayout extends StatelessWidget {
             ),
           ],
         );
-      case 14:
+      case 16:
         return SettingsSection(
           title: '',
           accentColor: t.danger,
@@ -8032,6 +8085,26 @@ class _SettingsLayout extends StatelessWidget {
                         value: tvKeyboardEnabled,
                         onChanged: onToggleTvKeyboard,
                       ),
+                  ],
+                ),
+                const SizedBox(height: 24),
+                SettingsSection(
+                  title: 'Collections',
+                  children: [
+                    SettingsTile.spec(
+                      SettingsRows.collections,
+                      onTap: onOpenCollectionsSettings,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 24),
+                SettingsSection(
+                  title: 'Badges',
+                  children: [
+                    SettingsTile.spec(
+                      SettingsRows.badges,
+                      onTap: onOpenBadgesSettings,
+                    ),
                   ],
                 ),
                 const SizedBox(height: 24),

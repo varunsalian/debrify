@@ -31,7 +31,7 @@ void main() {
       adaptive,
       matches(
         RegExp(
-          r'case 11:[\s\S]*?SettingsRows\.syncAndMigrate[\s\S]*?case 12:[\s\S]*?SettingsRows\.downloadLocation[\s\S]*?case 13:[\s\S]*?SettingsRows\.autoUpdate[\s\S]*?case 14:[\s\S]*?SettingsRows\.resetDebrify',
+          r'case 13:[\s\S]*?SettingsRows\.syncAndMigrate[\s\S]*?case 14:[\s\S]*?SettingsRows\.downloadLocation[\s\S]*?case 15:[\s\S]*?SettingsRows\.autoUpdate[\s\S]*?case 16:[\s\S]*?SettingsRows\.resetDebrify',
         ),
       ),
     );
@@ -39,7 +39,7 @@ void main() {
       tv,
       matches(
         RegExp(
-          r'case 11: // Sync and Migrate[\s\S]*?case 12: // Data & Backup[\s\S]*?case 13: // About[\s\S]*?case 14: // Danger Zone',
+          r'case 13: // Sync and Migrate[\s\S]*?case 14: // Data & Backup[\s\S]*?case 15: // About[\s\S]*?case 16: // Danger Zone',
         ),
       ),
     );
