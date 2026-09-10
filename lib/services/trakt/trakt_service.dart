@@ -11,6 +11,7 @@ import 'trakt_continue_watching_merge.dart';
 import 'trakt_watched_history_reader.dart';
 import '../profiles/profile_async_authorization.dart';
 import '../profiles/profile_runtime.dart';
+import '../profiles/profile_credential_facade.dart';
 import '../storage_service.dart';
 import 'trakt_calendar_service.dart';
 import 'trakt_constants.dart';
@@ -432,30 +433,52 @@ class TraktService {
 
   Future<bool> _refreshAccessTokenScoped() async {
     try {
-      final refreshToken = await StorageService.getTraktRefreshToken();
-      if (refreshToken == null || refreshToken.isEmpty) return false;
-
-      final response = await http
-          .post(
-            Uri.parse(kTraktTokenUrl),
-            headers: {'Content-Type': 'application/json'},
-            body: jsonEncode({
-              'refresh_token': refreshToken,
-              'client_id': kTraktClientId,
-              'client_secret': kTraktClientSecret,
-              'grant_type': 'refresh_token',
-            }),
-          )
-          .timeout(const Duration(seconds: 10));
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body) as Map<String, dynamic>;
-        await _storeTokens(data);
-        return true;
+      Future<Map<String, dynamic>?> exchange(String refreshToken) async {
+        final response = await http
+            .post(
+              Uri.parse(kTraktTokenUrl),
+              headers: {'Content-Type': 'application/json'},
+              body: jsonEncode({
+                'refresh_token': refreshToken,
+                'client_id': kTraktClientId,
+                'client_secret': kTraktClientSecret,
+                'grant_type': 'refresh_token',
+              }),
+            )
+            .timeout(const Duration(seconds: 10));
+        if (response.statusCode == 200) {
+          return jsonDecode(response.body) as Map<String, dynamic>;
+        }
+        debugPrint('Trakt: Token refresh failed (${response.statusCode})');
+        return null;
       }
 
-      debugPrint('Trakt: Token refresh failed (${response.statusCode})');
-      return false;
+      final shared = await ProfileCredentialFacade.refreshTraktSession((
+        token,
+      ) async {
+        final data = await exchange(token);
+        if (data == null) return null;
+        final expiresIn = data['expires_in'] as int;
+        if (expiresIn <= 0) throw const FormatException('Invalid Trakt expiry');
+        return (
+          accessToken: data['access_token'] as String,
+          refreshToken: data['refresh_token'] as String,
+          expiryMs: DateTime.now().millisecondsSinceEpoch + expiresIn * 1000,
+        );
+      });
+      if (shared != null) {
+        if (shared) {
+          _invalidateLibraryCache();
+          StorageService.movieFinishedRevision.value++;
+        }
+        return shared;
+      }
+      final refreshToken = await StorageService.getTraktRefreshToken();
+      if (refreshToken == null || refreshToken.isEmpty) return false;
+      final data = await exchange(refreshToken);
+      if (data == null) return false;
+      await _storeTokens(data);
+      return true;
     } catch (error) {
       debugPrint('Trakt: Token refresh error (${error.runtimeType})');
       return false;
@@ -503,16 +526,17 @@ class TraktService {
     // previous user's watchlist/collection/ratings can't be served. Harmless on
     // a same-account refresh — it just forces one re-fetch.
     _invalidateLibraryCache();
-    await StorageService.setTraktAccessToken(data['access_token'] as String);
-    await StorageService.setTraktRefreshToken(data['refresh_token'] as String);
-
     final expiresIn = data['expires_in'] as int?;
-    if (expiresIn != null) {
-      final expiryMs = DateTime.now()
-          .add(Duration(seconds: expiresIn))
-          .millisecondsSinceEpoch;
-      await StorageService.setTraktTokenExpiry(expiryMs);
-    }
+    final expiryMs = expiresIn == null
+        ? null
+        : DateTime.now()
+              .add(Duration(seconds: expiresIn))
+              .millisecondsSinceEpoch;
+    await StorageService.setTraktSession(
+      accessToken: data['access_token'] as String,
+      refreshToken: data['refresh_token'] as String,
+      expiryMs: expiryMs,
+    );
     StorageService.movieFinishedRevision.value++;
   }
 

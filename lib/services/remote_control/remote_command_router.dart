@@ -3676,11 +3676,11 @@ class RemoteCommandRouter {
         return;
       }
 
-      await StorageService.setTraktAccessToken(accessToken);
-      await StorageService.setTraktRefreshToken(refreshToken);
-      if (expiry != null) {
-        await StorageService.setTraktTokenExpiry(expiry);
-      }
+      await StorageService.setTraktSession(
+        accessToken: accessToken,
+        refreshToken: refreshToken,
+        expiryMs: expiry,
+      );
       if (username != null && username.isNotEmpty) {
         await StorageService.setTraktUsername(username);
       }

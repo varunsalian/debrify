@@ -597,12 +597,11 @@ class BackupRestoreService {
             refresh != null &&
             refresh.isNotEmpty) {
           try {
-            await StorageService.setTraktAccessToken(access);
-            await StorageService.setTraktRefreshToken(refresh);
-            final expiry = (t['expiry_ms'] as num?)?.toInt();
-            if (expiry != null) {
-              await StorageService.setTraktTokenExpiry(expiry);
-            }
+            await StorageService.setTraktSession(
+              accessToken: access,
+              refreshToken: refresh,
+              expiryMs: (t['expiry_ms'] as num?)?.toInt(),
+            );
             final username = t['username'] as String?;
             if (username != null && username.isNotEmpty) {
               await StorageService.setTraktUsername(username);

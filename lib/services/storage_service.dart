@@ -6618,12 +6618,38 @@ class StorageService {
     await prefs.setString(_traktUsernameKey, username);
   }
 
+  /// Replace the token pair and its expiry as one shared session write.
+  static Future<void> setTraktSession({
+    required String accessToken,
+    required String refreshToken,
+    required int? expiryMs,
+  }) async {
+    if (await ProfileCredentialFacade.storeTraktSession(
+      accessToken: accessToken,
+      refreshToken: refreshToken,
+      expiryMs: expiryMs,
+    )) {
+      return;
+    }
+    await setTraktAccessToken(accessToken);
+    await setTraktRefreshToken(refreshToken);
+    final prefs = await ProfilePreferences.instance();
+    if (expiryMs == null) {
+      await prefs.remove(_traktTokenExpiryKey);
+    } else {
+      await prefs.setInt(_traktTokenExpiryKey, expiryMs);
+    }
+  }
+
   static Future<int?> getTraktTokenExpiry() async {
+    final shared = await ProfileCredentialFacade.traktSessionExpiry();
+    if (shared.handled) return shared.value;
     final prefs = await ProfilePreferences.instance();
     return prefs.getInt(_traktTokenExpiryKey);
   }
 
   static Future<void> setTraktTokenExpiry(int expiryMs) async {
+    if (await ProfileCredentialFacade.setTraktSessionExpiry(expiryMs)) return;
     final prefs = await ProfilePreferences.instance();
     await prefs.setInt(_traktTokenExpiryKey, expiryMs);
   }

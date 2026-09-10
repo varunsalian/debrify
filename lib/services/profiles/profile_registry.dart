@@ -2203,6 +2203,46 @@ class ProfileRegistry {
     int? actingAuthorizationRevision,
     int? expectedResourceAuthorizationRevision,
   }) async {
+    return _updateResourceSecret(
+      resourceId: resourceId,
+      sealedSecretPayload: sealedSecretPayload,
+      secretPayloadVersion: secretPayloadVersion,
+      actingProfileId: actingProfileId,
+      actingAuthorizationRevision: actingAuthorizationRevision,
+      expectedResourceAuthorizationRevision:
+          expectedResourceAuthorizationRevision,
+    );
+  }
+
+  /// Token rotation maintains an existing Trakt session; it cannot bind or
+  /// replace an account. The service seals only the returned token fields.
+  Future<void> rotateTraktSession({
+    required String resourceId,
+    required String sealedSecretPayload,
+    required int secretPayloadVersion,
+    required String actingProfileId,
+    required int actingAuthorizationRevision,
+    required int expectedResourceAuthorizationRevision,
+  }) => _updateResourceSecret(
+    resourceId: resourceId,
+    sealedSecretPayload: sealedSecretPayload,
+    secretPayloadVersion: secretPayloadVersion,
+    actingProfileId: actingProfileId,
+    actingAuthorizationRevision: actingAuthorizationRevision,
+    expectedResourceAuthorizationRevision:
+        expectedResourceAuthorizationRevision,
+    traktRefresh: true,
+  );
+
+  Future<void> _updateResourceSecret({
+    required String resourceId,
+    required String sealedSecretPayload,
+    required int secretPayloadVersion,
+    String? actingProfileId,
+    int? actingAuthorizationRevision,
+    int? expectedResourceAuthorizationRevision,
+    bool traktRefresh = false,
+  }) async {
     _guardTvOsEnvelopeBound(sealedSecretPayload);
     await authorityWillChangeCallback?.call();
     final now = DateTime.now().millisecondsSinceEpoch;
@@ -2219,11 +2259,29 @@ class ProfileRegistry {
           txn,
           profileId: actingProfileId,
           authorizationRevision: actingAuthorizationRevision,
-          feature: ProfileFeature.manageConnections,
+          feature: traktRefresh
+              ? ProfileFeature.trackersAndDiscovery
+              : ProfileFeature.manageConnections,
           resourceId: resourceId,
           resourceAuthorizationRevision: expectedResourceAuthorizationRevision,
-          permission: ResourcePermission.manage,
+          permission: traktRefresh
+              ? ResourcePermission.use
+              : ResourcePermission.manage,
         );
+      }
+      if (traktRefresh) {
+        final bound = await txn.rawQuery(
+          'SELECT r.id FROM connection_resources r '
+          'JOIN profile_connection_bindings b ON b.resource_id = r.id '
+          'WHERE r.id = ? AND r.type = ? AND b.profile_id = ? AND b.slot = ?',
+          <Object?>[
+            resourceId,
+            ConnectionResourceType.trakt.name,
+            actingProfileId,
+            'tracker.trakt',
+          ],
+        );
+        if (bound.isEmpty) throw StateError('Trakt connection changed');
       }
       final changed = await txn.rawUpdate(
         '''UPDATE connection_resources
@@ -2250,19 +2308,23 @@ class ProfileRegistry {
         <String, Object?>{'resource_id': resourceId},
         sealedSecretPayload,
       );
-      final profiles = await txn.query(
-        'profile_resource_grants',
-        columns: const <String>['profile_id'],
-        where: 'resource_id = ?',
-        whereArgs: <Object>[resourceId],
-      );
-      for (final row in profiles) {
-        await txn.rawUpdate(
-          '''UPDATE user_profiles
+      // Rotating the same account keeps profile work authorized. The resource
+      // revision still advances to reject stale credential writes.
+      if (!traktRefresh) {
+        final profiles = await txn.query(
+          'profile_resource_grants',
+          columns: const <String>['profile_id'],
+          where: 'resource_id = ?',
+          whereArgs: <Object>[resourceId],
+        );
+        for (final row in profiles) {
+          await txn.rawUpdate(
+            '''UPDATE user_profiles
              SET authorization_revision = authorization_revision + 1,
                  updated_at_ms = ? WHERE id = ?''',
-          <Object>[now, row['profile_id']!],
-        );
+            <Object>[now, row['profile_id']!],
+          );
+        }
       }
     });
     await checkpointTvOsRecovery(webDavSyncRegistryChange: true);

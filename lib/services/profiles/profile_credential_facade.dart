@@ -312,6 +312,118 @@ class ProfileCredentialFacade {
     }
   }
 
+  static Future<bool?> refreshTraktSession(
+    Future<({String accessToken, String refreshToken, int expiryMs})?> Function(
+      String refreshToken,
+    )
+    exchange,
+  ) async {
+    if (!ProfileRuntime.isInitialized || !ProfileRuntime.isProfileCommitted) {
+      return null;
+    }
+    final registry = ProfileBootstrap.registry;
+    final context = await ProfileAuthorizationContext.capture(registry);
+    final id = await registry.getBoundResourceId(
+      context.profileId,
+      'tracker.trakt',
+    );
+    if (id == null) return false;
+    return _service(
+      registry,
+    ).refreshTraktSession(context: context, resourceId: id, exchange: exchange);
+  }
+
+  /// Sign-in and session imports retain the manage-connection boundary.
+  static Future<bool> storeTraktSession({
+    required String accessToken,
+    required String refreshToken,
+    required int? expiryMs,
+  }) async {
+    if (!ProfileRuntime.isInitialized || !ProfileRuntime.isProfileCommitted) {
+      return false;
+    }
+    final registry = ProfileBootstrap.registry;
+    final context = await ProfileAuthorizationContext.capture(registry);
+    final id = await registry.getBoundResourceId(
+      context.profileId,
+      'tracker.trakt',
+    );
+    final service = _service(registry);
+    final tokens = <String, dynamic>{
+      'accessToken': accessToken,
+      'refreshToken': refreshToken,
+      // Explicit null prevents falling back to a previous session's preference.
+      'expiryMs': expiryMs,
+    };
+    if (id == null) {
+      await service.create(
+        context: context,
+        type: ConnectionResourceType.trakt,
+        label: 'Trakt',
+        publicConfig: const {'accountLabel': 'Trakt'},
+        secretConfig: tokens,
+        bindingSlot: 'tracker.trakt',
+      );
+    } else {
+      await service.updateSecret(
+        context: context,
+        resourceId: id,
+        secretConfig: tokens,
+      );
+    }
+    return true;
+  }
+
+  static Future<({bool handled, int? value})> traktSessionExpiry() async {
+    if (!ProfileRuntime.isInitialized || !ProfileRuntime.isProfileCommitted) {
+      return (handled: false, value: null);
+    }
+    final registry = ProfileBootstrap.registry;
+    final context = await ProfileAuthorizationContext.capture(registry);
+    final id = await registry.getBoundResourceId(
+      context.profileId,
+      'tracker.trakt',
+    );
+    if (id == null) return (handled: false, value: null);
+    final resource = await registry.getResource(id);
+    if (resource?.secretPending == true) return (handled: false, value: null);
+    final secret = await _service(registry).resolveSecretForUse(
+      context: context,
+      resourceId: id,
+      feature: ProfileFeature.trackersAndDiscovery,
+    );
+    return (
+      handled: secret.containsKey('expiryMs'),
+      value: secret['expiryMs'] as int?,
+    );
+  }
+
+  static Future<bool> setTraktSessionExpiry(int expiryMs) async {
+    if (!ProfileRuntime.isInitialized || !ProfileRuntime.isProfileCommitted) {
+      return false;
+    }
+    final registry = ProfileBootstrap.registry;
+    final context = await ProfileAuthorizationContext.capture(registry);
+    final id = await registry.getBoundResourceId(
+      context.profileId,
+      'tracker.trakt',
+    );
+    if (id == null) return false;
+    final service = _service(registry);
+    final current = await service.resolveSecretForUse(
+      context: context,
+      resourceId: id,
+      feature: ProfileFeature.manageConnections,
+      permission: ResourcePermission.manage,
+    );
+    await service.updateSecret(
+      context: context,
+      resourceId: id,
+      secretConfig: {...current, 'expiryMs': expiryMs},
+    );
+    return true;
+  }
+
   static Future<bool> write(String key, String value) async {
     final field = _fields[key];
     if (field == null ||
