@@ -450,7 +450,6 @@ class StorageService {
   // IPTV settings
   static const String _iptvPlaylistsKey = 'iptv_playlists';
   static const String _iptvDefaultPlaylistKey = 'iptv_default_playlist';
-  static const String _iptvDefaultsInitializedKey = 'iptv_defaults_initialized';
   static const String _iptvLastLiveChannelKey = 'iptv_last_live_channel';
 
   // PikPak API settings
@@ -9387,18 +9386,6 @@ class StorageService {
     } else {
       await prefs.setString(_iptvDefaultPlaylistKey, playlistId);
     }
-  }
-
-  /// Check if IPTV defaults have been initialized (to avoid re-adding after user deletes)
-  static Future<bool> getIptvDefaultsInitialized() async {
-    final prefs = await ProfilePreferences.instance();
-    return prefs.getBool(_iptvDefaultsInitializedKey) ?? false;
-  }
-
-  /// Mark IPTV defaults as initialized
-  static Future<void> setIptvDefaultsInitialized(bool initialized) async {
-    final prefs = await ProfilePreferences.instance();
-    await prefs.setBool(_iptvDefaultsInitializedKey, initialized);
   }
 
   // ==========================================================================

@@ -769,16 +769,16 @@ void main() {
     final existingResourceId = migrated.single.connectionResourceId;
     final existingResourceRevision = migrated.single.connectionResourceRevision;
 
-    // This is the upgrade path that used to fail: the starter is a raw UI
+    // This is the add-provider path that used to fail: the addition is a raw UI
     // model while the existing provider is replaced in the resource graph.
-    final starter = IptvPlaylist(
-      id: 'iptv-org-default',
-      name: 'iptv-org',
-      url: 'https://iptv-org.github.io/iptv/index.m3u',
+    final addition = IptvPlaylist(
+      id: 'new-provider-id',
+      name: 'New provider',
+      url: 'https://iptv.invalid/new.m3u',
       addedAt: DateTime.utc(2026, 8, 14),
     );
     final canonical = await StorageService.setIptvPlaylistsAndReload(
-      <IptvPlaylist>[starter, ...migrated],
+      <IptvPlaylist>[addition, ...migrated],
       forSettings: false,
     );
 

@@ -859,31 +859,6 @@ class IptvResultsViewState extends State<IptvResultsView>
     final channelPreviewEnabled =
         await StorageService.getIptvChannelPreviewEnabled();
 
-    // Seed the starter playlist on first run (if not already initialized).
-    // Deliberately NOT marked as the stored default: "Default playlist" is an
-    // explicit choice the user makes in Settings, and it now outranks the
-    // Favorites landing (below) — auto-claiming it here would silently take
-    // that landing away from someone who never picked anything.
-    final defaultsInitialized =
-        await StorageService.getIptvDefaultsInitialized();
-    if (!defaultsInitialized) {
-      // Add the default iptv-org playlist
-      final starterPlaylist = IptvPlaylist(
-        id: 'iptv-org-default',
-        name: 'iptv-org',
-        url: 'https://iptv-org.github.io/iptv/index.m3u',
-        addedAt: DateTime.now(),
-      );
-      playlists = [starterPlaylist, ...playlists];
-
-      // Save the starter playlist and mark as initialized
-      playlists = await StorageService.setIptvPlaylistsAndReload(
-        playlists,
-        forSettings: false,
-      );
-      await StorageService.setIptvDefaultsInitialized(true);
-    }
-
     // Installed Stremio addons with live-TV catalogs appear as (non-stored)
     // virtual playlists after the user's own entries.
     final virtualPlaylists = await StremioIptvService.instance
