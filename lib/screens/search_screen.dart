@@ -273,6 +273,7 @@ class _KwPreservedState {
 const String _discCw = 'cw';
 const String _discTrakt = 'trakt';
 const String _discSimkl = 'simkl';
+const String _discTmdb = 'tmdb';
 const String _discMdblist = 'mdblist';
 const String _discAddonPrefix = 'a:';
 
@@ -11045,16 +11046,12 @@ class _SearchScreenState extends State<SearchScreen>
       final prefs = await MetadataPreferencesService.load();
       if (!mounted || generation != _metadataFeatureGeneration || scope != ProfileRuntime.scope.value) return;
       setState(() => _metadataFeaturePolicy = prefs);
+      if (widget.discoverMode &&
+          _discSource == _discTmdb &&
+          !prefs.features.contains(MetadataFeature.discovery)) {
+        _selectDiscoverSource(_discCw);
+      }
     } catch (_) {}
-  }
-
-  void _openMetadataDiscover() {
-    final prefs = _metadataFeaturePolicy;
-    if (prefs == null || !prefs.features.contains(MetadataFeature.discovery)) return;
-    Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) =>
-      MetadataBrowsePage(title: 'TMDB Discover', kind: 'discover', preferences: prefs,
-        isTelevision: widget.isTelevision,
-        onOpen: (item) => _openItem(item, item.sourceAddon ?? _addonForContinue(null)))));
   }
 
   void _metadataSettingsChanged() {
@@ -15543,17 +15540,6 @@ class _SearchScreenState extends State<SearchScreen>
     final glassHome = _heroTrailerActive;
     final app = AppThemeScope.of(context);
     return Scaffold(
-      floatingActionButton: widget.discoverMode && !widget.isTelevision
-          ? ValueListenableBuilder<double>(
-              valueListenable: _discTakeover,
-              builder: (_, takeover, __) => takeover > 0 ? const SizedBox.shrink()
-                  : MetadataExploreButton.discover(
-                      isTelevision: widget.isTelevision,
-                      onOpen: (item) => _openItem(item,
-                          item.sourceAddon ?? _addonForContinue(null)),
-                    ),
-            )
-          : null,
       backgroundColor: glassHome ? Colors.transparent : app.home.bg,
       // A restrained indigo bloom near the top fading fast into near-black —
       // toned down from a saturated purple so the posters carry the colour
@@ -17515,10 +17501,19 @@ class _SearchScreenState extends State<SearchScreen>
     var landing = defaultSource == StorageService.discoverDefaultRememberLast
         ? lastSource
         : defaultSource;
+    if (landing == _discTmdb) {
+      if (_metadataFeaturePolicy == null) await _refreshMetadataFeaturePolicy();
+      if (!mounted) return;
+      if (_metadataFeaturePolicy?.features.contains(MetadataFeature.discovery) !=
+          true) {
+        landing = _discCw;
+      }
+    }
     final fixedSource =
         landing == _discCw ||
         landing == _discTrakt ||
         landing == _discSimkl ||
+        landing == _discTmdb ||
         (kMdblistEnabled && landing == _discMdblist);
 
     // Search→MDBList handoff is a stronger, explicit navigation intent. For
@@ -17994,6 +17989,28 @@ class _SearchScreenState extends State<SearchScreen>
     );
   }
 
+  void _selectDiscoverSource(String source) {
+    if (source == _discSource) return;
+    if (source == _discTmdb &&
+        _metadataFeaturePolicy?.features.contains(MetadataFeature.discovery) !=
+            true) {
+      return;
+    }
+    _discFocused.value = null;
+    _discShown.value = null;
+    setState(() {
+      _discSourceRevision++;
+      _discSource = source;
+    });
+    unawaited(StorageService.setDiscoverLastSource(source));
+    // The embedded panel reattaches this shared node when the source changes.
+    if (widget.isTelevision) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _discSourceNode.requestFocus();
+      });
+    }
+  }
+
   Widget _buildDiscoverPanel() {
     final source = StremioDropdown<String>(
       label: 'Source',
@@ -18005,11 +18022,12 @@ class _SearchScreenState extends State<SearchScreen>
       quietAccent: true,
       focusNode: _discSourceNode,
       options: [
-        if (_metadataFeaturePolicy?.features.contains(MetadataFeature.discovery) == true)
-          const StremioDropdownOption('__metadata_discover', 'TMDB Discover'),
         const StremioDropdownOption(_discCw, 'Continue Watching'),
         const StremioDropdownOption(_discTrakt, 'Trakt'),
         const StremioDropdownOption(_discSimkl, 'Simkl'),
+        if (_metadataFeaturePolicy?.features.contains(MetadataFeature.discovery) ==
+            true)
+          const StremioDropdownOption(_discTmdb, 'TMDB'),
         // MDBList is hidden for the alpha (kMdblistEnabled) AND only when
         // connected — kept if it's somehow already the active source so the
         // dropdown's value always has a matching option.
@@ -18019,30 +18037,27 @@ class _SearchScreenState extends State<SearchScreen>
         for (final a in _discAddons)
           StremioDropdownOption('$_discAddonPrefix${a.id}', a.name),
       ],
-      onSelected: (s) {
-        if (s == '__metadata_discover') { _openMetadataDiscover(); return; }
-        if (s == _discSource) return;
-        // Swapping source re-mounts the grid and drops DPAD focus back onto the
-        // Source dropdown — clear the rail (and the stage backdrop behind it)
-        // so they show the prompt/ink, not a stale title from the previous
-        // source, until a new tile is focused.
-        _discFocused.value = null;
-        _discShown.value = null;
-        setState(() {
-          _discSourceRevision++;
-          _discSource = s;
-        });
-        unawaited(StorageService.setDiscoverLastSource(s));
-        // The swap re-mounts the embedded panel (new ValueKey), which re-attaches
-        // this shared node; pin the DPAD ring back on the Source dropdown so it
-        // isn't lost in the dispose/reattach.
-        if (widget.isTelevision) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) _discSourceNode.requestFocus();
-          });
-        }
-      },
+      onSelected: _selectDiscoverSource,
     );
+
+    if (_discSource == _discTmdb && _metadataFeaturePolicy != null) {
+      return MetadataBrowsePage(
+        key: const ValueKey('disc_tmdb'),
+        title: 'TMDB',
+        kind: 'discover',
+        preferences: _metadataFeaturePolicy!,
+        onOpen: (item) => _openItem(
+          item,
+          item.sourceAddon ?? _addonForContinue(null),
+        ),
+        onItemFocused: _onDiscFocused,
+        isBound: _isBound,
+        isTelevision: widget.isTelevision,
+        embedded: true,
+        leading: source,
+        leadingNode: _discSourceNode,
+      );
+    }
 
     if (_discSource == _discTrakt) {
       return TraktSeeAllScreen(

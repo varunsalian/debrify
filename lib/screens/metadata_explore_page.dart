@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../models/metadata_preferences.dart';
 import '../models/stremio_addon.dart';
@@ -8,9 +9,15 @@ import '../services/collection_native_source_service.dart';
 import '../services/metadata_details_service.dart';
 import '../services/metadata_explore_service.dart';
 import '../services/metadata_preferences_service.dart';
+import '../services/main_page_bridge.dart';
 import '../services/profiles/profile_runtime.dart';
 import '../widgets/catalog_item_tile.dart';
 import '../widgets/metadata_explore_spotlight.dart';
+import '../widgets/metadata_title_navigation.dart';
+import '../widgets/see_all/see_all_filter_bar.dart';
+import '../widgets/see_all/see_all_filter_focus.dart';
+import '../widgets/see_all/see_all_poster_grid.dart';
+import '../widgets/see_all/stremio_dropdown.dart';
 
 /// Optional detail destination, using the host's existing title-open action.
 class MetadataExplorePage extends StatefulWidget {
@@ -193,9 +200,21 @@ class MetadataBrowsePage extends StatefulWidget {
     this.type = 'movie',
     this.isTelevision = false,
     this.service,
+    this.embedded = false,
+    this.leading,
+    this.leadingNode,
+    this.onItemFocused,
+    this.isBound,
   });
   final MetadataExploreService? service;
   final String title, kind, type;
+
+  /// Discover supplies the Source dropdown and owns the surrounding page.
+  final bool embedded;
+  final Widget? leading;
+  final FocusNode? leadingNode;
+  final ValueChanged<StremioMeta>? onItemFocused;
+  final bool Function(StremioMeta)? isBound;
   final int? id;
   final MetadataPreferences preferences;
   final ValueChanged<StremioMeta> onOpen;
@@ -205,14 +224,25 @@ class MetadataBrowsePage extends StatefulWidget {
 }
 
 class _MetadataBrowsePageState extends State<MetadataBrowsePage> {
+  final _gridKey = GlobalKey<SeeAllPosterGridState>();
+  final _typeNode = FocusNode(debugLabel: 'tmdb_type');
+  final _runtimeNode = FocusNode(debugLabel: 'tmdb_runtime');
+  final _languageNode = FocusNode(debugLabel: 'tmdb_language');
+  final _retryNode = FocusNode(debugLabel: 'tmdb_retry');
+  bool _opening = false;
   final _items = <StremioMeta>[];
   final _scroll = ScrollController();
   Timer? _retryTimer;
   int _retryCount = 0;
 
   void _nearEnd() {
-    if (!mounted || _profileChanged || _busy || !_more || _error != null ||
-        _retryTimer != null || !_scroll.hasClients) {
+    if (!mounted ||
+        _profileChanged ||
+        _busy ||
+        !_more ||
+        _error != null ||
+        _retryTimer != null ||
+        !_scroll.hasClients) {
       return;
     }
     if (_scroll.position.extentAfter < _scroll.position.viewportDimension) {
@@ -221,8 +251,11 @@ class _MetadataBrowsePageState extends State<MetadataBrowsePage> {
   }
 
   void _focused(int index) {
-    if (index >= _items.length - 8 && !_busy && _more &&
-        _error == null && _retryTimer == null) {
+    if (index >= _items.length - 8 &&
+        !_busy &&
+        _more &&
+        _error == null &&
+        _retryTimer == null) {
       _load();
     }
   }
@@ -273,6 +306,10 @@ class _MetadataBrowsePageState extends State<MetadataBrowsePage> {
   void dispose() {
     _retryTimer?.cancel();
     _scroll.dispose();
+    _typeNode.dispose();
+    _runtimeNode.dispose();
+    _languageNode.dispose();
+    _retryNode.dispose();
     MetadataPreferencesService.revision.removeListener(_policyChanged);
     ProfileRuntime.scope.removeListener(_policyChanged);
     super.dispose();
@@ -306,17 +343,18 @@ class _MetadataBrowsePageState extends State<MetadataBrowsePage> {
       _error = null;
     });
     try {
-      final result = await (widget.service ?? MetadataExploreService.instance).browse(
-        kind: widget.kind,
-        id: widget.id,
-        preferences: _preferences,
-        type: _type,
-        page: _page + 1,
-        filters: {
-          if (_short) 'with_runtime.lte': '120',
-          if (_language.isNotEmpty) 'with_original_language': _language,
-        },
-      );
+      final result = await (widget.service ?? MetadataExploreService.instance)
+          .browse(
+            kind: widget.kind,
+            id: widget.id,
+            preferences: _preferences,
+            type: _type,
+            page: _page + 1,
+            filters: {
+              if (_short) 'with_runtime.lte': '120',
+              if (_language.isNotEmpty) 'with_original_language': _language,
+            },
+          );
       if (!mounted || generation != _generation) return;
       setState(() {
         final seen = _items.map((i) => '${i.type}:${i.id}').toSet();
@@ -343,14 +381,207 @@ class _MetadataBrowsePageState extends State<MetadataBrowsePage> {
       if (mounted && generation == _generation) {
         setState(() => _busy = false);
         if (_retryTimer == null && _error == null) {
-          WidgetsBinding.instance.addPostFrameCallback((_) => _nearEnd());
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted || generation != _generation) return;
+            if (widget.embedded && _items.isEmpty && _more) {
+              _load();
+            } else {
+              _nearEnd();
+            }
+          });
         }
       }
     }
   }
 
+  Future<void> _openEmbeddedTitle(StremioMeta item) async {
+    if (_opening || _profileChanged || _scope != ProfileRuntime.scope.value) {
+      return;
+    }
+    _opening = true;
+    try {
+      await openMetadataTitle(context, item, widget.onOpen);
+    } finally {
+      _opening = false;
+    }
+  }
+
+  void _focusResults() {
+    if (_items.isEmpty && _error != null) {
+      _retryNode.requestFocus();
+    } else {
+      _gridKey.currentState?.focusFirst();
+    }
+  }
+
+  Widget _buildEmbedded() {
+    final quiet = widget.isTelevision;
+    final filters = Focus(
+      canRequestFocus: false,
+      skipTraversal: true,
+      onKeyEvent: (_, event) => !widget.isTelevision
+          ? KeyEventResult.ignored
+          : handleSeeAllFilterArrows(
+              event,
+              [
+                if (widget.leadingNode != null) widget.leadingNode!,
+                _typeNode,
+                _runtimeNode,
+                _languageNode,
+              ],
+              onDown: _focusResults,
+              onUp: () {},
+              onLeftEdge: () => MainPageBridge.focusTvSidebar?.call(),
+            ),
+      child: Padding(
+        padding: quiet
+            ? const EdgeInsets.fromLTRB(24, 16, 24, 10)
+            : const EdgeInsets.fromLTRB(24, 10, 24, 12),
+        child: SeeAllFilterBar(
+          isTelevision: widget.isTelevision,
+          quiet: quiet,
+          leading: widget.leading,
+          activeCount:
+              (_type == 'tv' ? 1 : 0) +
+              (_short ? 1 : 0) +
+              (_language.isNotEmpty ? 1 : 0),
+          buildChips: () => [
+            StremioDropdown<String>(
+              label: 'Type',
+              value: _type,
+              quiet: quiet,
+              isTelevision: widget.isTelevision,
+              focusNode: _typeNode,
+              options: const [
+                StremioDropdownOption('movie', 'Movies'),
+                StremioDropdownOption('tv', 'TV shows'),
+              ],
+              onSelected: (value) {
+                _type = value;
+                _load(reset: true);
+              },
+            ),
+            StremioDropdown<bool>(
+              label: 'Runtime',
+              value: _short,
+              quiet: quiet,
+              isTelevision: widget.isTelevision,
+              focusNode: _runtimeNode,
+              options: const [
+                StremioDropdownOption(false, 'Any runtime'),
+                StremioDropdownOption(true, 'Under two hours'),
+              ],
+              onSelected: (value) {
+                _short = value;
+                _load(reset: true);
+              },
+            ),
+            StremioDropdown<String>(
+              label: 'Language',
+              value: _language,
+              quiet: quiet,
+              isTelevision: widget.isTelevision,
+              focusNode: _languageNode,
+              options: const [
+                StremioDropdownOption('', 'All languages'),
+                StremioDropdownOption('en', 'English'),
+                StremioDropdownOption('hi', 'Hindi'),
+                StremioDropdownOption('kn', 'Kannada'),
+                StremioDropdownOption('ta', 'Tamil'),
+                StremioDropdownOption('te', 'Telugu'),
+              ],
+              onSelected: (value) {
+                _language = value;
+                _load(reset: true);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+    final retry = Focus(
+      canRequestFocus: false,
+      skipTraversal: true,
+      onKeyEvent: (_, event) {
+        if (widget.isTelevision &&
+            event is KeyDownEvent &&
+            event.logicalKey == LogicalKeyboardKey.arrowUp) {
+          if (_items.isEmpty) {
+            (widget.leadingNode ?? _typeNode).requestFocus();
+          } else {
+            _gridKey.currentState?.focusFirst();
+          }
+          return KeyEventResult.handled;
+        }
+        return KeyEventResult.ignored;
+      },
+      child: TextButton(
+        focusNode: _retryNode,
+        onPressed: () {
+          // Retry disappears while loading. Keep TV focus on a mounted control.
+          if (widget.isTelevision && _retryNode.hasFocus) {
+            (widget.leadingNode ?? _typeNode).requestFocus();
+          }
+          _load();
+        },
+        child: Text(_error ?? 'Retry'),
+      ),
+    );
+    final waiting = _busy || _retryTimer != null;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        filters,
+        Expanded(
+          child: _profileChanged
+              ? const Center(
+                  child: Text('Profile changed. Reopen Discover to continue.'),
+                )
+              : _items.isEmpty
+              ? Center(
+                  child: waiting
+                      ? const CircularProgressIndicator()
+                      : _error != null
+                      ? retry
+                      : const Text('No matching titles'),
+                )
+              : Stack(
+                  children: [
+                    Positioned.fill(
+                      child: SeeAllPosterGrid(
+                        key: _gridKey,
+                        items: List.of(_items),
+                        isTelevision: widget.isTelevision,
+                        loadingMore: waiting,
+                        exhausted: !_more || _error != null,
+                        onOpen: _openEmbeddedTitle,
+                        onItemFocused: widget.onItemFocused,
+                        isBound: widget.isBound,
+                        onLoadMore: () {
+                          if (_more && !waiting && _error == null) _load();
+                        },
+                        onExitTop: () =>
+                            (widget.leadingNode ?? _typeNode).requestFocus(),
+                        onExitLeft: () => MainPageBridge.focusTvSidebar?.call(),
+                        onExitBottom: _error != null
+                            ? _retryNode.requestFocus
+                            : null,
+                      ),
+                    ),
+                    if (_error != null)
+                      Align(alignment: Alignment.bottomCenter, child: retry),
+                  ],
+                ),
+        ),
+      ],
+    );
+  }
+
   @override
-  Widget build(BuildContext context) => Scaffold(
+  Widget build(BuildContext context) =>
+      widget.embedded ? _buildEmbedded() : _buildStandalone();
+
+  Widget _buildStandalone() => Scaffold(
     appBar: AppBar(title: Text(widget.title)),
     body: _profileChanged
         ? const Center(

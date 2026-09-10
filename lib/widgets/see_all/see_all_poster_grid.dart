@@ -280,27 +280,29 @@ class SeeAllPosterGridState extends State<SeeAllPosterGrid> {
   /// stray focus grab for whenever that tile next mounts (a later reload then
   /// yanks the ring out of the filter bar with no keypress). The filter bar
   /// swallows the key either way, so the visible result is a dead DOWN. The
-  /// wall can't hit this: its UP walks row by row, scrolling item 0 back into
-  /// view on the way.
+  /// wall can also re-enter from a pagination Retry button while item 0 is
+  /// unmounted. Rewind before requesting the first node in either layout.
   void focusFirst() {
-    if (_nodes.isEmpty) return;
+    if (widget.items.isEmpty || _nodes.isEmpty) return;
     if (_shelf != null) {
       final i = _focusIndex.value;
       if (i >= 0 && i < _nodes.length && _isBuilt(_nodes[i])) {
         _nodes[i].requestFocus();
         return;
       }
-      // Nothing remembered, or it went with a reload: rewind so the head is
-      // built, then take it on the next frame.
-      if (_scroll.hasClients && _scroll.offset > 0) {
-        _scroll.jumpTo(0);
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted && _nodes.isNotEmpty) _nodes.first.requestFocus();
-        });
-        return;
-      }
     }
-    _nodes.first.requestFocus();
+    // Nothing remembered, or returning to an offscreen first row: rewind so
+    // the head is built, then take focus on the next frame.
+    if (_scroll.hasClients && _scroll.offset > 0) {
+      _scroll.jumpTo(0);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && widget.items.isNotEmpty && _isBuilt(_nodes.first)) {
+          _nodes.first.requestFocus();
+        }
+      });
+      return;
+    }
+    if (_isBuilt(_nodes.first)) _nodes.first.requestFocus();
   }
 
   /// Whether [node]'s tile is actually mounted — the only state in which

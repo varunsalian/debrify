@@ -302,6 +302,9 @@ void main() {
   test(
     'Discover preference backup validation accepts only known source shapes',
     () {
+      for (final key in ['discover_default_source', 'discover_last_source']) {
+        expect(SanitizedProfilePreferences.allowsEntry(key, 'tmdb'), isTrue);
+      }
       expect(
         SanitizedProfilePreferences.allowsEntry(
           'discover_default_source',

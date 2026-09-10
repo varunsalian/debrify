@@ -175,6 +175,7 @@ abstract final class SanitizedProfilePreferences {
       value == 'cw' ||
       value == 'trakt' ||
       value == 'simkl' ||
+      value == 'tmdb' ||
       value == 'mdblist' ||
       (value.startsWith('a:') && value.length > 2 && value.length <= 514);
 
