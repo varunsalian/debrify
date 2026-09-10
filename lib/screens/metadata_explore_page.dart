@@ -19,6 +19,63 @@ import '../widgets/see_all/see_all_filter_focus.dart';
 import '../widgets/see_all/see_all_poster_grid.dart';
 import '../widgets/see_all/stremio_dropdown.dart';
 
+/// Original-language filters shared by standalone and embedded TMDB browsing.
+const _metadataBrowseLanguages = <StremioDropdownOption<String>>[
+  StremioDropdownOption('', 'All languages'),
+  StremioDropdownOption('ar', 'Arabic'),
+  StremioDropdownOption('as', 'Assamese'),
+  StremioDropdownOption('bn', 'Bengali'),
+  StremioDropdownOption('bg', 'Bulgarian'),
+  StremioDropdownOption('my', 'Burmese'),
+  StremioDropdownOption('ca', 'Catalan'),
+  StremioDropdownOption('zh', 'Chinese'),
+  StremioDropdownOption('hr', 'Croatian'),
+  StremioDropdownOption('cs', 'Czech'),
+  StremioDropdownOption('da', 'Danish'),
+  StremioDropdownOption('nl', 'Dutch'),
+  StremioDropdownOption('en', 'English'),
+  StremioDropdownOption('fi', 'Finnish'),
+  StremioDropdownOption('fr', 'French'),
+  StremioDropdownOption('de', 'German'),
+  StremioDropdownOption('el', 'Greek'),
+  StremioDropdownOption('gu', 'Gujarati'),
+  StremioDropdownOption('he', 'Hebrew'),
+  StremioDropdownOption('hi', 'Hindi'),
+  StremioDropdownOption('hu', 'Hungarian'),
+  StremioDropdownOption('is', 'Icelandic'),
+  StremioDropdownOption('id', 'Indonesian'),
+  StremioDropdownOption('it', 'Italian'),
+  StremioDropdownOption('ja', 'Japanese'),
+  StremioDropdownOption('kn', 'Kannada'),
+  StremioDropdownOption('ko', 'Korean'),
+  StremioDropdownOption('ms', 'Malay'),
+  StremioDropdownOption('ml', 'Malayalam'),
+  StremioDropdownOption('mr', 'Marathi'),
+  StremioDropdownOption('ne', 'Nepali'),
+  StremioDropdownOption('no', 'Norwegian'),
+  StremioDropdownOption('or', 'Odia'),
+  StremioDropdownOption('fa', 'Persian'),
+  StremioDropdownOption('pl', 'Polish'),
+  StremioDropdownOption('pt', 'Portuguese'),
+  StremioDropdownOption('pa', 'Punjabi'),
+  StremioDropdownOption('ro', 'Romanian'),
+  StremioDropdownOption('ru', 'Russian'),
+  StremioDropdownOption('sr', 'Serbian'),
+  StremioDropdownOption('si', 'Sinhala'),
+  StremioDropdownOption('sk', 'Slovak'),
+  StremioDropdownOption('sl', 'Slovenian'),
+  StremioDropdownOption('es', 'Spanish'),
+  StremioDropdownOption('sv', 'Swedish'),
+  StremioDropdownOption('tl', 'Tagalog'),
+  StremioDropdownOption('ta', 'Tamil'),
+  StremioDropdownOption('te', 'Telugu'),
+  StremioDropdownOption('th', 'Thai'),
+  StremioDropdownOption('tr', 'Turkish'),
+  StremioDropdownOption('uk', 'Ukrainian'),
+  StremioDropdownOption('ur', 'Urdu'),
+  StremioDropdownOption('vi', 'Vietnamese'),
+];
+
 /// Optional detail destination, using the host's existing title-open action.
 class MetadataExplorePage extends StatefulWidget {
   const MetadataExplorePage({
@@ -414,6 +471,19 @@ class _MetadataBrowsePageState extends State<MetadataBrowsePage> {
     }
   }
 
+  Widget _buildLanguageDropdown({bool quiet = false}) => StremioDropdown<String>(
+    label: 'Language',
+    value: _language,
+    quiet: quiet,
+    isTelevision: widget.isTelevision,
+    focusNode: _languageNode,
+    options: _metadataBrowseLanguages,
+    onSelected: (value) {
+      _language = value;
+      _load(reset: true);
+    },
+  );
+
   Widget _buildEmbedded() {
     final quiet = widget.isTelevision;
     final filters = Focus(
@@ -476,25 +546,7 @@ class _MetadataBrowsePageState extends State<MetadataBrowsePage> {
                 _load(reset: true);
               },
             ),
-            StremioDropdown<String>(
-              label: 'Language',
-              value: _language,
-              quiet: quiet,
-              isTelevision: widget.isTelevision,
-              focusNode: _languageNode,
-              options: const [
-                StremioDropdownOption('', 'All languages'),
-                StremioDropdownOption('en', 'English'),
-                StremioDropdownOption('hi', 'Hindi'),
-                StremioDropdownOption('kn', 'Kannada'),
-                StremioDropdownOption('ta', 'Tamil'),
-                StremioDropdownOption('te', 'Telugu'),
-              ],
-              onSelected: (value) {
-                _language = value;
-                _load(reset: true);
-              },
-            ),
+            _buildLanguageDropdown(quiet: quiet),
           ],
         ),
       ),
@@ -630,25 +682,7 @@ class _MetadataBrowsePageState extends State<MetadataBrowsePage> {
                           _load(reset: true);
                         },
                       ),
-                      DropdownButton<String>(
-                        value: _language,
-                        items: const [
-                          DropdownMenuItem(
-                            value: '',
-                            child: Text('All languages'),
-                          ),
-                          DropdownMenuItem(value: 'en', child: Text('English')),
-                          DropdownMenuItem(value: 'hi', child: Text('Hindi')),
-                          DropdownMenuItem(value: 'kn', child: Text('Kannada')),
-                          DropdownMenuItem(value: 'ta', child: Text('Tamil')),
-                          DropdownMenuItem(value: 'te', child: Text('Telugu')),
-                        ],
-                        onChanged: (v) {
-                          if (v == null) return;
-                          _language = v;
-                          _load(reset: true);
-                        },
-                      ),
+                      _buildLanguageDropdown(),
                     ],
                   ),
                 ),

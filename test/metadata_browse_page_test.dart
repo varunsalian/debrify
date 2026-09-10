@@ -49,13 +49,14 @@ void main() {
     BrowseService service, {
     bool tv = false,
     bool embedded = false,
+    bool discover = false,
     bool shelf = false,
     FocusNode? sourceNode,
     ValueChanged<StremioMeta>? onItemFocused,
   }) async {
     Widget page = MetadataBrowsePage(
       title: embedded ? 'TMDB' : 'Person',
-      kind: embedded ? 'discover' : 'person',
+      kind: embedded || discover ? 'discover' : 'person',
       id: embedded ? null : 3,
       preferences: MetadataPreferences(),
       onOpen: (_) {},
@@ -123,6 +124,10 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
+      if (label == 'Language') {
+        await tester.enterText(find.byType(TextField), option);
+        await tester.pumpAndSettle();
+      }
       await tester.tap(find.text(option).last);
       await tester.pumpAndSettle();
     }
@@ -152,6 +157,78 @@ void main() {
     expect(service.requests.last.filters['with_original_language'], 'hi');
     expect(tester.takeException(), isNull);
   });
+
+  for (final embedded in [false, true]) {
+    testWidgets(
+      'searching expanded languages filters and clears results (embedded=$embedded)',
+      (tester) async {
+        if (embedded) {
+          tester.view.physicalSize = const Size(320, 568);
+          tester.view.devicePixelRatio = 1;
+          addTearDown(tester.view.reset);
+        }
+        final service = BrowseService();
+        await open(tester, service, embedded: embedded, discover: true);
+        if (embedded) {
+          await tester.tap(find.text('Filters'));
+          await tester.pumpAndSettle();
+        }
+        final language = find.byWidgetPredicate(
+          (w) => w is StremioDropdown<String> && w.label == 'Language',
+        );
+        for (final (name, code) in [
+          ('Malayalam', 'ml'),
+          ('Korean', 'ko'),
+          ('All languages', ''),
+        ]) {
+          await tester.tap(language);
+          await tester.pumpAndSettle();
+          await tester.enterText(find.byType(TextField), name);
+          await tester.pumpAndSettle();
+          await tester.tap(find.text(name).last);
+          await tester.pumpAndSettle();
+          expect(
+            service.requests.last.filters['with_original_language'],
+            code.isEmpty ? isNull : code,
+          );
+          expect(service.pages.last, 1);
+          expect(tester.widget<StremioDropdown<String>>(language).value, code);
+        }
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox());
+        await tester.pumpAndSettle();
+      },
+    );
+  }
+
+  testWidgets(
+    'TV language picker opens at the selection and supports remote selection',
+    (tester) async {
+      final service = BrowseService();
+      await open(tester, service, tv: true, embedded: true);
+      final language = find.byWidgetPredicate(
+        (w) => w is StremioDropdown<String> && w.label == 'Language',
+      );
+      tester.widget<StremioDropdown<String>>(language).onSelected('kn');
+      await tester.pumpAndSettle();
+      final node = tester.widget<StremioDropdown<String>>(language).focusNode!;
+      node.requestFocus();
+      await tester.pumpAndSettle();
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pumpAndSettle();
+      expect(find.byType(TextField), findsNothing);
+      for (var i = 0; i < 3; i++) {
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+        await tester.pumpAndSettle();
+      }
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pumpAndSettle();
+      expect(service.requests.last.filters['with_original_language'], 'ml');
+      expect(tester.widget<StremioDropdown<String>>(language).value, 'ml');
+      expect(node.hasFocus, isTrue);
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   for (final shelf in [false, true]) {
     testWidgets(
