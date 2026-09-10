@@ -670,12 +670,23 @@ class TraktService {
   /// Authenticated POST request with automatic token refresh on 401.
   Future<http.Response?> _authenticatedPost(
     String path,
-    Map<String, dynamic> body,
-  ) async {
+    Map<String, dynamic> body, {
+    bool requireScrobbleEnabled = false,
+  }) async {
     var accessToken = await StorageService.getTraktAccessToken();
     if (accessToken == null) return null;
 
     try {
+      // Players retain launch-time flags. Recheck the current profile's
+      // switch at the send boundary so a running session cannot keep writing
+      // after scrobbling is disabled. Explicit history/rating actions use
+      // this helper too, but remain independent of automatic scrobbling.
+      if (requireScrobbleEnabled &&
+          !(await StorageService.getTrackingScrobbleTargets()).contains(
+            TrackingSource.trakt,
+          )) {
+        return null;
+      }
       var response = await http
           .post(
             Uri.parse('$kTraktApiBaseUrl$path'),
@@ -692,6 +703,13 @@ class TraktService {
         accessToken = await StorageService.getTraktAccessToken();
         if (accessToken == null) return null;
 
+        // The preference may have changed while the refresh was in flight.
+        if (requireScrobbleEnabled &&
+            !(await StorageService.getTrackingScrobbleTargets()).contains(
+              TrackingSource.trakt,
+            )) {
+          return null;
+        }
         response = await http
             .post(
               Uri.parse('$kTraktApiBaseUrl$path'),
@@ -789,7 +807,11 @@ class TraktService {
         'progress': progress,
       };
     }
-    final response = await _authenticatedPost(path, body);
+    final response = await _authenticatedPost(
+      path,
+      body,
+      requireScrobbleEnabled: true,
+    );
     DiagnosticLog.instance.recordEvent(
       source: 'trakt',
       event: 'scrobble_result',
