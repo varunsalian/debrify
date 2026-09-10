@@ -174,7 +174,7 @@ void main() {
       FocusManager.instance.primaryFocus?.debugLabel,
       'settings-tv-rail-11',
     );
-    expect(find.text('Sync and backup'), findsWidgets);
+    expect(find.text('Sync and Migrate'), findsWidgets);
 
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
     await tester.pump();

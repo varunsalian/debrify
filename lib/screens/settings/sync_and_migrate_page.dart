@@ -1093,7 +1093,7 @@ class _SyncAndMigratePageState extends State<SyncAndMigratePage>
   @override
   Widget build(BuildContext context) {
     return SettingsPageScaffold(
-      title: 'Sync and backup',
+      title: 'Sync and Migrate',
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Center(

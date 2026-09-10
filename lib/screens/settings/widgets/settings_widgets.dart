@@ -363,7 +363,7 @@ abstract final class SettingsRows {
   );
   static const syncAndMigrate = SettingsRowContent(
     icon: Icons.sync_alt_rounded,
-    title: 'Sync and backup',
+    title: 'Sync and Migrate',
     subtitle: 'Sync across devices with WebDAV',
   );
   static const enableWebDavSync = SettingsRowContent(
