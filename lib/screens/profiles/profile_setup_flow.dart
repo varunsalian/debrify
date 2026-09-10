@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../models/profiles/profile_policy.dart';
 import '../../models/profiles/profile_avatar.dart';
@@ -12,6 +13,7 @@ import '../../services/profiles/profile_registry.dart';
 import '../../services/profiles/profile_runtime.dart';
 import '../../services/main_page_bridge.dart';
 import '../../utils/platform_util.dart';
+import '../../utils/tv_keys.dart';
 import '../../widgets/onboarding/onboarding_theme.dart';
 import '../../widgets/onboarding/onboarding_focus.dart';
 import '../../widgets/profiles/profile_art.dart';
@@ -83,6 +85,7 @@ class _ProfileSetupFlowState extends State<ProfileSetupFlow> {
   final OnboardFocusController _focus = OnboardFocusController();
   final TextEditingController _name = TextEditingController();
   final FocusNode _nameNode = FocusNode(debugLabel: 'profile-name-field');
+  final FocusNode _cancelNode = FocusNode(debugLabel: 'profile-setup-cancel');
 
   late _QStep _step;
   String? _artId;
@@ -119,6 +122,8 @@ class _ProfileSetupFlowState extends State<ProfileSetupFlow> {
   String? _error;
 
   bool get _isEdit => widget.profile != null;
+  bool get _backExits =>
+      _step == _QStep.identity || (_isEdit && _step == _QStep.review);
 
   @override
   void initState() {
@@ -142,6 +147,7 @@ class _ProfileSetupFlowState extends State<ProfileSetupFlow> {
     _focus.dispose();
     _name.dispose();
     _nameNode.dispose();
+    _cancelNode.dispose();
     super.dispose();
   }
 
@@ -240,9 +246,10 @@ class _ProfileSetupFlowState extends State<ProfileSetupFlow> {
   }
 
   void _back() {
+    if (_saving) return;
     switch (_step) {
       case _QStep.identity:
-        Navigator.of(context).pop(false);
+        _cancel();
       case _QStep.role:
         _go(_QStep.identity);
       case _QStep.search:
@@ -253,11 +260,62 @@ class _ProfileSetupFlowState extends State<ProfileSetupFlow> {
         _go(_QStep.sources);
       case _QStep.review:
         if (_isEdit) {
-          Navigator.of(context).pop(_changedElsewhere);
+          _cancel();
         } else {
           _go(_QStep.abilities);
         }
     }
+  }
+
+  void _cancel() {
+    if (_saving) return;
+    Navigator.of(context).pop(_changedElsewhere);
+  }
+
+  KeyEventResult _handleKey(FocusNode _, KeyEvent event) {
+    if (event.logicalKey != LogicalKeyboardKey.escape) {
+      return KeyEventResult.ignored;
+    }
+    if (event is KeyDownEvent) _back();
+    return KeyEventResult.handled;
+  }
+
+  KeyEventResult _handleNavigationKey(FocusNode _, KeyEvent event) {
+    final key = event.logicalKey;
+    if (isActivateOrSpaceKey(key)) {
+      // Back can become Cancel while this button still owns focus. Consume
+      // repeats before Material's shortcuts can activate the new action.
+      if (event is KeyDownEvent && !_saving) {
+        if (_cancelNode.hasFocus) {
+          _cancel();
+        } else {
+          _back();
+        }
+      }
+      return KeyEventResult.handled;
+    }
+    if (key != LogicalKeyboardKey.arrowLeft &&
+        key != LogicalKeyboardKey.arrowRight &&
+        key != LogicalKeyboardKey.arrowUp &&
+        key != LogicalKeyboardKey.arrowDown) {
+      return KeyEventResult.ignored;
+    }
+    if (event is KeyDownEvent && !_saving) {
+      if (key == LogicalKeyboardKey.arrowLeft && _cancelNode.hasFocus) {
+        _focus.backNode.requestFocus();
+      } else if (key == LogicalKeyboardKey.arrowRight) {
+        // LEFT from a form control parks on Back; RIGHT traverses Cancel
+        // before returning to that control. DOWN returns from either button.
+        if (_focus.backNode.hasFocus && !_backExits) {
+          _cancelNode.requestFocus();
+        } else {
+          _focus.returnFromBack();
+        }
+      } else if (key == LogicalKeyboardKey.arrowDown) {
+        _focus.returnFromBack();
+      }
+    }
+    return KeyEventResult.handled;
   }
 
   Future<void> _save() async {
@@ -438,7 +496,11 @@ class _ProfileSetupFlowState extends State<ProfileSetupFlow> {
                         horizontal: compact ? 22 : 32,
                         vertical: 18,
                       ),
-                      child: _buildStep(context, app, compact),
+                      child: Focus(
+                        autofocus: !PlatformUtil.isTelevision,
+                        onKeyEvent: _handleKey,
+                        child: _buildStep(context, app, compact),
+                      ),
                     ),
                   ),
                 );
@@ -501,42 +563,55 @@ class _ProfileSetupFlowState extends State<ProfileSetupFlow> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const SizedBox(height: 8),
-        Text(
-          eyebrow.toUpperCase(),
-          style: const TextStyle(
-            fontFamily: 'JetBrainsMono',
-            fontSize: 10,
-            fontWeight: FontWeight.w600,
-            letterSpacing: 2.2,
-            color: Color(0x6BFFFFFF),
-          ),
-        ),
-        const SizedBox(height: 10),
-        Text(
-          title,
-          style: const TextStyle(
-            fontSize: 27,
-            height: 1.06,
-            fontWeight: FontWeight.w700,
-            letterSpacing: -0.7,
-            color: Colors.white,
-          ),
-        ),
-        const SizedBox(height: 10),
-        ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 380),
-          child: Text(
-            subtitle,
-            style: const TextStyle(
-              fontSize: 12.5,
-              height: 1.46,
-              color: Color(0x99FFFFFF),
+        _navigation(),
+        // The heading shares the form's scroll area so an open keyboard
+        // and a validation error cannot squeeze the name field out of view.
+        Expanded(
+          child: SingleChildScrollView(
+            key: ValueKey(_step),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const SizedBox(height: 8),
+                Text(
+                  eyebrow.toUpperCase(),
+                  style: const TextStyle(
+                    fontFamily: 'JetBrainsMono',
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 2.2,
+                    color: Color(0x6BFFFFFF),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 27,
+                    height: 1.06,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: -0.7,
+                    color: Colors.white,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 380),
+                  child: Text(
+                    subtitle,
+                    style: const TextStyle(
+                      fontSize: 12.5,
+                      height: 1.46,
+                      color: Color(0x99FFFFFF),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 18),
+                content,
+              ],
             ),
           ),
         ),
-        const SizedBox(height: 18),
-        Expanded(child: SingleChildScrollView(child: content)),
         if (_error != null) ...[
           const SizedBox(height: 10),
           Text(
@@ -560,6 +635,42 @@ class _ProfileSetupFlowState extends State<ProfileSetupFlow> {
         const SizedBox(height: 6),
         _dots(),
       ],
+    );
+  }
+
+  Widget _navigation() {
+    final style = TextButton.styleFrom(
+      foregroundColor: Colors.white,
+      disabledForegroundColor: const Color(0x61FFFFFF),
+      minimumSize: const Size(44, 44),
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+    );
+    return Focus(
+      canRequestFocus: false,
+      skipTraversal: true,
+      onKeyEvent: _handleNavigationKey,
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          TextButton.icon(
+            focusNode: _focus.backNode,
+            onPressed: _saving ? null : _back,
+            style: style,
+            icon: Icon(
+              _backExits ? Icons.close_rounded : Icons.arrow_back_rounded,
+              size: 18,
+            ),
+            label: Text(_backExits ? 'Cancel' : 'Back'),
+          ),
+          if (!_backExits)
+            TextButton(
+              focusNode: _cancelNode,
+              onPressed: _saving ? null : _cancel,
+              style: style,
+              child: const Text('Cancel'),
+            ),
+        ],
+      ),
     );
   }
 
