@@ -1269,6 +1269,11 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
 
   void _up() {
     if (_row <= 0) {
+      // Local shelves can precede hero data. Do not leave a pending focus
+      // request that steals the cursor when the hero eventually mounts.
+      if (widget.hero.isEmpty || !(widget.heroNode.context?.mounted ?? false)) {
+        return;
+      }
       setState(() => _row = -1);
       _restartCadence();
       _go(widget.heroNode, const Offset(0, -1));
@@ -1432,13 +1437,39 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
     return KeyEventResult.ignored;
   }
 
-  /// Where the shell should land focus on re-entry.
+  /// Initial entry and re-entry must only target mounted content. Shelves
+  /// may arrive before the independently loaded hero, and late hero data
+  /// must not move an already placed card cursor.
   FocusNode? focusTarget() {
-    if (_row < 0) return widget.heroNode;
-    if (_row >= widget.sections.length) return widget.heroNode;
-    final nodes = widget.sections[_row].nodes;
-    if (nodes.isEmpty) return widget.heroNode;
-    return nodes[(_col[_row] ?? 0).clamp(0, nodes.length - 1)];
+    bool available(FocusNode node) =>
+        (node.context?.mounted ?? false) && node.canRequestFocus;
+    if (widget.heroNode.hasFocus && available(widget.heroNode)) {
+      return widget.heroNode;
+    }
+    for (final section in widget.sections) {
+      for (final node in section.nodes) {
+        if (node.hasFocus && available(node)) return node;
+      }
+    }
+    if (_row >= 0 && _row < widget.sections.length) {
+      final nodes = widget.sections[_row].nodes;
+      if (nodes.isNotEmpty) {
+        final col = (_col[_row] ?? 0).clamp(0, nodes.length - 1);
+        if (available(nodes[col])) return nodes[col];
+        for (final node in nodes) {
+          if (available(node)) return node;
+        }
+      }
+    }
+    if (widget.hero.isNotEmpty && available(widget.heroNode)) {
+      return widget.heroNode;
+    }
+    for (final section in widget.sections) {
+      for (final node in section.nodes) {
+        if (available(node)) return node;
+      }
+    }
+    return null;
   }
 
   // ── paint ──────────────────────────────────────────────────────────────

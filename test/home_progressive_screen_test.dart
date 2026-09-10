@@ -7,11 +7,13 @@ import 'package:debrify/screens/search_screen.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/stremio_service.dart';
 import 'package:debrify/services/storage_service.dart';
+import 'package:debrify/services/main_page_bridge.dart';
 import 'package:debrify/services/text_brightness.dart';
 import 'package:debrify/theme/app_theme.dart';
 import 'package:debrify/theme/app_theme_adapter.dart';
 import 'package:debrify/theme/app_theme_scope.dart';
 import 'package:debrify/widgets/detail/theme/detail_themes.dart';
+import 'package:debrify/widgets/home/spotlight_board.dart';
 import 'package:debrify/utils/platform_util.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -31,10 +33,21 @@ void main() {
       await loader.load();
     }
   });
-  for (final android in [true, false]) {
+  for (final (android, style) in [
+    (true, 'classic'),
+    (false, 'classic'),
+    (true, 'spotlight'),
+  ]) {
     testWidgets(
-      'saved collections load before catalogs only on Android TV (android=$android)',
+      'saved collections load before catalogs only on Android TV (android=$android, style=$style)',
       (tester) async {
+        final previousTab = MainPageBridge.activeTvTabIndex;
+        if (style == 'spotlight') {
+          MainPageBridge.setActiveTvTab(15);
+          AppThemeAdapter.debugUseTestTypography = true;
+          addTearDown(() => AppThemeAdapter.debugUseTestTypography = false);
+        }
+        addTearDown(() => MainPageBridge.setActiveTvTab(previousTab));
         ProfileRuntime.debugReset();
         ProfileRuntime.initializeLegacy();
         PlatformUtil.debugSetAndroidTvCached(android);
@@ -63,9 +76,9 @@ void main() {
         SharedPreferences.setMockInitialValues({
           'stremio_addons_v1': jsonEncode([addon.toJson()]),
           'home_collections_v1': jsonEncode([collection.toJson()]),
-          'tv_home_style': 'classic',
+          'tv_home_style': style,
         });
-        StorageService.tvHomeStyleCached = 'classic';
+        StorageService.tvHomeStyleCached = style;
         StremioService.instance.invalidateCache();
         final slow = Completer<http.Response>();
         final client = MockClient(
@@ -93,12 +106,42 @@ void main() {
           find.text('Saved collection'),
           android ? findsWidgets : findsNothing,
         );
+        FocusNode? earlyCard;
+        if (style == 'spotlight') {
+          final board = tester.widget<SpotlightBoard>(
+            find.byType(SpotlightBoard),
+          );
+          expect(board.hero, isEmpty);
+          earlyCard = FocusManager.instance.primaryFocus;
+          expect(board.sections.expand((s) => s.nodes), contains(earlyCard));
+          expect(earlyCard, isNot(isA<FocusScopeNode>()));
+          await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+          await tester.pump();
+          expect(FocusManager.instance.primaryFocus, same(earlyCard));
+        }
         await tester.runAsync(() async {
-          slow.complete(http.Response('{"metas":[]}', 200));
+          slow.complete(
+            http.Response(
+              style == 'spotlight'
+                  ? '{"metas":[{"id":"late-hero","type":"movie","name":"Late hero"}]}'
+                  : '{"metas":[]}',
+              200,
+            ),
+          );
           await Future<void>.delayed(const Duration(milliseconds: 50));
         });
         await tester.pump(const Duration(milliseconds: 500));
         expect(find.text('Saved collection'), findsWidgets);
+        if (style == 'spotlight') {
+          final board = tester.widget<SpotlightBoard>(
+            find.byType(SpotlightBoard),
+          );
+          expect(board.hero, isNotEmpty);
+          expect(FocusManager.instance.primaryFocus, same(earlyCard));
+          await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+          await tester.pump(const Duration(milliseconds: 500));
+          expect(board.heroNode.hasFocus, isTrue);
+        }
         await tester.pumpWidget(const SizedBox());
         await tester.pump(const Duration(seconds: 2));
         expect(tester.takeException(), isNull);

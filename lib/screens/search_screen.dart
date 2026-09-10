@@ -7800,7 +7800,7 @@ class _SearchScreenState extends State<SearchScreen>
     // Spotlight owns its own cursor — the hero is a focusable row, which the
     // rail-based resolution below cannot describe.
     if (_homeStyleEffective == 'spotlight') {
-      return _spotlightKey.currentState?.focusTarget() ?? _spotlightHeroNode;
+      return _spotlightKey.currentState?.focusTarget();
     }
     // Tonight parks focus in its vertical queue until the user walks down
     // into the rail zone; the rail resolution below is only right for the

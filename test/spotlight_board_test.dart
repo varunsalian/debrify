@@ -111,6 +111,58 @@ void main() {
     ),
   );
 
+  testWidgets(
+    'cards receive entry focus before hero data and retain it on arrival',
+    (tester) async {
+      final a = _meta('tt1', 'Alpha');
+      final b = _meta('tt2', 'Bravo');
+      final shelves = [
+        _section('Saved', [a, b], nodes: rows.first),
+      ];
+      await tester.pumpWidget(host([], shelves));
+      await tester.pumpAndSettle();
+      final board = tester.state<SpotlightBoardState>(
+        find.byType(SpotlightBoard),
+      );
+      expect(hero.context, isNull);
+      expect(board.focusTarget(), same(rows.first.first));
+      board.focusTarget()!.requestFocus();
+      await tester.pumpAndSettle();
+      expect(rows.first.first.hasFocus, isTrue);
+      // UP must not latch a request on the still-unmounted hero.
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+      await tester.pumpAndSettle();
+      expect(rows.first.first.hasFocus, isTrue);
+      await tester.pumpWidget(host([a], shelves));
+      await tester.pumpAndSettle();
+      expect(rows.first.first.hasFocus, isTrue);
+      // Model the host's next autofocus pass when the hero arrives. Even a
+      // user who has not moved horizontally keeps the available card anchor.
+      expect(board.focusTarget(), same(rows.first.first));
+      board.focusTarget()!.requestFocus();
+      await tester.pumpAndSettle();
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+      await tester.pumpAndSettle();
+      expect(rows.first[1].hasFocus, isTrue);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+      await tester.pumpAndSettle();
+      expect(hero.hasFocus, isTrue);
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
+
+  testWidgets('empty Spotlight has no detached initial focus target', (
+    tester,
+  ) async {
+    await tester.pumpWidget(host([], []));
+    await tester.pumpAndSettle();
+    final board = tester.state<SpotlightBoardState>(
+      find.byType(SpotlightBoard),
+    );
+    expect(board.focusTarget(), isNull);
+    await tester.pumpWidget(const SizedBox());
+  });
+
   testWidgets('the hero parks by ITEM ID across a reel re-order', (
     tester,
   ) async {
