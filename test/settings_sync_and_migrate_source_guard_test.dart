@@ -20,10 +20,10 @@ void main() {
     expect(adaptive, contains("title: 'Sync and backup'"));
     expect(
       tv,
-      contains("'Sync and backup',\n    'Sync across devices and save backups'"),
+      contains("'Sync and backup',\n    'Sync across devices with WebDAV'"),
     );
-    expect(page, contains('SettingsRows.createWebDavBackup'));
-    expect(page, contains('SettingsRows.restoreWebDavBackup'));
+    expect(page, isNot(contains('SettingsRows.createWebDavBackup')));
+    expect(page, isNot(contains('SettingsRows.restoreWebDavBackup')));
   });
 
   test('index-based category switches preserve the destructive tail', () {

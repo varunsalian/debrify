@@ -19,13 +19,11 @@ import '../../services/webdav_sync/webdav_sync_setup_service.dart';
 import '../../widgets/tv_text_field.dart';
 import '../../widgets/webdav_sync/webdav_foreground_sync.dart';
 import '../webdav_sync/webdav_sync_login_screen.dart';
-import 'profile_backup_flows.dart';
 import 'widgets/settings_widgets.dart';
 
 class SyncAndMigratePage extends StatefulWidget {
   const SyncAndMigratePage({
     super.key,
-    this.onRestored,
     this.syncService,
     this.syncAuthorization,
     this.syncActivation,
@@ -33,7 +31,6 @@ class SyncAndMigratePage extends StatefulWidget {
     this.launchSyncLogin,
   });
 
-  final Future<void> Function()? onRestored;
   final WebDavSyncSetupService? syncService;
   final WebDavSyncSetupAuthorization? syncAuthorization;
   final WebDavSyncActivationController? syncActivation;
@@ -1106,33 +1103,6 @@ class _SyncAndMigratePageState extends State<SyncAndMigratePage>
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 if (_syncFeatureEnabled) _buildSyncSection(),
-                const SettingsSectionLabel('Manual backups'),
-                const SizedBox(height: 8),
-                SettingsSection(
-                  title: '',
-                  children: [
-                    SettingsTile.spec(
-                      SettingsRows.createWebDavBackup,
-                      onTap: () => ProfileBackupFlows(
-                        context,
-                      ).createWebDavProfileBackup(),
-                    ),
-                    SettingsTile.spec(
-                      SettingsRows.restoreWebDavBackup,
-                      onTap: () => ProfileBackupFlows(
-                        context,
-                        onRestored: widget.onRestored,
-                      ).restoreWebDavProfileBackup(),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                const Text(
-                  'Backups are encrypted with the passphrase you choose. '
-                  'Save a separate copy or restore one when you need it. '
-                  'These backups do not turn on automatic sync.',
-                  style: TextStyle(fontSize: 12.5),
-                ),
               ],
             ),
           ),

@@ -2668,11 +2668,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _openSyncAndMigrate,
         keywords: const [
           'webdav',
-          'cloud backup',
           'migration',
           'transfer',
-          'save backup',
-          'restore backup',
           'apple tv',
           'tvos',
           'encrypted',
@@ -5266,15 +5263,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
     if (!await _ensureProfileFeature(ProfileFeature.backupRestore)) return;
     if (!mounted) return;
-    await pushSettingsPage(
-      context,
-      SyncAndMigratePage(
-        onRestored: () async {
-          await _loadSummaries();
-          MainPageBridge.notifyIntegrationChanged();
-        },
-      ),
-    );
+    await pushSettingsPage(context, const SyncAndMigratePage());
   }
 
   Future<void> _createBackup() async {
@@ -7331,12 +7320,12 @@ const List<SettingsCategoryDefinition> _kAdaptiveSettingsCategories = [
   SettingsCategoryDefinition(
     icon: Icons.sync_alt_rounded,
     label: 'Sync and backup',
-    subtitle: 'Sync across devices and save backups',
+    subtitle: 'Sync across devices with WebDAV',
     eyebrow: 'Sync and backup',
     title: 'Keep your devices in sync.',
     description:
         'Connect your WebDAV account to sync profiles, settings and watch '
-        'progress, or save a separate backup.',
+        'progress.',
   ),
   SettingsCategoryDefinition(
     icon: Icons.storage_rounded,

@@ -147,12 +147,14 @@ void main() {
         size: size,
       );
       expect(tester.takeException(), isNull);
+      expect(find.text('Manual backups'), findsNothing);
+      expect(find.text('Save backup to WebDAV'), findsNothing);
+      expect(find.text('Restore backup from WebDAV'), findsNothing);
       for (final label in [
         'Sync now',
         'Connected devices',
         'Log out',
         'Sync channels now',
-        'Save backup to WebDAV',
       ]) {
         await tester.ensureVisible(find.text(label));
         await tester.pumpAndSettle();
@@ -235,7 +237,9 @@ void main() {
     await pumpPage(tester, enabled: false);
 
     expect(find.text('Connect WebDAV'), findsNothing);
-    expect(find.text('Save backup to WebDAV'), findsOneWidget);
+    expect(find.text('Manual backups'), findsNothing);
+    expect(find.text('Save backup to WebDAV'), findsNothing);
+    expect(find.text('Restore backup from WebDAV'), findsNothing);
   });
 
   testWidgets('failed Admin check does not resume an unpaused runtime', (

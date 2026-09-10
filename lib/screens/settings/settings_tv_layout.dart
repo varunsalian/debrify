@@ -346,9 +346,9 @@ const List<_Category> _kCategories = [
   _Category(
     Icons.sync_alt_rounded,
     'Sync and backup',
-    'Sync across devices and save backups',
+    'Sync across devices with WebDAV',
     'Keep your devices in sync.',
-    'Sync profiles, settings and watch progress, or save a separate backup.',
+    'Sync profiles, settings and watch progress with WebDAV.',
   ),
   _Category(
     Icons.storage_rounded,
