@@ -4,6 +4,7 @@ import 'dart:isolate';
 
 import 'package:crypto/crypto.dart';
 
+import '../profiles/profile_appearance_preferences.dart';
 import '../../models/home_collection_inventory.dart';
 import 'webdav_sync_codec.dart';
 import 'webdav_sync_hot_models.dart';
@@ -521,6 +522,7 @@ abstract final class WebDavSyncHotMerge {
   };
 
   static const Set<String> _hotLocalOnlyScalarKeys = <String>{
+    ...ProfileAppearancePreferences.keys,
     mdblistSyncCheckpointPreference,
     HomeCollectionInventory.syncDeferredKey,
   };
@@ -891,8 +893,8 @@ abstract final class WebDavSyncHotMerge {
     final scalarValues = <String, WebDavSyncStampedValue>{};
     for (final doc in docs) {
       for (final entry in doc.scalars.entries.entries) {
-        // Ignore checkpoints from older clients that published this
-        // device-local cursor before it was excluded from hot sync.
+        // Ignore local-only settings published by older clients, including
+        // appearance preferences and device-local sync checkpoints.
         if (_hotLocalOnlyScalarKeys.contains(entry.key)) continue;
         // The former part-level dormant filter now applies to each entry.
         if (suppressDormantLocal &&

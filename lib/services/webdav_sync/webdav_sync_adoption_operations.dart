@@ -10,6 +10,7 @@ import '../../models/profiles/profile_policy.dart';
 import '../../models/profiles/user_profile.dart';
 import '../../utils/app_storage.dart';
 import '../profiles/profile_authorization.dart';
+import '../profiles/profile_appearance_preferences.dart';
 import '../profiles/profile_cleanup_ledger.dart';
 import '../profiles/profile_data_generation.dart';
 import '../profiles/profile_database_snapshot.dart';
@@ -62,6 +63,7 @@ final class DefaultWebDavSyncAdoptionOperations
   }) => restoreCoordinator.restoreDeviceGraph(
     package: package,
     authorization: authorization,
+    excludedPreferenceKeys: ProfileAppearancePreferences.keys,
     databaseFileResolver: databaseFileResolver,
   );
 

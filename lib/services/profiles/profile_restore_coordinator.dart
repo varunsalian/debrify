@@ -91,6 +91,7 @@ class ProfileRestoreCoordinator {
   Future<ProfileGraphRestoreReport> restoreDeviceGraph({
     required PortableProfilePackage package,
     required ProfileAuthorizationContext authorization,
+    Set<String> excludedPreferenceKeys = const <String>{},
     ProfileDatabaseFileResolver? databaseFileResolver,
     Future<void> Function(
       Map<String, String>,
@@ -231,6 +232,9 @@ class ProfileRestoreCoordinator {
           rejectDisallowedKeys:
               package.sourceVersion >= PortableProfilePackage.version,
         );
+        // Sync bootstrap can contain appearance values from an older client.
+        // Manual restore leaves this exclusion set empty.
+        values.removeWhere((key, _) => excludedPreferenceKeys.contains(key));
         _validatePreferenceOverlay(
           values,
           includeCredentialEngineSettings: true,

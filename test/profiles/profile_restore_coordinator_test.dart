@@ -209,6 +209,98 @@ void main() {
   });
 
   test(
+    'sync bootstrap excludes appearance but explicit backup restores it',
+    () async {
+      final prefs = await ProfilePreferences.instance();
+      await prefs.setString('tv_home_style', 'spotlight');
+      await prefs.setString('app_theme', 'aurora');
+      await prefs.setString('default_torrent_provider_v1', 'torbox');
+      final packages = ProfilePackageService(
+        registry: registry,
+        resources: ConnectionResourceService(
+          registry: registry,
+          cipher: cipher,
+        ),
+      );
+      final authorization = await ProfileAuthorizationContext.capture(registry);
+      final backup = await packages.exportAllProfiles(
+        context: authorization,
+        includeSecrets: true,
+        includeDatabases: false,
+      );
+      final sync = await packages.exportAllProfilesForSync(
+        context: authorization,
+        profileIdProjection: const {},
+        resourceIdProjection: const {},
+        includeDatabases: false,
+        includePreferences: true,
+      );
+      Map valuesOf(PortableProfilePackage package) =>
+          package.sections[package
+                  .profiles
+                  .single['preferencesSection']]['values']
+              as Map;
+      expect(valuesOf(backup)['tv_home_style'], 'spotlight');
+      expect(valuesOf(sync.package), isNot(contains('tv_home_style')));
+      expect(valuesOf(sync.package), isNot(contains('app_theme')));
+      expect(valuesOf(sync.package)['default_torrent_provider_v1'], 'torbox');
+      final restore = ProfileRestoreCoordinator(
+        registry: registry,
+        cipher: cipher,
+      );
+      final lifecycle = ProfileLifecycleCoordinator(registry: registry);
+      addTearDown(lifecycle.dispose);
+      final operations = DefaultWebDavSyncAdoptionOperations(
+        registry: registry,
+        restoreCoordinator: restore,
+        lifecycleCoordinator: lifecycle,
+      );
+      // A legacy bootstrap still contains appearance, just like this backup.
+      final joined = await operations.restoreGraph(
+        package: backup,
+        authorization: authorization,
+      );
+      final raw = await SharedPreferences.getInstance();
+      Future<ProfileScope> scopeFor(String id) async => ProfileScope(
+        profileId: id,
+        dataGeneration: (await registry.getProfile(id))!.visibleDataGeneration,
+        sessionEpoch: 1,
+      );
+      final joinedScope = await scopeFor(joined.importedProfileIds.single);
+      expect(
+        raw.containsKey(joinedScope.preferenceKey('tv_home_style')),
+        isFalse,
+      );
+      expect(raw.containsKey(joinedScope.preferenceKey('app_theme')), isFalse);
+      expect(
+        raw.getString(joinedScope.preferenceKey('default_torrent_provider_v1')),
+        'torbox',
+      );
+      // Rejoining an existing profile carries its LOCAL appearance to the new ID.
+      await operations.carryLocalState(
+        oldProfileId: profileId,
+        newProfileId: joined.importedProfileIds.single,
+        oldToNewResources: const {},
+        unmappedOldResourceIds: const {},
+      );
+      expect(
+        raw.getString(joinedScope.preferenceKey('tv_home_style')),
+        'spotlight',
+      );
+      final manual = await restore.restoreDeviceGraph(
+        package: backup,
+        authorization: authorization,
+      );
+      final manualScope = await scopeFor(manual.importedProfileIds.single);
+      expect(
+        raw.getString(manualScope.preferenceKey('tv_home_style')),
+        'spotlight',
+      );
+      expect(raw.getString(manualScope.preferenceKey('app_theme')), 'aurora');
+    },
+  );
+
+  test(
     'legacy backup salvages valid collections and restores other preferences',
     () async {
       final authorization = await ProfileAuthorizationContext.capture(registry);

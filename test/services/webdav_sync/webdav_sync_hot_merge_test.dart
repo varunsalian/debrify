@@ -1,4 +1,7 @@
 import 'dart:async';
+import 'package:debrify/services/profiles/profile_appearance_preferences.dart';
+import 'package:debrify/services/profiles/profile_preference_portability.dart';
+import 'package:debrify/services/webdav_sync/webdav_sync_scheduler.dart';
 import 'dart:convert';
 
 import 'package:crypto/crypto.dart';
@@ -892,6 +895,56 @@ void main() {
     expect(materialized['resource_json'], contains('local-resource'));
   });
 
+  test(
+    'appearance stays local through build, legacy merge and materialization',
+    () {
+      final appearance = <String, Object>{
+        for (final key in ProfileAppearancePreferences.keys)
+          key: 'remote-value',
+      };
+      final legacy = _document(
+        device: 'legacy',
+        scalarTime: 200,
+        scalars: {...appearance, 'default_torrent_provider_v1': 'torbox'},
+      );
+      final built = _buildWithPreferences(maps, 'device-a', {
+        ...appearance,
+        'default_torrent_provider_v1': 'torbox',
+      }, now: 100);
+      final merged = WebDavSyncHotMerge.merge(
+        local: built.document,
+        peers: [legacy],
+        tombstoneDocuments: const [],
+        nowMs: 300,
+      ).document;
+      final materialized = WebDavSyncHotMerge.materializePreferences(
+        document: legacy,
+        identityMaps: maps,
+      );
+      for (final key in appearance.keys) {
+        expect(
+          built.document.scalars.values,
+          isNot(contains(key)),
+          reason: key,
+        );
+        expect(merged.scalars.values, isNot(contains(key)), reason: key);
+        expect(materialized, isNot(contains(key)), reason: key);
+        expect(
+          WebDavSyncScheduler.admitsLocalChangeKey(key),
+          isFalse,
+          reason: key,
+        );
+        expect(
+          ProfilePreferencePortability.allowsKey(key),
+          isTrue,
+          reason: key,
+        );
+      }
+      expect(materialized['default_torrent_provider_v1'], 'torbox');
+      expect(merged.scalars.values['default_torrent_provider_v1'], 'torbox');
+    },
+  );
+
   test('MDBList checkpoint stays local without restamping scalar settings', () {
     const checkpoint = WebDavSyncHotMerge.mdblistSyncCheckpointPreference;
     final previous = _document(
@@ -985,7 +1038,9 @@ void main() {
   });
 
   test('composite resource IDs in JSON keys round-trip without leaking', () {
-    const preferenceKey = 'playlist_view_modes_v1';
+    // Layout preferences are local now; exercise the generic ID projection
+    // with a portable resource-options map.
+    const preferenceKey = 'resource_options';
     const localComposite = 'server:local-resource|path:%2Fshows';
     const circleComposite = 'server:resource-circle|path:%2Fshows';
     final built = _buildWithPreferences(maps, 'device-a', <String, Object?>{

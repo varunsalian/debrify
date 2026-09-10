@@ -40,6 +40,27 @@ void main() {
   late String activeId;
   late OpenedWebDavSyncRoot circleRoot;
 
+  test(
+    'old pending sync targets preserve local appearance and unset defaults',
+    () async {
+      final prefs = await ProfilePreferences.instance();
+      await prefs.setString('tv_home_style', 'canvas');
+      final local = ProfileWebDavSyncLocalAdapter(
+        registry,
+        activeProfileRefresher: _EngineRefreshRecorder(),
+      );
+      final applied = await local.applyProfile(session, activeId, {
+        'tv_home_style': 'spotlight',
+        'app_theme': 'aurora',
+        'default_torrent_provider_v1': 'torbox',
+      }, replayingPending: true);
+      expect(prefs.getString('tv_home_style'), 'canvas');
+      expect(prefs.containsKey('app_theme'), isFalse);
+      expect(prefs.getString('default_torrent_provider_v1'), 'torbox');
+      expect(applied, {'default_torrent_provider_v1'});
+    },
+  );
+
   setUpAll(() {
     sqfliteFfiInit();
     databaseFactory = databaseFactoryFfi;

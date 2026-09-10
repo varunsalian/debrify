@@ -865,8 +865,8 @@ class _SyncAndMigratePageState extends State<SyncAndMigratePage>
         SettingsSection(
           title: 'WebDAV sync',
           blurb: active
-              ? 'Your settings, profiles and watch progress sync automatically while the app is open.'
-              : 'Keep your profiles, settings and watch progress together across your devices.',
+              ? 'Your profiles, shared settings and watch progress sync automatically while the app is open. Appearance stays on this device.'
+              : 'Keep your profiles, shared settings and watch progress together across your devices. Appearance stays on each device.',
           children: [
             ListTile(
               leading: Icon(

@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:debrify/screens/settings/detail_theme_page.dart';
 import 'package:debrify/services/storage_service.dart';
+import 'package:debrify/services/profiles/profile_appearance_preferences.dart';
 import 'package:debrify/theme/app_looks.dart';
 import 'package:debrify/theme/app_theme.dart';
 import 'package:debrify/theme/app_theme_controller.dart';
@@ -19,6 +20,12 @@ void main() {
   });
 
   group('the bundles are well-formed', () {
+    test('every setting a Look can change stays outside automatic sync', () {
+      for (final key in LookKeys.all) {
+        expect(ProfileAppearancePreferences.keys, contains(key.id));
+      }
+    });
+
     test('every key a Look names is one a Look may set', () {
       // An unknown key does not throw, it silently does nothing — which is the
       // worst failure mode for a settings feature, because the row still says
@@ -46,7 +53,9 @@ void main() {
     test('ids and labels are unique', () {
       expect(AppLooks.all.map((l) => l.id).toSet().length, AppLooks.all.length);
       expect(
-          AppLooks.all.map((l) => l.label).toSet().length, AppLooks.all.length);
+        AppLooks.all.map((l) => l.label).toSet().length,
+        AppLooks.all.length,
+      );
     });
 
     test('every Look says something about the app theme', () {
@@ -64,109 +73,136 @@ void main() {
   });
 
   group('detection, not storage', () {
-    test('a fresh install reads as its default Look or Custom, never stale',
-        () {
-      // Nothing is written at startup, so whatever `active()` says is derived
-      // purely from the live prefs. The point of the test is that it does not
-      // throw and does not depend on a stored id.
-      final a = AppLooks.active();
-      expect(a == null || AppLooks.all.contains(a), isTrue);
-    });
+    test(
+      'a fresh install reads as its default Look or Custom, never stale',
+      () {
+        // Nothing is written at startup, so whatever `active()` says is derived
+        // purely from the live prefs. The point of the test is that it does not
+        // throw and does not depend on a stored id.
+        final a = AppLooks.active();
+        expect(a == null || AppLooks.all.contains(a), isTrue);
+      },
+    );
 
-    test('changing one key away from a Look makes it Custom by itself',
-        () async {
-      final look = AppLooks.all.firstWhere((l) => l.id == 'classic');
-      await LookApplier.apply(look);
-      expect(AppLooks.active()?.id, 'classic');
+    test(
+      'changing one key away from a Look makes it Custom by itself',
+      () async {
+        final look = AppLooks.all.firstWhere((l) => l.id == 'classic');
+        await LookApplier.apply(look);
+        expect(AppLooks.active()?.id, 'classic');
 
-      // A manual change to ONE key the Look names — exactly what a user does
-      // by opening a picker afterwards.
-      await StorageService.setDetailPageStyle('stage');
-      expect(AppLooks.active()?.id, isNot('classic'),
-          reason: 'a stored "current Look" would still claim classic here');
-    });
+        // A manual change to ONE key the Look names — exactly what a user does
+        // by opening a picker afterwards.
+        await StorageService.setDetailPageStyle('stage');
+        expect(
+          AppLooks.active()?.id,
+          isNot('classic'),
+          reason: 'a stored "current Look" would still claim classic here',
+        );
+      },
+    );
   });
 
   group('applying', () {
     test('sets every key it names, and only those', () async {
       await StorageService.setIptvStyle('edition');
       final classic = AppLooks.all.firstWhere((l) => l.id == 'classic');
-      expect(classic.values.containsKey('iptv_style'), isFalse,
-          reason: 'fixture: classic must not name iptv_style');
+      expect(
+        classic.values.containsKey('iptv_style'),
+        isFalse,
+        reason: 'fixture: classic must not name iptv_style',
+      );
 
       await LookApplier.apply(classic);
       expect(StorageService.detailPageStyleCached, 'classic');
-      expect(StorageService.iptvStyleCached, 'edition',
-          reason: 'a Look must leave alone what it does not name');
+      expect(
+        StorageService.iptvStyleCached,
+        'edition',
+        reason: 'a Look must leave alone what it does not name',
+      );
     });
 
-    test('publishes synchronously — the UI is right on the next frame',
-        () async {
-      final neon = AppLooks.all.firstWhere((l) => l.id == 'neon');
-      final future = LookApplier.apply(neon);
-      // Not awaited yet: the mirrors must already be correct.
-      expect(AppThemeController.instance.id, neon.values['app_theme']);
-      await future;
-    });
+    test(
+      'publishes synchronously — the UI is right on the next frame',
+      () async {
+        final neon = AppLooks.all.firstWhere((l) => l.id == 'neon');
+        final future = LookApplier.apply(neon);
+        // Not awaited yet: the mirrors must already be correct.
+        expect(AppThemeController.instance.id, neon.values['app_theme']);
+        await future;
+      },
+    );
 
-    test('a change made BEFORE the apply loses — the preset was picked later',
-        () async {
-      // The ordering that matters. Setting a picker and then choosing a Look
-      // means the Look is the newer intent, so it must win. (The generation
-      // snapshot is taken when the apply STARTS, which is what expresses
-      // this.)
-      await StorageService.setIptvStyle('edition');
-      final console = AppLooks.all.firstWhere((l) => l.id == 'console');
-      await LookApplier.apply(console);
-      expect(StorageService.iptvStyleCached, 'console');
-    });
+    test(
+      'a change made BEFORE the apply loses — the preset was picked later',
+      () async {
+        // The ordering that matters. Setting a picker and then choosing a Look
+        // means the Look is the newer intent, so it must win. (The generation
+        // snapshot is taken when the apply STARTS, which is what expresses
+        // this.)
+        await StorageService.setIptvStyle('edition');
+        final console = AppLooks.all.firstWhere((l) => l.id == 'console');
+        await LookApplier.apply(console);
+        expect(StorageService.iptvStyleCached, 'console');
+      },
+    );
 
-    test('a change made DURING the apply wins — a human beats a preset',
-        () async {
-      final console = AppLooks.all.firstWhere((l) => l.id == 'console');
-      expect(console.values['iptv_style'], 'console');
+    test(
+      'a change made DURING the apply wins — a human beats a preset',
+      () async {
+        final console = AppLooks.all.firstWhere((l) => l.id == 'console');
+        expect(console.values['iptv_style'], 'console');
 
-      // Start the apply, then have a picker announce itself while it is still
-      // walking the bundle — `iptv_style` sits fifth in the map, so the note
-      // lands before the applier reaches it.
-      final future = LookApplier.apply(console);
-      await StorageService.setIptvStyle('edition');
-      LookApplier.noteExternalWrite('iptv_style');
-      await future;
+        // Start the apply, then have a picker announce itself while it is still
+        // walking the bundle — `iptv_style` sits fifth in the map, so the note
+        // lands before the applier reaches it.
+        final future = LookApplier.apply(console);
+        await StorageService.setIptvStyle('edition');
+        LookApplier.noteExternalWrite('iptv_style');
+        await future;
 
-      expect(StorageService.iptvStyleCached, 'edition',
-          reason: 'a deliberate choice made during the apply must survive it');
-      // …and the rest of the bundle still landed.
-      expect(StorageService.detailPageStyleCached, 'console');
-    });
+        expect(
+          StorageService.iptvStyleCached,
+          'edition',
+          reason: 'a deliberate choice made during the apply must survive it',
+        );
+        // …and the rest of the bundle still landed.
+        expect(StorageService.detailPageStyleCached, 'console');
+      },
+    );
 
     test('every bundle round-trips: apply then detect', () async {
       for (final look in AppLooks.all) {
         await LookApplier.apply(look);
-        expect(AppLooks.active()?.id, look.id,
-            reason: '${look.id} did not detect as active after applying');
+        expect(
+          AppLooks.active()?.id,
+          look.id,
+          reason: '${look.id} did not detect as active after applying',
+        );
       }
     });
 
-    test('Spotlight and Classic both carry Debrify TV, and Classic pins grid',
-        () async {
-      // The assertion that would have caught the Custom-flip: isActive only
-      // checks keys a bundle names, so BOTH flagship bundles must name
-      // `debrify_tv_style` — Spotlight to carry the rail, Classic to pin the
-      // grid — or the picker and the screen contradict each other.
-      final spotlight = AppLooks.all.firstWhere((l) => l.id == 'spotlight');
-      final classic = AppLooks.all.firstWhere((l) => l.id == 'classic');
-      expect(spotlight.values['debrify_tv_style'], 'spotlight');
-      expect(classic.values['debrify_tv_style'], 'grid');
+    test(
+      'Spotlight and Classic both carry Debrify TV, and Classic pins grid',
+      () async {
+        // The assertion that would have caught the Custom-flip: isActive only
+        // checks keys a bundle names, so BOTH flagship bundles must name
+        // `debrify_tv_style` — Spotlight to carry the rail, Classic to pin the
+        // grid — or the picker and the screen contradict each other.
+        final spotlight = AppLooks.all.firstWhere((l) => l.id == 'spotlight');
+        final classic = AppLooks.all.firstWhere((l) => l.id == 'classic');
+        expect(spotlight.values['debrify_tv_style'], 'spotlight');
+        expect(classic.values['debrify_tv_style'], 'grid');
 
-      await LookApplier.apply(spotlight);
-      expect(AppLooks.active()?.id, 'spotlight');
-      expect(StorageService.debrifyTvStyleCached, 'spotlight');
+        await LookApplier.apply(spotlight);
+        expect(AppLooks.active()?.id, 'spotlight');
+        expect(StorageService.debrifyTvStyleCached, 'spotlight');
 
-      await LookApplier.apply(classic);
-      expect(AppLooks.active()?.id, 'classic');
-      expect(StorageService.debrifyTvStyleCached, 'grid');
-    });
+        await LookApplier.apply(classic);
+        expect(AppLooks.active()?.id, 'classic');
+        expect(StorageService.debrifyTvStyleCached, 'grid');
+      },
+    );
   });
 
   test('a failing write does not take the apply down', () async {

@@ -11,6 +11,7 @@ import 'profile_authorization.dart';
 import 'profile_database_snapshot.dart';
 import 'profile_portable_files.dart';
 import 'profile_preference_portability.dart';
+import 'profile_appearance_preferences.dart';
 import 'profile_registry.dart';
 import 'profile_scope.dart';
 import 'portable_profile_package.dart';
@@ -346,6 +347,7 @@ class ProfilePackageService {
     compactDatabaseSnapshots: false,
     includeDatabases: includeDatabases,
     includePreferences: includePreferences,
+    excludeAppearance: true,
     profileIdProjection: profileIdProjection,
     resourceIdProjection: resourceIdProjection,
     fileSinks: fileSinks,
@@ -357,6 +359,7 @@ class ProfilePackageService {
     required bool compactDatabaseSnapshots,
     required bool includeDatabases,
     required bool includePreferences,
+    bool excludeAppearance = false,
     Map<String, String> profileIdProjection = const <String, String>{},
     Map<String, String> resourceIdProjection = const <String, String>{},
     ProfilePackageFileSinks? fileSinks,
@@ -419,6 +422,7 @@ class ProfilePackageService {
             scope,
             sanitized: false,
             includeCredentialEngineSettings: true,
+            excludeAppearance: excludeAppearance,
           ),
           profileBackupId: backupId,
           fileSinks: fileSinks,
@@ -707,6 +711,7 @@ class ProfilePackageService {
     ProfileScope scope, {
     required bool sanitized,
     required bool includeCredentialEngineSettings,
+    bool excludeAppearance = false,
   }) async {
     final raw = await SharedPreferences.getInstance();
     final preferences = <String, Object?>{};
@@ -718,6 +723,10 @@ class ProfilePackageService {
           ..sort();
     for (final physical in physicalKeys) {
       final logical = physical.substring(scope.preferencePrefix.length);
+      if (excludeAppearance &&
+          ProfileAppearancePreferences.keys.contains(logical)) {
+        continue;
+      }
       final value = raw.get(physical);
       if (sanitized
           ? !SanitizedProfilePreferences.allowsEntry(logical, value)

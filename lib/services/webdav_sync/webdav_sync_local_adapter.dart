@@ -8,6 +8,7 @@ import '../../utils/app_storage.dart';
 
 import 'package:crypto/crypto.dart' as crypto;
 
+import '../profiles/profile_appearance_preferences.dart';
 import '../../models/profiles/connection_resource.dart';
 import '../../models/profiles/profile_avatar.dart';
 import '../../models/profiles/profile_policy.dart';
@@ -421,6 +422,13 @@ final class ProfileWebDavSyncLocalAdapter
     bool replayingPending = false,
   }) async {
     _validateSession(session);
+    // Pending targets from older builds bypass hot materialization. Filter at
+    // the final write boundary as well, preserving local values and defaults.
+    values = {
+      for (final entry in values.entries)
+        if (!ProfileAppearancePreferences.keys.contains(entry.key))
+          entry.key: entry.value,
+    };
     final profile = await registry.getProfile(localProfileId);
     _validateSession(session);
     if (profile == null) {

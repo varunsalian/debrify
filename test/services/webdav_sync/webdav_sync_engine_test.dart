@@ -1705,45 +1705,54 @@ void main() {
     },
   );
 
-  test('active-profile apply dispatches mapped UI callbacks once', () async {
-    ProfileRuntime.initializeCommitted(
-      ProfileScope(
-        profileId: 'local-profile',
-        dataGeneration: 1,
-        sessionEpoch: 1,
-      ),
-    );
-    final originalTvHomeStyle = MainPageBridge.tvHomeStyleChanged;
-    final originalDiscoverLayout = MainPageBridge.discoverLayoutChanged;
-    addTearDown(() {
-      MainPageBridge.tvHomeStyleChanged = originalTvHomeStyle;
-      MainPageBridge.discoverLayoutChanged = originalDiscoverLayout;
-      ProfileRuntime.debugReset();
-    });
-    var tvHomeCalls = 0;
-    var discoverCalls = 0;
-    MainPageBridge.tvHomeStyleChanged = () => tvHomeCalls++;
-    MainPageBridge.discoverLayoutChanged = () => discoverCalls++;
-    local.activeProfileId = 'local-profile';
-    local.preferences = <String, Object?>{
-      'tv_home_style': 'classic',
-      'discover_layout': 'grid',
-    };
-    engine = WebDavSyncEngine(
-      stateRepository: states,
-      localAdapter: local,
-      transportFactory: (_) => transport,
-      codec: codec,
-      sectionCache: sectionCache,
-      clock: () => now,
-      appliedKeysCallback: dispatchWebDavSyncAppliedKeysForActiveProfile,
-    );
+  test(
+    'active-profile sync refreshes shared settings but leaves appearance alone',
+    () async {
+      ProfileRuntime.initializeCommitted(
+        ProfileScope(
+          profileId: 'local-profile',
+          dataGeneration: 1,
+          sessionEpoch: 1,
+        ),
+      );
+      final originalTvHomeStyle = MainPageBridge.tvHomeStyleChanged;
+      final originalDiscoverLayout = MainPageBridge.discoverLayoutChanged;
+      addTearDown(() {
+        MainPageBridge.tvHomeStyleChanged = originalTvHomeStyle;
+        MainPageBridge.discoverLayoutChanged = originalDiscoverLayout;
+        ProfileRuntime.debugReset();
+      });
+      var homeCalls = 0;
+      void onHome() => homeCalls++;
+      MainPageBridge.addHomeSettingsListener(onHome);
+      addTearDown(() => MainPageBridge.removeHomeSettingsListener(onHome));
+      var tvHomeCalls = 0;
+      var discoverCalls = 0;
+      MainPageBridge.tvHomeStyleChanged = () => tvHomeCalls++;
+      MainPageBridge.discoverLayoutChanged = () => discoverCalls++;
+      local.activeProfileId = 'local-profile';
+      local.preferences = <String, Object?>{
+        'tv_home_style': 'classic',
+        'discover_layout': 'grid',
+        'home_default_source_type': 'trakt',
+      };
+      engine = WebDavSyncEngine(
+        stateRepository: states,
+        localAdapter: local,
+        transportFactory: (_) => transport,
+        codec: codec,
+        sectionCache: sectionCache,
+        clock: () => now,
+        appliedKeysCallback: dispatchWebDavSyncAppliedKeysForActiveProfile,
+      );
 
-    await runFixture(context());
+      await runFixture(context());
 
-    expect(tvHomeCalls, 1);
-    expect(discoverCalls, 1);
-  });
+      expect(tvHomeCalls, 0);
+      expect(discoverCalls, 0);
+      expect(homeCalls, 1);
+    },
+  );
 
   test('non-active profile apply dispatches no UI callback', () async {
     ProfileRuntime.initializeCommitted(
@@ -1803,15 +1812,13 @@ void main() {
         sessionEpoch: 1,
       ),
     );
-    final originalTvHomeStyle = MainPageBridge.tvHomeStyleChanged;
-    addTearDown(() {
-      MainPageBridge.tvHomeStyleChanged = originalTvHomeStyle;
-      ProfileRuntime.debugReset();
-    });
-    var tvHomeCalls = 0;
-    MainPageBridge.tvHomeStyleChanged = () => tvHomeCalls++;
+    addTearDown(ProfileRuntime.debugReset);
+    var homeCalls = 0;
+    void onHome() => homeCalls++;
+    MainPageBridge.addHomeSettingsListener(onHome);
+    addTearDown(() => MainPageBridge.removeHomeSettingsListener(onHome));
     local.activeProfileId = 'local-profile';
-    local.preferences = <String, Object?>{'tv_home_style': 'classic'};
+    local.preferences = <String, Object?>{'home_default_source_type': 'trakt'};
     engine = WebDavSyncEngine(
       stateRepository: states,
       localAdapter: local,
@@ -1824,13 +1831,13 @@ void main() {
     local.failNextApply = true;
 
     await expectLater(runFixture(context()), throwsStateError);
-    expect(tvHomeCalls, 0);
+    expect(homeCalls, 0);
     expect(states.state.profiles['profile-circle']!.pendingApply, isNotNull);
 
     await runFixture(context());
 
     expect(local.replayingPendingFlags, <bool>[false, true, false]);
-    expect(tvHomeCalls, 1);
+    expect(homeCalls, 1);
     expect(states.state.profiles['profile-circle']!.pendingApply, isNull);
   });
 
