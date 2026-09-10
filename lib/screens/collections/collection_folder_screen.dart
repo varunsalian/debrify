@@ -14,7 +14,6 @@ import '../../services/collection_catalog_pager.dart';
 import '../../services/watched_filter.dart';
 import '../../services/main_page_bridge.dart';
 import '../../services/home_collections_store.dart';
-import '../../services/storage_service.dart';
 import '../../services/stremio_service.dart';
 import '../../theme/app_theme_scope.dart';
 import '../../services/collection_native_source_service.dart';
@@ -183,7 +182,6 @@ class _CollectionFolderScreenState extends State<CollectionFolderScreen> {
   _View _view = _View.lists;
   int _tab = 0;
   List<StremioAddon> _addons = const [];
-  Set<String> _disabled = const {};
   bool _booted = false;
 
   List<_Rail> _rails = const [];
@@ -223,14 +221,10 @@ class _CollectionFolderScreenState extends State<CollectionFolderScreen> {
   bool get _tabs =>
       widget.sourceKey != null || _layout == CollectionFolderLayout.tabs;
 
-  /// The folder's lists minus the ones switched off in Home Rows.
+  /// The folder's lists, narrowed to the selected source when opening a list.
   List<CollectionCatalogSource> get _enabledSources => [
     for (final s in _folder.sources)
-      if ((widget.sourceKey == null || s.key == widget.sourceKey) &&
-          !_disabled.contains(
-            HomeCollectionRowIds.folderList(_collection.id, _folder.id, s),
-          ))
-        s,
+      if (widget.sourceKey == null || s.key == widget.sourceKey) s,
   ];
 
   Set<String> get _sourceIssues => {
@@ -267,7 +261,6 @@ class _CollectionFolderScreenState extends State<CollectionFolderScreen> {
     final session = HomeCollectionsStore.captureSession();
     try {
       final addons = await _stremio.getAddons();
-      final disabled = await StorageService.getHomeDisabledSections();
       final layout = await HomeCollectionsStore.instance.getFolderLayout();
       HomeCollection? updated;
       if (refreshCollection) {
@@ -283,19 +276,9 @@ class _CollectionFolderScreenState extends State<CollectionFolderScreen> {
           ? updated ??
                 HomeCollection(id: _collection.id, title: _collection.title)
           : _collection;
-      final relevantDisabled =
-          disabled
-              .where(
-                (id) => id.startsWith(
-                  '${HomeCollectionRowIds.folderListPrefix}${candidate.id}:',
-                ),
-              )
-              .toList()
-            ..sort();
       final signature = jsonEncode({
         'collection': candidate.toJson()..remove('importedAt'),
         'addons': [for (final addon in addons) addon.toJson()],
-        'disabled': relevantDisabled,
         'layout': layout.name,
       });
       if (_configurationError == null && signature == _configurationSignature) {
@@ -309,7 +292,6 @@ class _CollectionFolderScreenState extends State<CollectionFolderScreen> {
           FocusScope.of(context).hasFocus;
       final folderId = _hasFolders ? _folder.id : null;
       _addons = addons;
-      _disabled = disabled;
       _layout = widget.sourceKey != null
           ? CollectionFolderLayout.tabs
           : switch (candidate.viewMode?.toUpperCase()) {
@@ -1175,9 +1157,8 @@ class _CollectionFolderScreenState extends State<CollectionFolderScreen> {
       title = 'This folder has no sources';
       detail = 'Add an addon, TMDB, or Trakt source in the collection editor.';
     } else if (_enabledSources.isEmpty) {
-      title = 'Every list in this folder is switched off';
-      detail =
-          'Turn its lists back on under Settings › Home Screen › Home Rows.';
+      title = 'This list is unavailable';
+      detail = 'The selected list is no longer in this folder.';
     } else if (_rails.isEmpty) {
       title = 'Some collection sources need attention';
       detail = _unresolved.toSet().join('\n\n');

@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:debrify/services/storage_service.dart';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
@@ -23,6 +24,42 @@ void main() {
     SharedPreferences.setMockInitialValues({});
   });
   tearDown(ProfilePreferenceBudget.debugReset);
+  test(
+    'retired folder-list flags are migrated while Home row flags survive',
+    () async {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(
+        'home_disabled_sections_v1',
+        jsonEncode([
+          'collectionlist:c:f:old',
+          'collection:c',
+          'cw:movies',
+          'future:row',
+        ]),
+      );
+      expect(await StorageService.getHomeDisabledSections(), {
+        'collection:c',
+        'cw:movies',
+        'future:row',
+      });
+      expect(
+        jsonDecode(prefs.getString('home_disabled_sections_v1')!),
+        unorderedEquals(['collection:c', 'cw:movies', 'future:row']),
+      );
+      await StorageService.setHomeDisabledSections({
+        'collectionlist:c:f:old',
+        'cw:series',
+      });
+      expect(await StorageService.getHomeDisabledSections(), {'cw:series'});
+      await prefs.setString(
+        'home_disabled_sections_v1',
+        jsonEncode(['collectionlist:c:f:old']),
+      );
+      expect(await StorageService.getHomeDisabledSections(), isEmpty);
+      expect(prefs.containsKey('home_disabled_sections_v1'), isFalse);
+    },
+  );
+
   test('stored and freshly imported native rows share one identity', () {
     final inventory = HomeCollectionInventory.decode(
       jsonEncode([

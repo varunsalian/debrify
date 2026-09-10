@@ -1,3 +1,4 @@
+import '../models/home_collection.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:http/http.dart' as http;
@@ -10091,7 +10092,22 @@ class StorageService {
     if (json == null) return {};
     try {
       final list = jsonDecode(json) as List<dynamic>;
-      return list.cast<String>().toSet();
+      final disabled = list.cast<String>().toSet();
+      final rows = disabled
+          .where((id) => !HomeCollectionRowIds.isFolderList(id))
+          .toSet();
+      // Folder-list controls were retired; migrate their hidden flags away.
+      if (rows.length != disabled.length) {
+        if (rows.isEmpty) {
+          await prefs.remove(_homeDisabledSectionsKey);
+        } else {
+          await prefs.setString(
+            _homeDisabledSectionsKey,
+            jsonEncode(rows.toList()),
+          );
+        }
+      }
+      return rows;
     } catch (e) {
       debugPrint('Error reading home disabled sections: $e');
       return {};
@@ -10101,12 +10117,15 @@ class StorageService {
   /// Save the set of hidden Home-row IDs.
   static Future<void> setHomeDisabledSections(Set<String> disabled) async {
     final prefs = await ProfilePreferences.instance();
-    if (disabled.isEmpty) {
+    final rows = disabled
+        .where((id) => !HomeCollectionRowIds.isFolderList(id))
+        .toSet();
+    if (rows.isEmpty) {
       await prefs.remove(_homeDisabledSectionsKey);
     } else {
       await prefs.setString(
         _homeDisabledSectionsKey,
-        jsonEncode(disabled.toList()),
+        jsonEncode(rows.toList()),
       );
     }
   }

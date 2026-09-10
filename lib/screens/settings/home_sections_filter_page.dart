@@ -98,9 +98,6 @@ class _Item {
   final String? extraTitle;
   final bool unavailable;
 
-  /// False for leaves toggled here that are not Home rows (the lists inside
-  /// a collection folder), so they never enter the row order or Arrange view.
-  final bool arrangeable;
   bool on;
   _Item(
     this.id,
@@ -110,7 +107,6 @@ class _Item {
     this.defaultOn = true,
     this.extraTitle,
     this.unavailable = false,
-    this.arrangeable = true,
   });
 }
 
@@ -295,21 +291,6 @@ class _HomeSectionsFilterPageState extends State<HomeSectionsFilterPage> {
               badge: c.pinToTop ? 'PINNED' : 'FOLDERS',
             ),
         ]),
-      // Each folder's catalog lists: toggled here like any addon catalog but
-      // never arranged, since they live inside the folder, not on the board.
-      for (final c in widget.collections)
-        for (final f in c.folders)
-          if (f.sources.isNotEmpty)
-            _Group('${c.title} › ${f.title}', [
-              for (final s in f.sources)
-                _Item(
-                  HomeCollectionRowIds.folderList(c.id, f.id, s),
-                  _folderListLabel(s),
-                  on(HomeCollectionRowIds.folderList(c.id, f.id, s)),
-                  badge: s.type,
-                  arrangeable: false,
-                ),
-            ]),
       _Group('My Watchlist', [
         _Item('watchlist:movies', 'Movies', on('watchlist:movies')),
         _Item('watchlist:series', 'Series', on('watchlist:series')),
@@ -388,22 +369,6 @@ class _HomeSectionsFilterPageState extends State<HomeSectionsFilterPage> {
     return groups;
   }
 
-  /// "Popular Movies · Action" for a folder list, resolved against the
-  /// installed addons. Falls back to the raw catalog id when nothing serves
-  /// it, so the list can still be switched off deliberately.
-  String _folderListLabel(CollectionCatalogSource s) {
-    if (!s.isAddon) return '${s.label} (${s.provider.toUpperCase()})';
-    final addons = [for (final e in widget.catalogTree) e.addon];
-    final addon = HomeCollectionsStore.resolveAddon(s, addons);
-    final catalog = addon == null
-        ? null
-        : HomeCollectionsStore.resolveCatalog(s, addon);
-    final base = catalog == null
-        ? '${s.catalogId} (${s.type})'
-        : CatalogSection.rowTitle(catalog);
-    return s.genre == null ? base : '$base · ${s.genre}';
-  }
-
   /// The board's pre-customization order. Keep this aligned with Home's row
   /// assembly: Continue Watching, favourites/IPTV lists, tracker list rows,
   /// then addon catalogs. The settings page groups rows by provider for
@@ -462,7 +427,7 @@ class _HomeSectionsFilterPageState extends State<HomeSectionsFilterPage> {
     // this version). Stable group/item order is the safest default for both.
     for (final group in _groups) {
       for (final item in group.items) {
-        if (item.arrangeable) add(item.id);
+        add(item.id);
       }
     }
     return HomeRowOrder.defaults(out, (id) => id);
@@ -472,7 +437,7 @@ class _HomeSectionsFilterPageState extends State<HomeSectionsFilterPage> {
     final entries = [
       for (final group in _groups)
         for (final item in group.items)
-          if (item.on && item.arrangeable) _ArrangeEntry(item, group.name),
+          if (item.on) _ArrangeEntry(item, group.name),
     ];
     return HomeRowOrder.apply(entries, _orderIds, (entry) => entry.item.id);
   }
