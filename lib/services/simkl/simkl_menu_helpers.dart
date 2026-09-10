@@ -4,9 +4,6 @@ import '../../models/tracking_source.dart';
 import 'simkl_service.dart';
 import '../watched_action_coordinator.dart';
 
-/// Actions available in the Simkl episode overflow menu.
-enum SimklEpisodeMenuAction { markWatched, markUnwatched, rate }
-
 /// Actions available in the Simkl item quick-action strip.
 ///
 /// Deliberately smaller than [TraktItemMenuAction]: Simkl has no

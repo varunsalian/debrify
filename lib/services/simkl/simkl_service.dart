@@ -298,7 +298,7 @@ class SimklService {
   /// than crashing the caller.
   ///
   /// Only catches a show/movie-level mismatch. For the episode-scoped writes
-  /// (markEpisodeWatched/Unwatched, rateEpisode) this can't detect an
+  /// (markEpisodeWatched/Unwatched) this can't detect an
   /// unrecognized season/episode number within an otherwise-matched show —
   /// Simkl's `not_found` isn't documented to report at that granularity, so
   /// an episode-level false-success is a known limitation, not something
@@ -816,42 +816,6 @@ class SimklService {
     _invalidateLibraryCache();
     EpisodeTrackerSnapshotRevision.invalidateTitle('simkl', showImdbId);
     StorageService.movieFinishedRevision.value++;
-    return true;
-  }
-
-  /// Rate a single episode 1–10 via `POST /sync/ratings`. The nested
-  /// `seasons[].episodes[].rating` shape mirrors history's episode nesting —
-  /// not separately confirmed from docs, flagged for a live-test check.
-  Future<bool> rateEpisode(
-    String showImdbId,
-    int season,
-    int episode,
-    int rating,
-  ) async {
-    final token = await StorageService.getSimklAccessToken();
-    if (token == null || token.isEmpty) return false;
-    final result = await _postOrNull(
-      '/sync/ratings',
-      {
-        'shows': [
-          {
-            'ids': {'imdb': showImdbId},
-            'seasons': [
-              {
-                'number': season,
-                'episodes': [
-                  {'number': episode, 'rating': rating},
-                ],
-              },
-            ],
-          },
-        ],
-      },
-      token: token,
-      label: 'rateEpisode',
-    );
-    if (!_wasMatched(result, 'shows')) return false;
-    _invalidateLibraryCache();
     return true;
   }
 

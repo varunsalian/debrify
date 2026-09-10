@@ -11,6 +11,20 @@ void main() {
     expect(buildSimklMenuOptions(), isEmpty);
   });
 
+  for (final isSeries in [false, true]) {
+    test('whole-title Simkl ratings remain available (series=$isSeries)', () {
+      final actions = _actions(
+        buildSimklMenuOptions(
+          isSeries: isSeries,
+          isSimklAuthenticated: true,
+          status: const SimklTitleStatus(rating: 8),
+        ),
+      );
+      expect(actions, contains(SimklItemMenuAction.rate));
+      expect(actions, contains(SimklItemMenuAction.removeRating));
+    });
+  }
+
   test('an untracked movie offers statuses but no removal', () {
     final actions = _actions(buildSimklMenuOptions(isSimklAuthenticated: true));
 
