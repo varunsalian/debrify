@@ -532,12 +532,95 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      expect(find.text('1 source(s) need attention'), findsOneWidget);
-      await tester.tap(find.text('1 source(s) need attention'));
+      expect(find.text('1 source(s) need attention'), findsNothing);
+      expect(find.byTooltip('Collection needs attention'), findsOneWidget);
+      await tester.tap(find.byTooltip('Collection needs attention'));
       await tester.pumpAndSettle();
       expect(find.text('Unsupported provider: future'), findsOneWidget);
     },
   );
+
+  testWidgets('TV can navigate to empty error details and back', (
+    tester,
+  ) async {
+    final native = service(status: 401);
+    addTearDown(native.close);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: CollectionFolderScreen(
+          collection: collection(viewMode: 'TABBED_GRID'),
+          nativeSources: native,
+          isTelevision: true,
+          onOpenItem: (_) {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final sort = tester
+        .widgetList<StremioDropdown<String>>(
+          find.byType(StremioDropdown<String>),
+        )
+        .firstWhere((d) => d.label == 'Sort');
+    sort.focusNode!.requestFocus();
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pump();
+    final details = tester.widget<TextButton>(
+      find.widgetWithText(TextButton, 'View details'),
+    );
+    expect(details.focusNode!.hasFocus, isTrue);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    expect(find.textContaining('TMDB denied access'), findsOneWidget);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    expect(find.byType(AlertDialog), findsNothing);
+    expect(details.focusNode!.hasFocus, isTrue);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pump();
+    final retry = tester.widget<OutlinedButton>(
+      find.widgetWithText(OutlinedButton, 'Retry'),
+    );
+    expect(retry.focusNode!.hasFocus, isTrue);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+    await tester.pump();
+    expect(details.focusNode!.hasFocus, isTrue);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+    await tester.pump();
+    expect(details.focusNode!.hasFocus, isFalse);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pump();
+    expect(details.focusNode!.hasFocus, isTrue);
+  });
+
+  testWidgets('empty successful tab retains other source diagnostics', (
+    tester,
+  ) async {
+    final native = CollectionNativeSourceService(
+      tmdbToken: 'dummy',
+      resolveIds: false,
+      client: MockClient(
+        (_) async => http.Response('{"results":[],"total_pages":1}', 200),
+      ),
+    );
+    addTearDown(native.close);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: CollectionFolderScreen(
+          collection: collection(viewMode: 'TABBED_GRID', unknown: true),
+          nativeSources: native,
+          onOpenItem: (_) {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Nothing in this list'), findsOneWidget);
+    expect(find.text('Couldn’t load this collection'), findsNothing);
+    expect(find.text('View details'), findsNothing);
+    await tester.tap(find.byTooltip('Collection needs attention'));
+    await tester.pumpAndSettle();
+    expect(find.text('Unsupported provider: future'), findsOneWidget);
+  });
 
   testWidgets('provider denial is shown rather than an empty addon message', (
     tester,
@@ -554,9 +637,13 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    expect(find.textContaining('TMDB denied access'), findsNothing);
+    expect(find.text('Couldn’t load this collection'), findsOneWidget);
+    expect(find.text('Retry'), findsOneWidget);
+    await tester.tap(find.text('View details'));
+    await tester.pumpAndSettle();
     expect(find.textContaining('TMDB denied access'), findsOneWidget);
     expect(find.text('No matching addon installed'), findsNothing);
-    expect(find.text('Retry'), findsOneWidget);
   });
   testWidgets(
     'TV gallery opens a list with poster focus and restores its card',

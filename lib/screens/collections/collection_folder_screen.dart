@@ -211,6 +211,7 @@ class _CollectionFolderScreenState extends State<CollectionFolderScreen> {
   final FocusNode _listNode = FocusNode(debugLabel: 'collection_list');
   final FocusNode _sortNode = FocusNode(debugLabel: 'collection_sort');
   final FocusNode _retryNode = FocusNode(debugLabel: 'collection_retry');
+  final FocusNode _detailsNode = FocusNode(debugLabel: 'collection_details');
   final FocusNode _issuesNode = FocusNode(debugLabel: 'collection_issues');
 
   late HomeCollection _collection;
@@ -351,6 +352,7 @@ class _CollectionFolderScreenState extends State<CollectionFolderScreen> {
     _sortNode.dispose();
     _retryNode.dispose();
     _issuesNode.dispose();
+    _detailsNode.dispose();
     super.dispose();
   }
 
@@ -766,8 +768,6 @@ class _CollectionFolderScreenState extends State<CollectionFolderScreen> {
       if (_offersAll) _viewNode,
       if (_view == _View.all) _sortNode,
     ],
-    if (_hasVisibleLoadError) _retryNode,
-    if (_sourceIssues.isNotEmpty && _rails.isNotEmpty) _issuesNode,
   ];
 
   bool get _showingEmpty {
@@ -791,7 +791,7 @@ class _CollectionFolderScreenState extends State<CollectionFolderScreen> {
   /// empty pages offer Retry.
   void _enterContent() {
     if (_showingEmpty) {
-      _retryNode.requestFocus();
+      (_hasEmptyLoadError ? _detailsNode : _retryNode).requestFocus();
       return;
     }
     if (_showingAll) {
@@ -851,6 +851,8 @@ class _CollectionFolderScreenState extends State<CollectionFolderScreen> {
                   ? _tabRail!.items.first
                   : null,
               backNode: _backNode,
+              action: _hasHeaderIssue ? _buildIssueAction() : null,
+              onRight: _hasHeaderIssue ? _issuesNode.requestFocus : null,
               onDown: () => _filterNodes.first.requestFocus(),
             ),
             _buildFilterBar(),
@@ -881,54 +883,71 @@ class _CollectionFolderScreenState extends State<CollectionFolderScreen> {
                   ),
                 ],
               ),
-            if (_hasVisibleLoadError)
-              Focus(
-                canRequestFocus: false,
-                onKeyEvent: _handleFilterKeys,
-                child: TextButton.icon(
-                  focusNode: _retryNode,
-                  onPressed: _retryCurrent,
-                  icon: const Icon(Icons.refresh),
-                  label: Text(
-                    _hasVisibleLoadFailure
-                        ? 'Some lists could not load · Retry'
-                        : 'No new titles loaded · Continue',
-                  ),
-                ),
-              ),
-            if (_sourceIssues.isNotEmpty && _rails.isNotEmpty)
-              Focus(
-                canRequestFocus: false,
-                onKeyEvent: _handleFilterKeys,
-                child: TextButton.icon(
-                  focusNode: _issuesNode,
-                  icon: const Icon(Icons.info_outline),
-                  label: Text(
-                    '${_sourceIssues.length} source(s) need attention',
-                  ),
-                  onPressed: () => showDialog<void>(
-                    context: context,
-                    builder: (context) => AlertDialog(
-                      scrollable: true,
-                      title: const Text('Unavailable sources'),
-                      content: Text(_sourceIssues.join('\n\n')),
-                      actions: [
-                        TextButton(
-                          autofocus: true,
-                          onPressed: () => Navigator.pop(context),
-                          child: const Text('Close'),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
             Expanded(child: _buildBody()),
           ],
         ),
       ),
     );
   }
+
+  bool get _hasHeaderIssue => _hasVisibleLoadError || _sourceIssues.isNotEmpty;
+
+  Future<void> _showIssueDetails(String detail, {bool retry = false}) async {
+    final shouldRetry = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        scrollable: true,
+        title: const Text('Collection details'),
+        content: Text(detail),
+        actions: [
+          TextButton(
+            autofocus: !retry,
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Close'),
+          ),
+          if (retry)
+            TextButton(
+              autofocus: true,
+              onPressed: () => Navigator.pop(context, true),
+              child: Text(
+                _hasVisibleLoadError && !_hasVisibleLoadFailure
+                    ? 'Continue'
+                    : 'Retry',
+              ),
+            ),
+        ],
+      ),
+    );
+    if (mounted && shouldRetry == true) _retryCurrent();
+  }
+
+  Widget _buildIssueAction() => Focus(
+    canRequestFocus: false,
+    onKeyEvent: (_, event) {
+      if (event is KeyDownEvent) {
+        if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+          _backNode.requestFocus();
+          return KeyEventResult.handled;
+        }
+        if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+          _filterNodes.first.requestFocus();
+          return KeyEventResult.handled;
+        }
+      }
+      return KeyEventResult.ignored;
+    },
+    child: IconButton(
+      focusNode: _issuesNode,
+      tooltip: 'Collection needs attention',
+      icon: const Icon(Icons.info_outline),
+      onPressed: () => _showIssueDetails(
+        _sourceIssues.isNotEmpty
+            ? _sourceIssues.join('\n\n')
+            : 'No new titles loaded. Continue to try again.',
+        retry: _hasVisibleLoadError,
+      ),
+    ),
+  );
 
   Widget _sortChip() => StremioDropdown<String>(
     label: 'Sort',
@@ -1130,6 +1149,17 @@ class _CollectionFolderScreenState extends State<CollectionFolderScreen> {
     );
   }
 
+  bool get _hasEmptyLoadError {
+    if (_configurationError != null) return true;
+    if (!_hasFolders || _folder.sources.isEmpty || _enabledSources.isEmpty) {
+      return false;
+    }
+    if (_rails.isEmpty) return _unresolved.isNotEmpty;
+    if (_showingAll) return _loader?.hasErrors ?? false;
+    if (_tabs) return _tabRail?.error != null;
+    return _sourceIssues.isNotEmpty;
+  }
+
   Widget _buildEmpty() {
     final app = AppThemeScope.of(context);
     final String title;
@@ -1175,6 +1205,7 @@ class _CollectionFolderScreenState extends State<CollectionFolderScreen> {
           ? _rails.map((r) => r.error).whereType<String>().toSet().join('\n')
           : 'The lists are empty or their titles are hidden by your watched filter.';
     }
+    final hasError = _hasEmptyLoadError;
     return SingleChildScrollView(
       child: Center(
         child: Padding(
@@ -1191,7 +1222,7 @@ class _CollectionFolderScreenState extends State<CollectionFolderScreen> {
                 ),
                 const SizedBox(height: 14),
                 Text(
-                  title,
+                  hasError ? 'Couldn’t load this collection' : title,
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     color: app.fade(app.core.tx, 0.7),
@@ -1201,20 +1232,42 @@ class _CollectionFolderScreenState extends State<CollectionFolderScreen> {
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  detail,
+                  hasError ? 'Please try again.' : detail,
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     color: app.fade(app.core.tx, 0.4),
                     fontSize: 13,
                   ),
                 ),
+                if (hasError)
+                  Focus(
+                    canRequestFocus: false,
+                    onKeyEvent: (_, event) {
+                      if (widget.isTelevision && event is KeyDownEvent) {
+                        if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+                          _gridExitNode.requestFocus();
+                          return KeyEventResult.handled;
+                        }
+                        if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+                          _retryNode.requestFocus();
+                          return KeyEventResult.handled;
+                        }
+                      }
+                      return KeyEventResult.ignored;
+                    },
+                    child: TextButton(
+                      focusNode: _detailsNode,
+                      onPressed: () => _showIssueDetails(detail),
+                      child: const Text('View details'),
+                    ),
+                  ),
                 const SizedBox(height: 18),
                 Focus(
                   onKeyEvent: (_, event) {
                     if (widget.isTelevision &&
                         event is KeyDownEvent &&
                         event.logicalKey == LogicalKeyboardKey.arrowUp) {
-                      _gridExitNode.requestFocus();
+                      (hasError ? _detailsNode : _gridExitNode).requestFocus();
                       return KeyEventResult.handled;
                     }
                     return KeyEventResult.ignored;

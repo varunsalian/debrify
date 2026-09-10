@@ -22,6 +22,8 @@ class CollectionBrowserHero extends StatelessWidget {
     this.source,
     this.backdrop,
     this.item,
+    this.action,
+    this.onRight,
   });
   final String collectionTitle;
   final HomeCollectionFolder? folder;
@@ -30,6 +32,8 @@ class CollectionBrowserHero extends StatelessWidget {
   final StremioMeta? item;
   final FocusNode backNode;
   final VoidCallback onDown;
+  final Widget? action;
+  final VoidCallback? onRight;
 
   @override
   Widget build(BuildContext context) {
@@ -112,6 +116,12 @@ class CollectionBrowserHero extends StatelessWidget {
                           onDown();
                           return KeyEventResult.handled;
                         }
+                        if (event is KeyDownEvent &&
+                            event.logicalKey == LogicalKeyboardKey.arrowRight &&
+                            onRight != null) {
+                          onRight!();
+                          return KeyEventResult.handled;
+                        }
                         return KeyEventResult.ignored;
                       },
                       child: IconButton(
@@ -135,6 +145,7 @@ class CollectionBrowserHero extends StatelessWidget {
                         ),
                       ),
                     ),
+                    if (action != null) action!,
                   ],
                 ),
                 const Spacer(),
