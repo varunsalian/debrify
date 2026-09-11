@@ -47,6 +47,8 @@ right code instead of re-discovering it. Flutter app; code under `lib/{screens,s
   `utils/{rd,torbox}_folder_tree_builder.dart`, `screens/playlist_content_view_screen.dart`.
 - Cloud/downloads screens: `screens/{debrid_downloads,torbox/torbox_downloads,pikpak/pikpak_files,`
   `premiumize/premiumize_files,alldebrid/alldebrid_files}_screen.dart`, `screens/cloud_screen.dart`.
+- Initial-title cloud search matching: `services/cloud/cloud_search_query.dart`;
+  RD/TorBox hosts retain submission guards, fetching and focus handling.
 - WebDAV: `services/webdav_service.dart` (read/browse only — no upload yet).
 
 ## Players

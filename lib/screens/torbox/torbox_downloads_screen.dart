@@ -11,6 +11,7 @@ import '../../models/rd_file_node.dart';
 import '../../services/analytics_service.dart';
 import '../../services/series_source_service.dart';
 import '../../services/torbox_service.dart';
+import '../../services/cloud/cloud_search_query.dart';
 import '../../services/video_player_launcher.dart';
 import '../../services/torbox_torrent_control_service.dart';
 import '../../services/storage_service.dart';
@@ -5717,23 +5718,8 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
     });
   }
 
-  bool _queryMatchesInitialTitle(String query) {
-    final title = widget.initialSearchQuery;
-    if (title == null || title.isEmpty) return true;
-    const stopwords = {'the', 'a', 'an'};
-    final rawTokens = title
-        .toLowerCase()
-        .split(RegExp(r'[^a-z0-9]+'))
-        .where((t) => t.isNotEmpty)
-        .toList();
-    final filtered = rawTokens
-        .where((t) => !stopwords.contains(t) && t.length >= 2)
-        .toList();
-    final effectiveTokens = filtered.isEmpty ? rawTokens : filtered;
-    if (effectiveTokens.isEmpty) return true;
-    final normalizedQuery = query.toLowerCase();
-    return effectiveTokens.any((t) => normalizedQuery.contains(t));
-  }
+  bool _queryMatchesInitialTitle(String query) =>
+      queryMatchesInitialTitle(query, widget.initialSearchQuery);
 
   void _submitTorrentSearch() {
     final query = _torrentSearchController.text.trim();

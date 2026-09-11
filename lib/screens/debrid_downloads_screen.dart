@@ -10,6 +10,7 @@ import '../models/debrid_download.dart';
 import '../services/analytics_service.dart';
 import '../theme/app_theme_scope.dart';
 import '../services/debrid_service.dart';
+import '../services/cloud/cloud_search_query.dart';
 import '../services/series_source_service.dart';
 import '../services/storage_service.dart';
 import '../utils/formatters.dart';
@@ -543,23 +544,8 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
     });
   }
 
-  bool _queryMatchesInitialTitle(String query) {
-    final title = widget.initialSearchQuery;
-    if (title == null || title.isEmpty) return true;
-    const stopwords = {'the', 'a', 'an'};
-    final rawTokens = title
-        .toLowerCase()
-        .split(RegExp(r'[^a-z0-9]+'))
-        .where((t) => t.isNotEmpty)
-        .toList();
-    final filtered = rawTokens
-        .where((t) => !stopwords.contains(t) && t.length >= 2)
-        .toList();
-    final effectiveTokens = filtered.isEmpty ? rawTokens : filtered;
-    if (effectiveTokens.isEmpty) return true;
-    final normalizedQuery = query.toLowerCase();
-    return effectiveTokens.any((t) => normalizedQuery.contains(t));
-  }
+  bool _queryMatchesInitialTitle(String query) =>
+      queryMatchesInitialTitle(query, widget.initialSearchQuery);
 
   void _submitTorrentSearch() {
     final query = _torrentSearchController.text.trim();
