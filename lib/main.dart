@@ -102,6 +102,8 @@ import 'services/remote_control/remote_command_router.dart';
 import 'services/remote_control/remote_constants.dart';
 import 'services/analytics_service.dart';
 import 'services/text_brightness.dart';
+import 'services/tv_motion_profile.dart';
+import 'theme/tv_motion_scope.dart';
 import 'services/support_remote_config_service.dart';
 import 'widgets/auto_launch_overlay.dart';
 import 'widgets/remote/addon_install_dialog.dart';
@@ -662,6 +664,7 @@ Future<void> _continueApplicationStartup() async {
   // Warms the app theme AFTER the preset (it is an input), for the same
   // reason: the controller's memoized ThemeData is read in the first build.
   await _bestEffortStartupStep('app-theme-warm', AppThemeController.warm);
+  await _bestEffortStartupStep('tv-motion-warm', TvMotionController.warm);
   // From here the system-bar owner is the authority — it re-applies on every
   // active-surface or theme change (the _initOrientation call below remains
   // the pre-warm default and matches the legacy style anyway).
@@ -1100,7 +1103,9 @@ class _DebrifyAppState extends State<DebrifyApp> {
           // launch ident (see app_texture.dart). It short-circuits to `child`
           // for legacy and for the seventeen themes that declare neither, so
           // the common path costs one build and no layer.
-          child: WebDavSaveStatus(child: AppTexture(child: child!)),
+          child: TvMotionRoot(
+            child: WebDavSaveStatus(child: AppTexture(child: child!)),
+          ),
         );
         // Pointer input counts as presence too — an Apple TV remote's
         // trackpad and an attached mouse both arrive here rather than through

@@ -27,6 +27,7 @@ import '../stremio_service.dart';
 import '../subtitle_font_service.dart';
 import '../play_loader_style.dart';
 import '../text_brightness.dart';
+import '../tv_motion_profile.dart';
 import '../trakt/trakt_service.dart';
 import '../watched_status_service.dart';
 import '../torbox_account_service.dart';
@@ -48,6 +49,7 @@ class ProfileAppLifecycleParticipant implements ProfileLifecycleParticipant {
   @override
   Future<void> prepareDeactivate(ProfileScope current) async {
     ProfileSessionMemory.clearAll();
+    TvMotionController.resetProfileScope();
     EngineProfileLifecycle.prepareDeactivate();
     MainPageBridge.clearProfileSessionState();
     await TvosTopShelfService.instance.clear();
@@ -180,6 +182,7 @@ class ProfileAppLifecycleParticipant implements ProfileLifecycleParticipant {
         StorageService.getParentsGuideStyle(),
       ]);
       await TextBrightnessController.warm();
+      await TvMotionController.warm();
       await PlayLoaderStyleController.warm();
       await AppThemeController.warm();
       await TvHeroArtworkQualityController.warm();

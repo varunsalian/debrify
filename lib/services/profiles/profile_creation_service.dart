@@ -21,6 +21,7 @@ class ProfileCreationService {
   static const Set<String> copyablePreferenceKeys = <String>{
     'app_theme',
     'text_brightness',
+    'tv_motion_profile',
     'tv_ui_scale_percent',
     'tv_home_style',
     'home_card_orientation',

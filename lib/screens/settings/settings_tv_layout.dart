@@ -4,11 +4,13 @@ import '../../utils/tv_reveal.dart';
 import 'package:flutter/services.dart';
 
 import '../../services/main_page_bridge.dart';
+import '../../services/tv_motion_profile.dart';
 import '../../services/profiles/profile_bootstrap.dart';
 import '../../utils/platform_util.dart';
 import '../../theme/app_focus.dart';
 import '../../theme/widgets/parallax_focus.dart';
 import 'settings_spotlight_shell.dart';
+import 'tv_motion_page.dart';
 import 'widgets/settings_widgets.dart';
 import '../../theme/app_theme_scope.dart';
 
@@ -406,7 +408,7 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
   /// so a row added past the pool throws on build.
   /// Appearance is the longest fixed category. The pool must cover it, or the
   /// last row of that category has no node and cannot be reached.
-  static const int _kMaxCategoryRows = 19;
+  static const int _kMaxCategoryRows = 20;
 
   /// Selected category. A [ValueNotifier] (not setState) so a rail focus-move
   /// only rebuilds the pane and the two affected rail items via their
@@ -1127,6 +1129,17 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
                 onTap: widget.onOpenTvHeroArtworkQuality,
                 focusNode: _paneNodes[16],
               ),
+              ValueListenableBuilder<TvMotionProfile>(
+                valueListenable: TvMotionController.notifier,
+                builder: (context, profile, _) => SettingsTile.spec(
+                  SettingsRows.tvMotion,
+                  subtitle: profile.label,
+                  onTap: () async {
+                    await pushSettingsPage(context, const TvMotionPage());
+                  },
+                  focusNode: _paneNodes[17],
+                ),
+              ),
             ],
           ),
           // Android TV only, and LAST on purpose: this layout also renders on
@@ -1146,13 +1159,13 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
                   SettingsRows.tvPlayerControls,
                   subtitle: widget.tvPlayerControlsStyleLabel,
                   onTap: widget.onOpenTvPlayerControlsStyle,
-                  focusNode: _paneNodes[17],
+                  focusNode: _paneNodes[18],
                 ),
                 SettingsTile.spec(
                   SettingsRows.debrifyTvPlayer,
                   subtitle: widget.debrifyTvPlayerStyleLabel,
                   onTap: widget.onOpenDebrifyTvPlayerStyle,
-                  focusNode: _paneNodes[18],
+                  focusNode: _paneNodes[19],
                 ),
               ],
             ),

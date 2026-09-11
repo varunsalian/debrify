@@ -204,6 +204,11 @@ abstract final class SettingsRows {
     title: 'Rendering',
     subtitle: '',
   );
+  static const tvMotion = SettingsRowContent(
+    icon: Icons.slow_motion_video_rounded,
+    title: 'TV motion',
+    subtitle: 'Smooth or Snappy scrolling on Spotlight Home',
+  );
   static const tvHeroArtworkQuality = SettingsRowContent(
     icon: Icons.photo_size_select_large_rounded,
     title: 'Hero Artwork Quality',

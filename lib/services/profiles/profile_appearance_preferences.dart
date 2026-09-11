@@ -7,6 +7,7 @@ abstract final class ProfileAppearancePreferences {
     'detail_theme',
     'theme_overrides',
     'text_brightness',
+    'tv_motion_profile',
     'launch_animation',
     'launch_ident_palette',
     'tv_ui_scale_percent',
