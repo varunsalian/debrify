@@ -15953,12 +15953,37 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   /// Apply default subtitle language from settings (when no stored preference exists)
   /// Returns true if an embedded subtitle was found and applied, false otherwise.
   Future<bool> _applyDefaultSubtitleLanguage() async {
+    final token = _addonSubtitleFetchToken;
     try {
       final defaultLang = await StorageService.getDefaultSubtitleLanguage();
       debugPrint('SubAuto: defaultSubtitleLanguage setting = $defaultLang');
-      if (defaultLang == null) {
-        // No preference set - do nothing, let player use its default
+      if (token != _addonSubtitleFetchToken || _userManuallySelectedSubtitle) {
         return false;
+      }
+      if (defaultLang == null) {
+        var selectedId = _player.state.track.subtitle.id;
+        final platform = _player.platform;
+        if (platform is mk.NativePlayer) {
+          try {
+            // Dart may still report "auto" while mpv has selected a real sid.
+            selectedId = await platform.getProperty('sid');
+          } catch (_) {
+            // Fall back to media_kit's reported selection.
+          }
+        }
+        if (token != _addonSubtitleFetchToken ||
+            _userManuallySelectedSubtitle) {
+          return false;
+        }
+        final track = subtitleWithoutLanguagePreference(
+          _player.state.tracks.subtitle,
+          selectedId: selectedId,
+        );
+        if (track == null) return false;
+        return _setSubtitleTrackWithDiagnostics(
+          track,
+          source: 'no-preference-embedded',
+        );
       }
 
       final tracks = _player.state.tracks;
