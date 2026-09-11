@@ -1,3 +1,4 @@
+import '../services/series_playlist_metadata_loader.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -2210,8 +2211,8 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
 
       // Fetch TVMaze metadata asynchronously
       if (_seriesPlaylist!.isSeries) {
-        _seriesPlaylist!
-            .fetchEpisodeInfo(
+        SeriesPlaylistMetadataLoader.fetchEpisodeInfo(
+              _seriesPlaylist!,
               playlistItem: widget.playlistItem,
               imdbId: widget.playlistItem?['imdbId'] as String?,
             )
@@ -2307,8 +2308,8 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
           _isLoadingSeriesMetadata = true;
         });
 
-        _seriesPlaylist!
-            .fetchEpisodeInfo(
+        SeriesPlaylistMetadataLoader.fetchEpisodeInfo(
+              _seriesPlaylist!,
               playlistItem: widget.playlistItem,
               imdbId: widget.playlistItem?['imdbId'] as String?,
             )

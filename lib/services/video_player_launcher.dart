@@ -1,3 +1,4 @@
+import 'series_playlist_metadata_loader.dart';
 import 'dart:async';
 import '../utils/platform_util.dart';
 import 'dart:convert';
@@ -2319,7 +2320,8 @@ class VideoPlayerLauncher {
           // Fetch TVMaze metadata so items arrive pre-populated with artwork/descriptions
           if (isSeries && seriesPlaylist != null) {
             try {
-              await seriesPlaylist.fetchEpisodeInfo(
+              await SeriesPlaylistMetadataLoader.fetchEpisodeInfo(
+                seriesPlaylist,
                 imdbId: effectiveContentImdbId(),
               );
               debugPrint(
@@ -3400,7 +3402,7 @@ class VideoPlayerLauncher {
           debugPrint(
             'MovieAsync: Not a series, attempting movie metadata fetch',
           );
-          await seriesPlaylist.fetchMovieMetadata();
+          await SeriesPlaylistMetadataLoader.fetchMovieMetadata(seriesPlaylist);
 
           final discoveredImdbId = seriesPlaylist.imdbId;
           if (discoveredImdbId != null) {
@@ -3440,7 +3442,10 @@ class VideoPlayerLauncher {
         debugPrint(
           'TVMazeAsync: Calling fetchEpisodeInfo() with imdbId=$contentImdbId',
         );
-        await seriesPlaylist.fetchEpisodeInfo(imdbId: contentImdbId);
+        await SeriesPlaylistMetadataLoader.fetchEpisodeInfo(
+          seriesPlaylist,
+          imdbId: contentImdbId,
+        );
         debugPrint('TVMazeAsync: fetchEpisodeInfo() completed');
 
         // Save discovered IMDB ID back to playlist item for future direct plays
