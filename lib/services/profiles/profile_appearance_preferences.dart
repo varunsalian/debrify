@@ -1,4 +1,5 @@
-/// Appearance remains local to each profile on each installation. These keys
+/// Navigation styles, sidebar order/labels, and phone navigation sync using
+/// their existing separate keys. Other appearance remains local to each profile on each installation. These keys
 /// are still portable through explicit backups and profile-default copies;
 /// only automatic WebDAV sync excludes them (including bootstrap and replay).
 abstract final class ProfileAppearancePreferences {
@@ -26,11 +27,6 @@ abstract final class ProfileAppearancePreferences {
     'player_dock_style',
     'player_dock_palette',
     'player_dock_size',
-    'phone_nav_style',
-    'phone_nav_bar_indices',
-    'tv_sidebar_style',
-    'desktop_sidebar_style',
-    'sidebar_configuration_v1',
     'discover_layout',
     'discover_show_type_tags',
     'discover_show_ratings',

@@ -215,6 +215,9 @@ void main() {
       await prefs.setString('tv_home_style', 'spotlight');
       await prefs.setString('app_theme', 'aurora');
       await prefs.setInt('defaults_generation', 3);
+      await prefs.setString('tv_sidebar_style', 'pill');
+      await prefs.setString('desktop_sidebar_style', 'rail');
+      await prefs.setString('phone_nav_style', 'floating');
       await prefs.setString('default_torrent_provider_v1', 'torbox');
       final packages = ProfilePackageService(
         registry: registry,
@@ -247,6 +250,9 @@ void main() {
       expect(valuesOf(sync.package), isNot(contains('tv_home_style')));
       expect(valuesOf(sync.package), isNot(contains('app_theme')));
       expect(valuesOf(sync.package)['default_torrent_provider_v1'], 'torbox');
+      expect(valuesOf(sync.package)['tv_sidebar_style'], 'pill');
+      expect(valuesOf(sync.package)['desktop_sidebar_style'], 'rail');
+      expect(valuesOf(sync.package)['phone_nav_style'], 'floating');
       final restore = ProfileRestoreCoordinator(
         registry: registry,
         cipher: cipher,
@@ -282,6 +288,18 @@ void main() {
       expect(
         raw.getString(joinedScope.preferenceKey('default_torrent_provider_v1')),
         'torbox',
+      );
+      expect(
+        raw.getString(joinedScope.preferenceKey('tv_sidebar_style')),
+        'pill',
+      );
+      expect(
+        raw.getString(joinedScope.preferenceKey('desktop_sidebar_style')),
+        'rail',
+      );
+      expect(
+        raw.getString(joinedScope.preferenceKey('phone_nav_style')),
+        'floating',
       );
       // Rejoining an existing profile carries its LOCAL appearance to the new ID.
       await operations.carryLocalState(

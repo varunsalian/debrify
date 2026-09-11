@@ -945,6 +945,38 @@ void main() {
     },
   );
 
+  test('navigation keys survive export, peer merge and materialization', () {
+    final navigation = <String, Object>{
+      'phone_nav_style': 'floating',
+      'phone_nav_bar_indices': ['1', '2'],
+      'tv_sidebar_style': 'pill',
+      'desktop_sidebar_style': 'rail',
+      'sidebar_configuration_v1':
+          '{"version":1,"order":["discover","home"],"labels":{"discover":"My Movies"}}',
+    };
+    final built = _buildWithPreferences(maps, 'device-a', navigation, now: 100);
+    final merged = WebDavSyncHotMerge.merge(
+      local: _document(device: 'device-b', scalarTime: 50, scalars: const {}),
+      peers: [built.document],
+      tombstoneDocuments: const [],
+      nowMs: 200,
+    ).document;
+    final materialized = WebDavSyncHotMerge.materializePreferences(
+      document: merged,
+      identityMaps: maps,
+    );
+    for (final entry in navigation.entries) {
+      if (entry.key == 'sidebar_configuration_v1') {
+        expect(
+          jsonDecode(materialized[entry.key] as String),
+          jsonDecode(entry.value as String),
+        );
+      } else {
+        expect(materialized[entry.key], entry.value, reason: entry.key);
+      }
+    }
+  });
+
   test('MDBList checkpoint stays local without restamping scalar settings', () {
     const checkpoint = WebDavSyncHotMerge.mdblistSyncCheckpointPreference;
     final previous = _document(
