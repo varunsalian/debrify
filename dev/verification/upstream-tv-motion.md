@@ -51,29 +51,41 @@ Dependencies: pinned SDK `flutter pub get --enforce-lockfile`; lockfile unchange
 2. Removing the root subscription caused the profile-switch test to fail: the
    same mounted consumer retained Smooth after the incoming profile warmed
    Snappy. Restoring the subscription passed.
-3. Final related regression selection: **163 passed**. Includes nine real
+3. Final related regression selection: **169 passed**. Includes nine real
    Spotlight DPAD cases (intermediate frames, curve, repeats/reversal, tvOS,
    off-TV, reduced motion), preference/race/isolation/root-refresh tests,
    picker navigation, actual Appearance-pane entry/return, existing Spotlight
    board and compact behavior, appearance focus-index guards, profile isolation,
-   WebDAV hot-state appearance exclusions, and existing theme motion policies.
+   WebDAV hot-state appearance exclusions, existing theme motion policies,
+   and the six supplemental behavioral cases below.
 4. Three unrelated tests failed both with the port and with original upstream
    source restored in this worktree. They were excluded from the final selection:
    - `TV Spotlight settings visual`: identical 3.84% golden mismatch on Windows.
    - `direct SharedPreferences opens stay inside reviewed adapters/stores`:
-     baseline reviewed-call-count mismatch.
+     unregistered direct preference open in the untouched
+     `lib/services/webdav_sync/webdav_sync_save_feedback.dart`.
    - `device reset stops and deletes Dart and native diagnostics`: baseline
      source-marker `RangeError` in the Kotlin scanner.
 5. Scoped analysis: no errors or warnings; 16 informational diagnostics, matching
    original upstream exactly after ignoring shifted line numbers. These concern
    existing main/Settings async-context/deprecation sites and Spotlight's
    existing parameter name/cacheExtent, not the port's added code.
+6. Supplemental scoped selection: **6 passed**. Five controller tests hold the
+   preference transport across rapid selections, successful/false/throwing
+   writes, a queued warm, and profile-generation changes. One real Spotlight
+   test changes selection, incoming profile, and reduced motion while preserving
+   the focused widget's element identity and checking the next DPAD reveal.
+   These live in `test/tv_motion_profile_persistence_test.dart` and
+   `test/spotlight_board_live_motion_test.dart`.
 
-The regression command used `flutter test --no-pub --reporter expanded` with:
+Rerun the related regression selection with
+`flutter test --no-pub --reporter expanded` and the following files:
 
 ```text
 test/spotlight_board_scroll_motion_test.dart
 test/tv_motion_profile_test.dart
+test/tv_motion_profile_persistence_test.dart
+test/spotlight_board_live_motion_test.dart
 test/settings_tv_motion_page_test.dart
 test/spotlight_board_test.dart
 test/spotlight_board_compact_test.dart
@@ -96,7 +108,10 @@ this note's directory:
 
 - `upstream-tv-motion/red-spotlight.log`
 - `upstream-tv-motion/red-root-subscription.log`
-- `upstream-tv-motion/final-regressions.log`
+- `upstream-tv-motion/final-regressions.log` (initial 163-test selection)
 - `upstream-tv-motion/upstream-baseline-tests.log`
 - `upstream-tv-motion/analyze.log`
 - `upstream-tv-motion/upstream-baseline-analyze.log`
+- `../../.dart_tool/adversarial-motion/promoted-scoped.jsonl`
+- `../../.dart_tool/adversarial-motion/promoted-regression.jsonl` (169 tests)
+- `../../.dart_tool/adversarial-motion/promoted-analyze.log`
