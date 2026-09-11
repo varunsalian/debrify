@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import 'package:flutter/foundation.dart';
 import 'package:synchronized/synchronized.dart';
 import 'dart:convert';
+import 'storage/torrent_search_history_store.dart';
 import 'debrid_service.dart';
 import 'hide_watched_prefs.dart';
 import 'iptv_channel_order.dart';
@@ -524,11 +525,6 @@ class StorageService {
   static const String _myWatchlistKey =
       TvOsRecoveryLimits.myWatchlistPreferenceKey;
   static const String _onboardingCompleteKey = 'initial_setup_complete_v1';
-
-  // Torrent Search History
-  static const String _torrentSearchHistoryKey = 'torrent_search_history_v1';
-  static const String _torrentSearchHistoryEnabledKey =
-      'torrent_search_history_enabled';
 
   // Default Torrent Filter Settings
   static const String _defaultFilterQualitiesKey =
@@ -8086,69 +8082,27 @@ class StorageService {
 
   /// Get torrent search history
   /// Returns list of maps containing torrent JSON + service + timestamp
-  static Future<List<Map<String, dynamic>>> getTorrentSearchHistory() async {
-    final prefs = await ProfilePreferences.instance();
-    final raw = prefs.getString(_torrentSearchHistoryKey);
-    if (raw == null || raw.isEmpty) return [];
-    try {
-      final list = jsonDecode(raw) as List<dynamic>;
-      return list.whereType<Map<String, dynamic>>().toList();
-    } catch (e) {
-      debugPrint('Error loading torrent search history: $e');
-      return [];
-    }
-  }
+  static Future<List<Map<String, dynamic>>> getTorrentSearchHistory() =>
+      TorrentSearchHistoryStore.getTorrentSearchHistory();
 
   /// Add torrent to search history with deduplication
   /// Deduplicates by infohash, keeps max 5 items (FIFO)
   static Future<void> addTorrentToHistory(
     Map<String, dynamic> torrentJson,
     String service,
-  ) async {
-    final prefs = await ProfilePreferences.instance();
-    final history = await getTorrentSearchHistory();
-
-    final infohash = torrentJson['infohash'] as String?;
-    if (infohash == null || infohash.isEmpty) return;
-
-    // Remove existing entry with same infohash (deduplicate)
-    history.removeWhere((entry) {
-      final entryTorrent = entry['torrent'] as Map<String, dynamic>?;
-      return entryTorrent?['infohash'] == infohash;
-    });
-
-    // Add new entry at start
-    history.insert(0, {
-      'torrent': torrentJson,
-      'service': service,
-      'clickedAt': DateTime.now().millisecondsSinceEpoch,
-    });
-
-    // Keep only last 5
-    if (history.length > 5) {
-      history.removeRange(5, history.length);
-    }
-
-    await prefs.setString(_torrentSearchHistoryKey, jsonEncode(history));
-  }
+  ) => TorrentSearchHistoryStore.addTorrentToHistory(torrentJson, service);
 
   /// Clear all search history
-  static Future<void> clearTorrentSearchHistory() async {
-    final prefs = await ProfilePreferences.instance();
-    await prefs.remove(_torrentSearchHistoryKey);
-  }
+  static Future<void> clearTorrentSearchHistory() =>
+      TorrentSearchHistoryStore.clearTorrentSearchHistory();
 
   /// Get whether search history tracking is enabled
-  static Future<bool> getTorrentSearchHistoryEnabled() async {
-    final prefs = await ProfilePreferences.instance();
-    return prefs.getBool(_torrentSearchHistoryEnabledKey) ?? true;
-  }
+  static Future<bool> getTorrentSearchHistoryEnabled() =>
+      TorrentSearchHistoryStore.getTorrentSearchHistoryEnabled();
 
   /// Set whether search history tracking is enabled
-  static Future<void> setTorrentSearchHistoryEnabled(bool enabled) async {
-    final prefs = await ProfilePreferences.instance();
-    await prefs.setBool(_torrentSearchHistoryEnabledKey, enabled);
-  }
+  static Future<void> setTorrentSearchHistoryEnabled(bool enabled) =>
+      TorrentSearchHistoryStore.setTorrentSearchHistoryEnabled(enabled);
 
   /// Whether quick-play ranks candidates by the default filters (the
   /// FilterLadder). ON by default — the ladder only reorders, never drops.
