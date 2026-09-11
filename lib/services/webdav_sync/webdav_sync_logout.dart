@@ -42,7 +42,8 @@ typedef WebDavSyncLogoutTransportFactory =
 
 /// Run under the runtime operation lock, with scheduler/transports stopped.
 /// Remote failures retain the logout journal and credentials for an explicit
-/// retry; a restart cannot silently register the device again.
+/// retry; a restart cannot silently register the device again. A missing root
+/// needs no remote cleanup. Explicit local-only logout skips remote access.
 final class WebDavSyncLogout {
   WebDavSyncLogout({
     required this.store,
@@ -65,11 +66,13 @@ final class WebDavSyncLogout {
 
   Future<void> run({
     required Future<void> Function() authorize,
+    bool localOnly = false,
     Future<void> Function(WebDavSyncNamespace)? forgetLocalNamespace,
   }) async {
     await authorize();
     final snapshot = await store.beginLogout();
-    for (final binding in snapshot.bindings.values) {
+    for (final binding
+        in localOnly ? const <WebDavSyncBinding>[] : snapshot.bindings.values) {
       final namespace = snapshot.namespaceFor(binding);
       if (binding.circleId == null || namespace?.markerBytes == null) continue;
       final secrets = await store.readSecrets(binding);
@@ -78,7 +81,14 @@ final class WebDavSyncLogout {
         if (transport is! WebDavSyncRegistrationTransport) {
           throw StateError('This connection cannot unregister devices');
         }
-        final rootBytes = await transport.readRootMarker();
+        final WebDavBytesResult rootBytes;
+        try {
+          rootBytes = await transport.readRootMarker();
+        } on WebDavException catch (error) {
+          // A deleted sync folder has no registration left to retire.
+          if (error.kind == WebDavErrorKind.notFound) continue;
+          rethrow;
+        }
         if (!namespace!.matchesAuthority(rootBytes.bytes)) {
           throw StateError('The sync folder changed. Logout has been paused.');
         }

@@ -304,6 +304,40 @@ void main() {
     expect((await store.load()).bindings, isEmpty);
   });
 
+  for (final action in [
+    'Forget connection',
+    'Change account',
+    'Connect WebDAV',
+  ]) {
+    testWidgets('$action recovers pending logout with confirmation', (
+      tester,
+    ) async {
+      await installActiveBinding();
+      if (action == 'Connect WebDAV') {
+        await store.markError(
+          (await store.load()).activeBindingId!,
+          StateError('missing root'),
+        );
+      }
+      await store.beginLogout();
+      final activation = _FakeActivation(store)..failLogout = true;
+      await pumpPage(tester, enabled: true, activation: activation);
+      await tester.ensureVisible(find.text(action));
+      await tester.tap(find.text(action));
+      await tester.pumpAndSettle();
+      expect(find.text('Forget WebDAV connection?'), findsOneWidget);
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+      expect((await store.load()).bindings, isNotEmpty);
+      await tester.tap(find.text(action));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(FilledButton, 'Forget connection'));
+      await tester.pumpAndSettle();
+      expect((await store.load()).bindings, isEmpty);
+      expect(activation.logouts, 1);
+    });
+  }
+
   testWidgets('failed logout presents a retry and disables sync', (
     tester,
   ) async {
@@ -1267,10 +1301,10 @@ final class _FakeActivation
   bool failLogout = false;
 
   @override
-  Future<void> logout() async {
+  Future<void> logout({bool localOnly = false}) async {
     logouts++;
     await store.beginLogout();
-    if (failLogout) throw StateError('offline');
+    if (failLogout && !localOnly) throw StateError('offline');
     await store.finishLogout();
   }
 

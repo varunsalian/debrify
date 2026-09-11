@@ -201,7 +201,7 @@ abstract interface class WebDavSyncManagementController {
 }
 
 abstract interface class WebDavSyncLogoutController {
-  Future<void> logout();
+  Future<void> logout({bool localOnly = false});
 }
 
 enum WebDavSyncTvManualAvailability {
@@ -880,7 +880,7 @@ final class WebDavSyncRuntime
   }
 
   @override
-  Future<void> logout() async {
+  Future<void> logout({bool localOnly = false}) async {
     await initialize();
     _requireInteractiveWorkAllowed();
     final authorization = await _captureManagingAdmin();
@@ -888,6 +888,7 @@ final class WebDavSyncRuntime
     try {
       await _operations.run(() async {
         await WebDavSyncLogout(store: bindingStore).run(
+          localOnly: localOnly,
           forgetLocalNamespace: stateStore.forgetLoggedOutNamespace,
           authorize: () async {
             await authorization.validate(ProfileBootstrap.registry);

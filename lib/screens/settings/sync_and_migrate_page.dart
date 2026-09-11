@@ -263,6 +263,8 @@ class _SyncAndMigratePageState extends State<SyncAndMigratePage>
 
   Future<void> _configureSync() async {
     if (_syncBusy) return;
+    if (_logoutPending && !await _forgetConnection()) return;
+    if (!mounted) return;
     setState(() => _syncBusy = true);
     final reconfiguration =
         _syncActivation is WebDavSyncReconfigurationController
@@ -367,6 +369,51 @@ class _SyncAndMigratePageState extends State<SyncAndMigratePage>
       ? _syncActivation as WebDavSyncLogoutController
       : null;
 
+  Future<bool> _forgetConnection() async {
+    final controller = _logoutController;
+    if (_syncBusy || controller == null) return false;
+    final confirmed = await showSettingsDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Forget WebDAV connection?'),
+        content: const Text(
+          'Remove the saved connection from this device without contacting WebDAV. '
+          'Your profiles and data stay here. You can then connect again.\n\n'
+          'The old account may still list this device as connected. '
+          'Data on WebDAV and your other devices will not be changed.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Forget connection'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return false;
+    setState(() => _syncBusy = true);
+    try {
+      await controller.logout(localOnly: true);
+      if (!mounted) return false;
+      await _loadSyncState();
+      if (!mounted) return false;
+      setState(() {
+        _runtimeStatus = null;
+        _syncStateMessage = null;
+      });
+      return true;
+    } catch (error) {
+      if (mounted) _showError(error);
+      return false;
+    } finally {
+      if (mounted) setState(() => _syncBusy = false);
+    }
+  }
+
   Future<void> _logout() async {
     final controller = _logoutController;
     if (_syncBusy || controller == null) return;
@@ -381,7 +428,7 @@ class _SyncAndMigratePageState extends State<SyncAndMigratePage>
           'Your profiles and data stay on this device. Already synced data stays '
           'on WebDAV so you and your other devices can use it later. Changes '
           'that have not synced stay only on this device.\n\n'
-          'An internet connection is needed to confirm logout. You can connect again at any time.',
+          'If WebDAV is unavailable, you can forget the connection on this device after trying logout.',
         ),
         actions: [
           TextButton(
@@ -424,7 +471,7 @@ class _SyncAndMigratePageState extends State<SyncAndMigratePage>
         SnackBar(
           content: Text(
             _logoutPending
-                ? 'Logout could not be confirmed. Sync is paused. Check your connection or update your password, then retry.'
+                ? 'Logout could not be confirmed. Retry or choose Forget connection to disconnect on this device.'
                 : _userFacingSyncError(error),
           ),
           action: SnackBarAction(label: 'Retry', onPressed: _logout),
@@ -934,7 +981,7 @@ class _SyncAndMigratePageState extends State<SyncAndMigratePage>
                 icon: Icons.login_rounded,
                 title: finishingFirstSync ? 'Continue setup' : 'Connect WebDAV',
                 subtitle: 'Use Koofr or another WebDAV provider',
-                enabled: !_syncBusy && !_logoutPending,
+                enabled: !_syncBusy,
                 onTap: _configureSync,
               ),
             if (credentialRepairAvailable)
@@ -1006,7 +1053,7 @@ class _SyncAndMigratePageState extends State<SyncAndMigratePage>
                 icon: Icons.manage_accounts_outlined,
                 title: 'Change account',
                 subtitle: 'Use a different WebDAV account',
-                enabled: !_syncBusy && !_logoutPending,
+                enabled: !_syncBusy,
                 onTap: _configureSync,
               ),
               if (_logoutController != null)
@@ -1016,6 +1063,17 @@ class _SyncAndMigratePageState extends State<SyncAndMigratePage>
                   subtitle: 'Stop syncing and forget this saved login',
                   enabled: !_syncBusy,
                   onTap: _logout,
+                ),
+              if (_logoutPending && _logoutController != null)
+                SettingsTile(
+                  icon: Icons.link_off_rounded,
+                  title: 'Forget connection',
+                  subtitle:
+                      'Disconnect on this device if WebDAV is unavailable',
+                  enabled: !_syncBusy,
+                  onTap: () async {
+                    await _forgetConnection();
+                  },
                 ),
             ],
           ),

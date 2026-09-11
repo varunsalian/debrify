@@ -295,6 +295,64 @@ void main() {
     }
   });
 
+  test('deleted root finishes logout and permits a new connection', () async {
+    transport.rootMissing = true;
+    final forgotten = <String>[];
+    await logout.run(
+      authorize: () async {},
+      forgetLocalNamespace: (namespace) async {
+        forgotten.add(namespace.id);
+      },
+    );
+    expect(forgotten, isNotEmpty);
+    expect((await store.load()).bindings, isEmpty);
+    expect(transport.registrations, isEmpty);
+    expect(
+      (await SharedPreferences.getInstance()).getString('local-data'),
+      'keep me',
+    );
+    await store.stageBinding(
+      location: binding.location,
+      config: config,
+      syncPassphrase: 'new-secret',
+    );
+    expect((await store.load()).bindings, isNotEmpty);
+  });
+
+  test(
+    'explicit local logout recovers offline pending logout without remote access',
+    () async {
+      transport.offline = true;
+      await expectLater(
+        logout.run(authorize: () async {}),
+        throwsA(isA<WebDavException>()),
+      );
+      final localLogout = WebDavSyncLogout(
+        store: store,
+        transportFactory: (_, _) => throw StateError('must not contact server'),
+      );
+      await localLogout.run(authorize: () async {}, localOnly: true);
+      expect((await store.load()).bindings, isEmpty);
+      expect(
+        (await SharedPreferences.getInstance()).getString('local-data'),
+        'keep me',
+      );
+    },
+  );
+
+  test('local-only logout still requires authorization', () async {
+    await expectLater(
+      logout.run(
+        authorize: () async {
+          throw StateError('not admin');
+        },
+        localOnly: true,
+      ),
+      throwsStateError,
+    );
+    expect((await store.load()).bindings, isNotEmpty);
+  });
+
   test('offline logout keeps a durable pause and can be retried', () async {
     transport.offline = true;
     await expectLater(
@@ -383,6 +441,7 @@ class _Transport
   final Uint8List manifest;
   final registrations = <String, Uint8List>{};
   bool offline = false;
+  bool rootMissing = false;
   bool ignoreWrite = false;
   WebDavBytesResult result(Uint8List bytes) => WebDavBytesResult(
     bytes: bytes,
@@ -400,6 +459,11 @@ class _Transport
         message: 'offline',
       );
     }
+    if (rootMissing)
+      throw const WebDavException(
+        kind: WebDavErrorKind.notFound,
+        message: 'deleted',
+      );
     return result(authority);
   }
 
