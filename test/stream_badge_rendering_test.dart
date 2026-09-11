@@ -11,6 +11,97 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
+  testWidgets('image badge slots remain stable and reveal together', (
+    tester,
+  ) async {
+    final rules = StreamBadgeRuleset.parse(
+      jsonEncode({
+        'filters': [
+          {
+            'name': 'Short',
+            'pattern': 'x',
+            'imageUrl': 'https://example.test/one.png',
+          },
+          {
+            'name': 'A longer badge',
+            'pattern': 'x',
+            'imageUrl': 'https://example.test/two.png',
+          },
+        ],
+      }),
+    ).rules;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Align(
+            alignment: Alignment.topLeft,
+            child: StreamBadgeStrip(badges: rules, height: 24),
+          ),
+        ),
+      ),
+    );
+    final chips = tester
+        .widgetList<StreamBadgeChip>(find.byType(StreamBadgeChip))
+        .toList();
+    expect(chips.first.onImageReady, isNotNull);
+    final before = tester.getSize(find.byType(StreamBadgeStrip));
+    expect(
+      tester.widget<AnimatedOpacity>(find.byType(AnimatedOpacity)).opacity,
+      0,
+    );
+    chips.first.onImageReady!();
+    await tester.pump();
+    expect(
+      tester.widget<AnimatedOpacity>(find.byType(AnimatedOpacity)).opacity,
+      0,
+    );
+    chips.last.onImageReady!();
+    await tester.pump();
+    await tester.pump();
+    expect(
+      tester.widget<AnimatedOpacity>(find.byType(AnimatedOpacity)).opacity,
+      1,
+    );
+    expect(tester.getSize(find.byType(StreamBadgeStrip)), before);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets(
+    'slow badge artwork reveals bounded fallback slots after timeout',
+    (tester) async {
+      final rules = StreamBadgeRuleset.parse(
+        jsonEncode({
+          'filters': [
+            {
+              'name': 'Slow artwork',
+              'pattern': 'x',
+              'imageUrl': 'https://example.test/slow.png',
+            },
+          ],
+        }),
+      ).rules;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Align(
+              alignment: Alignment.topLeft,
+              child: StreamBadgeStrip(badges: rules, height: 24),
+            ),
+          ),
+        ),
+      );
+      final before = tester.getSize(find.byType(StreamBadgeStrip));
+      await tester.pump(const Duration(seconds: 2));
+      await tester.pump();
+      expect(
+        tester.widget<AnimatedOpacity>(find.byType(AnimatedOpacity)).opacity,
+        1,
+      );
+      expect(tester.getSize(find.byType(StreamBadgeStrip)), before);
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
+
   for (final disposeBeforeRetry in [false, true]) {
     testWidgets(
       'deferred matching retries only while mounted: $disposeBeforeRetry',

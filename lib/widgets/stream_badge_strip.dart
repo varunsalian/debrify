@@ -13,7 +13,7 @@ import '../utils/stream_badge_svg.dart';
 ///
 /// Uses the preset's fill and border for both text and image chips. Artwork
 /// keeps its original colours; labels receive a contrast-safe fallback.
-class StreamBadgeStrip extends StatelessWidget {
+class StreamBadgeStrip extends StatefulWidget {
   final List<StreamBadgeRule> badges;
 
   /// Chip height; images scale to it, text sizes from it.
@@ -28,14 +28,96 @@ class StreamBadgeStrip extends StatelessWidget {
   });
 
   @override
+  State<StreamBadgeStrip> createState() => _StreamBadgeStripState();
+}
+
+class _StreamBadgeStripState extends State<StreamBadgeStrip> {
+  final _pending = <String>{};
+  Timer? _deadline;
+  bool _revealed = false;
+  int _generation = 0;
+  @override
+  void initState() {
+    super.initState();
+    _reset();
+  }
+
+  void _reset() {
+    _generation++;
+    _deadline?.cancel();
+    _pending.clear();
+    _pending.addAll(widget.badges.map((b) => b.imageUrl).whereType<String>());
+    _revealed = _pending.isEmpty;
+    if (!_revealed) {
+      // A slow or unavailable artwork host must never hide the labels forever.
+      _deadline = Timer(const Duration(seconds: 2), () {
+        if (mounted) setState(() => _revealed = true);
+      });
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant StreamBadgeStrip oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!identical(widget.badges, oldWidget.badges)) _reset();
+  }
+
+  void _ready(String url, int generation) {
+    if (generation != _generation || !_pending.contains(url)) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || generation != _generation || !_pending.remove(url)) {
+        return;
+      }
+      if (_pending.isEmpty) {
+        _deadline?.cancel();
+        setState(() => _revealed = true);
+      }
+    });
+    WidgetsBinding.instance.scheduleFrame();
+  }
+
+  @override
+  void dispose() {
+    _deadline?.cancel();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    if (badges.isEmpty) return const SizedBox.shrink();
-    return Wrap(
-      spacing: spacing,
-      runSpacing: spacing,
-      crossAxisAlignment: WrapCrossAlignment.center,
+    if (widget.badges.isEmpty) return const SizedBox.shrink();
+    final generation = _generation;
+    return Stack(
       children: [
-        for (final b in badges) StreamBadgeChip(rule: b, height: height),
+        AnimatedOpacity(
+          duration: const Duration(milliseconds: 140),
+          opacity: _revealed ? 1 : 0,
+          child: Wrap(
+            spacing: widget.spacing,
+            runSpacing: widget.spacing,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              for (final b in widget.badges)
+                StreamBadgeChip(
+                  rule: b,
+                  height: widget.height,
+                  onImageReady: b.imageUrl == null
+                      ? null
+                      : () => _ready(b.imageUrl!, generation),
+                ),
+            ],
+          ),
+        ),
+        if (!_revealed)
+          Positioned.fill(
+            child: IgnorePointer(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: .06),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+              ),
+            ),
+          ),
       ],
     );
   }
@@ -110,6 +192,19 @@ class _StreamBadgeStripForState extends State<StreamBadgeStripFor> {
           name: widget.name,
           description: widget.description,
           render: _render,
+          loading: () {
+            final placeholder = SizedBox(
+              height: widget.height,
+              width: widget.height * 4,
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: .06),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+              ),
+            );
+            return widget.builder?.call(placeholder) ?? placeholder;
+          },
         );
       },
     );
@@ -122,7 +217,13 @@ class StreamBadgeChip extends StatelessWidget {
   final StreamBadgeRule rule;
   final double height;
 
-  const StreamBadgeChip({super.key, required this.rule, this.height = 16});
+  final VoidCallback? onImageReady;
+  const StreamBadgeChip({
+    super.key,
+    required this.rule,
+    this.height = 16,
+    this.onImageReady,
+  });
 
   /// Fallback surface when the preset does not supply a filled background.
   static const Color imageBacking = StreamBadgeAppearance.darkBacking;
@@ -149,6 +250,10 @@ class StreamBadgeChip extends StatelessWidget {
     final appearance = StreamBadgeAppearance(rule);
     if (image == null) return _textChip(appearance);
     final inner = height - 4;
+    // The image and its fallback share one slot; decoding cannot reflow Wrap.
+    final slotWidth = (rule.name.runes.length * height * .34)
+        .clamp(inner * 1.5, height * 7)
+        .toDouble();
     // No alignment on this container: with one set it would expand to the
     // row's full width instead of hugging the image.
     return DecoratedBox(
@@ -161,8 +266,8 @@ class StreamBadgeChip extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
         child: ConstrainedBox(
           constraints: BoxConstraints(
-            minWidth: inner,
-            maxWidth: height * 7,
+            minWidth: slotWidth,
+            maxWidth: slotWidth,
             minHeight: inner,
             maxHeight: inner,
           ),
@@ -174,10 +279,18 @@ class StreamBadgeChip extends StatelessWidget {
                   fit: BoxFit.contain,
                   memCacheHeight: (inner * 3).round(),
                   fadeInDuration: Duration.zero,
+                  imageBuilder: (_, provider) {
+                    onImageReady?.call();
+                    return Image(
+                      image: provider,
+                      height: inner,
+                      fit: BoxFit.contain,
+                    );
+                  },
                   placeholder: (_, __) => _imageLabel(appearance),
                   // The backing already frames the fallback; no second chip.
                   errorWidget: (_, __, ___) => isBadgeBitmapUrl(image)
-                      ? _imageLabel(appearance)
+                      ? _failedImage(appearance)
                       : _svgImage(image, inner, appearance),
                 ),
         ),
@@ -198,10 +311,18 @@ class StreamBadgeChip extends StatelessWidget {
     height: inner,
     fit: BoxFit.contain,
     gaplessPlayback: true,
-    frameBuilder: (_, child, frame, synchronous) =>
-        frame == null ? _imageLabel(appearance) : child,
-    errorBuilder: (_, __, ___) => _imageLabel(appearance),
+    frameBuilder: (_, child, frame, synchronous) {
+      if (frame == null) return _imageLabel(appearance);
+      onImageReady?.call();
+      return child;
+    },
+    errorBuilder: (_, __, ___) => _failedImage(appearance),
   );
+
+  Widget _failedImage(StreamBadgeAppearance appearance) {
+    onImageReady?.call();
+    return _imageLabel(appearance);
+  }
 
   Widget _imageLabel(StreamBadgeAppearance appearance) => Align(
     widthFactor: 1,
@@ -253,11 +374,13 @@ class _MatchedBadgeStrip extends StatefulWidget {
     required this.name,
     required this.description,
     required this.render,
+    required this.loading,
   });
   final StreamBadgeMatcher matcher;
   final String name;
   final String? description;
   final Widget Function(List<StreamBadgeRule>) render;
+  final Widget Function() loading;
   @override
   State<_MatchedBadgeStrip> createState() => _MatchedBadgeStripState();
 }
@@ -265,6 +388,7 @@ class _MatchedBadgeStrip extends StatefulWidget {
 class _MatchedBadgeStripState extends State<_MatchedBadgeStrip> {
   List<StreamBadgeRule> _badges = const [];
   Timer? _retry;
+  bool _loading = true;
 
   @override
   void initState() {
@@ -275,6 +399,7 @@ class _MatchedBadgeStripState extends State<_MatchedBadgeStrip> {
     );
     if (cached != null) {
       _badges = cached;
+      _loading = false;
     } else {
       _request();
     }
@@ -289,7 +414,12 @@ class _MatchedBadgeStripState extends State<_MatchedBadgeStrip> {
     if (result.status == StreamBadgeMatchStatus.deferred) {
       _retry = Timer(const Duration(milliseconds: 250), _request);
     } else if (result.status == StreamBadgeMatchStatus.resolved) {
-      setState(() => _badges = result.badges);
+      setState(() {
+        _badges = result.badges;
+        _loading = false;
+      });
+    } else {
+      setState(() => _loading = false);
     }
   }
 
@@ -300,5 +430,7 @@ class _MatchedBadgeStripState extends State<_MatchedBadgeStrip> {
   }
 
   @override
-  Widget build(BuildContext context) => widget.render(_badges);
+  Widget build(BuildContext context) => _loading && !widget.matcher.isEmpty
+      ? widget.loading()
+      : widget.render(_badges);
 }
