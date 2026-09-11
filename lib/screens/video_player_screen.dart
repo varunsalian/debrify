@@ -15,6 +15,7 @@ import 'package:synchronized/synchronized.dart';
 
 // Removed volume_controller; using media_kit player volume instead
 import '../services/storage_service.dart';
+import '../services/playback/playlist_metadata_persistence.dart';
 import '../services/local_playback_resume_resolver.dart';
 import '../services/startup_stream_policy.dart';
 import '../services/resume_write_guard.dart';
@@ -227,6 +228,13 @@ class IptvCatchupRequestGate {
 /// - Resume playback from last position
 /// - Series-aware episode ordering and tracking
 class VideoPlayerScreen extends StatefulWidget {
+  // Only native construction is substituted by host integration tests.
+  @visibleForTesting
+  static mk.Player Function(mk.PlayerConfiguration)? debugPlayerFactory;
+  @visibleForTesting
+  static mkv.VideoController Function(mk.Player, mkv.VideoControllerConfiguration)?
+      debugVideoControllerFactory;
+
   final String videoUrl;
 
   /// Optional separate audio track played alongside [videoUrl] via mpv's
@@ -1505,7 +1513,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     unawaited(_loadTrackingPolicy());
     unawaited(_loadSkipSegmentSettings());
     unawaited(_loadLocalCompletionThresholds());
-    MediaKitInit.ensureInitialized();
+    if (VideoPlayerScreen.debugPlayerFactory == null) {
+      MediaKitInit.ensureInitialized();
+    }
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
     // The player opens landscape — a video wants the long edge — unless the
     // user asked it to open upright, in which case the Portrait/Landscape
@@ -2631,25 +2641,25 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   void _createPlayerInstance(AndroidVideoRendererMode rendererMode) {
     final instanceGeneration = ++_playerInstanceGeneration;
     _isReady = false;
-    final player = mk.Player(
-      configuration: mk.PlayerConfiguration(
-        logLevel: mk.MPVLogLevel.error,
-        ready: () => _onPlayerInstanceReady(instanceGeneration),
-      ),
+    final playerConfiguration = mk.PlayerConfiguration(
+      logLevel: mk.MPVLogLevel.error,
+      ready: () => _onPlayerInstanceReady(instanceGeneration),
     );
+    final player = VideoPlayerScreen.debugPlayerFactory?.call(playerConfiguration)
+        ?? mk.Player(configuration: playerConfiguration);
     _player = player;
     _playerCreated = true;
-    _videoController = mkv.VideoController(
-      player,
-      configuration: mkv.VideoControllerConfiguration(
-        vo: rendererMode.videoOutput,
-        // The tvOS escape hatch outranks the renderer mode (which is an
-        // Android concept; its decoder string is null off-Android anyway).
-        hwdec: PlatformUtil.isTvOS && _tvosForceSoftwareDecode
-            ? 'no'
-            : rendererMode.hardwareDecoder,
-      ),
+    final videoConfiguration = mkv.VideoControllerConfiguration(
+      vo: rendererMode.videoOutput,
+      // The tvOS escape hatch outranks the renderer mode (which is an
+      // Android concept; its decoder string is null off-Android anyway).
+      hwdec: PlatformUtil.isTvOS && _tvosForceSoftwareDecode
+          ? 'no'
+          : rendererMode.hardwareDecoder,
     );
+    _videoController = VideoPlayerScreen.debugVideoControllerFactory
+        ?.call(player, videoConfiguration)
+        ?? mkv.VideoController(player, configuration: videoConfiguration);
     _installTvosDecodeRemedy(player);
     _bindPlayerInstanceSubscriptions(instanceGeneration, player);
     unawaited(_installDecoderObservers(instanceGeneration, player));
@@ -10477,12 +10487,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   }
 
   Future<void> _saveImdbIdToPlaylist(SeriesPlaylist seriesPlaylist) async {
-    final imdbId = seriesPlaylist.imdbId;
-    if (imdbId == null || !imdbId.startsWith('tt')) return;
-    if (widget.contentImdbId != null) return;
-
-    await StorageService.updatePlaylistItemImdbId(
-      imdbId,
+    await PlaylistMetadataPersistence.saveImdbId(
+      seriesPlaylist,
+      launchContentImdbId: widget.contentImdbId,
       rdTorrentId: widget.rdTorrentId,
       torboxTorrentId: widget.torboxTorrentId,
       pikpakCollectionId: widget.pikpakCollectionId,
@@ -10493,60 +10500,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   Future<void> _saveSeriesPosterToPlaylist(
     SeriesPlaylist seriesPlaylist,
   ) async {
-    print('🎬 _saveSeriesPosterToPlaylist called');
-    print('  seriesTitle: ${seriesPlaylist.seriesTitle}');
-
-    if (seriesPlaylist.seriesTitle == null) {
-      print('  ⚠️ No series title, skipping poster save');
-      return;
-    }
-
-    // Get identifiers from widget parameters
-    final rdTorrentId = widget.rdTorrentId;
-    final torboxTorrentId = widget.torboxTorrentId;
-    final pikpakCollectionId = widget.pikpakCollectionId;
-
-    print('  rdTorrentId: $rdTorrentId');
-    print('  torboxTorrentId: $torboxTorrentId');
-    print('  pikpakCollectionId: $pikpakCollectionId');
-
-    // Need at least one identifier to save poster
-    if ((rdTorrentId == null || rdTorrentId.isEmpty) &&
-        (torboxTorrentId == null || torboxTorrentId.isEmpty) &&
-        (pikpakCollectionId == null || pikpakCollectionId.isEmpty)) {
-      print('  ⚠️ No valid identifier found, skipping poster save');
-      return;
-    }
-
-    final posterUrl = seriesPlaylist.showPosterUrl;
-    if (posterUrl == null || posterUrl.isEmpty) {
-      print('  ⚠️ No poster URL from fetchEpisodeInfo');
-      return;
-    }
-
-    print('  Poster URL: $posterUrl');
-    try {
-      if (rdTorrentId != null && rdTorrentId.isNotEmpty) {
-        await StorageService.updatePlaylistItemPoster(
-          posterUrl,
-          rdTorrentId: rdTorrentId,
-        );
-      }
-      if (torboxTorrentId != null && torboxTorrentId.isNotEmpty) {
-        await StorageService.updatePlaylistItemPoster(
-          posterUrl,
-          torboxTorrentId: torboxTorrentId,
-        );
-      }
-      if (pikpakCollectionId != null && pikpakCollectionId.isNotEmpty) {
-        await StorageService.updatePlaylistItemPoster(
-          posterUrl,
-          pikpakCollectionId: pikpakCollectionId,
-        );
-      }
-    } catch (e) {
-      print('  ❌ Error saving poster: $e');
-    }
+    await PlaylistMetadataPersistence.saveSeriesPoster(
+      seriesPlaylist,
+      rdTorrentId: widget.rdTorrentId,
+      torboxTorrentId: widget.torboxTorrentId,
+      pikpakCollectionId: widget.pikpakCollectionId,
+    );
   }
 
   /// Enter PiP now, sized to the current video's pixel aspect when known.
