@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import 'package:flutter/foundation.dart';
 import 'package:synchronized/synchronized.dart';
 import 'dart:convert';
+import 'storage/default_torrent_filter_prefs.dart';
 import 'debrid_service.dart';
 import 'hide_watched_prefs.dart';
 import 'iptv_channel_order.dart';
@@ -531,15 +532,6 @@ class StorageService {
       'torrent_search_history_enabled';
 
   // Default Torrent Filter Settings
-  static const String _defaultFilterQualitiesKey =
-      'default_filter_qualities_v1';
-  static const String _defaultFilterRipSourcesKey =
-      'default_filter_rip_sources_v1';
-  static const String _defaultFilterLanguagesKey =
-      'default_filter_languages_v1';
-  static const String _defaultFilterSizesKey = 'default_filter_sizes_v1';
-  static const String _defaultFilterDynamicRangesKey =
-      'default_filter_dynamic_ranges_v1';
   static const String _quickPlayHonorsFiltersKey =
       'quick_play_honors_filters_v1';
 
@@ -4742,11 +4734,7 @@ class StorageService {
   /// Clear filter settings (qualities, rip sources, languages)
   static Future<void> clearAllFilterSettings() async {
     final prefs = await ProfilePreferences.instance();
-    await prefs.remove(_defaultFilterQualitiesKey);
-    await prefs.remove(_defaultFilterRipSourcesKey);
-    await prefs.remove(_defaultFilterLanguagesKey);
-    await prefs.remove(_defaultFilterSizesKey);
-    await prefs.remove(_defaultFilterDynamicRangesKey);
+    await DefaultTorrentFilterPrefs.clearDefaults(prefs);
     await prefs.remove(_defaultTorrentProviderKey);
   }
 
@@ -8166,67 +8154,36 @@ class StorageService {
   }
 
   // Default Torrent Filter Settings
-  static Future<List<String>> getDefaultFilterQualities() async {
-    final prefs = await ProfilePreferences.instance();
-    final json = prefs.getString(_defaultFilterQualitiesKey);
-    if (json == null) return [];
-    return List<String>.from(jsonDecode(json));
-  }
+  static Future<List<String>> getDefaultFilterQualities() =>
+      DefaultTorrentFilterPrefs.getDefaultFilterQualities();
 
-  static Future<void> setDefaultFilterQualities(List<String> qualities) async {
-    final prefs = await ProfilePreferences.instance();
-    await prefs.setString(_defaultFilterQualitiesKey, jsonEncode(qualities));
-  }
+  static Future<void> setDefaultFilterQualities(List<String> qualities) =>
+      DefaultTorrentFilterPrefs.setDefaultFilterQualities(qualities);
 
-  static Future<List<String>> getDefaultFilterRipSources() async {
-    final prefs = await ProfilePreferences.instance();
-    final json = prefs.getString(_defaultFilterRipSourcesKey);
-    if (json == null) return [];
-    return List<String>.from(jsonDecode(json));
-  }
+  static Future<List<String>> getDefaultFilterRipSources() =>
+      DefaultTorrentFilterPrefs.getDefaultFilterRipSources();
 
   static Future<void> setDefaultFilterRipSources(
     List<String> ripSources,
-  ) async {
-    final prefs = await ProfilePreferences.instance();
-    await prefs.setString(_defaultFilterRipSourcesKey, jsonEncode(ripSources));
-  }
+  ) => DefaultTorrentFilterPrefs.setDefaultFilterRipSources(ripSources);
 
-  static Future<List<String>> getDefaultFilterLanguages() async {
-    final prefs = await ProfilePreferences.instance();
-    final json = prefs.getString(_defaultFilterLanguagesKey);
-    if (json == null) return [];
-    return List<String>.from(jsonDecode(json));
-  }
+  static Future<List<String>> getDefaultFilterLanguages() =>
+      DefaultTorrentFilterPrefs.getDefaultFilterLanguages();
 
-  static Future<void> setDefaultFilterLanguages(List<String> languages) async {
-    final prefs = await ProfilePreferences.instance();
-    await prefs.setString(_defaultFilterLanguagesKey, jsonEncode(languages));
-  }
+  static Future<void> setDefaultFilterLanguages(List<String> languages) =>
+      DefaultTorrentFilterPrefs.setDefaultFilterLanguages(languages);
 
-  static Future<List<String>> getDefaultFilterSizes() async {
-    final prefs = await ProfilePreferences.instance();
-    final json = prefs.getString(_defaultFilterSizesKey);
-    if (json == null) return [];
-    return List<String>.from(jsonDecode(json));
-  }
+  static Future<List<String>> getDefaultFilterSizes() =>
+      DefaultTorrentFilterPrefs.getDefaultFilterSizes();
 
-  static Future<void> setDefaultFilterSizes(List<String> sizes) async {
-    final prefs = await ProfilePreferences.instance();
-    await prefs.setString(_defaultFilterSizesKey, jsonEncode(sizes));
-  }
+  static Future<void> setDefaultFilterSizes(List<String> sizes) =>
+      DefaultTorrentFilterPrefs.setDefaultFilterSizes(sizes);
 
-  static Future<List<String>> getDefaultFilterDynamicRanges() async {
-    final prefs = await ProfilePreferences.instance();
-    final json = prefs.getString(_defaultFilterDynamicRangesKey);
-    if (json == null) return [];
-    return List<String>.from(jsonDecode(json));
-  }
+  static Future<List<String>> getDefaultFilterDynamicRanges() =>
+      DefaultTorrentFilterPrefs.getDefaultFilterDynamicRanges();
 
-  static Future<void> setDefaultFilterDynamicRanges(List<String> ranges) async {
-    final prefs = await ProfilePreferences.instance();
-    await prefs.setString(_defaultFilterDynamicRangesKey, jsonEncode(ranges));
-  }
+  static Future<void> setDefaultFilterDynamicRanges(List<String> ranges) =>
+      DefaultTorrentFilterPrefs.setDefaultFilterDynamicRanges(ranges);
 
   // Debrify TV Filter Settings — scoped to Debrify TV only, deliberately
   // separate from the Search tab's default filters above so tuning a channel
