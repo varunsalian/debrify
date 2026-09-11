@@ -151,14 +151,13 @@ class _PikPakFolderPickerDialogState extends State<PikPakFolderPickerDialog> {
     final folderId = folders.last.id;
 
     bool stillRequested() {
-      if (!mounted ||
-          !from.hasFocus ||
-          _folderFocusNodes.isEmpty ||
-          !identical(_folderFocusNodes.last, target)) {
-        return false;
-      }
+      if (!mounted || !from.hasFocus) return false;
       final current = _getFlattenedFolders();
-      return current.isNotEmpty && current.last.id == folderId;
+      // Pointer collapse can leave unused nodes at the end of the focus pool.
+      return current.length == folders.length &&
+          current.last.id == folderId &&
+          current.length <= _folderFocusNodes.length &&
+          identical(_folderFocusNodes[current.length - 1], target);
     }
 
     void reveal(int attempt) {
