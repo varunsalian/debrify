@@ -1,6 +1,7 @@
 import '../widgets/metadata_franchise_rail.dart';
 import '../widgets/metadata_title_navigation.dart';
 import '../services/metadata_provider_service.dart';
+import '../services/watched_filter.dart';
 import '../services/metadata_preferences_service.dart';
 import '../models/metadata_preferences.dart';
 import '../services/profiles/profile_runtime.dart';
@@ -1419,9 +1420,10 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
     bool valid() => mounted && generation == _detailsMetadataGeneration && scope == ProfileRuntime.scope.value && revision == MetadataPreferencesService.revision.value;
     final loader = widget.recommendationsLoader;
     try {
-      final recs = await MetadataDetailsService.instance.recommendations(
-        _item,
-        loader,
+      // Filter before presentation so every batch and its original-item
+      // mapping retain the same surviving titles.
+      final recs = WatchedFilter.apply(
+        await MetadataDetailsService.instance.recommendations(_item, loader),
       );
       if (mounted && valid()) {
         _recommendationOriginals.clear();
