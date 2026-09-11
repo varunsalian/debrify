@@ -7,8 +7,18 @@ import 'tv_text_field.dart';
 
 class PikPakFolderPickerDialog extends StatefulWidget {
   final String? initialFolderId;
+  @visibleForTesting
+  final bool? isTelevisionOverride;
+  @visibleForTesting
+  final Future<({List<Map<String, dynamic>> files, String? nextPageToken})>
+      Function({String? parentId, required int limit})? listFilesOverride;
 
-  const PikPakFolderPickerDialog({super.key, this.initialFolderId});
+  const PikPakFolderPickerDialog({
+    super.key,
+    this.initialFolderId,
+    this.isTelevisionOverride,
+    this.listFilesOverride,
+  });
 
   @override
   State<PikPakFolderPickerDialog> createState() =>
@@ -50,6 +60,7 @@ class _PikPakFolderPickerDialogState extends State<PikPakFolderPickerDialog> {
 
   // TV Navigation support
   bool _isTelevision = false;
+  final ScrollController _folderScrollController = ScrollController();
   final List<FocusNode> _folderFocusNodes = [];
   final List<ValueNotifier<bool>> _folderFocusStates = [];
   late final FocusNode _cancelButtonFocusNode;
@@ -79,9 +90,7 @@ class _PikPakFolderPickerDialogState extends State<PikPakFolderPickerDialog> {
         }
         // DPAD Up: Move to last folder item
         if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
-          final flatFolders = _getFlattenedFolders();
-          if (flatFolders.isNotEmpty && _folderFocusNodes.isNotEmpty) {
-            _folderFocusNodes[flatFolders.length - 1].requestFocus();
+          if (_focusLastFolder(node)) {
             return KeyEventResult.handled;
           }
         }
@@ -105,9 +114,7 @@ class _PikPakFolderPickerDialogState extends State<PikPakFolderPickerDialog> {
         }
         // DPAD Up: Move to last folder item
         if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
-          final flatFolders = _getFlattenedFolders();
-          if (flatFolders.isNotEmpty && _folderFocusNodes.isNotEmpty) {
-            _folderFocusNodes[flatFolders.length - 1].requestFocus();
+          if (_focusLastFolder(node)) {
             return KeyEventResult.handled;
           }
         }
@@ -126,9 +133,7 @@ class _PikPakFolderPickerDialogState extends State<PikPakFolderPickerDialog> {
         }
         // DPAD Up: Move to last folder item
         if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
-          final flatFolders = _getFlattenedFolders();
-          if (flatFolders.isNotEmpty && _folderFocusNodes.isNotEmpty) {
-            _folderFocusNodes[flatFolders.length - 1].requestFocus();
+          if (_focusLastFolder(node)) {
             return KeyEventResult.handled;
           }
         }
@@ -137,9 +142,58 @@ class _PikPakFolderPickerDialogState extends State<PikPakFolderPickerDialog> {
     );
   }
 
+  bool _focusLastFolder(FocusNode from) {
+    final folders = _getFlattenedFolders();
+    if (folders.isEmpty || folders.length > _folderFocusNodes.length) {
+      return false;
+    }
+    final target = _folderFocusNodes[folders.length - 1];
+    final folderId = folders.last.id;
+
+    bool stillRequested() {
+      if (!mounted ||
+          !from.hasFocus ||
+          _folderFocusNodes.isEmpty ||
+          !identical(_folderFocusNodes.last, target)) {
+        return false;
+      }
+      final current = _getFlattenedFolders();
+      return current.isNotEmpty && current.last.id == folderId;
+    }
+
+    void reveal(int attempt) {
+      if (!stillRequested() || !_folderScrollController.hasClients) return;
+      // A lazy row has no focus attachment until the list builds it. Its
+      // estimated extent can change as rows are laid out, so retry boundedly.
+      _folderScrollController.jumpTo(
+        _folderScrollController.position.maxScrollExtent,
+      );
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!stillRequested()) return;
+        final rowContext = target.context;
+        if (rowContext != null) {
+          target.requestFocus();
+          Scrollable.ensureVisible(
+            rowContext,
+            alignment: 1,
+            duration: Duration.zero,
+          );
+        } else if (attempt < 3) {
+          reveal(attempt + 1);
+        }
+      });
+      // Even an already-visible last row needs a frame for the handoff.
+      WidgetsBinding.instance.scheduleFrame();
+    }
+
+    reveal(0);
+    return true;
+  }
+
   Future<void> _detectTelevision() async {
     try {
-      final isTv = await AndroidNativeDownloader.isTelevision();
+      final isTv = widget.isTelevisionOverride ??
+          await AndroidNativeDownloader.isTelevision();
       if (mounted) {
         setState(() {
           _isTelevision = isTv;
@@ -157,7 +211,7 @@ class _PikPakFolderPickerDialogState extends State<PikPakFolderPickerDialog> {
     });
 
     try {
-      final result = await _apiService.listFiles(
+      final result = await (widget.listFilesOverride ?? _apiService.listFiles)(
         parentId: null, // Root folder
         limit: 100,
       );
@@ -217,7 +271,7 @@ class _PikPakFolderPickerDialogState extends State<PikPakFolderPickerDialog> {
     });
 
     try {
-      final result = await _apiService.listFiles(
+      final result = await (widget.listFilesOverride ?? _apiService.listFiles)(
         parentId: folder.id,
         limit: 100,
       );
@@ -600,6 +654,7 @@ class _PikPakFolderPickerDialogState extends State<PikPakFolderPickerDialog> {
                               ),
                             )
                           : ListView.builder(
+                              controller: _folderScrollController,
                               itemCount: _getFlattenedFolders().length,
                               itemBuilder: (context, index) {
                                 return _buildFolderItem(context, index);
@@ -857,6 +912,7 @@ class _PikPakFolderPickerDialogState extends State<PikPakFolderPickerDialog> {
 
   @override
   void dispose() {
+    _folderScrollController.dispose();
     for (final node in _folderFocusNodes) {
       node.dispose();
     }
