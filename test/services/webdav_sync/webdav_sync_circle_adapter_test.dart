@@ -52,10 +52,12 @@ void main() {
       final applied = await local.applyProfile(session, activeId, {
         'tv_home_style': 'spotlight',
         'app_theme': 'aurora',
+        'defaults_generation': 3,
         'default_torrent_provider_v1': 'torbox',
       }, replayingPending: true);
       expect(prefs.getString('tv_home_style'), 'canvas');
       expect(prefs.containsKey('app_theme'), isFalse);
+      expect(prefs.containsKey('defaults_generation'), isFalse);
       expect(prefs.getString('default_torrent_provider_v1'), 'torbox');
       expect(applied, {'default_torrent_provider_v1'});
     },

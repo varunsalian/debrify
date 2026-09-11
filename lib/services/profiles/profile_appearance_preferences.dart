@@ -3,6 +3,8 @@
 /// only automatic WebDAV sync excludes them (including bootstrap and replay).
 abstract final class ProfileAppearancePreferences {
   static const Set<String> keys = <String>{
+    // This checkpoint belongs to the local appearance values it initializes.
+    'defaults_generation',
     'app_theme',
     'detail_theme',
     'theme_overrides',

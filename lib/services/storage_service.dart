@@ -133,7 +133,10 @@ class StorageService {
   //
   // To roll out a future flagship look: bump the generation, append its
   // bundle under a `gen < N` block below.
-  static const int _currentDefaultsGeneration = 3;
+  // Generation 4 repairs profiles imported with a remote defaults checkpoint
+  // but without its device-local appearance values. Fill only absent keys;
+  // explicit Looks and custom settings remain unchanged.
+  static const int _currentDefaultsGeneration = 4;
   static const String _defaultsGenerationKey = 'defaults_generation';
 
   /// MUST run before [TextBrightnessController.warm] / theme warms in
@@ -142,7 +145,7 @@ class StorageService {
     final prefs = await ProfilePreferences.instance();
     final gen = prefs.getInt(_defaultsGenerationKey) ?? 0;
     if (gen >= _currentDefaultsGeneration) return;
-    if (gen < 1) {
+    if (gen < 4) {
       // Dormant prefs are written too (desktop pill on a phone, TV home
       // style off-TV): harmless where they don't apply, correct if the
       // device class — or a window size — ever changes.
@@ -186,10 +189,10 @@ class StorageService {
         }
       }
     }
-    if (gen < 3) {
+    if (gen < 4) {
       // Debrify TV joins the flagship bundle. Raw prefs only — this runs
       // before any mirror is warmed, so `app_theme` is read directly rather
-      // than through `appThemeCached`. The gen<1 block above has already
+      // than through `appThemeCached`. The appearance block above has already
       // written `app_theme` for anyone who never chose, including a fresh
       // install, so this read is never against an absent key on a migrated
       // install.

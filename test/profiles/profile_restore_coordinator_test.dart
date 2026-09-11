@@ -214,6 +214,7 @@ void main() {
       final prefs = await ProfilePreferences.instance();
       await prefs.setString('tv_home_style', 'spotlight');
       await prefs.setString('app_theme', 'aurora');
+      await prefs.setInt('defaults_generation', 3);
       await prefs.setString('default_torrent_provider_v1', 'torbox');
       final packages = ProfilePackageService(
         registry: registry,
@@ -241,6 +242,8 @@ void main() {
                   .single['preferencesSection']]['values']
               as Map;
       expect(valuesOf(backup)['tv_home_style'], 'spotlight');
+      expect(valuesOf(backup)['defaults_generation'], 3);
+      expect(valuesOf(sync.package), isNot(contains('defaults_generation')));
       expect(valuesOf(sync.package), isNot(contains('tv_home_style')));
       expect(valuesOf(sync.package), isNot(contains('app_theme')));
       expect(valuesOf(sync.package)['default_torrent_provider_v1'], 'torbox');
@@ -272,6 +275,10 @@ void main() {
         isFalse,
       );
       expect(raw.containsKey(joinedScope.preferenceKey('app_theme')), isFalse);
+      expect(
+        raw.containsKey(joinedScope.preferenceKey('defaults_generation')),
+        isFalse,
+      );
       expect(
         raw.getString(joinedScope.preferenceKey('default_torrent_provider_v1')),
         'torbox',
