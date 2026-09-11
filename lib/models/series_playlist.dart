@@ -2,7 +2,7 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import '../utils/series_parser.dart';
 import '../utils/movie_parser.dart';
-import '../screens/video_player_screen.dart';
+import 'playlist_entry.dart';
 import '../services/episode_info_service.dart';
 import '../services/tvmaze_service.dart';
 import '../services/movie_metadata_service.dart';
