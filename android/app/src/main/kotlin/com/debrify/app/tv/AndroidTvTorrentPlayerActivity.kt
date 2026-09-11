@@ -2211,6 +2211,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                             rebuildPlaylistContent()
                             seriesPlaylistAdapter?.setActiveIndex(currentIndex)
                             updateCatalogEpisodeControls()
+                            model.items.getOrNull(currentIndex)?.let { updateTitle(it) }
                         }
                     }
                 }
@@ -5179,6 +5180,13 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         return shuffleBag.removeAt(shuffleBag.lastIndex)
     }
 
+    private fun guideTitleFor(item: PlaybackItem): String? {
+        if (item.season == null || item.episode == null) return null
+        return payload?.guideEpisodes?.firstOrNull {
+            it.season == item.season && it.episode == item.episode
+        }?.title?.takeIf { it.isNotBlank() }
+    }
+
     private fun updateTitle(item: PlaybackItem) {
         // Prefer the episode label / show title when the item title is blank, so
         // a series episode never renders as just the red badge with no text (the
@@ -5186,7 +5194,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         // showControlsMenu guard keeps the header hidden rather than showing empty.
         val model = payload
         val fallbackTitle = item.seasonEpisodeLabel().ifEmpty { model?.title.orEmpty() }
-        titleView.text = item.title.ifBlank { fallbackTitle }
+        val displayTitle = guideTitleFor(item) ?: item.title
+        titleView.text = displayTitle.ifBlank { fallbackTitle }
 
         // Pre-populate OTT fields for when controls menu is shown
         if (model?.contentType?.lowercase(java.util.Locale.US) == "series") {
@@ -5199,7 +5208,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 ottEpisodeBadge.visibility = View.GONE
             }
             // Fall back to "Episode N" so the badge never sits next to a blank line.
-            ottEpisodeTitle.text = item.title.ifBlank {
+            ottEpisodeTitle.text = displayTitle.ifBlank {
                 item.episode?.let { "Episode $it" } ?: fallbackTitle
             }
 
@@ -5230,7 +5239,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         val overline = ottIdentityOverline
         val badge = ottIdentityBadge
         if (isSeries && item != null && item.season != null && item.episode != null) {
-            val episodeTitle = item.title.ifBlank { "Episode ${item.episode}" }
+            val episodeTitle = guideTitleFor(item)
+                ?: item.title.ifBlank { "Episode ${item.episode}" }
             // The FETCHED show/episode names only (TVMaze via the metadata
             // pushes); never the payload title, which on torrent launches is
             // the release filename the legacy header deliberately hid. Each
@@ -17756,15 +17766,24 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         for (i in newItems.indices) {
             val ni = newItems[i]
             if (ni.season == null || ni.episode == null) continue
-            val old = oldBySeasonEpisode[ni.season to ni.episode] ?: continue
-            val oldFetchedTitle = old.title.takeIf {
+            val old = oldBySeasonEpisode[ni.season to ni.episode]
+            val oldFetchedTitle = old?.title?.takeIf {
                 it.isNotBlank() && old.sourceTitle != null && it != old.sourceTitle
             }
+            val guide = model.guideEpisodes.firstOrNull {
+                it.season == ni.season && it.episode == ni.episode
+            }
             newItems[i] = ni.copy(
-                title = oldFetchedTitle ?: ni.title,
-                artwork = ni.artwork ?: old.artwork,
-                description = ni.description ?: old.description,
-                rating = ni.rating ?: old.rating,
+                title = resolveSwitchedEpisodeTitle(
+                    episode = ni.episode,
+                    incomingTitle = ni.title,
+                    sourceTitle = ni.sourceTitle,
+                    guideTitle = guide?.title,
+                    previousEpisodeTitle = oldFetchedTitle,
+                ),
+                artwork = ni.artwork ?: guide?.artwork ?: old?.artwork,
+                description = ni.description ?: guide?.description ?: old?.description,
+                rating = ni.rating ?: guide?.rating ?: old?.rating,
             )
         }
 
@@ -19628,7 +19647,8 @@ private data class PlaybackItem(
                 provider = if (obj.has("provider")) obj.optString("provider") else null,
                 traktProgressPercent = if (obj.has("traktProgressPercent")) obj.optDouble("traktProgressPercent") else null,
                 watched = obj.optBoolean("watched", false),
-                sourceTitle = obj.optString("title").takeIf { it.isNotEmpty() },
+                sourceTitle = obj.nullableString("sourceTitle")
+                    ?: obj.optString("title").takeIf { it.isNotEmpty() },
             )
         }
     }

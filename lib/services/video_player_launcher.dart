@@ -2473,6 +2473,7 @@ class VideoPlayerLauncher {
               // positional index alone — the safety net the initial payload has.
               'resumeId': '${entry.title}_$i',
               'title': episode?.displayTitle ?? entry.title,
+              'sourceTitle': entry.title,
               'url': entry.url,
               if (entry.hdVideoUrl != null) 'hdVideoUrl': entry.hdVideoUrl,
               if (entry.audioUrl != null) 'audioUrl': entry.audioUrl,
