@@ -1,4 +1,9 @@
 import 'package:debrify/screens/settings/settings_tv_layout.dart';
+import 'package:debrify/screens/settings/tv_motion_page.dart';
+import 'package:debrify/services/profiles/profile_runtime.dart';
+import 'package:debrify/services/tv_motion_profile.dart';
+import 'package:debrify/utils/platform_util.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:debrify/screens/settings/widgets/settings_widgets.dart';
 import 'package:debrify/services/text_brightness.dart';
 import 'package:debrify/theme/app_theme.dart';
@@ -144,6 +149,53 @@ Future<void> _pumpTv(
 }
 
 void main() {
+  testWidgets('Appearance DPAD reaches TV motion and refreshes its summary', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    ProfileRuntime.debugReset();
+    ProfileRuntime.initializeLegacy();
+    TvMotionController.resetProfileScope();
+    PlatformUtil.debugSetAndroidTvCached(true);
+    final entry = FocusNode(debugLabel: 'settings-test-entry-motion');
+    addTearDown(() {
+      entry.dispose();
+      TvMotionController.resetProfileScope();
+      ProfileRuntime.debugReset();
+      PlatformUtil.debugSetAndroidTvCached(null);
+    });
+    await _pumpTv(tester, const Size(960, 540), entry);
+    entry.requestFocus();
+    await tester.pump();
+    for (var i = 0; i < 6; i++) {
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pump();
+    }
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pump();
+    for (var i = 0; i < 17; i++) {
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pump();
+    }
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'settings-tv-pane-17');
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    await tester.pumpAndSettle();
+    expect(find.byType(TvMotionPage), findsOneWidget);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    await tester.pumpAndSettle();
+    expect(TvMotionController.current, TvMotionProfile.smooth);
+    Navigator.of(tester.element(find.byType(TvMotionPage))).pop();
+    await tester.pumpAndSettle();
+    final row = tester.widget<SettingsTile>(find.byWidgetPredicate(
+      (widget) => widget is SettingsTile && widget.title == 'TV motion',
+    ));
+    expect(row.subtitle, 'Smooth');
+    await tester.pumpWidget(const SizedBox.shrink());
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('Sync and Migrate has its own reachable TV rail category', (
     tester,
   ) async {

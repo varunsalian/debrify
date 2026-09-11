@@ -11,6 +11,7 @@ import 'package:flutter/services.dart';
 import '../../models/stremio_addon.dart';
 import '../../services/debrify_image_cache.dart';
 import '../../theme/app_focus.dart';
+import '../../theme/app_motion.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/app_theme_scope.dart';
 import '../../theme/widgets/focus_expression.dart';
@@ -2724,6 +2725,16 @@ class _CardState extends State<_Card> with MetadataPresentationMixin<_Card> {
   Widget build(BuildContext context) {
     final app = AppThemeScope.of(context);
     final c = widget.card;
+    // Capture inherited settings in build so focus notifications use the
+    // latest profile/accessibility policy without performing inherited reads.
+    final scrollDuration = AppMotion.of(context).scrollTempo(
+      PlatformUtil.isTelevision,
+      const Duration(milliseconds: 220),
+      // Android TV shipped an immediate reveal; tvOS shipped a 220ms glide.
+      tvSnappy: PlatformUtil.isAndroidTvCached
+          ? Duration.zero
+          : const Duration(milliseconds: 220),
+    );
     final w = widget.height * c.shape.aspect;
     // Decode at the card's own PHYSICAL width plus the 10% focus growth —
     // never a fixed constant. The hardcoded 400/800 decoded ~1.7× oversized
@@ -3087,13 +3098,8 @@ class _CardState extends State<_Card> with MetadataPresentationMixin<_Card> {
           Scrollable.ensureVisible(
             context,
             alignment: 0.5,
-            // Snap on TV — the detail rails' rule: a held key retargets an
-            // in-flight glide every repeat, so the cursor perpetually
-            // trails the press, and every glide frame is scroll paint a
-            // MiBox-class GPU visibly drops. Pointer/touch keeps the glide.
-            duration: PlatformUtil.isAndroidTvCached
-                ? Duration.zero
-                : const Duration(milliseconds: 220),
+            // Smooth opts into a glide; Snappy preserves the platform default.
+            duration: scrollDuration,
             curve: Curves.easeOutCubic,
           );
         }

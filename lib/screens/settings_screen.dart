@@ -26,6 +26,8 @@ import '../services/external_player_service.dart';
 import '../services/play_loader_style.dart';
 import '../services/subtitle_font_service.dart';
 import '../services/text_brightness.dart';
+import '../services/tv_motion_profile.dart';
+import 'settings/tv_motion_page.dart';
 import '../services/profiles/profile_runtime.dart';
 import '../services/profiles/connection_resource_service.dart';
 import '../services/profiles/portable_profile_package.dart';
@@ -1985,6 +1987,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
             'home & display',
             ...labels(kTvRenderQualityChoices.map((choice) => choice.label)),
           ],
+        ),
+      if (_isTelevision)
+        nav(
+          SettingsRows.tvMotion,
+          'Appearance',
+          () async {
+            await pushSettingsPage(context, const TvMotionPage());
+          },
+          subtitle: TvMotionController.current.label,
+          keywords: const ['motion', 'smooth', 'snappy', 'scrolling', 'spotlight'],
         ),
       // Android TV + tvOS: this controls Flutter image decode bounds, so it is
       // independent of Android's native render-scale picker above.

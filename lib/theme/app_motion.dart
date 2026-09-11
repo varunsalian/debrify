@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
+import '../services/tv_motion_profile.dart';
 import '../widgets/detail/theme/detail_theme.dart';
 import 'app_theme_scope.dart';
+import 'tv_motion_scope.dart';
 
 /// A theme's tempo.
 ///
@@ -262,11 +264,18 @@ class AppMotion {
   /// surface that has opted out.
   final bool reduced;
 
-  const AppMotion(this.tokens, {required this.reduced});
+  final TvMotionProfile profile;
+
+  const AppMotion(
+    this.tokens, {
+    required this.reduced,
+    this.profile = TvMotionProfile.snappy,
+  });
 
   static AppMotion of(BuildContext context) => AppMotion(
     AppThemeScope.of(context).motion,
     reduced: MediaQuery.maybeDisableAnimationsOf(context) ?? false,
+    profile: TvMotionScope.of(context),
   );
 
   Duration get fast => scaled(tokens.fast);
@@ -275,6 +284,21 @@ class AppMotion {
 
   Curve get standard => tokens.standard;
   Curve get emphasized => tokens.emphasized;
+
+  /// Spotlight opts into TV scroll motion. Preserve its shipped durations
+  /// independent of theme tempo; only explicit Smooth and reduced motion
+  /// change this scroll policy. Other motion tokens keep their own scaling.
+  Duration scrollTempo(
+    bool isTv,
+    Duration otherwise, {
+    Duration tvSnappy = Duration.zero,
+  }) {
+    if (reduced) return Duration.zero;
+    if (!isTv) return otherwise;
+    return profile == TvMotionProfile.smooth
+        ? const Duration(milliseconds: 260)
+        : tvSnappy;
+  }
 
   /// [d] at this theme's tempo — or nothing at all under reduced motion.
   ///
