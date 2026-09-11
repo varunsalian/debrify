@@ -1,3 +1,4 @@
+import 'package:debrify/screens/settings/playback_settings_section.dart';
 import 'package:debrify/screens/settings/settings_tv_layout.dart';
 import 'package:debrify/screens/settings/widgets/settings_widgets.dart';
 import 'package:debrify/services/text_brightness.dart';
@@ -24,6 +25,7 @@ ConnectionInfo _connection(String title, {bool connected = true}) =>
 SettingsTvLayout _layout(
   FocusNode entry, {
   Future<void> Function()? onOpenSyncAndMigrate,
+  Future<void> Function(PlaybackSettingsSection)? onOpenPlaybackSection,
 }) => SettingsTvLayout(
   connections: [
     _connection('Real Debrid'),
@@ -39,7 +41,7 @@ SettingsTvLayout _layout(
   onOpenCollectionsSettings: _noop,
   onOpenBadgesSettings: _noop,
   onOpenHomePageSettings: _noop,
-  onOpenExternalPlayerSettings: _noop,
+  onOpenPlaybackSection: onOpenPlaybackSection ?? (_) async {},
   onOpenRemoteControl: _voidNoop,
   onOpenTorrentSettings: _noop,
   onOpenFilterSettings: _noop,
@@ -144,6 +146,67 @@ Future<void> _pumpTv(
 }
 
 void main() {
+  testWidgets('Playback pane opens all four categories directly with DPAD', (
+    tester,
+  ) async {
+    final entry = FocusNode(debugLabel: 'settings-playback-entry');
+    addTearDown(entry.dispose);
+    final opened = <PlaybackSettingsSection>[];
+    tester.view.physicalSize = const Size(960, 540);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final theme = AppThemes.byId('spotlight');
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppThemeAdapter.themed(theme, TextBrightness.bright),
+        builder: (context, child) => AppThemeScope(theme: theme, child: child!),
+        home: Scaffold(
+          body: _layout(
+            entry,
+            onOpenPlaybackSection: (section) async => opened.add(section),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    entry.requestFocus();
+    await tester.pump();
+    for (var i = 0; i < 7; i++) {
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pump();
+    }
+    for (final section in PlaybackSettingsSection.values) {
+      expect(
+        find.byKey(ValueKey('playback-category-${section.name}')),
+        findsOneWidget,
+      );
+    }
+    // Playback is the rail category; the pane has no second Playback row.
+    expect(find.text('Playback'), findsOneWidget);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pump();
+    for (final section in PlaybackSettingsSection.values) {
+      expect(
+        FocusManager.instance.primaryFocus?.debugLabel,
+        'settings-tv-pane-${section.index}',
+      );
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pump();
+      expect(opened.last, section);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pump();
+    }
+    expect(opened, PlaybackSettingsSection.values);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+    await tester.pump();
+    expect(
+      FocusManager.instance.primaryFocus?.debugLabel,
+      'settings-tv-rail-7',
+    );
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('Sync and Migrate has its own reachable TV rail category', (
     tester,
   ) async {

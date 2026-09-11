@@ -1285,7 +1285,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       onOpenMetadataSettings: _openMetadataSettings,
       onOpenCollectionsSettings: _openCollectionsSettings,
       onOpenBadgesSettings: _openBadgesSettings,
-      onOpenExternalPlayerSettings: _openExternalPlayerSettings,
+      onOpenPlaybackSection: _openPlaybackSection,
       onOpenRemoteControl: _openRemoteControl,
       showSwitchProfile:
           ProfileRuntime.mode == ProfileRuntimeMode.profileCommitted,
@@ -1410,7 +1410,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       onOpenMetadataSettings: _openMetadataSettings,
       onOpenCollectionsSettings: _openCollectionsSettings,
       onOpenBadgesSettings: _openBadgesSettings,
-      onOpenExternalPlayerSettings: _openExternalPlayerSettings,
+      onOpenPlaybackSection: _openPlaybackSection,
       onOpenRemoteControl: _openRemoteControl,
       showSwitchProfile:
           ProfileRuntime.mode == ProfileRuntimeMode.profileCommitted,
@@ -7498,7 +7498,7 @@ class _SettingsLayout extends StatelessWidget {
   final Future<void> Function() onOpenMetadataSettings;
   final Future<void> Function() onOpenCollectionsSettings;
   final Future<void> Function() onOpenBadgesSettings;
-  final Future<void> Function() onOpenExternalPlayerSettings;
+  final Future<void> Function(PlaybackSettingsSection) onOpenPlaybackSection;
   final VoidCallback onOpenRemoteControl;
   final bool showSwitchProfile;
   final Future<void> Function() onSwitchProfile;
@@ -7593,7 +7593,7 @@ class _SettingsLayout extends StatelessWidget {
     required this.onOpenMetadataSettings,
     required this.onOpenCollectionsSettings,
     required this.onOpenBadgesSettings,
-    required this.onOpenExternalPlayerSettings,
+    required this.onOpenPlaybackSection,
     required this.onOpenRemoteControl,
     required this.showSwitchProfile,
     required this.onSwitchProfile,
@@ -7906,10 +7906,14 @@ class _SettingsLayout extends StatelessWidget {
         return SettingsSection(
           title: '',
           children: [
-            SettingsTile.spec(
-              SettingsRows.player,
-              onTap: onOpenExternalPlayerSettings,
-            ),
+            for (final section in PlaybackSettingsSection.values)
+              SettingsTile(
+                key: ValueKey('playback-category-${section.name}'),
+                icon: section.icon,
+                title: section.label,
+                subtitle: section.description,
+                onTap: () => onOpenPlaybackSection(section),
+              ),
           ],
         );
       case 8:
@@ -8324,10 +8328,14 @@ class _SettingsLayout extends StatelessWidget {
                 SettingsSection(
                   title: 'Playback',
                   children: [
-                    SettingsTile.spec(
-                      SettingsRows.player,
-                      onTap: onOpenExternalPlayerSettings,
-                    ),
+                    for (final section in PlaybackSettingsSection.values)
+                      SettingsTile(
+                        key: ValueKey('playback-category-${section.name}'),
+                        icon: section.icon,
+                        title: section.label,
+                        subtitle: section.description,
+                        onTap: () => onOpenPlaybackSection(section),
+                      ),
                   ],
                 ),
                 const SizedBox(height: 24),

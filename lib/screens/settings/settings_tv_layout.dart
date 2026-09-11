@@ -1,3 +1,4 @@
+import 'playback_settings_section.dart';
 import 'tv_collection_list_style_page.dart';
 import '../../widgets/collections/tmdb_attribution.dart';
 import 'package:flutter/material.dart';
@@ -50,7 +51,7 @@ class SettingsTvLayout extends StatefulWidget {
   final Future<void> Function() onOpenMetadataSettings;
   final Future<void> Function() onOpenCollectionsSettings;
   final Future<void> Function() onOpenBadgesSettings;
-  final Future<void> Function() onOpenExternalPlayerSettings;
+  final Future<void> Function(PlaybackSettingsSection) onOpenPlaybackSection;
   final VoidCallback onOpenRemoteControl;
   final bool showSwitchProfile;
   final Future<void> Function()? onSwitchProfile;
@@ -165,7 +166,7 @@ class SettingsTvLayout extends StatefulWidget {
     required this.onOpenMetadataSettings,
     required this.onOpenCollectionsSettings,
     required this.onOpenBadgesSettings,
-    required this.onOpenExternalPlayerSettings,
+    required this.onOpenPlaybackSection,
     required this.onOpenRemoteControl,
     this.showSwitchProfile = false,
     this.onSwitchProfile,
@@ -1177,11 +1178,15 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
           SettingsSection(
             title: '',
             children: [
-              SettingsTile.spec(
-                SettingsRows.player,
-                onTap: widget.onOpenExternalPlayerSettings,
-                focusNode: _paneNodes[0],
-              ),
+              for (final section in PlaybackSettingsSection.values)
+                SettingsTile(
+                  key: ValueKey('playback-category-${section.name}'),
+                  icon: section.icon,
+                  title: section.label,
+                  subtitle: section.description,
+                  onTap: () => widget.onOpenPlaybackSection(section),
+                  focusNode: _paneNodes[section.index],
+                ),
             ],
           ),
         ];
