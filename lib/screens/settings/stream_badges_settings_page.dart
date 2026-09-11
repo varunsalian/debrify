@@ -509,7 +509,7 @@ class _StreamBadgesSettingsPageState extends State<StreamBadgesSettingsPage> {
                   blurb:
                       'A badges file is a list of regular-expression rules; a '
                       'rule that matches a source\'s name or description adds '
-                      'its chip. Up to 512 active rules and 128 KiB per profile.',
+                      'its chip. Up to 512 active rules and 4 MiB of stored presets per profile.',
                   children: [
                     SettingsTile(
                       icon: Icons.link_rounded,

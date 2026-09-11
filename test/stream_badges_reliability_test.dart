@@ -154,20 +154,72 @@ void main() {
     expect(svc.matcher.value.failed, false);
     expect(svc.matcher.value.rules, hasLength(300));
   });
+  test('multiple presets exceeding 128 KiB persist and reload', () async {
+    await svc.importJson(preset(70 * 1024), name: 'one');
+    await svc.importJson(preset(70 * 1024), name: 'two');
+    await svc.importJson(preset(1100 * 1024), name: 'large');
+    svc.resetProfileScope();
+    await svc.warmUp();
+    final sources = await svc.getSources();
+    expect(sources.map((s) => s.name), ['one', 'two', 'large']);
+    expect(sources.last.json, preset(1100 * 1024));
+    expect(svc.matcher.value.rules, hasLength(3));
+  });
+  test('backup string limit rejects aggregate growth atomically', () async {
+    await svc.importJson(preset(2200 * 1024), name: 'one');
+    final prefs = await SharedPreferences.getInstance();
+    final before = prefs.getString(StreamBadgesService.sourcesKey);
+    await expectLater(
+      svc.importJson(preset(2200 * 1024), name: 'two'),
+      throwsFormatException,
+    );
+    expect(prefs.getString(StreamBadgesService.sourcesKey), before);
+    expect((await svc.getSources()).single.name, 'one');
+    expect(svc.matcher.value.rules, hasLength(1));
+    await expectLater(
+      svc.applyBackup([
+        StreamBadgeSource(
+          id: 'two',
+          name: 'two',
+          json: preset(2200 * 1024),
+        ).toJson(),
+      ]),
+      throwsFormatException,
+    );
+    expect(prefs.getString(StreamBadgesService.sourcesKey), before);
+  });
+
+  test('stored size includes JSON escaping beyond the import size', () async {
+    final escaped = jsonEncode({
+      'notes': List.filled(1500 * 1024, '\n').join(),
+      'filters': [
+        {'name': 'HDR', 'pattern': 'HDR'},
+      ],
+    });
+    await expectLater(
+      svc.importJson(escaped, name: 'escaped'),
+      throwsFormatException,
+    );
+    expect(await svc.getSources(), isEmpty);
+  });
+
   test(
-    'aggregate size rejection preserves the previously saved preset',
+    'existing inventories above backup limit can shrink in stages',
     () async {
-      await svc.importJson(preset(70 * 1024), name: 'one');
-      await expectLater(
-        svc.importJson(preset(70 * 1024), name: 'two'),
-        throwsFormatException,
-      );
-      expect((await svc.getSources()).single.name, 'one');
-      await expectLater(
-        svc.importJson(preset(1100 * 1024), name: 'huge'),
-        throwsFormatException,
-      );
-      expect((await svc.getSources()).single.name, 'one');
+      SharedPreferences.setMockInitialValues({
+        StreamBadgesService.sourcesKey: jsonEncode([
+          for (var i = 0; i < 3; i++)
+            StreamBadgeSource(
+              id: '$i',
+              name: '$i',
+              json: preset(2200 * 1024),
+            ).toJson(),
+        ]),
+      });
+      await svc.remove('0');
+      expect(await svc.getSources(), hasLength(2));
+      await svc.remove('1');
+      expect((await svc.getSources()).single.id, '2');
     },
   );
   test(
@@ -376,19 +428,17 @@ void main() {
       expect(await svc.getSources(), hasLength(1));
     },
   );
-  test('oversized restore is rejected without changing sources', () async {
+  test('backup restores presets above the former size cap', () async {
     await svc.importJson(preset(), name: 'one');
-    await expectLater(
-      svc.applyBackup([
-        StreamBadgeSource(
-          id: 'two',
-          name: 'two',
-          json: preset(200 * 1024),
-        ).toJson(),
-      ]),
-      throwsFormatException,
-    );
-    expect((await svc.getSources()).single.name, 'one');
+    final result = await svc.applyBackup([
+      StreamBadgeSource(
+        id: 'two',
+        name: 'two',
+        json: preset(200 * 1024),
+      ).toJson(),
+    ]);
+    expect(result.imported, 1);
+    expect((await svc.getSources()).map((s) => s.name), contains('two'));
   });
   test(
     'corrupt inventory is an error rather than an empty overwrite',

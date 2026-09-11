@@ -9,6 +9,7 @@ import 'profiles/profile_scope.dart';
 
 import '../models/stream_badge_rules.dart';
 import 'profiles/profile_preferences.dart';
+import 'profiles/portable_profile_package.dart';
 import 'stream_badge_matcher.dart';
 import 'remote_control/remote_constants.dart';
 
@@ -113,10 +114,6 @@ class StreamBadgesService {
     StreamBadgeMatcher.empty,
   );
 
-  // Keep the complete encoded inventory well below both tvOS defaults and
-  // the sync/backup string limits. Incoming JSON may be larger, but cannot
-  // become persisted authority until this aggregate check succeeds.
-  static const int maxStoredBytes = 128 * 1024;
   static final Lock _mutations = Lock(reentrant: true);
   bool _enabled = true;
   bool _warmed = false;
@@ -282,9 +279,13 @@ class StreamBadgesService {
         );
       }
       final encoded = jsonEncode([for (final s in sources) s.toJson()]);
-      if (utf8.encode(encoded).length > maxStoredBytes) {
+      // Backups carry this inventory as a single preference string. Use the
+      // same UTF-8 bound as their validator, including JSON escaping/metadata.
+      final storedBytes = utf8.encode(encoded).length;
+      if (storedBytes > PortableProfilePackage.maxStringBytes &&
+          storedBytes >= utf8.encode(old ?? '').length) {
         throw const FormatException(
-          'Badge presets can use up to 128 KiB per profile. '
+          'Badge presets exceed the profile backup size limit (4 MiB). '
           'Remove a preset or import a smaller file.',
         );
       }

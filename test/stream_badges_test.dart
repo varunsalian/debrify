@@ -83,6 +83,39 @@ void main() {
   });
 
   group('compileBadgePattern', () {
+    test('supports combined and repeated global flags across lines', () {
+      for (final flags in ['(?is)', '(?si)', '(?i)(?s)', '(?s)(?i)(?s)']) {
+        final r = compileBadgePattern('$flags^header.*remux\$')!;
+        expect(r.hasMatch('HEADER\nREMUX'), isTrue, reason: flags);
+        expect(r.hasMatch('HEADER\nWEB-DL'), isFalse);
+      }
+      expect(
+        compileBadgePattern(r'(?s)^header.*remux$')!.hasMatch('HEADER\nREMUX'),
+        isFalse,
+      );
+      expect(
+        compileBadgePattern(r'(?i)^header.*remux$')!.hasMatch('HEADER\nREMUX'),
+        isFalse,
+      );
+    });
+
+    test('multiline anchors are independent of dot-all matching', () {
+      expect(
+        compileBadgePattern(r'(?im)^remux$')!.hasMatch('Title\nREMUX\nAudio'),
+        isTrue,
+      );
+      expect(
+        compileBadgePattern(r'(?is)^remux$')!.hasMatch('Title\nREMUX\nAudio'),
+        isFalse,
+      );
+    });
+
+    test('unsupported and malformed flags remain invalid', () {
+      for (final pattern in ['(?x)abc', '(?s)[', '(?is)']) {
+        expect(compileBadgePattern(pattern), isNull, reason: pattern);
+      }
+    });
+
     test('turns a leading (?i) into case-insensitive matching', () {
       final r = compileBadgePattern(r'(?i)\bremux\b')!;
       expect(r.hasMatch('Movie.2020.REMUX.mkv'), isTrue);

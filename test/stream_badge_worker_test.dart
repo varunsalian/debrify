@@ -16,6 +16,22 @@ StreamBadgeMatcher matcher(String pattern) => StreamBadgeMatcher([
 ]);
 void main() {
   test(
+    'worker matches formatter markers after a newline with inline flags',
+    () async {
+      const marker = '\u2063\u200c\u200d\u2064';
+      final m = matcher('(?is)^(?=.*remux)(?=.*$marker)');
+      addTearDown(m.dispose);
+      final result = await m.matchResultFor(
+        name: 'Movie.mkv',
+        description: 'REMUX\n$marker',
+      );
+      expect(result.status, StreamBadgeMatchStatus.resolved);
+      expect(result.badges.map((b) => b.name), ['Match']);
+      expect(await m.matchesFor(name: 'REMUX without marker'), isEmpty);
+    },
+  );
+
+  test(
     'saturation defers new requests without evicting admitted matches',
     () async {
       final m = matcher('Movie');
