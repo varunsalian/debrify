@@ -18,8 +18,22 @@ import '../../widgets/tv_text_field.dart';
 import 'widgets/settings_widgets.dart';
 import '../../theme/app_theme_scope.dart';
 
+import 'playback_settings_section.dart';
+import 'player_dock_page.dart';
+import 'tv_player_controls_style_page.dart';
+import 'debrify_tv_player_style_page.dart';
+import 'player_guide_style_page.dart';
+import 'play_loader_style_page.dart';
+
+/// One category inside Settings → Playback. Keeps the existing storage and
+/// platform-specific controls shared across the four destinations.
 class ExternalPlayerSettingsPage extends StatefulWidget {
-  const ExternalPlayerSettingsPage({super.key});
+  final PlaybackSettingsSection section;
+
+  const ExternalPlayerSettingsPage({
+    super.key,
+    this.section = PlaybackSettingsSection.player,
+  });
 
   @override
   State<ExternalPlayerSettingsPage> createState() =>
@@ -29,6 +43,11 @@ class ExternalPlayerSettingsPage extends StatefulWidget {
 class _ExternalPlayerSettingsPageState
     extends State<ExternalPlayerSettingsPage> {
   bool _loading = true;
+  final _contentFocusNode = FocusNode(
+    debugLabel: 'playback-settings-content',
+    canRequestFocus: false,
+    skipTraversal: true,
+  );
 
   // Default player mode: 'debrify', 'external', 'deovr'
   String _defaultPlayerMode = 'debrify';
@@ -184,7 +203,7 @@ class _ExternalPlayerSettingsPageState
   @override
   void initState() {
     super.initState();
-    AnalyticsService.screenView('external_player_settings');
+    AnalyticsService.screenView('playback_${widget.section.name}_settings');
     _loadSettings();
     _commandFocusNode.addListener(() {
       if (!mounted) return;
@@ -400,6 +419,7 @@ class _ExternalPlayerSettingsPageState
     _windowsCommandController.dispose();
     _windowsCommandFocusNode.dispose();
     _firstModeFocusNode.dispose();
+    _contentFocusNode.dispose();
     _screenTypeFocusNode.dispose();
     _stereoModeFocusNode.dispose();
     _autoDetectFocusNode.dispose();
@@ -442,6 +462,11 @@ class _ExternalPlayerSettingsPageState
       // Load default player mode
       final mode = await StorageService.getDefaultPlayerMode();
 
+      // Only Player needs external application discovery. The other categories
+      // can load without waiting for native app detection.
+      final needsExternalPlayers =
+          widget.section == PlaybackSettingsSection.player;
+
       // Load macOS-specific settings
       Map<ExternalPlayer, bool> installed = {};
       String preferredKey = 'system_default';
@@ -449,12 +474,13 @@ class _ExternalPlayerSettingsPageState
       String? customAppName;
       String? customCommand;
 
-      if (Platform.isMacOS) {
+      if (needsExternalPlayers && (Platform.isMacOS)) {
         installed = await ExternalPlayerService.detectInstalledPlayers();
         preferredKey = await StorageService.getPreferredExternalPlayer();
         customAppPath = await StorageService.getCustomExternalPlayerPath();
         customAppName = await StorageService.getCustomExternalPlayerName();
         customCommand = await StorageService.getCustomExternalPlayerCommand();
+        if (!mounted) return;
         _commandController.text = customCommand ?? '';
       }
 
@@ -463,10 +489,12 @@ class _ExternalPlayerSettingsPageState
       String iosPreferredKey = 'vlc';
       String? iosCustomScheme;
 
-      if (PlatformUtil.isIosMobile || PlatformUtil.isTvOS) {
+      if (needsExternalPlayers &&
+          (PlatformUtil.isIosMobile || PlatformUtil.isTvOS)) {
         installedIOS = await ExternalPlayerService.detectInstalledIOSPlayers();
         iosPreferredKey = await StorageService.getPreferredIOSExternalPlayer();
         iosCustomScheme = await StorageService.getIOSCustomSchemeTemplate();
+        if (!mounted) return;
         _iosSchemeController.text = iosCustomScheme ?? '';
       }
 
@@ -475,12 +503,13 @@ class _ExternalPlayerSettingsPageState
       String linuxPreferredKey = 'system_default';
       String? linuxCustomCommand;
 
-      if (Platform.isLinux) {
+      if (needsExternalPlayers && (Platform.isLinux)) {
         installedLinux =
             await LinuxExternalPlayerServiceExtension.detectInstalledLinuxPlayers();
         linuxPreferredKey =
             await StorageService.getPreferredLinuxExternalPlayer();
         linuxCustomCommand = await StorageService.getLinuxCustomCommand();
+        if (!mounted) return;
         _linuxCommandController.text = linuxCustomCommand ?? '';
       }
 
@@ -489,12 +518,13 @@ class _ExternalPlayerSettingsPageState
       String windowsPreferredKey = 'system_default';
       String? windowsCustomCommand;
 
-      if (Platform.isWindows) {
+      if (needsExternalPlayers && (Platform.isWindows)) {
         installedWindows =
             await WindowsExternalPlayerServiceExtension.detectInstalledWindowsPlayers();
         windowsPreferredKey =
             await StorageService.getPreferredWindowsExternalPlayer();
         windowsCustomCommand = await StorageService.getWindowsCustomCommand();
+        if (!mounted) return;
         _windowsCommandController.text = windowsCustomCommand ?? '';
       }
 
@@ -571,6 +601,7 @@ class _ExternalPlayerSettingsPageState
       // Load subtitle settings
       final subtitleSettings = await SubtitleSettingsService.instance.loadAll();
 
+      if (!mounted) return;
       setState(() {
         _defaultPlayerMode = mode;
         _installedPlayers = installed;
@@ -646,10 +677,11 @@ class _ExternalPlayerSettingsPageState
           // FocusScopeNode as primary focus means DPAD is stranded.
           final primary = FocusManager.instance.primaryFocus;
           if (primary != null && primary is! FocusScopeNode) return;
-          _firstModeFocusNode.requestFocus();
+          _contentFocusNode.traversalDescendants.firstOrNull?.requestFocus();
         });
       }
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _loading = false;
       });
@@ -2097,723 +2129,920 @@ class _ExternalPlayerSettingsPageState
     );
   }
 
-  @override
-  Widget build(BuildContext context) {
+  Widget _defaultsCard(String title, String subtitle, List<Widget> children) {
+    final theme = Theme.of(context);
     final t = AppThemeScope.of(context).settings;
-    // tvOS joined with the audio toggles and external-player support — the
-    // old gate predates both and was quietly serving Apple TV the
-    // "not available" stub while the page's own tvOS rows sat unreachable
-    // behind it.
-    final isSupportedPlatform =
-        Platform.isMacOS ||
-        Platform.isAndroid ||
-        PlatformUtil.isIosMobile ||
-        PlatformUtil.isTvOS ||
-        Platform.isLinux ||
-        Platform.isWindows;
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              title,
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              subtitle,
+              style: theme.textTheme.bodySmall?.copyWith(color: t.dim),
+            ),
+            const SizedBox(height: 16),
+            ...children,
+          ],
+        ),
+      ),
+    );
+  }
 
-    if (!isSupportedPlatform) {
-      return SettingsPageScaffold(
-        title: 'Playback',
-        body: Center(
+  Future<void> _openPlayerSettings() async {
+    await pushSettingsPage(context, const ExternalPlayerSettingsPage());
+    if (mounted) await _loadSettings();
+  }
+
+  Widget _playerAppearance() => SettingsSection(
+    title: 'Appearance',
+    blurb: 'The same player styles available in Appearance settings.',
+    children: [
+      // Match Appearance: Apple TV uses TV controls, not the player dock.
+      if (_isAndroidTv || !PlatformUtil.isTelevision)
+        SettingsTile.spec(
+          SettingsRows.playerDock,
+          subtitle: _isAndroidTv ? 'Control style' : 'Style, colour and size',
+          onTap: () async {
+            await pushSettingsPage(
+              context,
+              _isAndroidTv
+                  ? const TvPlayerControlsStylePage()
+                  : const PlayerDockPage(),
+            );
+          },
+        ),
+      if (_isAndroidTv)
+        SettingsTile.spec(
+          SettingsRows.debrifyTvPlayer,
+          subtitle: 'Debrify TV playback-screen style',
+          onTap: () async {
+            await pushSettingsPage(context, const DebrifyTvPlayerStylePage());
+          },
+        ),
+      SettingsTile.spec(
+        SettingsRows.playerGuideStyle,
+        subtitle: 'In-player IPTV guide style',
+        onTap: () async {
+          await pushSettingsPage(context, const PlayerGuideStylePage());
+        },
+      ),
+      SettingsTile.spec(
+        SettingsRows.playLoaderStyle,
+        subtitle: 'Playback loading-screen style',
+        onTap: () async {
+          await pushSettingsPage(context, const PlayLoaderStylePage());
+        },
+      ),
+    ],
+  );
+
+  List<Widget> _playerSettings() {
+    final theme = Theme.of(context);
+    final t = AppThemeScope.of(context).settings;
+    return [
+      Card(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Default Player',
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Choose which player to use when playing videos',
+                style: theme.textTheme.bodySmall?.copyWith(color: t.dim),
+              ),
+              const SizedBox(height: 16),
+              _buildPlayerModeOption(
+                context,
+                value: 'debrify',
+                title: 'Debrify Player',
+                subtitle: 'Use the built-in video player',
+                icon: Icons.play_circle_filled_rounded,
+                recommended: true,
+                focusNode: _firstModeFocusNode,
+              ),
+              _buildPlayerModeOption(
+                context,
+                value: 'external',
+                title: 'External Player',
+                subtitle: Platform.isMacOS
+                    ? 'Open videos in your preferred external player'
+                    : 'Choose which app to use when opening videos',
+                icon: Icons.open_in_new_rounded,
+              ),
+              _buildPlayerModeOption(
+                context,
+                value: 'deovr',
+                title: 'DeoVR',
+                subtitle: 'Use this only on VR devices',
+                icon: Icons.vrpano,
+                disabled: !Platform.isAndroid,
+              ),
+            ],
+          ),
+        ),
+      ),
+
+      if (_defaultPlayerMode == 'debrify') ...[
+        const SizedBox(height: 16),
+        if (PlatformUtil.isPhone) ...[
+          _defaultsCard(
+            'When playback starts',
+            'Choose the starting orientation',
+            [
+              // Start orientation (phones only — a TV has no
+              // portrait, and a desktop window ignores the
+              // preferred-orientation call entirely). Gated on the
+              // WARM flag, not this page's `_isAndroidTv`: that one
+              // is loaded async and starts false, so a TV would
+              // paint the row and then drop it.
+              if (PlatformUtil.isPhone) ...[
+                const SizedBox(height: 4),
+                _buildCheckboxTile(
+                  context,
+                  title: 'Open the player in portrait',
+                  subtitle:
+                      'Start videos upright instead of turning the '
+                      'phone landscape. The player\'s rotate button '
+                      'switches to landscape whenever you want it.',
+                  value: _startPortrait,
+                  onChanged: _setStartPortrait,
+                  focusNode: _startPortraitFocusNode,
+                  isFocused: _startPortraitFocused,
+                ),
+              ],
+            ],
+          ),
+          const SizedBox(height: 16),
+        ],
+        // Local completion is deliberately independent from tracker
+        // scrobbling: Trakt and Simkl keep their own watched rules.
+        Card(
           child: Padding(
-            padding: const EdgeInsets.all(32),
+            padding: const EdgeInsets.all(16),
             child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(Icons.block_rounded, size: 64, color: t.dim),
-                const SizedBox(height: 16),
                 Text(
-                  'Player settings are not available on this platform',
-                  textAlign: TextAlign.center,
-                  style: Theme.of(
-                    context,
-                  ).textTheme.bodyLarge?.copyWith(color: t.dim),
+                  'Watch History',
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Mark locally tracked videos watched after this much playback. Trakt and Simkl keep their own rules.',
+                  style: theme.textTheme.bodySmall?.copyWith(color: t.dim),
+                ),
+                const SizedBox(height: 16),
+                _buildSettingDropdown(
+                  context,
+                  label: 'Mark movies watched at',
+                  value: _completionThresholdIndex(_movieCompletionThreshold),
+                  items: _completionThresholdOptions
+                      .map((value) => '$value%')
+                      .toList(),
+                  onChanged: _setMovieCompletionThresholdIndex,
+                  focusNode: _movieCompletionThresholdFocusNode,
+                  isFocused: _movieCompletionThresholdFocused,
+                ),
+                const SizedBox(height: 12),
+                _buildSettingDropdown(
+                  context,
+                  label: 'Mark episodes watched at',
+                  value: _completionThresholdIndex(_episodeCompletionThreshold),
+                  items: _completionThresholdOptions
+                      .map((value) => '$value%')
+                      .toList(),
+                  onChanged: _setEpisodeCompletionThresholdIndex,
+                  focusNode: _episodeCompletionThresholdFocusNode,
+                  isFocused: _episodeCompletionThresholdFocused,
                 ),
               ],
             ),
           ),
         ),
-      );
-    }
 
-    if (_loading) {
-      return const SettingsPageScaffold(
-        title: 'Playback',
-        body: Center(child: CircularProgressIndicator()),
-      );
-    }
+        const SizedBox(height: 16),
 
-    final theme = Theme.of(context);
-
-    return SettingsPageScaffold(
-      title: 'Playback',
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: kSettingsMaxWidth),
+        // Community intro/outro timestamps. This belongs to the
+        // built-in player because external players own their own UI
+        // and cannot display Debrify's manual skip button.
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Header
-                const SettingsPageHeader(
-                  icon: Icons.open_in_new_rounded,
-                  title: 'Playback',
-                  subtitle: 'Choose which player to use for video playback',
+                Text(
+                  'Skip Segments',
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
+                const SizedBox(height: 4),
+                Text(
+                  'Show manual skip buttons when community timestamps are available',
+                  style: theme.textTheme.bodySmall?.copyWith(color: t.dim),
+                ),
+                const SizedBox(height: 8),
+                _buildCheckboxTile(
+                  context,
+                  title: 'Skip intros & credits',
+                  subtitle:
+                      'Show a button during supported intros and outros. Playback is never skipped automatically.',
+                  value: _skipSegmentsEnabled,
+                  onChanged: _setSkipSegmentsEnabled,
+                  focusNode: _skipSegmentsEnabledFocusNode,
+                  isFocused: _skipSegmentsEnabledFocused,
+                ),
+                const SizedBox(height: 12),
+                _buildDropdownSetting(
+                  context,
+                  label: 'Timestamp provider',
+                  value: _skipSegmentProvider,
+                  items: SkipSegmentProviders.availableLabels,
+                  onChanged: _setSkipSegmentProvider,
+                  focusNode: _skipSegmentProviderFocusNode,
+                  isFocused: _skipSegmentProviderFocused,
+                  enabled: _skipSegmentsEnabled,
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  _skipSegmentProvider == SkipSegmentProviders.auto
+                      ? 'Checks every available source and prefers SkipDB, then TheIntroDB, then IntroDB.'
+                      : 'Coverage varies by series, episode, and video release.',
+                  style: theme.textTheme.bodySmall?.copyWith(color: t.dim2),
+                ),
+              ],
+            ),
+          ),
+        ),
 
+        const SizedBox(height: 16),
+
+        // Network & Buffering: the escape hatch for slow stream
+        // origins (Plex-backed addons, remote seedboxes). Standard
+        // leaves both players untouched — the Debrify (mpv) player
+        // reads the presets directly; the native Android TV player
+        // gets them via the launch payload.
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Network & Buffering',
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'For stream sources that stall or time out — '
+                  'Plex-backed addons, remote servers. Standard '
+                  'leaves playback exactly as before.',
+                  style: theme.textTheme.bodySmall?.copyWith(color: t.dim),
+                ),
                 const SizedBox(height: 16),
+                _buildDropdownSetting(
+                  context,
+                  label: 'Connection patience',
+                  value: _netPatience,
+                  items: NetworkTuning.patienceOptions,
+                  onChanged: _setNetPatience,
+                  focusNode: _netPatienceFocusNode,
+                  isFocused: _netPatienceFocused,
+                ),
+                const SizedBox(height: 12),
+                _buildDropdownSetting(
+                  context,
+                  label: 'Stream buffer',
+                  value: _netBuffer,
+                  items: NetworkTuning.bufferOptions,
+                  onChanged: _setNetBuffer,
+                  focusNode: _netBufferFocusNode,
+                  isFocused: _netBufferFocused,
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  'Patience raises connection timeouts and adds '
+                  'automatic retries where the player supports '
+                  'them. Bigger buffers ride over origin stalls '
+                  'but use more memory. Live TV keeps its own '
+                  'tuned pipeline. Restart playback to apply.',
+                  style: theme.textTheme.bodySmall?.copyWith(color: t.dim2),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 16),
 
-                // Default Player Mode Selection
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Default Player',
-                          style: theme.textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'Choose which player to use when playing videos',
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: t.dim,
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        _buildPlayerModeOption(
-                          context,
-                          value: 'debrify',
-                          title: 'Debrify Player',
-                          subtitle: 'Use the built-in video player',
-                          icon: Icons.play_circle_filled_rounded,
-                          recommended: true,
-                          focusNode: _firstModeFocusNode,
-                        ),
-                        _buildPlayerModeOption(
-                          context,
-                          value: 'external',
-                          title: 'External Player',
-                          subtitle: Platform.isMacOS
-                              ? 'Open videos in your preferred external player'
-                              : 'Choose which app to use when opening videos',
-                          icon: Icons.open_in_new_rounded,
-                        ),
-                        _buildPlayerModeOption(
-                          context,
-                          value: 'deovr',
-                          title: 'DeoVR',
-                          subtitle: 'Use this only on VR devices',
-                          icon: Icons.vrpano,
-                          disabled: !Platform.isAndroid,
-                        ),
-                      ],
+        _playerAppearance(),
+      ],
+      ..._externalPlayerSettings(),
+    ];
+  }
+
+  List<Widget> _videoSettings() {
+    final theme = Theme.of(context);
+    final t = AppThemeScope.of(context).settings;
+    return [
+      _defaultsCard(
+        'Picture & decoding',
+        'Default picture fit and device compatibility',
+        [
+          // Default Aspect
+          _buildSettingDropdown(
+            context,
+            label: 'Default Aspect',
+            value: _defaultAspectIndex,
+            items: _aspectLabels,
+            onChanged: (index) => _setDefaultAspectIndex(index),
+            focusNode: _aspectFocusNode,
+            isFocused: _aspectFocused,
+          ),
+          const SizedBox(height: 12),
+
+          // Android TV only. A frozen picture with running
+          // audio on live IPTV is almost always the box's
+          // hardware decoder choking on the stream — a device
+          // defect, which is why every IPTV player ships this
+          // switch rather than trying to auto-detect it.
+          if (Platform.isAndroid && _isAndroidTv) ...[
+            const SizedBox(height: 12),
+            _buildDropdownSetting(
+              context,
+              label: 'IPTV decoder',
+              value: _iptvDecoderMode,
+              items: const {
+                'auto': 'Automatic',
+                'hardware': 'Hardware',
+                'software': 'Software',
+              },
+              onChanged: _setIptvDecoderMode,
+              focusNode: _iptvDecoderFocusNode,
+              isFocused: _iptvDecoderFocused,
+            ),
+            const SizedBox(height: 6),
+            Text(
+              _iptvDecoderMode == 'software'
+                  ? 'Software decoding fixes channels that freeze '
+                        'while audio keeps playing, at the cost of '
+                        'more CPU. Re-open the channel to apply.'
+                  : 'Switch to Software if a channel freezes but '
+                        'audio keeps playing. Re-open the channel '
+                        'to apply.',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: _iptvDecoderMode == 'auto' ? t.dim : t.warning,
+              ),
+            ),
+          ],
+
+          // Android phone/tablet only. Android TV already uses
+          // native Media3 + SurfaceView; Apple and desktop
+          // platforms have different decoder APIs entirely.
+          if (Platform.isAndroid && !_isAndroidTv) ...[
+            const SizedBox(height: 12),
+            _buildDropdownSetting(
+              context,
+              label: 'Video renderer',
+              value: _androidVideoRendererMode.storageKey,
+              items: {
+                for (final mode in AndroidVideoRendererMode.values)
+                  mode.storageKey: mode.label,
+              },
+              onChanged: _setAndroidVideoRendererMode,
+              focusNode: _androidVideoRendererFocusNode,
+              isFocused: _androidVideoRendererFocused,
+            ),
+            const SizedBox(height: 6),
+            Text(
+              '${_androidVideoRendererMode.description} '
+              'Restart playback to apply. Use Automatic if a '
+              'video is black, has incorrect colors, or loses '
+              'a feature.',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color:
+                    _androidVideoRendererMode ==
+                        AndroidVideoRendererMode.automatic
+                    ? t.dim
+                    : t.warning,
+              ),
+            ),
+          ],
+
+          // Apple TV only. The automatic 10-bit remedy
+          // (PLAYER_TVOS_10BIT_PLAN.md) handles what it can
+          // detect; this forces software decoding for
+          // anything it cannot — wrong colors on a
+          // clean-reading format, most likely.
+          if (PlatformUtil.isTvOS) ...[
+            const SizedBox(height: 4),
+            _buildCheckboxTile(
+              context,
+              title: 'Force software video decoding',
+              subtitle:
+                  'Compatibility option if a video plays with '
+                  'wrong colors or a blank picture. Slower — '
+                  '4K may stutter. Applies from the next '
+                  'playback.',
+              value: _tvosForceSoftwareDecode,
+              onChanged: _setTvosForceSoftwareDecode,
+              focusNode: _tvosForceSwDecodeFocusNode,
+              isFocused: _tvosForceSwDecodeFocused,
+            ),
+          ],
+        ],
+      ),
+    ];
+  }
+
+  List<Widget> _audioSettings() {
+    return [
+      _defaultsCard(
+        'Audio defaults',
+        'Language and sound output for the built-in player',
+        [
+          // Default Audio Language
+          _buildSettingDropdown(
+            context,
+            label: 'Default Audio',
+            value: _audioLanguageIndex,
+            items: _audioLanguageOptions.map((opt) => opt.$2).toList(),
+            onChanged: (index) =>
+                _setDefaultAudioLanguage(_audioLanguageOptions[index].$1),
+            focusNode: _defaultAudioLangFocusNode,
+            isFocused: _defaultAudioLangFocused,
+          ),
+          const SizedBox(height: 12),
+
+          // System audio effects (Android only). Off by
+          // default because enabling it switches the audio
+          // output backend — see _attachAudioEffectSession in
+          // the player screen.
+          if (Platform.isAndroid) ...[
+            const SizedBox(height: 4),
+            _buildCheckboxTile(
+              context,
+              title: 'Allow system audio effects',
+              subtitle:
+                  'Let equalizer apps (Wavelet, Dolby, etc.) process playback. '
+                  'Changes the audio output — restart playback to apply.',
+              value: _systemAudioEffects,
+              onChanged: _setSystemAudioEffects,
+              focusNode: _systemAudioEffectsFocusNode,
+              isFocused: _systemAudioEffectsFocused,
+            ),
+            // Bitstream passthrough (AUDIO_FIDELITY_PLAN.md).
+            // Opt-in: a route that misreports support plays
+            // silence, and only the user knows their chain.
+            const SizedBox(height: 4),
+            _buildCheckboxTile(
+              context,
+              title: 'Audio passthrough (AC3 · EAC3 · DTS core)',
+              subtitle:
+                  'Send the original bitstream to your receiver '
+                  'instead of decoding. Requires an HDMI chain '
+                  'that supports it — if you hear silence, turn '
+                  'this off. Restart playback to apply.',
+              value: _audioPassthrough,
+              onChanged: _setAudioPassthrough,
+              focusNode: _audioPassthroughFocusNode,
+              isFocused: _audioPassthroughFocused,
+            ),
+          ],
+
+          // Apple multichannel LPCM (AUDIO_FIDELITY_PLAN.md).
+          // Opt-in until AirPlay/spatial routes are proven.
+          if (PlatformUtil.isTvOS || PlatformUtil.isIosMobile) ...[
+            const SizedBox(height: 4),
+            _buildCheckboxTile(
+              context,
+              title: 'Multichannel audio (LPCM over HDMI)',
+              subtitle:
+                  'Output surround tracks as 5.1/7.1 PCM when '
+                  'the connected receiver supports it, instead '
+                  'of stereo. Restart playback to apply.',
+              value: _appleMultichannel,
+              onChanged: _setAppleMultichannel,
+              focusNode: _appleMultichannelFocusNode,
+              isFocused: _appleMultichannelFocused,
+            ),
+          ],
+
+          // Apple TV audio diagnostics. The player normally
+          // decides both of these from the output route; these
+          // let a reporter narrow an audio problem without
+          // waiting on a custom build.
+          if (PlatformUtil.isTvOS) ...[
+            const SizedBox(height: 4),
+            _buildCheckboxTile(
+              context,
+              title: 'Force stereo audio',
+              subtitle:
+                  'Always downmix to 2 channels, whatever the '
+                  'TV or receiver reports. Try this if '
+                  'surround sound is noisy or distorted. '
+                  'Restart playback to apply.',
+              value: _tvosForceStereo,
+              onChanged: _setTvosForceStereo,
+              focusNode: _tvosForceStereoFocusNode,
+              isFocused: _tvosForceStereoFocused,
+            ),
+            const SizedBox(height: 4),
+            _buildCheckboxTile(
+              context,
+              title: 'Use the previous audio engine',
+              subtitle:
+                  'Go back to the audio output used before '
+                  'August 2026. It has no sound at all when '
+                  'Dolby Atmos is enabled, so only use it if '
+                  'the current one misbehaves. Restart '
+                  'playback to apply.',
+              value: _tvosLegacyAudioOutput,
+              onChanged: _setTvosLegacyAudioOutput,
+              focusNode: _tvosLegacyAudioFocusNode,
+              isFocused: _tvosLegacyAudioFocused,
+            ),
+          ],
+        ],
+      ),
+      ..._nightModeSettings(),
+    ];
+  }
+
+  List<Widget> _nightModeSettings() {
+    final theme = Theme.of(context);
+    final t = AppThemeScope.of(context).settings;
+    return [
+      // Night Mode (Android TV only)
+      if (_isAndroidTv) ...[
+        const SizedBox(height: 16),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.nightlight_round, color: t.accent, size: 24),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Night Mode',
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Boosts quiet sounds for late-night viewing without disturbing others',
+                  style: theme.textTheme.bodySmall?.copyWith(color: t.dim),
+                ),
+                const SizedBox(height: 16),
+                ...List.generate(_nightModeLabels.length, (index) {
+                  final isSelected = _nightModeIndex == index;
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 4),
+                    child: Focus(
+                      // Observer only: the InkWell below is the
+                      // focus stop; a focusable wrapper would make
+                      // each row cost two DPAD presses.
+                      canRequestFocus: false,
+                      skipTraversal: true,
+                      onKeyEvent: (node, event) {
+                        if (event is KeyDownEvent) {
+                          if (isActivateKey(event.logicalKey)) {
+                            _setNightModeIndex(index);
+                            return KeyEventResult.handled;
+                          }
+                        }
+                        return KeyEventResult.ignored;
+                      },
+                      child: Builder(
+                        builder: (context) {
+                          final isFocused = Focus.of(context).hasFocus;
+                          return InkWell(
+                            onTap: () => _setNightModeIndex(index),
+                            borderRadius: BorderRadius.circular(8),
+                            // Snap, don't tween (TV GPU rule).
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 8,
+                              ),
+                              decoration: BoxDecoration(
+                                color: isSelected
+                                    ? t.panel2
+                                    : Colors.transparent,
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(
+                                  color: isFocused
+                                      ? t.accent
+                                      : isSelected
+                                      ? t.accent
+                                      : t.line,
+                                  width: isFocused || isSelected ? 2 : 1,
+                                ),
+                                boxShadow: isFocused
+                                    ? [
+                                        BoxShadow(
+                                          color: t.accent.withValues(
+                                            alpha: 0.25,
+                                          ),
+                                          blurRadius: 12,
+                                          offset: const Offset(0, 4),
+                                        ),
+                                      ]
+                                    : null,
+                              ),
+                              child: Row(
+                                children: [
+                                  // Single focus stop per row —
+                                  // keep the Radio off the DPAD
+                                  // traversal order.
+                                  ExcludeFocus(
+                                    child: Radio<int>(
+                                      value: index,
+                                      groupValue: _nightModeIndex,
+                                      onChanged: (v) => _setNightModeIndex(v!),
+                                      materialTapTargetSize:
+                                          MaterialTapTargetSize.shrinkWrap,
+                                      visualDensity: VisualDensity.compact,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    _nightModeLabels[index],
+                                    style: theme.textTheme.bodyMedium?.copyWith(
+                                      fontWeight: isSelected || isFocused
+                                          ? FontWeight.w600
+                                          : FontWeight.normal,
+                                    ),
+                                  ),
+                                  if (index == 0) ...[
+                                    const SizedBox(width: 8),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 6,
+                                        vertical: 2,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: t.accent.withValues(alpha: 0.16),
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      child: Text(
+                                        'Recommended',
+                                        style: theme.textTheme.labelSmall
+                                            ?.copyWith(
+                                              color: t.accent,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  );
+                }),
+              ],
+            ),
+          ),
+        ),
+      ],
+    ];
+  }
+
+  List<Widget> _subtitleSettings() {
+    final theme = Theme.of(context);
+    final t = AppThemeScope.of(context).settings;
+    return [
+      _defaultsCard(
+        'Subtitle defaults',
+        'Preferred language and timing for the built-in player',
+        [
+          // Default Subtitle Language
+          _buildSettingDropdown(
+            context,
+            label: 'Default Subtitle',
+            value: _subtitleLanguageIndex,
+            items: _subtitleLanguageOptions.map((opt) => opt.$2).toList(),
+            onChanged: (index) =>
+                _setDefaultSubtitleLanguage(_subtitleLanguageOptions[index].$1),
+            focusNode: _defaultSubtitleLangFocusNode,
+            isFocused: _defaultSubtitleLangFocused,
+          ),
+
+          // Only platforms whose bundled native player is
+          // built with the required passive analysis filters
+          // (see PlatformUtil.supportsSubtitleAutoSync).
+          if (PlatformUtil.supportsSubtitleAutoSync) ...[
+            const SizedBox(height: 4),
+            _buildCheckboxTile(
+              context,
+              title: 'Auto-sync addon subtitles (experimental)',
+              subtitle:
+                  'Quietly align downloaded subtitles to the audio '
+                  'as you watch. Applies only on a confident match; '
+                  'manual timing always wins.',
+              value: _subtitleAutoSync,
+              onChanged: _setSubtitleAutoSync,
+              focusNode: _subtitleAutoSyncFocusNode,
+              isFocused: _subtitleAutoSyncFocused,
+            ),
+          ],
+        ],
+      ),
+      const SizedBox(height: 16),
+      // Subtitle Appearance
+      Card(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Subtitle Appearance',
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Customize how subtitles look',
+                style: theme.textTheme.bodySmall?.copyWith(color: t.dim),
+              ),
+              const SizedBox(height: 16),
+
+              // Size
+              _buildSettingDropdown(
+                context,
+                label: 'Size',
+                value: _subtitleSizeIndex,
+                items: SubtitleSize.options.map((o) => o.label).toList(),
+                onChanged: (index) => _setSubtitleSizeIndex(index),
+                focusNode: _subtitleSizeFocusNode,
+                isFocused: _subtitleSizeFocused,
+              ),
+              const SizedBox(height: 12),
+
+              // Style
+              _buildSettingDropdown(
+                context,
+                label: 'Style',
+                value: _subtitleStyleIndex,
+                items: SubtitleStyle.options.map((o) => o.label).toList(),
+                onChanged: (index) => _setSubtitleStyleIndex(index),
+                focusNode: _subtitleStyleFocusNode,
+                isFocused: _subtitleStyleFocused,
+              ),
+              const SizedBox(height: 12),
+
+              // Color
+              _buildSettingDropdown(
+                context,
+                label: 'Color',
+                value: _subtitleColorIndex,
+                items: SubtitleColor.options.map((o) => o.label).toList(),
+                onChanged: (index) => _setSubtitleColorIndex(index),
+                focusNode: _subtitleColorFocusNode,
+                isFocused: _subtitleColorFocused,
+              ),
+              const SizedBox(height: 12),
+
+              // Background
+              _buildSettingDropdown(
+                context,
+                label: 'Background',
+                value: _subtitleBgIndex,
+                items: SubtitleBackground.options.map((o) => o.label).toList(),
+                onChanged: (index) => _setSubtitleBgIndex(index),
+                focusNode: _subtitleBgFocusNode,
+                isFocused: _subtitleBgFocused,
+              ),
+              const SizedBox(height: 12),
+
+              // Font
+              _buildSettingDropdown(
+                context,
+                label: 'Font',
+                value: _subtitleFontIndex,
+                items: _allFonts
+                    .map((f) => f.isCustom ? '${f.label} (Custom)' : f.label)
+                    .toList(),
+                onChanged: (index) => _setSubtitleFontIndex(index),
+                focusNode: _subtitleFontFocusNode,
+                isFocused: _subtitleFontFocused,
+              ),
+              const SizedBox(height: 12),
+
+              // Bold
+              _buildSettingDropdown(
+                context,
+                label: 'Bold',
+                value: _subtitleBold ? 1 : 0,
+                items: const ['Off', 'On'],
+                onChanged: (index) => _setSubtitleBold(index == 1),
+                focusNode: _subtitleBoldFocusNode,
+                isFocused: _subtitleBoldFocused,
+              ),
+
+              // Import custom font button (always visible)
+              const SizedBox(height: 8),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: _importCustomFont,
+                  icon: const Icon(Icons.file_upload_outlined),
+                  label: const Text('Import Custom Font (TTF/OTF)'),
+                  // Default focus overlay is too faint for TV —
+                  // paint an explicit accent ring + lit fill.
+                  style: ButtonStyle(
+                    backgroundColor: WidgetStateProperty.resolveWith(
+                      (s) => s.contains(WidgetState.focused) ? t.panel2 : null,
+                    ),
+                    side: WidgetStateProperty.resolveWith(
+                      (s) => s.contains(WidgetState.focused)
+                          ? BorderSide(color: t.accent, width: 2)
+                          : null,
                     ),
                   ),
                 ),
+              ),
 
-                // Debrify Player settings (only when Debrify Player is selected)
-                if (_defaultPlayerMode == 'debrify') ...[
-                  const SizedBox(height: 16),
-
-                  // Playback Defaults
-                  Card(
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Playback Defaults',
-                            style: theme.textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            'Default settings when video playback starts',
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: t.dim,
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-
-                          // Default Aspect
-                          _buildSettingDropdown(
-                            context,
-                            label: 'Default Aspect',
-                            value: _defaultAspectIndex,
-                            items: _aspectLabels,
-                            onChanged: (index) => _setDefaultAspectIndex(index),
-                            focusNode: _aspectFocusNode,
-                            isFocused: _aspectFocused,
-                          ),
-                          const SizedBox(height: 12),
-
-                          // Default Audio Language
-                          _buildSettingDropdown(
-                            context,
-                            label: 'Default Audio',
-                            value: _audioLanguageIndex,
-                            items: _audioLanguageOptions
-                                .map((opt) => opt.$2)
-                                .toList(),
-                            onChanged: (index) => _setDefaultAudioLanguage(
-                              _audioLanguageOptions[index].$1,
-                            ),
-                            focusNode: _defaultAudioLangFocusNode,
-                            isFocused: _defaultAudioLangFocused,
-                          ),
-                          const SizedBox(height: 12),
-
-                          // Default Subtitle Language
-                          _buildSettingDropdown(
-                            context,
-                            label: 'Default Subtitle',
-                            value: _subtitleLanguageIndex,
-                            items: _subtitleLanguageOptions
-                                .map((opt) => opt.$2)
-                                .toList(),
-                            onChanged: (index) => _setDefaultSubtitleLanguage(
-                              _subtitleLanguageOptions[index].$1,
-                            ),
-                            focusNode: _defaultSubtitleLangFocusNode,
-                            isFocused: _defaultSubtitleLangFocused,
-                          ),
-
-                          // Start orientation (phones only — a TV has no
-                          // portrait, and a desktop window ignores the
-                          // preferred-orientation call entirely). Gated on the
-                          // WARM flag, not this page's `_isAndroidTv`: that one
-                          // is loaded async and starts false, so a TV would
-                          // paint the row and then drop it.
-                          if (PlatformUtil.isPhone) ...[
-                            const SizedBox(height: 4),
-                            _buildCheckboxTile(
-                              context,
-                              title: 'Open the player in portrait',
-                              subtitle:
-                                  'Start videos upright instead of turning the '
-                                  'phone landscape. The player\'s rotate button '
-                                  'switches to landscape whenever you want it.',
-                              value: _startPortrait,
-                              onChanged: _setStartPortrait,
-                              focusNode: _startPortraitFocusNode,
-                              isFocused: _startPortraitFocused,
-                            ),
-                          ],
-
-                          // Only platforms whose bundled native player is
-                          // built with the required passive analysis filters
-                          // (see PlatformUtil.supportsSubtitleAutoSync).
-                          if (PlatformUtil.supportsSubtitleAutoSync) ...[
-                            const SizedBox(height: 4),
-                            _buildCheckboxTile(
-                              context,
-                              title: 'Auto-sync addon subtitles (experimental)',
-                              subtitle:
-                                  'Quietly align downloaded subtitles to the audio '
-                                  'as you watch. Applies only on a confident match; '
-                                  'manual timing always wins.',
-                              value: _subtitleAutoSync,
-                              onChanged: _setSubtitleAutoSync,
-                              focusNode: _subtitleAutoSyncFocusNode,
-                              isFocused: _subtitleAutoSyncFocused,
-                            ),
-                          ],
-
-                          // Android TV only. A frozen picture with running
-                          // audio on live IPTV is almost always the box's
-                          // hardware decoder choking on the stream — a device
-                          // defect, which is why every IPTV player ships this
-                          // switch rather than trying to auto-detect it.
-                          if (Platform.isAndroid && _isAndroidTv) ...[
-                            const SizedBox(height: 12),
-                            _buildDropdownSetting(
-                              context,
-                              label: 'IPTV decoder',
-                              value: _iptvDecoderMode,
-                              items: const {
-                                'auto': 'Automatic',
-                                'hardware': 'Hardware',
-                                'software': 'Software',
-                              },
-                              onChanged: _setIptvDecoderMode,
-                              focusNode: _iptvDecoderFocusNode,
-                              isFocused: _iptvDecoderFocused,
-                            ),
-                            const SizedBox(height: 6),
-                            Text(
-                              _iptvDecoderMode == 'software'
-                                  ? 'Software decoding fixes channels that freeze '
-                                        'while audio keeps playing, at the cost of '
-                                        'more CPU. Re-open the channel to apply.'
-                                  : 'Switch to Software if a channel freezes but '
-                                        'audio keeps playing. Re-open the channel '
-                                        'to apply.',
-                              style: theme.textTheme.bodySmall?.copyWith(
-                                color: _iptvDecoderMode == 'auto'
-                                    ? t.dim
-                                    : t.warning,
+              // List of custom fonts with delete buttons
+              if (_allFonts.any((f) => f.isCustom)) ...[
+                const SizedBox(height: 12),
+                Text(
+                  'Custom Fonts',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: t.dim,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                ..._allFonts
+                    .where((f) => f.isCustom)
+                    .map(
+                      (font) => Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 2),
+                        child: Row(
+                          children: [
+                            Icon(Icons.text_fields, size: 16, color: t.dim),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                font.label,
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color:
+                                      _allFonts[_subtitleFontIndex].id ==
+                                          font.id
+                                      ? t.accent
+                                      : t.dim,
+                                  fontWeight:
+                                      _allFonts[_subtitleFontIndex].id ==
+                                          font.id
+                                      ? FontWeight.w600
+                                      : FontWeight.normal,
+                                ),
                               ),
                             ),
-                          ],
-
-                          // Android phone/tablet only. Android TV already uses
-                          // native Media3 + SurfaceView; Apple and desktop
-                          // platforms have different decoder APIs entirely.
-                          if (Platform.isAndroid && !_isAndroidTv) ...[
-                            const SizedBox(height: 12),
-                            _buildDropdownSetting(
-                              context,
-                              label: 'Video renderer',
-                              value: _androidVideoRendererMode.storageKey,
-                              items: {
-                                for (final mode
-                                    in AndroidVideoRendererMode.values)
-                                  mode.storageKey: mode.label,
-                              },
-                              onChanged: _setAndroidVideoRendererMode,
-                              focusNode: _androidVideoRendererFocusNode,
-                              isFocused: _androidVideoRendererFocused,
-                            ),
-                            const SizedBox(height: 6),
-                            Text(
-                              '${_androidVideoRendererMode.description} '
-                              'Restart playback to apply. Use Automatic if a '
-                              'video is black, has incorrect colors, or loses '
-                              'a feature.',
-                              style: theme.textTheme.bodySmall?.copyWith(
-                                color:
-                                    _androidVideoRendererMode ==
-                                        AndroidVideoRendererMode.automatic
-                                    ? t.dim
-                                    : t.warning,
+                            IconButton(
+                              onPressed: () => _removeCustomFont(font),
+                              icon: const Icon(Icons.delete_outline, size: 18),
+                              color: t.danger,
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(
+                                minWidth: 32,
+                                minHeight: 32,
                               ),
-                            ),
-                          ],
-
-                          // Apple TV only. The automatic 10-bit remedy
-                          // (PLAYER_TVOS_10BIT_PLAN.md) handles what it can
-                          // detect; this forces software decoding for
-                          // anything it cannot — wrong colors on a
-                          // clean-reading format, most likely.
-                          if (PlatformUtil.isTvOS) ...[
-                            const SizedBox(height: 4),
-                            _buildCheckboxTile(
-                              context,
-                              title: 'Force software video decoding',
-                              subtitle:
-                                  'Compatibility option if a video plays with '
-                                  'wrong colors or a blank picture. Slower — '
-                                  '4K may stutter. Applies from the next '
-                                  'playback.',
-                              value: _tvosForceSoftwareDecode,
-                              onChanged: _setTvosForceSoftwareDecode,
-                              focusNode: _tvosForceSwDecodeFocusNode,
-                              isFocused: _tvosForceSwDecodeFocused,
-                            ),
-                          ],
-
-                          // System audio effects (Android only). Off by
-                          // default because enabling it switches the audio
-                          // output backend — see _attachAudioEffectSession in
-                          // the player screen.
-                          if (Platform.isAndroid) ...[
-                            const SizedBox(height: 4),
-                            _buildCheckboxTile(
-                              context,
-                              title: 'Allow system audio effects',
-                              subtitle:
-                                  'Let equalizer apps (Wavelet, Dolby, etc.) process playback. '
-                                  'Changes the audio output — restart playback to apply.',
-                              value: _systemAudioEffects,
-                              onChanged: _setSystemAudioEffects,
-                              focusNode: _systemAudioEffectsFocusNode,
-                              isFocused: _systemAudioEffectsFocused,
-                            ),
-                            // Bitstream passthrough (AUDIO_FIDELITY_PLAN.md).
-                            // Opt-in: a route that misreports support plays
-                            // silence, and only the user knows their chain.
-                            const SizedBox(height: 4),
-                            _buildCheckboxTile(
-                              context,
-                              title:
-                                  'Audio passthrough (AC3 · EAC3 · DTS core)',
-                              subtitle:
-                                  'Send the original bitstream to your receiver '
-                                  'instead of decoding. Requires an HDMI chain '
-                                  'that supports it — if you hear silence, turn '
-                                  'this off. Restart playback to apply.',
-                              value: _audioPassthrough,
-                              onChanged: _setAudioPassthrough,
-                              focusNode: _audioPassthroughFocusNode,
-                              isFocused: _audioPassthroughFocused,
-                            ),
-                          ],
-
-                          // Apple multichannel LPCM (AUDIO_FIDELITY_PLAN.md).
-                          // Opt-in until AirPlay/spatial routes are proven.
-                          if (PlatformUtil.isTvOS ||
-                              PlatformUtil.isIosMobile) ...[
-                            const SizedBox(height: 4),
-                            _buildCheckboxTile(
-                              context,
-                              title: 'Multichannel audio (LPCM over HDMI)',
-                              subtitle:
-                                  'Output surround tracks as 5.1/7.1 PCM when '
-                                  'the connected receiver supports it, instead '
-                                  'of stereo. Restart playback to apply.',
-                              value: _appleMultichannel,
-                              onChanged: _setAppleMultichannel,
-                              focusNode: _appleMultichannelFocusNode,
-                              isFocused: _appleMultichannelFocused,
-                            ),
-                          ],
-
-                          // Apple TV audio diagnostics. The player normally
-                          // decides both of these from the output route; these
-                          // let a reporter narrow an audio problem without
-                          // waiting on a custom build.
-                          if (PlatformUtil.isTvOS) ...[
-                            const SizedBox(height: 4),
-                            _buildCheckboxTile(
-                              context,
-                              title: 'Force stereo audio',
-                              subtitle:
-                                  'Always downmix to 2 channels, whatever the '
-                                  'TV or receiver reports. Try this if '
-                                  'surround sound is noisy or distorted. '
-                                  'Restart playback to apply.',
-                              value: _tvosForceStereo,
-                              onChanged: _setTvosForceStereo,
-                              focusNode: _tvosForceStereoFocusNode,
-                              isFocused: _tvosForceStereoFocused,
-                            ),
-                            const SizedBox(height: 4),
-                            _buildCheckboxTile(
-                              context,
-                              title: 'Use the previous audio engine',
-                              subtitle:
-                                  'Go back to the audio output used before '
-                                  'August 2026. It has no sound at all when '
-                                  'Dolby Atmos is enabled, so only use it if '
-                                  'the current one misbehaves. Restart '
-                                  'playback to apply.',
-                              value: _tvosLegacyAudioOutput,
-                              onChanged: _setTvosLegacyAudioOutput,
-                              focusNode: _tvosLegacyAudioFocusNode,
-                              isFocused: _tvosLegacyAudioFocused,
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-                  ),
-
-                  const SizedBox(height: 16),
-
-                  // Local completion is deliberately independent from tracker
-                  // scrobbling: Trakt and Simkl keep their own watched rules.
-                  Card(
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Watch History',
-                            style: theme.textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            'Mark locally tracked videos watched after this much playback. Trakt and Simkl keep their own rules.',
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: t.dim,
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                          _buildSettingDropdown(
-                            context,
-                            label: 'Mark movies watched at',
-                            value: _completionThresholdIndex(
-                              _movieCompletionThreshold,
-                            ),
-                            items: _completionThresholdOptions
-                                .map((value) => '$value%')
-                                .toList(),
-                            onChanged: _setMovieCompletionThresholdIndex,
-                            focusNode: _movieCompletionThresholdFocusNode,
-                            isFocused: _movieCompletionThresholdFocused,
-                          ),
-                          const SizedBox(height: 12),
-                          _buildSettingDropdown(
-                            context,
-                            label: 'Mark episodes watched at',
-                            value: _completionThresholdIndex(
-                              _episodeCompletionThreshold,
-                            ),
-                            items: _completionThresholdOptions
-                                .map((value) => '$value%')
-                                .toList(),
-                            onChanged: _setEpisodeCompletionThresholdIndex,
-                            focusNode: _episodeCompletionThresholdFocusNode,
-                            isFocused: _episodeCompletionThresholdFocused,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-
-                  const SizedBox(height: 16),
-
-                  // Community intro/outro timestamps. This belongs to the
-                  // built-in player because external players own their own UI
-                  // and cannot display Debrify's manual skip button.
-                  Card(
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Skip Segments',
-                            style: theme.textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            'Show manual skip buttons when community timestamps are available',
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: t.dim,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          _buildCheckboxTile(
-                            context,
-                            title: 'Skip intros & credits',
-                            subtitle:
-                                'Show a button during supported intros and outros. Playback is never skipped automatically.',
-                            value: _skipSegmentsEnabled,
-                            onChanged: _setSkipSegmentsEnabled,
-                            focusNode: _skipSegmentsEnabledFocusNode,
-                            isFocused: _skipSegmentsEnabledFocused,
-                          ),
-                          const SizedBox(height: 12),
-                          _buildDropdownSetting(
-                            context,
-                            label: 'Timestamp provider',
-                            value: _skipSegmentProvider,
-                            items: SkipSegmentProviders.availableLabels,
-                            onChanged: _setSkipSegmentProvider,
-                            focusNode: _skipSegmentProviderFocusNode,
-                            isFocused: _skipSegmentProviderFocused,
-                            enabled: _skipSegmentsEnabled,
-                          ),
-                          const SizedBox(height: 10),
-                          Text(
-                            _skipSegmentProvider == SkipSegmentProviders.auto
-                                ? 'Checks every available source and prefers SkipDB, then TheIntroDB, then IntroDB.'
-                                : 'Coverage varies by series, episode, and video release.',
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: t.dim2,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-
-                  const SizedBox(height: 16),
-
-                  // Network & Buffering: the escape hatch for slow stream
-                  // origins (Plex-backed addons, remote seedboxes). Standard
-                  // leaves both players untouched — the Debrify (mpv) player
-                  // reads the presets directly; the native Android TV player
-                  // gets them via the launch payload.
-                  Card(
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Network & Buffering',
-                            style: theme.textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            'For stream sources that stall or time out — '
-                            'Plex-backed addons, remote servers. Standard '
-                            'leaves playback exactly as before.',
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: t.dim,
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                          _buildDropdownSetting(
-                            context,
-                            label: 'Connection patience',
-                            value: _netPatience,
-                            items: NetworkTuning.patienceOptions,
-                            onChanged: _setNetPatience,
-                            focusNode: _netPatienceFocusNode,
-                            isFocused: _netPatienceFocused,
-                          ),
-                          const SizedBox(height: 12),
-                          _buildDropdownSetting(
-                            context,
-                            label: 'Stream buffer',
-                            value: _netBuffer,
-                            items: NetworkTuning.bufferOptions,
-                            onChanged: _setNetBuffer,
-                            focusNode: _netBufferFocusNode,
-                            isFocused: _netBufferFocused,
-                          ),
-                          const SizedBox(height: 10),
-                          Text(
-                            'Patience raises connection timeouts and adds '
-                            'automatic retries where the player supports '
-                            'them. Bigger buffers ride over origin stalls '
-                            'but use more memory. Live TV keeps its own '
-                            'tuned pipeline. Restart playback to apply.',
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: t.dim2,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-
-                  // Subtitle Appearance
-                  Card(
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Subtitle Appearance',
-                            style: theme.textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            'Customize how subtitles look',
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: t.dim,
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-
-                          // Size
-                          _buildSettingDropdown(
-                            context,
-                            label: 'Size',
-                            value: _subtitleSizeIndex,
-                            items: SubtitleSize.options
-                                .map((o) => o.label)
-                                .toList(),
-                            onChanged: (index) => _setSubtitleSizeIndex(index),
-                            focusNode: _subtitleSizeFocusNode,
-                            isFocused: _subtitleSizeFocused,
-                          ),
-                          const SizedBox(height: 12),
-
-                          // Style
-                          _buildSettingDropdown(
-                            context,
-                            label: 'Style',
-                            value: _subtitleStyleIndex,
-                            items: SubtitleStyle.options
-                                .map((o) => o.label)
-                                .toList(),
-                            onChanged: (index) => _setSubtitleStyleIndex(index),
-                            focusNode: _subtitleStyleFocusNode,
-                            isFocused: _subtitleStyleFocused,
-                          ),
-                          const SizedBox(height: 12),
-
-                          // Color
-                          _buildSettingDropdown(
-                            context,
-                            label: 'Color',
-                            value: _subtitleColorIndex,
-                            items: SubtitleColor.options
-                                .map((o) => o.label)
-                                .toList(),
-                            onChanged: (index) => _setSubtitleColorIndex(index),
-                            focusNode: _subtitleColorFocusNode,
-                            isFocused: _subtitleColorFocused,
-                          ),
-                          const SizedBox(height: 12),
-
-                          // Background
-                          _buildSettingDropdown(
-                            context,
-                            label: 'Background',
-                            value: _subtitleBgIndex,
-                            items: SubtitleBackground.options
-                                .map((o) => o.label)
-                                .toList(),
-                            onChanged: (index) => _setSubtitleBgIndex(index),
-                            focusNode: _subtitleBgFocusNode,
-                            isFocused: _subtitleBgFocused,
-                          ),
-                          const SizedBox(height: 12),
-
-                          // Font
-                          _buildSettingDropdown(
-                            context,
-                            label: 'Font',
-                            value: _subtitleFontIndex,
-                            items: _allFonts
-                                .map(
-                                  (f) => f.isCustom
-                                      ? '${f.label} (Custom)'
-                                      : f.label,
-                                )
-                                .toList(),
-                            onChanged: (index) => _setSubtitleFontIndex(index),
-                            focusNode: _subtitleFontFocusNode,
-                            isFocused: _subtitleFontFocused,
-                          ),
-                          const SizedBox(height: 12),
-
-                          // Bold
-                          _buildSettingDropdown(
-                            context,
-                            label: 'Bold',
-                            value: _subtitleBold ? 1 : 0,
-                            items: const ['Off', 'On'],
-                            onChanged: (index) => _setSubtitleBold(index == 1),
-                            focusNode: _subtitleBoldFocusNode,
-                            isFocused: _subtitleBoldFocused,
-                          ),
-
-                          // Import custom font button (always visible)
-                          const SizedBox(height: 8),
-                          SizedBox(
-                            width: double.infinity,
-                            child: OutlinedButton.icon(
-                              onPressed: _importCustomFont,
-                              icon: const Icon(Icons.file_upload_outlined),
-                              label: const Text('Import Custom Font (TTF/OTF)'),
-                              // Default focus overlay is too faint for TV —
-                              // paint an explicit accent ring + lit fill.
+                              tooltip: 'Remove font',
+                              // DPAD focus must be unmistakable.
                               style: ButtonStyle(
                                 backgroundColor:
                                     WidgetStateProperty.resolveWith(
@@ -2828,1313 +3057,1080 @@ class _ExternalPlayerSettingsPageState
                                 ),
                               ),
                             ),
-                          ),
-
-                          // List of custom fonts with delete buttons
-                          if (_allFonts.any((f) => f.isCustom)) ...[
-                            const SizedBox(height: 12),
-                            Text(
-                              'Custom Fonts',
-                              style: theme.textTheme.bodySmall?.copyWith(
-                                color: t.dim,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            ..._allFonts
-                                .where((f) => f.isCustom)
-                                .map(
-                                  (font) => Padding(
-                                    padding: const EdgeInsets.symmetric(
-                                      vertical: 2,
-                                    ),
-                                    child: Row(
-                                      children: [
-                                        Icon(
-                                          Icons.text_fields,
-                                          size: 16,
-                                          color: t.dim,
-                                        ),
-                                        const SizedBox(width: 8),
-                                        Expanded(
-                                          child: Text(
-                                            font.label,
-                                            style: theme.textTheme.bodySmall
-                                                ?.copyWith(
-                                                  color:
-                                                      _allFonts[_subtitleFontIndex]
-                                                              .id ==
-                                                          font.id
-                                                      ? t.accent
-                                                      : t.dim,
-                                                  fontWeight:
-                                                      _allFonts[_subtitleFontIndex]
-                                                              .id ==
-                                                          font.id
-                                                      ? FontWeight.w600
-                                                      : FontWeight.normal,
-                                                ),
-                                          ),
-                                        ),
-                                        IconButton(
-                                          onPressed: () =>
-                                              _removeCustomFont(font),
-                                          icon: const Icon(
-                                            Icons.delete_outline,
-                                            size: 18,
-                                          ),
-                                          color: t.danger,
-                                          padding: EdgeInsets.zero,
-                                          constraints: const BoxConstraints(
-                                            minWidth: 32,
-                                            minHeight: 32,
-                                          ),
-                                          tooltip: 'Remove font',
-                                          // DPAD focus must be unmistakable.
-                                          style: ButtonStyle(
-                                            backgroundColor:
-                                                WidgetStateProperty.resolveWith(
-                                                  (s) =>
-                                                      s.contains(
-                                                        WidgetState.focused,
-                                                      )
-                                                      ? t.panel2
-                                                      : null,
-                                                ),
-                                            side:
-                                                WidgetStateProperty.resolveWith(
-                                                  (s) =>
-                                                      s.contains(
-                                                        WidgetState.focused,
-                                                      )
-                                                      ? BorderSide(
-                                                          color: t.accent,
-                                                          width: 2,
-                                                        )
-                                                      : null,
-                                                ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                          ],
-
-                          const SizedBox(height: 16),
-
-                          // Preview
-                          Container(
-                            width: double.infinity,
-                            padding: const EdgeInsets.all(16),
-                            decoration: BoxDecoration(
-                              color: Colors.black87,
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Center(
-                              child: Builder(
-                                builder: (context) {
-                                  final previewSize =
-                                      SubtitleSize
-                                          .options[_subtitleSizeIndex]
-                                          .sizePx *
-                                      0.4;
-                                  final data = SubtitleSettingsData(
-                                    sizeIndex: _subtitleSizeIndex,
-                                    styleIndex: _subtitleStyleIndex,
-                                    colorIndex: _subtitleColorIndex,
-                                    bgIndex: _subtitleBgIndex,
-                                    bold: _subtitleBold,
-                                    fontIndex: _subtitleFontIndex,
-                                    fontFamily:
-                                        _subtitleFontIndex < _allFonts.length
-                                        ? _allFonts[_subtitleFontIndex]
-                                              .fontFamily
-                                        : null,
-                                  );
-                                  return Text(
-                                    'Sample Subtitle',
-                                    // Built by the same code the player uses,
-                                    // at the preview's size — a preview that
-                                    // styles text its own way is a preview
-                                    // that can lie about bold.
-                                    style: data.buildTextStyle(
-                                      fontSizePx: previewSize,
-                                    ),
-                                  );
-                                },
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-
-                  // Night Mode (Android TV only)
-                  if (_isAndroidTv) ...[
-                    const SizedBox(height: 16),
-                    Card(
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Icon(
-                                  Icons.nightlight_round,
-                                  color: t.accent,
-                                  size: 24,
-                                ),
-                                const SizedBox(width: 8),
-                                Text(
-                                  'Night Mode',
-                                  style: theme.textTheme.titleMedium?.copyWith(
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              'Boosts quiet sounds for late-night viewing without disturbing others',
-                              style: theme.textTheme.bodySmall?.copyWith(
-                                color: t.dim,
-                              ),
-                            ),
-                            const SizedBox(height: 16),
-                            ...List.generate(_nightModeLabels.length, (index) {
-                              final isSelected = _nightModeIndex == index;
-                              return Padding(
-                                padding: const EdgeInsets.only(bottom: 4),
-                                child: Focus(
-                                  // Observer only: the InkWell below is the
-                                  // focus stop; a focusable wrapper would make
-                                  // each row cost two DPAD presses.
-                                  canRequestFocus: false,
-                                  skipTraversal: true,
-                                  onKeyEvent: (node, event) {
-                                    if (event is KeyDownEvent) {
-                                      if (isActivateKey(event.logicalKey)) {
-                                        _setNightModeIndex(index);
-                                        return KeyEventResult.handled;
-                                      }
-                                    }
-                                    return KeyEventResult.ignored;
-                                  },
-                                  child: Builder(
-                                    builder: (context) {
-                                      final isFocused = Focus.of(
-                                        context,
-                                      ).hasFocus;
-                                      return InkWell(
-                                        onTap: () => _setNightModeIndex(index),
-                                        borderRadius: BorderRadius.circular(8),
-                                        // Snap, don't tween (TV GPU rule).
-                                        child: Container(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 12,
-                                            vertical: 8,
-                                          ),
-                                          decoration: BoxDecoration(
-                                            color: isSelected
-                                                ? t.panel2
-                                                : Colors.transparent,
-                                            borderRadius: BorderRadius.circular(
-                                              8,
-                                            ),
-                                            border: Border.all(
-                                              color: isFocused
-                                                  ? t.accent
-                                                  : isSelected
-                                                  ? t.accent
-                                                  : t.line,
-                                              width: isFocused || isSelected
-                                                  ? 2
-                                                  : 1,
-                                            ),
-                                            boxShadow: isFocused
-                                                ? [
-                                                    BoxShadow(
-                                                      color: t.accent
-                                                          .withValues(
-                                                            alpha: 0.25,
-                                                          ),
-                                                      blurRadius: 12,
-                                                      offset: const Offset(
-                                                        0,
-                                                        4,
-                                                      ),
-                                                    ),
-                                                  ]
-                                                : null,
-                                          ),
-                                          child: Row(
-                                            children: [
-                                              // Single focus stop per row —
-                                              // keep the Radio off the DPAD
-                                              // traversal order.
-                                              ExcludeFocus(
-                                                child: Radio<int>(
-                                                  value: index,
-                                                  groupValue: _nightModeIndex,
-                                                  onChanged: (v) =>
-                                                      _setNightModeIndex(v!),
-                                                  materialTapTargetSize:
-                                                      MaterialTapTargetSize
-                                                          .shrinkWrap,
-                                                  visualDensity:
-                                                      VisualDensity.compact,
-                                                ),
-                                              ),
-                                              const SizedBox(width: 8),
-                                              Text(
-                                                _nightModeLabels[index],
-                                                style: theme
-                                                    .textTheme
-                                                    .bodyMedium
-                                                    ?.copyWith(
-                                                      fontWeight:
-                                                          isSelected ||
-                                                              isFocused
-                                                          ? FontWeight.w600
-                                                          : FontWeight.normal,
-                                                    ),
-                                              ),
-                                              if (index == 0) ...[
-                                                const SizedBox(width: 8),
-                                                Container(
-                                                  padding:
-                                                      const EdgeInsets.symmetric(
-                                                        horizontal: 6,
-                                                        vertical: 2,
-                                                      ),
-                                                  decoration: BoxDecoration(
-                                                    color: t.accent.withValues(
-                                                      alpha: 0.16,
-                                                    ),
-                                                    borderRadius:
-                                                        BorderRadius.circular(
-                                                          4,
-                                                        ),
-                                                  ),
-                                                  child: Text(
-                                                    'Recommended',
-                                                    style: theme
-                                                        .textTheme
-                                                        .labelSmall
-                                                        ?.copyWith(
-                                                          color: t.accent,
-                                                          fontWeight:
-                                                              FontWeight.w600,
-                                                        ),
-                                                  ),
-                                                ),
-                                              ],
-                                            ],
-                                          ),
-                                        ),
-                                      );
-                                    },
-                                  ),
-                                ),
-                              );
-                            }),
                           ],
                         ),
+                      ),
+                    ),
+              ],
+
+              const SizedBox(height: 16),
+
+              // Preview
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.black87,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Center(
+                  child: Builder(
+                    builder: (context) {
+                      final previewSize =
+                          SubtitleSize.options[_subtitleSizeIndex].sizePx * 0.4;
+                      final data = SubtitleSettingsData(
+                        sizeIndex: _subtitleSizeIndex,
+                        styleIndex: _subtitleStyleIndex,
+                        colorIndex: _subtitleColorIndex,
+                        bgIndex: _subtitleBgIndex,
+                        bold: _subtitleBold,
+                        fontIndex: _subtitleFontIndex,
+                        fontFamily: _subtitleFontIndex < _allFonts.length
+                            ? _allFonts[_subtitleFontIndex].fontFamily
+                            : null,
+                      );
+                      return Text(
+                        'Sample Subtitle',
+                        // Built by the same code the player uses,
+                        // at the preview's size — a preview that
+                        // styles text its own way is a preview
+                        // that can lie about bold.
+                        style: data.buildTextStyle(fontSizePx: previewSize),
+                      );
+                    },
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    ];
+  }
+
+  List<Widget> _externalPlayerSettings() {
+    final theme = Theme.of(context);
+    final t = AppThemeScope.of(context).settings;
+    return [
+      // Android External Player info
+      if (Platform.isAndroid && _defaultPlayerMode == 'external') ...[
+        const SizedBox(height: 16),
+        SettingsInfoBanner(
+          text:
+              'When enabled, you will be able to choose which app to use when opening videos. Install VLC, MX Player, or other video player apps to see them in the chooser.',
+        ),
+      ],
+
+      // iOS + Apple TV player selection (same catalog; tvOS shows
+      // only the players that ship an Apple TV app)
+      if ((PlatformUtil.isIosMobile || PlatformUtil.isTvOS) &&
+          _defaultPlayerMode == 'external') ...[
+        const SizedBox(height: 16),
+        Card(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                child: Text(
+                  'Preferred Player',
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Text(
+                  'Select the app to open videos with. Make sure the app is installed from the App Store.',
+                  style: theme.textTheme.bodySmall?.copyWith(color: t.dim),
+                ),
+              ),
+              const SizedBox(height: 8),
+              // tvOS lists only players with a real Apple TV app —
+              // a row that can never launch is worse than no row.
+              ...[
+                for (final (i, player)
+                    in iOSExternalPlayer.values
+                        .where((p) => !PlatformUtil.isTvOS || p.availableOnTvos)
+                        .indexed) ...[
+                  if (i > 0) const Divider(height: 1),
+                  _buildIOSPlayerTile(player),
+                ],
+              ],
+              const SizedBox(height: 8),
+            ],
+          ),
+        ),
+      ],
+
+      // iOS Custom URL Scheme configuration
+      if ((PlatformUtil.isIosMobile || PlatformUtil.isTvOS) &&
+          _defaultPlayerMode == 'external' &&
+          _selectedIOSPlayer == iOSExternalPlayer.customScheme) ...[
+        const SizedBox(height: 16),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.code_rounded, color: t.accent),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Custom URL Scheme',
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
                   ],
-                ],
-
-                // Android External Player info
-                if (Platform.isAndroid && _defaultPlayerMode == 'external') ...[
-                  const SizedBox(height: 16),
-                  SettingsInfoBanner(
-                    text:
-                        'When enabled, you will be able to choose which app to use when opening videos. Install VLC, MX Player, or other video player apps to see them in the chooser.',
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Define a custom URL scheme to launch videos',
+                  style: theme.textTheme.bodyMedium?.copyWith(color: t.dim),
+                ),
+                const SizedBox(height: 16),
+                Container(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(14),
+                    boxShadow: _iosSchemeFocused
+                        ? [
+                            BoxShadow(
+                              color: t.accent.withValues(alpha: 0.25),
+                              blurRadius: 18,
+                              offset: const Offset(0, 8),
+                            ),
+                          ]
+                        : null,
                   ),
-                ],
-
-                // iOS + Apple TV player selection (same catalog; tvOS shows
-                // only the players that ship an Apple TV app)
-                if ((PlatformUtil.isIosMobile || PlatformUtil.isTvOS) &&
-                    _defaultPlayerMode == 'external') ...[
-                  const SizedBox(height: 16),
-                  Card(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Padding(
-                          padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-                          child: Text(
-                            'Preferred Player',
-                            style: theme.textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 16),
-                          child: Text(
-                            'Select the app to open videos with. Make sure the app is installed from the App Store.',
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: t.dim,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        // tvOS lists only players with a real Apple TV app —
-                        // a row that can never launch is worse than no row.
-                        ...[
-                          for (final (i, player)
-                              in iOSExternalPlayer.values
-                                  .where(
-                                    (p) =>
-                                        !PlatformUtil.isTvOS ||
-                                        p.availableOnTvos,
-                                  )
-                                  .indexed) ...[
-                            if (i > 0) const Divider(height: 1),
-                            _buildIOSPlayerTile(player),
-                          ],
-                        ],
-                        const SizedBox(height: 8),
-                      ],
+                  child: TvTextField(
+                    controller: _iosSchemeController,
+                    // The surrounding Container draws this field's focus ring;
+                    // skip the shell's fallback ring so they don't double up.
+                    shellRing: false,
+                    focusNode: _iosSchemeFocusNode,
+                    decoration: InputDecoration(
+                      labelText: 'URL Scheme Template',
+                      hintText: 'myplayer://play?url={url}',
+                      helperText: 'Use {url} for the video URL',
+                      helperMaxLines: 2,
+                      errorText: _iosSchemeError,
+                      prefixIcon: const Icon(Icons.link_rounded),
                     ),
+                    onChanged: (_) {
+                      if (_iosSchemeError != null) {
+                        setState(() {
+                          _iosSchemeError = null;
+                        });
+                      }
+                    },
                   ),
-                ],
-
-                // iOS Custom URL Scheme configuration
-                if ((PlatformUtil.isIosMobile || PlatformUtil.isTvOS) &&
-                    _defaultPlayerMode == 'external' &&
-                    _selectedIOSPlayer == iOSExternalPlayer.customScheme) ...[
-                  const SizedBox(height: 16),
-                  Card(
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Icon(Icons.code_rounded, color: t.accent),
-                              const SizedBox(width: 8),
-                              Text(
-                                'Custom URL Scheme',
-                                style: theme.textTheme.titleMedium?.copyWith(
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'Define a custom URL scheme to launch videos',
-                            style: theme.textTheme.bodyMedium?.copyWith(
-                              color: t.dim,
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                          Container(
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(14),
-                              boxShadow: _iosSchemeFocused
-                                  ? [
-                                      BoxShadow(
-                                        color: t.accent.withValues(alpha: 0.25),
-                                        blurRadius: 18,
-                                        offset: const Offset(0, 8),
-                                      ),
-                                    ]
-                                  : null,
-                            ),
-                            child: TvTextField(
-                              controller: _iosSchemeController,
-                              // The surrounding Container draws this field's focus ring;
-                              // skip the shell's fallback ring so they don't double up.
-                              shellRing: false,
-                              focusNode: _iosSchemeFocusNode,
-                              decoration: InputDecoration(
-                                labelText: 'URL Scheme Template',
-                                hintText: 'myplayer://play?url={url}',
-                                helperText: 'Use {url} for the video URL',
-                                helperMaxLines: 2,
-                                errorText: _iosSchemeError,
-                                prefixIcon: const Icon(Icons.link_rounded),
-                              ),
-                              onChanged: (_) {
-                                if (_iosSchemeError != null) {
-                                  setState(() {
-                                    _iosSchemeError = null;
-                                  });
-                                }
-                              },
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: FilledButton.icon(
-                                  onPressed: _saveIOSCustomScheme,
-                                  icon: const Icon(Icons.save_rounded),
-                                  label: const Text('Save'),
-                                ),
-                              ),
-                              if (_iosCustomScheme != null &&
-                                  _iosCustomScheme!.isNotEmpty) ...[
-                                const SizedBox(width: 8),
-                                OutlinedButton(
-                                  onPressed: _clearIOSCustomScheme,
-                                  child: const Text('Clear'),
-                                ),
-                              ],
-                            ],
-                          ),
-                          const SizedBox(height: 12),
-                          Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: t.panel2,
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Examples',
-                                  style: theme.textTheme.labelMedium?.copyWith(
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
-                                Text(
-                                  'vlc://{url}',
-                                  style: theme.textTheme.bodySmall?.copyWith(
-                                    fontFamily: 'monospace',
-                                    color: t.dim,
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  'infuse://x-callback-url/play?url={url}',
-                                  style: theme.textTheme.bodySmall?.copyWith(
-                                    fontFamily: 'monospace',
-                                    color: t.dim,
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  'customapp://stream?video={url}',
-                                  style: theme.textTheme.bodySmall?.copyWith(
-                                    fontFamily: 'monospace',
-                                    color: t.dim,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Expanded(
+                      child: FilledButton.icon(
+                        onPressed: _saveIOSCustomScheme,
+                        icon: const Icon(Icons.save_rounded),
+                        label: const Text('Save'),
                       ),
                     ),
+                    if (_iosCustomScheme != null &&
+                        _iosCustomScheme!.isNotEmpty) ...[
+                      const SizedBox(width: 8),
+                      OutlinedButton(
+                        onPressed: _clearIOSCustomScheme,
+                        child: const Text('Clear'),
+                      ),
+                    ],
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: t.panel2,
+                    borderRadius: BorderRadius.circular(8),
                   ),
-                ],
-
-                // iOS external player info
-                if ((PlatformUtil.isIosMobile || PlatformUtil.isTvOS) &&
-                    _defaultPlayerMode == 'external') ...[
-                  const SizedBox(height: 16),
-                  SettingsInfoBanner(
-                    text:
-                        'Videos will open in the selected app using URL schemes. Make sure the player app is installed from the App Store.',
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Examples',
+                        style: theme.textTheme.labelMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'vlc://{url}',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          fontFamily: 'monospace',
+                          color: t.dim,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'infuse://x-callback-url/play?url={url}',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          fontFamily: 'monospace',
+                          color: t.dim,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'customapp://stream?video={url}',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          fontFamily: 'monospace',
+                          color: t.dim,
+                        ),
+                      ),
+                    ],
                   ),
-                ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
 
-                // Linux-specific player selection
-                if (Platform.isLinux && _defaultPlayerMode == 'external') ...[
-                  const SizedBox(height: 16),
-                  Card(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Padding(
-                          padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-                          child: Text(
-                            'Preferred Player',
-                            style: theme.textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 16),
-                          child: Text(
-                            'Select the player to open videos with. Players marked as "Installed" were detected on your system.',
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: t.dim,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        _buildLinuxPlayerTile(
-                          LinuxExternalPlayer.systemDefault,
-                        ),
-                        const Divider(height: 1),
-                        _buildLinuxPlayerTile(LinuxExternalPlayer.vlc),
-                        const Divider(height: 1),
-                        _buildLinuxPlayerTile(LinuxExternalPlayer.mpv),
-                        const Divider(height: 1),
-                        _buildLinuxPlayerTile(LinuxExternalPlayer.celluloid),
-                        const Divider(height: 1),
-                        _buildLinuxPlayerTile(LinuxExternalPlayer.smplayer),
-                        const Divider(height: 1),
-                        _buildLinuxPlayerTile(
-                          LinuxExternalPlayer.customCommand,
-                        ),
-                        const SizedBox(height: 8),
-                      ],
-                    ),
+      // iOS external player info
+      if ((PlatformUtil.isIosMobile || PlatformUtil.isTvOS) &&
+          _defaultPlayerMode == 'external') ...[
+        const SizedBox(height: 16),
+        SettingsInfoBanner(
+          text:
+              'Videos will open in the selected app using URL schemes. Make sure the player app is installed from the App Store.',
+        ),
+      ],
+
+      // Linux-specific player selection
+      if (Platform.isLinux && _defaultPlayerMode == 'external') ...[
+        const SizedBox(height: 16),
+        Card(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                child: Text(
+                  'Preferred Player',
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
                   ),
-                ],
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Text(
+                  'Select the player to open videos with. Players marked as "Installed" were detected on your system.',
+                  style: theme.textTheme.bodySmall?.copyWith(color: t.dim),
+                ),
+              ),
+              const SizedBox(height: 8),
+              _buildLinuxPlayerTile(LinuxExternalPlayer.systemDefault),
+              const Divider(height: 1),
+              _buildLinuxPlayerTile(LinuxExternalPlayer.vlc),
+              const Divider(height: 1),
+              _buildLinuxPlayerTile(LinuxExternalPlayer.mpv),
+              const Divider(height: 1),
+              _buildLinuxPlayerTile(LinuxExternalPlayer.celluloid),
+              const Divider(height: 1),
+              _buildLinuxPlayerTile(LinuxExternalPlayer.smplayer),
+              const Divider(height: 1),
+              _buildLinuxPlayerTile(LinuxExternalPlayer.customCommand),
+              const SizedBox(height: 8),
+            ],
+          ),
+        ),
+      ],
 
-                // Linux Custom Command configuration
-                if (Platform.isLinux &&
-                    _defaultPlayerMode == 'external' &&
-                    _selectedLinuxPlayer ==
-                        LinuxExternalPlayer.customCommand) ...[
-                  const SizedBox(height: 16),
-                  Card(
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Icon(Icons.terminal_rounded, color: t.accent),
-                              const SizedBox(width: 8),
-                              Text(
-                                'Custom Command',
-                                style: theme.textTheme.titleMedium?.copyWith(
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'Define a custom command to launch videos',
-                            style: theme.textTheme.bodyMedium?.copyWith(
-                              color: t.dim,
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                          Container(
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(14),
-                              boxShadow: _linuxCommandFocused
-                                  ? [
-                                      BoxShadow(
-                                        color: t.accent.withValues(alpha: 0.25),
-                                        blurRadius: 18,
-                                        offset: const Offset(0, 8),
-                                      ),
-                                    ]
-                                  : null,
-                            ),
-                            child: TvTextField(
-                              controller: _linuxCommandController,
-                              // The surrounding Container draws this field's focus ring;
-                              // skip the shell's fallback ring so they don't double up.
-                              shellRing: false,
-                              focusNode: _linuxCommandFocusNode,
-                              decoration: InputDecoration(
-                                labelText: 'Command Template',
-                                hintText: 'vlc --fullscreen {url}',
-                                helperText:
-                                    'Use {url} for video URL, {title} for title',
-                                helperMaxLines: 2,
-                                errorText: _linuxCommandError,
-                                prefixIcon: const Icon(Icons.code_rounded),
-                              ),
-                              onChanged: (_) {
-                                if (_linuxCommandError != null) {
-                                  setState(() {
-                                    _linuxCommandError = null;
-                                  });
-                                }
-                              },
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: FilledButton.icon(
-                                  onPressed: _saveLinuxCustomCommand,
-                                  icon: const Icon(Icons.save_rounded),
-                                  label: const Text('Save'),
-                                ),
-                              ),
-                              if (_linuxCustomCommand != null &&
-                                  _linuxCustomCommand!.isNotEmpty) ...[
-                                const SizedBox(width: 8),
-                                OutlinedButton(
-                                  onPressed: _clearLinuxCustomCommand,
-                                  child: const Text('Clear'),
-                                ),
-                              ],
-                            ],
-                          ),
-                          const SizedBox(height: 12),
-                          Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: t.panel2,
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Examples',
-                                  style: theme.textTheme.labelMedium?.copyWith(
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
-                                Text(
-                                  'vlc --fullscreen {url}',
-                                  style: theme.textTheme.bodySmall?.copyWith(
-                                    fontFamily: 'monospace',
-                                    color: t.dim,
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  'mpv --title="{title}" {url}',
-                                  style: theme.textTheme.bodySmall?.copyWith(
-                                    fontFamily: 'monospace',
-                                    color: t.dim,
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  'celluloid {url}',
-                                  style: theme.textTheme.bodySmall?.copyWith(
-                                    fontFamily: 'monospace',
-                                    color: t.dim,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
+      // Linux Custom Command configuration
+      if (Platform.isLinux &&
+          _defaultPlayerMode == 'external' &&
+          _selectedLinuxPlayer == LinuxExternalPlayer.customCommand) ...[
+        const SizedBox(height: 16),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.terminal_rounded, color: t.accent),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Custom Command',
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
-                  ),
-                ],
-
-                // Linux external player info
-                if (Platform.isLinux && _defaultPlayerMode == 'external') ...[
-                  const SizedBox(height: 16),
-                  SettingsInfoBanner(
-                    text:
-                        'Videos will open in the selected player via command line. Make sure the player is installed on your system.',
-                  ),
-                ],
-
-                // Windows-specific player selection
-                if (Platform.isWindows && _defaultPlayerMode == 'external') ...[
-                  const SizedBox(height: 16),
-                  Card(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Padding(
-                          padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-                          child: Text(
-                            'Preferred Player',
-                            style: theme.textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.w600,
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Define a custom command to launch videos',
+                  style: theme.textTheme.bodyMedium?.copyWith(color: t.dim),
+                ),
+                const SizedBox(height: 16),
+                Container(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(14),
+                    boxShadow: _linuxCommandFocused
+                        ? [
+                            BoxShadow(
+                              color: t.accent.withValues(alpha: 0.25),
+                              blurRadius: 18,
+                              offset: const Offset(0, 8),
                             ),
-                          ),
-                        ),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 16),
-                          child: Text(
-                            'Select the player to open videos with. Players marked as "Installed" were detected on your system.',
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: t.dim,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        _buildWindowsPlayerTile(
-                          WindowsExternalPlayer.systemDefault,
-                        ),
-                        const Divider(height: 1),
-                        _buildWindowsPlayerTile(WindowsExternalPlayer.vlc),
-                        const Divider(height: 1),
-                        _buildWindowsPlayerTile(WindowsExternalPlayer.mpv),
-                        const Divider(height: 1),
-                        _buildWindowsPlayerTile(WindowsExternalPlayer.mpcHc),
-                        const Divider(height: 1),
-                        _buildWindowsPlayerTile(
-                          WindowsExternalPlayer.potPlayer,
-                        ),
-                        const Divider(height: 1),
-                        _buildWindowsPlayerTile(
-                          WindowsExternalPlayer.customCommand,
-                        ),
-                        const SizedBox(height: 8),
-                      ],
+                          ]
+                        : null,
+                  ),
+                  child: TvTextField(
+                    controller: _linuxCommandController,
+                    // The surrounding Container draws this field's focus ring;
+                    // skip the shell's fallback ring so they don't double up.
+                    shellRing: false,
+                    focusNode: _linuxCommandFocusNode,
+                    decoration: InputDecoration(
+                      labelText: 'Command Template',
+                      hintText: 'vlc --fullscreen {url}',
+                      helperText: 'Use {url} for video URL, {title} for title',
+                      helperMaxLines: 2,
+                      errorText: _linuxCommandError,
+                      prefixIcon: const Icon(Icons.code_rounded),
                     ),
+                    onChanged: (_) {
+                      if (_linuxCommandError != null) {
+                        setState(() {
+                          _linuxCommandError = null;
+                        });
+                      }
+                    },
                   ),
-                ],
-
-                // Windows Custom Command configuration
-                if (Platform.isWindows &&
-                    _defaultPlayerMode == 'external' &&
-                    _selectedWindowsPlayer ==
-                        WindowsExternalPlayer.customCommand) ...[
-                  const SizedBox(height: 16),
-                  Card(
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Icon(Icons.terminal_rounded, color: t.accent),
-                              const SizedBox(width: 8),
-                              Text(
-                                'Custom Command',
-                                style: theme.textTheme.titleMedium?.copyWith(
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'Define a custom command to launch videos',
-                            style: theme.textTheme.bodyMedium?.copyWith(
-                              color: t.dim,
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                          Container(
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(14),
-                              boxShadow: _windowsCommandFocused
-                                  ? [
-                                      BoxShadow(
-                                        color: t.accent.withValues(alpha: 0.25),
-                                        blurRadius: 18,
-                                        offset: const Offset(0, 8),
-                                      ),
-                                    ]
-                                  : null,
-                            ),
-                            child: TvTextField(
-                              controller: _windowsCommandController,
-                              // The surrounding Container draws this field's focus ring;
-                              // skip the shell's fallback ring so they don't double up.
-                              shellRing: false,
-                              focusNode: _windowsCommandFocusNode,
-                              decoration: InputDecoration(
-                                labelText: 'Command Template',
-                                hintText: 'vlc --fullscreen {url}',
-                                helperText:
-                                    'Use {url} for video URL, {title} for title',
-                                helperMaxLines: 2,
-                                errorText: _windowsCommandError,
-                                prefixIcon: const Icon(Icons.code_rounded),
-                              ),
-                              onChanged: (_) {
-                                if (_windowsCommandError != null) {
-                                  setState(() {
-                                    _windowsCommandError = null;
-                                  });
-                                }
-                              },
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: FilledButton.icon(
-                                  onPressed: _saveWindowsCustomCommand,
-                                  icon: const Icon(Icons.save_rounded),
-                                  label: const Text('Save'),
-                                ),
-                              ),
-                              if (_windowsCustomCommand != null &&
-                                  _windowsCustomCommand!.isNotEmpty) ...[
-                                const SizedBox(width: 8),
-                                OutlinedButton(
-                                  onPressed: _clearWindowsCustomCommand,
-                                  child: const Text('Clear'),
-                                ),
-                              ],
-                            ],
-                          ),
-                          const SizedBox(height: 12),
-                          Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: t.panel2,
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Examples',
-                                  style: theme.textTheme.labelMedium?.copyWith(
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
-                                Text(
-                                  'vlc --fullscreen {url}',
-                                  style: theme.textTheme.bodySmall?.copyWith(
-                                    fontFamily: 'monospace',
-                                    color: t.dim,
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  'mpv --title="{title}" {url}',
-                                  style: theme.textTheme.bodySmall?.copyWith(
-                                    fontFamily: 'monospace',
-                                    color: t.dim,
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  '"C:\\Program Files\\MPC-HC\\mpc-hc64.exe" {url} /play',
-                                  style: theme.textTheme.bodySmall?.copyWith(
-                                    fontFamily: 'monospace',
-                                    color: t.dim,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Expanded(
+                      child: FilledButton.icon(
+                        onPressed: _saveLinuxCustomCommand,
+                        icon: const Icon(Icons.save_rounded),
+                        label: const Text('Save'),
                       ),
                     ),
+                    if (_linuxCustomCommand != null &&
+                        _linuxCustomCommand!.isNotEmpty) ...[
+                      const SizedBox(width: 8),
+                      OutlinedButton(
+                        onPressed: _clearLinuxCustomCommand,
+                        child: const Text('Clear'),
+                      ),
+                    ],
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: t.panel2,
+                    borderRadius: BorderRadius.circular(8),
                   ),
-                ],
-
-                // Windows external player info
-                if (Platform.isWindows && _defaultPlayerMode == 'external') ...[
-                  const SizedBox(height: 16),
-                  SettingsInfoBanner(
-                    text:
-                        'Videos will open in the selected player. For MPC-HC and PotPlayer, the app checks common installation paths. Use Custom Command if the player is installed elsewhere.',
-                  ),
-                ],
-
-                // macOS-specific player selection
-                if (Platform.isMacOS && _defaultPlayerMode == 'external') ...[
-                  const SizedBox(height: 16),
-                  Card(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Padding(
-                          padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-                          child: Text(
-                            'Preferred Player',
-                            style: theme.textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Examples',
+                        style: theme.textTheme.labelMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
                         ),
-                        _buildPlayerTile(ExternalPlayer.systemDefault),
-                        const Divider(height: 1),
-                        _buildPlayerTile(ExternalPlayer.vlc),
-                        const Divider(height: 1),
-                        _buildPlayerTile(ExternalPlayer.iina),
-                        const Divider(height: 1),
-                        _buildPlayerTile(ExternalPlayer.mpv),
-                        const Divider(height: 1),
-                        _buildPlayerTile(ExternalPlayer.quickTime),
-                        const Divider(height: 1),
-                        _buildPlayerTile(ExternalPlayer.infuse),
-                        const Divider(height: 1),
-                        _buildPlayerTile(ExternalPlayer.customApp),
-                        const Divider(height: 1),
-                        _buildPlayerTile(ExternalPlayer.customCommand),
-                        const SizedBox(height: 8),
-                      ],
-                    ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'vlc --fullscreen {url}',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          fontFamily: 'monospace',
+                          color: t.dim,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'mpv --title="{title}" {url}',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          fontFamily: 'monospace',
+                          color: t.dim,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'celluloid {url}',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          fontFamily: 'monospace',
+                          color: t.dim,
+                        ),
+                      ),
+                    ],
                   ),
-                ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
 
-                // Custom App configuration (macOS only, when selected)
-                if (Platform.isMacOS &&
-                    _defaultPlayerMode == 'external' &&
-                    _selectedPlayer == ExternalPlayer.customApp) ...[
-                  const SizedBox(height: 16),
-                  Card(
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Icon(Icons.folder_open_rounded, color: t.accent),
-                              const SizedBox(width: 8),
-                              Text(
-                                'Custom App',
-                                style: theme.textTheme.titleMedium?.copyWith(
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'Select a .app to use as your video player',
-                            style: theme.textTheme.bodyMedium?.copyWith(
-                              color: t.dim,
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                          if (_customAppPath != null) ...[
-                            Container(
-                              padding: const EdgeInsets.all(12),
-                              decoration: BoxDecoration(
-                                color: t.panel2,
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Row(
-                                children: [
-                                  Icon(Icons.apps_rounded, color: t.accent),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          _customAppName ?? 'Custom App',
-                                          style: theme.textTheme.bodyMedium
-                                              ?.copyWith(
-                                                fontWeight: FontWeight.w500,
-                                              ),
-                                        ),
-                                        Text(
-                                          _customAppPath!,
-                                          style: theme.textTheme.bodySmall
-                                              ?.copyWith(color: t.dim),
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(height: 12),
-                          ],
-                          Row(
-                            children: [
-                              Expanded(
-                                child: FilledButton.icon(
-                                  onPressed: _browseForCustomApp,
-                                  icon: const Icon(Icons.folder_open_rounded),
-                                  label: Text(
-                                    _customAppPath == null
-                                        ? 'Browse'
-                                        : 'Change',
-                                  ),
-                                ),
-                              ),
-                              if (_customAppPath != null) ...[
-                                const SizedBox(width: 8),
-                                OutlinedButton(
-                                  onPressed: _clearCustomApp,
-                                  child: const Text('Clear'),
-                                ),
-                              ],
-                            ],
-                          ),
-                        ],
+      // Linux external player info
+      if (Platform.isLinux && _defaultPlayerMode == 'external') ...[
+        const SizedBox(height: 16),
+        SettingsInfoBanner(
+          text:
+              'Videos will open in the selected player via command line. Make sure the player is installed on your system.',
+        ),
+      ],
+
+      // Windows-specific player selection
+      if (Platform.isWindows && _defaultPlayerMode == 'external') ...[
+        const SizedBox(height: 16),
+        Card(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                child: Text(
+                  'Preferred Player',
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Text(
+                  'Select the player to open videos with. Players marked as "Installed" were detected on your system.',
+                  style: theme.textTheme.bodySmall?.copyWith(color: t.dim),
+                ),
+              ),
+              const SizedBox(height: 8),
+              _buildWindowsPlayerTile(WindowsExternalPlayer.systemDefault),
+              const Divider(height: 1),
+              _buildWindowsPlayerTile(WindowsExternalPlayer.vlc),
+              const Divider(height: 1),
+              _buildWindowsPlayerTile(WindowsExternalPlayer.mpv),
+              const Divider(height: 1),
+              _buildWindowsPlayerTile(WindowsExternalPlayer.mpcHc),
+              const Divider(height: 1),
+              _buildWindowsPlayerTile(WindowsExternalPlayer.potPlayer),
+              const Divider(height: 1),
+              _buildWindowsPlayerTile(WindowsExternalPlayer.customCommand),
+              const SizedBox(height: 8),
+            ],
+          ),
+        ),
+      ],
+
+      // Windows Custom Command configuration
+      if (Platform.isWindows &&
+          _defaultPlayerMode == 'external' &&
+          _selectedWindowsPlayer == WindowsExternalPlayer.customCommand) ...[
+        const SizedBox(height: 16),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.terminal_rounded, color: t.accent),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Custom Command',
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Define a custom command to launch videos',
+                  style: theme.textTheme.bodyMedium?.copyWith(color: t.dim),
+                ),
+                const SizedBox(height: 16),
+                Container(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(14),
+                    boxShadow: _windowsCommandFocused
+                        ? [
+                            BoxShadow(
+                              color: t.accent.withValues(alpha: 0.25),
+                              blurRadius: 18,
+                              offset: const Offset(0, 8),
+                            ),
+                          ]
+                        : null,
                   ),
-                ],
-
-                // Custom Command configuration (macOS only, when selected)
-                if (Platform.isMacOS &&
-                    _defaultPlayerMode == 'external' &&
-                    _selectedPlayer == ExternalPlayer.customCommand) ...[
-                  const SizedBox(height: 16),
-                  Card(
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Icon(Icons.code_rounded, color: t.accent),
-                              const SizedBox(width: 8),
-                              Text(
-                                'Custom Command',
-                                style: theme.textTheme.titleMedium?.copyWith(
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'Define a custom shell command to launch videos',
-                            style: theme.textTheme.bodyMedium?.copyWith(
-                              color: t.dim,
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                          Container(
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(14),
-                              border: _commandFocused
-                                  ? Border.all(color: t.accent, width: 1.8)
-                                  : null,
-                              boxShadow: _commandFocused
-                                  ? [
-                                      BoxShadow(
-                                        color: t.accent.withValues(alpha: 0.25),
-                                        blurRadius: 18,
-                                        offset: const Offset(0, 8),
-                                      ),
-                                    ]
-                                  : null,
-                            ),
-                            child: TvTextField(
-                              controller: _commandController,
-                              // The surrounding Container draws this field's focus ring;
-                              // skip the shell's fallback ring so they don't double up.
-                              shellRing: false,
-                              focusNode: _commandFocusNode,
-                              // Directional (non-wrapping): DOWN on the last
-                              // row must not jump back to the top of the page.
-                              onDownArrow: () => FocusScope.of(
-                                context,
-                              ).focusInDirection(TraversalDirection.down),
-                              onUpArrow: () => FocusScope.of(
-                                context,
-                              ).focusInDirection(TraversalDirection.up),
-                              decoration: InputDecoration(
-                                labelText: 'Command',
-                                hintText: 'vlc --fullscreen {url}',
-                                helperText:
-                                    'Use {url} for video URL, {title} for title',
-                                helperMaxLines: 2,
-                                errorText: _commandError,
-                                prefixIcon: const Icon(Icons.terminal_rounded),
-                              ),
-                              onChanged: (_) {
-                                if (_commandError != null) {
-                                  setState(() {
-                                    _commandError = null;
-                                  });
-                                }
-                              },
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: FilledButton.icon(
-                                  onPressed: _saveCustomCommand,
-                                  icon: const Icon(Icons.save_rounded),
-                                  label: const Text('Save Command'),
-                                ),
-                              ),
-                              if (_customCommand != null &&
-                                  _customCommand!.isNotEmpty) ...[
-                                const SizedBox(width: 8),
-                                OutlinedButton(
-                                  onPressed: _clearCustomCommand,
-                                  child: const Text('Clear'),
-                                ),
-                              ],
-                            ],
-                          ),
-                          const SizedBox(height: 12),
-                          Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: t.panel2,
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Examples',
-                                  style: theme.textTheme.labelMedium?.copyWith(
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
-                                Text(
-                                  'vlc --fullscreen {url}',
-                                  style: theme.textTheme.bodySmall?.copyWith(
-                                    fontFamily: 'monospace',
-                                    color: t.dim,
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  'mpv --fs --title="{title}" {url}',
-                                  style: theme.textTheme.bodySmall?.copyWith(
-                                    fontFamily: 'monospace',
-                                    color: t.dim,
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  '/opt/homebrew/bin/mpv {url}',
-                                  style: theme.textTheme.bodySmall?.copyWith(
-                                    fontFamily: 'monospace',
-                                    color: t.dim,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
+                  child: TvTextField(
+                    controller: _windowsCommandController,
+                    // The surrounding Container draws this field's focus ring;
+                    // skip the shell's fallback ring so they don't double up.
+                    shellRing: false,
+                    focusNode: _windowsCommandFocusNode,
+                    decoration: InputDecoration(
+                      labelText: 'Command Template',
+                      hintText: 'vlc --fullscreen {url}',
+                      helperText: 'Use {url} for video URL, {title} for title',
+                      helperMaxLines: 2,
+                      errorText: _windowsCommandError,
+                      prefixIcon: const Icon(Icons.code_rounded),
+                    ),
+                    onChanged: (_) {
+                      if (_windowsCommandError != null) {
+                        setState(() {
+                          _windowsCommandError = null;
+                        });
+                      }
+                    },
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Expanded(
+                      child: FilledButton.icon(
+                        onPressed: _saveWindowsCustomCommand,
+                        icon: const Icon(Icons.save_rounded),
+                        label: const Text('Save'),
                       ),
                     ),
+                    if (_windowsCustomCommand != null &&
+                        _windowsCustomCommand!.isNotEmpty) ...[
+                      const SizedBox(width: 8),
+                      OutlinedButton(
+                        onPressed: _clearWindowsCustomCommand,
+                        child: const Text('Clear'),
+                      ),
+                    ],
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: t.panel2,
+                    borderRadius: BorderRadius.circular(8),
                   ),
-                ],
-
-                // macOS external player info
-                if (Platform.isMacOS && _defaultPlayerMode == 'external') ...[
-                  const SizedBox(height: 16),
-                  SettingsInfoBanner(
-                    text:
-                        'Players marked as "Not found" are not installed on your system. Install them via the App Store, Homebrew, or their official websites.',
-                  ),
-                ],
-
-                // DeoVR settings (Android only, when selected)
-                if (Platform.isAndroid && _defaultPlayerMode == 'deovr') ...[
-                  const SizedBox(height: 16),
-                  Card(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Padding(
-                          padding: const EdgeInsets.all(16),
-                          child: Row(
-                            children: [
-                              Icon(Icons.vrpano, color: t.accent, size: 24),
-                              const SizedBox(width: 12),
-                              Text(
-                                'DeoVR Settings',
-                                style: theme.textTheme.titleMedium?.copyWith(
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ],
-                          ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Examples',
+                        style: theme.textTheme.labelMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
                         ),
-                        const Divider(height: 1),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'vlc --fullscreen {url}',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          fontFamily: 'monospace',
+                          color: t.dim,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'mpv --title="{title}" {url}',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          fontFamily: 'monospace',
+                          color: t.dim,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '"C:\\Program Files\\MPC-HC\\mpc-hc64.exe" {url} /play',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          fontFamily: 'monospace',
+                          color: t.dim,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
 
-                        // VR Format Settings
-                        Padding(
-                          padding: const EdgeInsets.all(16),
+      // Windows external player info
+      if (Platform.isWindows && _defaultPlayerMode == 'external') ...[
+        const SizedBox(height: 16),
+        SettingsInfoBanner(
+          text:
+              'Videos will open in the selected player. For MPC-HC and PotPlayer, the app checks common installation paths. Use Custom Command if the player is installed elsewhere.',
+        ),
+      ],
+
+      // macOS-specific player selection
+      if (Platform.isMacOS && _defaultPlayerMode == 'external') ...[
+        const SizedBox(height: 16),
+        Card(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                child: Text(
+                  'Preferred Player',
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              _buildPlayerTile(ExternalPlayer.systemDefault),
+              const Divider(height: 1),
+              _buildPlayerTile(ExternalPlayer.vlc),
+              const Divider(height: 1),
+              _buildPlayerTile(ExternalPlayer.iina),
+              const Divider(height: 1),
+              _buildPlayerTile(ExternalPlayer.mpv),
+              const Divider(height: 1),
+              _buildPlayerTile(ExternalPlayer.quickTime),
+              const Divider(height: 1),
+              _buildPlayerTile(ExternalPlayer.infuse),
+              const Divider(height: 1),
+              _buildPlayerTile(ExternalPlayer.customApp),
+              const Divider(height: 1),
+              _buildPlayerTile(ExternalPlayer.customCommand),
+              const SizedBox(height: 8),
+            ],
+          ),
+        ),
+      ],
+
+      // Custom App configuration (macOS only, when selected)
+      if (Platform.isMacOS &&
+          _defaultPlayerMode == 'external' &&
+          _selectedPlayer == ExternalPlayer.customApp) ...[
+        const SizedBox(height: 16),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.folder_open_rounded, color: t.accent),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Custom App',
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Select a .app to use as your video player',
+                  style: theme.textTheme.bodyMedium?.copyWith(color: t.dim),
+                ),
+                const SizedBox(height: 16),
+                if (_customAppPath != null) ...[
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: t.panel2,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.apps_rounded, color: t.accent),
+                        const SizedBox(width: 12),
+                        Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                'Default VR Format',
-                                style: theme.textTheme.titleSmall?.copyWith(
-                                  fontWeight: FontWeight.w600,
+                                _customAppName ?? 'Custom App',
+                                style: theme.textTheme.bodyMedium?.copyWith(
+                                  fontWeight: FontWeight.w500,
                                 ),
                               ),
-                              const SizedBox(height: 4),
                               Text(
-                                'Used when format cannot be detected from filename',
+                                _customAppPath!,
                                 style: theme.textTheme.bodySmall?.copyWith(
                                   color: t.dim,
                                 ),
-                              ),
-                              const SizedBox(height: 16),
-
-                              // Screen Type dropdown
-                              _buildDropdownSetting(
-                                context,
-                                label: 'Screen Type',
-                                value: _vrDefaultScreenType,
-                                items: deovr.screenTypeLabels,
-                                onChanged: _setVrDefaultScreenType,
-                                focusNode: _screenTypeFocusNode,
-                                isFocused: _screenTypeFocused,
-                              ),
-                              const SizedBox(height: 12),
-
-                              // Stereo Mode dropdown
-                              _buildDropdownSetting(
-                                context,
-                                label: 'Stereo Mode',
-                                value: _vrDefaultStereoMode,
-                                items: deovr.stereoModeLabels,
-                                onChanged: _setVrDefaultStereoMode,
-                                focusNode: _stereoModeFocusNode,
-                                isFocused: _stereoModeFocused,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
                               ),
                             ],
                           ),
                         ),
-                        const Divider(height: 1),
-                        // Checkboxes
-                        _buildCheckboxTile(
-                          context,
-                          title: 'Auto-detect format from filename',
-                          subtitle:
-                              'Parse filename for VR markers (180, 360, SBS, etc.)',
-                          value: _vrAutoDetectFormat,
-                          onChanged: _setVrAutoDetectFormat,
-                          focusNode: _autoDetectFocusNode,
-                          isFocused: _autoDetectFocused,
-                        ),
-                        _buildCheckboxTile(
-                          context,
-                          title: 'Show format selection dialog',
-                          subtitle: 'Confirm VR format before launching DeoVR',
-                          value: _vrShowDialog,
-                          onChanged: _setVrShowDialog,
-                          focusNode: _showDialogFocusNode,
-                          isFocused: _showDialogFocused,
-                        ),
                       ],
                     ),
                   ),
-
-                  const SizedBox(height: 16),
-                  SettingsInfoBanner(
-                    text:
-                        'DeoVR must be installed on your device. All videos will open in DeoVR with the selected VR format settings.',
-                  ),
+                  const SizedBox(height: 12),
                 ],
+                Row(
+                  children: [
+                    Expanded(
+                      child: FilledButton.icon(
+                        onPressed: _browseForCustomApp,
+                        icon: const Icon(Icons.folder_open_rounded),
+                        label: Text(
+                          _customAppPath == null ? 'Browse' : 'Change',
+                        ),
+                      ),
+                    ),
+                    if (_customAppPath != null) ...[
+                      const SizedBox(width: 8),
+                      OutlinedButton(
+                        onPressed: _clearCustomApp,
+                        child: const Text('Clear'),
+                      ),
+                    ],
+                  ],
+                ),
               ],
+            ),
+          ),
+        ),
+      ],
+
+      // Custom Command configuration (macOS only, when selected)
+      if (Platform.isMacOS &&
+          _defaultPlayerMode == 'external' &&
+          _selectedPlayer == ExternalPlayer.customCommand) ...[
+        const SizedBox(height: 16),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.code_rounded, color: t.accent),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Custom Command',
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Define a custom shell command to launch videos',
+                  style: theme.textTheme.bodyMedium?.copyWith(color: t.dim),
+                ),
+                const SizedBox(height: 16),
+                Container(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(14),
+                    border: _commandFocused
+                        ? Border.all(color: t.accent, width: 1.8)
+                        : null,
+                    boxShadow: _commandFocused
+                        ? [
+                            BoxShadow(
+                              color: t.accent.withValues(alpha: 0.25),
+                              blurRadius: 18,
+                              offset: const Offset(0, 8),
+                            ),
+                          ]
+                        : null,
+                  ),
+                  child: TvTextField(
+                    controller: _commandController,
+                    // The surrounding Container draws this field's focus ring;
+                    // skip the shell's fallback ring so they don't double up.
+                    shellRing: false,
+                    focusNode: _commandFocusNode,
+                    // Directional (non-wrapping): DOWN on the last
+                    // row must not jump back to the top of the page.
+                    onDownArrow: () => FocusScope.of(
+                      context,
+                    ).focusInDirection(TraversalDirection.down),
+                    onUpArrow: () => FocusScope.of(
+                      context,
+                    ).focusInDirection(TraversalDirection.up),
+                    decoration: InputDecoration(
+                      labelText: 'Command',
+                      hintText: 'vlc --fullscreen {url}',
+                      helperText: 'Use {url} for video URL, {title} for title',
+                      helperMaxLines: 2,
+                      errorText: _commandError,
+                      prefixIcon: const Icon(Icons.terminal_rounded),
+                    ),
+                    onChanged: (_) {
+                      if (_commandError != null) {
+                        setState(() {
+                          _commandError = null;
+                        });
+                      }
+                    },
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Expanded(
+                      child: FilledButton.icon(
+                        onPressed: _saveCustomCommand,
+                        icon: const Icon(Icons.save_rounded),
+                        label: const Text('Save Command'),
+                      ),
+                    ),
+                    if (_customCommand != null &&
+                        _customCommand!.isNotEmpty) ...[
+                      const SizedBox(width: 8),
+                      OutlinedButton(
+                        onPressed: _clearCustomCommand,
+                        child: const Text('Clear'),
+                      ),
+                    ],
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: t.panel2,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Examples',
+                        style: theme.textTheme.labelMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'vlc --fullscreen {url}',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          fontFamily: 'monospace',
+                          color: t.dim,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'mpv --fs --title="{title}" {url}',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          fontFamily: 'monospace',
+                          color: t.dim,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '/opt/homebrew/bin/mpv {url}',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          fontFamily: 'monospace',
+                          color: t.dim,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+
+      // macOS external player info
+      if (Platform.isMacOS && _defaultPlayerMode == 'external') ...[
+        const SizedBox(height: 16),
+        SettingsInfoBanner(
+          text:
+              'Players marked as "Not found" are not installed on your system. Install them via the App Store, Homebrew, or their official websites.',
+        ),
+      ],
+
+      // DeoVR settings (Android only, when selected)
+      if (Platform.isAndroid && _defaultPlayerMode == 'deovr') ...[
+        const SizedBox(height: 16),
+        Card(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                  children: [
+                    Icon(Icons.vrpano, color: t.accent, size: 24),
+                    const SizedBox(width: 12),
+                    Text(
+                      'DeoVR Settings',
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Divider(height: 1),
+
+              // VR Format Settings
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Default VR Format',
+                      style: theme.textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Used when format cannot be detected from filename',
+                      style: theme.textTheme.bodySmall?.copyWith(color: t.dim),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Screen Type dropdown
+                    _buildDropdownSetting(
+                      context,
+                      label: 'Screen Type',
+                      value: _vrDefaultScreenType,
+                      items: deovr.screenTypeLabels,
+                      onChanged: _setVrDefaultScreenType,
+                      focusNode: _screenTypeFocusNode,
+                      isFocused: _screenTypeFocused,
+                    ),
+                    const SizedBox(height: 12),
+
+                    // Stereo Mode dropdown
+                    _buildDropdownSetting(
+                      context,
+                      label: 'Stereo Mode',
+                      value: _vrDefaultStereoMode,
+                      items: deovr.stereoModeLabels,
+                      onChanged: _setVrDefaultStereoMode,
+                      focusNode: _stereoModeFocusNode,
+                      isFocused: _stereoModeFocused,
+                    ),
+                  ],
+                ),
+              ),
+              const Divider(height: 1),
+              // Checkboxes
+              _buildCheckboxTile(
+                context,
+                title: 'Auto-detect format from filename',
+                subtitle: 'Parse filename for VR markers (180, 360, SBS, etc.)',
+                value: _vrAutoDetectFormat,
+                onChanged: _setVrAutoDetectFormat,
+                focusNode: _autoDetectFocusNode,
+                isFocused: _autoDetectFocused,
+              ),
+              _buildCheckboxTile(
+                context,
+                title: 'Show format selection dialog',
+                subtitle: 'Confirm VR format before launching DeoVR',
+                value: _vrShowDialog,
+                onChanged: _setVrShowDialog,
+                focusNode: _showDialogFocusNode,
+                isFocused: _showDialogFocused,
+              ),
+            ],
+          ),
+        ),
+
+        const SizedBox(height: 16),
+        SettingsInfoBanner(
+          text:
+              'DeoVR must be installed on your device. All videos will open in DeoVR with the selected VR format settings.',
+        ),
+      ],
+    ];
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final section = widget.section;
+    final isSupportedPlatform =
+        Platform.isMacOS ||
+        Platform.isAndroid ||
+        PlatformUtil.isIosMobile ||
+        PlatformUtil.isTvOS ||
+        Platform.isLinux ||
+        Platform.isWindows;
+    if (!isSupportedPlatform) {
+      return SettingsPageScaffold(
+        title: section.label,
+        body: const Center(
+          child: Text('Player settings are not available on this platform'),
+        ),
+      );
+    }
+    if (_loading) {
+      return SettingsPageScaffold(
+        title: section.label,
+        body: const Center(child: CircularProgressIndicator()),
+      );
+    }
+    final managedExternally =
+        section != PlaybackSettingsSection.player &&
+        _defaultPlayerMode != 'debrify';
+    return SettingsPageScaffold(
+      title: section.label,
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: kSettingsMaxWidth),
+            child: Focus(
+              focusNode: _contentFocusNode,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SettingsPageHeader(
+                    icon: section.icon,
+                    title: section.label,
+                    subtitle: section.description,
+                  ),
+                  const SizedBox(height: 16),
+                  if (managedExternally) ...[
+                    SettingsInfoBanner(
+                      text:
+                          '${_defaultPlayerMode == 'deovr' ? 'DeoVR' : 'Your external player'} manages these settings. Choose Debrify Player to configure its defaults.',
+                    ),
+                    const SizedBox(height: 16),
+                    SettingsSection(
+                      title: '',
+                      children: [
+                        SettingsTile(
+                          icon: Icons.play_circle_outline_rounded,
+                          title: 'Choose player',
+                          subtitle: 'Open Player settings',
+                          onTap: _openPlayerSettings,
+                        ),
+                      ],
+                    ),
+                  ] else
+                    ...switch (section) {
+                      PlaybackSettingsSection.player => _playerSettings(),
+                      PlaybackSettingsSection.video => _videoSettings(),
+                      PlaybackSettingsSection.audio => _audioSettings(),
+                      PlaybackSettingsSection.subtitles => _subtitleSettings(),
+                    },
+                ],
+              ),
             ),
           ),
         ),

@@ -116,7 +116,7 @@ abstract final class SettingsRows {
   static const player = SettingsRowContent(
     icon: Icons.play_circle_outline_rounded,
     title: 'Playback',
-    subtitle: 'Player, skip segments, subtitles, audio & VR',
+    subtitle: 'Player, video, audio & subtitles',
   );
   static const remote = SettingsRowContent(
     icon: Icons.phonelink_rounded,

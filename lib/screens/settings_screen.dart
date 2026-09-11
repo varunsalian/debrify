@@ -117,6 +117,8 @@ import 'settings/indexer_managers_settings_page.dart';
 import 'settings/provider_settings_page.dart';
 import 'settings/quick_play_settings_page.dart';
 import 'settings/external_player_settings_page.dart';
+import 'settings/playback_settings_page.dart';
+import 'settings/playback_settings_section.dart';
 import 'video_player/services/subtitle_settings_service.dart';
 import 'video_player/services/network_tuning.dart';
 import 'settings/profiles_settings_page.dart';
@@ -3893,16 +3895,30 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ],
         ),
 
+      for (final section in PlaybackSettingsSection.values)
+        leaf(
+          'Playback',
+          section.label,
+          section.description,
+          const [],
+          onTap: () => _openPlaybackSection(section),
+        ),
       // Player Settings
-      leaf('Playback', 'Default Player', 'Which player plays videos', const [
-        'default player',
-        'debrify player',
-        'external',
-        'external player',
-        'built-in',
-        'system app chooser',
-        'deovr',
-      ]),
+      leaf(
+        'Playback',
+        'Default Player',
+        'Which player plays videos',
+        const [
+          'default player',
+          'debrify player',
+          'external',
+          'external player',
+          'built-in',
+          'system app chooser',
+          'deovr',
+        ],
+        onTap: () => _openPlaybackSection(PlaybackSettingsSection.player),
+      ),
       leaf(
         'Playback',
         'Default Subtitle language',
@@ -3914,12 +3930,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
           'captions',
           ...subtitleLanguageLabels,
         ],
+        onTap: () => _openPlaybackSection(PlaybackSettingsSection.subtitles),
       ),
       leaf(
         'Playback',
         'Default Audio language',
         'Preferred audio language / track',
         const ['audio', 'language', 'track', 'dub', ...audioLanguageLabels],
+        onTap: () => _openPlaybackSection(PlaybackSettingsSection.audio),
       ),
       leaf(
         'Playback',
@@ -3945,6 +3963,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             SubtitleFont.builtInOptions.map((option) => option.label),
           ),
         ],
+        onTap: () => _openPlaybackSection(PlaybackSettingsSection.subtitles),
       ),
       leaf(
         'Playback',
@@ -3968,6 +3987,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           '3:2',
           '5:4',
         ],
+        onTap: () => _openPlaybackSection(PlaybackSettingsSection.video),
       ),
       leaf(
         'Playback',
@@ -3985,6 +4005,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           'percent',
           'rewatch',
         ],
+        onTap: () => _openPlaybackSection(PlaybackSettingsSection.player),
       ),
       leaf(
         'Playback',
@@ -3998,6 +4019,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           'ending',
           'skip segment',
         ],
+        onTap: () => _openPlaybackSection(PlaybackSettingsSection.player),
       ),
       leaf(
         'Playback',
@@ -4012,6 +4034,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           'timestamp',
           'segments',
         ],
+        onTap: () => _openPlaybackSection(PlaybackSettingsSection.player),
       ),
       leaf(
         'Playback',
@@ -4032,6 +4055,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ...optionLabels(NetworkTuning.patienceOptions.values),
           ...optionLabels(NetworkTuning.bufferOptions.values),
         ],
+        onTap: () => _openPlaybackSection(PlaybackSettingsSection.player),
       ),
       if (_isAndroid)
         leaf(
@@ -4039,6 +4063,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           'Allow system audio effects',
           'Let equalizer apps process audio (Android)',
           const ['audio effects', 'equalizer', 'wavelet', 'dolby'],
+          onTap: () => _openPlaybackSection(PlaybackSettingsSection.audio),
         ),
       if (_isAndroid)
         leaf(
@@ -4054,6 +4079,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             'receiver',
             'avr',
           ],
+          onTap: () => _openPlaybackSection(PlaybackSettingsSection.audio),
         ),
       if (PlatformUtil.isTvOS || PlatformUtil.isIosMobile)
         leaf(
@@ -4068,6 +4094,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             'lpcm',
             'audio channels',
           ],
+          onTap: () => _openPlaybackSection(PlaybackSettingsSection.audio),
         ),
       if (PlatformUtil.isTvOS)
         leaf(
@@ -4082,6 +4109,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             'hardware decoding',
             '10-bit',
           ],
+          onTap: () => _openPlaybackSection(PlaybackSettingsSection.video),
         ),
       if (PlatformUtil.isTvOS)
         leaf(
@@ -4098,6 +4126,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             'receiver',
             'tvos',
           ],
+          onTap: () => _openPlaybackSection(PlaybackSettingsSection.audio),
         ),
       if (PlatformUtil.isTvOS)
         leaf(
@@ -4113,6 +4142,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             'no sound',
             'tvos',
           ],
+          onTap: () => _openPlaybackSection(PlaybackSettingsSection.audio),
         ),
       if (_isAndroid && PlatformUtil.isAndroidTvCached)
         leaf(
@@ -4129,6 +4159,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             'audio only',
             'no picture',
           ],
+          onTap: () => _openPlaybackSection(PlaybackSettingsSection.video),
         ),
       if (_isAndroid && !PlatformUtil.isAndroidTvCached)
         leaf(
@@ -4146,6 +4177,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               AndroidVideoRendererMode.values.map((mode) => mode.label),
             ),
           ],
+          onTap: () => _openPlaybackSection(PlaybackSettingsSection.video),
         ),
       if (_isAndroid && PlatformUtil.isAndroidTvCached)
         leaf(
@@ -4166,6 +4198,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             'max',
             'off',
           ],
+          onTap: () => _openPlaybackSection(PlaybackSettingsSection.audio),
         ),
       if (PlatformUtil.supportsSubtitleAutoSync)
         leaf(
@@ -4181,6 +4214,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             'offset',
             'experimental',
           ],
+          onTap: () => _openPlaybackSection(PlaybackSettingsSection.subtitles),
         ),
       if (_isPhone)
         leaf(
@@ -4196,6 +4230,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             'vertical',
             'horizontal',
           ],
+          onTap: () => _openPlaybackSection(PlaybackSettingsSection.player),
         ),
       if (_preferredExternalPlayerSupported)
         leaf(
@@ -4210,6 +4245,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             'custom url scheme',
             ...externalPlayerLabels(),
           ],
+          onTap: () => _openPlaybackSection(PlaybackSettingsSection.player),
         ),
       if (_customPlayerCommandSupported)
         leaf(
@@ -4225,6 +4261,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             'save command',
             'command template',
           ],
+          onTap: () => _openPlaybackSection(PlaybackSettingsSection.player),
         ),
       leaf(
         'Playback',
@@ -4240,6 +4277,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           'delete font',
           'subtitle',
         ],
+        onTap: () => _openPlaybackSection(PlaybackSettingsSection.subtitles),
       ),
       // Android only: the page disables the DeoVR mode off Android and builds
       // its format controls under `Platform.isAndroid`.
@@ -4264,6 +4302,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ...optionLabels(deovr.screenTypeLabels.values),
             ...optionLabels(deovr.stereoModeLabels.values),
           ],
+          onTap: () => _openPlaybackSection(PlaybackSettingsSection.player),
         ),
 
       // Debrify TV
@@ -5056,12 +5095,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await _reloadAppearanceSummaries();
   }
 
+  Future<void> _openPlaybackSection(PlaybackSettingsSection section) async {
+    if (!await _ensureProfileFeature(ProfileFeature.externalPlayers)) return;
+    if (!mounted) return;
+    await pushSettingsPage(
+      context,
+      ExternalPlayerSettingsPage(section: section),
+    );
+    if (!mounted) return;
+    await _reloadAppearanceSummaries();
+  }
+
   Future<void> _openExternalPlayerSettings() async {
     if (!await _ensureProfileFeature(ProfileFeature.externalPlayers)) return;
     if (!mounted) return;
-    await pushSettingsPage(context, const ExternalPlayerSettingsPage());
+    await pushSettingsPage(context, const PlaybackSettingsPage());
     if (!mounted) return;
-    setState(() {});
+    await _reloadAppearanceSummaries();
   }
 
   Future<void> _openRemoteControl() async {
@@ -7060,11 +7110,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
     });
   }
 
-  /// The Appearance rows quote live pref labels, but three of those prefs
+  /// The Appearance rows quote live pref labels, but some of those prefs
   /// also have feature-local editors (the Home Screen page's layout row, the
-  /// IPTV page's Appearance/Player guide sections). Re-read JUST those after
+  /// IPTV page's Appearance/Player guide sections, and Playback). Re-read those after
   /// any route that can reach them, so the captions never go stale. Never
-  /// the full [_loadSummaries] — this is three pref reads, no network.
+  /// the full [_loadSummaries] — these are local pref reads, no network.
   Future<void> _reloadAppearanceSummaries() async {
     final tvHomeStyle = await StorageService.getTvHomeStyle();
     final iptvStyle = await StorageService.getIptvStyle();
@@ -7073,6 +7123,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final tvPlayerControlsStyle =
         await StorageService.getTvPlayerControlsStyle();
     final debrifyTvStyle = await StorageService.getDebrifyTvStyle();
+    final debrifyTvPlayerStyle = await StorageService.getDebrifyTvPlayerStyle();
+    final playerDockStyle = await StorageService.getPlayerDockStyle();
+    final playerDockPalette = await StorageService.getPlayerDockPalette();
+    final playerDockSize = await StorageService.getPlayerDockSize();
     if (!mounted) return;
     setState(() {
       _tvHomeStyle = tvHomeStyle;
@@ -7081,6 +7135,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _playLoaderStyle = playLoaderStyle;
       _tvPlayerControlsStyle = tvPlayerControlsStyle;
       _debrifyTvStyle = debrifyTvStyle;
+      _debrifyTvPlayerStyle = debrifyTvPlayerStyle;
+      _playerDockStyle = playerDockStyle;
+      _playerDockPalette = playerDockPalette;
+      _playerDockSize = playerDockSize;
     });
   }
 
@@ -7306,7 +7364,7 @@ const List<SettingsCategoryDefinition> _kAdaptiveSettingsCategories = [
   SettingsCategoryDefinition(
     icon: Icons.play_circle_outline_rounded,
     label: 'Playback',
-    subtitle: 'Player, subtitles & audio',
+    subtitle: 'Player, video, audio & subtitles',
     eyebrow: 'Playback',
     title: 'Playback without surprises.',
     description:
