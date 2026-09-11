@@ -953,6 +953,8 @@ void main() {
         'tv_player_controls_style': 'frost',
         'debrify_tv_player_style': 'cinema',
         'player_dock_style': 'compact',
+        'subtitle_source_priority_v1':
+            '["addon:config-b","embedded","addon:config-a"]',
 
         'phone_nav_bar_indices': ['1', '2'],
         'tv_sidebar_style': 'pill',

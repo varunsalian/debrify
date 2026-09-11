@@ -1,3 +1,5 @@
+import 'dart:convert';
+import '../../models/subtitle_source_priority.dart';
 import '../../services/backup_restore_service.dart';
 import 'portable_profile_package.dart';
 
@@ -388,10 +390,17 @@ class LegacyBackupAdapter {
       ],
       resources: resources,
       sections: <String, dynamic>{
-        'legacy-preferences': const <String, dynamic>{
+        'legacy-preferences': <String, dynamic>{
           'schemaVersion': 1,
-          'recordCount': 0,
-          'values': <String, dynamic>{},
+          'recordCount': payload['subtitleSourcePriority'] is List ? 1 : 0,
+          'values': <String, dynamic>{
+            if (payload['subtitleSourcePriority'] is List)
+              SubtitleSourcePriority.preferenceKey: jsonEncode(
+                SubtitleSourcePriority.normalize(
+                  payload['subtitleSourcePriority'] as List,
+                ),
+              ),
+          },
         },
         // Only non-resource legacy categories remain here. The restore
         // coordinator applies them into the invisible shadow generation.

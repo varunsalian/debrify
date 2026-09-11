@@ -201,6 +201,8 @@ void main() {
       final value = '${'x' * 16383}😀中\n' * 24;
       final prefs = await ProfilePreferences.instance();
       await prefs.setString('saved_search_notes', value);
+      const priority = '["addon:config-b","embedded","addon:config-a"]';
+      await prefs.setString('subtitle_source_priority_v1', priority);
       final auth = await ProfileAuthorizationContext.capture(registry);
       final exported = await LocalBackupExporter(service: packages).export(
         context: auth,
@@ -239,6 +241,7 @@ void main() {
         CapturedProfilePreferenceAccess.diagnosticsReadOnly,
       );
       expect(restoredPrefs.getString('saved_search_notes'), value);
+      expect(restoredPrefs.getString('subtitle_source_priority_v1'), priority);
       final before = (await registry.listProfiles()).map((p) => p.id).toSet();
       final changed = staged.resolveDatabase(pages.first.name)!;
       final bytes = await changed.readAsBytes();

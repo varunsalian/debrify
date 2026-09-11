@@ -123,6 +123,10 @@ void main() {
 
       final profilePrefs = await ProfilePreferences.instance();
       await profilePrefs.setString('player_default_subtitle_language', 'es');
+      await profilePrefs.setString(
+        'subtitle_source_priority_v1',
+        '["addon:config-b","embedded"]',
+      );
       await profilePrefs.setString('player_default_audio_language', 'ja');
       await profilePrefs.setInt('subtitle_color_index', 3);
       await profilePrefs.setBool('subtitle_bold', true);
@@ -134,6 +138,10 @@ void main() {
               as Map<String, dynamic>;
       var values = projection['values'] as Map<String, dynamic>;
       expect(values['player_default_subtitle_language'], 'es');
+      expect(
+        values['subtitle_source_priority_v1'],
+        '["addon:config-b","embedded"]',
+      );
       expect(values['player_default_audio_language'], 'ja');
       expect(values['subtitle_color_index'], 3);
       expect(values['subtitle_bold'], isTrue);

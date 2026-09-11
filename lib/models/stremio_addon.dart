@@ -839,6 +839,7 @@ class StremioAddon {
       if (manifestId != null) 'manifest_id': manifestId,
       'name': name,
       'manifest_url': manifestUrl,
+      'subtitle_priority_id': portableConfigurationKey,
       'base_url': baseUrl,
       if (connectionResourceId != null)
         '_connectionResourceId': connectionResourceId,

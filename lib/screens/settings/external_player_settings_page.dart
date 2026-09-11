@@ -19,6 +19,7 @@ import 'widgets/settings_widgets.dart';
 import '../../theme/app_theme_scope.dart';
 
 import 'playback_settings_section.dart';
+import 'subtitle_priority_page.dart';
 import 'player_dock_page.dart';
 import 'tv_player_controls_style_page.dart';
 import 'debrify_tv_player_style_page.dart';
@@ -2842,6 +2843,21 @@ class _ExternalPlayerSettingsPageState
     final theme = Theme.of(context);
     final t = AppThemeScope.of(context).settings;
     return [
+      SettingsSection(
+        title: '',
+        children: [
+          SettingsTile(
+            icon: Icons.low_priority_rounded,
+            title: 'Subtitle priority',
+            subtitle:
+                'Choose the order of embedded subtitles and subtitle addons',
+            onTap: () async {
+              await pushSettingsPage(context, const SubtitlePriorityPage());
+            },
+          ),
+        ],
+      ),
+      const SizedBox(height: 16),
       _defaultsCard(
         'Subtitle defaults',
         'Preferred language and timing for the built-in player',

@@ -132,8 +132,17 @@ data class StremioAddon(
     val resources: List<String>,
     val types: List<String>,
     val enabled: Boolean,
-    val needsManifestHydration: Boolean = false
+    val needsManifestHydration: Boolean = false,
+    val subtitlePriorityId: String = "",
 ) {
+    // Stored manifest URLs are normalized by Flutter. New records explicitly
+    // carry the digest; the fallback supports pre-upgrade legacy inventories.
+    val priorityId: String get() = subtitlePriorityId.ifEmpty {
+        java.security.MessageDigest.getInstance("SHA-256")
+            .digest(manifestUrl.trim().toByteArray(Charsets.UTF_8))
+            .joinToString("") { "%02x".format(it) }
+    }
+
     val supportsSubtitles: Boolean
         get() = resources.contains("subtitles")
 
@@ -167,7 +176,8 @@ data class StremioAddon(
                 resources = resources,
                 types = types,
                 enabled = json.optBoolean("enabled", true),
-                needsManifestHydration = json.optBoolean("needs_manifest_hydration", false)
+                needsManifestHydration = json.optBoolean("needs_manifest_hydration", false),
+                subtitlePriorityId = json.optString("subtitle_priority_id", "")
             )
         }
     }

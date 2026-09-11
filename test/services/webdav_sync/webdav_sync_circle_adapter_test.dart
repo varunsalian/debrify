@@ -57,6 +57,8 @@ void main() {
         'tv_player_controls_style': 'frost',
         'debrify_tv_player_style': 'cinema',
         'player_dock_style': 'compact',
+        'subtitle_source_priority_v1':
+            '["addon:config-b","embedded","addon:config-a"]',
 
         'tv_sidebar_style': 'pill',
         'default_torrent_provider_v1': 'torbox',
@@ -70,11 +72,15 @@ void main() {
       expect(prefs.getString('tv_player_controls_style'), 'frost');
       expect(prefs.getString('debrify_tv_player_style'), 'cinema');
       expect(prefs.getString('player_dock_style'), 'compact');
+      expect(
+        prefs.getString('subtitle_source_priority_v1'),
+        '["addon:config-b","embedded","addon:config-a"]',
+      );
       expect(applied, {
         'tv_player_controls_style',
         'debrify_tv_player_style',
         'player_dock_style',
-
+        'subtitle_source_priority_v1',
         'default_torrent_provider_v1',
         'phone_nav_style',
         'tv_sidebar_style',

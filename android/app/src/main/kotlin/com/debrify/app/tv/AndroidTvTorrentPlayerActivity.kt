@@ -1176,6 +1176,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private val addonFetchTokens = mutableMapOf<String, Int>()  // per-addon retry generation
     private val failedSubtitleUrls = mutableSetOf<String>()  // external subs that parsed to zero cues — don't re-auto-select
     private var currentStremioSubtitleIndex: Int = -1  // -1 means no Stremio subtitle selected
+    private var subtitleAddonDiscoveryReady = false
     private var isLoadingStremioSubtitles = false  // Loading state for UI indicator
     private val subtitleTrackReadiness = SubtitleTrackReadiness()
     private var userManuallySelectedSubtitle = false  // Track if user manually selected a subtitle
@@ -4594,6 +4595,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         pendingSeriesResult = null
         currentStremioSubtitleIndex = -1
         isLoadingStremioSubtitles = false
+        subtitleAddonDiscoveryReady = false
         subtitleTrackReadiness.onMediaReplacement()
         trackSelector?.let { selector ->
             selector.parameters = selector.parameters.buildUpon()
@@ -4885,6 +4887,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         //    when that addon is retried.
         val contentToken = addonSubtitleFetchToken
         val addons = stremioSubtitleService?.getSubtitleAddons() ?: emptyList()
+        subtitleAddonDiscoveryReady = true
         addonSubtitleResults.clear()
         addons.forEach { addonSubtitleResults.add(AddonSubtitleResult(it, AddonSubtitleStatus.LOADING)) }
         isLoadingStremioSubtitles = addons.isNotEmpty()
@@ -4892,6 +4895,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         refreshSubtitleUiForLoading()
 
         addons.forEach { launchAddonSubtitleFetch(it, type, imdbId, item, contentToken) }
+        tryAutoSelectAddonSubtitle()
     }
 
     private fun launchAddonSubtitleFetch(
@@ -4998,6 +5002,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
      */
     private fun clearStremioLoadingState() {
         isLoadingStremioSubtitles = false
+        subtitleAddonDiscoveryReady = true
+        tryAutoSelectAddonSubtitle()
         if (subtitleSettingsVisible) {
             refreshSubtitlePanelForLoading()
         }
@@ -6499,7 +6505,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         hidePikPakRetryOverlay()
     }
 
-    /** Embedded tracks get the first choice once the current media is ready. */
+    /** Apply source priority once tracks and any higher-priority addons are ready. */
     private fun tryAutoSelectAddonSubtitle() {
         val currentPlayer = player ?: return
         val defaultSubtitleLang = SubtitleSettings.getDefaultSubtitleLanguage(this)
@@ -6537,6 +6543,17 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             suppressed = suppressSubtitleAutoSelect,
             addonSelected = currentStremioSubtitleIndex >= 0,
             candidates = candidates,
+            sourcePriority = SubtitleSettings.getSubtitleSourcePriority(this),
+            addonDiscoveryReady = subtitleAddonDiscoveryReady,
+            addons = addonSubtitleResults.map { slot ->
+                val eligible = slot.subtitles.indices.filter { slot.subtitles[it].url !in failedSubtitleUrls }
+                val matching = eligible.filter { LanguageMapper.matchesLanguage(targetLanguage, slot.subtitles[it].lang) }
+                AddonSubtitleCandidate(
+                    addonId = slot.addon.priorityId,
+                    loading = slot.status == AddonSubtitleStatus.LOADING,
+                    matchingIndices = matching + if (defaultSubtitleLang == null) eligible.filter { it !in matching } else emptyList(),
+                )
+            },
         )) {
             SubtitleAutoSelection.Wait, SubtitleAutoSelection.Keep -> return
             is SubtitleAutoSelection.Embedded -> {
@@ -6552,24 +6569,15 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 }
                 return
             }
-            SubtitleAutoSelection.Addon -> Unit
-        }
-
-        // If no preference set, default to English
-        val targetLang = defaultSubtitleLang ?: "en"
-
-        // Search for addon subtitle matching the preferred language
-        for ((index, sub) in stremioSubtitles.withIndex()) {
-            if (sub.url in failedSubtitleUrls) continue   // skip subs that parsed to zero cues
-            if (LanguageMapper.matchesLanguage(targetLang, sub.lang)) {
-                android.util.Log.d("AndroidTvPlayer", "PikPak: Auto-selecting addon subtitle: ${sub.displayName} (${sub.lang})")
-                currentStremioSubtitleIndex = index
+            is SubtitleAutoSelection.AddonTrack -> {
+                val sub = addonSubtitleResults.firstOrNull { it.addon.priorityId == choice.addonId }
+                    ?.subtitles?.getOrNull(choice.index) ?: return
+                currentStremioSubtitleIndex = stremioSubtitles.indexOfFirst { it.url == sub.url }
                 loadStremioSubtitle(sub)
-                return
             }
+            SubtitleAutoSelection.Addon -> return
         }
 
-        android.util.Log.d("AndroidTvPlayer", "PikPak: No $targetLang addon subtitle found")
     }
 
     // D-pad navigation
@@ -15361,6 +15369,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 }
             }
             if (subtitleSettingsVisible) refreshSubtitlePanelForLoading()
+            tryAutoSelectAddonSubtitle()
             return
         }
 

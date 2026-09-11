@@ -283,6 +283,8 @@ enum AddonSubtitleStatus { loading, ok, failed }
 class AddonSubtitleSlot {
   final String addonId;
   final String addonName;
+  final String? configurationKey;
+  String get priorityId => configurationKey ?? addonId;
   final AddonSubtitleStatus status;
   final List<StremioSubtitle> subtitles;
   final String? error;
@@ -290,6 +292,7 @@ class AddonSubtitleSlot {
   const AddonSubtitleSlot({
     required this.addonId,
     required this.addonName,
+    this.configurationKey,
     required this.status,
     this.subtitles = const [],
     this.error,
@@ -303,6 +306,7 @@ class AddonSubtitleSlot {
     return AddonSubtitleSlot(
       addonId: addonId,
       addonName: addonName,
+      configurationKey: configurationKey,
       status: status ?? this.status,
       subtitles: subtitles ?? this.subtitles,
       error: error,

@@ -119,6 +119,7 @@ import 'settings/quick_play_settings_page.dart';
 import 'settings/external_player_settings_page.dart';
 import 'settings/playback_settings_page.dart';
 import 'settings/playback_settings_section.dart';
+import 'settings/subtitle_priority_page.dart';
 import 'video_player/services/subtitle_settings_service.dart';
 import 'video_player/services/network_tuning.dart';
 import 'settings/profiles_settings_page.dart';
@@ -3903,6 +3904,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const [],
           onTap: () => _openPlaybackSection(section),
         ),
+      leaf(
+        'Playback',
+        'Subtitle priority',
+        'Reorder embedded subtitles and subtitle addons',
+        const [
+          'subtitle',
+          'priority',
+          'order',
+          'embedded',
+          'addons',
+          'language',
+        ],
+        onTap: () async {
+          if (!await _ensureProfileFeature(ProfileFeature.externalPlayers)) {
+            return;
+          }
+          if (!mounted) return;
+          await pushSettingsPage(context, const SubtitlePriorityPage());
+        },
+      ),
       // Player Settings
       leaf(
         'Playback',

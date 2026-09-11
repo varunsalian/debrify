@@ -145,6 +145,7 @@ class StremioSubtitleService {
         AddonSubtitleSlot(
           addonId: a.id,
           addonName: a.name,
+          configurationKey: a.portableConfigurationKey,
           status: AddonSubtitleStatus.loading,
         ),
     ];
@@ -210,6 +211,7 @@ class StremioSubtitleService {
       return AddonSubtitleSlot(
         addonId: addon.id,
         addonName: addon.name,
+        configurationKey: addon.portableConfigurationKey,
         status: AddonSubtitleStatus.ok,
         subtitles: subs,
       );
@@ -217,6 +219,7 @@ class StremioSubtitleService {
       return AddonSubtitleSlot(
         addonId: addon.id,
         addonName: addon.name,
+        configurationKey: addon.portableConfigurationKey,
         status: AddonSubtitleStatus.failed,
         error: '$e',
       );

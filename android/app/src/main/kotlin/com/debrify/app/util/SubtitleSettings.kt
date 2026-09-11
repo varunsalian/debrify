@@ -120,10 +120,17 @@ object SubtitleSettings {
         return context.getSharedPreferences(FLUTTER_PREFS_NAME, Context.MODE_PRIVATE)
     }
 
-    /**
-     * Get the default subtitle language from Flutter settings.
-     * Returns language code (e.g., "en", "es"), "off" for disabled, or null for no preference.
-     */
+    /** Portable source order from the active Flutter profile. */
+    @JvmStatic
+    fun getSubtitleSourcePriority(context: Context): List<String> = runCatching {
+        val raw = ProfilePreferenceProjection.getString(context, "subtitle_source_priority_v1", null)
+        val array = org.json.JSONArray(raw ?: "[]")
+        (0 until array.length()).mapNotNull { array.opt(it) as? String }
+            .filter { it == "embedded" || (it.startsWith("addon:") && it.length > 6) }
+            .distinct().let { if ("embedded" in it) it else it + "embedded" }
+    }.getOrDefault(listOf("embedded"))
+
+    /** Returns a language code, "off", or null for no preference. */
     @JvmStatic
     fun getDefaultSubtitleLanguage(context: Context): String? {
         return com.debrify.app.profiles.ProfilePreferenceProjection.getString(

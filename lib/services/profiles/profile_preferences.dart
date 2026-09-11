@@ -213,6 +213,7 @@ class ProfilePreferences implements SharedPreferences {
     'skip_segments_enabled',
     'skip_segment_provider',
     'player_default_subtitle_language',
+    'subtitle_source_priority_v1',
     'player_default_audio_language',
     'subtitle_size_index',
     'subtitle_style_index',

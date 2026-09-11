@@ -191,6 +191,8 @@ class BackupRestoreService {
       'version': payloadVersion,
       'createdAt': DateTime.now().toUtc().toIso8601String(),
       'trackingPreferences': trackingPreferences,
+      'subtitleSourcePriority':
+          await StorageService.getSubtitleSourcePriority(),
       if (includeCredentials) ...{
         if (realDebridKey != null && realDebridKey.isNotEmpty)
           'realDebridApiKey': realDebridKey,
@@ -775,6 +777,17 @@ class BackupRestoreService {
         } catch (_) {
           report.errors.add('Stream badges: restore failed');
         }
+      }
+    }
+
+    final subtitlePriority = map['subtitleSourcePriority'];
+    if (selection.addons && subtitlePriority is List) {
+      try {
+        await StorageService.setSubtitleSourcePriority(
+          subtitlePriority.whereType<String>().toList(),
+        );
+      } catch (_) {
+        report.errors.add('Subtitle priority: restore failed');
       }
     }
 

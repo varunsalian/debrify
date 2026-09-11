@@ -1,3 +1,4 @@
+import '../models/subtitle_source_priority.dart';
 import '../models/home_collection.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -9150,8 +9151,23 @@ class StorageService {
     await prefs.setBool(_subtitleAutoSyncKey, enabled);
   }
 
-  /// Get default subtitle language code
-  /// Returns language code (e.g., 'en', 'es') or 'off' for disabled, null for no preference
+  /// Ordered, portable subtitle sources for automatic selection.
+  static Future<List<String>> getSubtitleSourcePriority() async {
+    final prefs = await ProfilePreferences.instance();
+    return SubtitleSourcePriority.decode(
+      prefs.getString(SubtitleSourcePriority.preferenceKey),
+    );
+  }
+
+  static Future<void> setSubtitleSourcePriority(List<String> order) async {
+    final prefs = await ProfilePreferences.instance();
+    await prefs.setString(
+      SubtitleSourcePriority.preferenceKey,
+      jsonEncode(SubtitleSourcePriority.normalize(order)),
+    );
+  }
+
+  /// Returns a language code, 'off', or null for no preference.
   static Future<String?> getDefaultSubtitleLanguage() async {
     final prefs = await ProfilePreferences.instance();
     return prefs.getString(_playerDefaultSubtitleLanguageKey);

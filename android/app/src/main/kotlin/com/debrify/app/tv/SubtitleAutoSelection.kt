@@ -35,8 +35,15 @@ internal sealed class SubtitleAutoSelection {
     object Wait : SubtitleAutoSelection()
     object Keep : SubtitleAutoSelection()
     object Addon : SubtitleAutoSelection()
+    data class AddonTrack(val addonId: String, val index: Int) : SubtitleAutoSelection()
     data class Embedded(val index: Int) : SubtitleAutoSelection()
 }
+
+internal data class AddonSubtitleCandidate(
+    val addonId: String,
+    val loading: Boolean,
+    val matchingIndices: List<Int>,
+)
 
 /** Decide only after the current media's tracks are ready, regardless of addon timing. */
 internal fun chooseAutomaticSubtitle(
@@ -46,6 +53,9 @@ internal fun chooseAutomaticSubtitle(
     suppressed: Boolean,
     addonSelected: Boolean,
     candidates: List<EmbeddedSubtitleCandidate>,
+    sourcePriority: List<String> = listOf("embedded"),
+    addons: List<AddonSubtitleCandidate> = emptyList(),
+    addonDiscoveryReady: Boolean = true,
 ): SubtitleAutoSelection {
     if (manualSelection || suppressed || preference == "off" || addonSelected) {
         return SubtitleAutoSelection.Keep
@@ -59,5 +69,24 @@ internal fun chooseAutomaticSubtitle(
         ?: eligible.firstOrNull { candidates[it].matchesLanguage }
         ?: eligible.firstOrNull { candidates[it].defaultTrack }
         ?: eligible.firstOrNull()
-    return best?.let { SubtitleAutoSelection.Embedded(it) } ?: SubtitleAutoSelection.Addon
+    val saved = (sourcePriority + "embedded").distinct()
+    // Before discovery, a preferred addon may still be unknown. Do not let
+    // embedded win early just because video metadata arrived first.
+    if (!addonDiscoveryReady && (best == null || saved.first() != "embedded")) {
+        return SubtitleAutoSelection.Wait
+    }
+    val available = listOf("embedded") + addons.map { "addon:${it.addonId}" }
+    val order = (saved.filter { it in available } + available).distinct()
+    for (source in order) {
+        if (source == "embedded") {
+            if (best != null) return SubtitleAutoSelection.Embedded(best)
+        } else {
+            val slot = addons.firstOrNull { "addon:${it.addonId}" == source } ?: continue
+            if (slot.loading) return SubtitleAutoSelection.Wait
+            slot.matchingIndices.firstOrNull()?.let {
+                return SubtitleAutoSelection.AddonTrack(slot.addonId, it)
+            }
+        }
+    }
+    return SubtitleAutoSelection.Addon
 }

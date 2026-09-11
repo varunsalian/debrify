@@ -1,3 +1,5 @@
+import '../models/subtitle_source_priority.dart';
+import 'video_player/utils/subtitle_priority_selection.dart';
 import 'dart:async';
 import '../services/player_visibility.dart';
 import '../utils/media_kit_init.dart';
@@ -1165,6 +1167,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   bool _userManuallySelectedSubtitle =
       false; // Track if user manually selected a subtitle
   bool _trackPreferencesReadyForAddonSubtitles = false;
+  final _subtitlePrioritySelectionQueue = SubtitlePrioritySelectionQueue();
   int _addonSubtitleFetchToken =
       0; // Guard against stale async fetches on content switch
   // Paths of temp SRT/VTT files we've written for addon subtitles. We hand
@@ -15952,13 +15955,22 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
   /// Apply default subtitle language from settings (when no stored preference exists)
   /// Returns true if an embedded subtitle was found and applied, false otherwise.
-  Future<bool> _applyDefaultSubtitleLanguage() async {
+  Future<bool> _applyDefaultSubtitleLanguage({
+    bool ignoreSourcePriority = false,
+  }) async {
     final token = _addonSubtitleFetchToken;
     try {
       final defaultLang = await StorageService.getDefaultSubtitleLanguage();
       debugPrint('SubAuto: defaultSubtitleLanguage setting = $defaultLang');
       if (token != _addonSubtitleFetchToken || _userManuallySelectedSubtitle) {
         return false;
+      }
+      if (!ignoreSourcePriority && defaultLang != 'off') {
+        final order = await StorageService.getSubtitleSourcePriority();
+        if (token != _addonSubtitleFetchToken || _userManuallySelectedSubtitle) {
+          return false;
+        }
+        if (order.first != SubtitleSourcePriority.embedded) return false;
       }
       if (defaultLang == null) {
         var selectedId = _player.state.track.subtitle.id;
@@ -16218,7 +16230,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
       // Need IMDB ID to fetch Stremio subtitles
       if (imdbId == null || imdbId.isEmpty) {
-        debugPrint('SubAuto: ABORT — no IMDB ID for addon subtitle fetch');
+        await _applySubtitleSourcePriority(
+          const [],
+          fetchToken,
+          discoveryReady: false,
+        );
         return;
       }
       debugPrint(
@@ -16246,6 +16262,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           imdbId: imdbId,
           season: season,
           episode: episode,
+          onUpdate: (slots) {
+            if (!mounted || fetchToken != _addonSubtitleFetchToken) return;
+            unawaited(_applySubtitleSourcePriority(slots, fetchToken));
+          },
         );
         subtitles = AddonSubtitleSlot.flatten(slots);
 
@@ -16266,102 +16286,70 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         );
       }
 
-      // Only auto-select if no embedded subtitle was applied and user hasn't manually selected
-      if (_embeddedSubtitleApplied) {
-        debugPrint(
-          'SubAuto: SKIP — embedded subtitle already applied (_embeddedSubtitleApplied=true)',
-        );
-        return;
-      }
-
-      if (_userManuallySelectedSubtitle) {
-        debugPrint(
-          'SubAuto: SKIP — user manually selected a subtitle this session',
-        );
-        return;
-      }
-
-      if (subtitles.isEmpty) {
-        debugPrint('SubAuto: SKIP — zero addon subtitles fetched');
-        return;
-      }
-
-      // Get user's default subtitle language preference
-      final defaultLang = await StorageService.getDefaultSubtitleLanguage();
-
-      // If subtitles are explicitly disabled, don't auto-select
-      if (defaultLang == 'off') {
-        debugPrint('SubAuto: SKIP — subtitles set to off');
-        return;
-      }
-
-      // If no preference set, default to English
-      final targetLang = defaultLang ?? 'en';
-      final availableLangs = subtitles.map((s) => s.lang).toSet();
-      debugPrint(
-        'SubAuto: matching targetLang=$targetLang (setting=$defaultLang) '
-        'against ${subtitles.length} addon subs, langs=$availableLangs',
-      );
-
-      // Find matching subtitle by language
-      StremioSubtitle? matchingSub;
-      for (final sub in subtitles) {
-        if (LanguageMapper.matchesLanguage(targetLang, sub.lang)) {
-          matchingSub = sub;
-          break;
-        }
-      }
-
-      if (matchingSub == null) {
-        debugPrint('SubAuto: NO MATCH — no $targetLang among $availableLangs');
-        return;
-      }
-
-      debugPrint(
-        'VideoPlayer: Auto-selecting addon subtitle: ${matchingSub.displayName} (${matchingSub.lang})',
-      );
-
-      // Download to a temp file so libmpv can detect the encoding itself.
-      final filePath = await _downloadStremioSubtitleToTempFile(matchingSub);
-
-      // Check if content changed or user manually selected during download
-      if (fetchToken != _addonSubtitleFetchToken) {
-        debugPrint(
-          'VideoPlayer: Content changed during addon subtitle download, discarding',
-        );
-        return;
-      }
-      if (_userManuallySelectedSubtitle) {
-        debugPrint(
-          'VideoPlayer: User manually selected subtitle during addon download, discarding',
-        );
-        return;
-      }
-      if (filePath == null) {
-        debugPrint(
-          'SubAuto: FAILED to download addon subtitle ${matchingSub.url}',
-        );
-        _showSubtitleFailureMessage(
-          'Couldn’t load the preferred subtitles. Choose another subtitle track.',
-        );
-        return;
-      }
-
-      final track = mk.SubtitleTrack.uri(
-        filePath,
-        title: matchingSub.displayName,
-        language: matchingSub.lang,
-      );
-      final applied = await _applyExternalSubtitleTrack(track);
-      if (!applied) return;
-      _selectedStremioSubtitleId = matchingSub.id;
-      _setActiveExternalSubtitlePath(filePath);
-
-      debugPrint(
-        'SubAuto: APPLIED addon subtitle "${matchingSub.displayName}" lang=${matchingSub.lang} source=${matchingSub.source}',
+      await _applySubtitleSourcePriority(
+        _cachedAddonSlots ?? const [],
+        fetchToken,
       );
     } catch (e) {
       debugPrint('SubAuto: auto-select FAILED with exception: $e');
+    }
+  }
+
+  Future<void> _applySubtitleSourcePriority(
+    List<AddonSubtitleSlot> slots,
+    int token, {
+    bool discoveryReady = true,
+  }) async {
+    if (!mounted || token != _addonSubtitleFetchToken) return;
+    await _subtitlePrioritySelectionQueue.submit(
+      SubtitlePriorityUpdate(token, slots, discoveryReady: discoveryReady),
+      _applySubtitlePriorityUpdate,
+    );
+  }
+
+  Future<void> _applySubtitlePriorityUpdate(SubtitlePriorityUpdate update) async {
+    bool valid() =>
+        mounted &&
+        update.token == _addonSubtitleFetchToken &&
+        _trackPreferencesReadyForAddonSubtitles &&
+        !_embeddedSubtitleApplied &&
+        !_userManuallySelectedSubtitle &&
+        _selectedStremioSubtitleId == null;
+    if (!valid()) return;
+    try {
+      final language = await StorageService.getDefaultSubtitleLanguage();
+      final saved = await StorageService.getSubtitleSourcePriority();
+      String? selectedPath;
+      final result = await selectSubtitleBySourcePriority(
+        saved: saved,
+        language: language,
+        slots: update.slots,
+        discoveryReady: update.discoveryReady,
+        isCurrent: valid,
+        tryEmbedded: () async {
+          // A manual title search explicitly asks for online subtitles.
+          if (_manualContentImdbId?.isNotEmpty == true) return false;
+          return _applyDefaultSubtitleLanguage(ignoreSourcePriority: true);
+        },
+        tryAddon: (sub) async {
+          final path = await _downloadStremioSubtitleToTempFile(sub);
+          if (!valid() || path == null) return false;
+          final applied = await _applyExternalSubtitleTrack(
+            mk.SubtitleTrack.uri(path, title: sub.displayName, language: sub.lang),
+          );
+          if (applied) selectedPath = path;
+          return applied;
+        },
+      );
+      if (!valid() || result == null) return;
+      if (result.addon case final sub?) {
+        _selectedStremioSubtitleId = sub.id;
+        _setActiveExternalSubtitlePath(selectedPath!);
+      } else if (!result.provisional) {
+        _embeddedSubtitleApplied = true;
+      }
+    } catch (e) {
+      debugPrint('SubAuto: source priority apply failed: $e');
     }
   }
 
