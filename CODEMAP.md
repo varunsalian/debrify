@@ -30,7 +30,9 @@ right code instead of re-discovering it. Flutter app; code under `lib/{screens,s
   `sizeFromTitle`), `services/stremio_marketplace_service.dart`, `screens/addons/addon_hub_screen.dart`.
 - Indexer managers (Prowlarr/Jackett): `services/indexer_manager_service.dart`
   (`_searchProwlarr*`, Torznab), `models/indexer_manager_config.dart`,
-  `screens/settings/indexer_managers_settings_page.dart`.
+  `screens/settings/indexer_managers_settings_page.dart`. Configuration adaptation and legacy storage:
+  `services/storage/indexer_manager_config_store.dart`, behind the StorageService facade;
+  canonical credentials and permissions remain in `ProfileCollectionResourceFacade`.
 - Scraper "engine" system (YAML-config, **not** a code-plugin runtime): `services/engine/*`.
 - **Filters**: `models/torrent_filter_state.dart` (QualityTier/RipSource/AudioLanguage/SizeBucket dims),
   format/HDR tag detection already exists in `utils/format_tag_detector.dart` +
