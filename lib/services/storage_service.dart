@@ -1551,6 +1551,26 @@ class StorageService {
     );
   }
 
+  static const tvCollectionListStyles = {
+    'grid',
+    'gallery',
+    'filmstrip',
+    'journal',
+  };
+  static Future<String> getTvCollectionListStyle() async {
+    final prefs = await ProfilePreferences.instance();
+    final value = prefs.getString('tv_collection_list_style');
+    return tvCollectionListStyles.contains(value) ? value! : 'filmstrip';
+  }
+
+  static Future<void> setTvCollectionListStyle(String value) async {
+    final prefs = await ProfilePreferences.instance();
+    await prefs.setString(
+      'tv_collection_list_style',
+      tvCollectionListStyles.contains(value) ? value : 'filmstrip',
+    );
+  }
+
   static const String _tvPlayerControlsStyleKey = 'tv_player_controls_style';
   static const Set<String> _tvPlayerControlsStyles = {
     'classic',

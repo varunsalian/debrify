@@ -1,3 +1,4 @@
+import 'settings/tv_collection_list_style_page.dart';
 import 'settings/metadata_settings_page.dart';
 import '../widgets/collections/tmdb_attribution.dart';
 import 'dart:async';
@@ -1331,6 +1332,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       onOpenTvSidebarStyle: _openTvSidebarStyle,
       discoverLayoutLabel: discoverLayoutLabel(_discoverLayout),
       onOpenDiscoverLayout: _openDiscoverLayout,
+      onOpenCollectionListStyle: _openCollectionListStyle,
       tvHomeStyleLabel: tvHomeStyleLabel(_tvHomeStyle),
       onOpenTvHomeStyle: _openTvHomeStyle,
       profileAppearanceLabel: ProfileGateStyle.labelFor(
@@ -2065,6 +2067,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
       // Android TV only — the stage layout is a TV-canvas design; phones and
       // desktop always browse Discover as a grid.
+      if (_isAndroidTv)
+        nav(
+          SettingsRows.collectionListStyle,
+          'Appearance',
+          _openCollectionListStyle,
+          subtitle: 'Grid · Gallery · Filmstrip · Journal',
+          keywords: ['collection', 'list', 'gallery', 'filmstrip', 'journal'],
+        ),
       if (_isAndroidTv)
         nav(
           SettingsRows.discoverLayout,
@@ -6820,6 +6830,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   /// Same contract as [_openTvHomeStyle], for the Discover layout picker.
+  Future<void> _openCollectionListStyle() async {
+    await pushSettingsPage(context, const TvCollectionListStylePage());
+  }
+
   Future<void> _openDiscoverLayout() async {
     await pushSettingsPage(context, const DiscoverLayoutPage());
     if (!mounted) return;

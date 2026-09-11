@@ -216,6 +216,12 @@ abstract final class SettingsRows {
     subtitle: '',
   );
   // Subtitle is dynamic (the chosen layout) — passed per call site.
+  static const collectionListStyle = SettingsRowContent(
+    icon: Icons.view_carousel_outlined,
+    title: 'Collection list style',
+    subtitle: '',
+  );
+
   static const discoverLayout = SettingsRowContent(
     icon: Icons.explore_rounded,
     title: 'Discover Layout',

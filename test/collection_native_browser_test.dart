@@ -1,3 +1,4 @@
+import 'package:debrify/widgets/collections/tv_collection_titles.dart';
 import 'dart:convert';
 import 'dart:async';
 
@@ -23,6 +24,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 void main() {
   setUp(() {
     SharedPreferences.setMockInitialValues({
+      'tv_collection_list_style': 'grid',
       HomeCollectionsStore.folderLayoutKey: 'rows',
     });
     StremioService.instance.invalidateCache();
@@ -76,6 +78,7 @@ void main() {
       (tester) async {
         await tester.runAsync(() async {
           SharedPreferences.setMockInitialValues({
+            'tv_collection_list_style': 'grid',
             HideWatchedPrefs.key: true,
             'finished_movies_v1': ['tt1234567'],
           });
@@ -182,6 +185,7 @@ void main() {
       (tester) async {
         await tester.runAsync(() async {
           SharedPreferences.setMockInitialValues({
+            'tv_collection_list_style': 'grid',
             HideWatchedPrefs.key: true,
             'finished_movies_v1': ['tt1234567'],
           });
@@ -690,6 +694,51 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+
+  for (final style in ['gallery', 'filmstrip', 'journal']) {
+    for (final tv in [false, true]) {
+      testWidgets('$style collection layout is TV-only (TV $tv)', (
+        tester,
+      ) async {
+        SharedPreferences.setMockInitialValues({
+          HomeCollectionsStore.folderLayoutKey: 'rows',
+          'tv_collection_list_style': style,
+        });
+        await tester.binding.setSurfaceSize(const Size(960, 540));
+        addTearDown(() => tester.binding.setSurfaceSize(null));
+        final native = service();
+        addTearDown(native.close);
+        final c = collection();
+        final opened = <String>[];
+        await tester.pumpWidget(
+          MaterialApp(
+            home: CollectionFolderScreen(
+              collection: c,
+              sourceKey: c.folders.first.sources.first.key,
+              nativeSources: native,
+              isTelevision: tv,
+              onOpenItem: (item) => opened.add(item.id),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(
+          find.byType(TvCollectionTitles),
+          tv ? findsOneWidget : findsNothing,
+        );
+        expect(
+          find.byType(SeeAllPosterGrid),
+          tv ? findsNothing : findsOneWidget,
+        );
+        if (tv) {
+          await tester.sendKeyEvent(LogicalKeyboardKey.numpadEnter);
+          await tester.pumpAndSettle();
+          expect(opened, ['tmdb:42']);
+        }
+        expect(tester.takeException(), isNull);
+      });
+    }
+  }
 
   testWidgets('opened gallery list paginates on touch scroll', (tester) async {
     await tester.binding.setSurfaceSize(const Size(390, 844));

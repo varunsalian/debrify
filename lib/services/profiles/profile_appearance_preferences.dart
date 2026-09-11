@@ -17,6 +17,7 @@ abstract final class ProfileAppearancePreferences {
     'tv_low_res_render',
     'tv_hero_artwork_quality',
     'tv_home_style',
+    'tv_collection_list_style',
     'detail_page_style',
     'parents_guide_style',
     'debrify_tv_style',
