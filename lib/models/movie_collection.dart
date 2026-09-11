@@ -1,5 +1,5 @@
 import 'package:flutter/foundation.dart';
-import '../screens/video_player/models/playlist_entry.dart';
+import 'playlist_entry.dart';
 
 /// Represents a group (folder) within a movie collection
 class CollectionGroup {

@@ -50,6 +50,8 @@ right code instead of re-discovering it. Flutter app; code under `lib/{screens,s
 - WebDAV: `services/webdav_service.dart` (read/browse only — no upload yet).
 
 ## Players
+- Playlist entries: `models/playlist_entry.dart`; the old
+  `screens/video_player/models/playlist_entry.dart` path re-exports the same type.
 - In-app player: `screens/video_player_screen.dart` 🔴 (subtitles via media_kit
   `subtitleViewConfiguration`; `_restoreTrackPreferences`/`_applyDefault*Language`; per-key D-pad
   handlers arrowUp/Down/Left/Right; duplicated Trakt+Simkl scrobble state machines). Controls overlay:
