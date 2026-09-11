@@ -56,6 +56,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.AppCompatButton
 import androidx.media3.common.C
 import androidx.media3.common.Format
+import androidx.media3.exoplayer.hls.HlsManifest
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.MimeTypes
@@ -1176,7 +1177,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private val failedSubtitleUrls = mutableSetOf<String>()  // external subs that parsed to zero cues — don't re-auto-select
     private var currentStremioSubtitleIndex: Int = -1  // -1 means no Stremio subtitle selected
     private var isLoadingStremioSubtitles = false  // Loading state for UI indicator
-    private var embeddedSubtitleSelected = false  // Track if embedded subtitle was auto-selected
+    private val subtitleTrackReadiness = SubtitleTrackReadiness()
     private var userManuallySelectedSubtitle = false  // Track if user manually selected a subtitle
     private var addonSubtitleFetchToken = 0  // Guard against stale async fetches on content switch
     private var manualSubtitleImdbId: String? = null  // Subtitle-only identity override from Search Subtitle
@@ -1446,6 +1447,17 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     }
 
     private val playbackListener = object : Player.Listener {
+        override fun onEvents(player: Player, events: Player.Events) {
+            if (isFinishing || isDestroyed) return
+            if (events.contains(Player.EVENT_TRACKS_CHANGED) ||
+                events.contains(Player.EVENT_PLAYBACK_STATE_CHANGED)) {
+                if (player.playbackState == Player.STATE_READY) {
+                    subtitleTrackReadiness.onReady()
+                    tryAutoSelectAddonSubtitle()
+                }
+            }
+        }
+
         override fun onPlaybackStateChanged(playbackState: Int) {
             when (playbackState) {
                 Player.STATE_READY -> {
@@ -2639,8 +2651,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         // Apply subtitle language preference
         when {
             defaultSubtitleLang == "off" -> {
-                // Disable subtitle auto-selection by setting empty preferred language
                 paramsBuilder?.setPreferredTextLanguage("")
+                paramsBuilder?.setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
             }
             defaultSubtitleLang != null -> {
                 // Get all language variants (ISO 639-1, ISO 639-2, etc.) for robust matching
@@ -4582,7 +4594,16 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         pendingSeriesResult = null
         currentStremioSubtitleIndex = -1
         isLoadingStremioSubtitles = false
-        embeddedSubtitleSelected = false
+        subtitleTrackReadiness.onMediaReplacement()
+        trackSelector?.let { selector ->
+            selector.parameters = selector.parameters.buildUpon()
+                .clearOverridesOfType(C.TRACK_TYPE_TEXT)
+                .setTrackTypeDisabled(
+                    C.TRACK_TYPE_TEXT,
+                    SubtitleSettings.getDefaultSubtitleLanguage(this) == "off",
+                )
+                .build()
+        }
         userManuallySelectedSubtitle = false
         // Re-established by seedInjectedSubtitles() when the next item has
         // launch-supplied captions; cleared here so a non-injected item never
@@ -4626,30 +4647,16 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
         player?.apply {
             if (mergedSource != null) {
+                subtitleTrackReadiness.onMediaReplacement()
                 setMediaSource(mergedSource)
             } else {
+                subtitleTrackReadiness.onMediaReplacement()
                 setMediaItem(mediaItem)
             }
             prepare()
             playWhenReady = true
             play()
         }
-
-        // Detect if ExoPlayer auto-selects an embedded subtitle via TrackSelector preferences
-        player?.addListener(object : Player.Listener {
-            override fun onTracksChanged(tracks: Tracks) {
-                player?.removeListener(this)
-                if (isFinishing || isDestroyed) return
-                val defaultSubtitleLang = SubtitleSettings.getDefaultSubtitleLanguage(this@AndroidTvTorrentPlayerActivity)
-                if (defaultSubtitleLang == "off") return
-                // Language-aware: an auto-selected embedded track (e.g. a forced
-                // English one in a MULTi rip) only blocks addon auto-select when
-                // it actually matches the user's preferred language.
-                if (selectedEmbeddedTrackSatisfiesPreference(tracks)) {
-                    embeddedSubtitleSelected = true
-                }
-            }
-        })
 
         updateTitle(item)
         playlistAdapter?.setActiveIndex(currentIndex)
@@ -6131,7 +6138,6 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
         stremioSubtitles.clear()
         currentStremioSubtitleIndex = -1
-        embeddedSubtitleSelected = false
         userManuallySelectedSubtitle = false
         isLoadingStremioSubtitles = true
 
@@ -6280,6 +6286,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             .build()
 
         player?.apply {
+            subtitleTrackReadiness.onMediaReplacement()
             setMediaItem(mediaItem)
             prepare()
             play()
@@ -6428,7 +6435,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                     checkHandler.removeCallbacks(this)
 
                     // Ensure subtitles are selected after successful load
-                    ensureDefaultSubtitleSelected()
+                    tryAutoSelectAddonSubtitle()
 
                     onComplete(true)
                     return
@@ -6492,142 +6499,60 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         hidePikPakRetryOverlay()
     }
 
-    private fun ensureDefaultSubtitleSelected() {
-        player?.let { currentPlayer ->
-            currentPlayer.addListener(object : Player.Listener {
-                override fun onTracksChanged(tracks: Tracks) {
-                    currentPlayer.removeListener(this)
-
-                    // Skip if user already manually selected a subtitle
-                    if (userManuallySelectedSubtitle) return
-
-                    val trackSelector = trackSelector ?: return
-
-                    // Get user's default subtitle language preference
-                    val defaultSubtitleLang = SubtitleSettings.getDefaultSubtitleLanguage(this@AndroidTvTorrentPlayerActivity)
-
-                    // If subtitles are explicitly disabled, don't auto-select
-                    if (defaultSubtitleLang == "off") {
-                        android.util.Log.d("AndroidTvPlayer", "PikPak: Subtitles disabled by user preference")
-                        embeddedSubtitleSelected = false
-                        return
-                    }
-
-                    // If no preference set, default to English
-                    val targetLang = defaultSubtitleLang ?: "en"
-
-                    // Search for subtitle track matching the preferred language
-                    for (trackGroup in tracks.groups) {
-                        if (trackGroup.type == C.TRACK_TYPE_TEXT) {
-                            for (i in 0 until trackGroup.length) {
-                                val format = trackGroup.getTrackFormat(i)
-                                val language = format.language
-                                val label = format.label
-                                val id = format.id
-
-                                // Check if track matches the preferred language using robust matching
-                                if (LanguageMapper.matchesLanguage(targetLang, language) ||
-                                    LanguageMapper.matchesLanguage(targetLang, label) ||
-                                    LanguageMapper.matchesLanguage(targetLang, id)) {
-
-                                    val override = TrackSelectionOverride(
-                                        trackGroup.mediaTrackGroup,
-                                        listOf(i)
-                                    )
-                                    trackSelector.parameters = trackSelector.parameters.buildUpon()
-                                        .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
-                                        .addOverride(override)
-                                        .build()
-                                    android.util.Log.d("AndroidTvPlayer", "PikPak: Auto-enabled $targetLang subtitles: label=$label lang=$language")
-                                    embeddedSubtitleSelected = true
-                                    return
-                                }
-                            }
-                        }
-                    }
-
-                    // No embedded subtitle found - mark for addon subtitle selection
-                    android.util.Log.d("AndroidTvPlayer", "PikPak: No $targetLang embedded subtitle found")
-                    embeddedSubtitleSelected = false
-
-                    // Try addon subtitles if already loaded
-                    if (stremioSubtitles.isNotEmpty()) {
-                        tryAutoSelectAddonSubtitle()
-                    }
-                }
-            })
-        }
-    }
-
-    /**
-     * Whether the embedded text track ExoPlayer selected satisfies the user's
-     * default-subtitle-language preference. With no preference set, any
-     * selection satisfies (respect the file's own choice). With a preference,
-     * only a matching-language track does — a forced/default English track
-     * must NOT block addon auto-select of e.g. Spanish.
-     */
-    private fun selectedEmbeddedTrackSatisfiesPreference(tracks: Tracks): Boolean {
-        val pref = SubtitleSettings.getDefaultSubtitleLanguage(this)
+    /** Embedded tracks get the first choice once the current media is ready. */
+    private fun tryAutoSelectAddonSubtitle() {
+        val currentPlayer = player ?: return
+        val defaultSubtitleLang = SubtitleSettings.getDefaultSubtitleLanguage(this)
+        val targetLanguage = defaultSubtitleLang ?: "en"
+        val tracks = currentPlayer.currentTracks
+        val positions = mutableListOf<Pair<Tracks.Group, Int>>()
+        val candidates = mutableListOf<EmbeddedSubtitleCandidate>()
         for (group in tracks.groups) {
+            // A manual subtitle identity search explicitly asks for addon results.
+            if (!manualSubtitleImdbId.isNullOrEmpty()) break
             if (group.type != C.TRACK_TYPE_TEXT) continue
             for (i in 0 until group.length) {
-                if (!group.isTrackSelected(i)) continue
-                if (pref == null) return true
-                val f = group.getTrackFormat(i)
-                if (LanguageMapper.matchesLanguage(pref, f.language) ||
-                    LanguageMapper.matchesLanguage(pref, f.label) ||
-                    LanguageMapper.matchesLanguage(pref, f.id)
-                ) return true
+                val format = group.getTrackFormat(i)
+                positions.add(group to i)
+                candidates.add(EmbeddedSubtitleCandidate(
+                    supported = group.isTrackSupported(i),
+                    selected = group.isTrackSelected(i),
+                    matchesLanguage = LanguageMapper.matchesLanguage(targetLanguage, format.language) ||
+                        LanguageMapper.matchesLanguage(targetLanguage, format.label) ||
+                        LanguageMapper.matchesLanguage(targetLanguage, format.id),
+                    defaultTrack = format.selectionFlags and C.SELECTION_FLAG_DEFAULT != 0,
+                    undeclaredHlsCaption = isUndeclaredHlsCaption(
+                        isHls = currentPlayer.currentManifest is HlsManifest,
+                        mimeType = format.sampleMimeType,
+                        accessibilityChannel = format.accessibilityChannel,
+                        language = format.language,
+                    ),
+                ))
             }
         }
-        return false
-    }
-
-    /**
-     * Try to auto-select a Stremio addon subtitle matching user's preferred language.
-     * Called after Stremio subtitles are fetched, if no embedded subtitle was selected.
-     */
-    private fun tryAutoSelectAddonSubtitle() {
-        // Skip when the offered subtitles are launch-supplied captions (YouTube):
-        // they stay off until the user picks one, so we never force them on.
-        if (suppressSubtitleAutoSelect) {
-            return
-        }
-
-        // Skip if embedded subtitle was already selected
-        if (embeddedSubtitleSelected) {
-            return
-        }
-
-        // Skip if user manually selected a subtitle
-        if (userManuallySelectedSubtitle) {
-            return
-        }
-
-        // Check if ExoPlayer auto-selected an embedded subtitle via TrackSelector
-        // preferences (covers non-PikPak content where ensureDefaultSubtitleSelected()
-        // isn't called). Language-aware: a selected track only blocks addon
-        // auto-select when it actually matches the user's preference.
-        val tracksNow = player?.currentTracks
-        if (tracksNow != null &&
-            currentStremioSubtitleIndex == -1 &&
-            selectedEmbeddedTrackSatisfiesPreference(tracksNow)
-        ) {
-            embeddedSubtitleSelected = true
-            return
-        }
-
-        // Skip if addon subtitle is already selected
-        if (currentStremioSubtitleIndex >= 0) {
-            return
-        }
-
-        // Get user's default subtitle language preference
-        val defaultSubtitleLang = SubtitleSettings.getDefaultSubtitleLanguage(this)
-
-        // If subtitles are explicitly disabled, don't auto-select
-        if (defaultSubtitleLang == "off") {
-            return
+        when (val choice = chooseAutomaticSubtitle(
+            tracksReady = subtitleTrackReadiness.canSelect(currentPlayer.playbackState == Player.STATE_READY),
+            preference = defaultSubtitleLang,
+            manualSelection = userManuallySelectedSubtitle,
+            suppressed = suppressSubtitleAutoSelect,
+            addonSelected = currentStremioSubtitleIndex >= 0,
+            candidates = candidates,
+        )) {
+            SubtitleAutoSelection.Wait, SubtitleAutoSelection.Keep -> return
+            is SubtitleAutoSelection.Embedded -> {
+                val (group, index) = positions[choice.index]
+                if (!group.isTrackSelected(index)) {
+                    trackSelector?.let { selector ->
+                        selector.parameters = selector.parameters.buildUpon()
+                            .clearOverridesOfType(C.TRACK_TYPE_TEXT)
+                            .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
+                            .setOverrideForType(TrackSelectionOverride(group.mediaTrackGroup, listOf(index)))
+                            .build()
+                    }
+                }
+                return
+            }
+            SubtitleAutoSelection.Addon -> Unit
         }
 
         // If no preference set, default to English
@@ -6638,8 +6563,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             if (sub.url in failedSubtitleUrls) continue   // skip subs that parsed to zero cues
             if (LanguageMapper.matchesLanguage(targetLang, sub.lang)) {
                 android.util.Log.d("AndroidTvPlayer", "PikPak: Auto-selecting addon subtitle: ${sub.displayName} (${sub.lang})")
-                loadStremioSubtitle(sub)
                 currentStremioSubtitleIndex = index
+                loadStremioSubtitle(sub)
                 return
             }
         }
@@ -13798,8 +13723,10 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         val startAt = if (entry.isLive) 0L else entry.resumePositionMs
         player?.apply {
             if (startAt > 0L) {
+                subtitleTrackReadiness.onMediaReplacement()
                 setMediaItem(mediaItem, startAt)
             } else {
+                subtitleTrackReadiness.onMediaReplacement()
                 setMediaItem(mediaItem)
             }
             prepare()
@@ -14027,6 +13954,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         if (entry != null) {
             setIptvMediaItem(entry, url)
         } else {
+            subtitleTrackReadiness.onMediaReplacement()
             player?.setMediaItem(MediaItem.fromUri(url))
             player?.prepare()
             player?.play()
@@ -18022,8 +17950,10 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             manualSourceCandidateUrl = url
         }
         if (mergedSource != null) {
+            subtitleTrackReadiness.onMediaReplacement()
             player?.setMediaSource(mergedSource)
         } else {
+            subtitleTrackReadiness.onMediaReplacement()
             player?.setMediaItem(MediaItem.fromUri(url))
         }
         player?.prepare()
@@ -19087,6 +19017,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             .build()
 
         player?.apply {
+            subtitleTrackReadiness.onMediaReplacement()
             setMediaItem(mediaItem)
             prepare()
             playWhenReady = true
