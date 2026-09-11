@@ -54,6 +54,10 @@ void main() {
         'app_theme': 'aurora',
         'defaults_generation': 3,
         'phone_nav_style': 'floating',
+        'tv_player_controls_style': 'frost',
+        'debrify_tv_player_style': 'cinema',
+        'player_dock_style': 'compact',
+
         'tv_sidebar_style': 'pill',
         'default_torrent_provider_v1': 'torbox',
       }, replayingPending: true);
@@ -63,7 +67,14 @@ void main() {
       expect(prefs.getString('default_torrent_provider_v1'), 'torbox');
       expect(prefs.getString('phone_nav_style'), 'floating');
       expect(prefs.getString('tv_sidebar_style'), 'pill');
+      expect(prefs.getString('tv_player_controls_style'), 'frost');
+      expect(prefs.getString('debrify_tv_player_style'), 'cinema');
+      expect(prefs.getString('player_dock_style'), 'compact');
       expect(applied, {
+        'tv_player_controls_style',
+        'debrify_tv_player_style',
+        'player_dock_style',
+
         'default_torrent_provider_v1',
         'phone_nav_style',
         'tv_sidebar_style',

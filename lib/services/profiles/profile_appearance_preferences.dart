@@ -1,5 +1,6 @@
 /// Navigation styles, sidebar order/labels, and phone navigation sync using
-/// their existing separate keys. Other appearance remains local to each profile on each installation. These keys
+/// their existing separate keys, as do the three player control/dock styles.
+/// Other appearance remains local to each profile on each installation. These keys
 /// are still portable through explicit backups and profile-default copies;
 /// only automatic WebDAV sync excludes them (including bootstrap and replay).
 abstract final class ProfileAppearancePreferences {
@@ -22,9 +23,6 @@ abstract final class ProfileAppearancePreferences {
     'iptv_style',
     'iptv_player_guide_style',
     'play_loader_style',
-    'tv_player_controls_style',
-    'debrify_tv_player_style',
-    'player_dock_style',
     'player_dock_palette',
     'player_dock_size',
     'discover_layout',

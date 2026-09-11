@@ -215,6 +215,10 @@ void main() {
       await prefs.setString('tv_home_style', 'spotlight');
       await prefs.setString('app_theme', 'aurora');
       await prefs.setInt('defaults_generation', 3);
+      await prefs.setString('tv_player_controls_style', 'frost');
+      await prefs.setString('debrify_tv_player_style', 'cinema');
+      await prefs.setString('player_dock_style', 'compact');
+
       await prefs.setString('tv_sidebar_style', 'pill');
       await prefs.setString('desktop_sidebar_style', 'rail');
       await prefs.setString('phone_nav_style', 'floating');
@@ -245,6 +249,10 @@ void main() {
                   .single['preferencesSection']]['values']
               as Map;
       expect(valuesOf(backup)['tv_home_style'], 'spotlight');
+      expect(valuesOf(sync.package)['tv_player_controls_style'], 'frost');
+      expect(valuesOf(sync.package)['debrify_tv_player_style'], 'cinema');
+      expect(valuesOf(sync.package)['player_dock_style'], 'compact');
+
       expect(valuesOf(backup)['defaults_generation'], 3);
       expect(valuesOf(sync.package), isNot(contains('defaults_generation')));
       expect(valuesOf(sync.package), isNot(contains('tv_home_style')));
@@ -300,6 +308,18 @@ void main() {
       expect(
         raw.getString(joinedScope.preferenceKey('phone_nav_style')),
         'floating',
+      );
+      expect(
+        raw.getString(joinedScope.preferenceKey('tv_player_controls_style')),
+        'frost',
+      );
+      expect(
+        raw.getString(joinedScope.preferenceKey('debrify_tv_player_style')),
+        'cinema',
+      );
+      expect(
+        raw.getString(joinedScope.preferenceKey('player_dock_style')),
+        'compact',
       );
       // Rejoining an existing profile carries its LOCAL appearance to the new ID.
       await operations.carryLocalState(
