@@ -997,7 +997,19 @@ class _ConsolePosterState extends State<_ConsolePoster> {
         child: InkWell(
           focusNode: widget.focusNode,
           onTap: widget.onTap,
-          onFocusChange: (f) => setState(() => _focused = f),
+          onFocusChange: (focused) {
+            setState(() => _focused = focused);
+            if (!focused) return;
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted && _focused) {
+                Scrollable.ensureVisible(
+                  context,
+                  alignment: 0.5,
+                  duration: Duration.zero,
+                );
+              }
+            });
+          },
           child: (p != null && p.isNotEmpty)
               ? CachedNetworkImage(
                   imageUrl: p,
