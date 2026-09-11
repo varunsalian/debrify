@@ -651,7 +651,19 @@ class _RecPosterState extends State<_RecPoster> {
           clipBehavior: Clip.antiAlias,
           child: InkWell(
             onTap: widget.onTap,
-            onFocusChange: (f) => setState(() => _focused = f),
+            onFocusChange: (focused) {
+              setState(() => _focused = focused);
+              if (!focused) return;
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (mounted && _focused) {
+                  Scrollable.ensureVisible(
+                    context,
+                    alignment: 0.5,
+                    duration: Duration.zero,
+                  );
+                }
+              });
+            },
             child: (poster != null && poster.isNotEmpty)
                 ? CachedNetworkImage(
                     imageUrl: poster,
