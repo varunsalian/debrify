@@ -67,10 +67,22 @@ class ProfileScope {
     final normalized = p.normalize(relativePath);
     if (p.isAbsolute(normalized) ||
         normalized == '..' ||
-        normalized.startsWith('../')) {
+        normalized.startsWith('../') ||
+        // package:path considers Windows drive-relative paths (C:file) relative.
+        (Platform.isWindows && RegExp(r'^[A-Za-z]:').hasMatch(normalized))) {
       throw ArgumentError.value(relativePath, 'relativePath', 'Unsafe path');
     }
-    return File(p.join(storageDirectory(root, area).path, normalized));
+    final scopedRoot = storageDirectory(root, area).path;
+    final target = p.join(scopedRoot, normalized);
+    final absoluteRoot = p.normalize(p.absolute(scopedRoot));
+    final absoluteTarget = p.normalize(p.absolute(target));
+    // Compare components, not a prefix that also matches sibling names.
+    // This is lexical containment; it does not resolve filesystem links.
+    if (!p.equals(absoluteRoot, absoluteTarget) &&
+        !p.isWithin(absoluteRoot, absoluteTarget)) {
+      throw ArgumentError.value(relativePath, 'relativePath', 'Unsafe path');
+    }
+    return File(target);
   }
 
   @override
