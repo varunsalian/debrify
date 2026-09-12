@@ -14,12 +14,14 @@ class SpotlightContentTypeControl extends StatelessWidget {
   static const String series = 'series';
 
   final String value;
+  final bool dense;
   final ValueChanged<String> onChanged;
   final FocusNode? firstItemFocusNode;
 
   const SpotlightContentTypeControl({
     super.key,
     required this.value,
+    this.dense = false,
     required this.onChanged,
     this.firstItemFocusNode,
   }) : assert(
@@ -30,6 +32,24 @@ class SpotlightContentTypeControl extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = IptvStyleTokens.spotlight;
+    if (dense) {
+      return KeyedSubtree(
+        key: const ValueKey<String>('spotlight-content-type-control'),
+        child: FocusTraversalGroup(
+          policy: OrderedTraversalPolicy(),
+          child: Row(
+            children: [
+              _segment(live, 'Live TV', 0),
+              const SizedBox(width: 4),
+              _segment(movies, 'Movies', 1),
+              const SizedBox(width: 4),
+              _segment(series, 'Series', 2),
+            ],
+          ),
+        ),
+      );
+    }
+
     return DecoratedBox(
       key: const ValueKey<String>('spotlight-content-type-control'),
       decoration: BoxDecoration(
@@ -143,7 +163,7 @@ class _ContentTypeSegmentState extends State<_ContentTypeSegment> {
                 'spotlight-content-type-pill-${widget.label}',
               ),
               duration: const Duration(milliseconds: 120),
-              height: 42,
+              height: 44,
               alignment: Alignment.center,
               padding: const EdgeInsets.symmetric(horizontal: 7),
               decoration: BoxDecoration(

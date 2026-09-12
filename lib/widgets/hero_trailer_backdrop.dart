@@ -489,7 +489,7 @@ class HeroTrailerBackdropState extends State<HeroTrailerBackdrop>
     // Subscribe synchronously, before any await, so a teardown landing in the
     // await window below cancels these subscriptions instead of orphaning them.
     _playingSub = engine.playingStream.listen((playing) {
-      if (!mounted) return;
+      if (!mounted || _engine != engine || _playing == playing) return;
       setState(() => _playing = playing);
       _syncPlayingNotification();
     });
@@ -551,7 +551,15 @@ class HeroTrailerBackdropState extends State<HeroTrailerBackdrop>
       }
     });
     _durSub = engine.durationStream.listen((d) {
-      if (mounted) setState(() => _duration = d);
+      if (!mounted || _engine != engine || _duration == d) return;
+      // Live windows can change duration every segment. Ambient previews
+      // render no time UI: rebuilding here repaints the underlay's surrounding
+      // Flutter scene on low-end TVs. Keep the value for later promotion only.
+      if (widget.foreground) {
+        setState(() => _duration = d);
+      } else {
+        _duration = d;
+      }
     });
 
     try {

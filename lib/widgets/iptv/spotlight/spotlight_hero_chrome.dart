@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../styles/iptv_style.dart';
 
-const double kSpotlightHeroDenseBreakpoint = 220;
+const double kSpotlightHeroDenseBreakpoint = 280;
 
 /// Apple-style selected-channel hero around an existing preview subtree.
 ///

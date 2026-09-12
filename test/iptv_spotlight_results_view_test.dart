@@ -1,6 +1,11 @@
 import 'dart:io';
 
 import 'package:debrify/models/iptv_playlist.dart';
+import 'package:debrify/screens/browse_screen.dart';
+import 'package:debrify/theme/app_theme.dart';
+import 'package:debrify/theme/app_theme_scope.dart';
+import 'package:debrify/utils/platform_util.dart';
+import 'package:debrify/widgets/tv_keyboard.dart';
 import 'package:debrify/services/debrify_tv_database.dart';
 import 'package:debrify/services/iptv_catalog_db.dart';
 import 'package:debrify/services/iptv_media_store.dart';
@@ -12,6 +17,7 @@ import 'package:debrify/widgets/browse/browse_search_header.dart';
 import 'package:debrify/widgets/iptv/iptv_filters.dart';
 import 'package:debrify/widgets/iptv/iptv_results_view.dart';
 import 'package:debrify/widgets/iptv/spotlight/spotlight_live_timeline.dart';
+import 'package:debrify/widgets/iptv/spotlight/spotlight_shell.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -213,6 +219,36 @@ https://example.com/live/two.ts
       FocusManager.instance.primaryFocus?.nearestScope?.debugLabel,
       'iptv-spotlight-sources',
     );
+    final shell = find.byType(SpotlightShell);
+    expect(tester.widget<SpotlightShell>(shell).sourcesExpanded, isTrue);
+    final heroRect = tester.getRect(
+      find.byKey(const ValueKey('spotlight-hero')),
+    );
+    final heroElement = tester.element(
+      find.byKey(const ValueKey('spotlight-hero')),
+    );
+    final expandedContent = tester.getRect(find.byType(SpotlightLiveTimeline));
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pump();
+    expect(tester.widget<SpotlightShell>(shell).sourcesExpanded, isFalse);
+    expect(timeline.controller!.hasFocus, isTrue);
+    expect(tester.getRect(find.byType(SpotlightLiveTimeline)), expandedContent);
+    expect(
+      tester.getRect(find.byKey(const ValueKey('spotlight-hero'))),
+      heroRect,
+    );
+    expect(
+      tester.element(find.byKey(const ValueKey('spotlight-hero'))),
+      same(heroElement),
+    );
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.arrowLeft);
+    await tester.pump();
+    await tester.sendKeyRepeatEvent(LogicalKeyboardKey.arrowLeft);
+    await tester.pump();
+    expect(sidebar.hasPrimaryFocus, isFalse);
+    expect(tester.widget<SpotlightShell>(shell).sourcesExpanded, isTrue);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.arrowLeft);
     final sourceNode = FocusManager.instance.primaryFocus!;
     Focus.of(tester.element(find.text('Manage sources'))).requestFocus();
     await tester.pump();
@@ -227,6 +263,56 @@ https://example.com/live/two.ts
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
     await tester.pump();
     expect(sidebar.hasPrimaryFocus, isTrue);
+    expect(tester.widget<SpotlightShell>(shell).sourcesExpanded, isFalse);
+    sourceNode.requestFocus();
+    await tester.pump();
+    expect(tester.widget<SpotlightShell>(shell).sourcesExpanded, isTrue);
+    await tester.tap(find.byKey(const ValueKey('spotlight-sources-toggle')));
+    await tester.pump();
+    expect(tester.widget<SpotlightShell>(shell).sourcesExpanded, isFalse);
+    expect(timeline.controller!.hasFocus, isTrue);
+    await tester.tap(find.byKey(const ValueKey('spotlight-sources-toggle')));
+    await tester.pump();
+    expect(tester.widget<SpotlightShell>(shell).sourcesExpanded, isTrue);
+    await tester.tapAt(expandedContent.centerRight - const Offset(20, 0));
+    await tester.pump();
+    expect(tester.widget<SpotlightShell>(shell).sourcesExpanded, isFalse);
+    expect(timeline.controller!.hasFocus, isTrue);
+    // The app's existing Back flow also opens its sidebar through this bridge.
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+    await tester.pump();
+    MainPageBridge.notifyTvSidebarFocusChanged(true);
+    sidebar.requestFocus();
+    await tester.pump();
+    expect(tester.widget<SpotlightShell>(shell).sourcesExpanded, isFalse);
+    MainPageBridge.notifyTvSidebarFocusChanged(false);
+    final results = tester.state<IptvResultsViewState>(
+      find.byType(IptvResultsView),
+    );
+    results.focusFirstFilter();
+    await tester.pump();
+    Focus.of(tester.element(find.text('Manage sources'))).requestFocus();
+    await tester.pump(const Duration(milliseconds: 200));
+    await tester.pump();
+    final rememberedSource = FocusManager.instance.primaryFocus!;
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(sidebar.hasPrimaryFocus, isTrue);
+    // Exercise BrowseScreen's actual app-sidebar return callback.
+    results.focusFirstFilter();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(FocusManager.instance.primaryFocus, same(rememberedSource));
+    expect(tester.widget<SpotlightShell>(shell).sourcesExpanded, isTrue);
+    final panel = tester.getRect(
+      find.byKey(const ValueKey('spotlight-sources-panel')),
+    );
+    expect(
+      panel.contains(tester.getCenter(find.text('Manage sources'))),
+      isTrue,
+    );
+    expect(tester.takeException(), isNull);
+
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
@@ -241,6 +327,12 @@ https://example.com/live/two.ts
       await tester.pumpWidget(
         MaterialApp(
           theme: ThemeData.dark(),
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(
+              context,
+            ).copyWith(textScaler: const TextScaler.linear(1.5)),
+            child: child!,
+          ),
           home: Scaffold(
             body: IptvResultsView(
               searchQuery: '',
@@ -522,10 +614,16 @@ https://example.com/live/two.ts
       find.byKey(const ValueKey<String>('spotlight-shell-wide')),
       findsOneWidget,
     );
-    expect(find.text('Debrify'), findsOneWidget);
-    expect(find.text('CATEGORY'), findsOneWidget);
+    expect(find.byTooltip('Expand sources'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('spotlight-category-control')),
+      findsOneWidget,
+    );
     expect(find.text('Living room TV'), findsWidgets);
-    expect(find.byType(BrowseSearchHeader), findsOneWidget);
+    expect(
+      find.byType(BrowseSearchHeader, skipOffstage: false),
+      findsOneWidget,
+    );
     expect(find.byType(SpotlightLiveTimeline), findsOneWidget);
 
     await tester.tap(
@@ -563,9 +661,128 @@ https://example.com/live/two.ts
     await tester.pumpAndSettle();
     expect(find.byType(SpotlightLiveTimeline), findsNothing);
     expect(find.byType(IptvFiltersBar), findsOneWidget);
-    expect(find.byType(BrowseSearchHeader), findsOneWidget);
+    expect(
+      find.byType(BrowseSearchHeader, skipOffstage: false),
+      findsOneWidget,
+    );
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets(
+    'sidebar search keeps TV keyboard open and submits into results',
+    (tester) async {
+      tester.view.physicalSize = const Size(896, 540);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      PlatformUtil.debugSetAndroidTvCached(true);
+      final previousKeyboard = StorageService.tvKeyboardEnabledCached;
+      StorageService.tvKeyboardEnabledCached = true;
+      addTearDown(() {
+        PlatformUtil.debugSetAndroidTvCached(null);
+        StorageService.tvKeyboardEnabledCached = previousKeyboard;
+      });
+      await tester.pumpWidget(
+        MaterialApp(
+          home: AppThemeScope(
+            theme: AppThemes.legacy,
+            child: BrowseScreen(
+              tabIndex: 13,
+              hintText: 'Search channels',
+              submitOnly: false,
+              isTelevision: true,
+              embedSearchHeaderInView: true,
+              viewBuilder: (args) => IptvResultsView(
+                key: args.resultKey,
+                searchQuery: args.query,
+                isTelevision: args.isTelevision,
+                searchHeader: args.searchHeader,
+                onUpArrowFromFilters: args.onUpArrowToSearch,
+              ),
+            ),
+          ),
+        ),
+      );
+      await _pumpUntil(tester, find.byType(SpotlightLiveTimeline));
+      bool expanded() => tester
+          .widget<SpotlightShell>(find.byType(SpotlightShell))
+          .sourcesExpanded;
+      final initialChannels = tester
+          .widget<SpotlightLiveTimeline>(find.byType(SpotlightLiveTimeline))
+          .channels
+          .map((c) => c.name)
+          .toList();
+      final hero = find.byKey(const ValueKey('spotlight-hero'));
+      final heroRect = tester.getRect(hero);
+      final heroElement = tester.element(hero);
+      expect(heroRect.height, greaterThan(225));
+      expect(find.byType(BrowseSearchHeader), findsNothing);
+      final hiddenSearch = tester.widget<BrowseSearchHeader>(
+        find.byType(BrowseSearchHeader, skipOffstage: false),
+      );
+      expect(hiddenSearch.focusNode.canRequestFocus, isFalse);
+
+      await tester.tap(find.byTooltip('Search channels'));
+      await tester.pumpAndSettle();
+      expect(expanded(), isTrue);
+      expect(hiddenSearch.focusNode.hasFocus, isTrue);
+      expect(tester.getRect(hero), heroRect);
+      expect(tester.element(hero), same(heroElement));
+      await tester.sendKeyEvent(LogicalKeyboardKey.select);
+      await tester.pumpAndSettle();
+      expect(find.byType(TvKeyboardPanel), findsOneWidget);
+      expect(expanded(), isTrue);
+      var keyboard = tester
+          .widget<TvKeyboardPanel>(find.byType(TvKeyboardPanel))
+          .controller;
+      keyboard.onInsert('Kids');
+      await tester.pump();
+      // Submit before the live-filter debounce fires.
+      keyboard.onSubmit();
+      await tester.pumpAndSettle();
+      expect(find.byType(TvKeyboardPanel), findsNothing);
+      expect(expanded(), isFalse);
+      var timeline = tester.widget<SpotlightLiveTimeline>(
+        find.byType(SpotlightLiveTimeline),
+      );
+      expect(timeline.channels.map((channel) => channel.name), ['Kids Two']);
+      expect(timeline.controller!.hasFocus, isTrue);
+
+      // Guide -> sources -> Up reaches Search. Opening the keyboard keeps the
+      // field mounted; a query with no matches stays editable after submission.
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+      await tester.pumpAndSettle();
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+      await tester.pumpAndSettle();
+      expect(hiddenSearch.focusNode.hasFocus, isTrue);
+      await tester.sendKeyEvent(LogicalKeyboardKey.select);
+      await tester.pumpAndSettle();
+      keyboard = tester
+          .widget<TvKeyboardPanel>(find.byType(TvKeyboardPanel))
+          .controller;
+      keyboard.onClear();
+      keyboard.onInsert('No matching channel');
+      await tester.pump();
+      keyboard.onSubmit();
+      await tester.pumpAndSettle();
+      expect(expanded(), isTrue);
+      expect(hiddenSearch.focusNode.hasFocus, isTrue);
+      expect(find.byType(TvKeyboardPanel), findsNothing);
+      final search = tester.widget<BrowseSearchHeader>(
+        find.byType(BrowseSearchHeader),
+      );
+      search.onClear();
+      await tester.pumpAndSettle();
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pumpAndSettle();
+      timeline = tester.widget<SpotlightLiveTimeline>(
+        find.byType(SpotlightLiveTimeline),
+      );
+      expect(timeline.channels.map((c) => c.name), initialChannels);
+      expect(timeline.controller!.hasFocus, isTrue);
+      expect(expanded(), isFalse);
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets(
     'search spans categories and clearing restores the browse category',

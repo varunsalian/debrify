@@ -36,6 +36,8 @@ class SpotlightRail extends StatelessWidget {
   final VoidCallback? onUpFromFirstItem;
   final VoidCallback? onExitRight;
   final ScrollController? scrollController;
+  final bool collapsed;
+  final VoidCallback? onEntryFocus;
 
   const SpotlightRail({
     super.key,
@@ -60,6 +62,8 @@ class SpotlightRail extends StatelessWidget {
     this.onUpFromFirstItem,
     this.onExitRight,
     this.scrollController,
+    this.collapsed = false,
+    this.onEntryFocus,
   });
 
   @override
@@ -183,7 +187,9 @@ class SpotlightRail extends StatelessWidget {
     final children = <Widget>[];
     for (final section in sections) {
       if (section.entries.isEmpty) continue;
-      children.add(_RailHeader(section.label));
+      children.add(
+        collapsed ? const SizedBox(height: 12) : _RailHeader(section.label),
+      );
       for (final entry in section.entries) {
         children.add(
           FocusTraversalOrder(
@@ -191,6 +197,8 @@ class SpotlightRail extends StatelessWidget {
             child: _SpotlightRailTile(
               key: ValueKey<String>('spotlight-rail-${entry.id}'),
               entry: entry,
+              collapsed: collapsed,
+              onEntryFocus: onEntryFocus,
               focusNode: order == 0 ? firstItemFocusNode : null,
               autofocus: order == 0 && autofocusFirstItem,
               onUp: order == 0 ? onUpFromFirstItem : null,
@@ -313,6 +321,8 @@ class _RailHeader extends StatelessWidget {
 
 class _SpotlightRailTile extends StatefulWidget {
   final _RailEntry entry;
+  final bool collapsed;
+  final VoidCallback? onEntryFocus;
   final FocusNode? focusNode;
   final bool autofocus;
   final VoidCallback? onUp;
@@ -321,6 +331,8 @@ class _SpotlightRailTile extends StatefulWidget {
   const _SpotlightRailTile({
     super.key,
     required this.entry,
+    required this.collapsed,
+    this.onEntryFocus,
     required this.focusNode,
     required this.autofocus,
     required this.onUp,
@@ -362,6 +374,7 @@ class _SpotlightRailTileState extends State<_SpotlightRailTile> {
         onFocusChange: (focused) {
           if (_focused != focused) setState(() => _focused = focused);
           if (focused) {
+            widget.onEntryFocus?.call();
             WidgetsBinding.instance.addPostFrameCallback((_) {
               if (context.mounted) {
                 Scrollable.ensureVisible(
@@ -375,6 +388,14 @@ class _SpotlightRailTileState extends State<_SpotlightRailTile> {
           }
         },
         onKeyEvent: (_, event) {
+          if (event is KeyDownEvent &&
+              event.logicalKey == LogicalKeyboardKey.tab &&
+              !HardwareKeyboard.instance.isShiftPressed &&
+              widget.entry.id == 'manage-sources' &&
+              widget.onExitRight != null) {
+            widget.onExitRight!();
+            return KeyEventResult.handled;
+          }
           if (isActivateOrSpaceKey(event.logicalKey)) {
             if (event is KeyDownEvent) widget.entry.onPressed();
             return KeyEventResult.handled;
@@ -393,86 +414,99 @@ class _SpotlightRailTileState extends State<_SpotlightRailTile> {
           }
           return KeyEventResult.ignored;
         },
-        child: MouseRegion(
-          cursor: SystemMouseCursors.click,
-          onEnter: (_) => setState(() => _hovered = true),
-          onExit: (_) => setState(() => _hovered = false),
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            excludeFromSemantics: true,
-            onTap: widget.entry.onPressed,
-            child: AnimatedContainer(
-              key: ValueKey<String>('spotlight-rail-tile-${widget.entry.id}'),
-              duration: const Duration(milliseconds: 120),
-              height: 40,
-              margin: const EdgeInsets.symmetric(vertical: 1),
-              padding: const EdgeInsets.symmetric(horizontal: 11),
-              decoration: BoxDecoration(
-                color: inverse
-                    ? t.focusFill
-                    : widget.entry.selected
-                    ? t.selectedTint
-                    : _hovered
-                    ? t.focusTint
-                    : Colors.transparent,
-                borderRadius: BorderRadius.circular(11),
-                border: Border.all(
-                  color: inverse
-                      ? t.focusFill!
-                      : widget.entry.selected
-                      ? t.accent.withValues(alpha: 0.5)
-                      : Colors.transparent,
+        // An empty Tooltip changes its child structure. Keep Focus outside
+        // it so expanding the labels cannot dispose the remembered node.
+        child: Tooltip(
+          message: widget.collapsed ? widget.entry.label : '',
+          excludeFromSemantics: true,
+          child: MouseRegion(
+            cursor: SystemMouseCursors.click,
+            onEnter: (_) => setState(() => _hovered = true),
+            onExit: (_) => setState(() => _hovered = false),
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              excludeFromSemantics: true,
+              onTap: widget.entry.onPressed,
+              child: AnimatedContainer(
+                key: ValueKey<String>('spotlight-rail-tile-${widget.entry.id}'),
+                duration: const Duration(milliseconds: 120),
+                height: 44,
+                margin: const EdgeInsets.symmetric(vertical: 1),
+                padding: EdgeInsets.symmetric(
+                  horizontal: widget.collapsed ? 0 : 11,
                 ),
-              ),
-              child: Row(
-                children: [
-                  Icon(
-                    widget.entry.icon,
-                    size: 16,
+                decoration: BoxDecoration(
+                  color: inverse
+                      ? t.focusFill
+                      : widget.entry.selected
+                      ? t.selectedTint
+                      : _hovered
+                      ? t.focusTint
+                      : Colors.transparent,
+                  borderRadius: BorderRadius.circular(11),
+                  border: Border.all(
                     color: inverse
-                        ? t.focusInk
-                        : widget.entry.live
-                        ? t.rec
+                        ? t.focusFill!
                         : widget.entry.selected
-                        ? t.accent
-                        : t.fgDim,
+                        ? t.accent.withValues(alpha: 0.5)
+                        : Colors.transparent,
                   ),
-                  const SizedBox(width: 9),
-                  Expanded(
-                    child: Text(
-                      widget.entry.label,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: ink,
-                        fontSize: 12.25,
-                        fontWeight: widget.entry.selected
-                            ? FontWeight.w700
-                            : FontWeight.w600,
-                      ),
+                ),
+                child: Row(
+                  mainAxisAlignment: widget.collapsed
+                      ? MainAxisAlignment.center
+                      : MainAxisAlignment.start,
+                  children: [
+                    Icon(
+                      widget.entry.icon,
+                      size: 16,
+                      color: inverse
+                          ? t.focusInk
+                          : widget.entry.live
+                          ? t.rec
+                          : widget.entry.selected
+                          ? t.accent
+                          : t.fgDim,
                     ),
-                  ),
-                  if (widget.entry.live)
-                    Container(
-                      width: 7,
-                      height: 7,
-                      margin: const EdgeInsets.only(left: 6),
-                      decoration: BoxDecoration(
-                        color: inverse ? t.focusInk : t.rec,
-                        shape: BoxShape.circle,
+                    if (!widget.collapsed) ...[
+                      const SizedBox(width: 9),
+                      Expanded(
+                        child: Text(
+                          widget.entry.label,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: ink,
+                            fontSize: 12.25,
+                            fontWeight: widget.entry.selected
+                                ? FontWeight.w700
+                                : FontWeight.w600,
+                          ),
+                        ),
                       ),
-                    )
-                  else if (countText != null)
-                    Text(
-                      countText,
-                      style: TextStyle(
-                        color: inverse ? t.focusInk : t.fgFaint,
-                        fontSize: 10,
-                        fontWeight: FontWeight.w700,
-                        fontFeatures: const [FontFeature.tabularFigures()],
-                      ),
-                    ),
-                ],
+                      if (widget.entry.live)
+                        Container(
+                          width: 7,
+                          height: 7,
+                          margin: const EdgeInsets.only(left: 6),
+                          decoration: BoxDecoration(
+                            color: inverse ? t.focusInk : t.rec,
+                            shape: BoxShape.circle,
+                          ),
+                        )
+                      else if (countText != null)
+                        Text(
+                          countText,
+                          style: TextStyle(
+                            color: inverse ? t.focusInk : t.fgFaint,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                            fontFeatures: const [FontFeature.tabularFigures()],
+                          ),
+                        ),
+                    ],
+                  ],
+                ),
               ),
             ),
           ),

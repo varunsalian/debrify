@@ -14,6 +14,149 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  testWidgets('long channel names have two readable lines beside the logo', (
+    tester,
+  ) async {
+    const name = '4K: SKY SPORTS MAIN EVENTS UHD';
+    await tester.pumpWidget(
+      _host(
+        channels: [
+          IptvChannel(
+            name: name,
+            url: 'test-channel',
+            duration: -1,
+            contentType: 'live',
+            channelNumber: 14,
+          ),
+        ],
+        loader: (_) async => const [],
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 400));
+    final label = tester.renderObject<RenderParagraph>(find.text(name));
+    expect(label.size.width, greaterThanOrEqualTo(200));
+    expect(label.didExceedMaxLines, isFalse);
+    expect(find.text('Channel 14'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('dense rows keep long names visible at larger text sizes', (
+    tester,
+  ) async {
+    final controller = IptvSpotlightTimelineController();
+    final channels = List.generate(
+      12,
+      (i) => IptvChannel(
+        name: '4K: SKY SPORTS MAIN EVENTS UHD $i',
+        url: 'channel-$i',
+        duration: -1,
+        contentType: 'live',
+        channelNumber: i,
+      ),
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MediaQuery(
+          data: const MediaQueryData(textScaler: TextScaler.linear(1.3)),
+          child: Scaffold(
+            body: SpotlightLiveTimeline(
+              channels: channels,
+              sourceId: 'source',
+              loadGeneration: 0,
+              epgContextVersion: 0,
+              scheduleLoader: (_) async => const [],
+              onChannelActivate: (_) {},
+              onProgrammeActivate: (_, __) {},
+              controller: controller,
+              identityWidth: 300,
+              rowHeight: 46,
+              rulerHeight: 32,
+              dense: true,
+              height: 240,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pump(const Duration(milliseconds: 400));
+    controller.focusChannelAt(6);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pump(const Duration(milliseconds: 400));
+    final labelFinder = find.text(channels[6].name);
+    final label = tester.renderObject<RenderParagraph>(labelFinder);
+    expect(label.maxLines, 2);
+    expect(label.size.width, greaterThan(220));
+    expect(label.size.height, greaterThan(30));
+    final guide = tester.getRect(find.byType(SpotlightLiveTimeline));
+    final labelRect = tester.getRect(labelFinder);
+    expect(guide.contains(labelRect.topLeft), isTrue);
+    expect(guide.contains(labelRect.bottomRight), isTrue);
+    expect(controller.hasFocus, isTrue);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets(
+    'scaled names fit and focused rows remain visible after scaling',
+    (tester) async {
+      final controller = IptvSpotlightTimelineController();
+      final channels = List.generate(
+        12,
+        (i) => IptvChannel(
+          name: '4K: SKY SPORTS MAIN EVENTS UHD $i',
+          url: 'channel-$i',
+          duration: -1,
+          contentType: 'live',
+          channelNumber: i,
+        ),
+      );
+      Widget host(double scale) => MaterialApp(
+        home: MediaQuery(
+          data: MediaQueryData(textScaler: TextScaler.linear(scale)),
+          child: Scaffold(
+            body: SpotlightLiveTimeline(
+              channels: channels,
+              sourceId: 'source',
+              loadGeneration: 0,
+              epgContextVersion: 0,
+              scheduleLoader: (_) async => const [],
+              onChannelActivate: (_) {},
+              onProgrammeActivate: (_, __) {},
+              controller: controller,
+              identityWidth: 260,
+              rowHeight: 64,
+              height: 240,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpWidget(host(1));
+      controller.focusChannelAt(6);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+      await tester.pumpWidget(host(1.3));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(tester.takeException(), isNull);
+      final label = tester.getRect(find.text(channels[6].name));
+      final guide = tester.getRect(find.byType(SpotlightLiveTimeline));
+      expect(guide.contains(label.topLeft), isTrue);
+      expect(guide.contains(label.bottomRight), isTrue);
+      expect(controller.hasFocus, isTrue);
+      final rows = tester.widget<ListView>(
+        find.descendant(
+          of: find.byType(SpotlightLiveTimeline),
+          matching: find.byType(ListView),
+        ),
+      );
+      expect(rows.itemExtent, greaterThan(64));
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
+
   group('spotlightProgrammeGeometry', () {
     test('uses epoch duration for variable width and clips to the window', () {
       final window = DateTime.fromMillisecondsSinceEpoch(1_800_000_000_000);

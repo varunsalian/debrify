@@ -140,7 +140,14 @@ class _BrowseScreenState extends State<BrowseScreen> {
     _searchSubmitFocus.complete(
       field: _searchFocusNode,
       isMounted: () => mounted,
-      requestFocus: _focusContent,
+      requestFocus: () {
+        final Object? state = _resultKey.currentState;
+        if (state is BrowseSearchResultsFocusController) {
+          state.focusSearchResults();
+        } else {
+          _focusContent();
+        }
+      },
     );
   }
 

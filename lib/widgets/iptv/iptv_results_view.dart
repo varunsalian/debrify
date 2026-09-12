@@ -125,7 +125,9 @@ class IptvResultsView extends StatefulWidget {
 
 class IptvResultsViewState extends State<IptvResultsView>
     with WidgetsBindingObserver
-    implements BrowseResultsFocusController {
+    implements
+        BrowseResultsFocusController,
+        BrowseSearchResultsFocusController {
   final ScrollController _scrollController = ScrollController();
   final IptvService _iptvService = IptvService.instance;
 
@@ -461,6 +463,7 @@ class IptvResultsViewState extends State<IptvResultsView>
   final FocusNode _spotlightPrimaryFocusNode = FocusNode(
     debugLabel: 'iptv-spotlight-primary-action',
   );
+  bool _spotlightSourcesExpanded = false;
   final FocusScopeNode _spotlightRailScope = FocusScopeNode(
     debugLabel: 'iptv-spotlight-sources',
     traversalEdgeBehavior: TraversalEdgeBehavior.parentScope,
@@ -4761,7 +4764,10 @@ class IptvResultsViewState extends State<IptvResultsView>
   /// the backdrop, which releases its engine synchronously; refocusing a
   /// channel row re-arms the stage.
   void _onTvSidebarFocusChanged(bool focused) {
-    if (focused) _clearPreview();
+    if (focused) {
+      _setSpotlightSourcesExpanded(false);
+      _clearPreview();
+    }
   }
 
   /// Every route into IPTV settings from this page is an "Add playlist"
@@ -5268,7 +5274,20 @@ class IptvResultsViewState extends State<IptvResultsView>
   /// Focus the first filter (for DPAD navigation from search input)
   @override
   void focusFirstFilter() {
-    _playlistFilterFocusNode.requestFocus();
+    if (_spotlightLayoutMode == IptvSpotlightLayoutMode.wide) {
+      _focusSpotlightSources();
+    } else {
+      _playlistFilterFocusNode.requestFocus();
+    }
+  }
+
+  @override
+  void focusSearchResults() {
+    if (_spotlightLayoutMode != IptvSpotlightLayoutMode.classic) {
+      _focusSpotlightSearchResults();
+    } else {
+      focusFirstFilter();
+    }
   }
 
   /// Focus the first channel card (for DPAD navigation from filters)
@@ -5571,24 +5590,42 @@ class IptvResultsViewState extends State<IptvResultsView>
     return SpotlightShell(
       mode: mode,
       searchSlot: _buildSpotlightSearch(mode),
-      railSlot: FocusScope(
+      sourcesWrapper: (child) => FocusScope(
         node: _spotlightRailScope,
+        onFocusChange: (focused) {
+          // Dialogs opened from the drawer temporarily own focus. Keep the
+          // search available for their return instead of hiding its field.
+          if (!focused && ModalRoute.of(context)?.isCurrent != false) {
+            _setSpotlightSourcesExpanded(false);
+          }
+        },
         onKeyEvent: (_, event) {
+          if (!widget.isTelevision &&
+              event.logicalKey == LogicalKeyboardKey.escape) {
+            if (event is KeyDownEvent) _closeSpotlightSources();
+            return KeyEventResult.handled;
+          }
+
           // MainPage's automatic sidebar fallback deliberately excludes
           // nested scopes. This persistent rail must exit explicitly on TV.
           if ((event is KeyDownEvent || event is KeyRepeatEvent) &&
               event.logicalKey == LogicalKeyboardKey.arrowLeft &&
               widget.isTelevision &&
               MainPageBridge.focusTvSidebar != null) {
-            MainPageBridge.focusTvSidebar!();
+            if (event is KeyDownEvent) _exitSpotlightSourcesToApp();
             return KeyEventResult.handled;
           }
           return KeyEventResult.ignored;
         },
-        child: _buildSpotlightRail(),
+        child: child,
+      ),
+      railSlot: _buildSpotlightRail(
+        collapsed:
+            mode == IptvSpotlightLayoutMode.wide && !_spotlightSourcesExpanded,
       ),
       categorySlot: _spotlightControlNavigation(
         SpotlightCategoryControl(
+          dense: true,
           categoryLabel: _effectiveCategory ?? 'All channels',
           channelCount: _filteredChannels.length,
           loading: _isLoading,
@@ -5603,6 +5640,7 @@ class IptvResultsViewState extends State<IptvResultsView>
       contentTypeSlot: selected?.isXtreamCodes ?? false
           ? _spotlightControlNavigation(
               SpotlightContentTypeControl(
+                dense: true,
                 value: _selectedContentType,
                 onChanged: _onContentTypeChanged,
                 firstItemFocusNode: _contentTypeFocusNode,
@@ -5645,22 +5683,56 @@ class IptvResultsViewState extends State<IptvResultsView>
       ),
       contentSlot: _buildSpotlightContent(mode),
       onOpenSources: _showSpotlightSources,
+      sourcesExpanded: _spotlightSourcesExpanded,
+      onToggleSources: () {
+        if (_spotlightSourcesExpanded) {
+          _closeSpotlightSources();
+        } else {
+          _focusSpotlightSources();
+        }
+      },
+      onCloseSources: _closeSpotlightSources,
+      onExitSourcesLeft: _exitSpotlightSourcesToApp,
+      onOpenSearch: _openSpotlightSearch,
       compactSourceLabel: selected?.name ?? 'Sources',
       compactSourceCount: _spotlightSelectedSourceCount,
       compactSourceFocusNode: _playlistFilterFocusNode,
       onSourceDown: _focusSpotlightHero,
-      // The corrected mock gives the source rail about one fifth of a
-      // 16:9 TV canvas. Keep it compact on 896-wide TV layouts and allow a
-      // little more air on desktop without taking width from the guide.
-      railWidth: (constraints.maxWidth * 0.205).clamp(180.0, 224.0),
+      railWidth: 244,
       padding: EdgeInsets.all(mode == IptvSpotlightLayoutMode.wide ? 10 : 8),
     );
   }
 
+  void _setSpotlightSourcesExpanded(bool expanded) {
+    if (!mounted || _spotlightSourcesExpanded == expanded) return;
+    setState(() => _spotlightSourcesExpanded = expanded);
+  }
+
+  void _closeSpotlightSources() {
+    _setSpotlightSourcesExpanded(false);
+    _focusSpotlightContentEntry();
+  }
+
+  void _exitSpotlightSourcesToApp() {
+    final focusSidebar = MainPageBridge.focusTvSidebar;
+    if (!widget.isTelevision || focusSidebar == null) return;
+    _setSpotlightSourcesExpanded(false);
+    focusSidebar();
+  }
+
   void _focusSpotlightSources() {
-    if (_spotlightLayoutMode == IptvSpotlightLayoutMode.wide &&
-        _spotlightRailScope.focusedChild != null) {
-      _spotlightRailScope.requestFocus();
+    if (_spotlightLayoutMode == IptvSpotlightLayoutMode.wide) {
+      _setSpotlightSourcesExpanded(true);
+      final remembered = _spotlightRailScope.focusedChild;
+      // A search field hidden by the collapsed drawer cannot receive focus.
+      // Enter on the first source instead of leaving focus on an empty scope.
+      if (remembered != null &&
+          remembered is! FocusScopeNode &&
+          remembered.canRequestFocus) {
+        _spotlightRailScope.requestFocus();
+      } else {
+        _playlistFilterFocusNode.requestFocus();
+      }
     } else {
       _playlistFilterFocusNode.requestFocus();
     }
@@ -5723,9 +5795,16 @@ class IptvResultsViewState extends State<IptvResultsView>
           ? 'Search'
           : search.hintText,
       onChanged: search.onChanged,
-      onSubmitted: search.onSubmitted,
+      onSubmitted: (value) {
+        search.onSubmitted?.call(value);
+        // TV's parent coordinates keyboard dismissal before requesting focus.
+        // Desktop and standalone headers can enter results immediately.
+        if (!widget.isTelevision || search.onSubmitted == null) {
+          _focusSpotlightSearchResults();
+        }
+      },
       onClear: search.onClear,
-      onDownArrow: _focusSpotlightSources,
+      onDownArrow: _focusSpotlightSearchResults,
       ink: t.fg,
       fillColor: t.fg.withValues(alpha: 0.055),
       focusedBorderColor: t.accent,
@@ -5740,6 +5819,7 @@ class IptvResultsViewState extends State<IptvResultsView>
   }
 
   Widget _buildSpotlightRail({
+    bool collapsed = false,
     bool autofocusFirstItem = false,
     ValueChanged<IptvPlaylist>? onSelectPlaylist,
     VoidCallback? onOpenRecordings,
@@ -5749,6 +5829,14 @@ class IptvResultsViewState extends State<IptvResultsView>
     VoidCallback? onManageSources,
   }) {
     return SpotlightRail(
+      collapsed: collapsed,
+      onEntryFocus: autofocusFirstItem
+          ? null
+          : () {
+              if (_spotlightLayoutMode == IptvSpotlightLayoutMode.wide) {
+                _setSpotlightSourcesExpanded(true);
+              }
+            },
       playlists: _playlists,
       selectedPlaylist: _selectedPlaylist,
       sourceCounts: _sourceCounts,
@@ -5763,7 +5851,10 @@ class IptvResultsViewState extends State<IptvResultsView>
       recordingActive: _anyRecordingLive,
       onSelectPlaylist:
           onSelectPlaylist ??
-          (playlist) => _onPlaylistChanged(playlist, focusContent: true),
+          (playlist) {
+            _setSpotlightSourcesExpanded(false);
+            _onPlaylistChanged(playlist, focusContent: true);
+          },
       onOpenRecordings:
           onOpenRecordings ??
           (_pageCanRecord ? _openScheduledRecordings : null),
@@ -5776,17 +5867,50 @@ class IptvResultsViewState extends State<IptvResultsView>
       onUpFromFirstItem: autofocusFirstItem
           ? null
           : _focusSpotlightSearchOrExit,
-      onExitRight: autofocusFirstItem ? null : _focusSpotlightContentEntry,
+      onExitRight: autofocusFirstItem ? null : _closeSpotlightSources,
     );
   }
 
-  void _focusSpotlightSearchOrExit() {
+  void _openSpotlightSearch() {
     final search = widget.searchHeader;
-    if (search is BrowseSearchHeader && search.focusNode.canRequestFocus) {
-      search.focusNode.requestFocus();
-      return;
+    if (search is! BrowseSearchHeader) return;
+    if (_spotlightLayoutMode == IptvSpotlightLayoutMode.wide) {
+      _setSpotlightSourcesExpanded(true);
     }
-    widget.onUpArrowFromFilters?.call();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted ||
+          (_spotlightLayoutMode == IptvSpotlightLayoutMode.wide &&
+              !_spotlightSourcesExpanded)) {
+        return;
+      }
+      if (search.focusNode.canRequestFocus) search.focusNode.requestFocus();
+    });
+    WidgetsBinding.instance.scheduleFrame();
+  }
+
+  void _focusSpotlightSearchOrExit() {
+    if (widget.searchHeader is BrowseSearchHeader) {
+      _openSpotlightSearch();
+    } else {
+      widget.onUpArrowFromFilters?.call();
+    }
+  }
+
+  void _focusSpotlightSearchResults() {
+    _searchDebounce?.cancel();
+    _applyFilters();
+    final query = widget.searchQuery;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || widget.searchQuery != query) return;
+      // Keep an empty search editable. A matching query enters its first row.
+      if (_filteredChannels.isEmpty) {
+        _openSpotlightSearch();
+        return;
+      }
+      _setSpotlightSourcesExpanded(false);
+      _focusFirstChannel();
+    });
+    WidgetsBinding.instance.scheduleFrame();
   }
 
   void _focusSpotlightContentEntry() {
@@ -6320,9 +6444,10 @@ class IptvResultsViewState extends State<IptvResultsView>
           onProgrammeActivate: _activateSpotlightProgramme,
           windowDuration: const Duration(hours: 3),
           height: constraints.maxHeight,
-          identityWidth: mode == IptvSpotlightLayoutMode.wide ? 188 : 176,
-          rowHeight: mode == IptvSpotlightLayoutMode.wide ? 54 : 52,
-          rulerHeight: 38,
+          identityWidth: mode == IptvSpotlightLayoutMode.wide ? 300 : 260,
+          dense: true,
+          rowHeight: 46,
+          rulerHeight: 32,
         ),
       ),
     );

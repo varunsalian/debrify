@@ -32,6 +32,13 @@ class SpotlightShell extends StatelessWidget {
   final FocusNode? compactSourceFocusNode;
   final VoidCallback? onSourceDown;
 
+  /// Keeps the expanded drawer and its toggle in the same focus scope.
+  final Widget Function(Widget)? sourcesWrapper;
+  final bool sourcesExpanded;
+  final VoidCallback? onToggleSources;
+  final VoidCallback? onCloseSources;
+  final VoidCallback? onExitSourcesLeft;
+  final VoidCallback? onOpenSearch;
   final double railWidth;
   final EdgeInsetsGeometry padding;
 
@@ -49,6 +56,12 @@ class SpotlightShell extends StatelessWidget {
     this.compactSourceCount,
     this.compactSourceFocusNode,
     this.onSourceDown,
+    this.sourcesWrapper,
+    this.sourcesExpanded = false,
+    this.onToggleSources,
+    this.onCloseSources,
+    this.onExitSourcesLeft,
+    this.onOpenSearch,
     this.railWidth = 236,
     this.padding = const EdgeInsets.all(12),
   }) : assert(
@@ -73,45 +86,20 @@ class SpotlightShell extends StatelessWidget {
 
   Widget _buildWide() {
     final t = IptvStyleTokens.spotlight;
+    // The content always reserves only the icon rail. Expansion overlays its
+    // left edge without resizing or reparenting the native preview surface.
     return Padding(
       key: const ValueKey<String>('spotlight-shell-wide'),
       padding: padding,
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+      child: Stack(
         children: [
-          SizedBox(
-            width: railWidth,
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                color: t.panel,
-                borderRadius: BorderRadius.circular(18),
-                border: Border.all(color: t.hairline),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  _wideBrand(),
-                  KeyedSubtree(
-                    key: const ValueKey<String>('spotlight-search-slot'),
-                    child: searchSlot,
-                  ),
-                  Expanded(
-                    child: KeyedSubtree(
-                      key: const ValueKey<String>('spotlight-rail-slot'),
-                      child: railSlot,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
+          Padding(
+            padding: const EdgeInsets.only(left: 76),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Expanded(
-                  flex: 4,
+                  flex: 5,
                   child: KeyedSubtree(
                     key: const ValueKey<String>('spotlight-hero-slot'),
                     child: heroSlot,
@@ -121,13 +109,190 @@ class SpotlightShell extends StatelessWidget {
                 _topControls(),
                 const SizedBox(height: 8),
                 Expanded(
-                  flex: 6,
+                  flex: 5,
                   child: KeyedSubtree(
                     key: const ValueKey<String>('spotlight-content-slot'),
                     child: contentSlot,
                   ),
                 ),
               ],
+            ),
+          ),
+          if (sourcesExpanded)
+            Positioned.fill(
+              key: const ValueKey('spotlight-sources-dismiss-position'),
+              child: GestureDetector(
+                key: const ValueKey('spotlight-sources-dismiss'),
+                behavior: HitTestBehavior.opaque,
+                excludeFromSemantics: true,
+                onTap: onCloseSources,
+                child: const SizedBox.expand(),
+              ),
+            ),
+          Positioned(
+            // Keep this subtree when the sibling dismiss layer is inserted.
+            // Both siblings are Positioned; without keys Flutter replaces the
+            // rail with that layer and destroys its remembered focus nodes.
+            key: const ValueKey('spotlight-sources-position'),
+            left: 0,
+            top: 0,
+            bottom: 0,
+            width: sourcesExpanded ? railWidth : 64,
+            child: (sourcesWrapper ?? (child) => child)(
+              DecoratedBox(
+                key: const ValueKey('spotlight-sources-panel'),
+                decoration: BoxDecoration(
+                  color: t.panel,
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(color: t.hairline),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (sourcesExpanded)
+                      _wideBrand()
+                    else
+                      Padding(
+                        padding: const EdgeInsets.only(top: 14, bottom: 4),
+                        child: Icon(
+                          Icons.play_circle_fill_rounded,
+                          color: t.accent,
+                          size: 22,
+                        ),
+                      ),
+                    Padding(
+                      padding: const EdgeInsets.all(8),
+                      child: Focus(
+                        canRequestFocus: false,
+                        onKeyEvent: (_, event) {
+                          if (isActivateOrSpaceKey(event.logicalKey)) {
+                            if (event is KeyDownEvent) {
+                              (onToggleSources ?? onOpenSources)();
+                            }
+                            return KeyEventResult.handled;
+                          }
+                          if (event.logicalKey ==
+                                  LogicalKeyboardKey.arrowRight &&
+                              (event is KeyDownEvent ||
+                                  event is KeyRepeatEvent)) {
+                            onCloseSources?.call();
+                            return KeyEventResult.handled;
+                          }
+                          if (event.logicalKey ==
+                                  LogicalKeyboardKey.arrowLeft &&
+                              (event is KeyDownEvent ||
+                                  event is KeyRepeatEvent)) {
+                            if (event is KeyDownEvent) {
+                              onExitSourcesLeft?.call();
+                            }
+                            return KeyEventResult.handled;
+                          }
+                          return KeyEventResult.ignored;
+                        },
+                        child: IconButton(
+                          key: const ValueKey('spotlight-sources-toggle'),
+                          tooltip: sourcesExpanded
+                              ? 'Collapse sources'
+                              : 'Expand sources',
+                          constraints: const BoxConstraints(
+                            minHeight: 44,
+                            minWidth: 44,
+                          ),
+                          onPressed: onToggleSources ?? onOpenSources,
+                          icon: Icon(
+                            sourcesExpanded
+                                ? Icons.chevron_left_rounded
+                                : Icons.menu_rounded,
+                          ),
+                          style: ButtonStyle(
+                            backgroundColor: WidgetStateProperty.resolveWith(
+                              (states) => states.contains(WidgetState.focused)
+                                  ? t.focusFill
+                                  : Colors.transparent,
+                            ),
+                            foregroundColor: WidgetStateProperty.resolveWith(
+                              (states) => states.contains(WidgetState.focused)
+                                  ? t.focusInk
+                                  : t.fg,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    // Keep one search field mounted at drawer width so its
+                    // controller, keyboard and focus survive rail changes.
+                    Offstage(
+                      offstage: !sourcesExpanded,
+                      child: ExcludeFocus(
+                        excluding: !sourcesExpanded,
+                        child: UnconstrainedBox(
+                          constrainedAxis: Axis.vertical,
+                          alignment: Alignment.centerLeft,
+                          child: SizedBox(
+                            width: railWidth,
+                            child: KeyedSubtree(
+                              key: const ValueKey<String>(
+                                'spotlight-search-slot',
+                              ),
+                              child: searchSlot,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    if (!sourcesExpanded)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        child: Focus(
+                          canRequestFocus: false,
+                          onKeyEvent: (_, event) {
+                            if (isActivateOrSpaceKey(event.logicalKey)) {
+                              if (event is KeyDownEvent) onOpenSearch?.call();
+                              return KeyEventResult.handled;
+                            }
+                            if (event.logicalKey ==
+                                    LogicalKeyboardKey.arrowRight &&
+                                (event is KeyDownEvent ||
+                                    event is KeyRepeatEvent)) {
+                              onCloseSources?.call();
+                              return KeyEventResult.handled;
+                            }
+                            return KeyEventResult.ignored;
+                          },
+                          child: IconButton(
+                            key: const ValueKey('spotlight-search-trigger'),
+                            tooltip: 'Search channels',
+                            onPressed: onOpenSearch,
+                            icon: const Icon(Icons.search_rounded),
+                            style: ButtonStyle(
+                              backgroundColor: WidgetStateProperty.resolveWith(
+                                (states) => states.contains(WidgetState.focused)
+                                    ? t.focusFill
+                                    : Colors.transparent,
+                              ),
+                              foregroundColor: WidgetStateProperty.resolveWith(
+                                (states) => states.contains(WidgetState.focused)
+                                    ? t.focusInk
+                                    : t.fg,
+                              ),
+                            ),
+                            constraints: const BoxConstraints(
+                              minWidth: 44,
+                              minHeight: 44,
+                            ),
+                          ),
+                        ),
+                      ),
+                    Expanded(
+                      key: const ValueKey('spotlight-rail-position'),
+                      child: KeyedSubtree(
+                        key: const ValueKey<String>('spotlight-rail-slot'),
+                        child: railSlot,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
           ),
         ],
@@ -173,7 +338,7 @@ class SpotlightShell extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Expanded(
-            flex: 4,
+            flex: 5,
             child: KeyedSubtree(
               key: const ValueKey<String>('spotlight-hero-slot'),
               child: heroSlot,
@@ -183,7 +348,7 @@ class SpotlightShell extends StatelessWidget {
           _topControls(),
           const SizedBox(height: 8),
           Expanded(
-            flex: 6,
+            flex: 5,
             child: KeyedSubtree(
               key: const ValueKey<String>('spotlight-content-slot'),
               child: contentSlot,
@@ -239,10 +404,30 @@ class SpotlightShell extends StatelessWidget {
   Widget _topControls() {
     final types = contentTypeSlot;
     return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
+        if (mode == IptvSpotlightLayoutMode.wide) ...[
+          Flexible(
+            flex: 2,
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                compactSourceLabel,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: IptvStyleTokens.spotlight.fg,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+        ],
         if (types != null) ...[
           Flexible(
+            flex: 3,
             child: KeyedSubtree(
               key: const ValueKey<String>('spotlight-content-type-slot'),
               child: types,
@@ -251,6 +436,7 @@ class SpotlightShell extends StatelessWidget {
           const SizedBox(width: 8),
         ],
         Expanded(
+          flex: 4,
           child: KeyedSubtree(
             key: const ValueKey<String>('spotlight-category-slot'),
             child: categorySlot,

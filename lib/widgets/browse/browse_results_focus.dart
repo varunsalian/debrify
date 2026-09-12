@@ -10,3 +10,9 @@ abstract interface class BrowseResultsFocusController {
   /// from the sidebar). Mirrors the old `focusFirstFilter()` hooks.
   void focusFirstFilter();
 }
+
+/// Optional distinction between entering a page from app navigation and
+/// entering the results of a submitted search.
+abstract interface class BrowseSearchResultsFocusController {
+  void focusSearchResults();
+}

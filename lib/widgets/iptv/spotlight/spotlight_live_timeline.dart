@@ -252,6 +252,7 @@ class SpotlightLiveTimeline extends StatefulWidget {
   final Duration windowDuration;
   final Duration viewportSettleDelay;
   final double height;
+  final bool dense;
   final double identityWidth;
   final double rowHeight;
   final double rulerHeight;
@@ -277,7 +278,8 @@ class SpotlightLiveTimeline extends StatefulWidget {
     this.windowDuration = const Duration(hours: 4),
     this.viewportSettleDelay = const Duration(milliseconds: 375),
     this.height = 360,
-    this.identityWidth = 224,
+    this.dense = false,
+    this.identityWidth = 300,
     this.rowHeight = 68,
     this.rulerHeight = 42,
   }) : assert(height > 0),
@@ -387,6 +389,24 @@ class _SpotlightLiveTimelineState extends State<SpotlightLiveTimeline> {
   );
 
   FocusNode get _focusNode => _ownedFocusNode;
+
+  // A two-line name and the subtitle both grow with accessibility text size.
+  // Share the adjusted extent with painting, viewport loading and focus reveal.
+  double get _rowHeight {
+    final scaler = MediaQuery.textScalerOf(context);
+    final nameSize = widget.dense ? 12.5 : 14.0;
+    final extra =
+        math.max(0.0, scaler.scale(nameSize) - nameSize) * 2 * 1.1 +
+        (widget.dense ? 0 : math.max(0.0, scaler.scale(10) - 10));
+    return widget.rowHeight + extra.ceilToDouble();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _armViewportLoad();
+    _revealRow(_cursorRow);
+  }
 
   @override
   void initState() {
@@ -556,11 +576,11 @@ class _SpotlightLiveTimelineState extends State<SpotlightLiveTimeline> {
     final extent = _verticalController.hasClients
         ? _verticalController.position.viewportDimension
         : _viewportHeight;
-    final first = (offset / widget.rowHeight).floor().clamp(
+    final first = (offset / _rowHeight).floor().clamp(
       0,
       widget.channels.length - 1,
     );
-    final last = ((offset + extent - 0.001) / widget.rowHeight).floor().clamp(
+    final last = ((offset + extent - 0.001) / _rowHeight).floor().clamp(
       first,
       widget.channels.length - 1,
     );
@@ -967,8 +987,8 @@ class _SpotlightLiveTimelineState extends State<SpotlightLiveTimeline> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || !_verticalController.hasClients) return;
       final position = _verticalController.position;
-      final top = row * widget.rowHeight;
-      final bottom = top + widget.rowHeight;
+      final top = row * _rowHeight;
+      final bottom = top + _rowHeight;
       var target = position.pixels;
       if (top < position.pixels) {
         target = top;
@@ -1311,7 +1331,7 @@ class _SpotlightLiveTimelineState extends State<SpotlightLiveTimeline> {
                                       'spotlight-live-timeline-rows',
                                     ),
                                     controller: _verticalController,
-                                    itemExtent: widget.rowHeight,
+                                    itemExtent: _rowHeight,
                                     itemCount: widget.channels.length,
                                     physics: const ClampingScrollPhysics(),
                                     itemBuilder: (context, index) => _buildRow(
@@ -1579,7 +1599,12 @@ class _SpotlightLiveTimelineState extends State<SpotlightLiveTimeline> {
             child: AnimatedContainer(
               key: ValueKey(('spotlight-identity', entry.entryKey)),
               duration: const Duration(milliseconds: 130),
-              margin: const EdgeInsets.fromLTRB(6, 5, 7, 5),
+              margin: EdgeInsets.fromLTRB(
+                6,
+                widget.dense ? 3 : 5,
+                7,
+                widget.dense ? 3 : 5,
+              ),
               padding: const EdgeInsets.symmetric(horizontal: 10),
               decoration: BoxDecoration(
                 color: selected
@@ -1607,24 +1632,9 @@ class _SpotlightLiveTimelineState extends State<SpotlightLiveTimeline> {
               ),
               child: Row(
                 children: [
-                  if (channel.channelNumber != null) ...[
-                    SizedBox(
-                      width: 34,
-                      child: Text(
-                        channel.channelNumber.toString(),
-                        style: TextStyle(
-                          color: selected
-                              ? tokens.focusInk!.withValues(alpha: 0.64)
-                              : tokens.fgFaint,
-                          fontSize: 10,
-                          fontWeight: FontWeight.w600,
-                          fontFeatures: const [FontFeature.tabularFigures()],
-                        ),
-                      ),
-                    ),
-                  ],
                   _ChannelMark(
                     logoUrl: channel.logoUrl,
+                    size: widget.dense ? 30 : 38,
                     selected: selected,
                     tokens: tokens,
                   ),
@@ -1636,34 +1646,38 @@ class _SpotlightLiveTimelineState extends State<SpotlightLiveTimeline> {
                       children: [
                         Text(
                           channel.name,
-                          maxLines: 1,
+                          maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
                             color: selected ? tokens.focusInk : tokens.fg,
-                            fontSize: 13,
-                            height: 1.05,
+                            fontSize: widget.dense ? 12.5 : 14,
+                            height: 1.1,
                             fontWeight: selected
                                 ? FontWeight.w700
                                 : FontWeight.w600,
                           ),
                         ),
-                        const SizedBox(height: 4),
-                        Text(
-                          _lastTappedCell == (entry.entryKey, null)
-                              ? 'Tap again to watch'
-                              : channel.group?.trim().isNotEmpty == true
-                              ? channel.group!
-                              : 'Live television',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            color: selected
-                                ? tokens.focusInk!.withValues(alpha: 0.62)
-                                : tokens.fgFaint,
-                            fontSize: 10,
-                            height: 1,
+                        if (!widget.dense) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            _lastTappedCell == (entry.entryKey, null)
+                                ? 'Tap again to watch'
+                                : channel.channelNumber != null
+                                ? 'Channel ${channel.channelNumber}'
+                                : channel.isLive
+                                ? 'Live television'
+                                : 'On demand',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: selected
+                                  ? tokens.focusInk!.withValues(alpha: 0.62)
+                                  : tokens.fgFaint,
+                              fontSize: 10,
+                              height: 1,
+                            ),
                           ),
-                        ),
+                        ],
                       ],
                     ),
                   ),
@@ -1938,19 +1952,23 @@ class _SpotlightLiveTimelineState extends State<SpotlightLiveTimeline> {
                                 : FontWeight.w600,
                           ),
                         ),
-                        const SizedBox(height: 5),
-                        Text(
-                          '${_formatTime(programme.start)} – '
-                          '${_formatTime(programme.stop)}',
-                          maxLines: 1,
-                          overflow: TextOverflow.clip,
-                          style: TextStyle(
-                            color: foreground.withValues(alpha: 0.62),
-                            fontSize: 9.5,
-                            height: 1,
-                            fontFeatures: const [FontFeature.tabularFigures()],
+                        if (!widget.dense) ...[
+                          const SizedBox(height: 5),
+                          Text(
+                            '${_formatTime(programme.start)} – '
+                            '${_formatTime(programme.stop)}',
+                            maxLines: 1,
+                            overflow: TextOverflow.clip,
+                            style: TextStyle(
+                              color: foreground.withValues(alpha: 0.62),
+                              fontSize: 9.5,
+                              height: 1,
+                              fontFeatures: const [
+                                FontFeature.tabularFigures(),
+                              ],
+                            ),
                           ),
-                        ),
+                        ],
                       ],
                     ),
                   ),
@@ -2231,11 +2249,13 @@ class _GuideMessage extends StatelessWidget {
 
 class _ChannelMark extends StatelessWidget {
   final String? logoUrl;
+  final double size;
   final bool selected;
   final IptvStyleTokens tokens;
 
   const _ChannelMark({
     required this.logoUrl,
+    this.size = 38,
     required this.selected,
     required this.tokens,
   });
@@ -2249,8 +2269,8 @@ class _ChannelMark extends StatelessWidget {
     );
     final logo = logoUrl?.trim();
     return Container(
-      width: 38,
-      height: 38,
+      width: size,
+      height: size,
       padding: const EdgeInsets.all(6),
       decoration: BoxDecoration(
         color: selected

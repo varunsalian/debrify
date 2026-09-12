@@ -43,6 +43,36 @@ void main() {
     },
   );
 
+  testWidgets('ambient duration updates do not rebuild the video surface', (
+    tester,
+  ) async {
+    final engine = _PendingFirstFrameEngine();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: HeroTrailerBackdrop(
+          imageUrl: null,
+          videoUrl: 'https://example.invalid/live.m3u8',
+          live: true,
+          enabled: true,
+          startDelay: Duration.zero,
+          engineFactory: () async => engine,
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 1));
+    await tester.pump();
+    engine._firstFrame.complete();
+    await tester.pump();
+    await tester.pumpAndSettle();
+    final builds = engine.buildVideoCalls;
+    for (var i = 0; i < 8; i++) {
+      engine.durations.add(Duration(seconds: 30 + i * 2));
+      await tester.pump(const Duration(seconds: 2));
+    }
+    expect(engine.buildVideoCalls, builds);
+    await tester.pumpWidget(const SizedBox());
+  });
+
   testWidgets('mounts the render surface before the first frame arrives', (
     tester,
   ) async {
@@ -72,6 +102,7 @@ void main() {
 
 class _PendingFirstFrameEngine implements TrailerEngine {
   final Completer<void> _firstFrame = Completer<void>();
+  final durations = StreamController<Duration>.broadcast();
   bool opened = false;
   bool disposed = false;
   int buildVideoCalls = 0;
@@ -88,7 +119,7 @@ class _PendingFirstFrameEngine implements TrailerEngine {
   Stream<Duration> get positionStream => const Stream<Duration>.empty();
 
   @override
-  Stream<Duration> get durationStream => const Stream<Duration>.empty();
+  Stream<Duration> get durationStream => durations.stream;
 
   @override
   Stream<void> get errorStream => const Stream<void>.empty();
@@ -125,6 +156,7 @@ class _PendingFirstFrameEngine implements TrailerEngine {
   @override
   Future<void> dispose() async {
     disposed = true;
+    await durations.close();
   }
 
   @override

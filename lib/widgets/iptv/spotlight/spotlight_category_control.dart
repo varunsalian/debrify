@@ -9,6 +9,7 @@ class SpotlightCategoryControl extends StatelessWidget {
   final String categoryLabel;
   final int channelCount;
   final bool loading;
+  final bool dense;
   final VoidCallback onPressed;
   final VoidCallback? onOpenOptions;
   final FocusNode? focusNode;
@@ -20,6 +21,7 @@ class SpotlightCategoryControl extends StatelessWidget {
     required this.channelCount,
     required this.onPressed,
     this.loading = false,
+    this.dense = false,
     this.onOpenOptions,
     this.focusNode,
     this.optionsFocusNode,
@@ -32,6 +34,35 @@ class SpotlightCategoryControl extends StatelessWidget {
         ? 'All channels'
         : categoryLabel.trim();
     final countLabel = loading ? 'Loading' : _formatCount(channelCount);
+
+    if (dense) {
+      return KeyedSubtree(
+        key: const ValueKey<String>('spotlight-category-control'),
+        child: Row(
+          children: [
+            Expanded(
+              child: _CategoryButton(
+                focusNode: focusNode,
+                semanticsLabel: 'Category, $category, $countLabel channels',
+                onPressed: onPressed,
+                child: Text(
+                  '$category · $countLabel',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ),
+            if (onOpenOptions != null) ...[
+              const SizedBox(width: 7),
+              _CategoryOptionsButton(
+                focusNode: optionsFocusNode,
+                onPressed: onOpenOptions!,
+              ),
+            ],
+          ],
+        ),
+      );
+    }
 
     return DecoratedBox(
       key: const ValueKey<String>('spotlight-category-control'),
@@ -139,7 +170,7 @@ class _CategoryButtonState extends State<_CategoryButton> {
             child: AnimatedContainer(
               key: const ValueKey<String>('spotlight-category-pill'),
               duration: const Duration(milliseconds: 120),
-              height: 42,
+              height: 44,
               padding: const EdgeInsets.symmetric(horizontal: 13),
               decoration: BoxDecoration(
                 color: _focused
@@ -230,7 +261,7 @@ class _CategoryOptionsButtonState extends State<_CategoryOptionsButton> {
                 key: const ValueKey<String>('spotlight-category-options'),
                 duration: const Duration(milliseconds: 120),
                 width: 42,
-                height: 42,
+                height: 44,
                 decoration: BoxDecoration(
                   color: _focused
                       ? t.focusFill

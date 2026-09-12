@@ -85,15 +85,15 @@ void main() {
         find.byKey(const ValueKey<String>('spotlight-shell-wide')),
         findsOneWidget,
       );
-      expect(find.text('Parent search'), findsOneWidget);
+      expect(find.text('Parent search', skipOffstage: false), findsOneWidget);
       expect(find.text('Persistent rail'), findsOneWidget);
       expect(find.text('CATEGORY'), findsOneWidget);
       expect(find.text('All channels · 26'), findsOneWidget);
       expect(find.text('Live TV'), findsOneWidget);
       expect(find.text('Movies'), findsOneWidget);
       expect(find.text('Series'), findsOneWidget);
-      expect(find.text('Debrify'), findsOneWidget);
-      expect(find.text('A mix of great shows.'), findsOneWidget);
+      expect(find.byTooltip('Expand sources'), findsOneWidget);
+      expect(find.text('This is CBBC'), findsOneWidget);
       expect(find.text('Independent content'), findsOneWidget);
       final preview = find.byKey(
         const ValueKey<String>('native-preview-probe'),
@@ -137,7 +137,7 @@ void main() {
         findsOneWidget,
       );
       expect(find.text('Persistent rail'), findsNothing);
-      expect(find.text('Parent search'), findsOneWidget);
+      expect(find.text('Parent search', skipOffstage: false), findsOneWidget);
       expect(find.text('My provider · 26'), findsOneWidget);
       expect(find.text('All channels · 26'), findsOneWidget);
       expect(find.text('Debrify'), findsNothing);
