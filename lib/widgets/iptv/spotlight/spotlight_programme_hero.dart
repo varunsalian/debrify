@@ -19,14 +19,14 @@ class SpotlightProgrammeHero extends StatefulWidget {
   final IptvChannel? channel;
   final EpgProgramme? selectedProgramme;
   final Widget previewSlot;
-  final SpotlightHeroActionsBuilder actionsBuilder;
+  final SpotlightHeroActionsBuilder? actionsBuilder;
 
   const SpotlightProgrammeHero({
     super.key,
     required this.channel,
     this.selectedProgramme,
     required this.previewSlot,
-    required this.actionsBuilder,
+    this.actionsBuilder,
   });
 
   @override
@@ -152,7 +152,7 @@ class _SpotlightProgrammeHeroState extends State<SpotlightProgrammeHero> {
             programme == null || programme.description.trim().isEmpty
             ? null
             : Text(programme.description.trim()),
-        actionsSlot: widget.actionsBuilder(
+        actionsSlot: widget.actionsBuilder?.call(
           context,
           programme,
           constraints.maxHeight < kSpotlightHeroDenseBreakpoint,

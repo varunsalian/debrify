@@ -17,7 +17,7 @@ class SpotlightHeroChrome extends StatelessWidget {
   final Widget titleSlot;
   final Widget? metadataSlot;
   final Widget? descriptionSlot;
-  final Widget actionsSlot;
+  final Widget? actionsSlot;
   final int informationFlex;
   final int previewFlex;
 
@@ -26,7 +26,7 @@ class SpotlightHeroChrome extends StatelessWidget {
     required this.previewSlot,
     required this.identitySlot,
     required this.titleSlot,
-    required this.actionsSlot,
+    this.actionsSlot,
     this.metadataSlot,
     this.descriptionSlot,
     this.informationFlex = 10,
@@ -37,9 +37,8 @@ class SpotlightHeroChrome extends StatelessWidget {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        // A standard 896x540 TV leaves roughly 170px for this hero once its
-        // search, controls, and timeline are present. The editorial stack
-        // needs a genuinely tall desktop window.
+        // Use compact typography until the hero has room for the full
+        // programme description and desktop actions.
         final dense = constraints.maxHeight < kSpotlightHeroDenseBreakpoint;
         // Keep the title and touch-sized actions side by side when the live
         // metadata/progress stack cannot fit above a 48px action row.
@@ -162,6 +161,8 @@ class SpotlightHeroChrome extends StatelessWidget {
       ],
     );
 
+    if (actionsSlot == null) return summary;
+
     // At the compact boundary there is room for one line of icon actions
     // beside the summary. The parent puts every remaining action in More.
     if (minimal) {
@@ -171,7 +172,7 @@ class SpotlightHeroChrome extends StatelessWidget {
           const SizedBox(width: 8),
           KeyedSubtree(
             key: const ValueKey<String>('spotlight-hero-actions-slot'),
-            child: actionsSlot,
+            child: actionsSlot!,
           ),
         ],
       );
@@ -184,7 +185,7 @@ class SpotlightHeroChrome extends StatelessWidget {
         const SizedBox(height: 5),
         KeyedSubtree(
           key: const ValueKey<String>('spotlight-hero-actions-slot'),
-          child: actionsSlot,
+          child: actionsSlot!,
         ),
       ],
     );
@@ -244,11 +245,13 @@ class SpotlightHeroChrome extends StatelessWidget {
           ),
         ] else
           const Spacer(),
-        const SizedBox(height: 8),
-        KeyedSubtree(
-          key: const ValueKey<String>('spotlight-hero-actions-slot'),
-          child: actionsSlot,
-        ),
+        if (actionsSlot != null) ...[
+          const SizedBox(height: 8),
+          KeyedSubtree(
+            key: const ValueKey<String>('spotlight-hero-actions-slot'),
+            child: actionsSlot!,
+          ),
+        ],
       ],
     );
   }

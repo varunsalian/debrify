@@ -5954,13 +5954,17 @@ class IptvResultsViewState extends State<IptvResultsView>
                 builder: (context, programme, _) => SpotlightProgrammeHero(
                   channel: channel,
                   selectedProgramme: programme,
-                  actionsBuilder: (context, activeProgramme, dense) =>
-                      _buildSpotlightHeroActions(
-                        channel,
-                        programme: activeProgramme,
-                        compact:
-                            mode == IptvSpotlightLayoutMode.compact || dense,
-                      ),
+                  // TV uses short/held OK on the guide row for these actions.
+                  actionsBuilder: widget.isTelevision
+                      ? null
+                      : (context, activeProgramme, dense) =>
+                            _buildSpotlightHeroActions(
+                              channel,
+                              programme: activeProgramme,
+                              compact:
+                                  mode == IptvSpotlightLayoutMode.compact ||
+                                  dense,
+                            ),
                   // Keep the established preview subtree byte-for-byte.
                   // Spotlight only lays it out beside programme information.
                   previewSlot: Semantics(

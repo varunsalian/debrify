@@ -317,7 +317,7 @@ https://example.com/live/two.ts
   });
 
   testWidgets(
-    'Spotlight traverses wrapped hero actions before leaving the panel',
+    'Desktop Spotlight traverses wrapped hero actions before leaving the panel',
     (tester) async {
       await tester.runAsync(() => StorageService.createIptvList('Review list'));
       tester.view.physicalSize = const Size(896, 800);
@@ -336,7 +336,7 @@ https://example.com/live/two.ts
           home: Scaffold(
             body: IptvResultsView(
               searchQuery: '',
-              isTelevision: true,
+              isTelevision: false,
               onUpArrowFromFilters: () => upExits++,
             ),
           ),
@@ -410,17 +410,30 @@ https://example.com/live/two.ts
   );
 
   for (final width in [800.0, 896.0]) {
-    testWidgets('Spotlight DPAD connects sources, guide and hero at $width', (
+    testWidgets('Spotlight TV DPAD skips hero actions at $width', (
       tester,
     ) async {
       tester.view.physicalSize = Size(width, 540);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
+      final searchFocus = FocusNode();
+      final searchController = TextEditingController();
+      addTearDown(searchFocus.dispose);
+      addTearDown(searchController.dispose);
       await tester.pumpWidget(
         MaterialApp(
           theme: ThemeData.dark(),
-          home: const Scaffold(
-            body: IptvResultsView(searchQuery: '', isTelevision: true),
+          home: Scaffold(
+            body: IptvResultsView(
+              searchQuery: '',
+              isTelevision: true,
+              searchHeader: BrowseSearchHeader(
+                controller: searchController,
+                focusNode: searchFocus,
+                hintText: 'Search channels',
+                onClear: searchController.clear,
+              ),
+            ),
           ),
         ),
       );
@@ -465,10 +478,8 @@ https://example.com/live/two.ts
         await tester.pump();
         expect(
           FocusManager.instance.primaryFocus?.debugLabel,
-          'iptv-spotlight-primary-action',
+          'iptv-category-filter',
         );
-        await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
-        await tester.pump();
         await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
       }
       await tester.pump();
@@ -493,27 +504,27 @@ https://example.com/live/two.ts
       );
       await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
       await tester.pump();
+      expect(searchFocus.hasFocus, isTrue);
       expect(
-        FocusManager.instance.primaryFocus?.debugLabel,
-        'iptv-spotlight-primary-action',
+        find.byKey(const ValueKey('spotlight-hero-actions-slot')),
+        findsNothing,
       );
-      expect(find.text('Watch'), findsOneWidget);
-      await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
-      await tester.pump();
-      await tester.sendKeyEvent(LogicalKeyboardKey.gameButtonA);
+      expect(find.text('Watch'), findsNothing);
+      expect(find.byTooltip('More channel actions'), findsNothing);
+      tester
+          .widget<BrowseSearchHeader>(find.byType(BrowseSearchHeader))
+          .onDownArrow!();
+      await tester.pumpAndSettle();
+      expect(timeline.controller!.hasFocus, isTrue);
+      // Holding OK still opens channel options and returns to the guide.
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.select);
+      await tester.pump(const Duration(milliseconds: 700));
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.select);
       await tester.pumpAndSettle();
       expect(find.byType(SimpleDialog), findsOneWidget);
       expect(find.text('Add to Favorites'), findsOneWidget);
       await tester.sendKeyEvent(LogicalKeyboardKey.escape);
       await tester.pumpAndSettle();
-      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
-      await tester.pump();
-      expect(
-        FocusManager.instance.primaryFocus?.debugLabel,
-        'iptv-category-filter',
-      );
-      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
-      await tester.pump();
       expect(timeline.controller!.hasFocus, isTrue);
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox.shrink());
@@ -533,7 +544,10 @@ https://example.com/live/two.ts
           home: Scaffold(
             body: RepaintBoundary(
               key: surface,
-              child: const IptvResultsView(searchQuery: '', isTelevision: true),
+              child: const IptvResultsView(
+                searchQuery: '',
+                isTelevision: false,
+              ),
             ),
           ),
         ),
