@@ -41,7 +41,9 @@ class SpotlightHeroChrome extends StatelessWidget {
         // search, controls, and timeline are present. The editorial stack
         // needs a genuinely tall desktop window.
         final dense = constraints.maxHeight < kSpotlightHeroDenseBreakpoint;
-        final minimal = constraints.maxHeight < 140;
+        // Keep the title and touch-sized actions side by side when the live
+        // metadata/progress stack cannot fit above a 48px action row.
+        final minimal = constraints.maxHeight < 160;
         final gap = dense ? 6.0 : 8.0;
         final usableWidth = constraints.maxWidth > gap
             ? constraints.maxWidth - gap
@@ -167,11 +169,9 @@ class SpotlightHeroChrome extends StatelessWidget {
         children: [
           Expanded(child: summary),
           const SizedBox(width: 8),
-          Flexible(
-            child: KeyedSubtree(
-              key: const ValueKey<String>('spotlight-hero-actions-slot'),
-              child: actionsSlot,
-            ),
+          KeyedSubtree(
+            key: const ValueKey<String>('spotlight-hero-actions-slot'),
+            child: actionsSlot,
           ),
         ],
       );

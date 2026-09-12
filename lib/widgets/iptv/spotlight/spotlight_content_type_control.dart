@@ -124,8 +124,8 @@ class _ContentTypeSegmentState extends State<_ContentTypeSegment> {
           if (_focused != focused) setState(() => _focused = focused);
         },
         onKeyEvent: (_, event) {
-          if (event is KeyDownEvent && isActivateOrSpaceKey(event.logicalKey)) {
-            widget.onPressed();
+          if (isActivateOrSpaceKey(event.logicalKey)) {
+            if (event is KeyDownEvent) widget.onPressed();
             return KeyEventResult.handled;
           }
           return KeyEventResult.ignored;

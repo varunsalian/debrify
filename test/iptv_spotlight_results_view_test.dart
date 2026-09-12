@@ -163,6 +163,323 @@ https://example.com/live/two.ts
     );
   }
 
+  testWidgets('Spotlight source rail Left opens the app sidebar', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1000, 540);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final sidebar = FocusNode(debugLabel: 'review-sidebar');
+    addTearDown(sidebar.dispose);
+    final previousSidebarCallback = MainPageBridge.focusTvSidebar;
+    addTearDown(() => MainPageBridge.focusTvSidebar = previousSidebarCallback);
+    MainPageBridge.focusTvSidebar = sidebar.requestFocus;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Row(
+            children: [
+              SizedBox(
+                width: 72,
+                child: TextButton(
+                  focusNode: sidebar,
+                  onPressed: () {},
+                  child: const Text('Home'),
+                ),
+              ),
+              const Expanded(
+                child: IptvResultsView(searchQuery: '', isTelevision: true),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    for (var i = 0; i < 30; i++) {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 50)),
+      );
+      await tester.pump(const Duration(milliseconds: 100));
+      if (find.byType(SpotlightLiveTimeline).evaluate().isNotEmpty) break;
+    }
+    final timeline = tester.widget<SpotlightLiveTimeline>(
+      find.byType(SpotlightLiveTimeline),
+    );
+    expect(timeline.controller!.focusFirstChannel(), isTrue);
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+    await tester.pump();
+    expect(
+      FocusManager.instance.primaryFocus?.nearestScope?.debugLabel,
+      'iptv-spotlight-sources',
+    );
+    final sourceNode = FocusManager.instance.primaryFocus!;
+    Focus.of(tester.element(find.text('Manage sources'))).requestFocus();
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.pump();
+    expect(
+      FocusManager.instance.primaryFocus?.nearestScope?.debugLabel,
+      isNot('iptv-spotlight-sources'),
+    );
+    sourceNode.requestFocus();
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+    await tester.pump();
+    expect(sidebar.hasPrimaryFocus, isTrue);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets(
+    'Spotlight traverses wrapped hero actions before leaving the panel',
+    (tester) async {
+      await tester.runAsync(() => StorageService.createIptvList('Review list'));
+      tester.view.physicalSize = const Size(896, 800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      var upExits = 0;
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ThemeData.dark(),
+          home: Scaffold(
+            body: IptvResultsView(
+              searchQuery: '',
+              isTelevision: true,
+              onUpArrowFromFilters: () => upExits++,
+            ),
+          ),
+        ),
+      );
+      for (var i = 0; i < 30; i++) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 50)),
+        );
+        await tester.pump(const Duration(milliseconds: 100));
+        if (find.byType(SpotlightLiveTimeline).evaluate().isNotEmpty) break;
+      }
+      tester
+          .widget<SpotlightLiveTimeline>(find.byType(SpotlightLiveTimeline))
+          .controller!
+          .focusFirstChannel();
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+      await tester.pump();
+      final watch = find.widgetWithText(FilledButton, 'Watch');
+      final favorite = find.byTooltip('Add to Favorites');
+      expect(
+        tester.getTopLeft(favorite).dy,
+        greaterThan(tester.getTopLeft(watch).dy),
+      );
+      final watchNode = tester.widget<FilledButton>(watch).focusNode!;
+      expect(watchNode.hasPrimaryFocus, isTrue);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pump();
+      final lowerAction = FocusManager.instance.primaryFocus!;
+      expect(lowerAction.nearestScope?.debugLabel, 'iptv-spotlight-hero');
+      expect(lowerAction.rect.top, greaterThan(watchNode.rect.top));
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+      await tester.pump();
+      expect(
+        FocusManager.instance.primaryFocus!.rect.top,
+        lessThan(lowerAction.rect.top),
+      );
+      expect(upExits, 0);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+      await tester.pump();
+      expect(upExits, 1);
+      lowerAction.requestFocus();
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pump();
+      expect(
+        FocusManager.instance.primaryFocus?.debugLabel,
+        'iptv-category-filter',
+      );
+      Focus.of(
+        tester.element(
+          find.descendant(
+            of: find.byTooltip('More channel actions'),
+            matching: find.byIcon(Icons.more_horiz_rounded),
+          ),
+        ),
+      ).requestFocus();
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.pump();
+      expect(
+        FocusManager.instance.primaryFocus?.nearestScope?.debugLabel,
+        isNot('iptv-spotlight-hero'),
+      );
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
+  for (final width in [800.0, 896.0]) {
+    testWidgets('Spotlight DPAD connects sources, guide and hero at $width', (
+      tester,
+    ) async {
+      tester.view.physicalSize = Size(width, 540);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ThemeData.dark(),
+          home: const Scaffold(
+            body: IptvResultsView(searchQuery: '', isTelevision: true),
+          ),
+        ),
+      );
+      for (var i = 0; i < 30; i++) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 50)),
+        );
+        await tester.pump(const Duration(milliseconds: 100));
+        if (find.byType(SpotlightLiveTimeline).evaluate().isNotEmpty) break;
+      }
+      await tester.tap(find.byKey(const ValueKey('spotlight-category-pill')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('All channels'));
+      await tester.pumpAndSettle();
+      final timeline = tester.widget<SpotlightLiveTimeline>(
+        find.byType(SpotlightLiveTimeline),
+      );
+      expect(timeline.controller!.focusChannelAt(1), isTrue);
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+      await tester.pump();
+      expect(timeline.controller!.hasFocus, isFalse);
+      expect(
+        FocusManager.instance.primaryFocus?.debugLabel,
+        'iptv-playlist-filter',
+      );
+      if (width >= 860) {
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+      } else {
+        // The source trigger opens a sheet on compact canvases; dismissing it
+        // must restore the trigger before returning to content.
+        await tester.sendKeyEvent(LogicalKeyboardKey.select);
+        await tester.pumpAndSettle();
+        expect(find.byType(Dialog), findsOneWidget);
+        await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+        await tester.pumpAndSettle();
+        expect(
+          FocusManager.instance.primaryFocus?.debugLabel,
+          'iptv-playlist-filter',
+        );
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+        await tester.pump();
+        expect(
+          FocusManager.instance.primaryFocus?.debugLabel,
+          'iptv-spotlight-primary-action',
+        );
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+        await tester.pump();
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      }
+      await tester.pump();
+      expect(timeline.controller!.hasFocus, isTrue);
+      expect(
+        find.byWidgetPredicate(
+          (w) =>
+              w is Semantics &&
+              (w.properties.label?.contains(timeline.channels[1].name) ??
+                  false) &&
+              w.properties.selected == true,
+        ),
+        findsOneWidget,
+      );
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+      await tester.pump();
+      expect(
+        FocusManager.instance.primaryFocus?.debugLabel,
+        'iptv-category-filter',
+      );
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+      await tester.pump();
+      expect(
+        FocusManager.instance.primaryFocus?.debugLabel,
+        'iptv-spotlight-primary-action',
+      );
+      expect(find.text('Watch'), findsOneWidget);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.gameButtonA);
+      await tester.pumpAndSettle();
+      expect(find.byType(SimpleDialog), findsOneWidget);
+      expect(find.text('Add to Favorites'), findsOneWidget);
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pump();
+      expect(
+        FocusManager.instance.primaryFocus?.debugLabel,
+        'iptv-category-filter',
+      );
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pump();
+      expect(timeline.controller!.hasFocus, isTrue);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+  }
+
+  testWidgets(
+    'Spotlight preview actions fit the minimum and desktop canvases',
+    (tester) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(800, 480);
+      addTearDown(tester.view.reset);
+      final surface = GlobalKey();
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ThemeData.dark(),
+          home: Scaffold(
+            body: RepaintBoundary(
+              key: surface,
+              child: const IptvResultsView(searchQuery: '', isTelevision: true),
+            ),
+          ),
+        ),
+      );
+      for (var i = 0; i < 30; i++) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 50)),
+        );
+        await tester.pump(const Duration(milliseconds: 100));
+        if (find.byType(SpotlightLiveTimeline).evaluate().isNotEmpty) break;
+      }
+      for (final size in [
+        const Size(800, 480),
+        const Size(896, 480),
+        const Size(1200, 800),
+      ]) {
+        tester.view.physicalSize = size;
+        await tester.pump();
+        final timeline = tester.widget<SpotlightLiveTimeline>(
+          find.byType(SpotlightLiveTimeline),
+        );
+        timeline.controller!.focusFirstChannel();
+        await tester.pump(const Duration(milliseconds: 400));
+        await tester.pump();
+        final actions = tester.getRect(
+          find.byKey(const ValueKey('spotlight-hero-actions-slot')),
+        );
+        final hero = tester.getRect(
+          find.byKey(const ValueKey('spotlight-hero')),
+        );
+        expect(hero.contains(actions.topLeft), isTrue);
+        expect(hero.contains(actions.bottomRight - const Offset(1, 1)), isTrue);
+        expect(tester.takeException(), isNull);
+      }
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
   testWidgets('selected Spotlight style renders the complete TV shell', (
     tester,
   ) async {

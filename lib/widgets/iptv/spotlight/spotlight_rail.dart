@@ -375,17 +375,17 @@ class _SpotlightRailTileState extends State<_SpotlightRailTile> {
           }
         },
         onKeyEvent: (_, event) {
-          if (event is KeyDownEvent && isActivateOrSpaceKey(event.logicalKey)) {
-            widget.entry.onPressed();
+          if (isActivateOrSpaceKey(event.logicalKey)) {
+            if (event is KeyDownEvent) widget.entry.onPressed();
             return KeyEventResult.handled;
           }
-          if (event is KeyDownEvent &&
+          if ((event is KeyDownEvent || event is KeyRepeatEvent) &&
               event.logicalKey == LogicalKeyboardKey.arrowUp &&
               widget.onUp != null) {
             widget.onUp!();
             return KeyEventResult.handled;
           }
-          if (event is KeyDownEvent &&
+          if ((event is KeyDownEvent || event is KeyRepeatEvent) &&
               event.logicalKey == LogicalKeyboardKey.arrowRight &&
               widget.onExitRight != null) {
             widget.onExitRight!();

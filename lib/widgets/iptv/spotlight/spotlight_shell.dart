@@ -30,6 +30,7 @@ class SpotlightShell extends StatelessWidget {
   final String compactSourceLabel;
   final int? compactSourceCount;
   final FocusNode? compactSourceFocusNode;
+  final VoidCallback? onSourceDown;
 
   final double railWidth;
   final EdgeInsetsGeometry padding;
@@ -47,6 +48,7 @@ class SpotlightShell extends StatelessWidget {
     this.compactSourceLabel = 'Sources',
     this.compactSourceCount,
     this.compactSourceFocusNode,
+    this.onSourceDown,
     this.railWidth = 236,
     this.padding = const EdgeInsets.all(12),
   }) : assert(
@@ -156,6 +158,7 @@ class SpotlightShell extends StatelessWidget {
                     count: compactSourceCount,
                     focusNode: compactSourceFocusNode,
                     onPressed: onOpenSources,
+                    onDown: onSourceDown,
                   ),
                   const SizedBox(width: 8),
                   Expanded(
@@ -263,12 +266,14 @@ class _CompactSourceButton extends StatefulWidget {
   final int? count;
   final FocusNode? focusNode;
   final VoidCallback onPressed;
+  final VoidCallback? onDown;
 
   const _CompactSourceButton({
     required this.label,
     required this.count,
     required this.focusNode,
     required this.onPressed,
+    this.onDown,
   });
 
   @override
@@ -299,8 +304,14 @@ class _CompactSourceButtonState extends State<_CompactSourceButton> {
           if (_focused != focused) setState(() => _focused = focused);
         },
         onKeyEvent: (_, event) {
-          if (event is KeyDownEvent && isActivateOrSpaceKey(event.logicalKey)) {
-            widget.onPressed();
+          if (isActivateOrSpaceKey(event.logicalKey)) {
+            if (event is KeyDownEvent) widget.onPressed();
+            return KeyEventResult.handled;
+          }
+          if ((event is KeyDownEvent || event is KeyRepeatEvent) &&
+              event.logicalKey == LogicalKeyboardKey.arrowDown &&
+              widget.onDown != null) {
+            widget.onDown!();
             return KeyEventResult.handled;
           }
           return KeyEventResult.ignored;

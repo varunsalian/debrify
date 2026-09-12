@@ -104,6 +104,9 @@ class IptvSpotlightTimelineController {
 
   bool get hasFocus => _state?._hasFocus ?? false;
 
+  /// Restores the exact logical cell without resetting its programme or time.
+  bool restoreFocus() => _state?._restoreFocus() ?? false;
+
   bool focusFirstChannel() => _state?._focusFirstChannel() ?? false;
 
   /// Focus [index] directly without searching [SpotlightLiveTimeline.channels].
@@ -234,6 +237,12 @@ class SpotlightLiveTimeline extends StatefulWidget {
 
   final IptvSpotlightTimelineController? controller;
   final bool autofocus;
+  final VoidCallback? onExitUp;
+  final VoidCallback? onExitLeft;
+  final SpotlightChannelActivate? onChannelActions;
+
+  /// A first pointer tap selects for preview; a second tap opens the selection.
+  final bool selectBeforeActivate;
 
   /// Injectable wall clock for deterministic cursor-following tests.
   @visibleForTesting
@@ -259,6 +268,10 @@ class SpotlightLiveTimeline extends StatefulWidget {
     this.onSelectionChanged,
     this.controller,
     this.autofocus = false,
+    this.onExitUp,
+    this.onExitLeft,
+    this.onChannelActions,
+    this.selectBeforeActivate = true,
     this.now = DateTime.now,
     this.initialWindowStart,
     this.windowDuration = const Duration(hours: 4),
@@ -344,6 +357,7 @@ class _SpotlightLiveTimelineState extends State<SpotlightLiveTimeline> {
   final FocusNode _ownedFocusNode = FocusNode(
     debugLabel: 'spotlight-live-timeline',
   );
+  final FocusNode _nowFocusNode = FocusNode(debugLabel: 'spotlight-now');
   final ScrollController _verticalController = ScrollController();
   final Map<SpotlightTimelineEntryKey, _GuideSnapshot> _guides = {};
   final Map<SpotlightTimelineEntryKey, _LoadToken> _pendingLoads = {};
@@ -362,6 +376,15 @@ class _SpotlightLiveTimelineState extends State<SpotlightLiveTimeline> {
   int? _selectedProgrammeStartMs;
   late int _cursorTimeMs;
   bool _hasFocus = false;
+  (SpotlightTimelineEntryKey, int?)? _lastTappedCell;
+
+  late final TvHoldOk _holdOk = TvHoldOk(
+    onTap: _activateCursor,
+    onHold: () {
+      final entry = _entryAt(_cursorRow);
+      if (entry != null) widget.onChannelActions?.call(entry);
+    },
+  );
 
   FocusNode get _focusNode => _ownedFocusNode;
 
@@ -404,6 +427,8 @@ class _SpotlightLiveTimelineState extends State<SpotlightLiveTimeline> {
         oldWidget.epgContextVersion != widget.epgContextVersion;
     if (sourceChanged || contextChanged) {
       _cancelPointerSelection();
+      _lastTappedCell = null;
+      _holdOk.reset();
       _guides.clear();
       _pendingLoads.clear();
       _lastGuideRefreshAt = DateTime.now();
@@ -448,7 +473,9 @@ class _SpotlightLiveTimelineState extends State<SpotlightLiveTimeline> {
     _verticalController
       ..removeListener(_onViewportMoved)
       ..dispose();
+    _holdOk.reset();
     _ownedFocusNode.dispose();
+    _nowFocusNode.dispose();
     widget.controller?._detach(this);
     super.dispose();
   }
@@ -690,14 +717,35 @@ class _SpotlightLiveTimelineState extends State<SpotlightLiveTimeline> {
 
   void _onFocusChange(bool focused) {
     if (_hasFocus == focused) return;
-    setState(() => _hasFocus = focused);
+    setState(() {
+      _hasFocus = focused;
+      if (!focused) {
+        _lastTappedCell = null;
+        _holdOk.reset();
+      }
+    });
   }
 
   KeyEventResult _onKeyEvent(FocusNode node, KeyEvent event) {
+    // The ruler's Now button owns its own keys; it is not a logical guide cell.
+    if (!node.hasPrimaryFocus) return KeyEventResult.ignored;
+    if (isActivateOrSpaceKey(event.logicalKey) &&
+        widget.onChannelActions != null &&
+        _cursorLane != _CursorLane.retry) {
+      _cancelPointerSelection();
+      return _holdOk.handle(event);
+    }
     if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
       return KeyEventResult.ignored;
     }
+    _cancelPointerSelection();
+    _holdOk.reset();
+    _lastTappedCell = null;
     final key = event.logicalKey;
+    if (key == LogicalKeyboardKey.home) {
+      _jumpToNow();
+      return KeyEventResult.handled;
+    }
     final activationKey = isActivateOrSpaceKey(key);
     // Holding OK must never stack player routes or confirmation dialogs.
     // Arrow repeats remain intentional for fast guide traversal.
@@ -717,9 +765,16 @@ class _SpotlightLiveTimelineState extends State<SpotlightLiveTimeline> {
 
   KeyEventResult _moveVertical(int delta) {
     final target = _cursorRow + delta;
-    if (target < 0 || target >= widget.channels.length) {
-      return KeyEventResult.ignored;
+    if (target < 0) {
+      if (!_followNow) {
+        _nowFocusNode.requestFocus();
+        return KeyEventResult.handled;
+      }
+      if (widget.onExitUp == null) return KeyEventResult.ignored;
+      widget.onExitUp!();
+      return KeyEventResult.handled;
     }
+    if (target >= widget.channels.length) return KeyEventResult.handled;
     setState(() {
       _cursorRow = target;
       if (_cursorLane == _CursorLane.programme) {
@@ -751,11 +806,15 @@ class _SpotlightLiveTimelineState extends State<SpotlightLiveTimeline> {
   }
 
   KeyEventResult _moveHorizontal(int delta) {
-    if (widget.channels.isEmpty) return KeyEventResult.ignored;
+    if (widget.channels.isEmpty) return KeyEventResult.handled;
     final entry = _entryAt(_cursorRow)!;
     final programmes = _programmesForRow(_cursorRow);
     if (_cursorLane == _CursorLane.identity) {
-      if (delta < 0) return KeyEventResult.ignored;
+      if (delta < 0) {
+        if (widget.onExitLeft == null) return KeyEventResult.ignored;
+        widget.onExitLeft!();
+        return KeyEventResult.handled;
+      }
       if (_hasGuideError(entry)) {
         setState(() {
           _cursorLane = _CursorLane.retry;
@@ -765,7 +824,7 @@ class _SpotlightLiveTimelineState extends State<SpotlightLiveTimeline> {
         return KeyEventResult.handled;
       }
       if (programmes == null || programmes.isEmpty) {
-        return KeyEventResult.ignored;
+        return KeyEventResult.handled;
       }
       final nearest = _nearestProgramme(programmes, _cursorTimeMs);
       setState(() {
@@ -778,7 +837,7 @@ class _SpotlightLiveTimelineState extends State<SpotlightLiveTimeline> {
     }
 
     if (_cursorLane == _CursorLane.retry) {
-      if (delta > 0) return KeyEventResult.ignored;
+      if (delta > 0) return KeyEventResult.handled;
       setState(() {
         _cursorLane = _CursorLane.identity;
         _selectedProgrammeStartMs = null;
@@ -796,7 +855,7 @@ class _SpotlightLiveTimelineState extends State<SpotlightLiveTimeline> {
         _announceSelection();
         return KeyEventResult.handled;
       }
-      return KeyEventResult.ignored;
+      return KeyEventResult.handled;
     }
 
     var current = programmes.indexWhere(
@@ -817,7 +876,7 @@ class _SpotlightLiveTimelineState extends State<SpotlightLiveTimeline> {
       _announceSelection();
       return KeyEventResult.handled;
     }
-    if (target >= programmes.length) return KeyEventResult.ignored;
+    if (target >= programmes.length) return KeyEventResult.handled;
 
     final programme = programmes[target];
     setState(() {
@@ -955,6 +1014,42 @@ class _SpotlightLiveTimelineState extends State<SpotlightLiveTimeline> {
   void _activateIdentity(SpotlightTimelineEntry entry) =>
       widget.onChannelActivate(entry);
 
+  bool _restoreFocus() {
+    if (!mounted || widget.channels.isEmpty) return false;
+    _cancelPointerSelection();
+    if (_cursorLane == _CursorLane.programme) {
+      for (final programme
+          in _programmesForRow(_cursorRow) ?? const <EpgProgramme>[]) {
+        if (programme.start.millisecondsSinceEpoch ==
+            _selectedProgrammeStartMs) {
+          setState(() => _ensureProgrammeVisible(programme));
+          break;
+        }
+      }
+    }
+    _focusNode.requestFocus();
+    _revealRow(_cursorRow);
+    _announceSelection();
+    return true;
+  }
+
+  void _tapIdentity(int row) {
+    final target = (_entryAt(row)!.entryKey, null);
+    final activate = !widget.selectBeforeActivate || _lastTappedCell == target;
+    _lastTappedCell = target;
+    _selectIdentity(row, activate: activate, fromPointer: true);
+  }
+
+  void _tapProgramme(int row, EpgProgramme programme) {
+    final target = (
+      _entryAt(row)!.entryKey,
+      programme.start.millisecondsSinceEpoch,
+    );
+    final activate = !widget.selectBeforeActivate || _lastTappedCell == target;
+    _lastTappedCell = target;
+    _selectProgramme(row, programme, activate: activate, fromPointer: true);
+  }
+
   bool _focusFirstChannel() {
     if (!mounted || widget.channels.isEmpty) return false;
     _selectIdentity(0);
@@ -999,6 +1094,11 @@ class _SpotlightLiveTimelineState extends State<SpotlightLiveTimeline> {
       _focusNode.requestFocus();
     }
     setState(() {
+      // Hover and controller selection can move the cursor without another
+      // tap. Only consecutive taps on the same selected cell may activate it.
+      if (_lastTappedCell != (_entryAt(row)!.entryKey, null)) {
+        _lastTappedCell = null;
+      }
       _cursorRow = row;
       _cursorLane = _CursorLane.identity;
       _selectedProgrammeStartMs = null;
@@ -1020,6 +1120,10 @@ class _SpotlightLiveTimelineState extends State<SpotlightLiveTimeline> {
       _focusNode.requestFocus();
     }
     setState(() {
+      if (_lastTappedCell !=
+          (_entryAt(row)!.entryKey, programme.start.millisecondsSinceEpoch)) {
+        _lastTappedCell = null;
+      }
       _cursorRow = row;
       _cursorLane = _CursorLane.programme;
       _selectProgrammeValue(programme);
@@ -1086,12 +1190,22 @@ class _SpotlightLiveTimelineState extends State<SpotlightLiveTimeline> {
     final shift =
         keys.contains(LogicalKeyboardKey.shiftLeft) ||
         keys.contains(LogicalKeyboardKey.shiftRight);
-    final deltaPixels = signal.scrollDelta.dx.abs() > 0.01
-        ? signal.scrollDelta.dx
-        : shift
-        ? signal.scrollDelta.dy
-        : 0.0;
-    if (deltaPixels == 0) return;
+    // Match Flutter's axis swap for Shift + physical mouse wheel. Trackpad
+    // axes remain independent even while Shift is pressed.
+    final swapAxes = shift && signal.kind == PointerDeviceKind.mouse;
+    final horizontal = swapAxes ? signal.scrollDelta.dy : signal.scrollDelta.dx;
+    final vertical = swapAxes ? signal.scrollDelta.dx : signal.scrollDelta.dy;
+    if (horizontal.abs() <= vertical.abs()) return;
+    GestureBinding.instance.pointerSignalResolver.register(signal, (_) {
+      _panTimeline(horizontal, timelineWidth);
+      signal.respond(allowPlatformDefault: false);
+    });
+  }
+
+  void _panTimeline(double deltaPixels, double timelineWidth) {
+    if (timelineWidth <= 0) return;
+    _cancelPointerSelection();
+    _lastTappedCell = null;
     final deltaMs =
         deltaPixels / timelineWidth * widget.windowDuration.inMilliseconds;
     setState(() {
@@ -1100,6 +1214,43 @@ class _SpotlightLiveTimelineState extends State<SpotlightLiveTimeline> {
       );
       _followNow = false;
     });
+  }
+
+  KeyEventResult _onNowKeyEvent(FocusNode node, KeyEvent event) {
+    final key = event.logicalKey;
+    if (isActivateOrSpaceKey(key)) {
+      if (event is KeyDownEvent) _jumpToNow();
+      return KeyEventResult.handled;
+    }
+    if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
+      return KeyEventResult.ignored;
+    }
+    if (key == LogicalKeyboardKey.arrowDown ||
+        key == LogicalKeyboardKey.arrowRight) {
+      _restoreFocus();
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.arrowUp && widget.onExitUp != null) {
+      widget.onExitUp!();
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.arrowLeft && widget.onExitLeft != null) {
+      widget.onExitLeft!();
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
+
+  void _jumpToNow() {
+    _cancelPointerSelection();
+    setState(() {
+      _followNow = true;
+      _windowStart = _defaultWindowStart(widget.now());
+      _cursorTimeMs = widget.now().millisecondsSinceEpoch;
+      _cursorLane = _CursorLane.identity;
+      _selectedProgrammeStartMs = null;
+    });
+    _restoreFocus();
   }
 
   @override
@@ -1132,49 +1283,53 @@ class _SpotlightLiveTimelineState extends State<SpotlightLiveTimeline> {
                 return Listener(
                   onPointerSignal: (signal) =>
                       _handlePointerSignal(signal, timelineWidth),
-                  child: Stack(
-                    children: [
-                      Column(
-                        children: [
-                          _buildRuler(tokens, identityWidth, timelineWidth),
-                          Expanded(
-                            child: LayoutBuilder(
-                              builder: (context, rowConstraints) {
-                                if (_viewportHeight !=
-                                    rowConstraints.maxHeight) {
-                                  _viewportHeight = rowConstraints.maxHeight;
-                                  WidgetsBinding.instance.addPostFrameCallback((
-                                    _,
-                                  ) {
-                                    if (mounted) _armViewportLoad();
-                                  });
-                                }
-                                if (widget.channels.isEmpty) {
-                                  return _buildEmpty(tokens);
-                                }
-                                return ListView.builder(
-                                  key: const ValueKey(
-                                    'spotlight-live-timeline-rows',
-                                  ),
-                                  controller: _verticalController,
-                                  itemExtent: widget.rowHeight,
-                                  itemCount: widget.channels.length,
-                                  physics: const ClampingScrollPhysics(),
-                                  itemBuilder: (context, index) => _buildRow(
-                                    tokens,
-                                    _entryAt(index)!,
-                                    index,
-                                    identityWidth,
-                                    timelineWidth,
-                                  ),
-                                );
-                              },
+                  child: GestureDetector(
+                    onHorizontalDragStart: (_) => _cancelPointerSelection(),
+                    onHorizontalDragUpdate: (details) =>
+                        _panTimeline(-details.delta.dx, timelineWidth),
+                    child: Stack(
+                      children: [
+                        Column(
+                          children: [
+                            _buildRuler(tokens, identityWidth, timelineWidth),
+                            Expanded(
+                              child: LayoutBuilder(
+                                builder: (context, rowConstraints) {
+                                  if (_viewportHeight !=
+                                      rowConstraints.maxHeight) {
+                                    _viewportHeight = rowConstraints.maxHeight;
+                                    WidgetsBinding.instance
+                                        .addPostFrameCallback((_) {
+                                          if (mounted) _armViewportLoad();
+                                        });
+                                  }
+                                  if (widget.channels.isEmpty) {
+                                    return _buildEmpty(tokens);
+                                  }
+                                  return ListView.builder(
+                                    key: const ValueKey(
+                                      'spotlight-live-timeline-rows',
+                                    ),
+                                    controller: _verticalController,
+                                    itemExtent: widget.rowHeight,
+                                    itemCount: widget.channels.length,
+                                    physics: const ClampingScrollPhysics(),
+                                    itemBuilder: (context, index) => _buildRow(
+                                      tokens,
+                                      _entryAt(index)!,
+                                      index,
+                                      identityWidth,
+                                      timelineWidth,
+                                    ),
+                                  );
+                                },
+                              ),
                             ),
-                          ),
-                        ],
-                      ),
-                      _buildPlayhead(identityWidth, timelineWidth, tokens),
-                    ],
+                          ],
+                        ),
+                        _buildPlayhead(identityWidth, timelineWidth, tokens),
+                      ],
+                    ),
                   ),
                 );
               },
@@ -1233,14 +1388,47 @@ class _SpotlightLiveTimelineState extends State<SpotlightLiveTimeline> {
                     ),
                   ),
                 ),
-                Text(
-                  '${widget.channels.length}',
-                  style: TextStyle(
-                    color: tokens.fgFaint,
-                    fontSize: 11,
-                    fontFeatures: const [FontFeature.tabularFigures()],
+                if (!_followNow)
+                  Focus(
+                    canRequestFocus: false,
+                    onKeyEvent: _onNowKeyEvent,
+                    child: TextButton(
+                      key: const ValueKey('spotlight-jump-to-now'),
+                      focusNode: _nowFocusNode,
+                      onFocusChange: (focused) {
+                        if (focused) {
+                          _cancelPointerSelection();
+                          _holdOk.reset();
+                          _lastTappedCell = null;
+                        }
+                        setState(() {});
+                      },
+                      onPressed: _jumpToNow,
+                      style:
+                          TextButton.styleFrom(
+                            minimumSize: const Size(44, 38),
+                            padding: const EdgeInsets.symmetric(horizontal: 6),
+                            foregroundColor: tokens.accent,
+                          ).copyWith(
+                            foregroundColor: WidgetStateProperty.resolveWith(
+                              (states) => states.contains(WidgetState.focused)
+                                  ? tokens.focusInk
+                                  : tokens.accent,
+                            ),
+                            backgroundColor: WidgetStateProperty.resolveWith(
+                              (states) => states.contains(WidgetState.focused)
+                                  ? tokens.focusFill
+                                  : Colors.transparent,
+                            ),
+                          ),
+                      child: const Text('Now'),
+                    ),
+                  )
+                else
+                  Text(
+                    '${widget.channels.length}',
+                    style: TextStyle(color: tokens.fgFaint, fontSize: 11),
                   ),
-                ),
               ],
             ),
           ),
@@ -1307,17 +1495,25 @@ class _SpotlightLiveTimelineState extends State<SpotlightLiveTimeline> {
   ) {
     return RepaintBoundary(
       key: ValueKey(('spotlight-row', entry.entryKey)),
-      child: Row(
-        children: [
-          SizedBox(
-            width: identityWidth,
-            child: _buildIdentity(tokens, entry, row),
-          ),
-          SizedBox(
-            width: timelineWidth,
-            child: _buildProgrammeTrack(tokens, entry, row, timelineWidth),
-          ),
-        ],
+      // Signals bubble from the row to ListView. Claim a predominantly
+      // horizontal gesture here before its small vertical drift can scroll
+      // the channel list; the outer listener also covers the ruler/gaps.
+      child: Listener(
+        behavior: HitTestBehavior.opaque,
+        onPointerSignal: (signal) =>
+            _handlePointerSignal(signal, timelineWidth),
+        child: Row(
+          children: [
+            SizedBox(
+              width: identityWidth,
+              child: _buildIdentity(tokens, entry, row),
+            ),
+            SizedBox(
+              width: timelineWidth,
+              child: _buildProgrammeTrack(tokens, entry, row, timelineWidth),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1331,9 +1527,11 @@ class _SpotlightLiveTimelineState extends State<SpotlightLiveTimeline> {
     final programmeIsRefreshing =
         _cursorLane == _CursorLane.programme &&
         (snapshot == null || snapshot.status == _GuideStatus.loading);
+    final current = _cursorRow == row;
     final selected =
         _hasFocus &&
-        _cursorRow == row &&
+        !_nowFocusNode.hasFocus &&
+        current &&
         (_cursorLane == _CursorLane.identity || programmeIsRefreshing);
     final channel = entry.channel;
     final guideUnavailable =
@@ -1342,7 +1540,7 @@ class _SpotlightLiveTimelineState extends State<SpotlightLiveTimeline> {
       button: true,
       focusable: true,
       focused: selected,
-      selected: selected,
+      selected: current,
       label: [
         if (channel.channelNumber != null) 'Channel ${channel.channelNumber}',
         channel.name,
@@ -1352,8 +1550,10 @@ class _SpotlightLiveTimelineState extends State<SpotlightLiveTimeline> {
       ].join(', '),
       hint: guideUnavailable
           ? 'Press OK to play the channel or RIGHT to retry the guide'
+          : widget.selectBeforeActivate
+          ? 'Tap to preview; tap again to watch'
           : null,
-      onTap: () => _selectIdentity(row, activate: true),
+      onTap: () => _tapIdentity(row),
       child: MouseRegion(
         cursor: SystemMouseCursors.click,
         // Match the existing channel rows: crossing the guide does not churn
@@ -1365,7 +1565,13 @@ class _SpotlightLiveTimelineState extends State<SpotlightLiveTimeline> {
         onExit: (_) => _cancelPointerSelection(),
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,
-          onTap: () => _selectIdentity(row, activate: true),
+          onTap: () => _tapIdentity(row),
+          onLongPress: widget.onChannelActions == null
+              ? null
+              : () {
+                  _selectIdentity(row, fromPointer: true);
+                  widget.onChannelActions!(entry);
+                },
           child: AnimatedScale(
             scale: selected ? 1.018 : 1,
             duration: const Duration(milliseconds: 130),
@@ -1376,10 +1582,18 @@ class _SpotlightLiveTimelineState extends State<SpotlightLiveTimeline> {
               margin: const EdgeInsets.fromLTRB(6, 5, 7, 5),
               padding: const EdgeInsets.symmetric(horizontal: 10),
               decoration: BoxDecoration(
-                color: selected ? tokens.focusFill : _identityBackground,
+                color: selected
+                    ? tokens.focusFill
+                    : current
+                    ? tokens.selectedTint
+                    : _identityBackground,
                 borderRadius: BorderRadius.circular(9),
                 border: Border.all(
-                  color: selected ? tokens.focusFill! : tokens.hairline,
+                  color: selected
+                      ? tokens.focusFill!
+                      : current
+                      ? tokens.accent
+                      : tokens.hairline,
                 ),
                 boxShadow: selected
                     ? [
@@ -1435,7 +1649,9 @@ class _SpotlightLiveTimelineState extends State<SpotlightLiveTimeline> {
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          channel.group?.trim().isNotEmpty == true
+                          _lastTappedCell == (entry.entryKey, null)
+                              ? 'Tap again to watch'
+                              : channel.group?.trim().isNotEmpty == true
                               ? channel.group!
                               : 'Live television',
                           maxLines: 1,
@@ -1483,7 +1699,7 @@ class _SpotlightLiveTimelineState extends State<SpotlightLiveTimeline> {
             size: 15,
             color: tokens.fgDim,
           ),
-          onTap: () => _selectIdentity(row, activate: true),
+          onTap: () => _tapIdentity(row),
         ),
       );
     }
@@ -1491,6 +1707,7 @@ class _SpotlightLiveTimelineState extends State<SpotlightLiveTimeline> {
     final status = snapshot?.status ?? _GuideStatus.loading;
     final retrySelected =
         _hasFocus &&
+        !_nowFocusNode.hasFocus &&
         _cursorRow == row &&
         _cursorLane == _CursorLane.retry &&
         status == _GuideStatus.error;
@@ -1571,12 +1788,14 @@ class _SpotlightLiveTimelineState extends State<SpotlightLiveTimeline> {
               key: ValueKey(('spotlight-empty', entry.entryKey)),
               label: 'No programme information',
               color: tokens.fgFaint,
+              onTap: () => _tapIdentity(row),
             )
           else if (visible.isEmpty)
             _GuideMessage(
               key: ValueKey(('spotlight-window-empty', entry.entryKey)),
               label: 'No information in this time window',
               color: tokens.fgFaint,
+              onTap: () => _tapIdentity(row),
             ),
           for (final item in visible)
             Positioned(
@@ -1611,11 +1830,11 @@ class _SpotlightLiveTimelineState extends State<SpotlightLiveTimeline> {
     int programmeIndex,
   ) {
     final startMs = programme.start.millisecondsSinceEpoch;
-    final selected =
-        _hasFocus &&
+    final current =
         _cursorRow == row &&
         _cursorLane == _CursorLane.programme &&
         _selectedProgrammeStartMs == startMs;
+    final selected = _hasFocus && !_nowFocusNode.hasFocus && current;
     final now = DateTime.now();
     final isNow = programme.airsAt(now);
     final isPast = !programme.stop.isAfter(now);
@@ -1629,12 +1848,15 @@ class _SpotlightLiveTimelineState extends State<SpotlightLiveTimeline> {
       button: true,
       focusable: true,
       focused: selected,
-      selected: selected,
+      selected: current,
+      hint: widget.selectBeforeActivate
+          ? 'Tap to preview; tap again to open'
+          : null,
       label:
           '${programme.title}, ${_formatTime(programme.start)} to '
           '${_formatTime(programme.stop)}'
           '${programme.hasArchive && isPast ? ', replay available' : ''}',
-      onTap: () => _selectProgramme(row, programme, activate: true),
+      onTap: () => _tapProgramme(row, programme),
       child: MouseRegion(
         cursor: SystemMouseCursors.click,
         onEnter: (_) => _armPointerSelection(
@@ -1649,7 +1871,13 @@ class _SpotlightLiveTimelineState extends State<SpotlightLiveTimeline> {
         onExit: (_) => _cancelPointerSelection(),
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,
-          onTap: () => _selectProgramme(row, programme, activate: true),
+          onTap: () => _tapProgramme(row, programme),
+          onLongPress: widget.onChannelActions == null
+              ? null
+              : () {
+                  _selectProgramme(row, programme, fromPointer: true);
+                  widget.onChannelActions!(entry);
+                },
           child: AnimatedScale(
             scale: selected ? 1.018 : 1,
             duration: const Duration(milliseconds: 130),
@@ -1667,13 +1895,15 @@ class _SpotlightLiveTimelineState extends State<SpotlightLiveTimeline> {
               decoration: BoxDecoration(
                 color: selected
                     ? tokens.focusFill
-                    : isNow
+                    : current || isNow
                     ? tokens.selectedTint
                     : const Color(0xFF10243A),
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(
                   color: selected
                       ? tokens.focusFill!
+                      : current
+                      ? tokens.accent
                       : isNow
                       ? tokens.accent.withValues(alpha: 0.56)
                       : tokens.hairline2,

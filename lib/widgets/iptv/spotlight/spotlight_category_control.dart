@@ -122,8 +122,8 @@ class _CategoryButtonState extends State<_CategoryButton> {
           if (_focused != focused) setState(() => _focused = focused);
         },
         onKeyEvent: (_, event) {
-          if (event is KeyDownEvent && isActivateOrSpaceKey(event.logicalKey)) {
-            widget.onPressed();
+          if (isActivateOrSpaceKey(event.logicalKey)) {
+            if (event is KeyDownEvent) widget.onPressed();
             return KeyEventResult.handled;
           }
           return KeyEventResult.ignored;
@@ -212,9 +212,8 @@ class _CategoryOptionsButtonState extends State<_CategoryOptionsButton> {
             if (_focused != focused) setState(() => _focused = focused);
           },
           onKeyEvent: (_, event) {
-            if (event is KeyDownEvent &&
-                isActivateOrSpaceKey(event.logicalKey)) {
-              widget.onPressed();
+            if (isActivateOrSpaceKey(event.logicalKey)) {
+              if (event is KeyDownEvent) widget.onPressed();
               return KeyEventResult.handled;
             }
             return KeyEventResult.ignored;

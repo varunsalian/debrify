@@ -14,6 +14,7 @@ import 'package:flutter/foundation.dart'
         mapEquals,
         setEquals;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../../models/iptv_playlist.dart';
 import '../../services/debrify_image_cache.dart';
 import '../browse/brand_accent.dart';
@@ -33,7 +34,7 @@ import '../../services/xtream_codes_service.dart';
 import '../../services/storage_service.dart';
 import '../../services/video_player_launcher.dart';
 import '../../utils/iptv_player_paging.dart';
-import '../../utils/tv_keys.dart' show TvHeldKeyGuard;
+import '../../utils/tv_keys.dart' show TvHeldKeyGuard, isActivateOrSpaceKey;
 import '../../screens/iptv/xtream_series_detail.dart';
 import '../../screens/settings/iptv_settings_page.dart';
 import '../hero_trailer_backdrop.dart';
@@ -457,6 +458,18 @@ class IptvResultsViewState extends State<IptvResultsView>
   final FocusNode _spotlightCategoryOptionsFocusNode = FocusNode(
     debugLabel: 'iptv-spotlight-category-options',
   );
+  final FocusNode _spotlightPrimaryFocusNode = FocusNode(
+    debugLabel: 'iptv-spotlight-primary-action',
+  );
+  final FocusScopeNode _spotlightRailScope = FocusScopeNode(
+    debugLabel: 'iptv-spotlight-sources',
+    traversalEdgeBehavior: TraversalEdgeBehavior.parentScope,
+    directionalTraversalEdgeBehavior: TraversalEdgeBehavior.parentScope,
+  );
+  final FocusScopeNode _spotlightHeroScope = FocusScopeNode(
+    debugLabel: 'iptv-spotlight-hero',
+    traversalEdgeBehavior: TraversalEdgeBehavior.parentScope,
+  );
   final IptvSpotlightTimelineController _spotlightTimelineController =
       IptvSpotlightTimelineController();
   final GlobalKey _spotlightTimelineKey = GlobalKey(
@@ -627,13 +640,16 @@ class IptvResultsViewState extends State<IptvResultsView>
     final channel = _scheduleChannel;
     if (channel == null) return;
     setState(() => _scheduleChannel = null);
-    if (!widget.isTelevision) return;
+    if (!widget.isTelevision &&
+        _spotlightLayoutMode == IptvSpotlightLayoutMode.classic) {
+      return;
+    }
     // Hand focus back to the row that opened the schedule. Post-frame: the
     // grid (and the cached node's row) only exists again after this build.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       if (_spotlightLayoutMode != IptvSpotlightLayoutMode.classic &&
-          _spotlightTimelineController.focusChannel(channel)) {
+          _spotlightTimelineController.restoreFocus()) {
         return;
       }
       final node = _cardFocusNodes[channel];
@@ -1115,6 +1131,9 @@ class IptvResultsViewState extends State<IptvResultsView>
     _categoryFilterFocusNode.dispose();
     _contentTypeFocusNode.dispose();
     _spotlightCategoryOptionsFocusNode.dispose();
+    _spotlightPrimaryFocusNode.dispose();
+    _spotlightRailScope.dispose();
+    _spotlightHeroScope.dispose();
     _previewShown.dispose();
     _spotlightProgrammeShown.dispose();
     _previewShowing.dispose();
@@ -2968,6 +2987,10 @@ class IptvResultsViewState extends State<IptvResultsView>
       // still means "take me to the list" — collapse the rail and focus the
       // already-loaded content instead of a dead OK press.
       if (focusContent) {
+        if (_spotlightLayoutMode != IptvSpotlightLayoutMode.classic) {
+          _focusSpotlightContentEntry();
+          return;
+        }
         _focusContentAfterLoad = true;
         _consumeContentFocusRequest();
       }
@@ -2999,7 +3022,10 @@ class IptvResultsViewState extends State<IptvResultsView>
   void _consumeContentFocusRequest() {
     if (!_focusContentAfterLoad) return;
     _focusContentAfterLoad = false;
-    if (!widget.isTelevision) return;
+    if (!widget.isTelevision &&
+        _spotlightLayoutMode == IptvSpotlightLayoutMode.classic) {
+      return;
+    }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       if (_filteredChannels.isNotEmpty) {
@@ -5545,31 +5571,84 @@ class IptvResultsViewState extends State<IptvResultsView>
     return SpotlightShell(
       mode: mode,
       searchSlot: _buildSpotlightSearch(mode),
-      railSlot: _buildSpotlightRail(),
-      categorySlot: SpotlightCategoryControl(
-        categoryLabel: _effectiveCategory ?? 'All channels',
-        channelCount: _filteredChannels.length,
-        loading: _isLoading,
-        onPressed: _showSpotlightCategoryPicker,
-        focusNode: _categoryFilterFocusNode,
-        optionsFocusNode: _spotlightCategoryOptionsFocusNode,
-        onOpenOptions: _canShowCategoryOptions && _effectiveCategory != null
-            ? () => unawaited(_promptCategoryOptions(_selectedCategory!))
-            : null,
+      railSlot: FocusScope(
+        node: _spotlightRailScope,
+        onKeyEvent: (_, event) {
+          // MainPage's automatic sidebar fallback deliberately excludes
+          // nested scopes. This persistent rail must exit explicitly on TV.
+          if ((event is KeyDownEvent || event is KeyRepeatEvent) &&
+              event.logicalKey == LogicalKeyboardKey.arrowLeft &&
+              widget.isTelevision &&
+              MainPageBridge.focusTvSidebar != null) {
+            MainPageBridge.focusTvSidebar!();
+            return KeyEventResult.handled;
+          }
+          return KeyEventResult.ignored;
+        },
+        child: _buildSpotlightRail(),
+      ),
+      categorySlot: _spotlightControlNavigation(
+        SpotlightCategoryControl(
+          categoryLabel: _effectiveCategory ?? 'All channels',
+          channelCount: _filteredChannels.length,
+          loading: _isLoading,
+          onPressed: _showSpotlightCategoryPicker,
+          focusNode: _categoryFilterFocusNode,
+          optionsFocusNode: _spotlightCategoryOptionsFocusNode,
+          onOpenOptions: _canShowCategoryOptions && _effectiveCategory != null
+              ? () => unawaited(_promptCategoryOptions(_selectedCategory!))
+              : null,
+        ),
       ),
       contentTypeSlot: selected?.isXtreamCodes ?? false
-          ? SpotlightContentTypeControl(
-              value: _selectedContentType,
-              onChanged: _onContentTypeChanged,
-              firstItemFocusNode: _contentTypeFocusNode,
+          ? _spotlightControlNavigation(
+              SpotlightContentTypeControl(
+                value: _selectedContentType,
+                onChanged: _onContentTypeChanged,
+                firstItemFocusNode: _contentTypeFocusNode,
+              ),
             )
           : null,
-      heroSlot: _buildSpotlightHero(mode),
+      heroSlot: FocusScope(
+        node: _spotlightHeroScope,
+        onKeyEvent: (_, event) {
+          if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
+            return KeyEventResult.ignored;
+          }
+          final direction = switch (event.logicalKey) {
+            LogicalKeyboardKey.arrowUp => TraversalDirection.up,
+            LogicalKeyboardKey.arrowDown => TraversalDirection.down,
+            LogicalKeyboardKey.arrowLeft => TraversalDirection.left,
+            LogicalKeyboardKey.arrowRight => TraversalDirection.right,
+            _ => null,
+          };
+          if (direction == null) return KeyEventResult.ignored;
+          // Traverse all action rows before leaving the hero. Its scope
+          // confines spatial traversal to these buttons, including Wrap rows.
+          final primary = FocusManager.instance.primaryFocus;
+          if (primary != null && primary.focusInDirection(direction)) {
+            return KeyEventResult.handled;
+          }
+          switch (direction) {
+            case TraversalDirection.down:
+              _categoryFilterFocusNode.requestFocus();
+            case TraversalDirection.up:
+              _focusSpotlightSearchOrExit();
+            case TraversalDirection.left:
+              _focusSpotlightSources();
+            case TraversalDirection.right:
+              break;
+          }
+          return KeyEventResult.handled;
+        },
+        child: _buildSpotlightHero(mode),
+      ),
       contentSlot: _buildSpotlightContent(mode),
       onOpenSources: _showSpotlightSources,
       compactSourceLabel: selected?.name ?? 'Sources',
       compactSourceCount: _spotlightSelectedSourceCount,
       compactSourceFocusNode: _playlistFilterFocusNode,
+      onSourceDown: _focusSpotlightHero,
       // The corrected mock gives the source rail about one fifth of a
       // 16:9 TV canvas. Keep it compact on 896-wide TV layouts and allow a
       // little more air on desktop without taking width from the guide.
@@ -5577,6 +5656,59 @@ class IptvResultsViewState extends State<IptvResultsView>
       padding: EdgeInsets.all(mode == IptvSpotlightLayoutMode.wide ? 10 : 8),
     );
   }
+
+  void _focusSpotlightSources() {
+    if (_spotlightLayoutMode == IptvSpotlightLayoutMode.wide &&
+        _spotlightRailScope.focusedChild != null) {
+      _spotlightRailScope.requestFocus();
+    } else {
+      _playlistFilterFocusNode.requestFocus();
+    }
+  }
+
+  void _focusSpotlightHero() {
+    if (_spotlightPrimaryFocusNode.context != null) {
+      _spotlightPrimaryFocusNode.requestFocus();
+    } else {
+      _categoryFilterFocusNode.requestFocus();
+    }
+  }
+
+  Widget _spotlightControlNavigation(Widget child) => Focus(
+    canRequestFocus: false,
+    onKeyEvent: (_, event) {
+      if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
+        return KeyEventResult.ignored;
+      }
+      final key = event.logicalKey;
+      if (key == LogicalKeyboardKey.arrowUp) {
+        if (_spotlightPrimaryFocusNode.context != null) {
+          _spotlightPrimaryFocusNode.requestFocus();
+        } else {
+          _focusSpotlightSearchOrExit();
+        }
+        return KeyEventResult.handled;
+      }
+      if (key == LogicalKeyboardKey.arrowDown) {
+        if (_scheduleChannel == null &&
+            !_spotlightTimelineController.restoreFocus()) {
+          _focusFirstChannel();
+        }
+        return _scheduleChannel == null
+            ? KeyEventResult.handled
+            : KeyEventResult.ignored;
+      }
+      if (key == LogicalKeyboardKey.arrowLeft &&
+          (_contentTypeFocusNode.hasFocus ||
+              (!(_selectedPlaylist?.isXtreamCodes ?? false) &&
+                  _categoryFilterFocusNode.hasFocus))) {
+        _focusSpotlightSources();
+        return KeyEventResult.handled;
+      }
+      return KeyEventResult.ignored;
+    },
+    child: child,
+  );
 
   Widget _buildSpotlightSearch(IptvSpotlightLayoutMode mode) {
     final search = widget.searchHeader;
@@ -5593,7 +5725,7 @@ class IptvResultsViewState extends State<IptvResultsView>
       onChanged: search.onChanged,
       onSubmitted: search.onSubmitted,
       onClear: search.onClear,
-      onDownArrow: search.onDownArrow,
+      onDownArrow: _focusSpotlightSources,
       ink: t.fg,
       fillColor: t.fg.withValues(alpha: 0.055),
       focusedBorderColor: t.accent,
@@ -5659,7 +5791,7 @@ class IptvResultsViewState extends State<IptvResultsView>
 
   void _focusSpotlightContentEntry() {
     if (_filteredChannels.isNotEmpty) {
-      _focusFirstChannel();
+      if (!_spotlightTimelineController.restoreFocus()) _focusFirstChannel();
       return;
     }
     if ((_selectedPlaylist?.isXtreamCodes ?? false) &&
@@ -5707,7 +5839,20 @@ class IptvResultsViewState extends State<IptvResultsView>
                       ),
                   // Keep the established preview subtree byte-for-byte.
                   // Spotlight only lays it out beside programme information.
-                  previewSlot: _buildPreviewStage(channel, epoch),
+                  previewSlot: Semantics(
+                    button: channel != null,
+                    label: channel == null
+                        ? 'Channel preview'
+                        : 'Watch ${channel.name}',
+                    child: GestureDetector(
+                      key: const ValueKey('spotlight-preview-play'),
+                      behavior: HitTestBehavior.opaque,
+                      onTap: channel == null
+                          ? null
+                          : () => unawaited(_playChannel(channel)),
+                      child: _buildPreviewStage(channel, epoch),
+                    ),
+                  ),
                 ),
               ),
         ),
@@ -5739,18 +5884,23 @@ class IptvResultsViewState extends State<IptvResultsView>
       return Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          IconButton(
-            tooltip: primary.label,
-            onPressed: primary.action,
-            visualDensity: VisualDensity.compact,
-            style: IconButton.styleFrom(
-              foregroundColor: t.focusInk,
-              backgroundColor: t.focusFill,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
-              ),
+          _spotlightActivation(
+            primary.action,
+            FilledButton.icon(
+              focusNode: _spotlightPrimaryFocusNode,
+              onPressed: primary.action,
+              style: FilledButton.styleFrom(
+                minimumSize: const Size(44, 44),
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+                foregroundColor: t.focusInk,
+                backgroundColor: t.focusFill,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ).copyWith(side: _spotlightFocusBorder),
+              icon: Icon(primary.icon, size: 19),
+              label: Text(primary.label),
             ),
-            icon: Icon(primary.icon, size: 19),
           ),
           if (hasMore) ...[
             const SizedBox(width: 5),
@@ -5777,32 +5927,39 @@ class IptvResultsViewState extends State<IptvResultsView>
       runSpacing: 6,
       crossAxisAlignment: WrapCrossAlignment.center,
       children: [
-        FilledButton.icon(
-          style: FilledButton.styleFrom(
-            backgroundColor: t.focusFill,
-            foregroundColor: t.focusInk,
-            padding: compactPadding,
-            visualDensity: VisualDensity.compact,
-            shape: buttonShape,
-          ),
-          onPressed: primary.action,
-          icon: Icon(primary.icon, size: 18),
-          label: Text(primary.label),
-        ),
-        if (record != null)
-          OutlinedButton.icon(
-            style: OutlinedButton.styleFrom(
-              foregroundColor: record.label == 'Stop' ? t.rec : t.fg,
-              side: BorderSide(
-                color: record.label == 'Stop' ? t.rec : t.hairline2,
-              ),
+        _spotlightActivation(
+          primary.action,
+          FilledButton.icon(
+            focusNode: _spotlightPrimaryFocusNode,
+            style: FilledButton.styleFrom(
+              backgroundColor: t.focusFill,
+              foregroundColor: t.focusInk,
               padding: compactPadding,
               visualDensity: VisualDensity.compact,
               shape: buttonShape,
+            ).copyWith(side: _spotlightFocusBorder),
+            onPressed: primary.action,
+            icon: Icon(primary.icon, size: 18),
+            label: Text(primary.label),
+          ),
+        ),
+        if (record != null)
+          _spotlightActivation(
+            record.action,
+            OutlinedButton.icon(
+              style: OutlinedButton.styleFrom(
+                foregroundColor: record.label == 'Stop' ? t.rec : t.fg,
+                side: BorderSide(
+                  color: record.label == 'Stop' ? t.rec : t.hairline2,
+                ),
+                padding: compactPadding,
+                visualDensity: VisualDensity.compact,
+                shape: buttonShape,
+              ),
+              onPressed: record.action,
+              icon: Icon(record.icon, size: 16),
+              label: Text(record.label),
             ),
-            onPressed: record.action,
-            icon: Icon(record.icon, size: 16),
-            label: Text(record.label),
           ),
         if (canSave)
           _spotlightIconAction(
@@ -5974,11 +6131,18 @@ class IptvResultsViewState extends State<IptvResultsView>
               borderRadius: BorderRadius.circular(20),
               side: BorderSide(color: t.hairline2),
             ),
-            title: Text(
-              channel.name,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(color: t.fg, fontWeight: FontWeight.w800),
+            title: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    channel.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(color: t.fg, fontWeight: FontWeight.w800),
+                  ),
+                ),
+                CloseButton(onPressed: () => Navigator.of(dialogContext).pop()),
+              ],
             ),
             children: [
               if (record != null)
@@ -6019,6 +6183,28 @@ class IptvResultsViewState extends State<IptvResultsView>
     );
   }
 
+  WidgetStateProperty<BorderSide?> get _spotlightFocusBorder =>
+      WidgetStateProperty.resolveWith(
+        (states) => BorderSide(
+          color: states.contains(WidgetState.focused)
+              ? IptvStyleTokens.spotlight.accent
+              : Colors.transparent,
+          width: 3,
+        ),
+      );
+
+  Widget _spotlightActivation(VoidCallback action, Widget child) => Focus(
+    canRequestFocus: false,
+    onKeyEvent: (_, event) {
+      if (!isActivateOrSpaceKey(event.logicalKey)) {
+        return KeyEventResult.ignored;
+      }
+      if (event is KeyDownEvent) action();
+      return KeyEventResult.handled;
+    },
+    child: child,
+  );
+
   Widget _spotlightIconAction({
     required String tooltip,
     required IconData icon,
@@ -6026,17 +6212,38 @@ class IptvResultsViewState extends State<IptvResultsView>
     bool selected = false,
   }) {
     final t = IptvStyleTokens.spotlight;
-    return IconButton(
-      tooltip: tooltip,
-      onPressed: onPressed,
-      visualDensity: VisualDensity.compact,
-      style: IconButton.styleFrom(
-        foregroundColor: selected ? t.accent : t.fgMid,
-        backgroundColor: selected ? t.selectedTint : t.focusTint,
-        side: BorderSide(color: selected ? t.accent : t.hairline2),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+    return _spotlightActivation(
+      onPressed,
+      IconButton(
+        tooltip: tooltip,
+        onPressed: onPressed,
+        constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
+        style:
+            IconButton.styleFrom(
+              foregroundColor: selected ? t.accent : t.fgMid,
+              backgroundColor: selected ? t.selectedTint : t.focusTint,
+              side: BorderSide(color: selected ? t.accent : t.hairline2),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ).copyWith(
+              backgroundColor: WidgetStateProperty.resolveWith(
+                (states) => states.contains(WidgetState.focused)
+                    ? t.focusFill
+                    : selected
+                    ? t.selectedTint
+                    : t.focusTint,
+              ),
+              foregroundColor: WidgetStateProperty.resolveWith(
+                (states) => states.contains(WidgetState.focused)
+                    ? t.focusInk
+                    : selected
+                    ? t.accent
+                    : t.fgMid,
+              ),
+            ),
+        icon: Icon(icon, size: 18),
       ),
-      icon: Icon(icon, size: 18),
     );
   }
 
@@ -6103,6 +6310,12 @@ class IptvResultsViewState extends State<IptvResultsView>
           controller: _spotlightTimelineController,
           epgContextVersion: epgVersion,
           onSelectionChanged: _onSpotlightSelection,
+          onExitUp: () => _categoryFilterFocusNode.requestFocus(),
+          onExitLeft: _focusSpotlightSources,
+          onChannelActions: (entry) => _showSpotlightChannelActions(
+            entry.channel,
+            programme: _spotlightProgrammeShown.value,
+          ),
           onChannelActivate: (entry) => unawaited(_playChannel(entry.channel)),
           onProgrammeActivate: _activateSpotlightProgramme,
           windowDuration: const Duration(hours: 3),
@@ -6184,22 +6397,41 @@ class IptvResultsViewState extends State<IptvResultsView>
             child: SizedBox(
               width: math.min(390, size.width - 32),
               height: math.min(620, size.height - 32),
-              child: Padding(
-                padding: const EdgeInsets.all(8),
-                child: _buildSpotlightRail(
-                  autofocusFirstItem: true,
-                  onSelectPlaylist: (playlist) => closeThen(
-                    () => _onPlaylistChanged(playlist, focusContent: true),
+              child: Column(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.only(left: 16, right: 8),
+                    child: Row(
+                      children: [
+                        const Expanded(child: Text('Sources')),
+                        CloseButton(
+                          onPressed: () => Navigator.of(dialogContext).pop(),
+                        ),
+                      ],
+                    ),
                   ),
-                  onOpenRecordings: _pageCanRecord
-                      ? () => closeThen(_openScheduledRecordings)
-                      : null,
-                  onNewList: () =>
-                      closeThen(() => unawaited(_promptCreateList())),
-                  onAddPlaylist: () => closeThen(_navigateToSettings),
-                  onAddAddon: () => closeThen(_navigateToAddons),
-                  onManageSources: () => closeThen(_navigateToManageSources),
-                ),
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.all(8),
+                      child: _buildSpotlightRail(
+                        autofocusFirstItem: true,
+                        onSelectPlaylist: (playlist) => closeThen(
+                          () =>
+                              _onPlaylistChanged(playlist, focusContent: true),
+                        ),
+                        onOpenRecordings: _pageCanRecord
+                            ? () => closeThen(_openScheduledRecordings)
+                            : null,
+                        onNewList: () =>
+                            closeThen(() => unawaited(_promptCreateList())),
+                        onAddPlaylist: () => closeThen(_navigateToSettings),
+                        onAddAddon: () => closeThen(_navigateToAddons),
+                        onManageSources: () =>
+                            closeThen(_navigateToManageSources),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
@@ -6912,7 +7144,7 @@ class IptvResultsViewState extends State<IptvResultsView>
     final channel = _previewShown.value;
     if (channel != null &&
         _spotlightLayoutMode != IptvSpotlightLayoutMode.classic &&
-        _spotlightTimelineController.focusChannel(channel)) {
+        _spotlightTimelineController.restoreFocus()) {
       return;
     }
     if (channel != null && _rowAttached(channel)) {
@@ -7816,9 +8048,19 @@ class _SpotlightCategoryPickerDialogState
             children: [
               Padding(
                 padding: const EdgeInsets.fromLTRB(24, 20, 24, 14),
-                child: Text(
-                  'Choose category',
-                  style: TextStyle(color: t.fg, fontWeight: FontWeight.w800),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        'Choose category',
+                        style: TextStyle(
+                          color: t.fg,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                    CloseButton(onPressed: () => Navigator.of(context).pop()),
+                  ],
                 ),
               ),
               Divider(height: 1, color: t.hairline),

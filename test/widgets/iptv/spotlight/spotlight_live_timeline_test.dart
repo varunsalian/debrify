@@ -97,6 +97,445 @@ void main() {
     expect(marks.map((mark) => mark.add(nepalOffset).minute), [30, 0]);
   });
 
+  testWidgets(
+    'touch selects before playback, even on the focused startup row',
+    (tester) async {
+      final channels = [_channel('One', 'one'), _channel('Two', 'two')];
+      final played = <String>[];
+      final selections = <SpotlightTimelineSelection>[];
+      await tester.pumpWidget(
+        _host(
+          channels: channels,
+          height: 178,
+          autofocus: true,
+          loader: (_) async => [],
+          onChannel: (entry) => played.add(entry.channel.name),
+          onSelection: selections.add,
+        ),
+      );
+      await tester.pump();
+      await tester.tap(find.text('One'));
+      await tester.pump();
+      expect(played, isEmpty);
+      expect(selections.last.entry.channel.name, 'One');
+      expect(selections.last.fromPointer, isTrue);
+      expect(find.text('Tap again to watch'), findsOneWidget);
+      await tester.tap(find.text('Two'));
+      await tester.pump();
+      expect(played, isEmpty);
+      expect(selections.last.entry.channel.name, 'Two');
+      await tester.tap(find.text('Two'));
+      await tester.pump();
+      expect(played, ['Two']);
+    },
+  );
+
+  testWidgets(
+    'programme tap previews first and restores the same cell after leaving',
+    (tester) async {
+      final start = DateTime(2030, 1, 1, 10);
+      final controller = IptvSpotlightTimelineController();
+      final played = <String>[];
+      final selections = <SpotlightTimelineSelection>[];
+      await tester.pumpWidget(
+        _host(
+          channels: [_channel('One', 'one')],
+          loader: (_) async => [
+            _programme('Morning news', start, const Duration(hours: 1)),
+          ],
+          controller: controller,
+          initialWindowStart: start,
+          onProgramme: (_, programme) => played.add(programme.title),
+          onSelection: selections.add,
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 375));
+      await tester.pump();
+      await tester.tap(find.text('Morning news'));
+      await tester.pump();
+      expect(played, isEmpty);
+      expect(selections.last.programme?.title, 'Morning news');
+      await tester.dragFrom(const Offset(600, 80), const Offset(-500, 0));
+      await tester.pump();
+      expect(find.text('Morning news'), findsNothing);
+      FocusManager.instance.primaryFocus!.unfocus();
+      await tester.pump();
+      expect(controller.restoreFocus(), isTrue);
+      await tester.pump();
+      expect(selections.last.programme?.title, 'Morning news');
+      expect(find.text('Morning news'), findsOneWidget);
+      await tester.sendKeyEvent(LogicalKeyboardKey.select);
+      expect(played, ['Morning news']);
+    },
+  );
+
+  testWidgets(
+    'guide edges exit explicitly and bottom/right do not lose focus',
+    (tester) async {
+      var up = 0;
+      var left = 0;
+      final controller = IptvSpotlightTimelineController();
+      await tester.pumpWidget(
+        _host(
+          channels: [_channel('One', 'one')],
+          loader: (_) async => [],
+          autofocus: true,
+          controller: controller,
+          onExitUp: () => up++,
+          onExitLeft: () => left++,
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 375));
+      await tester.pump();
+      for (final key in [
+        LogicalKeyboardKey.arrowUp,
+        LogicalKeyboardKey.arrowLeft,
+        LogicalKeyboardKey.arrowDown,
+        LogicalKeyboardKey.arrowRight,
+      ]) {
+        await tester.sendKeyEvent(key);
+        await tester.pump();
+      }
+      expect(up, 1);
+      expect(left, 1);
+      expect(controller.hasFocus, isTrue);
+    },
+  );
+
+  testWidgets(
+    'horizontal swipe pans programmes, Now restores, vertical swipe scrolls channels',
+    (tester) async {
+      final start = DateTime(2030, 1, 1, 10);
+      final played = <String>[];
+      final channels = List.generate(
+        20,
+        (i) => _channel('Channel $i', 'url-$i'),
+      );
+      await tester.pumpWidget(
+        _host(
+          channels: channels,
+          height: 246,
+          now: () => start,
+          loader: (_) async => [
+            _programme('Current', start, const Duration(hours: 1)),
+            _programme(
+              'Later',
+              start.add(const Duration(hours: 3)),
+              const Duration(hours: 1),
+            ),
+          ],
+          onChannel: (entry) => played.add(entry.channel.name),
+          onProgramme: (_, programme) => played.add(programme.title),
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 375));
+      await tester.pump();
+      final before = tester.getTopLeft(find.text('Current').first);
+      await tester.dragFrom(const Offset(600, 80), const Offset(-150, 0));
+      await tester.pump();
+      expect(
+        find.byKey(const ValueKey('spotlight-jump-to-now')),
+        findsOneWidget,
+      );
+      expect(
+        tester.getTopLeft(find.text('Current').first).dx,
+        lessThan(before.dx),
+      );
+      expect(played, isEmpty);
+      await tester.tap(find.byKey(const ValueKey('spotlight-jump-to-now')));
+      await tester.pump();
+      expect(find.byKey(const ValueKey('spotlight-jump-to-now')), findsNothing);
+      expect(tester.getTopLeft(find.text('Current').first).dx, before.dx);
+      await tester.dragFrom(const Offset(100, 200), const Offset(0, -140));
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pump(const Duration(milliseconds: 400));
+      final list = tester.widget<ListView>(
+        find.byKey(const ValueKey('spotlight-live-timeline-rows')),
+      );
+      expect(list.controller!.offset, greaterThan(0));
+      expect(played, isEmpty);
+    },
+  );
+
+  testWidgets(
+    'short OK plays, held OK and touch long press open channel actions',
+    (tester) async {
+      final played = <String>[];
+      final menus = <String>[];
+      await tester.pumpWidget(
+        _host(
+          channels: [_channel('One', 'one'), _channel('Two', 'two')],
+          height: 178,
+          loader: (_) async => [],
+          autofocus: true,
+          onChannel: (entry) => played.add(entry.channel.name),
+          onActions: (entry) => menus.add(entry.channel.name),
+        ),
+      );
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.select);
+      expect(played, ['One']);
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.select);
+      await tester.pump(const Duration(milliseconds: 650));
+      await tester.sendKeyRepeatEvent(LogicalKeyboardKey.select);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.select);
+      expect(menus, ['One']);
+      expect(played, ['One']);
+      await tester.longPress(find.text('Two'));
+      await tester.pump();
+      expect(menus, ['One', 'Two']);
+      expect(played, ['One']);
+    },
+  );
+
+  for (final activateKey in [
+    LogicalKeyboardKey.select,
+    LogicalKeyboardKey.gameButtonA,
+    LogicalKeyboardKey.numpadEnter,
+    LogicalKeyboardKey.enter,
+  ]) {
+    testWidgets(
+      'DPAD reaches Now and returns to the guide with ${activateKey.keyLabel}',
+      (tester) async {
+        final now = DateTime(2030, 1, 1, 10);
+        final controller = IptvSpotlightTimelineController();
+        var played = 0;
+        var menus = 0;
+        var upExits = 0;
+        var leftExits = 0;
+        await tester.pumpWidget(
+          _host(
+            channels: [_channel('One', 'one')],
+            controller: controller,
+            now: () => now,
+            initialWindowStart: now.add(const Duration(hours: 3)),
+            loader: (_) async => [
+              _programme('Current show', now, const Duration(hours: 1)),
+            ],
+            onChannel: (_) => played++,
+            onActions: (_) => menus++,
+            onExitUp: () => upExits++,
+            onExitLeft: () => leftExits++,
+          ),
+        );
+        await tester.pump(const Duration(milliseconds: 400));
+        expect(controller.focusFirstChannel(), isTrue);
+        await tester.pump();
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+        await tester.pump();
+        expect(FocusManager.instance.primaryFocus?.debugLabel, 'spotlight-now');
+        final nowButton = tester.widget<TextButton>(
+          find.byKey(const ValueKey('spotlight-jump-to-now')),
+        );
+        expect(nowButton.focusNode!.hasPrimaryFocus, isTrue);
+        expect(
+          find.byWidgetPredicate(
+            (w) =>
+                w is Semantics &&
+                w.properties.label == 'One, Live' &&
+                w.properties.focused == true,
+          ),
+          findsNothing,
+        );
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+        expect(upExits, 1);
+        expect(leftExits, 1);
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+        await tester.pump();
+        expect(
+          FocusManager.instance.primaryFocus?.debugLabel,
+          'spotlight-live-timeline',
+        );
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+        await tester.pump();
+        await tester.sendKeyDownEvent(activateKey);
+        await tester.pump();
+        await tester.sendKeyRepeatEvent(activateKey);
+        await tester.sendKeyUpEvent(activateKey);
+        await tester.pump();
+        expect(
+          find.byKey(const ValueKey('spotlight-jump-to-now')),
+          findsNothing,
+        );
+        expect(find.text('Current show'), findsOneWidget);
+        expect(
+          FocusManager.instance.primaryFocus?.debugLabel,
+          'spotlight-live-timeline',
+        );
+        expect(played, 0);
+        expect(menus, 0);
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
+  for (final programmeCell in [false, true]) {
+    testWidgets(
+      'hover disarms a previously tapped ${programmeCell ? 'programme' : 'channel'}',
+      (tester) async {
+        final selections = <SpotlightTimelineSelection>[];
+        final played = <String>[];
+        final start = DateTime(2030, 1, 1, 10);
+        await tester.pumpWidget(
+          _host(
+            channels: [_channel('One', 'one'), _channel('Two', 'two')],
+            height: 178,
+            now: () => start,
+            initialWindowStart: programmeCell ? start : null,
+            loader: (channel) async => programmeCell
+                ? [
+                    _programme(
+                      '${channel.name} show',
+                      start,
+                      const Duration(hours: 1),
+                    ),
+                  ]
+                : [],
+            onSelection: selections.add,
+            onChannel: (entry) => played.add(entry.channel.name),
+            onProgramme: (_, programme) => played.add(programme.title),
+          ),
+        );
+        await tester.pump(const Duration(milliseconds: 400));
+        final first = find.text(programmeCell ? 'One show' : 'One');
+        final second = find.text(programmeCell ? 'Two show' : 'Two');
+        final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+        addTearDown(mouse.removePointer);
+        await mouse.addPointer(location: const Offset(0, 0));
+        Future<void> clickFirst() async {
+          await mouse.moveTo(tester.getCenter(first));
+          await mouse.down(tester.getCenter(first));
+          await mouse.up();
+          await tester.pump();
+        }
+
+        await clickFirst();
+        expect(played, isEmpty);
+        await mouse.moveTo(tester.getCenter(second));
+        await tester.pump(const Duration(milliseconds: 400));
+        expect(selections.last.entry.channel.name, 'Two');
+        await clickFirst();
+        expect(played, isEmpty);
+        expect(selections.last.entry.channel.name, 'One');
+        await clickFirst();
+        expect(played, [programmeCell ? 'One show' : 'One']);
+      },
+    );
+  }
+
+  for (final scroll in [
+    (
+      delta: const Offset(120, 1),
+      shift: false,
+      kind: PointerDeviceKind.mouse,
+      pan: true,
+    ),
+    (
+      delta: const Offset(-120, 1),
+      shift: false,
+      kind: PointerDeviceKind.mouse,
+      pan: true,
+    ),
+    (
+      delta: const Offset(1, 120),
+      shift: false,
+      kind: PointerDeviceKind.mouse,
+      pan: false,
+    ),
+    (
+      delta: const Offset(120, 0),
+      shift: false,
+      kind: PointerDeviceKind.mouse,
+      pan: true,
+    ),
+    (
+      delta: const Offset(0, 120),
+      shift: false,
+      kind: PointerDeviceKind.mouse,
+      pan: false,
+    ),
+    (
+      delta: const Offset(1, 120),
+      shift: true,
+      kind: PointerDeviceKind.mouse,
+      pan: true,
+    ),
+    (
+      delta: const Offset(1, 120),
+      shift: true,
+      kind: PointerDeviceKind.trackpad,
+      pan: false,
+    ),
+  ]) {
+    testWidgets(
+      'wheel chooses one axis for ${scroll.delta}, shift=${scroll.shift}, ${scroll.kind}',
+      (tester) async {
+        final now = DateTime(2030, 1, 1, 10);
+        await tester.pumpWidget(
+          _host(
+            channels: List.generate(
+              20,
+              (i) => _channel('Channel $i', 'url-$i'),
+            ),
+            height: 246,
+            now: () => now,
+            loader: (channel) async => [
+              _programme(
+                'Show ${channel.name}',
+                now.add(const Duration(hours: 1)),
+                const Duration(minutes: 30),
+              ),
+            ],
+          ),
+        );
+        await tester.pump(const Duration(milliseconds: 400));
+        final programmeX = tester.getTopLeft(find.text('Show Channel 0')).dx;
+        final list = tester.widget<ListView>(
+          find.byKey(const ValueKey('spotlight-live-timeline-rows')),
+        );
+        expect(list.controller!.offset, 0);
+        expect(
+          find.byKey(const ValueKey('spotlight-jump-to-now')),
+          findsNothing,
+        );
+        if (scroll.shift) {
+          await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+        }
+        await tester.sendEventToBinding(
+          PointerScrollEvent(
+            position: const Offset(600, 80),
+            scrollDelta: scroll.delta,
+            kind: scroll.kind,
+          ),
+        );
+        await tester.pump();
+        if (scroll.shift) {
+          await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+        }
+        if (scroll.pan) {
+          expect(
+            find.byKey(const ValueKey('spotlight-jump-to-now')),
+            findsOneWidget,
+          );
+          expect(list.controller!.offset, 0);
+          final horizontal = scroll.shift ? scroll.delta.dy : scroll.delta.dx;
+          expect(
+            tester.getTopLeft(find.text('Show Channel 0')).dx,
+            closeTo(programmeX - horizontal, 0.01),
+          );
+        } else {
+          expect(
+            find.byKey(const ValueKey('spotlight-jump-to-now')),
+            findsNothing,
+          );
+          expect(list.controller!.offset, closeTo(scroll.delta.dy, 0.01));
+        }
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
   testWidgets('settles for 375ms and only loads visible live rows', (
     tester,
   ) async {
@@ -851,6 +1290,9 @@ Widget _host({
   SpotlightChannelActivate? onChannel,
   SpotlightProgrammeActivate? onProgramme,
   ValueChanged<SpotlightTimelineSelection>? onSelection,
+  VoidCallback? onExitUp,
+  VoidCallback? onExitLeft,
+  SpotlightChannelActivate? onActions,
 }) {
   return MaterialApp(
     home: Scaffold(
@@ -873,6 +1315,9 @@ Widget _host({
             onChannelActivate: onChannel ?? (_) {},
             onProgrammeActivate: onProgramme ?? (_, _) {},
             onSelectionChanged: onSelection,
+            onExitUp: onExitUp,
+            onExitLeft: onExitLeft,
+            onChannelActions: onActions,
           ),
         ),
       ),
