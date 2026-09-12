@@ -14,6 +14,7 @@ import 'package:debrify/widgets/iptv/iptv_results_view.dart';
 import 'package:debrify/widgets/iptv/spotlight/spotlight_live_timeline.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -81,6 +82,86 @@ https://example.com/live/two.ts
     ProfileRuntime.debugReset();
     await catalogDirectory.delete(recursive: true);
   });
+
+  for (final favorites in [true, false]) {
+    testWidgets(
+      'Spotlight ${favorites ? 'Favorites' : 'custom list'} uses guide navigation',
+      (tester) async {
+        tester.view.physicalSize = const Size(896, 540);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+        late String listId;
+        await tester.runAsync(() async {
+          listId = favorites
+              ? StorageService.iptvFavoritesListId
+              : await StorageService.createIptvList('Mixed shelf');
+          for (var i = 0; i < 2; i++) {
+            await StorageService.setIptvChannelInList(
+              listId,
+              'https://example.com/saved/$i.ts',
+              true,
+              channelName: 'Saved channel $i',
+              playlistId: i == 0 ? 'local-guide' : 'another-provider',
+              contentType: i == 0 ? 'live' : 'vod',
+            );
+          }
+        });
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: ThemeData.dark(),
+            home: const Scaffold(
+              body: IptvResultsView(searchQuery: '', isTelevision: true),
+            ),
+          ),
+        );
+        Future<void> settleShelf() async {
+          for (var i = 0; i < 30; i++) {
+            await tester.runAsync(
+              () => Future<void>.delayed(const Duration(milliseconds: 50)),
+            );
+            await tester.pump(const Duration(milliseconds: 100));
+          }
+        }
+
+        await settleShelf();
+        await tester.tap(
+          find.byKey(
+            ValueKey<String>(
+              'spotlight-rail-tile-playlist-${favorites ? 'iptv-favorites' : 'iptv-list-$listId'}',
+            ),
+          ),
+        );
+        await settleShelf();
+        final timeline = tester.widget<SpotlightLiveTimeline>(
+          find.byType(SpotlightLiveTimeline),
+        );
+        expect(timeline.channels.map((c) => c.name), [
+          'Saved channel 0',
+          'Saved channel 1',
+        ]);
+        expect(timeline.controller!.focusChannelAt(0), isTrue);
+        await tester.pump();
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+        await tester.pump();
+        expect(
+          FocusManager.instance.primaryFocus?.debugLabel,
+          'spotlight-live-timeline',
+        );
+        expect(
+          find.byWidgetPredicate(
+            (widget) =>
+                widget is Semantics &&
+                widget.properties.label == 'Saved channel 1, On demand' &&
+                widget.properties.selected == true,
+          ),
+          findsOneWidget,
+        );
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pump();
+      },
+    );
+  }
 
   testWidgets('selected Spotlight style renders the complete TV shell', (
     tester,

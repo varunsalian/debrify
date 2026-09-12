@@ -6117,7 +6117,13 @@ class IptvResultsViewState extends State<IptvResultsView>
 
   bool get _spotlightUsesTimeline {
     final selected = _selectedPlaylist;
-    if (selected == null || selected.isVirtual) return false;
+    if (selected == null) return false;
+    // Saved shelves share the guide's row navigation, including its playable
+    // no-guide and on-demand rows. Schedule lookup stays channel-based so
+    // mixed Xtream providers use their own credentials without switching the
+    // page's global XMLTV context for each row.
+    if (selected.isFavorites || selected.isCustomList) return true;
+    if (selected.isVirtual) return false;
     return !selected.isXtreamCodes || _selectedContentType == 'live';
   }
 
