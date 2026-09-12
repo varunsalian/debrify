@@ -19,6 +19,7 @@ void main() {
         id: year,
         title: 'Dune',
         subtitle: 'Movie · $year',
+        year: year,
         onSelected: () => selected.add(year),
       ),
   ];
@@ -65,9 +66,9 @@ void main() {
     'stock keyboard arrows select the intended remake without submitting',
     (tester) async {
       await mount(tester);
-      expect(find.text('Movie · 1984'), findsOneWidget);
+      expect(find.text('Dune (1984)'), findsOneWidget);
       await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
-      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
       await tester.sendKeyEvent(LogicalKeyboardKey.enter);
       await tester.pumpAndSettle();
       expect(selected, ['2021']);
@@ -135,7 +136,7 @@ void main() {
 
   testWidgets('touch selects a title while the IME is open', (tester) async {
     await mount(tester);
-    await tester.tap(find.text('Movie · 1984'));
+    await tester.tap(find.text('Dune (1984)'));
     await tester.pumpAndSettle();
     expect(selected, ['1984']);
     expect(submitted, isEmpty);
@@ -151,12 +152,14 @@ void main() {
       expect(find.byType(TextFieldSuggestions), findsOneWidget);
       await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
       await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
       await tester.sendKeyEvent(LogicalKeyboardKey.select);
       await tester.pump();
       expect(text.text, 'Dune1');
       expect(selected, isEmpty);
       await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
-      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
       await tester.sendKeyEvent(LogicalKeyboardKey.select);
       await tester.pumpAndSettle();
       expect(selected, ['2021']);
@@ -225,7 +228,7 @@ void main() {
     expect(find.byType(TextFieldSuggestions), findsNothing);
   });
 
-  testWidgets('long titles wrap and suggestions fit above a phone keyboard', (
+  testWidgets('the horizontal strip follows the top of the system keyboard', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(390, 700);
@@ -245,11 +248,117 @@ void main() {
       ),
     ];
     await mount(tester);
-    expect(tester.widget<Text>(find.text(title)).maxLines, isNull);
+    final strip = find.byType(TextFieldSuggestions);
+    expect(tester.widget<Text>(find.text(title)).maxLines, 1);
+    expect(tester.getSize(find.text(title)).width, greaterThan(390));
+    expect(tester.getSize(strip).height, lessThanOrEqualTo(60));
     expect(
-      tester.getBottomRight(find.byType(TextFieldSuggestions)).dy,
-      lessThanOrEqualTo(370),
+      tester
+          .widget<SingleChildScrollView>(
+            find.descendant(
+              of: strip,
+              matching: find.byType(SingleChildScrollView),
+            ),
+          )
+          .scrollDirection,
+      Axis.horizontal,
     );
+    expect(
+      find.descendant(of: strip, matching: find.byType(Image)),
+      findsNothing,
+    );
+    expect(tester.getBottomRight(strip).dy, closeTo(370, 0.1));
+    tester.view.viewInsets = const FakeViewPadding(bottom: 450);
+    await tester.pumpAndSettle();
+    expect(tester.getBottomRight(strip).dy, closeTo(250, 0.1));
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Down leaves the strip and restores left/right caret movement', (
+    tester,
+  ) async {
+    await mount(tester);
+    text.selection = const TextSelection.collapsed(offset: 4);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+    expect(text.selection.baseOffset, 3);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    expect(text.selection.baseOffset, 3);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+    expect(text.selection.baseOffset, 2);
+    expect(selected, isEmpty);
+    await tester.testTextInput.receiveAction(TextInputAction.search);
+    await tester.pumpAndSettle();
+    expect(submitted, ['Dune']);
+  });
+
+  testWidgets('touch can scroll the strip and select an offscreen title', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 700);
+    tester.view.devicePixelRatio = 1;
+    tester.view.viewInsets = const FakeViewPadding(bottom: 330);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetViewInsets);
+    suggestions.value = [
+      for (var i = 0; i < 6; i++)
+        TextFieldSuggestion(
+          id: '$i',
+          title: 'Movie $i',
+          subtitle: 'Movie · 2026',
+          year: '2026',
+          onSelected: () => selected.add('$i'),
+        ),
+    ];
+    await mount(tester);
+    final strip = find.byType(TextFieldSuggestions);
+    await tester.drag(strip, const Offset(-1500, 0));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Movie 5 (2026)'));
+    await tester.pumpAndSettle();
+    expect(selected, ['5']);
+    expect(submitted, isEmpty);
+    expect(strip, findsNothing);
+  });
+
+  testWidgets('remote selection scrolls horizontal choices into view', (
+    tester,
+  ) async {
+    suggestions.value = [
+      for (var i = 0; i < 7; i++)
+        TextFieldSuggestion(
+          id: '$i',
+          title: 'A different movie $i',
+          subtitle: 'Movie · 2026',
+          year: '2026',
+          onSelected: () => selected.add('$i'),
+        ),
+    ];
+    await mount(tester, tv: true);
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    await tester.pumpAndSettle();
+    final strip = find.byType(TextFieldSuggestions);
+    expect(
+      tester.getTopLeft(find.text('A different movie 0 (2026)')).dy,
+      tester.getTopLeft(find.text('A different movie 1 (2026)')).dy,
+    );
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+    for (var i = 0; i < 6; i++) {
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+      await tester.pump();
+    }
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .getRect(strip)
+          .contains(tester.getCenter(find.text('A different movie 6 (2026)'))),
+      isTrue,
+    );
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    await tester.pumpAndSettle();
+    expect(selected, ['6']);
+    expect(submitted, isEmpty);
   });
 }

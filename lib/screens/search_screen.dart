@@ -11684,7 +11684,7 @@ class _SearchScreenState extends State<SearchScreen>
             item.type == 'series' ? 'TV show' : 'Movie',
             if (item.year?.isNotEmpty == true) item.year!,
           ].join(' · '),
-          imageUrl: item.poster,
+          year: item.year,
           onSelected: () => _openSuggestedTitle(item),
         ),
       if (_titleSearch.value.isNotEmpty)

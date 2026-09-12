@@ -314,13 +314,13 @@ class TvKeyboardController extends ChangeNotifier {
   /// vice versa, so long reaches across a row are one press, not nine.
   bool nav(int dx, int dy) {
     if (suggestionIndex >= 0) {
-      if (dx != 0) {
+      if (dy > 0) {
         leaveSuggestions();
-      } else if (dy != 0) {
-        final next = suggestionIndex + dy;
-        suggestionIndex = next >= _suggestions.length
-            ? -1
-            : next.clamp(0, _suggestions.length - 1);
+      } else if (dx != 0) {
+        suggestionIndex = (suggestionIndex + dx).clamp(
+          0,
+          _suggestions.length - 1,
+        );
         notifyListeners();
       }
       return true;
@@ -498,11 +498,6 @@ class TvKeyboardPanel extends StatelessWidget {
                         onSelected: (item) =>
                             controller.onSuggestionSelected?.call(item),
                         label: controller.suggestionsLabel,
-                        hint: controller.suggestionIndex < 0
-                            ? '↑ Choose a title'
-                            : '← → Back to keys',
-                        maxHeight: (MediaQuery.sizeOf(context).height * 0.25)
-                            .clamp(90, 200),
                         accent: accent,
                         ink: ink,
                       ),

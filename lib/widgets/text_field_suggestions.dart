@@ -8,16 +8,19 @@ class TextFieldSuggestion {
     required this.title,
     required this.subtitle,
     required this.onSelected,
-    this.imageUrl,
+    this.year,
   });
 
   final String id;
   final String title;
   final String subtitle;
-  final String? imageUrl;
+  final String? year;
   final VoidCallback onSelected;
+
+  String get displayText => year?.isNotEmpty == true ? '$title ($year)' : title;
 }
 
+/// A compact, horizontally scrolling prediction strip above the keyboard.
 /// The editor retains focus, including on TV. Remote/arrow navigation supplies
 /// [selectedIndex]; pointer selection never wakes or dismisses the editor IME
 /// until the owning field handles the selected choice.
@@ -27,9 +30,7 @@ class TextFieldSuggestions extends StatefulWidget {
     required this.items,
     required this.onSelected,
     this.selectedIndex = -1,
-    this.maxHeight = 280,
     this.label = 'Suggestions',
-    this.hint,
     this.accent,
     this.ink,
   });
@@ -37,9 +38,7 @@ class TextFieldSuggestions extends StatefulWidget {
   final List<TextFieldSuggestion> items;
   final ValueChanged<TextFieldSuggestion> onSelected;
   final int selectedIndex;
-  final double maxHeight;
   final String label;
-  final String? hint;
   final Color? accent;
   final Color? ink;
 
@@ -58,7 +57,8 @@ class _TextFieldSuggestionsState extends State<TextFieldSuggestions> {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         final selected = _selected.currentContext;
         if (mounted && selected != null) {
-          Scrollable.ensureVisible(selected, alignment: 0.5);
+          // Align long titles at the start instead of clipping both ends.
+          Scrollable.ensureVisible(selected);
         }
       });
     }
@@ -75,105 +75,72 @@ class _TextFieldSuggestionsState extends State<TextFieldSuggestions> {
     final scheme = Theme.of(context).colorScheme;
     final ink = widget.ink ?? scheme.onSurface;
     final accent = widget.accent ?? scheme.primary;
-    return ConstrainedBox(
-      constraints: BoxConstraints(maxHeight: widget.maxHeight),
-      child: SingleChildScrollView(
-        controller: _scroll,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 8, 12, 6),
-              child: Text(
-                [
-                  widget.label,
-                  if (widget.hint != null) widget.hint!,
-                ].join(' · '),
-                style: TextStyle(
-                  fontSize: 11,
-                  color: ink.withValues(alpha: 0.7),
+    return Semantics(
+      container: true,
+      label: widget.label,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: 48),
+        child: SingleChildScrollView(
+          controller: _scroll,
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              for (var i = 0; i < widget.items.length; i++)
+                Padding(
+                  padding: EdgeInsets.only(
+                    right: i < widget.items.length - 1 ? 8 : 0,
+                  ),
+                  child: _choice(
+                    widget.items[i],
+                    i == widget.selectedIndex,
+                    ink,
+                    accent,
+                  ),
                 ),
-              ),
-            ),
-            for (var i = 0; i < widget.items.length; i++)
-              _row(widget.items[i], i == widget.selectedIndex, ink, accent),
-          ],
+            ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _row(
+  Widget _choice(
     TextFieldSuggestion item,
     bool selected,
     Color ink,
     Color accent,
   ) {
-    final placeholder = Icon(
-      Icons.movie_outlined,
-      color: ink.withValues(alpha: 0.5),
-    );
     return Semantics(
       button: true,
       selected: selected,
+      label: '${item.title}, ${item.subtitle}',
+      excludeSemantics: true,
+      onTap: () => widget.onSelected(item),
       child: GestureDetector(
         key: selected ? _selected : ValueKey('suggestion-${item.id}'),
         behavior: HitTestBehavior.opaque,
         onTap: () => widget.onSelected(item),
         child: Container(
+          constraints: const BoxConstraints(minHeight: 36),
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           decoration: BoxDecoration(
-            color: selected ? accent.withValues(alpha: 0.18) : null,
-            border: Border(
-              left: BorderSide(
-                color: selected ? accent : Colors.transparent,
-                width: 3,
-              ),
-            ),
+            color: selected
+                ? accent.withValues(alpha: 0.22)
+                : ink.withValues(alpha: 0.06),
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(color: selected ? accent : Colors.transparent),
           ),
-          child: Row(
-            children: [
-              ClipRRect(
-                borderRadius: BorderRadius.circular(4),
-                child: SizedBox(
-                  width: 32,
-                  height: 48,
-                  child: item.imageUrl == null
-                      ? placeholder
-                      : Image.network(
-                          item.imageUrl!,
-                          fit: BoxFit.cover,
-                          cacheWidth: 96,
-                          errorBuilder: (_, __, ___) => placeholder,
-                        ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      item.title,
-                      style: TextStyle(
-                        color: ink,
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
-                      item.subtitle,
-                      style: TextStyle(
-                        color: ink.withValues(alpha: 0.7),
-                        fontSize: 12,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
+          child: Text(
+            item.displayText,
+            maxLines: 1,
+            softWrap: false,
+            style: TextStyle(
+              color: ink,
+              fontSize: 15,
+              fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+            ),
           ),
         ),
       ),

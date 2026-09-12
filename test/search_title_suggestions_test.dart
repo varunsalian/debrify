@@ -107,8 +107,8 @@ void main() {
       await tester.enterText(find.byType(TextField).first, 'Dune');
       await tester.pump(const Duration(milliseconds: 350));
       await tester.pump();
-      expect(find.text('Movie · 1984'), findsOneWidget);
-      expect(find.text('Movie · 2021'), findsOneWidget);
+      expect(find.text('Dune (1984)'), findsOneWidget);
+      expect(find.text('Dune (2021)'), findsOneWidget);
       expect(find.text('Search for “Dune”'), findsOneWidget);
       expect(fixture.requests, hasLength(1));
       await drive(
@@ -134,8 +134,8 @@ void main() {
       await tester.enterText(find.byType(TextField).first, 'Dune');
       await tester.pump(const Duration(milliseconds: 350));
       await tester.pump();
-      expect(find.text('Search torrents'), findsOneWidget);
-      expect(find.text('Movie · 2021'), findsOneWidget);
+      expect(find.text('Search for “Dune”'), findsOneWidget);
+      expect(find.text('Dune (2021)'), findsOneWidget);
       await tester.enterText(
         find.byType(TextField).first,
         'https://example.com/private',
@@ -180,7 +180,7 @@ void main() {
     await tester.enterText(find.byType(TextField).first, 'Dune');
     await tester.pump(const Duration(milliseconds: 350));
     await tester.pump();
-    await drive(tester, () => tester.tap(find.text('Movie · 2021')));
+    await drive(tester, () => tester.tap(find.text('Dune (2021)')));
     final detail = tester.widget<MergedDetailScreen>(
       find.byType(MergedDetailScreen),
     );
@@ -206,7 +206,7 @@ void main() {
     await tester.enterText(find.byType(TextField).first, 'Dune');
     await tester.pump(const Duration(milliseconds: 350));
     await tester.pump();
-    await tester.tap(find.text('Movie · 1984'));
+    await tester.tap(find.text('Dune (1984)'));
     await tester.pump();
     expect(resolved, hasLength(1));
     expect(find.text('Loading title…'), findsOneWidget);
@@ -223,7 +223,7 @@ void main() {
     final newerChoice = field.suggestions!.value.firstWhere(
       (item) => item.id == 'movie:tmdb:438631',
     );
-    await tester.tap(find.text('Movie · 2021'));
+    await tester.tap(find.text('Dune (2021)'));
     await tester.pump();
     expect(resolved, hasLength(2));
 
@@ -258,7 +258,7 @@ void main() {
       await tester.enterText(find.byType(TextField).first, 'Dune');
       await tester.pump(const Duration(milliseconds: 350));
       await tester.pump();
-      await tester.tap(find.text('Movie · 1984'));
+      await tester.tap(find.text('Dune (1984)'));
       await tester.pump();
       expect(selected, isNotNull);
 
@@ -306,7 +306,7 @@ void main() {
         await tester.enterText(find.byType(TextField).first, 'Dune');
         await tester.pump(const Duration(milliseconds: 350));
         await tester.pump();
-        await tester.tap(find.text('Movie · 2021'));
+        await tester.tap(find.text('Dune (2021)'));
         await tester.pump();
         expect(selected, isNotNull);
         final original = tester.state(find.byType(SearchScreen));

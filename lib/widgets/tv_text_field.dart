@@ -161,7 +161,7 @@ class TvTextField extends StatefulWidget {
 /// Shortcuts sit below the shell, so they resolve only when the editor holds
 /// focus). They shadow the framework's caret bindings, which is intentional:
 /// while our keyboard is up, arrows move its highlight, not the caret.
-enum _SuggestionCommand { next, previous, select, dismiss }
+enum _SuggestionCommand { up, down, next, previous, select, dismiss }
 
 class _SuggestionIntent extends Intent {
   const _SuggestionIntent(this.command);
@@ -177,6 +177,7 @@ class _SuggestionAction extends Action<_SuggestionIntent> {
     if (!state._suggestionsPortal.isShowing || state._editing) return false;
     return switch (intent.command) {
       _SuggestionCommand.select ||
+      _SuggestionCommand.next ||
       _SuggestionCommand.previous => state._suggestionIndex >= 0,
       _ => true,
     };
@@ -301,8 +302,6 @@ class TvTextFieldState extends State<TvTextField> {
   bool _editing = false;
   bool _focused = false;
   final _suggestionsPortal = OverlayPortalController();
-  final _suggestionsLink = LayerLink();
-  final _suggestionsAnchor = GlobalKey();
   int _suggestionIndex = -1;
   bool _suggestionsDismissed = false;
   String _suggestionText = '';
@@ -362,6 +361,10 @@ class TvTextFieldState extends State<TvTextField> {
     final items = _suggestions;
     if (items.isEmpty) return;
     switch (command) {
+      case _SuggestionCommand.up:
+        if (_suggestionIndex < 0) setState(() => _suggestionIndex = 0);
+      case _SuggestionCommand.down:
+        setState(() => _suggestionIndex = _suggestionIndex < 0 ? 0 : -1);
       case _SuggestionCommand.next:
         setState(
           () => _suggestionIndex = (_suggestionIndex + 1).clamp(
@@ -370,7 +373,12 @@ class TvTextFieldState extends State<TvTextField> {
           ),
         );
       case _SuggestionCommand.previous:
-        setState(() => _suggestionIndex--);
+        setState(
+          () => _suggestionIndex = (_suggestionIndex - 1).clamp(
+            0,
+            items.length - 1,
+          ),
+        );
       case _SuggestionCommand.select:
         if (_suggestionIndex >= 0) _selectSuggestion(items[_suggestionIndex]);
       case _SuggestionCommand.dismiss:
@@ -382,81 +390,76 @@ class TvTextFieldState extends State<TvTextField> {
     if (widget.suggestions == null || widget.obscureText) return field;
     return OverlayPortal(
       controller: _suggestionsPortal,
+      overlayLocation: OverlayChildLocation.rootOverlay,
       overlayChildBuilder: (context) {
-        final box = _suggestionsAnchor.currentContext?.findRenderObject();
-        if (box is! RenderBox || !box.hasSize) return const SizedBox.shrink();
-        final media = MediaQuery.of(context);
-        final position = box.localToGlobal(Offset.zero);
-        final below =
-            media.size.height -
-            media.viewInsets.bottom -
-            media.padding.bottom -
-            position.dy -
-            box.size.height -
-            8;
-        final above = position.dy - media.padding.top - 8;
-        final opensBelow = below >= 120 || below >= above;
-        final height = (opensBelow ? below : above).clamp(0.0, 320.0);
-        if (height < 48) return const SizedBox.shrink();
-        return Positioned(
-          width: box.size.width,
-          child: CompositedTransformFollower(
-            link: _suggestionsLink,
-            showWhenUnlinked: false,
-            targetAnchor: opensBelow ? Alignment.bottomLeft : Alignment.topLeft,
-            followerAnchor: opensBelow
-                ? Alignment.topLeft
-                : Alignment.bottomLeft,
-            offset: Offset(0, opensBelow ? 6 : -6),
-            child: TextFieldTapRegion(
-              child: Material(
-                elevation: 8,
-                color: Theme.of(context).colorScheme.surfaceContainerHigh,
-                borderRadius: BorderRadius.circular(12),
-                clipBehavior: Clip.antiAlias,
-                child: TextFieldSuggestions(
-                  items: _suggestions,
-                  selectedIndex: _suggestionIndex,
-                  onSelected: _selectSuggestion,
-                  label: widget.suggestionsLabel,
-                  maxHeight: height,
+        // Scaffold removes the keyboard inset from its body's MediaQuery.
+        // Read the view directly so this strip follows the actual IME top,
+        // including keyboard resizing, instead of following the search field.
+        return MediaQuery.fromView(
+          view: View.of(context),
+          child: Builder(
+            builder: (context) {
+              final media = MediaQuery.of(context);
+              return Positioned(
+                left: 0,
+                right: 0,
+                bottom: media.viewInsets.bottom > 0
+                    ? media.viewInsets.bottom
+                    : media.padding.bottom,
+                child: TextFieldTapRegion(
+                  child: Material(
+                    elevation: 4,
+                    color: Theme.of(context).colorScheme.surfaceContainerHigh,
+                    child: SafeArea(
+                      top: false,
+                      bottom: false,
+                      child: TextFieldSuggestions(
+                        items: _suggestions,
+                        selectedIndex: _suggestionIndex,
+                        onSelected: _selectSuggestion,
+                        label: widget.suggestionsLabel,
+                      ),
+                    ),
+                  ),
                 ),
-              ),
-            ),
+              );
+            },
           ),
         );
       },
-      child: CompositedTransformTarget(
-        key: _suggestionsAnchor,
-        link: _suggestionsLink,
-        child: Shortcuts(
-          shortcuts: const {
-            SingleActivator(LogicalKeyboardKey.arrowDown): _SuggestionIntent(
-              _SuggestionCommand.next,
-            ),
-            SingleActivator(LogicalKeyboardKey.arrowUp): _SuggestionIntent(
-              _SuggestionCommand.previous,
-            ),
-            SingleActivator(LogicalKeyboardKey.enter): _SuggestionIntent(
-              _SuggestionCommand.select,
-            ),
-            SingleActivator(LogicalKeyboardKey.numpadEnter): _SuggestionIntent(
-              _SuggestionCommand.select,
-            ),
-            SingleActivator(LogicalKeyboardKey.select): _SuggestionIntent(
-              _SuggestionCommand.select,
-            ),
-            SingleActivator(LogicalKeyboardKey.gameButtonA): _SuggestionIntent(
-              _SuggestionCommand.select,
-            ),
-            SingleActivator(LogicalKeyboardKey.escape): _SuggestionIntent(
-              _SuggestionCommand.dismiss,
-            ),
-          },
-          child: Actions(
-            actions: {_SuggestionIntent: _SuggestionAction(this)},
-            child: field,
+      child: Shortcuts(
+        shortcuts: const {
+          SingleActivator(LogicalKeyboardKey.arrowDown): _SuggestionIntent(
+            _SuggestionCommand.down,
           ),
+          SingleActivator(LogicalKeyboardKey.arrowUp): _SuggestionIntent(
+            _SuggestionCommand.up,
+          ),
+          SingleActivator(LogicalKeyboardKey.arrowRight): _SuggestionIntent(
+            _SuggestionCommand.next,
+          ),
+          SingleActivator(LogicalKeyboardKey.arrowLeft): _SuggestionIntent(
+            _SuggestionCommand.previous,
+          ),
+          SingleActivator(LogicalKeyboardKey.enter): _SuggestionIntent(
+            _SuggestionCommand.select,
+          ),
+          SingleActivator(LogicalKeyboardKey.numpadEnter): _SuggestionIntent(
+            _SuggestionCommand.select,
+          ),
+          SingleActivator(LogicalKeyboardKey.select): _SuggestionIntent(
+            _SuggestionCommand.select,
+          ),
+          SingleActivator(LogicalKeyboardKey.gameButtonA): _SuggestionIntent(
+            _SuggestionCommand.select,
+          ),
+          SingleActivator(LogicalKeyboardKey.escape): _SuggestionIntent(
+            _SuggestionCommand.dismiss,
+          ),
+        },
+        child: Actions(
+          actions: {_SuggestionIntent: _SuggestionAction(this)},
+          child: field,
         ),
       ),
     );
@@ -1150,11 +1153,19 @@ class TvTextFieldState extends State<TvTextField> {
     // framework's activation shortcuts and press that button instead.
     if (node.hasPrimaryFocus && _suggestionsPortal.isShowing) {
       if (key == LogicalKeyboardKey.arrowDown) {
-        _handleSuggestionCommand(_SuggestionCommand.next);
+        _handleSuggestionCommand(_SuggestionCommand.down);
         return KeyEventResult.handled;
       }
       if (_suggestionIndex >= 0 && key == LogicalKeyboardKey.arrowUp) {
+        _handleSuggestionCommand(_SuggestionCommand.up);
+        return KeyEventResult.handled;
+      }
+      if (_suggestionIndex >= 0 && key == LogicalKeyboardKey.arrowLeft) {
         _handleSuggestionCommand(_SuggestionCommand.previous);
+        return KeyEventResult.handled;
+      }
+      if (_suggestionIndex >= 0 && key == LogicalKeyboardKey.arrowRight) {
+        _handleSuggestionCommand(_SuggestionCommand.next);
         return KeyEventResult.handled;
       }
       if (_suggestionIndex >= 0 && isActivateKey(key)) {
