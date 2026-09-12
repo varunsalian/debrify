@@ -83,8 +83,8 @@ class SimklContinueWatchingService {
       }
       // The GETs are independent — kick them off together, then await, so a
       // cold start (no warm caches) costs one round-trip, not several.
-      final episodeFuture =
-          SimklService.instance.fetchEpisodePlaybackSessions();
+      final episodeFuture = SimklService.instance
+          .fetchEpisodePlaybackSessions();
       final movieFuture = SimklService.instance.fetchMoviePlaybackSessions();
       final libFuture = SimklService.instance.fetchLibrarySnapshotOrNull();
       final upNextFuture = SimklService.instance.fetchUpNextShowsOrNull();
@@ -103,9 +103,14 @@ class SimklContinueWatchingService {
       final lib0 = _buildLibraryIndex(lib);
       final libIndex = lib0.meta;
       final statusIndex = lib0.status;
-      // Paused rows exclude parked/finished/dropped titles (up-next already
-      // fetches only 'watching', so it's inherently filtered).
-      final paused = _buildShowItems(episodeSessions, libIndex, statusIndex);
+      // Hide parked titles and provably stale episode checkpoints. Keep
+      // newer pauses on completed titles so genuine rewatches remain visible.
+      final paused = _buildShowItems(
+        episodeSessions,
+        libIndex,
+        statusIndex,
+        await _episodeCompletionTimes(episodeSessions),
+      );
       // Up-next entries for shows NOT already paused (the paused entry is more
       // specific and wins). Merge with the paused shows and re-sort by recency.
       final pausedShowIds = paused.map((i) => i.id).toSet();
@@ -207,10 +212,42 @@ class SimklContinueWatchingService {
     return _sortedNewestFirst(byImdb.values);
   }
 
+  /// Read only shows with dated, resumable checkpoints. Deduplicate titles and
+  /// bound concurrency so several old sessions do not fan out into many calls.
+  Future<Map<String, Map<String, DateTime>>> _episodeCompletionTimes(
+    List<dynamic> sessions,
+  ) async {
+    final ids = <String>{};
+    for (final raw in sessions) {
+      if (raw is! Map || raw['show'] is! Map || raw['episode'] is! Map) {
+        continue;
+      }
+      final imdb = _imdbOf(raw['show']['ids']);
+      if (imdb != null &&
+          _visibleProgress(raw['progress']) != null &&
+          _pausedAtMs(raw['paused_at']) != null) {
+        ids.add(imdb);
+      }
+    }
+    final titles = ids.toList();
+    final out = <String, Map<String, DateTime>>{};
+    for (var offset = 0; offset < titles.length; offset += 4) {
+      await Future.wait(
+        titles.skip(offset).take(4).map((id) async {
+          out[id] = await SimklService.instance.fetchWatchedShowEpisodeTimes(
+            id,
+          );
+        }),
+      );
+    }
+    return out;
+  }
+
   List<SimklContinueWatchingItem> _buildShowItems(
     List<dynamic>? sessions,
     Map<String, StremioMeta> libIndex,
     Map<String, String> statusIndex,
+    Map<String, Map<String, DateTime>> completionTimes,
   ) {
     if (sessions == null) return const [];
     // One row per show — the most-recently-paused episode of each.
@@ -229,12 +266,19 @@ class SimklContinueWatchingService {
       final number = _asInt(ep['number']);
       final progress = _visibleProgress(raw['progress']);
       if (season == null || number == null || progress == null) continue;
+      final pausedAt = _pausedAtMs(raw['paused_at']);
+      final completed = completionTimes[imdb]?['$season-$number'];
+      if (pausedAt != null &&
+          completed != null &&
+          completed.millisecondsSinceEpoch > pausedAt) {
+        continue;
+      }
       final cand = SimklContinueWatchingItem(
         meta: _metaFor(imdb, 'series', libIndex[imdb], show['title']),
         progress: progress,
         season: season,
         episode: number,
-        pausedAtMs: _pausedAtMs(raw['paused_at']),
+        pausedAtMs: pausedAt,
         isMovie: false,
       );
       _keepNewest(byImdb, imdb, cand);
@@ -258,7 +302,9 @@ class SimklContinueWatchingService {
     for (final raw in shows) {
       if (raw is! Map) continue;
       final se = SimklService.parseSimklEpisodeCode(raw['next_to_watch']);
-      if (se == null) continue; // null / completed / anime-absolute → no up-next
+      if (se == null) {
+        continue; // null / completed / anime-absolute → no up-next
+      }
       final show = raw['show'];
       if (show is! Map) continue;
       final imdb = _imdbOf(show['ids']);
@@ -312,7 +358,8 @@ class SimklContinueWatchingService {
     StremioMeta? libMeta,
     dynamic sessionTitle,
   ) {
-    final title = libMeta?.name ?? (sessionTitle is String ? sessionTitle : null);
+    final title =
+        libMeta?.name ?? (sessionTitle is String ? sessionTitle : null);
     return StremioMeta(
       id: imdb,
       imdbId: imdb,
