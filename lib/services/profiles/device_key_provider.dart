@@ -8,14 +8,15 @@ import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// Process-wide device vault selected before profile resource services open.
-/// Linux remains explicitly locked until its Secret Service/passphrase flow
-/// supplies a key; other supported platforms use the native channel.
+/// Linux unlocks locally by default; existing passphrase vaults require one
+/// unlock before opting into local storage. Other platforms use native keys.
 class DeviceKeyProvider {
   DeviceKeyProvider._();
 
   static const String linuxStateKey = 'profiles_linux_wrapped_key_v1';
   static DeviceSecretCipher? _cipher;
   static bool _initialized = false;
+  static Future<void>? _initializing;
   @visibleForTesting
   static bool? debugLinuxOverride;
 
@@ -26,13 +27,57 @@ class DeviceKeyProvider {
   static DeviceSecretCipher get cipher =>
       _cipher ?? (throw StateError('Device vault is locked'));
 
-  static Future<void> initialize() async {
-    if (_initialized) return;
-    _initialized = true;
-    if (isLinux) return;
+  static Future<void> initialize() {
+    if (_initialized) return Future.value();
+    return _initializing ??= _initialize().whenComplete(
+      () => _initializing = null,
+    );
+  }
+
+  static Future<void> _initialize() async {
+    await removeScopedLinuxVaultCopies();
+    if (isLinux) {
+      final source = (await SharedPreferences.getInstance()).getString(
+        linuxStateKey,
+      );
+      if (source == null) {
+        final secret = base64Encode(
+          PassphraseDeviceSecretCipher._randomBytes(32),
+        );
+        final provider = await PassphraseDeviceSecretCipher.create(secret);
+        provider.state = provider.state.withLocalUnlock(secret);
+        await _persistLinuxProvider(provider);
+      } else {
+        final state = LinuxWrappedDeviceKey.decode(source);
+        final secret = state.localUnlockSecret;
+        if (secret != null) {
+          final provider = PassphraseDeviceSecretCipher(state);
+          await provider.unlock(secret);
+          _cipher = provider;
+        }
+      }
+      _initialized = true;
+      return;
+    }
     final platform = PlatformDeviceSecretCipher();
     await platform.initialize();
     _cipher = platform;
+    _initialized = true;
+  }
+
+  /// Repair older migrations that copied this device-only secret into profile
+  /// generations. Match the entire physical key; never remove the device entry
+  /// or similarly named user preferences. Also run before restoring protection.
+  static Future<void> removeScopedLinuxVaultCopies() async {
+    final prefs = await SharedPreferences.getInstance();
+    final scopedKey = RegExp(
+      '^p\\.[^.]+\\.g\\.[0-9]+\\.${RegExp.escape(linuxStateKey)}\$',
+    );
+    for (final key in prefs.getKeys().where(scopedKey.hasMatch).toList()) {
+      if (!await prefs.remove(key)) {
+        throw StateError('Could not remove scoped device vault state');
+      }
+    }
   }
 
   static Future<bool> linuxHasWrappedKey() async {
@@ -68,17 +113,54 @@ class DeviceKeyProvider {
     _initialized = true;
   }
 
-  static Future<void> changeLinuxPassphrase(String nextPassphrase) async {
-    final provider = _cipher;
-    if (provider is! PassphraseDeviceSecretCipher) {
-      throw StateError('Linux vault is locked');
-    }
-    await provider.changePassphrase(nextPassphrase);
-    final written = await (await SharedPreferences.getInstance()).setString(
+  static bool get linuxAutoUnlockEnabled =>
+      _cipher is PassphraseDeviceSecretCipher &&
+      (_cipher as PassphraseDeviceSecretCipher).state.localUnlockSecret != null;
+
+  static Future<void> _persistLinuxProvider(
+    PassphraseDeviceSecretCipher provider,
+  ) async {
+    if (!await (await SharedPreferences.getInstance()).setString(
       linuxStateKey,
       provider.state.encode(),
+    )) {
+      throw StateError('Could not persist Linux vault state');
+    }
+    _cipher = provider;
+  }
+
+  /// Rewrap the same device key, preserving all existing encrypted resources.
+  /// Publish only after the replacement state has been saved successfully.
+  static Future<void> changeLinuxPassphrase(String nextPassphrase) async {
+    await _rewrapLinuxKey(nextPassphrase, automatic: false);
+  }
+
+  static Future<void> enableLinuxAutoUnlock() async {
+    if (linuxAutoUnlockEnabled) return;
+    await _rewrapLinuxKey(
+      base64Encode(PassphraseDeviceSecretCipher._randomBytes(32)),
+      automatic: true,
     );
-    if (!written) throw StateError('Could not persist Linux vault state');
+  }
+
+  static Future<void> _rewrapLinuxKey(
+    String secret, {
+    required bool automatic,
+  }) async {
+    final current = _cipher;
+    if (!isLinux ||
+        current is! PassphraseDeviceSecretCipher ||
+        current._key == null) {
+      throw StateError('Linux vault is locked');
+    }
+    final replacement = PassphraseDeviceSecretCipher(current.state)
+      .._key = current._key;
+    await replacement.changePassphrase(secret);
+    if (automatic) {
+      replacement.state = replacement.state.withLocalUnlock(secret);
+    }
+    await removeScopedLinuxVaultCopies();
+    await _persistLinuxProvider(replacement);
   }
 
   static void lockLinuxVault() {
@@ -101,6 +183,7 @@ class DeviceKeyProvider {
 
   @visibleForTesting
   static void debugReset() {
+    _initializing = null;
     _cipher = null;
     _initialized = false;
     debugLinuxOverride = null;
@@ -327,11 +410,13 @@ class LinuxWrappedDeviceKey {
   final List<int> salt;
   final String wrappedKey;
   final String keyId;
+  final String? localUnlockSecret;
 
   const LinuxWrappedDeviceKey({
     required this.salt,
     required this.wrappedKey,
     required this.keyId,
+    this.localUnlockSecret,
   });
 
   factory LinuxWrappedDeviceKey.decode(String source) {
@@ -345,14 +430,32 @@ class LinuxWrappedDeviceKey {
     if (salt.length != 16 || wrapped is! String || keyId is! String) {
       throw const FormatException('Invalid Linux device-key state');
     }
-    return LinuxWrappedDeviceKey(salt: salt, wrappedKey: wrapped, keyId: keyId);
+    final local = json['localUnlockSecret'];
+    if (local != null &&
+        (local is! String || base64Decode(local).length != 32)) {
+      throw const FormatException('Invalid local unlock secret');
+    }
+    return LinuxWrappedDeviceKey(
+      salt: salt,
+      wrappedKey: wrapped,
+      keyId: keyId,
+      localUnlockSecret: local as String?,
+    );
   }
+
+  LinuxWrappedDeviceKey withLocalUnlock(String secret) => LinuxWrappedDeviceKey(
+    salt: salt,
+    wrappedKey: wrappedKey,
+    keyId: keyId,
+    localUnlockSecret: secret,
+  );
 
   String encode() => jsonEncode(<String, Object>{
     'version': 1,
     'salt': base64Encode(salt),
     'wrappedKey': wrappedKey,
     'keyId': keyId,
+    if (localUnlockSecret != null) 'localUnlockSecret': localUnlockSecret!,
   });
 }
 

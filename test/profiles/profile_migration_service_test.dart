@@ -79,6 +79,8 @@ void main() {
       SharedPreferences.setMockInitialValues(<String, Object>{
         'initial_setup_complete_v1': true,
         'theme_mode': 'dark',
+        DeviceKeyProvider.linuxStateKey: 'device-vault-sentinel',
+        'p.old-profile.g.2.${DeviceKeyProvider.linuxStateKey}': 'stale-copy',
         DevicePreferences.tvTrailerUnderlayEffectiveKey: false,
         DevicePreferences.tvLowResRenderActiveKey: true,
         'real_debrid_api_key': 'rd-sentinel',
@@ -136,6 +138,18 @@ void main() {
       expect(await registry.isMigrationCommitted(), isTrue);
       expect((await registry.activeProfile())?.id, admin.id);
       final raw = await SharedPreferences.getInstance();
+      expect(
+        raw.getString(DeviceKeyProvider.linuxStateKey),
+        'device-vault-sentinel',
+      );
+      expect(
+        raw.containsKey('p.${admin.id}.g.1.${DeviceKeyProvider.linuxStateKey}'),
+        isFalse,
+      );
+      expect(
+        raw.containsKey('p.old-profile.g.2.${DeviceKeyProvider.linuxStateKey}'),
+        isFalse,
+      );
       expect(raw.getString('real_debrid_api_key'), 'rd-sentinel');
       expect(raw.getString('p.${admin.id}.g.1.theme_mode'), 'dark');
       expect(

@@ -4,6 +4,8 @@ import 'package:flutter/services.dart';
 import '../../models/profiles/profile_policy.dart';
 import '../../models/profiles/user_profile.dart';
 import '../../services/main_page_bridge.dart';
+import '../../services/profiles/device_key_provider.dart';
+import '../profiles/linux_vault_screen.dart';
 import '../../services/profiles/profile_authorization.dart';
 import '../../services/profiles/profile_bootstrap.dart';
 import '../../services/profiles/profile_pin_service.dart';
@@ -98,6 +100,49 @@ class _ProfilesSettingsPageState extends State<ProfilesSettingsPage> {
         _profiles = const <UserProfile>[];
         _loading = false;
       });
+    }
+  }
+
+  Future<void> _setVaultAutoUnlock(bool enabled) async {
+    final registry = ProfileBootstrap.registry;
+    final authorization = await ProfileAuthorizationContext.capture(registry);
+    Future<void> validate() async {
+      final actor = await authorization.validate(registry);
+      if (actor.role != UserProfileRole.admin ||
+          !actor.allows(ProfileFeature.manageProfiles)) {
+        throw StateError('Only an administrator can change device protection');
+      }
+    }
+
+    try {
+      await validate();
+      if (enabled) {
+        await DeviceKeyProvider.enableLinuxAutoUnlock();
+      } else {
+        if (!mounted) return;
+        await Navigator.of(context).push<void>(
+          MaterialPageRoute(
+            builder: (pageContext) => LinuxVaultScreen(
+              existingVault: false,
+              allowAutoUnlock: false,
+              onSubmit: (passphrase, _) async {
+                await validate();
+                await DeviceKeyProvider.changeLinuxPassphrase(passphrase);
+                if (pageContext.mounted) Navigator.of(pageContext).pop();
+              },
+            ),
+          ),
+        );
+      }
+      if (mounted) setState(() {});
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Could not change device unlock settings.'),
+          ),
+        );
+      }
     }
   }
 
@@ -416,6 +461,16 @@ class _ProfilesSettingsPageState extends State<ProfilesSettingsPage> {
   Widget _behaviorSection() => SettingsSection(
     title: 'Profile behavior',
     children: [
+      if (_mayManage && DeviceKeyProvider.isLinux)
+        SettingsToggleTile(
+          key: const ValueKey('profiles-linux-auto-unlock'),
+          icon: Icons.lock_open_rounded,
+          title: 'Unlock automatically on this device',
+          subtitle:
+              'Stores vault access locally. Turn off to require a passphrase on each launch.',
+          value: DeviceKeyProvider.linuxAutoUnlockEnabled,
+          onChanged: _setVaultAutoUnlock,
+        ),
       SettingsToggleTile(
         key: const ValueKey('profiles-always-ask'),
         icon: Icons.login_rounded,

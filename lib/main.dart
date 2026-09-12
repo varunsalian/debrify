@@ -800,8 +800,11 @@ class _LinuxVaultBootstrapHost extends StatelessWidget {
     darkTheme: ThemeData.dark(useMaterial3: true),
     home: LinuxVaultScreen(
       existingVault: existingVault,
-      onSubmit: (passphrase) async {
-        await ProfileBootstrap.completeLinuxVault(passphrase);
+      onSubmit: (passphrase, autoUnlock) async {
+        await ProfileBootstrap.completeLinuxVault(
+          passphrase,
+          autoUnlock: autoUnlock,
+        );
         if (ProfileRuntime.isProfileCommitted) {
           await DeepLinkService.preflightLaunchIntent();
           await DeepLinkService.persistPreflightActions();

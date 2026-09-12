@@ -80,7 +80,9 @@ class _ProfileRecoveryScreenState extends State<ProfileRecoveryScreen> {
   }
 
   Future<String?> _linuxVaultPassphrase() async {
-    if (!Platform.isLinux || DeviceKeyProvider.isUnlocked) return null;
+    if (!Platform.isLinux) return null;
+    await DeviceKeyProvider.initialize();
+    if (DeviceKeyProvider.isUnlocked) return null;
     return _promptSecret(
       'Unlock device vault',
       await DeviceKeyProvider.linuxHasWrappedKey()
