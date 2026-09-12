@@ -119,6 +119,9 @@ import '../widgets/source_list_scroll_anchor.dart';
 import '../widgets/torrent_filters_sheet.dart';
 import '../widgets/torrent_result_row.dart';
 import '../widgets/tv_text_field.dart';
+import '../widgets/text_field_suggestions.dart';
+import '../widgets/metadata_title_navigation.dart';
+import '../services/tmdb_title_search.dart';
 import 'collections/collection_folder_screen.dart';
 import 'iptv/xtream_series_detail.dart';
 import 'playlist_content_view_screen.dart';
@@ -192,11 +195,13 @@ String? _seLabel(int? season, int? episode) {
 /// Dedicated Search tab.
 ///
 /// * CATALOG mode — a Stremio-style board (one horizontal row per addon
-///   catalog) with a hero spotlight that reflects the focused title; typing a
+///   catalog) with a hero spotlight that reflects the focused title; submitting a
 ///   query searches every searchable addon and shows one horizontal row of
 ///   results per addon (same board layout).
 /// * KEYWORD mode — raw torrent search → tap a result to add/play.
 /// * LISTS mode — MDBList public-list search, isolated from title catalogs.
+/// Catalog and Keyword offer TMDB title suggestions while typing on the
+/// dedicated Search tab. Selecting a title opens its existing detail flow.
 ///
 /// All playback (catalog auto-best, sources list, keyword) runs in-tab through
 /// the isolated [TorrentPlaybackService]; the Home engine is never invoked.
@@ -214,11 +219,19 @@ class SearchScreen extends StatefulWidget {
   /// reuses this screen's item-open/play handlers and cached CW/Trakt rows.
   final bool discoverMode;
 
+  @visibleForTesting
+  final TmdbTitleSearch? titleSearch;
+
+  @visibleForTesting
+  final Future<StremioMeta> Function(StremioMeta)? suggestedTitleResolver;
+
   const SearchScreen({
     super.key,
     this.isTelevision = false,
     this.searchMode = false,
     this.discoverMode = false,
+    this.titleSearch,
+    this.suggestedTitleResolver,
   });
 
   @override
@@ -484,6 +497,14 @@ class _SearchScreenState extends State<SearchScreen>
   final StremioService _stremio = StremioService.instance;
 
   final TextEditingController _searchController = TextEditingController();
+  late final _titleSearch = widget.titleSearch ?? TmdbTitleSearch();
+  final _titleSuggestions = ValueNotifier<List<TextFieldSuggestion>>(const []);
+  final _titleSearchScope = ProfileRuntime.scope.value;
+  bool _openingSuggestedTitle = false;
+  int _suggestedTitleOpenGeneration = 0;
+  bool _titleSearchPolicyReady = false;
+  String _titleSearchText = '';
+  bool _titleSearchComposing = false;
   final FocusNode _searchFocusNode = FocusNode(debugLabel: 'search_field');
   final TvSearchFocusHandoff _searchSubmitFocus = TvSearchFocusHandoff();
   // DPAD focus targets for the Catalog / Keyword / Lists selector, so the
@@ -1747,6 +1768,9 @@ class _SearchScreenState extends State<SearchScreen>
   @override
   void initState() {
     super.initState();
+    _titleSearch.addListener(_publishTitleSuggestions);
+    _searchController.addListener(_onTitleSearchEditingChanged);
+    ProfileRuntime.scope.addListener(_cancelTitleSuggestions);
     MetadataPreferencesService.revision.addListener(_metadataSettingsChanged);
     unawaited(_refreshMetadataFeaturePolicy());
     WidgetsBinding.instance.addObserver(this);
@@ -1771,6 +1795,7 @@ class _SearchScreenState extends State<SearchScreen>
     }
     if (widget.searchMode) {
       MainPageBridge.registerTabBackHandler('search', _handleSearchBack);
+      MainPageBridge.activeTab.addListener(_onTitleSearchTabChanged);
     }
     // A detail-open handed off from another tab (e.g. the Trakt Calendar, a
     // separate tab that can't reach this screen's state). Only the Home board
@@ -2311,6 +2336,7 @@ class _SearchScreenState extends State<SearchScreen>
     }
     if (widget.searchMode) {
       MainPageBridge.unregisterTabBackHandler('search', _handleSearchBack);
+      MainPageBridge.activeTab.removeListener(_onTitleSearchTabChanged);
     }
     if (!widget.isTelevision && !widget.searchMode && !widget.discoverMode) {
       // Same closure that registered — the bridge's mid-transition contract.
@@ -2399,6 +2425,10 @@ class _SearchScreenState extends State<SearchScreen>
     _heroLiveTakeover.dispose();
     _heroTint.dispose();
     _searchController.dispose();
+    ProfileRuntime.scope.removeListener(_cancelTitleSuggestions);
+    _titleSearch.removeListener(_publishTitleSuggestions);
+    _titleSearch.dispose();
+    _titleSuggestions.dispose();
     _catalogSourcesHideTimer?.cancel();
     _searchFocusNode.removeListener(_onSearchFocusForSources);
     _searchFocusNode.dispose();
@@ -11065,6 +11095,8 @@ class _SearchScreenState extends State<SearchScreen>
       final prefs = await MetadataPreferencesService.load();
       if (!mounted || generation != _metadataFeatureGeneration || scope != ProfileRuntime.scope.value) return;
       setState(() => _metadataFeaturePolicy = prefs);
+      _titleSearchPolicyReady = true;
+      _scheduleTitleSuggestions();
       if (widget.discoverMode &&
           _discSource == _discTmdb &&
           !prefs.features.contains(MetadataFeature.discovery)) {
@@ -11075,6 +11107,8 @@ class _SearchScreenState extends State<SearchScreen>
 
   void _metadataSettingsChanged() {
     if (!mounted) return;
+    _titleSearchPolicyReady = false;
+    _cancelTitleSuggestions();
     unawaited(_refreshMetadataFeaturePolicy());
     _metadataArtworkGeneration++;
     final requests = _metadataArtworkRequests.entries.toList();
@@ -11592,6 +11626,109 @@ class _SearchScreenState extends State<SearchScreen>
 
   // ── Search field ─────────────────────────────────────────────────────────
 
+  void _onTitleSearchTabChanged() {
+    if (MainPageBridge.activeTab.value != 'search') {
+      // Invalidate even if Search is reselected before the transition ends.
+      _cancelTitleSuggestions();
+    }
+  }
+
+  void _onTitleSearchEditingChanged() {
+    final editing = _searchController.value;
+    final composing = editing.composing.isValid && !editing.composing.isCollapsed;
+    if (editing.text == _titleSearchText && composing == _titleSearchComposing) {
+      return;
+    }
+    _titleSearchText = editing.text;
+    _titleSearchComposing = composing;
+    _cancelSuggestedTitleOpen();
+    _scheduleTitleSuggestions();
+  }
+
+  void _scheduleTitleSuggestions() {
+    final preferences = _metadataFeaturePolicy;
+    final editing = _searchController.value;
+    _titleSearch.update(
+      editing.text,
+      language: preferences?.language ?? 'en-US',
+      // The existing TMDB discovery opt-out also covers title lookup. Lists
+      // and pasted links retain their own search semantics.
+      enabled: widget.searchMode && _mode != _Mode.lists &&
+          MainPageBridge.activeTab.value == 'search' &&
+          _titleSearchPolicyReady &&
+          !_openingSuggestedTitle &&
+          _titleSearchScope == ProfileRuntime.scope.value &&
+          (preferences?.features.contains(MetadataFeature.discovery) ?? false),
+      composing: editing.composing.isValid && !editing.composing.isCollapsed,
+    );
+  }
+
+  void _cancelSuggestedTitleOpen() {
+    _suggestedTitleOpenGeneration++;
+    _openingSuggestedTitle = false;
+  }
+
+  void _cancelTitleSuggestions() {
+    _cancelSuggestedTitleOpen();
+    _titleSearch.clear();
+  }
+
+  void _publishTitleSuggestions() {
+    final query = _searchController.text.trim();
+    _titleSuggestions.value = [
+      for (final item in _titleSearch.value)
+        TextFieldSuggestion(
+          id: '${item.type}:${item.id}',
+          title: item.name,
+          subtitle: [
+            item.type == 'series' ? 'TV show' : 'Movie',
+            if (item.year?.isNotEmpty == true) item.year!,
+          ].join(' · '),
+          imageUrl: item.poster,
+          onSelected: () => _openSuggestedTitle(item),
+        ),
+      if (_titleSearch.value.isNotEmpty)
+        TextFieldSuggestion(
+          id: 'search-query',
+          title: 'Search for “$query”',
+          subtitle: _mode == _Mode.keyword ? 'Search torrents' : 'Search catalogs',
+          onSelected: () => _onQuerySubmitted(query),
+        ),
+    ];
+  }
+
+  Future<void> _openSuggestedTitle(StremioMeta item) async {
+    if (_openingSuggestedTitle || !mounted ||
+        MainPageBridge.activeTab.value != 'search' ||
+        _titleSearchScope != ProfileRuntime.scope.value) {
+      return;
+    }
+    _searchSubmitFocus.cancel();
+    _searchController.value = TextEditingValue(
+      text: item.name,
+      selection: TextSelection.collapsed(offset: item.name.length),
+    );
+    _cancelTitleSuggestions();
+    // Filling the field above goes through the same edit/cancel listener as
+    // typing. Capture ownership only after that update has finished.
+    final generation = _suggestedTitleOpenGeneration;
+    _openingSuggestedTitle = true;
+    try {
+      await openMetadataTitle(context, item, (selected) {
+        if (!mounted || generation != _suggestedTitleOpenGeneration ||
+            MainPageBridge.activeTab.value != 'search') {
+          return;
+        }
+        _openItem(selected, selected.sourceAddon ?? _addonForContinue(null));
+      }, resolve: widget.suggestedTitleResolver);
+    } finally {
+      // A cancelled lookup can finish while a newer selection is loading.
+      if (generation == _suggestedTitleOpenGeneration) {
+        _openingSuggestedTitle = false;
+      }
+    }
+  }
+
   void _onQueryChanged(String value) {
     _searchSubmitFocus.cancel();
     // Every mode searches on SUBMIT. Because the field is shared, emptying it
@@ -11604,6 +11741,7 @@ class _SearchScreenState extends State<SearchScreen>
   }
 
   void _onQuerySubmitted(String value) {
+    _cancelTitleSuggestions();
     _catalogDebounce?.cancel();
     final q = value.trim();
     if (q.isEmpty) {
@@ -11636,6 +11774,7 @@ class _SearchScreenState extends State<SearchScreen>
     _catalogDebounce?.cancel();
     _searchSubmitFocus.cancel();
     _searchController.clear();
+    _cancelTitleSuggestions();
     _kwSearchToken++;
     _disposeKwNodes();
     _disposeListsNodes();
@@ -12920,6 +13059,7 @@ class _SearchScreenState extends State<SearchScreen>
       return;
     }
     if (_mode == mode) return;
+    _cancelTitleSuggestions();
     setState(() {
       _mode = mode;
       // Leaving the keyword list drops any in-progress multi-selection.
@@ -15845,6 +15985,8 @@ class _SearchScreenState extends State<SearchScreen>
           // it renders the same plain TextField as before.
           final field = TvTextField(
             controller: _searchController,
+            suggestions: widget.searchMode ? _titleSuggestions : null,
+            suggestionsLabel: 'Titles from TMDB',
             focusNode: _searchFocusNode,
             onChanged: _onQueryChanged,
             onSubmitted: _onQuerySubmitted,

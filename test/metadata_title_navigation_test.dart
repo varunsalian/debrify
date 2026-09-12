@@ -87,4 +87,35 @@ void main() {
     expect(opened, same(native));
     expect(tester.takeException(), isNull);
   });
+
+  for (final newerFinishesFirst in [false, true]) {
+    testWidgets(
+      'overlapping lookups keep the latest notice (newer finishes first: $newerFinishesFirst)',
+      (tester) async {
+        final first = Completer<StremioMeta>();
+        final second = Completer<StremioMeta>();
+        var reads = 0;
+        await mount(tester, native, (_) {}, (_) {
+          return reads++ == 0 ? first.future : second.future;
+        });
+        await tester.tap(find.text('Open'));
+        await tester.pump();
+        expect(reads, 2);
+        expect(find.text('Loading title…'), findsOneWidget);
+
+        final early = newerFinishesFirst ? second : first;
+        final late = newerFinishesFirst ? first : second;
+        early.complete(resolved);
+        await tester.pumpAndSettle();
+        expect(
+          find.text('Loading title…'),
+          newerFinishesFirst ? findsNothing : findsOneWidget,
+        );
+        late.complete(resolved);
+        await tester.pumpAndSettle();
+        expect(find.text('Loading title…'), findsNothing);
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
 }

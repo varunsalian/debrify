@@ -4,6 +4,7 @@ import '../utils/platform_util.dart';
 import 'package:flutter/services.dart';
 
 import '../utils/tv_keys.dart';
+import 'text_field_suggestions.dart';
 
 /// In-app DPAD keyboard for TV.
 ///
@@ -132,6 +133,8 @@ class TvKeyboardController extends ChangeNotifier {
     required this.onVoiceStop,
     required this.onPaste,
     this.submitLabel = 'Search',
+    this.onSuggestionSelected,
+    this.suggestionsLabel = 'Suggestions',
     bool startShifted = false,
     bool voiceAvailable = false,
   }) : shift = startShifted,
@@ -151,6 +154,29 @@ class TvKeyboardController extends ChangeNotifier {
   /// inserts it; this controller only reports the press.
   final VoidCallback onPaste;
   final String submitLabel;
+  final ValueChanged<TextFieldSuggestion>? onSuggestionSelected;
+  final String suggestionsLabel;
+  List<TextFieldSuggestion> _suggestions = const [];
+  List<TextFieldSuggestion> get suggestions => _suggestions;
+  int suggestionIndex = -1;
+
+  void setSuggestions(List<TextFieldSuggestion> items) {
+    final selectedId = suggestionIndex >= 0
+        ? _suggestions[suggestionIndex].id
+        : null;
+    _suggestions = items;
+    suggestionIndex = selectedId == null
+        ? -1
+        : items.indexWhere((item) => item.id == selectedId);
+    notifyListeners();
+  }
+
+  bool leaveSuggestions() {
+    if (suggestionIndex < 0) return false;
+    suggestionIndex = -1;
+    notifyListeners();
+    return true;
+  }
 
   // ───────────────────────────────────────────────────────── dictation state
   // The panel swaps the key grid for a listening card while this is set, so
@@ -287,6 +313,23 @@ class TvKeyboardController extends ChangeNotifier {
   /// horizontal WRAPS — left from the leftmost key lands on the rightmost and
   /// vice versa, so long reaches across a row are one press, not nine.
   bool nav(int dx, int dy) {
+    if (suggestionIndex >= 0) {
+      if (dx != 0) {
+        leaveSuggestions();
+      } else if (dy != 0) {
+        final next = suggestionIndex + dy;
+        suggestionIndex = next >= _suggestions.length
+            ? -1
+            : next.clamp(0, _suggestions.length - 1);
+        notifyListeners();
+      }
+      return true;
+    }
+    if (dy < 0 && row == 0 && _suggestions.isNotEmpty) {
+      suggestionIndex = 0;
+      notifyListeners();
+      return true;
+    }
     final grid = rows;
     row = (row + dy).clamp(0, grid.length - 1);
     final rowLen = grid[row].length;
@@ -299,12 +342,17 @@ class TvKeyboardController extends ChangeNotifier {
   }
 
   void activateHighlighted() {
+    if (suggestionIndex >= 0) {
+      onSuggestionSelected?.call(_suggestions[suggestionIndex]);
+      return;
+    }
     final grid = rows;
     final r = row.clamp(0, grid.length - 1);
     activate(grid[r][col.clamp(0, grid[r].length - 1)]);
   }
 
   void activate(TvKey key) {
+    suggestionIndex = -1;
     switch (key.action) {
       case TvKeyAction.insert:
         onInsert(key.insert);
@@ -441,6 +489,24 @@ class TvKeyboardPanel extends StatelessWidget {
               Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
+                  if (controller.suggestions.isNotEmpty)
+                    ColoredBox(
+                      color: ground.withValues(alpha: 1),
+                      child: TextFieldSuggestions(
+                        items: controller.suggestions,
+                        selectedIndex: controller.suggestionIndex,
+                        onSelected: (item) =>
+                            controller.onSuggestionSelected?.call(item),
+                        label: controller.suggestionsLabel,
+                        hint: controller.suggestionIndex < 0
+                            ? '↑ Choose a title'
+                            : '← → Back to keys',
+                        maxHeight: (MediaQuery.sizeOf(context).height * 0.25)
+                            .clamp(90, 200),
+                        accent: accent,
+                        ink: ink,
+                      ),
+                    ),
                   if (controller.notice != null)
                     _NoticeBar(
                       text: controller.notice!,
@@ -457,7 +523,9 @@ class TvKeyboardPanel extends StatelessWidget {
                             child: _KeyCap(
                               keyDef: grid[r][c],
                               highlighted:
-                                  r == controller.row && c == controller.col,
+                                  controller.suggestionIndex < 0 &&
+                                  r == controller.row &&
+                                  c == controller.col,
                               lit:
                                   grid[r][c].action == TvKeyAction.shift &&
                                   controller.shift,

@@ -306,8 +306,12 @@ class MainPageBridge {
   /// Tab handlers registered by key (e.g., "realdebrid", "torbox", "pikpak")
   static final Map<String, bool Function()> _tabHandlers = {};
 
-  /// Currently active tab key
-  static String? _activeTabKey;
+  static final _activeTabKey = ValueNotifier<String?>(null);
+
+  /// The selected tab's back-routing key, or null for tabs without a handler.
+  /// Published before the outgoing page is unmounted, so async actions can
+  /// cancel as soon as the user leaves their tab.
+  static ValueListenable<String?> get activeTab => _activeTabKey;
 
   /// Stack of handlers for pushed routes (on top of tab screens)
   static final List<bool Function()> _pushedRouteStack = [];
@@ -330,7 +334,7 @@ class MainPageBridge {
 
   /// Set the currently active tab. Call from main.dart when tab changes.
   static void setActiveTab(String? key) {
-    _activeTabKey = key;
+    _activeTabKey.value = key;
   }
 
   /// Push a handler for a pushed route. Call in initState of pushed screens.
@@ -356,8 +360,9 @@ class MainPageBridge {
     }
 
     // Then, check the active tab's handler
-    if (_activeTabKey != null && _tabHandlers.containsKey(_activeTabKey)) {
-      return _tabHandlers[_activeTabKey]!();
+    final key = _activeTabKey.value;
+    if (key != null && _tabHandlers.containsKey(key)) {
+      return _tabHandlers[key]!();
     }
 
     return false;
