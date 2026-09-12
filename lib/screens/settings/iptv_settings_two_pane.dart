@@ -70,7 +70,7 @@ class IptvSettingsTwoPane extends StatefulWidget {
     required this.trackContinueWatching,
     required this.onToggleTrackContinueWatching,
     this.showAppearanceSection = false,
-    this.iptvStyle = 'command',
+    this.iptvStyle = StorageService.kIptvStyleDefault,
     this.onIptvStyleChanged,
     this.playerGuideStyle = 'classic',
     this.onPlayerGuideStyleChanged,

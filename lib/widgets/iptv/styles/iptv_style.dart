@@ -3,10 +3,8 @@ import 'package:flutter/material.dart';
 /// The IPTV cockpit's visual style, chosen in IPTV settings and persisted as
 /// the `iptv_style` preference (see `StorageService.getIptvStyle`).
 ///
-/// `command` is the shipped Command Center look and takes the UNTOUCHED legacy
-/// build paths everywhere — widgets branch on the style FIRST and only the
-/// `edition`/`console` branches read [IptvStyleTokens], which is what makes
-/// the default provably pixel-identical to today.
+/// Spotlight Guide is the default. Command Center retains its legacy build
+/// paths; the other styles use [IptvStyleTokens].
 ///
 /// Only the TV/desktop cockpit consults this. The phone classic layout and
 /// the touch-tablet two-pane never restyle.
@@ -19,8 +17,8 @@ enum IptvStyle {
   static IptvStyle fromPref(String raw) => switch (raw) {
     'edition' => IptvStyle.edition,
     'console' => IptvStyle.console,
-    'spotlight' => IptvStyle.spotlight,
-    _ => IptvStyle.command,
+    'command' => IptvStyle.command,
+    _ => IptvStyle.spotlight,
   };
 
   String get prefValue => name;

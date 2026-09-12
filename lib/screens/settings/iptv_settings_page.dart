@@ -212,7 +212,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
   // Cockpit appearance (`iptv_style`). Shown only where the cockpit exists —
   // television and desktop; a phone or touch tablet would be picking a look it
   // can never see.
-  String _iptvStyle = 'command';
+  String _iptvStyle = StorageService.kIptvStyleDefault;
 
   // In-player guide look (`iptv_player_guide_style`). Ungated: every
   // platform has a player — phones/desktop the Dart one, Android TV the

@@ -272,7 +272,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String _tvHomeStyle = 'canvas';
   String _discoverLayout = 'stage';
   String _tvSidebarStyle = 'ghost';
-  String _iptvStyle = 'command';
+  String _iptvStyle = StorageService.kIptvStyleDefault;
   String _debrifyTvStyle = 'grid';
   String _playerGuideStyle = 'classic';
   String _playLoaderStyle = PlayLoaderStyleController.defaultStyle;

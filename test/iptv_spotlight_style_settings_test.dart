@@ -32,6 +32,24 @@ void main() {
   });
 
   test(
+    'default and profile reset use Spotlight without saving a choice',
+    () async {
+      expect(StorageService.iptvStyleCached, 'spotlight');
+      expect(await StorageService.getIptvStyle(), 'spotlight');
+      expect(
+        (await SharedPreferences.getInstance()).containsKey('iptv_style'),
+        isFalse,
+      );
+      for (final style in ['command', 'edition', 'console', 'spotlight']) {
+        await StorageService.setIptvStyle(style);
+        StorageService.resetProfileCaches();
+        expect(StorageService.iptvStyleCached, 'spotlight');
+        expect(await StorageService.getIptvStyle(), style);
+      }
+    },
+  );
+
+  test(
     'Spotlight IPTV style persists and unknown values remain safe',
     () async {
       final write = StorageService.setIptvStyle('spotlight');
@@ -40,13 +58,13 @@ void main() {
       expect(await StorageService.getIptvStyle(), 'spotlight');
 
       await StorageService.setIptvStyle('future-style');
-      expect(await StorageService.getIptvStyle(), 'command');
+      expect(await StorageService.getIptvStyle(), 'spotlight');
 
       SharedPreferences.setMockInitialValues(const <String, Object>{
         'iptv_style': 'future-style',
       });
       StorageService.resetProfileCaches();
-      expect(await StorageService.getIptvStyle(), 'command');
+      expect(await StorageService.getIptvStyle(), 'spotlight');
     },
   );
 
@@ -70,7 +88,7 @@ void main() {
     expect(spotlight.label, 'Spotlight Guide');
     expect(spotlight.subtitle, contains('Apple TV'));
     expect(iptvStyleLabel('spotlight'), 'Spotlight Guide');
-    expect(iptvStyleLabel('unknown'), 'Command Center');
+    expect(iptvStyleLabel('unknown'), 'Spotlight Guide');
   });
 
   test('appearance is available only on televisions and desktop', () {

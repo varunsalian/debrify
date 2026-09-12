@@ -187,7 +187,7 @@ class IptvResultsViewState extends State<IptvResultsView>
 
   /// The cockpit's visual style (`iptv_style` pref). Only the TV/desktop
   /// cockpit branch consults it — classic and touch-tablet layouts ignore it.
-  IptvStyle _iptvStyle = IptvStyle.command;
+  IptvStyle _iptvStyle = IptvStyle.fromPref(StorageService.iptvStyleCached);
 
   /// Whether focusing a row may open its stream in the embedded side stage.
   /// The channel identity and stage actions remain available when false; only

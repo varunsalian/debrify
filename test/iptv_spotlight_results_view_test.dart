@@ -58,7 +58,7 @@ void main() {
         );
     IptvCatalogDb.debugDirectoryOverride = catalogDirectory.path;
     await IptvCatalogDb.open();
-    await StorageService.setIptvStyle('spotlight');
+    StorageService.resetProfileCaches();
     await StorageService.setIptvChannelPreviewEnabled(false);
     await StorageService.setIptvPlaylists([
       IptvPlaylist(
@@ -572,7 +572,7 @@ https://example.com/live/two.ts
     },
   );
 
-  testWidgets('selected Spotlight style renders the complete TV shell', (
+  testWidgets('default Spotlight style renders the complete TV shell', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(896, 540);

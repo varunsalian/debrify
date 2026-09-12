@@ -43,7 +43,9 @@ String iptvStyleLabel(String style) {
   for (final c in kIptvStyleChoices) {
     if (c.value == style) return c.label;
   }
-  return 'Command Center';
+  return kIptvStyleChoices
+      .firstWhere((choice) => choice.value == StorageService.kIptvStyleDefault)
+      .label;
 }
 
 /// IPTV page appearance picker (`iptv_style`).
@@ -62,7 +64,7 @@ class IptvStylePage extends StatefulWidget {
 
 class _IptvStylePageState extends State<IptvStylePage> {
   bool _loading = true;
-  String _style = 'command';
+  String _style = StorageService.kIptvStyleDefault;
 
   /// Non-focusable marker around the options card; used on TV to hand entry
   /// focus to its first focusable descendant (the first option row).
