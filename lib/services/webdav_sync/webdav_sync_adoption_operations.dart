@@ -9,6 +9,7 @@ import 'package:sqflite/sqflite.dart';
 import '../../models/profiles/profile_policy.dart';
 import '../../models/profiles/user_profile.dart';
 import '../../utils/app_storage.dart';
+import '../profiles/home_row_preference_ids.dart';
 import '../profiles/profile_authorization.dart';
 import '../profiles/profile_appearance_preferences.dart';
 import '../profiles/profile_cleanup_ledger.dart';
@@ -21,6 +22,7 @@ import '../profiles/portable_profile_package.dart';
 import '../profiles/profile_registry.dart';
 import '../profiles/profile_restore_coordinator.dart';
 import '../profiles/profile_scope.dart';
+import '../profiles/subtitle_appearance_preferences.dart';
 import 'webdav_sync_adoption.dart';
 import 'webdav_sync_models.dart';
 
@@ -144,7 +146,10 @@ final class DefaultWebDavSyncAdoptionOperations
   }) async {
     if (!ProfilePreferenceBudget.enforced || oldToNewProfiles.isEmpty) return;
     final prefs = await SharedPreferences.getInstance();
-    final plannedTargets = prefs.getKeys().toSet();
+    final plannedFootprints = <String, int>{
+      for (final key in prefs.getKeys())
+        key: ProfilePreferenceBudget.entryFootprint(key, prefs.get(key)),
+    };
     var projectedBytes = ProfilePreferenceBudget.measure(prefs);
     final pairs = oldToNewProfiles.entries.toList()
       ..sort((left, right) => left.key.compareTo(right.key));
@@ -160,14 +165,24 @@ final class DefaultWebDavSyncAdoptionOperations
       for (final physical in sourceKeys) {
         final logical = physical.substring(source.preferencePrefix.length);
         final target = destination.preferenceKey(logical);
-        if (!plannedTargets.add(target)) continue;
-        final value = _projectPreference(
-          prefs.get(physical),
+        final sourceValue = prefs.get(physical);
+        final preserveCustomFont = _preservesLocalCustomFont(
+          logical,
+          sourceValue,
+        );
+        if (plannedFootprints.containsKey(target) && !preserveCustomFont) {
+          continue;
+        }
+        final value = _projectCarriedPreference(
+          logical,
+          sourceValue,
           oldToNewResources,
           unmappedOldResourceIds,
         );
         if (identical(value, _dropped) || value == null) continue;
-        projectedBytes += ProfilePreferenceBudget.entryFootprint(target, value);
+        final footprint = ProfilePreferenceBudget.entryFootprint(target, value);
+        projectedBytes += footprint - (plannedFootprints[target] ?? 0);
+        plannedFootprints[target] = footprint;
         if (projectedBytes > ProfilePreferenceBudget.emergencyLimitBytes) {
           throw StateError(
             'Apple TV preference storage is too full to refresh this sync '
@@ -382,9 +397,14 @@ final class DefaultWebDavSyncAdoptionOperations
     for (final physical in sourceKeys) {
       final logical = physical.substring(source.preferencePrefix.length);
       final target = destination.preferenceKey(logical);
-      if (targetKeys.contains(target)) continue;
-      final value = _projectPreference(
-        prefs.get(physical),
+      final sourceValue = prefs.get(physical);
+      if (targetKeys.contains(target) &&
+          !_preservesLocalCustomFont(logical, sourceValue)) {
+        continue;
+      }
+      final value = _projectCarriedPreference(
+        logical,
+        sourceValue,
         resourceMap,
         droppedResources,
       );
@@ -393,6 +413,26 @@ final class DefaultWebDavSyncAdoptionOperations
       targetKeys.add(target);
     }
   }
+
+  static bool _preservesLocalCustomFont(String key, Object? value) =>
+      key == SubtitleAppearancePreferences.selectedFontKey &&
+      SubtitleAppearancePreferences.isCustomFontId(value);
+
+  static Object? _projectCarriedPreference(
+    String key,
+    Object? value,
+    Map<String, String> resourceMap,
+    Set<String> droppedResources,
+  ) => _projectPreference(
+    HomeRowPreferenceIds.remap(
+      key,
+      value,
+      resourceMap,
+      droppedResourceIds: droppedResources,
+    ),
+    resourceMap,
+    droppedResources,
+  );
 
   static Object? _projectPreference(
     Object? value,

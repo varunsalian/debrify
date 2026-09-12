@@ -62,6 +62,18 @@ void main() {
       'home_card_orientation',
       'home_hide_card_titles_and_ratings',
       'home_row_order_v1',
+      'home_disabled_sections_v1',
+      'home_hide_catalog_addon_names',
+      'home_hero_trailer_volume',
+      'detail_trailer_volume',
+      'subtitle_size_index',
+      'subtitle_style_index',
+      'subtitle_color_index',
+      'subtitle_bg_index',
+      'subtitle_outline_color_index',
+      'subtitle_elevation_index',
+      'subtitle_bold',
+      'subtitle_selected_font_id',
     });
 
     expect(homeCalls, 1);

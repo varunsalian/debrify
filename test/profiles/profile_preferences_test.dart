@@ -167,7 +167,10 @@ void main() {
         expect(await prefs.mutateStringAtomically(key, (_) => local), true);
         expect(signals, [key]);
         expect(await prefs.remove(key), true);
-        expect(signals, [key, key]);
+        expect(
+          signals,
+          key == 'subtitle_selected_font_id' ? [key] : [key, key],
+        );
       },
     );
   }
@@ -212,8 +215,13 @@ void main() {
         expect(feedback.revision, 1);
         expect(feedback.hasPending, isFalse);
         expect(await prefs.remove(key), isTrue);
-        expect(feedback.revision, 2);
-        expect(feedback.hasPending, isTrue);
+        if (key == 'subtitle_selected_font_id') {
+          expect(feedback.revision, 1);
+          expect(feedback.hasPending, isFalse);
+        } else {
+          expect(feedback.revision, 2);
+          expect(feedback.hasPending, isTrue);
+        }
       },
     );
   }

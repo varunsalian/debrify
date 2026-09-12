@@ -1938,7 +1938,7 @@ class _SearchScreenState extends State<SearchScreen>
         // that mean "resolve and paint a video" — none of the TV shell
         // machinery the _heroTrailerActive block registers.
         MainPageBridge.addPlayerLaunchListener(_onContentPlayerLaunch);
-        unawaited(_reloadOffTvHeroTrailerPrefs());
+        unawaited(_reloadHeroTrailerPrefs());
       }
     }
     // Unified (non-TV) layout: drive the catalog Sources bar off search-field
@@ -2054,24 +2054,22 @@ class _SearchScreenState extends State<SearchScreen>
     return true;
   }
 
-  /// Off-TV hero trailer prefs — read at init and RE-read whenever Settings
-  /// fires the home-settings bridge, because off-TV Settings is a pushed
-  /// route over a surviving Home: without the re-read, flipping the toggle
-  /// would do nothing until the tab was recreated. setState because the
-  /// board's `trailersEnabled` is a constructor param — its dwell clock only
-  /// learns the pref through a rebuild.
+  /// Re-read hero trailer prefs when Home survives Settings or a WebDAV
+  /// update. TV also needs the live read now that trailer volume can sync
+  /// without switching tabs. The existing audio/enable gates remain local.
   ///
   /// Sound/volume read the DETAIL surface keys off-TV: that is the pair the
   /// settings page has always shown on these platforms, so a stored "sound
   /// off" keeps meaning what it meant. Writes go to both surfaces now, so
   /// the pairs converge on first change.
-  Future<void> _reloadOffTvHeroTrailerPrefs() async {
+  Future<void> _reloadHeroTrailerPrefs() async {
+    final surface = widget.isTelevision
+        ? AmbientTrailerSurface.homeHero
+        : AmbientTrailerSurface.detail;
     final values = await Future.wait([
       StorageService.getHomeHeroTrailerEnabled(),
-      StorageService.getAmbientTrailerAudioEnabled(
-        AmbientTrailerSurface.detail,
-      ),
-      StorageService.getAmbientTrailerVolume(AmbientTrailerSurface.detail),
+      StorageService.getAmbientTrailerAudioEnabled(surface),
+      StorageService.getAmbientTrailerVolume(surface),
     ]);
     if (!mounted) return;
     final enabled = values[0] as bool;
@@ -2592,11 +2590,8 @@ class _SearchScreenState extends State<SearchScreen>
         );
       });
     }
-    // Off-TV the hero-trailer prefs ride this same signal — Settings is a
-    // pushed route here, so nothing else tells a surviving Home about them.
-    if (!widget.isTelevision) {
-      unawaited(_reloadOffTvHeroTrailerPrefs());
-    }
+    // Sync can update volume on a surviving Home on every platform.
+    unawaited(_reloadHeroTrailerPrefs());
     await _loadHomeDefaultView();
     if (!mounted) return;
     final disabled = await StorageService.getHomeDisabledSections();

@@ -222,6 +222,17 @@ void main() {
       await prefs.setString('tv_sidebar_style', 'pill');
       await prefs.setString('desktop_sidebar_style', 'rail');
       await prefs.setString('phone_nav_style', 'floating');
+      await prefs.setBool('home_hide_catalog_addon_names', true);
+      await prefs.setInt('home_hero_trailer_volume', 20);
+      await prefs.setInt('detail_trailer_volume', 20);
+      await prefs.setInt('subtitle_size_index', 4);
+      await prefs.setInt('subtitle_style_index', 2);
+      await prefs.setInt('subtitle_color_index', 1);
+      await prefs.setInt('subtitle_bg_index', 3);
+      await prefs.setInt('subtitle_outline_color_index', 7);
+      await prefs.setInt('subtitle_elevation_index', 0);
+      await prefs.setBool('subtitle_bold', true);
+      await prefs.setString('subtitle_selected_font_id', 'notosans');
       await prefs.setString('default_torrent_provider_v1', 'torbox');
       final packages = ProfilePackageService(
         registry: registry,
@@ -261,6 +272,21 @@ void main() {
       expect(valuesOf(sync.package)['tv_sidebar_style'], 'pill');
       expect(valuesOf(sync.package)['desktop_sidebar_style'], 'rail');
       expect(valuesOf(sync.package)['phone_nav_style'], 'floating');
+      expect(valuesOf(sync.package)['home_hide_catalog_addon_names'], true);
+      expect(valuesOf(sync.package)['home_hero_trailer_volume'], 20);
+      expect(valuesOf(sync.package)['detail_trailer_volume'], 20);
+      expect(valuesOf(sync.package)['subtitle_size_index'], 4);
+      expect(valuesOf(sync.package)['subtitle_style_index'], 2);
+      expect(valuesOf(sync.package)['subtitle_color_index'], 1);
+      expect(valuesOf(sync.package)['subtitle_bg_index'], 3);
+      expect(valuesOf(sync.package)['subtitle_outline_color_index'], 7);
+      expect(valuesOf(sync.package)['subtitle_elevation_index'], 0);
+      expect(valuesOf(sync.package)['subtitle_bold'], true);
+      expect(valuesOf(sync.package)['subtitle_selected_font_id'], 'notosans');
+      expect(
+        valuesOf(sync.package),
+        isNot(contains('subtitle_extreme_bottom_default_adopted_v1')),
+      );
       final restore = ProfileRestoreCoordinator(
         registry: registry,
         cipher: cipher,
@@ -284,6 +310,34 @@ void main() {
         sessionEpoch: 1,
       );
       final joinedScope = await scopeFor(joined.importedProfileIds.single);
+      expect(
+        raw.getBool(joinedScope.preferenceKey('home_hide_catalog_addon_names')),
+        true,
+      );
+      expect(
+        raw.getInt(joinedScope.preferenceKey('home_hero_trailer_volume')),
+        20,
+      );
+      expect(
+        raw.getInt(joinedScope.preferenceKey('detail_trailer_volume')),
+        20,
+      );
+      expect(
+        raw.getInt(joinedScope.preferenceKey('subtitle_elevation_index')),
+        0,
+      );
+      expect(
+        raw.getString(joinedScope.preferenceKey('subtitle_selected_font_id')),
+        'notosans',
+      );
+      expect(
+        raw.getBool(
+          joinedScope.preferenceKey(
+            'subtitle_extreme_bottom_default_adopted_v1',
+          ),
+        ),
+        true,
+      );
       expect(
         raw.containsKey(joinedScope.preferenceKey('tv_home_style')),
         isFalse,
@@ -628,7 +682,9 @@ void main() {
             'base_url': 'https://example.invalid',
             'types': ['movie'],
             'resources': ['catalog'],
-            'catalogs': [],
+            'catalogs': [
+              {'id': 'top', 'type': 'movie', 'name': 'Popular'},
+            ],
           },
           if (type == ConnectionResourceType.webDav) ...{
             'baseUrl': 'https://example.invalid/dav',
@@ -642,13 +698,23 @@ void main() {
             'api_key': 'test-key',
           },
         };
-        await resources.create(
+        final created = await resources.create(
           context: await ProfileAuthorizationContext.capture(registry),
           type: type,
           label: type.name,
           publicConfig: const {},
           secretConfig: secret,
         );
+        if (type == ConnectionResourceType.stremioAddon) {
+          await StorageService.setHomeDisabledSections({
+            '${created.id}:movie:top',
+            'cw:movies',
+          });
+          await StorageService.setHomeRowOrder([
+            'cw:movies',
+            '${created.id}:movie:top',
+          ]);
+        }
       }
       final packages = ProfilePackageService(
         registry: registry,
@@ -679,6 +745,16 @@ void main() {
       // The backup source is not part of the restored phone. Remove it before
       // seeding so the circle contains exactly the restored resource graph.
       await operations.pruneProfile(profileId);
+      StremioService.instance.invalidateCache();
+      final backupAddon = (await StremioService.instance.getAddons()).single;
+      expect(await StorageService.getHomeDisabledSections(), {
+        '${backupAddon.id}:movie:top',
+        'cw:movies',
+      });
+      expect(await StorageService.getHomeRowOrder(), [
+        'cw:movies',
+        '${backupAddon.id}:movie:top',
+      ]);
       final localProfiles = await registry.listProfiles(includeDisabled: true);
       final localResources = await registry.listAllResourcesIncludingDisabled();
       final seedMaps = WebDavSyncGraphIdentityPlanner.ensure(
@@ -720,6 +796,29 @@ void main() {
       );
       addTearDown(stage.dispose);
       addTearDown(seed.snapshot!.dispose);
+      final preferenceSection =
+          stage.package.sections[stage
+                  .package
+                  .profiles
+                  .single['preferencesSection']]
+              as Map;
+      final preferenceBytes = <int>[];
+      for (final part
+          in preferenceSection['preferencePages']['parts'] as List) {
+        preferenceBytes.addAll(
+          await stage.resolveDatabase(part['entry'] as String)!.readAsBytes(),
+        );
+      }
+      final stagedPrefs = jsonDecode(utf8.decode(preferenceBytes)) as Map;
+      final circleAddon = retained.localToCircleResources[backupAddon.id]!;
+      expect(
+        jsonDecode(stagedPrefs['home_disabled_sections_v1'] as String),
+        unorderedEquals(['$circleAddon:movie:top', 'cw:movies']),
+      );
+      expect(jsonDecode(stagedPrefs['home_row_order_v1'] as String), [
+        'cw:movies',
+        '$circleAddon:movie:top',
+      ]);
       final joined = await adoption.adopt(
         WebDavSyncAdoptionRequest(
           namespaceId: 'circle:regression',
@@ -783,6 +882,15 @@ void main() {
       );
       final addons = await StremioService.instance.getAddons();
       expect(addons, hasLength(1));
+      expect(addons.single.id, isNot(backupAddon.id));
+      expect(await StorageService.getHomeDisabledSections(), {
+        '${addons.single.id}:movie:top',
+        'cw:movies',
+      });
+      expect(await StorageService.getHomeRowOrder(), [
+        'cw:movies',
+        '${addons.single.id}:movie:top',
+      ]);
       for (final row in [
         ...playlists.where((p) => !p.isVirtual).map((p) => p.toJson()),
         ...servers.map((p) => p.toJson()),

@@ -6,6 +6,7 @@ import 'package:synchronized/synchronized.dart';
 
 import 'profile_preference_budget.dart';
 import 'profile_preference_portability.dart';
+import 'profile_appearance_preferences.dart';
 import 'profile_runtime.dart';
 import 'profile_scope.dart';
 import 'profile_credential_facade.dart';
@@ -223,6 +224,7 @@ class ProfilePreferences implements SharedPreferences {
     'subtitle_elevation_index',
     'subtitle_bold',
     'subtitle_selected_font_id',
+    'subtitle_extreme_bottom_default_adopted_v1',
   };
 
   /// Installed by the native authority bridge after bootstrap. Keeping the
@@ -480,6 +482,7 @@ class ProfilePreferences implements SharedPreferences {
   /// settings snapshot after one interaction.
   Future<bool> setNativeProjectionBatch(Map<String, Object> values) async {
     _assertWritable();
+    final changedKeys = <String>{};
     for (final entry in values.entries) {
       if (!nativeProjectionKeys.contains(entry.key)) {
         throw ArgumentError.value(
@@ -511,6 +514,9 @@ class ProfilePreferences implements SharedPreferences {
         for (final entry in values.entries) {
           _assertWritable();
           final physical = _physical(entry.key);
+          if (!_sameSyncValue(_delegate.get(physical), entry.value)) {
+            changedKeys.add(entry.key);
+          }
           final wrote = switch (entry.value) {
             bool value => await _delegate.setBool(physical, value),
             int value => await _delegate.setInt(physical, value),
@@ -540,6 +546,19 @@ class ProfilePreferences implements SharedPreferences {
         ProfileRuntime.isInitialized &&
         ProfileRuntime.isProfileCommitted) {
       await TvOsProfileRecoveryStore.checkpointPreferenceMutation();
+    }
+    if (success && _capturedAccess == null && scope != null) {
+      for (final key in changedKeys) {
+        if (ProfileAppearancePreferences.keys.contains(key) ||
+            !ProfilePreferencePortability.allowsKey(key) ||
+            !ProfilePreferencePortability.prepareValue(
+              key,
+              values[key],
+            ).include) {
+          continue;
+        }
+        notifyWebDavSyncLocalChange(scope.profileId, key);
+      }
     }
     return success;
   }

@@ -945,49 +945,216 @@ void main() {
     },
   );
 
-  test(
-    'navigation and player styles survive export, peer merge and materialization',
-    () {
-      final navigation = <String, Object>{
-        'phone_nav_style': 'floating',
-        'tv_player_controls_style': 'frost',
-        'debrify_tv_player_style': 'cinema',
-        'player_dock_style': 'compact',
-        'subtitle_source_priority_v1':
-            '["addon:config-b","embedded","addon:config-a"]',
+  test('navigation, player styles and shared Home preferences survive sync', () {
+    final navigation = <String, Object>{
+      'home_hide_catalog_addon_names': true,
+      'home_hero_trailer_volume': 20,
+      'detail_trailer_volume': 20,
+      'subtitle_size_index': 4,
+      'subtitle_style_index': 2,
+      'subtitle_color_index': 1,
+      'subtitle_bg_index': 3,
+      'subtitle_outline_color_index': 7,
+      'subtitle_elevation_index': 0,
+      'subtitle_bold': true,
+      'subtitle_selected_font_id': 'notosans',
+      'phone_nav_style': 'floating',
+      'tv_player_controls_style': 'frost',
+      'debrify_tv_player_style': 'cinema',
+      'player_dock_style': 'compact',
+      'subtitle_source_priority_v1':
+          '["addon:config-b","embedded","addon:config-a"]',
 
-        'phone_nav_bar_indices': ['1', '2'],
-        'tv_sidebar_style': 'pill',
-        'desktop_sidebar_style': 'rail',
-        'sidebar_configuration_v1':
-            '{"version":1,"order":["discover","home"],"labels":{"discover":"My Movies"}}',
+      'phone_nav_bar_indices': ['1', '2'],
+      'tv_sidebar_style': 'pill',
+      'desktop_sidebar_style': 'rail',
+      'sidebar_configuration_v1':
+          '{"version":1,"order":["discover","home"],"labels":{"discover":"My Movies"}}',
+    };
+    final built = _buildWithPreferences(maps, 'device-a', navigation, now: 100);
+    final merged = WebDavSyncHotMerge.merge(
+      local: _document(device: 'device-b', scalarTime: 50, scalars: const {}),
+      peers: [built.document],
+      tombstoneDocuments: const [],
+      nowMs: 200,
+    ).document;
+    final materialized = WebDavSyncHotMerge.materializePreferences(
+      document: merged,
+      identityMaps: maps,
+    );
+    for (final entry in navigation.entries) {
+      expect(WebDavSyncScheduler.admitsLocalChangeKey(entry.key), isTrue);
+      if (entry.key == 'sidebar_configuration_v1') {
+        expect(
+          jsonDecode(materialized[entry.key] as String),
+          jsonDecode(entry.value as String),
+        );
+      } else {
+        expect(materialized[entry.key], entry.value, reason: entry.key);
+      }
+    }
+  });
+
+  test('custom and invalid subtitle fonts stay local', () {
+    for (final font in ['custom_1720000000000', 'custom', 'unknown-font']) {
+      final local = _buildWithPreferences(maps, 'device-a', {
+        'subtitle_selected_font_id': font,
+      }, now: 100);
+      expect(
+        local.protectedPreferenceKeys,
+        contains('subtitle_selected_font_id'),
+      );
+      expect(
+        local.document.scalars.values,
+        isNot(contains('subtitle_selected_font_id')),
+      );
+      final peer = _document(
+        device: 'device-b',
+        scalarTime: 200,
+        scalars: {'subtitle_selected_font_id': 'roboto'},
+      );
+      final merged = WebDavSyncHotMerge.merge(
+        local: local.document,
+        peers: [peer],
+        tombstoneDocuments: [],
+        nowMs: 300,
+      ).document;
+      expect(
+        WebDavSyncHotMerge.materializePreferences(
+          document: merged,
+          identityMaps: maps,
+          protectedPreferenceKeys: local.protectedPreferenceKeys,
+        ),
+        isNot(contains('subtitle_selected_font_id')),
+      );
+    }
+
+    final legacyCustom = _document(
+      device: 'legacy',
+      scalarTime: 200,
+      scalars: {'subtitle_selected_font_id': 'custom_old_device'},
+    );
+    expect(
+      WebDavSyncHotMerge.materializePreferences(
+        document: legacyCustom,
+        identityMaps: maps,
+      ),
+      isNot(contains('subtitle_selected_font_id')),
+    );
+  });
+
+  test(
+    'Home catalog rows translate between device IDs and converge without edits',
+    () {
+      final receiver = WebDavSyncIdentityMaps(
+        circleToLocalProfiles: {'profile-circle': 'receiver-profile'},
+        circleToLocalResources: {'resource-circle': 'receiver-addon'},
+      );
+      final preferences = <String, Object?>{
+        'home_disabled_sections_v1': '["local-resource:movie:top","cw:movies"]',
+        'home_row_order_v1':
+            '["cw:movies","local-resource:series:list:top","local-resource:movie:top"]',
       };
       final built = _buildWithPreferences(
         maps,
-        'device-a',
-        navigation,
+        'source',
+        preferences,
         now: 100,
       );
+      expect(
+        built.document.scalars.values['home_disabled_sections_v1'],
+        '["resource-circle:movie:top","cw:movies"]',
+      );
       final merged = WebDavSyncHotMerge.merge(
-        local: _document(device: 'device-b', scalarTime: 50, scalars: const {}),
+        local: _buildWithPreferences(
+          receiver,
+          'receiver',
+          {},
+          now: 200,
+        ).document,
         peers: [built.document],
-        tombstoneDocuments: const [],
+        tombstoneDocuments: [],
         nowMs: 200,
       ).document;
-      final materialized = WebDavSyncHotMerge.materializePreferences(
+      final local = WebDavSyncHotMerge.materializePreferences(
         document: merged,
-        identityMaps: maps,
+        identityMaps: receiver,
       );
-      for (final entry in navigation.entries) {
-        if (entry.key == 'sidebar_configuration_v1') {
-          expect(
-            jsonDecode(materialized[entry.key] as String),
-            jsonDecode(entry.value as String),
-          );
-        } else {
-          expect(materialized[entry.key], entry.value, reason: entry.key);
-        }
+      expect(
+        local['home_disabled_sections_v1'],
+        '["receiver-addon:movie:top","cw:movies"]',
+      );
+      expect(
+        local['home_row_order_v1'],
+        '["cw:movies","receiver-addon:series:list:top","receiver-addon:movie:top"]',
+      );
+      final next = _buildWithPreferences(
+        receiver,
+        'receiver',
+        local,
+        now: 300,
+        previous: merged,
+      );
+      expect(next.document.scalars.toJson(), merged.scalars.toJson());
+      expect(
+        WebDavSyncHotMerge.materializePreferences(
+          document: next.document,
+          identityMaps: maps,
+        ),
+        containsPair(
+          'home_disabled_sections_v1',
+          preferences['home_disabled_sections_v1'],
+        ),
+      );
+    },
+  );
+
+  test(
+    'upgraded source repairs legacy Home row IDs without retoggling settings',
+    () {
+      const hidden = '["local-resource:movie:top"]';
+      final legacy = _document(
+        device: 'source',
+        scalarTime: 100,
+        scalars: {
+          'home_disabled_sections_v1': hidden,
+          'home_row_order_v1': hidden,
+          'default_torrent_provider_v1': 'torbox',
+        },
+      );
+      final rebuilt = _buildWithPreferences(
+        maps,
+        'source',
+        legacy.scalars.values,
+        now: 300,
+        previous: legacy,
+      );
+      for (final key in ['home_disabled_sections_v1', 'home_row_order_v1']) {
+        expect(
+          rebuilt.document.scalars.values[key],
+          '["resource-circle:movie:top"]',
+        );
+        expect(
+          rebuilt.document.scalars.entries[key]!.stamp.normalizedTimeMs,
+          300,
+        );
       }
+      expect(
+        rebuilt
+            .document
+            .scalars
+            .entries['default_torrent_provider_v1']!
+            .stamp
+            .normalizedTimeMs,
+        100,
+      );
+      final merged = WebDavSyncHotMerge.merge(
+        local: legacy,
+        peers: [rebuilt.document],
+        tombstoneDocuments: [],
+        nowMs: 300,
+      ).document;
+      expect(merged.scalars.values, rebuilt.document.scalars.values);
     },
   );
 

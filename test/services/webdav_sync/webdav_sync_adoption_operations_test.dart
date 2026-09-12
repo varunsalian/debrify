@@ -263,6 +263,48 @@ void main() {
   });
 
   test(
+    'tvOS preflight measures Home rows after removed addons are pruned',
+    () async {
+      final prefs = await SharedPreferences.getInstance();
+      final oldScope = ProfileScope(
+        profileId: oldId,
+        dataGeneration: 1,
+        sessionEpoch: 0,
+      );
+      final removedRows = jsonEncode(
+        List<String>.generate(
+          900,
+          (index) => 'removed-resource:movie:catalog-$index',
+        ),
+      );
+      await prefs.setString(
+        oldScope.preferenceKey('home_row_order_v1'),
+        removedRows,
+      );
+      final fillerKey = 'unscoped_filler';
+      final base = ProfilePreferenceBudget.measure(prefs);
+      final emptyFillerFootprint = ProfilePreferenceBudget.entryFootprint(
+        fillerKey,
+        '',
+      );
+      final fillerLength =
+          ProfilePreferenceBudget.emergencyLimitBytes -
+          base -
+          emptyFillerFootprint -
+          1024;
+      expect(fillerLength, greaterThan(0));
+      await prefs.setString(fillerKey, 'x' * fillerLength);
+      ProfilePreferenceBudget.debugEnforcedOverride = true;
+
+      await operations.preflightLocalStateCarry(
+        oldToNewProfiles: <String, String>{oldId: newId},
+        oldToNewResources: const <String, String>{},
+        unmappedOldResourceIds: const <String>{'removed-resource'},
+      );
+    },
+  );
+
+  test(
     'carry preserves staged values, remaps refs, and excludes DB/temp',
     () async {
       final prefs = await SharedPreferences.getInstance();
@@ -297,6 +339,20 @@ void main() {
         }),
       );
       await prefs.setString(newScope.preferenceKey('theme'), 'staged');
+      await prefs.setString(
+        oldScope.preferenceKey('subtitle_selected_font_id'),
+        'custom_1720000000000',
+      );
+      await prefs.setString(
+        newScope.preferenceKey('subtitle_selected_font_id'),
+        'roboto',
+      );
+      for (final key in ['home_disabled_sections_v1', 'home_row_order_v1']) {
+        await prefs.setString(
+          oldScope.preferenceKey(key),
+          '["old-resource:movie:top","removed-resource:series:top","cw:movies"]',
+        );
+      }
 
       final sourceRoot = oldScope.generationDirectory(documents);
       final targetRoot = newScope.generationDirectory(documents);
@@ -326,7 +382,17 @@ void main() {
       );
 
       expect(prefs.getString(newScope.preferenceKey('theme')), 'staged');
+      expect(
+        prefs.getString(newScope.preferenceKey('subtitle_selected_font_id')),
+        'custom_1720000000000',
+      );
       expect(prefs.getString(newScope.preferenceKey('device_path')), '/local');
+      for (final key in ['home_disabled_sections_v1', 'home_row_order_v1']) {
+        expect(jsonDecode(prefs.getString(newScope.preferenceKey(key))!), [
+          'new-resource:movie:top',
+          'cw:movies',
+        ]);
+      }
       expect(
         jsonDecode(
           prefs.getString(newScope.preferenceKey('webdav_servers_v1'))!,

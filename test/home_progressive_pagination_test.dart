@@ -9,6 +9,7 @@ import 'package:debrify/services/main_page_bridge.dart';
 import 'package:debrify/services/profiles/profile_scope.dart';
 import 'package:debrify/services/stremio_service.dart';
 import 'package:debrify/services/storage_service.dart';
+import 'package:debrify/services/webdav_sync/webdav_sync_ui_refresh.dart';
 import 'package:debrify/services/text_brightness.dart';
 import 'package:debrify/theme/app_theme.dart';
 import 'package:debrify/theme/app_theme_adapter.dart';
@@ -219,6 +220,53 @@ class HomeFixture {
 }
 
 void main() {
+  testWidgets(
+    'synced TV trailer volume refreshes live without reloading Home',
+    (tester) async {
+      final home = HomeFixture(tester, style: 'canvas');
+      await home.mount();
+      await home.drive(() => home.slow.complete(page('Slow')));
+      await home.settle();
+      final trailer = find.byWidgetPredicate(
+        (widget) => widget.runtimeType.toString() == '_HeroTrailerLayer',
+      );
+      double volume() => (tester.widget(trailer) as dynamic).volume as double;
+      expect(volume(), 70);
+      final state = tester.state(find.byType(SearchScreen));
+      final requests = List<String>.of(home.requests);
+      await home.drive(() async {
+        await StorageService.setAmbientTrailerVolume(
+          AmbientTrailerSurface.homeHero,
+          20,
+        );
+        WebDavSyncUiRefresh.dispatch({'home_hero_trailer_volume'});
+      });
+      await home.settle();
+      expect(volume(), 20);
+      expect(tester.state(find.byType(SearchScreen)), same(state));
+      expect(home.requests, requests);
+      await home.drive(() async {
+        await StorageService.setAmbientTrailerAudioEnabled(
+          AmbientTrailerSurface.homeHero,
+          false,
+        );
+        await StorageService.setAmbientTrailerVolume(
+          AmbientTrailerSurface.homeHero,
+          30,
+        );
+        WebDavSyncUiRefresh.dispatch({'home_hero_trailer_volume'});
+      });
+      await home.settle();
+      expect(
+        volume(),
+        0,
+        reason: 'A synced volume must not override local mute',
+      );
+      expect(home.requests, requests);
+      await home.dispose();
+    },
+  );
+
   for (final style in ['classic', 'spotlight']) {
     testWidgets('$style Home can leave and reopen during progressive loading', (
       tester,
@@ -268,9 +316,9 @@ void main() {
         expect(
           tester
               .widget<SpotlightBoard>(find.byType(SpotlightBoard))
-                .sections
-                .expand((shelf) => shelf.items)
-                .any((item) => item.title == 'Slow 0'),
+              .sections
+              .expand((shelf) => shelf.items)
+              .any((item) => item.title == 'Slow 0'),
           isTrue,
         );
       } else {

@@ -3,6 +3,7 @@ import 'package:debrify/models/stremio_addon.dart';
 import 'package:debrify/services/storage_service.dart';
 import 'package:debrify/widgets/collections/tv_collection_titles.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -103,6 +104,102 @@ void main() {
       expect(await StorageService.getTvCollectionListStyle(), expected);
     }
   });
+
+  testWidgets('desktop hover updates the selected preview', (tester) async {
+    final focused = <String>[];
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: TvCollectionTitles(
+            style: 'filmstrip',
+            items: List.generate(
+              3,
+              (i) =>
+                  StremioMeta(id: '$i', name: 'Hover title $i', type: 'movie'),
+            ),
+            onOpen: (_) {},
+            onLoadMore: () {},
+            onExitTop: () {},
+            onItemFocused: (item) => focused.add(item.id),
+            exhausted: true,
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    addTearDown(mouse.removePointer);
+    await mouse.addPointer();
+    await mouse.moveTo(tester.getCenter(find.text('Hover title 1')));
+    await tester.pumpAndSettle();
+    expect(focused, ['1']);
+    expect(tester.takeException(), isNull);
+  });
+
+  for (final style in ['gallery', 'filmstrip', 'journal']) {
+    testWidgets('$style auto-fills a short initial touch list', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(960, 540));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      var loads = 0;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: TvCollectionTitles(
+              style: style,
+              items: const [
+                StremioMeta(id: '1', name: 'Only title', type: 'movie'),
+              ],
+              onOpen: (_) {},
+              onLoadMore: () => loads++,
+              onExitTop: () {},
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(loads, 1);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('$style touch scrolling loads the next page near the end', (
+      tester,
+    ) async {
+      await tester.binding.setSurfaceSize(const Size(960, 540));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      var loads = 0;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: TvCollectionTitles(
+              style: style,
+              items: List.generate(
+                40,
+                (i) => StremioMeta(
+                  id: '$i',
+                  name: 'Touch title $i',
+                  type: 'movie',
+                ),
+              ),
+              onOpen: (_) {},
+              onLoadMore: () => loads++,
+              onExitTop: () {},
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final scrollView = style == 'gallery'
+          ? find.byType(GridView)
+          : find.byType(ListView);
+      await tester.drag(scrollView, const Offset(0, -10000));
+      await tester.pumpAndSettle();
+
+      expect(loads, 1);
+      expect(tester.takeException(), isNull);
+    });
+  }
 
   for (final style in ['gallery', 'filmstrip', 'journal']) {
     testWidgets('$style traverses long lists, pages and returns to filters', (

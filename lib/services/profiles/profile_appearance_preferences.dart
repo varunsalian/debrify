@@ -1,5 +1,7 @@
 /// Navigation styles, sidebar order/labels, and phone navigation sync using
-/// their existing separate keys, as do the three player control/dock styles.
+/// their existing separate keys, as do the three player control/dock styles,
+/// Home addon-name visibility, ambient trailer volumes, and portable subtitle
+/// appearance (including bundled-font selection).
 /// Other appearance remains local to each profile on each installation. These keys
 /// are still portable through explicit backups and profile-default copies;
 /// only automatic WebDAV sync excludes them (including bootstrap and replay).
@@ -35,27 +37,16 @@ abstract final class ProfileAppearancePreferences {
     'home_collections_gif_remote',
     'home_collections_folder_layout',
     'home_hide_card_titles_and_ratings',
-    'home_hide_catalog_addon_names',
     'series_browser_dense_view',
     'playlist_view_modes_v1',
     'detail_trailer_autoplay_enabled',
     'home_hero_trailer_enabled',
     'home_hero_trailer_audio_enabled',
-    'home_hero_trailer_volume',
     'detail_trailer_audio_enabled',
-    'detail_trailer_volume',
     'tv_trailer_underlay_enabled',
     'iptv_channel_preview_enabled',
     'ui_sounds',
     'ui_haptics',
-    'subtitle_size_index',
-    'subtitle_style_index',
-    'subtitle_color_index',
-    'subtitle_bg_index',
-    'subtitle_outline_color_index',
-    'subtitle_elevation_index',
-    'subtitle_bold',
     'subtitle_extreme_bottom_default_adopted_v1',
-    'subtitle_selected_font_id',
   };
 }

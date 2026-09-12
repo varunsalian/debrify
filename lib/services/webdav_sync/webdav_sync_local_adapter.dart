@@ -9,6 +9,7 @@ import '../../utils/app_storage.dart';
 import 'package:crypto/crypto.dart' as crypto;
 
 import '../profiles/profile_appearance_preferences.dart';
+import '../profiles/subtitle_appearance_preferences.dart';
 import '../../models/profiles/connection_resource.dart';
 import '../../models/profiles/profile_avatar.dart';
 import '../../models/profiles/profile_policy.dart';
@@ -426,9 +427,12 @@ final class ProfileWebDavSyncLocalAdapter
     // the final write boundary as well, preserving local values and defaults.
     values = {
       for (final entry in values.entries)
-        if (!ProfileAppearancePreferences.keys.contains(entry.key))
+        if (!ProfileAppearancePreferences.keys.contains(entry.key) &&
+            (entry.key != SubtitleAppearancePreferences.selectedFontKey ||
+                SubtitleAppearancePreferences.isBuiltInFontId(entry.value)))
           entry.key: entry.value,
     };
+    SubtitleAppearancePreferences.markSyncedElevation(values);
     final profile = await registry.getProfile(localProfileId);
     _validateSession(session);
     if (profile == null) {

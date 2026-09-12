@@ -5,6 +5,8 @@ import 'dart:isolate';
 import 'package:crypto/crypto.dart';
 
 import '../profiles/profile_appearance_preferences.dart';
+import '../profiles/home_row_preference_ids.dart';
+import '../profiles/subtitle_appearance_preferences.dart';
 import '../../models/home_collection_inventory.dart';
 import 'webdav_sync_codec.dart';
 import 'webdav_sync_hot_models.dart';
@@ -179,6 +181,17 @@ final class WebDavSyncIdentityMaps {
   Object? toWire(Object? value) => _rewrite(value, _toWireReplacements);
 
   Object? toLocal(Object? value) => _rewrite(value, _toLocalReplacements);
+
+  Object? preferenceToWire(String key, Object? value) =>
+      toWire(HomeRowPreferenceIds.remap(key, value, localToCircleResources));
+
+  Object? preferenceToLocal(String key, Object? value) =>
+      toLocal(HomeRowPreferenceIds.remap(key, value, circleToLocalResources));
+
+  Map<String, Object?> preferencesToWire(Map<String, Object?> values) => {
+    for (final entry in values.entries)
+      entry.key: preferenceToWire(entry.key, entry.value),
+  };
 
   String playlistDedupeToWire(String key) {
     var rewritten = key;
@@ -605,13 +618,18 @@ abstract final class WebDavSyncHotMerge {
       }
     }
     for (final entry in input.portablePreferences.entries) {
+      if (entry.key == SubtitleAppearancePreferences.selectedFontKey &&
+          !SubtitleAppearancePreferences.isBuiltInFontId(entry.value)) {
+        protected.add(entry.key);
+        continue;
+      }
       if (entry.value == null ||
           _hotLocalOnlyScalarKeys.contains(entry.key) ||
           _specialKeys.contains(entry.key) ||
           entry.key.startsWith(seriesSourcePrefix)) {
         continue;
       }
-      final wire = input.identityMaps.toWire(entry.value);
+      final wire = input.identityMaps.preferenceToWire(entry.key, entry.value);
       if (wire is bool ||
           wire is int ||
           wire is double && wire.isFinite ||
@@ -1115,8 +1133,14 @@ abstract final class WebDavSyncHotMerge {
 
     final output = <String, Object>{
       for (final entry in document.scalars.values.entries)
-        if (!_hotLocalOnlyScalarKeys.contains(entry.key))
-          entry.key: identityMaps.toLocal(entry.value) as Object,
+        if (!_hotLocalOnlyScalarKeys.contains(entry.key) &&
+            !(entry.key == SubtitleAppearancePreferences.selectedFontKey &&
+                (protectedPreferenceKeys.contains(entry.key) ||
+                    !SubtitleAppearancePreferences.isBuiltInFontId(
+                      entry.value,
+                    ))))
+          entry.key:
+              identityMaps.preferenceToLocal(entry.key, entry.value) as Object,
     };
     final playback = <String, dynamic>{};
     final continueWatching = <Map<String, dynamic>>[];

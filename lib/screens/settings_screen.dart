@@ -1410,6 +1410,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       onOpenMetadataSettings: _openMetadataSettings,
       onOpenCollectionsSettings: _openCollectionsSettings,
       onOpenBadgesSettings: _openBadgesSettings,
+      onOpenCollectionListStyle: _openCollectionListStyle,
       onOpenPlaybackSection: _openPlaybackSection,
       onOpenRemoteControl: _openRemoteControl,
       showSwitchProfile:
@@ -2068,9 +2069,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ...labels(ProfileGateStyle.options.map((option) => option.label)),
         ],
       ),
-      // Android TV only — the stage layout is a TV-canvas design; phones and
-      // desktop always browse Discover as a grid.
-      if (_isAndroidTv)
+      if (_isTelevision ||
+          MediaQuery.sizeOf(context).shortestSide >= 600 ||
+          (PlatformUtil.isDesktop && MediaQuery.sizeOf(context).width >= 600))
         nav(
           SettingsRows.collectionListStyle,
           'Appearance',
@@ -7498,6 +7499,7 @@ class _SettingsLayout extends StatelessWidget {
   final Future<void> Function() onOpenMetadataSettings;
   final Future<void> Function() onOpenCollectionsSettings;
   final Future<void> Function() onOpenBadgesSettings;
+  final Future<void> Function() onOpenCollectionListStyle;
   final Future<void> Function(PlaybackSettingsSection) onOpenPlaybackSection;
   final VoidCallback onOpenRemoteControl;
   final bool showSwitchProfile;
@@ -7593,6 +7595,7 @@ class _SettingsLayout extends StatelessWidget {
     required this.onOpenMetadataSettings,
     required this.onOpenCollectionsSettings,
     required this.onOpenBadgesSettings,
+    required this.onOpenCollectionListStyle,
     required this.onOpenPlaybackSection,
     required this.onOpenRemoteControl,
     required this.showSwitchProfile,
@@ -7674,6 +7677,10 @@ class _SettingsLayout extends StatelessWidget {
     connections.simkl,
     if (connections.mdblist != null) connections.mdblist!,
   ];
+
+  bool _showsLargeCollectionStyles(BuildContext context) =>
+      MediaQuery.sizeOf(context).shortestSide >= 600 ||
+      (PlatformUtil.isDesktop && MediaQuery.sizeOf(context).width >= 600);
 
   Widget _buildSpotlight(BuildContext context) {
     final attention = _providerConnections.where(
@@ -7856,6 +7863,12 @@ class _SettingsLayout extends StatelessWidget {
               title: 'Screen layouts',
               blurb: 'Where things sit. Each screen is chosen separately.',
               children: [
+                if (_showsLargeCollectionStyles(context))
+                  SettingsTile.spec(
+                    SettingsRows.collectionListStyle,
+                    subtitle: 'Grid · Gallery · Filmstrip · Journal',
+                    onTap: onOpenCollectionListStyle,
+                  ),
                 SettingsTile.spec(
                   SettingsRows.detailPageStyle,
                   subtitle: detailPageStyleLabel,
@@ -8260,6 +8273,12 @@ class _SettingsLayout extends StatelessWidget {
                   title: 'Screen layouts',
                   blurb: 'Where things sit. Each screen is chosen separately.',
                   children: [
+                    if (_showsLargeCollectionStyles(context))
+                      SettingsTile.spec(
+                        SettingsRows.collectionListStyle,
+                        subtitle: 'Grid · Gallery · Filmstrip · Journal',
+                        onTap: onOpenCollectionListStyle,
+                      ),
                     SettingsTile.spec(
                       SettingsRows.detailPageStyle,
                       subtitle: detailPageStyleLabel,

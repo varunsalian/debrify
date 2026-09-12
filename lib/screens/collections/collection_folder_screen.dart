@@ -186,9 +186,23 @@ class _CollectionFolderScreenState extends State<CollectionFolderScreen> {
   int _tab = 0;
   List<StremioAddon> _addons = const [];
   bool _booted = false;
-  String _tvListStyle = 'grid';
+  String _collectionListStyle = 'grid';
   GlobalKey<TvCollectionTitlesState> _tvTitlesKey = GlobalKey();
-  bool get _styledTvList => widget.isTelevision && _tvListStyle != 'grid';
+  bool get _supportsCollectionStyles {
+    final size = MediaQuery.sizeOf(context);
+    final desktop = switch (Theme.of(context).platform) {
+      TargetPlatform.macOS ||
+      TargetPlatform.windows ||
+      TargetPlatform.linux => true,
+      _ => false,
+    };
+    return widget.isTelevision ||
+        size.shortestSide >= 600 ||
+        (desktop && size.width >= 600);
+  }
+
+  bool get _styledCollectionList =>
+      _supportsCollectionStyles && _collectionListStyle != 'grid';
 
   List<_Rail> _rails = const [];
   List<String> _unresolved = const [];
@@ -266,9 +280,7 @@ class _CollectionFolderScreenState extends State<CollectionFolderScreen> {
     final generation = ++_configurationToken;
     final session = HomeCollectionsStore.captureSession();
     try {
-      final tvStyle = widget.isTelevision
-          ? await StorageService.getTvCollectionListStyle()
-          : 'grid';
+      final collectionStyle = await StorageService.getTvCollectionListStyle();
       final addons = await _stremio.getAddons();
       final layout = await HomeCollectionsStore.instance.getFolderLayout();
       HomeCollection? updated;
@@ -289,6 +301,7 @@ class _CollectionFolderScreenState extends State<CollectionFolderScreen> {
         'collection': candidate.toJson()..remove('importedAt'),
         'addons': [for (final addon in addons) addon.toJson()],
         'layout': layout.name,
+        'collectionStyle': collectionStyle,
       });
       if (_configurationError == null && signature == _configurationSignature) {
         return;
@@ -315,7 +328,7 @@ class _CollectionFolderScreenState extends State<CollectionFolderScreen> {
         final index = _collection.folders.indexWhere((f) => f.id == folderId);
         _folderIndex = index < 0 ? 0 : index;
       }
-      _tvListStyle = tvStyle;
+      _collectionListStyle = collectionStyle;
       _configurationError = null;
       _booted = true;
       _rebuildFolder(
@@ -467,7 +480,7 @@ class _CollectionFolderScreenState extends State<CollectionFolderScreen> {
           ModalRoute.of(context)?.isCurrent != true) {
         return;
       }
-      if (_styledTvList &&
+      if (_styledCollectionList &&
           _tvTitlesKey.currentState != null &&
           _sortNode.hasFocus) {
         _initialGridFocus = true;
@@ -796,7 +809,7 @@ class _CollectionFolderScreenState extends State<CollectionFolderScreen> {
       return;
     }
     if (_showingAll) {
-      if (_styledTvList) {
+      if (_styledCollectionList) {
         _tvTitlesKey.currentState?.focusFirst();
       } else {
         _allGridKey.currentState?.focusFirst();
@@ -804,7 +817,7 @@ class _CollectionFolderScreenState extends State<CollectionFolderScreen> {
       return;
     }
     if (_tabs) {
-      if (_styledTvList) {
+      if (_styledCollectionList) {
         _tvTitlesKey.currentState?.focusFirst();
       } else {
         _tabGridKey.currentState?.focusFirst();
@@ -845,7 +858,7 @@ class _CollectionFolderScreenState extends State<CollectionFolderScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (_styledTvList && (_tabs || _showingAll))
+            if (_styledCollectionList && (_tabs || _showingAll))
               Row(
                 children: [
                   Expanded(
@@ -855,7 +868,7 @@ class _CollectionFolderScreenState extends State<CollectionFolderScreen> {
                           : (_tabRail?.title ?? _collection.title),
                       subtitle:
                           '${_collection.title} / ${_hasFolders ? _folder.title : ""}',
-                      isTelevision: true,
+                      isTelevision: widget.isTelevision,
                       backNode: _backNode,
                       onFilterDown: () => _filterNodes.first.requestFocus(),
                     ),
@@ -1124,7 +1137,7 @@ class _CollectionFolderScreenState extends State<CollectionFolderScreen> {
       }
       return SkeletonPosterGrid(isTelevision: widget.isTelevision);
     }
-    if (_styledTvList) {
+    if (_styledCollectionList) {
       return _styledTitles(
         items,
         loadingMore: r.loadingMore,
@@ -1168,7 +1181,7 @@ class _CollectionFolderScreenState extends State<CollectionFolderScreen> {
       }
       return SkeletonPosterGrid(isTelevision: widget.isTelevision);
     }
-    if (_styledTvList) {
+    if (_styledCollectionList) {
       return _styledTitles(
         items,
         loadingMore: _allLoadingMore,
@@ -1200,7 +1213,7 @@ class _CollectionFolderScreenState extends State<CollectionFolderScreen> {
     required VoidCallback loadMore,
   }) => TvCollectionTitles(
     key: _tvTitlesKey,
-    style: _tvListStyle,
+    style: _collectionListStyle,
     items: _sorted(items),
     loadingMore: loadingMore,
     exhausted: exhausted,

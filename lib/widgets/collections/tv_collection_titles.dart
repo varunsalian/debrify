@@ -6,8 +6,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../models/stremio_addon.dart';
 
-/// TV-only presentations of a collection's titles. The parent owns paging,
-/// sorting and title actions; focus remains here while details are pushed.
+/// Large-screen presentations of a collection's titles. The parent owns
+/// paging, sorting and title actions; focus remains here while details push.
 class TvCollectionTitles extends StatefulWidget {
   const TvCollectionTitles({
     super.key,
@@ -36,6 +36,7 @@ class TvCollectionTitles extends StatefulWidget {
 class TvCollectionTitlesState extends State<TvCollectionTitles> {
   final _nodes = <FocusNode>[];
   int _index = 0;
+  int? _scrollLoadRequestedForLength;
   Timer? _holdTimer;
   int? _pressedIndex;
   LogicalKeyboardKey? _pressedKey;
@@ -81,7 +82,27 @@ class TvCollectionTitlesState extends State<TvCollectionTitles> {
   @override
   void initState() {
     super.initState();
+    _scroll.addListener(_maybeLoadMoreFromScroll);
     _resize();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _maybeLoadMoreFromScroll();
+    });
+  }
+
+  void _maybeLoadMoreFromScroll() {
+    if (!_scroll.hasClients ||
+        widget.items.isEmpty ||
+        widget.loadingMore ||
+        widget.exhausted ||
+        _scrollLoadRequestedForLength == widget.items.length) {
+      return;
+    }
+    // Two rows gives touch users enough headroom for the next page to arrive
+    // before they hit the end, while the length guard prevents one swipe from
+    // scheduling the same page more than once.
+    if (_scroll.position.extentAfter > _rowExtent * 2) return;
+    _scrollLoadRequestedForLength = widget.items.length;
+    widget.onLoadMore();
   }
 
   void _resize() {
@@ -96,6 +117,11 @@ class TvCollectionTitlesState extends State<TvCollectionTitles> {
   @override
   void didUpdateWidget(covariant TvCollectionTitles oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.items.length != widget.items.length ||
+        (oldWidget.loadingMore && !widget.loadingMore) ||
+        (oldWidget.exhausted && !widget.exhausted)) {
+      _scrollLoadRequestedForLength = null;
+    }
     final pressed = _pressedIndex;
     if (pressed != null &&
         (pressed >= widget.items.length ||
@@ -123,6 +149,9 @@ class TvCollectionTitlesState extends State<TvCollectionTitles> {
         });
       }
     }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _maybeLoadMoreFromScroll();
+    });
   }
 
   @override
@@ -250,6 +279,11 @@ class TvCollectionTitlesState extends State<TvCollectionTitles> {
         borderRadius: BorderRadius.circular(journal ? 0 : 8),
         child: InkWell(
           canRequestFocus: false,
+          onHover: (hovering) {
+            if (hovering && !_nodes[index].hasFocus) {
+              _nodes[index].requestFocus();
+            }
+          },
           onTap: () => widget.onOpen(item),
           onLongPress: widget.onQuickPlay == null
               ? null

@@ -31,6 +31,8 @@ import 'profile_lifecycle.dart';
 import 'profile_pin_service.dart';
 import 'profile_portable_files.dart';
 import 'profile_preference_portability.dart';
+import 'home_row_preference_ids.dart';
+import 'subtitle_appearance_preferences.dart';
 import 'profile_preferences.dart';
 import 'profile_registry.dart';
 import 'profile_runtime.dart';
@@ -235,6 +237,9 @@ class ProfileRestoreCoordinator {
         // Sync bootstrap can contain appearance values from an older client.
         // Manual restore leaves this exclusion set empty.
         values.removeWhere((key, _) => excludedPreferenceKeys.contains(key));
+        if (excludedPreferenceKeys.isNotEmpty) {
+          SubtitleAppearancePreferences.markSyncedElevation(values);
+        }
         _validatePreferenceOverlay(
           values,
           includeCredentialEngineSettings: true,
@@ -1395,7 +1400,10 @@ class ProfileRestoreCoordinator {
         includeCredentialEngineSettings: includeCredentialEngineSettings,
       );
       if (!prepared.include) continue;
-      result[key] = _remapPreferenceValue(prepared.value, resourceIds);
+      result[key] = _remapPreferenceValue(
+        HomeRowPreferenceIds.remap(key, prepared.value, resourceIds),
+        resourceIds,
+      );
     }
     return result;
   }

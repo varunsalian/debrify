@@ -45,12 +45,26 @@ void main() {
     () async {
       final prefs = await ProfilePreferences.instance();
       await prefs.setString('tv_home_style', 'canvas');
+      await prefs.setBool('home_hide_catalog_addon_names', false);
+      await prefs.setInt('home_hero_trailer_volume', 70);
+      await prefs.setInt('detail_trailer_volume', 70);
       final local = ProfileWebDavSyncLocalAdapter(
         registry,
         activeProfileRefresher: _EngineRefreshRecorder(),
       );
       final applied = await local.applyProfile(session, activeId, {
         'tv_home_style': 'spotlight',
+        'home_hide_catalog_addon_names': true,
+        'home_hero_trailer_volume': 20,
+        'detail_trailer_volume': 20,
+        'subtitle_size_index': 4,
+        'subtitle_style_index': 2,
+        'subtitle_color_index': 1,
+        'subtitle_bg_index': 3,
+        'subtitle_outline_color_index': 7,
+        'subtitle_elevation_index': 0,
+        'subtitle_bold': true,
+        'subtitle_selected_font_id': 'notosans',
         'app_theme': 'aurora',
         'defaults_generation': 3,
         'phone_nav_style': 'floating',
@@ -64,6 +78,18 @@ void main() {
         'default_torrent_provider_v1': 'torbox',
       }, replayingPending: true);
       expect(prefs.getString('tv_home_style'), 'canvas');
+      expect(prefs.getBool('home_hide_catalog_addon_names'), true);
+      expect(prefs.getInt('home_hero_trailer_volume'), 20);
+      expect(prefs.getInt('detail_trailer_volume'), 20);
+      expect(prefs.getInt('subtitle_size_index'), 4);
+      expect(prefs.getInt('subtitle_style_index'), 2);
+      expect(prefs.getInt('subtitle_color_index'), 1);
+      expect(prefs.getInt('subtitle_bg_index'), 3);
+      expect(prefs.getInt('subtitle_outline_color_index'), 7);
+      expect(prefs.getInt('subtitle_elevation_index'), 0);
+      expect(prefs.getBool('subtitle_bold'), true);
+      expect(prefs.getString('subtitle_selected_font_id'), 'notosans');
+      expect(prefs.getBool('subtitle_extreme_bottom_default_adopted_v1'), true);
       expect(prefs.containsKey('app_theme'), isFalse);
       expect(prefs.containsKey('defaults_generation'), isFalse);
       expect(prefs.getString('default_torrent_provider_v1'), 'torbox');
@@ -77,6 +103,18 @@ void main() {
         '["addon:config-b","embedded","addon:config-a"]',
       );
       expect(applied, {
+        'home_hide_catalog_addon_names',
+        'home_hero_trailer_volume',
+        'detail_trailer_volume',
+        'subtitle_size_index',
+        'subtitle_style_index',
+        'subtitle_color_index',
+        'subtitle_bg_index',
+        'subtitle_outline_color_index',
+        'subtitle_elevation_index',
+        'subtitle_bold',
+        'subtitle_selected_font_id',
+        'subtitle_extreme_bottom_default_adopted_v1',
         'tv_player_controls_style',
         'debrify_tv_player_style',
         'player_dock_style',

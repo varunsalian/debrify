@@ -101,7 +101,7 @@ class _TvCollectionListStylePageState extends State<TvCollectionListStylePage> {
                       icon: Icons.view_carousel_outlined,
                       title: 'Collection list style',
                       subtitle:
-                          'How movies and series appear inside collection lists on this TV',
+                          'How movies and series appear inside collection lists on TVs, desktops and tablets',
                     ),
                     const SizedBox(height: 24),
                     SettingsSection(
@@ -122,7 +122,7 @@ class _TvCollectionListStylePageState extends State<TvCollectionListStylePage> {
                     ),
                     const SizedBox(height: 16),
                     const Text(
-                      'Applies when you next open a collection list. Other devices keep their own layout.',
+                      'Applies when you next open a collection list on a large screen. Phones keep the poster grid.',
                     ),
                   ],
                 ),

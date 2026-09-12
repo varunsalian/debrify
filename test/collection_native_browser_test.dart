@@ -697,21 +697,24 @@ void main() {
 
   for (final style in ['gallery', 'filmstrip', 'journal']) {
     for (final tv in [false, true]) {
-      testWidgets('$style collection layout is TV-only (TV $tv)', (
+      testWidgets('$style collection layout supports large screens (TV $tv)', (
         tester,
       ) async {
         SharedPreferences.setMockInitialValues({
           HomeCollectionsStore.folderLayoutKey: 'rows',
           'tv_collection_list_style': style,
         });
-        await tester.binding.setSurfaceSize(const Size(960, 540));
-        addTearDown(() => tester.binding.setSurfaceSize(null));
+        tester.view.physicalSize = const Size(960, 540);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
         final native = service();
         addTearDown(native.close);
         final c = collection();
         final opened = <String>[];
         await tester.pumpWidget(
           MaterialApp(
+            theme: ThemeData(platform: TargetPlatform.macOS),
             home: CollectionFolderScreen(
               collection: c,
               sourceKey: c.folders.first.sources.first.key,
@@ -722,14 +725,8 @@ void main() {
           ),
         );
         await tester.pumpAndSettle();
-        expect(
-          find.byType(TvCollectionTitles),
-          tv ? findsOneWidget : findsNothing,
-        );
-        expect(
-          find.byType(SeeAllPosterGrid),
-          tv ? findsNothing : findsOneWidget,
-        );
+        expect(find.byType(TvCollectionTitles), findsOneWidget);
+        expect(find.byType(SeeAllPosterGrid), findsNothing);
         if (tv) {
           await tester.sendKeyEvent(LogicalKeyboardKey.numpadEnter);
           await tester.pumpAndSettle();
@@ -738,6 +735,64 @@ void main() {
         expect(tester.takeException(), isNull);
       });
     }
+
+    testWidgets('$style keeps the compact phone poster grid', (tester) async {
+      SharedPreferences.setMockInitialValues({
+        HomeCollectionsStore.folderLayoutKey: 'rows',
+        'tv_collection_list_style': style,
+      });
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final native = service();
+      addTearDown(native.close);
+      final c = collection();
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ThemeData(platform: TargetPlatform.android),
+          home: CollectionFolderScreen(
+            collection: c,
+            sourceKey: c.folders.first.sources.first.key,
+            nativeSources: native,
+            onOpenItem: (_) {},
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byType(TvCollectionTitles), findsNothing);
+      expect(find.byType(SeeAllPosterGrid), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('$style supports an iPad portrait surface', (tester) async {
+      SharedPreferences.setMockInitialValues({
+        HomeCollectionsStore.folderLayoutKey: 'rows',
+        'tv_collection_list_style': style,
+      });
+      tester.view.physicalSize = const Size(768, 1024);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final native = service();
+      addTearDown(native.close);
+      final c = collection();
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ThemeData(platform: TargetPlatform.iOS),
+          home: CollectionFolderScreen(
+            collection: c,
+            sourceKey: c.folders.first.sources.first.key,
+            nativeSources: native,
+            onOpenItem: (_) {},
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byType(TvCollectionTitles), findsOneWidget);
+      expect(find.byType(SeeAllPosterGrid), findsNothing);
+      expect(tester.takeException(), isNull);
+    });
   }
 
   testWidgets('opened gallery list paginates on touch scroll', (tester) async {

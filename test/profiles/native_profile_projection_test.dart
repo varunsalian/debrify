@@ -37,6 +37,7 @@ void main() {
     NativeProfileProjection.debugAfterInvalidation = null;
     NativeProfileProjection.debugBeforeAddonRead = null;
     ProfileNativeLockBridge.debugReset();
+    ProfilePreferences.webDavSyncLocalChangeSink = null;
     ProfileLockController.instance.dispose();
     ProfileRuntime.debugReset();
     temporaryDirectory = await Directory.systemTemp.createTemp(
@@ -69,6 +70,7 @@ void main() {
     NativeProfileProjection.debugAfterInvalidation = null;
     NativeProfileProjection.debugBeforeAddonRead = null;
     ProfileNativeLockBridge.debugReset();
+    ProfilePreferences.webDavSyncLocalChangeSink = null;
     ProfileLockController.instance.dispose();
     await NativeProfileProjection.clear();
     ProfileRuntime.debugReset();
@@ -164,6 +166,9 @@ void main() {
     await NativeProfileProjection.publish(scope);
 
     var publications = 0;
+    final syncSignals = <String>[];
+    ProfilePreferences.webDavSyncLocalChangeSink = (_, key) =>
+        syncSignals.add(key);
     NativeProfileProjection.debugAfterInvalidation = (_) async {
       publications++;
     };
@@ -174,6 +179,8 @@ void main() {
         'subtitle_color_index': 2,
         'subtitle_bold': true,
         'subtitle_selected_font_id': 'roboto',
+        'subtitle_elevation_index': 0,
+        'subtitle_extreme_bottom_default_adopted_v1': true,
       }),
       isTrue,
     );
@@ -188,6 +195,18 @@ void main() {
     expect(values['subtitle_color_index'], 2);
     expect(values['subtitle_bold'], isTrue);
     expect(values['subtitle_selected_font_id'], 'roboto');
+    expect(values['subtitle_elevation_index'], 0);
+    expect(values['subtitle_extreme_bottom_default_adopted_v1'], isTrue);
+    expect(
+      syncSignals,
+      unorderedEquals(<String>[
+        'subtitle_size_index',
+        'subtitle_color_index',
+        'subtitle_bold',
+        'subtitle_selected_font_id',
+        'subtitle_elevation_index',
+      ]),
+    );
   });
 
   test('a profile switch cannot relabel an in-flight addon read', () async {

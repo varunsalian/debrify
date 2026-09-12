@@ -328,9 +328,7 @@ final class WebDavSyncGraphBuilder {
                   resourceContent: sinks.resourceContent,
                   preferencePages: (id, values) => sinks.preferencePages!(
                     id,
-                    Map<String, Object?>.from(
-                      identityMaps.toWire(values)! as Map,
-                    ),
+                    identityMaps.preferencesToWire(values),
                   ),
                 ),
               );
@@ -622,6 +620,9 @@ final class WebDavSyncGraphBuilder {
     final rawSections = Map<String, dynamic>.from(
       projected['sections']! as Map,
     );
+    final preferenceSections = {
+      for (final profile in source.profiles) profile['preferencesSection'],
+    };
     final sections = <String, dynamic>{};
     for (final entry in rawSections.entries) {
       final section = Map<String, dynamic>.from(entry.value! as Map);
@@ -632,7 +633,9 @@ final class WebDavSyncGraphBuilder {
       }
       sections[entry.key] = {
         ...await PortableProfilePackage.buildSection(
-          values,
+          preferenceSections.contains(entry.key)
+              ? maps.preferencesToWire(values)
+              : values,
           schemaVersion: schema,
         ),
         if (section['preferencePages'] != null)

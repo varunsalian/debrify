@@ -130,6 +130,15 @@ void main() {
         ),
         (include: true, value: 'notosans'),
       );
+      for (final invalid in <Object>['custom', 'unknown-font', '', 3]) {
+        expect(
+          ProfilePreferencePortability.prepareValue(
+            'subtitle_selected_font_id',
+            invalid,
+          ).include,
+          isFalse,
+        );
+      }
     },
   );
 

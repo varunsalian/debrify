@@ -233,6 +233,7 @@ class AndroidTvPlayerBridge {
       }
       if (elevation is int) {
         update['subtitle_elevation_index'] = elevation.clamp(0, 5);
+        update['subtitle_extreme_bottom_default_adopted_v1'] = true;
       }
       if (bold is bool) update['subtitle_bold'] = bold;
       if (fontId is String && fontId.isNotEmpty) {

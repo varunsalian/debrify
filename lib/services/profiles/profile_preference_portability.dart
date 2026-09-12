@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'profile_preferences.dart';
+import 'subtitle_appearance_preferences.dart';
 
 /// Portability policy for encrypted profile backups and authenticated profile
 /// transfers.
@@ -75,10 +76,10 @@ abstract final class ProfilePreferencePortability {
           ? (include: false, value: null)
           : (include: true, value: value);
     }
-    if (key == 'subtitle_selected_font_id' &&
-        value is String &&
-        value.startsWith('custom_')) {
-      return (include: false, value: null);
+    if (key == SubtitleAppearancePreferences.selectedFontKey) {
+      return SubtitleAppearancePreferences.isBuiltInFontId(value)
+          ? (include: true, value: value)
+          : (include: false, value: null);
     }
     return (include: true, value: value);
   }
