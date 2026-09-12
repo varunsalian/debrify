@@ -1,7 +1,7 @@
 import 'dart:async' show unawaited;
 import 'dart:io' show Platform;
 
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show kIsWeb, visibleForTesting;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:file_picker/file_picker.dart';
@@ -37,6 +37,7 @@ import '../../widgets/iptv/iptv_startup_channel_picker.dart';
 import '../../widgets/tv_text_field.dart';
 import 'iptv_settings_two_pane.dart';
 import 'widgets/settings_widgets.dart';
+import '../../theme/app_looks.dart';
 import '../../theme/app_theme_scope.dart';
 
 /// The narrow (phone / small-window) layout's destinations. The wide layout
@@ -58,6 +59,12 @@ enum _PhoneSection {
 
 class IptvSettingsPage extends StatefulWidget {
   const IptvSettingsPage({super.key, this.openAddSource = false});
+
+  @visibleForTesting
+  static bool showsAppearance({
+    required bool isTelevision,
+    required bool isDesktop,
+  }) => isTelevision || isDesktop;
 
   /// Opened by an "Add playlist" affordance rather than from the settings
   /// list: land on the add form itself instead of making the user find it.
@@ -203,8 +210,8 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
   }
 
   // Cockpit appearance (`iptv_style`). Shown only where the cockpit exists —
-  // Android TV and desktop; a phone or touch tablet would be picking a look
-  // it can never see.
+  // television and desktop; a phone or touch tablet would be picking a look it
+  // can never see.
   String _iptvStyle = 'command';
 
   // In-player guide look (`iptv_player_guide_style`). Ungated: every
@@ -213,8 +220,10 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
   String _playerGuideStyle = 'classic';
   static final bool _isDesktopPlatform =
       !kIsWeb && (Platform.isMacOS || Platform.isWindows || Platform.isLinux);
-  bool get _appearanceVisible =>
-      PlatformUtil.isAndroidTvCached || _isDesktopPlatform;
+  bool get _appearanceVisible => IptvSettingsPage.showsAppearance(
+    isTelevision: PlatformUtil.isTelevision,
+    isDesktop: _isDesktopPlatform,
+  );
 
   bool _loading = true;
   bool _isAdding = false;
@@ -583,6 +592,9 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
   Future<void> _setIptvStyleForProfile(String style) async {
     // Persist BEFORE reflecting the choice: the IPTV page re-reads the pref
     // the moment this route pops, and an unawaited write could lose that race.
+    // A direct pick here has the same priority as the standalone picker over
+    // any Look bundle that is still being applied.
+    LookApplier.noteExternalWrite('iptv_style');
     await StorageService.setIptvStyle(style);
     if (mounted) setState(() => _iptvStyle = style);
   }

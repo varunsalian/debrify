@@ -1373,7 +1373,12 @@ class StorageService {
   }
 
   static const String _iptvStyleKey = 'iptv_style';
-  static const Set<String> _iptvStyles = {'command', 'edition', 'console'};
+  static const Set<String> _iptvStyles = {
+    'command',
+    'edition',
+    'console',
+    'spotlight',
+  };
 
   /// Whether browsing IPTV channels may open the focused channel in the
   /// embedded side preview. This is on by default to preserve the shipped
@@ -1393,12 +1398,12 @@ class StorageService {
   }
 
   /// IPTV cockpit look: 'command' (the shipped Command Center, the default),
-  /// 'edition' (First Edition — editorial ink/serif) or 'console' (Master
-  /// Control — black instrument). Only the TV/desktop cockpit reads it; the
-  /// phone classic layout and the touch-tablet two-pane never do. Unknown or
-  /// unset coerces to 'command' on BOTH read and write, so an old build
-  /// downgrading past a newer value can never pin a look the reader treats
-  /// as the exception.
+  /// 'edition' (First Edition — editorial ink/serif), 'console' (Master
+  /// Control — black instrument), or 'spotlight' (Spotlight Guide — Apple TV
+  /// style hero and timeline). Only the TV/desktop cockpit reads it; the phone
+  /// classic layout and the touch-tablet two-pane never do. Unknown or unset
+  /// coerces to 'command' on BOTH read and write, so an old build downgrading
+  /// past a newer value can never pin a look the reader treats as the exception.
   /// Synchronous mirror of `iptvStyle`, kept so a Look can read
   /// the current value without an await. Additive: every existing caller
   /// still goes through the async getter, which now also refreshes this.

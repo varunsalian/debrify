@@ -3223,11 +3223,13 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
           // keystroke — one scan per deliberate search, no per-keystroke storm.
           submitOnly: true,
           isTelevision: _isAndroidTv,
+          embedSearchHeaderInView: true,
           viewBuilder: (args) => IptvResultsView(
             key: args.resultKey,
             searchQuery: args.query,
             isTelevision: args.isTelevision,
             onUpArrowFromFilters: args.onUpArrowToSearch,
+            searchHeader: args.searchHeader,
           ),
         );
       case 14: // YouTube

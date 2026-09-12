@@ -25,6 +25,7 @@ void main() {
     test('accepts large Android and iOS canvases', () {
       expect(useLayout(), isTrue);
       expect(useLayout(platform: TargetPlatform.iOS), isTrue);
+      expect(useLayout(size: const Size(900, 500)), isTrue);
     });
 
     test('rejects constrained, non-touch, web, and TV layouts', () {

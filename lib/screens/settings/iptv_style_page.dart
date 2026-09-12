@@ -31,6 +31,11 @@ const List<IptvStyleChoice> kIptvStyleChoices = [
     'Master Control',
     'Broadcast console — pure black, mono numerals, amber playhead',
   ),
+  IptvStyleChoice(
+    'spotlight',
+    'Spotlight Guide',
+    'Apple TV style — cinematic hero, source rail, and timeline guide',
+  ),
 ];
 
 /// Row caption for the current choice (Appearance row subtitle).
@@ -87,7 +92,7 @@ class _IptvStylePageState extends State<IptvStylePage> {
       _style = style;
       _loading = false;
     });
-    if (PlatformUtil.isAndroidTvCached) {
+    if (PlatformUtil.isTelevision) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
         // Don't yank focus if it already landed on a real node (only the
@@ -150,11 +155,7 @@ class _IptvStylePageState extends State<IptvStylePage> {
                 Text(
                   'Applies the next time the IPTV page opens. Phones keep '
                   'the classic list either way.',
-                  style: TextStyle(
-                    fontSize: 12.5,
-                    height: 1.45,
-                    color: t.dim,
-                  ),
+                  style: TextStyle(fontSize: 12.5, height: 1.45, color: t.dim),
                 ),
               ],
             ),

@@ -7,6 +7,7 @@ import '../../services/iptv_source_stats.dart';
 import '../../services/storage_service.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/app_theme_scope.dart';
+import 'iptv_style_page.dart';
 
 /// Two-pane IPTV settings for TV and desktop ("Concept A"): a rail of the
 /// user's actual sources on the left, the selected source's detail on the
@@ -181,8 +182,8 @@ class IptvSettingsTwoPane extends StatefulWidget {
   final ValueChanged<bool> onToggleTrackContinueWatching;
 
   /// The Appearance rail entry + pane exist only where the IPTV cockpit does
-  /// (Android TV and desktop) — a phone or touch tablet would be picking a
-  /// look it can never see.
+  /// (television and desktop) — a phone or touch tablet would be picking a look
+  /// it can never see.
   final bool showAppearanceSection;
 
   /// In-player guide look (`iptv_player_guide_style`). ALWAYS present in the
@@ -190,8 +191,9 @@ class IptvSettingsTwoPane extends StatefulWidget {
   final String playerGuideStyle;
   final ValueChanged<String>? onPlayerGuideStyleChanged;
 
-  /// Current `iptv_style` value ('command' / 'edition' / 'console'). Owned by
-  /// the host page, which persists BEFORE reflecting the change back here.
+  /// Current `iptv_style` value ('command' / 'edition' / 'console' /
+  /// 'spotlight'). Owned by the host page, which persists BEFORE reflecting the
+  /// change back here.
   final String iptvStyle;
   final ValueChanged<String>? onIptvStyleChanged;
 
@@ -650,11 +652,7 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
                   focusNode: _railNodes[_appearanceIndex],
                   icon: Icons.style_rounded,
                   title: 'Appearance',
-                  subtitle: switch (widget.iptvStyle) {
-                    'edition' => 'First Edition',
-                    'console' => 'Master Control',
-                    _ => 'Command Center',
-                  },
+                  subtitle: iptvStyleLabel(widget.iptvStyle),
                   selected: selected == _appearanceIndex,
                   chevron: true,
                   onFocused: () => _dest.value = const _AppearanceDest(),
@@ -1262,6 +1260,13 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
 
   Widget _buildAppearancePane() {
     var row = 0;
+    IconData styleIcon(String value) => switch (value) {
+      'edition' => Icons.menu_book_rounded,
+      'console' => Icons.tune_rounded,
+      'spotlight' => Icons.calendar_view_week_rounded,
+      _ => Icons.grid_view_rounded,
+    };
+
     Widget styleRow({
       required IconData icon,
       required String value,
@@ -1300,29 +1305,14 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
         const SizedBox(height: 20),
         _RowGroup(
           children: [
-            styleRow(
-              icon: Icons.grid_view_rounded,
-              value: 'command',
-              title: 'Command Center',
-              subtitle: 'The shipped cockpit — dense guide, gold focus',
-            ),
-            styleRow(
-              icon: Icons.menu_book_rounded,
-              value: 'edition',
-              title: 'First Edition',
-              subtitle:
-                  'Editorial ink and serif headlines — hairline ledger, '
-                  'ivory focus',
-            ),
-            styleRow(
-              icon: Icons.tune_rounded,
-              value: 'console',
-              title: 'Master Control',
-              subtitle:
-                  'Broadcast console — pure black, mono numerals, amber '
-                  'playhead',
-              isLast: true,
-            ),
+            for (var index = 0; index < kIptvStyleChoices.length; index++)
+              styleRow(
+                icon: styleIcon(kIptvStyleChoices[index].value),
+                value: kIptvStyleChoices[index].value,
+                title: kIptvStyleChoices[index].label,
+                subtitle: kIptvStyleChoices[index].subtitle,
+                isLast: index == kIptvStyleChoices.length - 1,
+              ),
           ],
         ),
       ],

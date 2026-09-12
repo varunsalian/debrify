@@ -100,7 +100,12 @@ abstract final class SanitizedProfilePreferences {
             const <String>{'classic', 'compass'}.contains(value);
       case 'iptv_style':
         return value is String &&
-            const <String>{'command', 'edition', 'console'}.contains(value);
+            const <String>{
+              'command',
+              'edition',
+              'console',
+              'spotlight',
+            }.contains(value);
       case 'player_dock_style':
         return value is String && _playerDockStyles.contains(value);
       case 'player_dock_palette':

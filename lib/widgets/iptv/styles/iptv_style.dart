@@ -13,11 +13,13 @@ import 'package:flutter/material.dart';
 enum IptvStyle {
   command,
   edition,
-  console;
+  console,
+  spotlight;
 
   static IptvStyle fromPref(String raw) => switch (raw) {
     'edition' => IptvStyle.edition,
     'console' => IptvStyle.console,
+    'spotlight' => IptvStyle.spotlight,
     _ => IptvStyle.command,
   };
 
@@ -27,7 +29,7 @@ enum IptvStyle {
   bool get isStyled => this != IptvStyle.command;
 }
 
-/// Design tokens for the two styled looks. `command` deliberately has NO
+/// Design tokens for the styled looks. `command` deliberately has NO
 /// tokens — its widgets never reach for this class.
 ///
 /// Every color that varies by emphasis is expressed as the base color plus
@@ -137,10 +139,31 @@ class IptvStyleTokens {
     monoFamily: 'JetBrainsMono',
   );
 
+  /// Spotlight Guide — deep navy glass, restrained system blue and the
+  /// solid light focus treatment used by tvOS list rows.
+  static const IptvStyleTokens spotlight = IptvStyleTokens(
+    bg: Color(0xFF06111E),
+    panel: Color(0xFF0B1929),
+    fg: Color(0xFFF5F7FB),
+    fgMid: Color(0xCCDCE3EC),
+    fgDim: Color(0xA6AEBBCD),
+    fgFaint: Color(0x738899AE),
+    hairline: Color(0x1FFFFFFF),
+    hairline2: Color(0x33FFFFFF),
+    accent: Color(0xFF0A84FF),
+    rec: Color(0xFFFF453A),
+    live: Color(0xFF30D6A0),
+    selectedTint: Color(0x290A84FF),
+    focusTint: Color(0x1FFFFFFF),
+    focusFill: Color(0xFFF5F7FB),
+    focusInk: Color(0xFF07111E),
+  );
+
   static IptvStyleTokens? of(IptvStyle style) => switch (style) {
     IptvStyle.command => null,
     IptvStyle.edition => edition,
     IptvStyle.console => console,
+    IptvStyle.spotlight => spotlight,
   };
 }
 

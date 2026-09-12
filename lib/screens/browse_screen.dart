@@ -21,12 +21,19 @@ class BrowseViewArgs {
   final bool isTelevision;
   final VoidCallback onUpArrowToSearch;
 
+  /// The one search field owned by [BrowseScreen]. A view receives this only
+  /// when [BrowseScreen.embedSearchHeaderInView] is true and must mount it
+  /// exactly once. Its controller, IME behavior and TV focus handoff remain
+  /// owned here even when the view chooses its visual placement.
+  final Widget? searchHeader;
+
   const BrowseViewArgs({
     required this.resultKey,
     required this.query,
     required this.searchToken,
     required this.isTelevision,
     required this.onUpArrowToSearch,
+    this.searchHeader,
   });
 }
 
@@ -46,6 +53,7 @@ class BrowseScreen extends StatefulWidget {
   /// runs. When false (IPTV), the query updates live for local filtering.
   final bool submitOnly;
   final bool isTelevision;
+  final bool embedSearchHeaderInView;
   final Widget Function(BrowseViewArgs args) viewBuilder;
 
   const BrowseScreen({
@@ -54,6 +62,7 @@ class BrowseScreen extends StatefulWidget {
     required this.hintText,
     required this.submitOnly,
     required this.isTelevision,
+    this.embedSearchHeaderInView = false,
     required this.viewBuilder,
   });
 
@@ -74,9 +83,7 @@ class _BrowseScreenState extends State<BrowseScreen> {
   void initState() {
     super.initState();
     // Same widget backs both the IPTV (13) and YouTube (14) tabs.
-    AnalyticsService.screenView(
-      widget.tabIndex == 14 ? 'youtube' : 'iptv',
-    );
+    AnalyticsService.screenView(widget.tabIndex == 14 ? 'youtube' : 'iptv');
     // Down-from-field is wired via BrowseSearchHeader.onDownArrow →
     // TvTextField (a node-level handler here would be clobbered by the
     // shell's Focus widget on attach).
@@ -150,48 +157,49 @@ class _BrowseScreenState extends State<BrowseScreen> {
   @override
   Widget build(BuildContext context) {
     final app = AppThemeScope.of(context);
+    final searchHeader = BrowseSearchHeader(
+      controller: _searchController,
+      focusNode: _searchFocusNode,
+      // The header strikes every alpha it paints (hint, glyphs, fill, ring)
+      // from this one ink, so the page's text colour carries the whole set
+      // instead of a hardcoded white that vanishes on paper.
+      ink: app.core.tx,
+      // The in-app keyboard this header raises. `youtube.focus` is the token
+      // that pins `TvTextField.accent` — the DPAD cursor role, which is what a
+      // highlighted keycap is — and it themes IPTV's header too: both sources
+      // reach this one widget, and the keyboard is the same surface whichever
+      // raised it.
+      accent: app.youtube.focus,
+      keyboardGround: app.youtube.keyboardPanel,
+      keyboardInk: app.core.tx,
+      keyboardInkOnAccent: app.inkOn(app.youtube.focus),
+      hintText: widget.hintText,
+      onChanged: widget.submitOnly ? _onSubmitQueryChanged : _onChanged,
+      onSubmitted: widget.submitOnly ? _onSubmitted : _onLiveSearchSubmitted,
+      onClear: _onClear,
+      onDownArrow: _focusContent,
+    );
+    final result = widget.viewBuilder(
+      BrowseViewArgs(
+        resultKey: _resultKey,
+        query: _query,
+        searchToken: _searchToken,
+        isTelevision: widget.isTelevision,
+        onUpArrowToSearch: _searchFocusNode.requestFocus,
+        searchHeader: widget.embedSearchHeaderInView ? searchHeader : null,
+      ),
+    );
     return Scaffold(
       backgroundColor: app.seeAll.bg,
       body: SafeArea(
-        child: Column(
-          children: [
-            BrowseSearchHeader(
-              controller: _searchController,
-              focusNode: _searchFocusNode,
-              // The header strikes every alpha it paints (hint, glyphs, fill,
-              // ring) from this one ink, so the page's text colour carries the
-              // whole set instead of a hardcoded white that vanishes on paper.
-              ink: app.core.tx,
-              // The in-app keyboard this header raises. `youtube.focus` is the
-              // token that pins `TvTextField.accent` — the DPAD cursor role,
-              // which is what a highlighted keycap is — and it themes IPTV's
-              // header too: both sources reach this one widget, and the
-              // keyboard is the same surface whichever raised it.
-              accent: app.youtube.focus,
-              keyboardGround: app.youtube.keyboardPanel,
-              keyboardInk: app.core.tx,
-              keyboardInkOnAccent: app.inkOn(app.youtube.focus),
-              hintText: widget.hintText,
-              onChanged: widget.submitOnly ? _onSubmitQueryChanged : _onChanged,
-              onSubmitted: widget.submitOnly
-                  ? _onSubmitted
-                  : _onLiveSearchSubmitted,
-              onClear: _onClear,
-              onDownArrow: _focusContent,
-            ),
-            Expanded(
-              child: widget.viewBuilder(
-                BrowseViewArgs(
-                  resultKey: _resultKey,
-                  query: _query,
-                  searchToken: _searchToken,
-                  isTelevision: widget.isTelevision,
-                  onUpArrowToSearch: _searchFocusNode.requestFocus,
-                ),
+        child: widget.embedSearchHeaderInView
+            ? result
+            : Column(
+                children: [
+                  searchHeader,
+                  Expanded(child: result),
+                ],
               ),
-            ),
-          ],
-        ),
       ),
     );
   }

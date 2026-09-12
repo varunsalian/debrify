@@ -179,13 +179,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
   /// there) — see ExternalPlayerSettingsPage.
   bool get _isPhone => PlatformUtil.isPhone;
 
-  /// The IPTV Appearance picker renders only where the cockpit does (Android
-  /// TV, desktop) — the SAME gate IptvSettingsPage uses for its section
-  /// (PlatformUtil's cache, not this screen's own `_isAndroidTv`, which
-  /// handles probe failures differently and could disagree).
+  /// The IPTV Appearance picker renders only where the cockpit does (every TV
+  /// platform and desktop) — the SAME gate IptvSettingsPage uses for its
+  /// section. This includes tvOS, where the synchronous television flag is
+  /// authoritative and the Android-specific cache is always false.
   bool get _iptvAppearanceSearchable =>
-      PlatformUtil.isAndroidTvCached ||
-      (!kIsWeb && (Platform.isMacOS || Platform.isLinux || Platform.isWindows));
+      PlatformUtil.isTelevision || (!kIsWeb && PlatformUtil.isDesktop);
 
   /// Custom launch command (macOS/Linux/Windows) or custom URL scheme (iOS).
   /// Android's external-player branch offers neither — it only explains the
@@ -2169,6 +2168,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
             'command center',
             'first edition',
             'master control',
+            'spotlight guide',
+            'apple tv',
+            'epg',
             'cockpit',
             'premium',
             'live tv',
