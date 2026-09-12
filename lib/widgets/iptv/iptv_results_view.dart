@@ -240,6 +240,10 @@ class IptvResultsViewState extends State<IptvResultsView>
   List<String> _categories = [];
   String? _selectedCategory;
 
+  // Search spans the current source; retain the browse category for clearing.
+  String? get _effectiveCategory =>
+      widget.searchQuery.isNotEmpty ? null : _selectedCategory;
+
   /// True once the user has picked a category — INCLUDING "All" — for the
   /// current load. Needed because "All" and "nothing picked yet" are the same
   /// null [_selectedCategory]: the landing-category seed fills the latter and
@@ -2916,7 +2920,7 @@ class IptvResultsViewState extends State<IptvResultsView>
       setState(() {
         _filteredChannels = _makeDbList(
           snap,
-          group: _selectedCategory,
+          group: _effectiveCategory,
           search: widget.searchQuery.isEmpty ? null : widget.searchQuery,
         );
       });
@@ -2943,8 +2947,8 @@ class IptvResultsViewState extends State<IptvResultsView>
     var channels = _allChannels;
 
     // Filter by category
-    if (_selectedCategory != null) {
-      channels = _iptvService.filterByCategory(channels, _selectedCategory);
+    if (_effectiveCategory != null) {
+      channels = _iptvService.filterByCategory(channels, _effectiveCategory);
     }
 
     // Filter by search query
@@ -4457,7 +4461,7 @@ class IptvResultsViewState extends State<IptvResultsView>
         iptvCategories: _fullCategoryList(),
         iptvSourceId: _selectedPlaylist?.id,
         iptvSourceName: _selectedPlaylist?.name,
-        iptvSelectedCategory: _selectedCategory,
+        iptvSelectedCategory: _effectiveCategory,
         iptvContentType: _selectedPlaylist?.isXtreamCodes == true
             ? _selectedContentType
             : (channel.isLive ? 'live' : 'vod'),
@@ -5543,13 +5547,13 @@ class IptvResultsViewState extends State<IptvResultsView>
       searchSlot: _buildSpotlightSearch(mode),
       railSlot: _buildSpotlightRail(),
       categorySlot: SpotlightCategoryControl(
-        categoryLabel: _selectedCategory ?? 'All channels',
+        categoryLabel: _effectiveCategory ?? 'All channels',
         channelCount: _filteredChannels.length,
         loading: _isLoading,
         onPressed: _showSpotlightCategoryPicker,
         focusNode: _categoryFilterFocusNode,
         optionsFocusNode: _spotlightCategoryOptionsFocusNode,
-        onOpenOptions: _canShowCategoryOptions && _selectedCategory != null
+        onOpenOptions: _canShowCategoryOptions && _effectiveCategory != null
             ? () => unawaited(_promptCategoryOptions(_selectedCategory!))
             : null,
       ),
@@ -6207,7 +6211,7 @@ class IptvResultsViewState extends State<IptvResultsView>
       barrierColor: Colors.black.withValues(alpha: 0.68),
       builder: (_) => _SpotlightCategoryPickerDialog(
         categories: List<String>.of(_categories, growable: false),
-        selectedCategory: _selectedCategory,
+        selectedCategory: _effectiveCategory,
         categoryCounts: Map<String, int>.of(_categoryCounts),
         allChannelCount: _allChannels.length,
         showOptionsHint: _canShowCategoryOptions && _categories.isNotEmpty,
@@ -6229,7 +6233,7 @@ class IptvResultsViewState extends State<IptvResultsView>
           playlists: _playlists,
           selectedPlaylist: _selectedPlaylist,
           categories: _categories,
-          selectedCategory: _selectedCategory,
+          selectedCategory: _effectiveCategory,
           categoryCounts: _categoryCounts,
           channelCount: _filteredChannels.length,
           isLoading: _isLoading,
@@ -6786,7 +6790,7 @@ class IptvResultsViewState extends State<IptvResultsView>
         if (_categories.isNotEmpty)
           StremioDropdown<String>(
             label: 'category',
-            value: _selectedCategory ?? '',
+            value: _effectiveCategory ?? '',
             quiet: true,
             isTelevision: widget.isTelevision,
             focusNode: _categoryFilterFocusNode,

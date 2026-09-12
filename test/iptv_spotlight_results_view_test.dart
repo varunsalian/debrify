@@ -169,6 +169,63 @@ https://example.com/live/two.ts
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets(
+    'search spans categories and clearing restores the browse category',
+    (tester) async {
+      tester.view.physicalSize = const Size(896, 540);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final query = ValueNotifier<String>('');
+      addTearDown(query.dispose);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: ValueListenableBuilder<String>(
+              valueListenable: query,
+              builder: (context, value, _) =>
+                  IptvResultsView(searchQuery: value, isTelevision: true),
+            ),
+          ),
+        ),
+      );
+      await _pumpUntil(tester, find.byType(SpotlightLiveTimeline));
+      await tester.tap(
+        find.byKey(const ValueKey<String>('spotlight-category-pill')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('News'));
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<SpotlightLiveTimeline>(find.byType(SpotlightLiveTimeline))
+            .channels
+            .map((c) => c.name),
+        ['News One'],
+      );
+      query.value = 'Kids';
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 250));
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<SpotlightLiveTimeline>(find.byType(SpotlightLiveTimeline))
+            .channels
+            .map((c) => c.name),
+        ['Kids Two'],
+      );
+      query.value = '';
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<SpotlightLiveTimeline>(find.byType(SpotlightLiveTimeline))
+            .channels
+            .map((c) => c.name),
+        ['News One'],
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets('Spotlight category picker lazily builds a bounded list', (
     tester,
   ) async {
