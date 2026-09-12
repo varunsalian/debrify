@@ -23,6 +23,7 @@ import '../services/resume_write_guard.dart';
 import '../models/profiles/profile_policy.dart';
 import '../services/profiles/profile_policy_guard.dart';
 import '../services/skip_segment_service.dart';
+import '../services/playback/skip_segment_session.dart';
 import '../services/analytics_service.dart';
 import '../services/pip_service.dart';
 import '../services/audio_effect_session_service.dart';
@@ -229,6 +230,13 @@ class IptvCatchupRequestGate {
 /// - Resume playback from last position
 /// - Series-aware episode ordering and tracking
 class VideoPlayerScreen extends StatefulWidget {
+  // Only native construction is substituted by host integration tests.
+  @visibleForTesting
+  static mk.Player Function(mk.PlayerConfiguration)? debugPlayerFactory;
+  @visibleForTesting
+  static mkv.VideoController Function(mk.Player, mkv.VideoControllerConfiguration)?
+      debugVideoControllerFactory;
+
   final String videoUrl;
 
   /// Optional separate audio track played alongside [videoUrl] via mpv's
@@ -1128,12 +1136,14 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   bool _skipSegmentSettingsLoaded = false;
   bool _skipSegmentsEnabled = false;
   String _skipSegmentProviderId = SkipSegmentProviders.auto;
-  SkipSegmentProvider? _skipSegmentProvider;
+  late final SkipSegmentSession _skipSegmentSession = SkipSegmentSession(
+    currentRequest: _currentSkipSegmentRequest,
+    isMounted: () => mounted,
+    loadedKey: () => _loadedSkipSegmentsKey,
+    publish: _publishSkipSegments,
+  );
   SkipSegments _skipSegments = SkipSegments.empty;
   String? _loadedSkipSegmentsKey;
-  String? _loadingSkipSegmentsKey;
-  int _skipSegmentsFetchGeneration = 0;
-  final Map<String, SkipSegments> _skipSegmentsCache = <String, SkipSegments>{};
 
   /// Whether _position/_duration describe the item currently selected, rather
   /// than the one being switched away from. The native player's equivalent is
@@ -1508,7 +1518,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     unawaited(_loadTrackingPolicy());
     unawaited(_loadSkipSegmentSettings());
     unawaited(_loadLocalCompletionThresholds());
-    MediaKitInit.ensureInitialized();
+    if (VideoPlayerScreen.debugPlayerFactory == null) {
+      MediaKitInit.ensureInitialized();
+    }
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
     // The player opens landscape — a video wants the long edge — unless the
     // user asked it to open upright, in which case the Portrait/Landscape
@@ -1565,10 +1577,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         ? storedProvider
         : SkipSegmentProviders.auto;
 
-    _skipSegmentProvider?.close();
-    _skipSegmentProvider = enabled
-        ? SkipSegmentProviders.create(providerId)
-        : null;
+    _skipSegmentSession.configure(enabled, providerId);
     _skipSegmentsEnabled = enabled;
     _skipSegmentProviderId = providerId;
     _skipSegmentSettingsLoaded = true;
@@ -1686,66 +1695,15 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   }
 
   void _syncSkipSegmentsForCurrentContent() {
-    final request = _currentSkipSegmentRequest();
-    final provider = _skipSegmentProvider;
-    if (request == null || provider == null) return;
-    if (_loadedSkipSegmentsKey == request.key ||
-        _loadingSkipSegmentsKey == request.key) {
-      return;
-    }
+    _skipSegmentSession.sync();
+  }
 
-    if (_skipSegmentsCache.containsKey(request.key)) {
-      final cached = _skipSegmentsCache[request.key]!;
-      if (mounted) {
-        setState(() {
-          _skipSegments = cached;
-          _loadedSkipSegmentsKey = request.key;
-        });
-        _syncActiveSkipSegmentUi();
-      }
-      return;
-    }
-
-    final generation = ++_skipSegmentsFetchGeneration;
-    _loadingSkipSegmentsKey = request.key;
-    provider
-        .fetch(
-          imdbId: request.imdbId,
-          season: request.season,
-          episode: request.episode,
-          duration: request.duration,
-        )
-        .then((segments) {
-          _skipSegmentsCache[request.key] = segments;
-          if (!mounted || generation != _skipSegmentsFetchGeneration) return;
-          if (_currentSkipSegmentRequest()?.key != request.key) return;
-          setState(() {
-            _skipSegments = segments;
-            _loadedSkipSegmentsKey = request.key;
-          });
-          _syncActiveSkipSegmentUi();
-        })
-        .catchError((Object error) {
-          // Missing skip data must never affect playback. Cache the miss for
-          // this session so an offline API cannot be retried on every position
-          // tick.
-          _skipSegmentsCache[request.key] = SkipSegments.empty;
-          debugPrint(
-            'SkipSegments: ${provider.displayName} fetch failed: $error',
-          );
-          if (!mounted || generation != _skipSegmentsFetchGeneration) return;
-          if (_currentSkipSegmentRequest()?.key != request.key) return;
-          setState(() {
-            _skipSegments = SkipSegments.empty;
-            _loadedSkipSegmentsKey = request.key;
-          });
-          _syncActiveSkipSegmentUi();
-        })
-        .whenComplete(() {
-          if (_loadingSkipSegmentsKey == request.key) {
-            _loadingSkipSegmentsKey = null;
-          }
-        });
+  void _publishSkipSegments(SkipSegments segments, String key) {
+    setState(() {
+      _skipSegments = segments;
+      _loadedSkipSegmentsKey = key;
+    });
+    _syncActiveSkipSegmentUi();
   }
 
   /// Forget the outgoing item's skip segments when switching playlist entries,
@@ -1755,8 +1713,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   /// The fetch cache survives on purpose: it's keyed per episode, so going
   /// back to one already looked up is instant.
   void _resetSkipSegmentState() {
-    _skipSegmentsFetchGeneration++;
-    _loadingSkipSegmentsKey = null;
+    _skipSegmentSession.reset();
     _loadedSkipSegmentsKey = null;
     _skipSegments = SkipSegments.empty;
     _skipSegmentsMediaReady = false;
@@ -2634,25 +2591,25 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   void _createPlayerInstance(AndroidVideoRendererMode rendererMode) {
     final instanceGeneration = ++_playerInstanceGeneration;
     _isReady = false;
-    final player = mk.Player(
-      configuration: mk.PlayerConfiguration(
-        logLevel: mk.MPVLogLevel.error,
-        ready: () => _onPlayerInstanceReady(instanceGeneration),
-      ),
+    final playerConfiguration = mk.PlayerConfiguration(
+      logLevel: mk.MPVLogLevel.error,
+      ready: () => _onPlayerInstanceReady(instanceGeneration),
     );
+    final player = VideoPlayerScreen.debugPlayerFactory?.call(playerConfiguration)
+        ?? mk.Player(configuration: playerConfiguration);
     _player = player;
     _playerCreated = true;
-    _videoController = mkv.VideoController(
-      player,
-      configuration: mkv.VideoControllerConfiguration(
-        vo: rendererMode.videoOutput,
-        // The tvOS escape hatch outranks the renderer mode (which is an
-        // Android concept; its decoder string is null off-Android anyway).
-        hwdec: PlatformUtil.isTvOS && _tvosForceSoftwareDecode
-            ? 'no'
-            : rendererMode.hardwareDecoder,
-      ),
+    final videoConfiguration = mkv.VideoControllerConfiguration(
+      vo: rendererMode.videoOutput,
+      // The tvOS escape hatch outranks the renderer mode (which is an
+      // Android concept; its decoder string is null off-Android anyway).
+      hwdec: PlatformUtil.isTvOS && _tvosForceSoftwareDecode
+          ? 'no'
+          : rendererMode.hardwareDecoder,
     );
+    _videoController = VideoPlayerScreen.debugVideoControllerFactory
+        ?.call(player, videoConfiguration)
+        ?? mkv.VideoController(player, configuration: videoConfiguration);
     _installTvosDecodeRemedy(player);
     _bindPlayerInstanceSubscriptions(instanceGeneration, player);
     unawaited(_installDecoderObservers(instanceGeneration, player));
@@ -10785,9 +10742,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _pikPakRetryMessage = null;
 
     _cleanupTempSubtitleFilesSync();
-    _skipSegmentsFetchGeneration++;
-    _skipSegmentProvider?.close();
-    _skipSegmentProvider = null;
+    _skipSegmentSession.close();
     _hideTimer?.cancel();
     _autosaveTimer?.cancel();
     _manualSelectionResetTimer?.cancel();

@@ -50,6 +50,8 @@ right code instead of re-discovering it. Flutter app; code under `lib/{screens,s
 - WebDAV: `services/webdav_service.dart` (read/browse only — no upload yet).
 
 ## Players
+- Skip provider request/cache lifetime: `services/playback/skip_segment_session.dart`;
+  current-content guards, published segments, button and seek remain in the player host.
 - In-app player: `screens/video_player_screen.dart` 🔴 (subtitles via media_kit
   `subtitleViewConfiguration`; `_restoreTrackPreferences`/`_applyDefault*Language`; per-key D-pad
   handlers arrowUp/Down/Left/Right; duplicated Trakt+Simkl scrobble state machines). Controls overlay:
