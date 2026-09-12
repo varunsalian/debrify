@@ -587,6 +587,92 @@ version: one
     expect(opened, const <String, Object?>{'apiKey': 'owner-secret'});
   });
 
+  test('matching local secret survives a synced metadata update', () async {
+    final authorization = await ProfileAuthorizationContext.capture(registry);
+    final resource =
+        await ConnectionResourceService(
+          registry: registry,
+          cipher: cipher,
+        ).create(
+          context: authorization,
+          type: ConnectionResourceType.realDebrid,
+          label: 'Local RD',
+          publicConfig: const <String, Object?>{},
+          secretConfig: const <String, Object?>{'apiKey': 'same-secret'},
+        );
+    final maps = WebDavSyncIdentityMaps(
+      circleToLocalProfiles: <String, String>{'p-active': activeId},
+      circleToLocalResources: <String, String>{'r-owned': resource.id},
+    );
+    final built = await adapter.buildCircleState(
+      session,
+      WebDavSyncCircleBuildRequest(
+        identityMaps: maps,
+        deviceId: 'device-owner',
+        circleId: circleRoot.document.circleId,
+        circleKey: circleRoot.key,
+        localNowMs: 1000,
+        clockOffsetMs: 0,
+        serverNowMs: 1000,
+      ),
+    );
+    final currentEntry = built.resources.resources['r-owned']!;
+    final currentMetadata = currentEntry.metadata.value!;
+    final remoteResources = WebDavSyncResourcesDocument(
+      resources: <String, WebDavSyncResourceEntry>{
+        'r-owned': WebDavSyncResourceEntry(
+          metadata: WebDavSyncCircleLeaf<WebDavSyncResourceMetadata>(
+            stamp: _stamp(2000),
+            value: WebDavSyncResourceMetadata(
+              type: currentMetadata.type,
+              label: 'Renamed remotely',
+              ownerCircleProfileId: currentMetadata.ownerCircleProfileId,
+              publicConfig: currentMetadata.publicConfig,
+              publicSchemaVersion: currentMetadata.publicSchemaVersion,
+              enabled: currentMetadata.enabled,
+            ),
+          ),
+          secretConfig: currentEntry.secretConfig,
+        ),
+      },
+      grants: built.resources.grants,
+      settings: built.resources.settings,
+      bindings: built.resources.bindings,
+    );
+
+    final result = await adapter.applyCircleState(
+      session,
+      WebDavSyncCircleApplyRequest(
+        identityMaps: maps,
+        circleId: circleRoot.document.circleId,
+        circleKey: circleRoot.key,
+        profiles: built.profiles,
+        resources: remoteResources,
+        registryVersions: built.registryVersions,
+      ),
+    );
+
+    expect(result, WebDavSyncCircleApplyResult.applied);
+    expect(
+      (await registry.getResource(resource.id))?.label,
+      'Renamed remotely',
+    );
+    expect((await registry.getResource(resource.id))?.secretPending, isFalse);
+    final refreshedAuthorization = await ProfileAuthorizationContext.capture(
+      registry,
+    );
+    expect(
+      await ConnectionResourceService(
+        registry: registry,
+        cipher: cipher,
+      ).revealOwnedSecretForProfileBackup(
+        context: refreshedAuthorization,
+        resourceId: resource.id,
+      ),
+      const <String, Object?>{'apiKey': 'same-secret'},
+    );
+  });
+
   test(
     'metadata-only resource becomes usable when owner secret arrives',
     () async {

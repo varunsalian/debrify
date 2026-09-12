@@ -1820,7 +1820,6 @@ final class ProfileWebDavSyncLocalAdapter
             throw const FormatException('Synced resource secret mismatch');
           }
           final canonical = Map<String, Object?>.from(payload);
-          secretVersion = secret.payloadVersion;
           localSecretMatches = await _localSecretMatches(
             registry: registry,
             cipher: cipher,
@@ -1830,6 +1829,7 @@ final class ProfileWebDavSyncLocalAdapter
             secret: secret,
           );
           if (!localSecretMatches) {
+            secretVersion = secret.payloadVersion;
             sealedSecret = await cipher.seal(
               utf8.encode(WebDavSyncCodec.canonicalJson(canonical)),
               associatedData: ConnectionResourceService.associatedDataForSecret(
@@ -1866,7 +1866,7 @@ final class ProfileWebDavSyncLocalAdapter
         publicSchemaVersion: metadata.publicSchemaVersion,
         authorizationRevision: 1,
         enabled: metadata.enabled,
-        secretPending: sealedSecret == null,
+        secretPending: sealedSecret == null && !localSecretMatches,
       );
       final current = currentResources[localResourceId];
       final secretNeedsApply =
