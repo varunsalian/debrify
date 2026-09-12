@@ -15,6 +15,8 @@ import '../theme/app_theme.dart';
 import '../theme/app_theme_scope.dart';
 import '../widgets/trakt_calendar_day_sheet.dart';
 import '../utils/tv_keys.dart';
+import '../services/profiles/profile_preferences.dart';
+import '../widgets/calendar_display_preferences.dart';
 
 class TraktCalendarScreen extends StatefulWidget {
   const TraktCalendarScreen({super.key});
@@ -31,6 +33,18 @@ class _TraktCalendarScreenState extends State<TraktCalendarScreen> {
   final FocusNode _sourceFocusNode = FocusNode(
     debugLabel: 'calendar-source-selector',
   );
+  final FocusNode _timeFormatFocusNode = FocusNode(
+    debugLabel: 'calendar-time-format',
+  );
+  static const _timeFormatKey = 'calendar_time_format';
+  CalendarTimeFormat _timeFormat = CalendarTimeFormat.device;
+  ProfilePreferences? _displayPreferences;
+  bool _showEarlierDays = false;
+  bool get _isCurrentMonth {
+    final now = DateTime.now();
+    return _selectedYear == now.year && _selectedMonth == now.month;
+  }
+
   final Map<DateTime, FocusNode> _dayFocusNodes = <DateTime, FocusNode>{};
   final Map<DateTime, Map<DateTime, List<TraktCalendarEntry>>> _monthCache =
       <DateTime, Map<DateTime, List<TraktCalendarEntry>>>{};
@@ -94,6 +108,7 @@ class _TraktCalendarScreenState extends State<TraktCalendarScreen> {
     _yearFocusNode.dispose();
     _monthFocusNode.dispose();
     _sourceFocusNode.dispose();
+    _timeFormatFocusNode.dispose();
     for (final node in _dayFocusNodes.values) {
       node.dispose();
     }
@@ -106,6 +121,14 @@ class _TraktCalendarScreenState extends State<TraktCalendarScreen> {
   }
 
   Future<void> _loadInitial() async {
+    final prefs = await ProfilePreferences.instance();
+    if (!mounted) return;
+    _displayPreferences = prefs;
+    final saved = prefs.getString(_timeFormatKey);
+    _timeFormat = CalendarTimeFormat.values.firstWhere(
+      (format) => format.name == saved,
+      orElse: () => CalendarTimeFormat.device,
+    );
     final results = await Future.wait([
       TraktService.instance.isAuthenticated(),
       SimklService.instance.isAuthenticated(),
@@ -253,6 +276,7 @@ class _TraktCalendarScreenState extends State<TraktCalendarScreen> {
     setState(() {
       _selectedYear = nextYear;
       _selectedMonth = nextMonth;
+      _showEarlierDays = false;
       _isChangingMonth = true;
     });
     // Remember it for the round-trip through a title's detail page (see fields).
@@ -296,9 +320,18 @@ class _TraktCalendarScreenState extends State<TraktCalendarScreen> {
     final grouped =
         _monthCache[_selectedMonthStart] ??
         const <DateTime, List<TraktCalendarEntry>>{};
+    final now = DateTime.now();
     final days =
         grouped.entries
-            .where((entry) => entry.value.isNotEmpty)
+            .where(
+              (entry) =>
+                  entry.value.isNotEmpty &&
+                  calendarIncludesDay(
+                    entry.key,
+                    now,
+                    showEarlier: _showEarlierDays,
+                  ),
+            )
             .map(
               (entry) => _AiringDay(
                 day: entry.key,
@@ -327,10 +360,13 @@ class _TraktCalendarScreenState extends State<TraktCalendarScreen> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      builder: (_) => TraktCalendarDaySheet(
-        date: day,
-        entries: entries,
-        onEpisodeSelected: _handleEpisodeSelected,
+      builder: (_) => CalendarTimeFormatScope(
+        format: _timeFormat,
+        child: TraktCalendarDaySheet(
+          date: day,
+          entries: entries,
+          onEpisodeSelected: _handleEpisodeSelected,
+        ),
       ),
     );
   }
@@ -365,29 +401,32 @@ class _TraktCalendarScreenState extends State<TraktCalendarScreen> {
     final app = AppThemeScope.of(context);
     final isWide = MediaQuery.of(context).size.width >= 900;
 
-    return Scaffold(
-      backgroundColor: app.calendar.bg,
-      appBar: _isTelevision
-          ? null
-          : AppBar(
-              backgroundColor: Colors.transparent,
-              surfaceTintColor: Colors.transparent,
-              elevation: 0,
-              title: Text('$_sourceName Calendar'),
+    return CalendarTimeFormatScope(
+      format: _timeFormat,
+      child: Scaffold(
+        backgroundColor: app.calendar.bg,
+        appBar: _isTelevision
+            ? null
+            : AppBar(
+                backgroundColor: Colors.transparent,
+                surfaceTintColor: Colors.transparent,
+                elevation: 0,
+                title: Text('$_sourceName Calendar'),
+              ),
+        body: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                const Color(0xFF171B30),
+                const Color(0xFF0B1020),
+                app.calendar.bg,
+              ],
             ),
-      body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              const Color(0xFF171B30),
-              const Color(0xFF0B1020),
-              app.calendar.bg,
-            ],
           ),
+          child: SafeArea(top: false, child: _buildBody(isWide, app)),
         ),
-        child: SafeArea(top: false, child: _buildBody(isWide, app)),
       ),
     );
   }
@@ -445,6 +484,7 @@ class _TraktCalendarScreenState extends State<TraktCalendarScreen> {
                           key: ValueKey('empty-$_selectedYear-$_selectedMonth'),
                           monthLabel: _monthName(_selectedMonth),
                           year: _selectedYear,
+                          fromToday: _isCurrentMonth && !_showEarlierDays,
                         )
                       : _buildDayList(days, isWide, app),
                 ),
@@ -471,6 +511,7 @@ class _TraktCalendarScreenState extends State<TraktCalendarScreen> {
               key: ValueKey('empty-$_selectedYear-$_selectedMonth'),
               monthLabel: _monthName(_selectedMonth),
               year: _selectedYear,
+              fromToday: _isCurrentMonth && !_showEarlierDays,
               compact: true,
             )
           : _buildDayList(days, isWide, app),
@@ -633,6 +674,8 @@ class _TraktCalendarScreenState extends State<TraktCalendarScreen> {
               ),
             ],
           ),
+          const SizedBox(height: 10),
+          _buildDisplayControls(dense: true),
           const SizedBox(height: 10),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -842,6 +885,8 @@ class _TraktCalendarScreenState extends State<TraktCalendarScreen> {
               ],
             ),
           SizedBox(height: isCompact ? 10 : 12),
+          _buildDisplayControls(dense: isCompact),
+          SizedBox(height: isCompact ? 10 : 12),
           Wrap(
             spacing: 8,
             runSpacing: 8,
@@ -867,11 +912,13 @@ class _TraktCalendarScreenState extends State<TraktCalendarScreen> {
                       color: const Color(0xFFFFB3B8),
                     ),
                     SizedBox(width: isCompact ? 6 : 8),
-                    Text(
-                      summary,
-                      style: TextStyle(
-                        fontSize: isCompact ? 11 : 12,
-                        fontWeight: FontWeight.w700,
+                    Flexible(
+                      child: Text(
+                        summary,
+                        style: TextStyle(
+                          fontSize: isCompact ? 11 : 12,
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
                     ),
                   ],
@@ -884,9 +931,43 @@ class _TraktCalendarScreenState extends State<TraktCalendarScreen> {
     );
   }
 
+  Widget _buildDisplayControls({required bool dense}) => Wrap(
+    spacing: 10,
+    runSpacing: 8,
+    crossAxisAlignment: WrapCrossAlignment.center,
+    children: [
+      SizedBox(
+        width: dense ? 160 : 190,
+        child: _SelectorField<CalendarTimeFormat>(
+          label: 'Time format',
+          value: _timeFormat,
+          focusNode: _timeFormatFocusNode,
+          dense: dense,
+          items: [
+            for (final format in CalendarTimeFormat.values)
+              DropdownMenuItem(value: format, child: Text(format.label)),
+          ],
+          onChanged: (value) async {
+            if (value == null) return;
+            setState(() => _timeFormat = value);
+            await _displayPreferences?.setString(_timeFormatKey, value.name);
+          },
+        ),
+      ),
+      if (_isCurrentMonth)
+        TextButton.icon(
+          onPressed: () => setState(() => _showEarlierDays = !_showEarlierDays),
+          icon: Icon(_showEarlierDays ? Icons.today : Icons.history, size: 18),
+          label: Text(_showEarlierDays ? 'From today' : 'Show earlier days'),
+        ),
+    ],
+  );
+
   Widget _buildDayList(List<_AiringDay> days, bool isWide, AppTheme app) {
     return ListView.separated(
-      key: ValueKey('list-$_selectedYear-$_selectedMonth'),
+      key: ValueKey(
+        'list-$_source-$_selectedYear-$_selectedMonth-$_showEarlierDays',
+      ),
       padding: EdgeInsets.zero,
       itemCount: days.length,
       separatorBuilder: (_, __) => SizedBox(height: _isTelevision ? 8 : 12),
@@ -959,6 +1040,7 @@ class _SelectorField<T> extends StatelessWidget {
   Widget build(BuildContext context) {
     final app = AppThemeScope.of(context);
     return DropdownButtonFormField<T>(
+      isExpanded: true,
       value: value,
       focusNode: focusNode,
       items: items,
@@ -1521,7 +1603,10 @@ class _EpisodeRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final accent = _AiringDayCard._accentFor(entry.showTitle, palette);
-    final time = _formatTime(entry.firstAiredLocal);
+    final time = CalendarTimeFormatScope.formatTime(
+      context,
+      entry.firstAiredLocal,
+    );
     final code =
         'S${entry.seasonNumber.toString().padLeft(2, '0')}'
         'E${entry.episodeNumber.toString().padLeft(2, '0')}';
@@ -1671,12 +1756,6 @@ class _EpisodeRow extends StatelessWidget {
         ],
       ),
     );
-  }
-
-  static String _formatTime(DateTime local) {
-    final h = local.hour.toString().padLeft(2, '0');
-    final m = local.minute.toString().padLeft(2, '0');
-    return '$h:$m';
   }
 }
 
@@ -1848,11 +1927,13 @@ class _EmptyMonthState extends StatelessWidget {
     required this.monthLabel,
     required this.year,
     this.compact = false,
+    this.fromToday = false,
   });
 
   final String monthLabel;
   final int year;
   final bool compact;
+  final bool fromToday;
 
   @override
   Widget build(BuildContext context) {
@@ -1882,7 +1963,9 @@ class _EmptyMonthState extends StatelessWidget {
           ),
           SizedBox(height: compact ? 12 : 18),
           Text(
-            'Nothing airing in $monthLabel $year',
+            fromToday
+                ? 'Nothing else airing this month'
+                : 'Nothing airing in $monthLabel $year',
             textAlign: TextAlign.center,
             style: TextStyle(
               fontSize: compact ? 16 : 24,
@@ -1891,7 +1974,9 @@ class _EmptyMonthState extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Text(
-            'Try another month or year.',
+            fromToday
+                ? 'Show earlier days or choose another month.'
+                : 'Try another month or year.',
             textAlign: TextAlign.center,
             style: TextStyle(
               color: Colors.white.withValues(alpha: 0.66),
