@@ -56,16 +56,14 @@ class CollectionBrowserHero extends StatelessWidget {
     );
     final height = compact
         ? 110.0 + textGrowth
-        : (size.height * .26).clamp(170.0, 240.0) +
-              textGrowth * 2 +
-              (logo != null ? 24 : 0);
+        : (size.height * .22).clamp(160.0, 200.0) + textGrowth;
     Widget network(String url, {BoxFit fit = BoxFit.cover, Widget? fallback}) =>
         CachedNetworkImage(
           imageUrl: url,
           cacheManager: DebrifyImageCache.manager,
           fit: fit,
           memCacheWidth: fit == BoxFit.cover ? 1280 : 400,
-          placeholder: (_, _) => const SizedBox.shrink(),
+          placeholder: (_, _) => fallback ?? const SizedBox.shrink(),
           errorWidget: (_, _, _) => fallback ?? const SizedBox.shrink(),
         );
     return SizedBox(
@@ -149,31 +147,40 @@ class CollectionBrowserHero extends StatelessWidget {
                   ],
                 ),
                 const Spacer(),
-                if (!compact && logo != null) ...[
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: SizedBox(
-                      width: narrow ? 100 : 140,
-                      height: 30,
-                      child: network(logo, fit: BoxFit.contain),
+                if (!compact && listTitle == null && logo != null)
+                  Semantics(
+                    label: title,
+                    image: true,
+                    child: ExcludeSemantics(
+                      child: SizedBox(
+                        width: narrow ? 200 : 260,
+                        height: narrow ? 54 : 68,
+                        child: Align(
+                          alignment: Alignment.centerLeft,
+                          child: network(
+                            logo,
+                            fit: BoxFit.contain,
+                            fallback: _title(
+                              title,
+                              app.core.tx,
+                              narrow ? 28 : 34,
+                            ),
+                          ),
+                        ),
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 8),
-                ],
-                Text(
-                  title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: app.core.tx,
-                    fontSize: compact
+                  )
+                else
+                  _title(
+                    title,
+                    app.core.tx,
+                    compact
                         ? 22
                         : narrow
                         ? 28
                         : 34,
-                    fontWeight: FontWeight.w800,
                   ),
-                ),
+                const SizedBox(height: 14),
               ],
             ),
           ),
@@ -181,4 +188,16 @@ class CollectionBrowserHero extends StatelessWidget {
       ),
     );
   }
+
+  Widget _title(String title, Color color, double size) => Text(
+    title,
+    maxLines: 1,
+    overflow: TextOverflow.ellipsis,
+    style: TextStyle(
+      color: color,
+      fontSize: size,
+      fontWeight: FontWeight.w800,
+      letterSpacing: -0.6,
+    ),
+  );
 }

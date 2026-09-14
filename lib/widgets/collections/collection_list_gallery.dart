@@ -1,3 +1,4 @@
+import '../../utils/dominant_color.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -157,6 +158,17 @@ class CollectionListGalleryState extends State<CollectionListGallery> {
   );
 }
 
+// Only built-in list names are restyled; custom titles retain their wording.
+(String, String)? _galleryLabel(String title) => switch (title) {
+  'New Movies' => ('MOVIES', 'New Releases'),
+  'New Series' => ('SERIES', 'New Releases'),
+  'Popular Movies' => ('MOVIES', 'Popular'),
+  'Popular Series' => ('SERIES', 'Popular'),
+  'Top All Time Movies' => ('MOVIES', 'All-Time Favourites'),
+  'Top All Time Series' => ('SERIES', 'All-Time Favourites'),
+  _ => null,
+};
+
 class _GalleryCard extends StatefulWidget {
   const _GalleryCard({
     super.key,
@@ -176,6 +188,29 @@ class _GalleryCard extends StatefulWidget {
 
 class _GalleryCardState extends State<_GalleryCard> {
   bool _focused = false, _hovered = false;
+  Color? _artColor;
+  String? _colorUrl;
+
+  void _resolveAccent() {
+    final items = widget.preview.items;
+    final url = items.isEmpty ? null : items.first.poster;
+    if (url == _colorUrl) return;
+    _artColor = null;
+    _colorUrl = url;
+    if (url == null) return;
+    extractDominantColor(CachedNetworkImageProvider(url)).then((color) {
+      if (mounted && _colorUrl == url && color != null) {
+        setState(() => _artColor = color);
+      }
+    });
+  }
+
+  @override
+  void didUpdateWidget(covariant _GalleryCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (_focused || _hovered) _resolveAccent();
+  }
+
   @override
   Widget build(BuildContext context) {
     final p = widget.preview;
@@ -186,11 +221,17 @@ class _GalleryCardState extends State<_GalleryCard> {
       onKeyEvent: widget.onKey,
       onFocusChange: (value) {
         setState(() => _focused = value);
-        if (value) widget.onFocused();
+        if (value) {
+          _resolveAccent();
+          widget.onFocused();
+        }
       },
       child: MouseRegion(
         cursor: SystemMouseCursors.click,
-        onEnter: (_) => setState(() => _hovered = true),
+        onEnter: (_) {
+          setState(() => _hovered = true);
+          _resolveAccent();
+        },
         onExit: (_) => setState(() => _hovered = false),
         child: Semantics(
           button: true,
@@ -199,20 +240,20 @@ class _GalleryCardState extends State<_GalleryCard> {
             onTap: widget.onOpen,
             behavior: HitTestBehavior.opaque,
             child: AnimatedContainer(
-              duration: const Duration(milliseconds: 140),
+              duration: MediaQuery.disableAnimationsOf(context)
+                  ? Duration.zero
+                  : const Duration(milliseconds: 160),
               transform: Matrix4.translationValues(0, active ? -3 : 0, 0),
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(18),
                 color: app.core.tx.withValues(alpha: .06),
-                border: Border.all(
-                  color: app.core.tx.withValues(alpha: active ? .8 : .10),
-                  width: active ? 2 : 1,
-                ),
                 boxShadow: active
                     ? [
                         BoxShadow(
-                          color: app.core.tx.withValues(alpha: .16),
-                          blurRadius: 18,
+                          color: (_artColor ?? app.core.tx).withValues(
+                            alpha: .22,
+                          ),
+                          blurRadius: 22,
                         ),
                       ]
                     : [],
@@ -222,6 +263,7 @@ class _GalleryCardState extends State<_GalleryCard> {
                 fit: StackFit.expand,
                 children: [
                   Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       for (final item in p.items.take(3))
                         Expanded(
@@ -239,10 +281,10 @@ class _GalleryCardState extends State<_GalleryCard> {
                         end: Alignment.bottomCenter,
                         colors: [
                           Colors.transparent,
-                          app.seeAll.bg.withValues(alpha: .3),
-                          app.seeAll.bg,
+                          app.seeAll.bg.withValues(alpha: .12),
+                          app.seeAll.bg.withValues(alpha: .96),
                         ],
-                        stops: const [0, .35, 1],
+                        stops: const [0, .4, 1],
                       ),
                     ),
                   ),
@@ -268,13 +310,25 @@ class _GalleryCardState extends State<_GalleryCard> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             mainAxisSize: MainAxisSize.min,
                             children: [
+                              if (_galleryLabel(p.title) case final label?) ...[
+                                Text(
+                                  label.$1,
+                                  style: TextStyle(
+                                    color: app.core.tx.withValues(alpha: .72),
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w700,
+                                    letterSpacing: 1.5,
+                                  ),
+                                ),
+                                const SizedBox(height: 6),
+                              ],
                               Text(
-                                p.title,
+                                _galleryLabel(p.title)?.$2 ?? p.title,
                                 maxLines: 2,
                                 overflow: TextOverflow.ellipsis,
                                 style: TextStyle(
                                   color: app.core.tx,
-                                  fontSize: 21,
+                                  fontSize: 19,
                                   fontWeight: FontWeight.w800,
                                 ),
                               ),
@@ -295,8 +349,29 @@ class _GalleryCardState extends State<_GalleryCard> {
                           ),
                         ),
                         const SizedBox(width: 10),
-                        Icon(Icons.chevron_right, color: app.core.tx),
+                        Icon(
+                          Icons.chevron_right,
+                          size: 20,
+                          color: app.core.tx.withValues(
+                            alpha: active ? .95 : .5,
+                          ),
+                        ),
                       ],
+                    ),
+                  ),
+                  Positioned.fill(
+                    child: IgnorePointer(
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(18),
+                          border: Border.all(
+                            color: app.core.tx.withValues(
+                              alpha: active ? .8 : .12,
+                            ),
+                            width: active ? 1.5 : 1,
+                          ),
+                        ),
+                      ),
                     ),
                   ),
                 ],

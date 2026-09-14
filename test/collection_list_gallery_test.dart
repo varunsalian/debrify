@@ -48,6 +48,7 @@ void main() {
                       folder: const HomeCollectionFolder(
                         id: 'f',
                         title: 'Netflix',
+                        titleLogoUrl: 'https://example.invalid/logo.png',
                       ),
                       listCount: 49,
                       backNode: back,
@@ -77,6 +78,55 @@ void main() {
       await tester.pumpWidget(const SizedBox());
     });
   }
+
+  testWidgets(
+    'built-in cards separate media labels without changing custom names',
+    (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: MediaQuery(
+            data: const MediaQueryData(textScaler: TextScaler.linear(1.8)),
+            child: Scaffold(
+              body: CollectionListGallery(
+                lists: const [
+                  CollectionListPreview(
+                    id: 'movies',
+                    title: 'New Movies',
+                    source: 'TMDB',
+                    items: [],
+                  ),
+                  CollectionListPreview(
+                    id: 'series',
+                    title: 'Top All Time Series',
+                    source: 'TMDB',
+                    items: [],
+                  ),
+                  CollectionListPreview(
+                    id: 'custom',
+                    title: 'My weekend picks',
+                    source: 'TRAKT',
+                    items: [],
+                  ),
+                ],
+                onOpen: (_) {},
+                onExitTop: () {},
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('MOVIES'), findsOneWidget);
+      expect(find.text('SERIES'), findsOneWidget);
+      expect(find.text('New Releases'), findsOneWidget);
+      expect(find.text('All-Time Favourites'), findsOneWidget);
+      expect(find.text('TMDB'), findsNothing);
+      expect(tester.takeException(), isNull);
+      await tester.scrollUntilVisible(find.text('My weekend picks'), 150);
+      expect(find.text('My weekend picks'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets('remote traverses lazy rows and returns to the selected card', (
     tester,
