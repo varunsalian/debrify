@@ -312,19 +312,19 @@ class _DetailHoldHintState extends State<DetailHoldHint> {
   }
 }
 
-/// Black glass with white ink, so it reads over artwork and over a light
-/// theme's ground alike — it floats above the page, not inside it.
+/// The active theme's ink and ground keep the floating hint legible over art.
 class _DetailHoldHintPill extends StatelessWidget {
   const _DetailHoldHintPill();
 
   @override
   Widget build(BuildContext context) {
+    final t = DetailThemeScope.of(context);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
       decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.72),
+        color: t.ground.withValues(alpha: 0.92),
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.22)),
+        border: Border.all(color: t.hair),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -332,13 +332,13 @@ class _DetailHoldHintPill extends StatelessWidget {
           Icon(
             Icons.more_horiz_rounded,
             size: 15,
-            color: Colors.white.withValues(alpha: 0.92),
+            color: t.tx,
           ),
           const SizedBox(width: 6),
           Text(
             'Long press for more actions',
             style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.92),
+              color: t.tx,
               fontSize: 12,
               fontWeight: FontWeight.w600,
             ),
