@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+import '../../widgets/collections/collection_category_tabs.dart';
 import '../../widgets/see_all/see_all_header.dart';
 import '../../services/storage_service.dart';
 import '../../widgets/collections/tv_collection_titles.dart';
@@ -204,7 +206,9 @@ class _CollectionFolderScreenState extends State<CollectionFolderScreen> {
   }
 
   bool get _styledCollectionList =>
-      _supportsCollectionStyles && _collectionListStyle != 'grid';
+      !_touchCategories &&
+      _supportsCollectionStyles &&
+      _collectionListStyle != 'grid';
 
   List<_Rail> _rails = const [];
   List<String> _unresolved = const [];
@@ -240,8 +244,17 @@ class _CollectionFolderScreenState extends State<CollectionFolderScreen> {
   String? _configurationSignature;
   bool get _hasFolders => _collection.folders.isNotEmpty;
   HomeCollectionFolder get _folder => _collection.folders[_folderIndex];
+  bool get _touchCategories =>
+      widget.fromHome &&
+      widget.sourceKey == null &&
+      !widget.isTelevision &&
+      (defaultTargetPlatform == TargetPlatform.android ||
+          defaultTargetPlatform == TargetPlatform.iOS);
+
   bool get _tabs =>
-      widget.sourceKey != null || _layout == CollectionFolderLayout.tabs;
+      _touchCategories ||
+      widget.sourceKey != null ||
+      _layout == CollectionFolderLayout.tabs;
 
   /// The folder's lists, narrowed to the selected source when opening a list.
   List<CollectionCatalogSource> get _enabledSources => [
@@ -786,7 +799,7 @@ class _CollectionFolderScreenState extends State<CollectionFolderScreen> {
     }
   }
 
-  List<FocusNode> get _filterNodes => _homeGallery
+  List<FocusNode> get _filterNodes => (_homeGallery || _touchCategories)
       ? []
       : [
           if (widget.sourceKey == null) _folderNode,
@@ -913,7 +926,50 @@ class _CollectionFolderScreenState extends State<CollectionFolderScreen> {
                 onRight: _hasHeaderIssue ? _issuesNode.requestFocus : null,
                 onDown: _focusBelowHeader,
               ),
-            if (!_homeGallery) _buildFilterBar(),
+            if (_touchCategories)
+              Row(
+                children: [
+                  Expanded(
+                    child: CollectionCategoryTabs(
+                      labels: [
+                        for (final rail in _rails) rail.title,
+                        if (_offersAll) 'All',
+                      ],
+                      selectedIndex: _tab == _kAllTab ? _rails.length : _tab,
+                      onSelected: (index) => _onTabChanged(
+                        index == _rails.length ? _kAllTab : index,
+                      ),
+                    ),
+                  ),
+                  PopupMenuButton<String>(
+                    tooltip: 'Sort titles',
+                    icon: Icon(
+                      Icons.sort,
+                      color: _sort == _sortDefault
+                          ? null
+                          : Theme.of(context).colorScheme.primary,
+                    ),
+                    initialValue: _sort,
+                    onSelected: _onSortChanged,
+                    itemBuilder: (_) => [
+                      for (final option in const {
+                        _sortDefault: 'Default',
+                        _sortImdbDesc: 'IMDb Rating · High → Low',
+                        _sortImdbAsc: 'IMDb Rating · Low → High',
+                        _sortTitle: 'Title · A → Z',
+                      }.entries)
+                        CheckedPopupMenuItem<String>(
+                          value: option.key,
+                          checked: _sort == option.key,
+                          child: Text(option.value),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(width: 12),
+                ],
+              )
+            else if (!_homeGallery)
+              _buildFilterBar(),
             if (_openingTitle != null)
               Row(
                 children: [

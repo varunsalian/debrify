@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+import 'package:debrify/widgets/collections/collection_category_tabs.dart';
 import 'package:debrify/widgets/collections/tv_collection_titles.dart';
 import 'dart:convert';
 import 'dart:async';
@@ -71,6 +73,78 @@ void main() {
           ),
         ),
       );
+
+  for (final platform in [
+    TargetPlatform.android,
+    TargetPlatform.iOS,
+    TargetPlatform.macOS,
+  ]) {
+    testWidgets(
+      'Home collection uses touch categories only on mobile: $platform',
+      (tester) async {
+        debugDefaultTargetPlatformOverride = platform;
+        addTearDown(() => debugDefaultTargetPlatformOverride = null);
+        final native = CollectionNativeSourceService(
+          tmdbToken: 'dummy',
+          resolveIds: false,
+          client: MockClient(
+            (_) async => http.Response(
+              jsonEncode({
+                'results': [
+                  {'id': 42, 'title': 'Zulu', 'vote_average': 8.0},
+                  {'id': 43, 'title': 'Alpha', 'vote_average': 6.0},
+                ],
+                'total_pages': 1,
+              }),
+              200,
+            ),
+          ),
+        );
+        addTearDown(native.close);
+        await tester.pumpWidget(
+          MaterialApp(
+            home: CollectionFolderScreen(
+              collection: collection(),
+              fromHome: true,
+              nativeSources: native,
+              onOpenItem: (_) {},
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        final mobile = platform != TargetPlatform.macOS;
+        expect(
+          find.byType(CollectionCategoryTabs),
+          mobile ? findsOneWidget : findsNothing,
+        );
+        expect(
+          find.byType(CollectionListGallery),
+          mobile ? findsNothing : findsOneWidget,
+        );
+        if (mobile) {
+          List<String> titles() => tester
+              .widget<SeeAllPosterGrid>(find.byType(SeeAllPosterGrid))
+              .items
+              .map((item) => item.name)
+              .toList();
+          expect(titles(), ['Zulu', 'Alpha']);
+          await tester.tap(find.byTooltip('Sort titles'));
+          await tester.pumpAndSettle();
+          await tester.tap(find.text('Title · A → Z'));
+          await tester.pumpAndSettle();
+          expect(titles(), ['Alpha', 'Zulu']);
+          await tester.tap(find.byTooltip('Sort titles'));
+          await tester.pumpAndSettle();
+          await tester.tap(find.text('IMDb Rating · High → Low'));
+          await tester.pumpAndSettle();
+          expect(titles(), ['Zulu', 'Alpha']);
+        }
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox());
+        debugDefaultTargetPlatformOverride = null;
+      },
+    );
+  }
 
   for (final all in [false, true]) {
     testWidgets(
