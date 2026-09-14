@@ -14,7 +14,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # In iOS, build-name is used as CFBundleShortVersionString while build-number is used as CFBundleVersion.
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 0.9.0-beta.1+44
+version: 0.9.1-alpha.1+45
 
 environment:
   sdk: ^3.8.1
@@ -84,6 +84,8 @@ dependencies:
   
   # Image caching for episode posters
   cached_network_image: ^3.3.1
+  # Static imported stream-badge artwork, rasterized into the image cache.
+  flutter_svg: ^2.3.0
   # Direct dep so we can configure a bigger disk cache than the 200-object
   # default (already transitive via cached_network_image)
   flutter_cache_manager: ^3.4.1
@@ -139,6 +141,7 @@ dependencies:
   animations: ^2.0.11
   provider: ^6.1.2
   youtube_explode_dart: ^3.1.0
+  visibility_detector: ^0.4.0+2
 
 # media_kit is vendored under packages/media_kit_patched for Apple TV support:
 # an already-resolved NativeLibrary initialization guard, safe NativeCallable
@@ -152,8 +155,14 @@ dependencies:
 # tvOS fallback — flutter_cache_manager, google_fonts, background_downloader.
 # Everything else is stock 0.0.3 — diff it before upgrading.
 dependency_overrides:
+  # Engine-owned Android database handles; see the package PATCHES.md.
+  sqflite_android:
+    path: packages/sqflite_android_patched
   media_kit:
     path: packages/media_kit_patched
+  # Await native render-context teardown before libmpv destruction on Apple/Windows.
+  media_kit_video:
+    path: packages/media_kit_video_patched
   # Android TV uses ExoPlayer and is unaffected. Android phones use MediaKit's
   # restricted FFmpeg build, which omits Blu-ray PGS and other bitmap/text
   # subtitle decoders. Release CI fills this package with a pinned patch build.
@@ -168,9 +177,11 @@ dependency_overrides:
     path: packages/path_provider_tvos_patched
 
 dev_dependencies:
+  file: ^7.0.1
   flutter_test:
     sdk: flutter
   path_provider_platform_interface: ^2.1.2
+  shared_preferences_platform_interface: ^2.4.1
 
   # The "flutter_lints" package below contains a set of recommended lints to
   # encourage good coding practices. The lint set provided by the package is
@@ -215,6 +226,7 @@ flutter:
     - assets/app_icon.png
     - assets/app_icon_foreground.png
     - assets/images/profile_gate_lighthouse.png
+    - assets/images/tmdb-logo.png
     - assets/images/profile_avatars/
     - assets/splash_logo.png
     - assets/config/app_remote_config.json

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../theme/app_theme_scope.dart';
 import 'package:flutter/services.dart';
 
 import '../../services/remote_control/remote_constants.dart';
@@ -32,12 +33,14 @@ class RemoteDpadWidget extends StatelessWidget {
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
                 colors: [
-                  const Color(0xFF1E293B).withValues(alpha: 0.8),
-                  const Color(0xFF0F172A).withValues(alpha: 0.9),
+                  AppThemeScope.of(
+                    context,
+                  ).settings.panel2.withValues(alpha: 0.8),
+                  AppThemeScope.of(context).core.ground.withValues(alpha: 0.9),
                 ],
               ),
               border: Border.all(
-                color: Colors.white.withValues(alpha: 0.1),
+                color: AppThemeScope.of(context).core.tx.withValues(alpha: 0.1),
                 width: 1,
               ),
               boxShadow: [
@@ -147,19 +150,27 @@ class _DpadButtonState extends State<_DpadButton> {
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
               colors: _isPressed
-                  ? [const Color(0xFF6366F1), const Color(0xFF8B5CF6)]
-                  : [const Color(0xFF334155), const Color(0xFF1E293B)],
+                  ? [
+                      AppThemeScope.of(context).core.tx,
+                      AppThemeScope.of(context).core.tx,
+                    ]
+                  : [
+                      AppThemeScope.of(context).settings.panel2,
+                      AppThemeScope.of(context).settings.panel2,
+                    ],
             ),
             border: Border.all(
               color: _isPressed
-                  ? const Color(0xFF6366F1)
-                  : Colors.white.withValues(alpha: 0.1),
+                  ? AppThemeScope.of(context).core.tx
+                  : AppThemeScope.of(context).core.tx.withValues(alpha: 0.1),
               width: 1,
             ),
             boxShadow: _isPressed
                 ? [
                     BoxShadow(
-                      color: const Color(0xFF6366F1).withValues(alpha: 0.4),
+                      color: AppThemeScope.of(
+                        context,
+                      ).core.tx.withValues(alpha: 0.4),
                       blurRadius: 12,
                       spreadRadius: 0,
                     ),
@@ -168,7 +179,11 @@ class _DpadButtonState extends State<_DpadButton> {
           ),
           child: Icon(
             widget.icon,
-            color: Colors.white,
+            color: _isPressed
+                ? AppThemeScope.of(
+                    context,
+                  ).inkOn(AppThemeScope.of(context).core.tx)
+                : AppThemeScope.of(context).core.tx,
             size: widget.size * 0.6,
           ),
         ),
@@ -214,15 +229,21 @@ class _DpadCenterButtonState extends State<_DpadCenterButton> {
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
               colors: _isPressed
-                  ? [const Color(0xFF10B981), const Color(0xFF059669)]
-                  : [const Color(0xFF6366F1), const Color(0xFF8B5CF6)],
+                  ? [
+                      AppThemeScope.of(context).core.tx,
+                      AppThemeScope.of(context).core.tx,
+                    ]
+                  : [
+                      AppThemeScope.of(context).core.tx,
+                      AppThemeScope.of(context).core.tx,
+                    ],
             ),
             boxShadow: [
               BoxShadow(
                 color:
                     (_isPressed
-                            ? const Color(0xFF10B981)
-                            : const Color(0xFF6366F1))
+                            ? AppThemeScope.of(context).core.tx
+                            : AppThemeScope.of(context).core.tx)
                         .withValues(alpha: 0.4),
                 blurRadius: 16,
                 offset: const Offset(0, 4),
@@ -233,7 +254,9 @@ class _DpadCenterButtonState extends State<_DpadCenterButton> {
             child: Text(
               'OK',
               style: TextStyle(
-                color: Colors.white,
+                color: AppThemeScope.of(
+                  context,
+                ).inkOn(AppThemeScope.of(context).core.tx),
                 fontSize: widget.size * 0.3,
                 fontWeight: FontWeight.bold,
                 letterSpacing: 1,

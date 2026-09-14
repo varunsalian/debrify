@@ -7,7 +7,13 @@ import 'package:debrify/models/iptv_playlist.dart';
 import 'package:debrify/screens/settings/iptv_hidden_categories_page.dart';
 import 'package:debrify/services/iptv_catalog_db.dart';
 import 'package:debrify/services/iptv_catalog_key.dart';
+import 'package:debrify/services/profiles/profile_scope.dart';
+import 'package:debrify/services/webdav_sync/webdav_sync_circle_models.dart';
+import 'package:debrify/services/webdav_sync/webdav_sync_hot_models.dart';
+import 'package:debrify/services/webdav_sync/webdav_sync_library_models.dart';
+import 'package:debrify/services/webdav_sync/webdav_sync_library_mutation.dart';
 import 'package:debrify/utils/platform_util.dart';
+import 'package:sqlite3/sqlite3.dart' as raw;
 
 IptvChannel _ch(int i, {required String group, int? number}) => IptvChannel(
   channelNumber: number,
@@ -44,6 +50,8 @@ void main() {
   });
 
   tearDown(() async {
+    WebDavSyncLibraryMutation.debugUserMutationObserver = null;
+    WebDavSyncLibraryMutation.originDeviceId = 'local-device';
     IptvCatalogDb.debugClose();
     IptvCatalogDb.debugDirectoryOverride = null;
     await dir.delete(recursive: true);
@@ -159,6 +167,208 @@ void main() {
   });
 
   test(
+    'user hides and deletes stamp state, revision, and one notification',
+    () {
+      var notifications = 0;
+      WebDavSyncLibraryMutation.originDeviceId = 'device-a';
+      WebDavSyncLibraryMutation.debugUserMutationObserver = () =>
+          notifications++;
+      IptvCatalogDb.debugLibraryClock = () =>
+          DateTime.fromMillisecondsSinceEpoch(1000);
+
+      IptvCatalogDb.setGroupHidden(key, 'Adult', true);
+
+      var db = raw.sqlite3.open(IptvCatalogDb.path);
+      var state = db.select(
+        'SELECT * FROM webdav_sync_record_state WHERE kind = ?',
+        [WebDavSyncLibraryKinds.hiddenGroups],
+      ).single;
+      expect(state['owner_key'], key);
+      expect(state['item_key'], 'Adult');
+      expect(state['updated_at_ms'], 1000);
+      expect(state['origin_device_id'], 'device-a');
+      expect(state['normalized'], 0);
+      expect(state['deleted'], 0);
+      expect(
+        db
+            .select(
+              "SELECT value FROM webdav_sync_meta "
+              "WHERE key = 'mutation_revision'",
+            )
+            .single['value'],
+        '1',
+      );
+      db.dispose();
+      expect(notifications, 1);
+
+      IptvCatalogDb.debugLibraryClock = () =>
+          DateTime.fromMillisecondsSinceEpoch(2000);
+      IptvCatalogDb.setGroupHidden(key, 'Adult', false);
+
+      db = raw.sqlite3.open(IptvCatalogDb.path);
+      state = db.select(
+        'SELECT * FROM webdav_sync_record_state WHERE kind = ?',
+        [WebDavSyncLibraryKinds.hiddenGroups],
+      ).single;
+      expect(state['updated_at_ms'], 2000);
+      expect(state['deleted'], 1);
+      expect(
+        db
+            .select(
+              "SELECT value FROM webdav_sync_meta "
+              "WHERE key = 'mutation_revision'",
+            )
+            .single['value'],
+        '2',
+      );
+      db.dispose();
+      expect(notifications, 2);
+    },
+  );
+
+  test('maintenance migration and rollback origins stay silent', () {
+    var notifications = 0;
+    WebDavSyncLibraryMutation.debugUserMutationObserver = () => notifications++;
+
+    for (final origin in const <WebDavSyncMutationOrigin>[
+      WebDavSyncMutationOrigin.syncApply,
+      WebDavSyncMutationOrigin.maintenance,
+      WebDavSyncMutationOrigin.migration,
+      WebDavSyncMutationOrigin.rollback,
+    ]) {
+      IptvCatalogDb.setGroupHidden(key, origin.name, true, origin: origin);
+    }
+
+    final db = raw.sqlite3.open(IptvCatalogDb.path);
+    expect(db.select('SELECT * FROM webdav_sync_record_state'), isEmpty);
+    expect(
+      db
+          .select(
+            "SELECT value FROM webdav_sync_meta "
+            "WHERE key = 'mutation_revision'",
+          )
+          .single['value'],
+      '0',
+    );
+    db.dispose();
+    expect(notifications, 0);
+  });
+
+  test(
+    'sync apply preserves an exact stamp and fences stale revisions',
+    () async {
+      var notifications = 0;
+      WebDavSyncLibraryMutation.debugUserMutationObserver = () =>
+          notifications++;
+      final scope = ProfileScope(
+        profileId: 'profile-a',
+        dataGeneration: 1,
+        sessionEpoch: 1,
+      );
+      const exactStamp = WebDavSyncStamp(
+        normalizedTimeMs: 4242,
+        originDeviceId: 'device-b',
+      );
+      final applied = await IptvCatalogDb.applyWebDavHiddenGroups(
+        scope,
+        expectedRevision: 0,
+        targets: const <WebDavSyncHiddenGroupTarget>[
+          WebDavSyncHiddenGroupTarget(
+            catalogKey: key,
+            group: 'Adult',
+            leaf: WebDavSyncCircleLeaf<Map<String, Object?>>(
+              stamp: exactStamp,
+              value: <String, Object?>{'group': 'Adult'},
+            ),
+          ),
+        ],
+      );
+
+      expect(applied.result, WebDavSyncLibraryApplyResult.applied);
+      expect(applied.touched, isTrue);
+      expect(IptvCatalogDb.hiddenGroups(key), contains('Adult'));
+      var db = raw.sqlite3.open(IptvCatalogDb.path);
+      final exact = db.select(
+        'SELECT updated_at_ms, origin_device_id, normalized, deleted '
+        'FROM webdav_sync_record_state WHERE kind = ?',
+        [WebDavSyncLibraryKinds.hiddenGroups],
+      ).single;
+      expect(exact['updated_at_ms'], exactStamp.normalizedTimeMs);
+      expect(exact['origin_device_id'], exactStamp.originDeviceId);
+      expect(exact['normalized'], 1);
+      expect(exact['deleted'], 0);
+      db.dispose();
+      expect(notifications, 0);
+
+      IptvCatalogDb.setGroupHidden(key, 'News', true);
+      final conflict = await IptvCatalogDb.applyWebDavHiddenGroups(
+        scope,
+        expectedRevision: 1,
+        targets: const <WebDavSyncHiddenGroupTarget>[
+          WebDavSyncHiddenGroupTarget(
+            catalogKey: key,
+            group: 'Adult',
+            leaf: WebDavSyncCircleLeaf<Map<String, Object?>>(
+              stamp: WebDavSyncStamp(
+                normalizedTimeMs: 5252,
+                originDeviceId: 'device-c',
+              ),
+              value: null,
+            ),
+          ),
+        ],
+      );
+      expect(conflict.result, WebDavSyncLibraryApplyResult.conflict);
+      expect(conflict.touched, isFalse);
+      expect(IptvCatalogDb.hiddenGroups(key), contains('Adult'));
+      db = raw.sqlite3.open(IptvCatalogDb.path);
+      expect(
+        db
+            .select(
+              "SELECT value FROM webdav_sync_meta "
+              "WHERE key = 'mutation_revision'",
+            )
+            .single['value'],
+        '2',
+      );
+      db.dispose();
+      expect(notifications, 1);
+    },
+  );
+
+  test('forgetting a source persists a tombstone for every hidden group', () {
+    IptvCatalogDb.hideGroups(key, const <String>['Adult', 'News']);
+    IptvCatalogDb.forgetHiddenGroups(
+      [key],
+      ownerReferences: const <String, WebDavSyncCatalogOwnerReference>{
+        key: WebDavSyncCatalogOwnerReference(
+          localResourceId: 'local-resource',
+          variant: 'm3u',
+        ),
+      },
+    );
+
+    final db = raw.sqlite3.open(IptvCatalogDb.path);
+    final rows = db.select(
+      'SELECT item_key, deleted, aux FROM webdav_sync_record_state '
+      'WHERE kind = ? ORDER BY item_key',
+      [WebDavSyncLibraryKinds.hiddenGroups],
+    );
+    expect(rows.map((row) => row['item_key']), <String>['Adult', 'News']);
+    expect(rows.map((row) => row['deleted']), everyElement(1));
+    expect(
+      rows.map(
+        (row) => WebDavSyncCatalogOwnerReference.tryFromAux(
+          row['aux'] as String?,
+        )?.localResourceId,
+      ),
+      everyElement('local-resource'),
+    );
+    db.dispose();
+    expect(IptvCatalogDb.hiddenGroups(key), isEmpty);
+  });
+
+  test(
     'hiding the landing default clears it without affecting other hides',
     () {
       IptvCatalogDb.setDefaultCategory(key, 'Sports');
@@ -195,7 +405,10 @@ void main() {
     IptvCatalogDb.ingest(
       dbPath: IptvCatalogDb.path,
       catalogKey: other,
-      channels: [_ch(1, group: 'Adult'), _ch(2, group: 'Sports')],
+      channels: [
+        _ch(1, group: 'Adult'),
+        _ch(2, group: 'Sports'),
+      ],
     );
     IptvCatalogDb.setGroupHidden(key, 'Adult', true);
 
@@ -249,16 +462,19 @@ void main() {
     expect(IptvCatalogDb.snapshot(key)!.count(), 6);
   });
 
-  test('writes report success when saved and failure when the db is closed', () {
-    expect(IptvCatalogDb.setGroupHidden(key, 'Adult', true), isTrue);
-    expect(IptvCatalogDb.hideGroups(key, const ['News']), isTrue);
-    expect(IptvCatalogDb.showAllGroups(key), isTrue);
+  test(
+    'writes report success when saved and failure when the db is closed',
+    () {
+      expect(IptvCatalogDb.setGroupHidden(key, 'Adult', true), isTrue);
+      expect(IptvCatalogDb.hideGroups(key, const ['News']), isTrue);
+      expect(IptvCatalogDb.showAllGroups(key), isTrue);
 
-    IptvCatalogDb.debugClose();
-    expect(IptvCatalogDb.setGroupHidden(key, 'Adult', true), isFalse);
-    expect(IptvCatalogDb.hideGroups(key, const ['News']), isFalse);
-    expect(IptvCatalogDb.showAllGroups(key), isFalse);
-  });
+      IptvCatalogDb.debugClose();
+      expect(IptvCatalogDb.setGroupHidden(key, 'Adult', true), isFalse);
+      expect(IptvCatalogDb.hideGroups(key, const ['News']), isFalse);
+      expect(IptvCatalogDb.showAllGroups(key), isFalse);
+    },
+  );
 
   testWidgets('TV DPAD reveals category rows past the initial viewport', (
     tester,

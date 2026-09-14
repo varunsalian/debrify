@@ -370,7 +370,12 @@ Future<bool> sendRemoteTransferCompletion(
     expectedCommands: expectedCommands,
   );
   var sent = false;
-  for (var attempt = 0; attempt < 3; attempt++) {
+  final attempts =
+      (state.sessionFor(targetIp)?.peerProtocolVersion ?? 0) >=
+          kReliableTransferProtocolVersion
+      ? 1
+      : 3;
+  for (var attempt = 0; attempt < attempts; attempt++) {
     if (attempt > 0) {
       await Future<void>.delayed(const Duration(milliseconds: 400));
     }
@@ -400,7 +405,12 @@ Future<bool> beginRemoteTransfer(
 }) async {
   final body = remoteTransferRequestBody(requestId);
   var sent = false;
-  for (var attempt = 0; attempt < 3; attempt++) {
+  final attempts =
+      (state.sessionFor(targetIp)?.peerProtocolVersion ?? 0) >=
+          kReliableTransferProtocolVersion
+      ? 1
+      : 3;
+  for (var attempt = 0; attempt < attempts; attempt++) {
     if (attempt > 0) {
       await Future<void>.delayed(const Duration(milliseconds: 400));
     }
@@ -444,7 +454,20 @@ class ChunkResendCache {
     _transfers[transferId] = _CachedTransfer(
       targetIp: targetIp,
       chunks: chunks,
-      expiry: Timer(kChunkResendCacheTtl, () => _transfers.remove(transferId)),
+      expiry: Timer(
+        const Duration(minutes: 30),
+        () => _transfers.remove(transferId),
+      ),
+    );
+  }
+
+  static void finishedSending(String transferId) {
+    final cached = _transfers[transferId];
+    if (cached == null) return;
+    cached.expiry.cancel();
+    cached.expiry = Timer(
+      kChunkResendCacheTtl,
+      () => _transfers.remove(transferId),
     );
   }
 
@@ -510,7 +533,7 @@ class _CachedTransfer {
 
   final String targetIp;
   final List<String> chunks;
-  final Timer expiry;
+  Timer expiry;
 }
 
 /// Send a config payload to a TV, splitting it across packets when it doesn't
@@ -543,6 +566,15 @@ Future<bool> sendConfigPayloadToDevice(
       ? payload
       : remoteTransferItemBody(requestId: transferRequestId, payload: payload);
   final session = state.sessionFor(targetIp);
+
+  if (session != null &&
+      session.peerProtocolVersion >= kReliableTransferProtocolVersion) {
+    return state.sendConfigCommandToDevice(
+      command,
+      targetIp,
+      configData: transferPayload,
+    );
+  }
 
   if (session == null
       ? fitsSinglePacket(transferPayload)
@@ -628,105 +660,109 @@ Future<bool> sendConfigPayloadToDevice(
   // races the tail of the send still finds the cache.
   ChunkResendCache.register(transferId, targetIp, chunks);
 
-  final startBody = chunkStartBody(
-    transferId: transferId,
-    command: command,
-    label: label,
-    totalChunks: chunks.length,
-    encSidB64: encSidB64,
-    encN: encN,
-    resultRequestId: resultRequestId,
-  );
-  final startOk = await state.sendConfigCommandToDevice(
-    ConfigCommand.debrifyChannelStart,
-    targetIp,
-    configData: startBody,
-    plaintextTransport: true,
-  );
-  if (graphDiagnostic) {
-    RemoteTransferDiagnostics.record(
-      'sender_chunk_start_packet',
-      fields: <String, Object?>{'trace': trace, 'ok': startOk},
+  try {
+    final startBody = chunkStartBody(
+      transferId: transferId,
+      command: command,
+      label: label,
+      totalChunks: chunks.length,
+      encSidB64: encSidB64,
+      encN: encN,
+      resultRequestId: resultRequestId,
     );
-  }
-  if (!startOk) return false;
-  // A lost START is the one packet repair cannot recover (the receiver has
-  // no buffer to notice gaps in), so send it twice. Duplicates are safe
-  // ONLY here: the receiver rebuilds the buffer on a repeated start, which
-  // is a no-op before any chunk has landed and destructive after.
-  await Future.delayed(chunkPace);
-  final duplicateStartOk = await state.sendConfigCommandToDevice(
-    ConfigCommand.debrifyChannelStart,
-    targetIp,
-    configData: startBody,
-    plaintextTransport: true,
-  );
-  if (graphDiagnostic) {
-    RemoteTransferDiagnostics.record(
-      'sender_chunk_start_repeat',
-      fields: <String, Object?>{'trace': trace, 'ok': duplicateStartOk},
-    );
-  }
-
-  var loggedProgressBucket = 0;
-  for (var i = 0; i < chunks.length; i++) {
-    // Pace the send: a burst of hundreds of datagrams overruns the receiver's
-    // socket buffer, and a chunk dropped there costs the whole transfer.
-    await Future.delayed(chunkPace);
-    final ok = await state.sendConfigCommandToDevice(
-      ConfigCommand.debrifyChannelChunk,
+    final startOk = await state.sendConfigCommandToDevice(
+      ConfigCommand.debrifyChannelStart,
       targetIp,
-      configData: chunkPieceBody(
-        transferId: transferId,
-        index: i,
-        data: chunks[i],
-      ),
+      configData: startBody,
       plaintextTransport: true,
     );
-    if (!ok) {
-      if (graphDiagnostic) {
-        RemoteTransferDiagnostics.record(
-          'sender_chunk_send_stopped',
-          fields: <String, Object?>{
-            'trace': trace,
-            'chunk': i + 1,
-            'chunks': chunks.length,
-          },
-        );
-      }
-      return false;
-    }
     if (graphDiagnostic) {
-      final percent = ((i + 1) * 100) ~/ chunks.length;
-      final bucket = percent >= 100
-          ? 100
-          : percent >= 75
-          ? 75
-          : percent >= 50
-          ? 50
-          : percent >= 25
-          ? 25
-          : 0;
-      if (bucket > loggedProgressBucket) {
-        loggedProgressBucket = bucket;
-        RemoteTransferDiagnostics.record(
-          'sender_chunk_progress',
-          fields: <String, Object?>{
-            'trace': trace,
-            'percent': bucket,
-            'sent': i + 1,
-            'chunks': chunks.length,
-          },
-        );
+      RemoteTransferDiagnostics.record(
+        'sender_chunk_start_packet',
+        fields: <String, Object?>{'trace': trace, 'ok': startOk},
+      );
+    }
+    if (!startOk) return false;
+    // A lost START is the one packet repair cannot recover (the receiver has
+    // no buffer to notice gaps in), so send it twice. Duplicates are safe
+    // ONLY here: the receiver rebuilds the buffer on a repeated start, which
+    // is a no-op before any chunk has landed and destructive after.
+    await Future.delayed(chunkPace);
+    final duplicateStartOk = await state.sendConfigCommandToDevice(
+      ConfigCommand.debrifyChannelStart,
+      targetIp,
+      configData: startBody,
+      plaintextTransport: true,
+    );
+    if (graphDiagnostic) {
+      RemoteTransferDiagnostics.record(
+        'sender_chunk_start_repeat',
+        fields: <String, Object?>{'trace': trace, 'ok': duplicateStartOk},
+      );
+    }
+
+    var loggedProgressBucket = 0;
+    for (var i = 0; i < chunks.length; i++) {
+      // Pace the send: a burst of hundreds of datagrams overruns the receiver's
+      // socket buffer, and a chunk dropped there costs the whole transfer.
+      await Future.delayed(chunkPace);
+      final ok = await state.sendConfigCommandToDevice(
+        ConfigCommand.debrifyChannelChunk,
+        targetIp,
+        configData: chunkPieceBody(
+          transferId: transferId,
+          index: i,
+          data: chunks[i],
+        ),
+        plaintextTransport: true,
+      );
+      if (!ok) {
+        if (graphDiagnostic) {
+          RemoteTransferDiagnostics.record(
+            'sender_chunk_send_stopped',
+            fields: <String, Object?>{
+              'trace': trace,
+              'chunk': i + 1,
+              'chunks': chunks.length,
+            },
+          );
+        }
+        return false;
+      }
+      if (graphDiagnostic) {
+        final percent = ((i + 1) * 100) ~/ chunks.length;
+        final bucket = percent >= 100
+            ? 100
+            : percent >= 75
+            ? 75
+            : percent >= 50
+            ? 50
+            : percent >= 25
+            ? 25
+            : 0;
+        if (bucket > loggedProgressBucket) {
+          loggedProgressBucket = bucket;
+          RemoteTransferDiagnostics.record(
+            'sender_chunk_progress',
+            fields: <String, Object?>{
+              'trace': trace,
+              'percent': bucket,
+              'sent': i + 1,
+              'chunks': chunks.length,
+            },
+          );
+        }
       }
     }
-  }
 
-  if (graphDiagnostic) {
-    RemoteTransferDiagnostics.record(
-      'sender_chunks_complete',
-      fields: <String, Object?>{'trace': trace, 'chunks': chunks.length},
-    );
+    if (graphDiagnostic) {
+      RemoteTransferDiagnostics.record(
+        'sender_chunks_complete',
+        fields: <String, Object?>{'trace': trace, 'chunks': chunks.length},
+      );
+    }
+    return true;
+  } finally {
+    ChunkResendCache.finishedSending(transferId);
   }
-  return true;
 }

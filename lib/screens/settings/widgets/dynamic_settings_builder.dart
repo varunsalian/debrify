@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:synchronized/synchronized.dart';
+import '../../../services/engine/local_engine_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../models/engine_config/engine_config.dart';
 import '../../../services/engine/settings_manager.dart';
@@ -87,10 +89,23 @@ class _DynamicSettingsBuilderState extends State<DynamicSettingsBuilder> {
   @override
   void initState() {
     super.initState();
+    LocalEngineStorage.changes.addListener(_loadSettings);
     _loadSettings();
   }
 
-  Future<void> _loadSettings() async {
+  final _settingsLoadLock = Lock();
+
+  @override
+  void dispose() {
+    LocalEngineStorage.changes.removeListener(_loadSettings);
+    super.dispose();
+  }
+
+  Future<void> _loadSettings() =>
+      _settingsLoadLock.synchronized(_loadSettingsNow);
+
+  Future<void> _loadSettingsNow() async {
+    if (!mounted) return;
     try {
       // Get all engine configs from registry
       final registry = EngineRegistry.instance;
@@ -675,6 +690,7 @@ class DynamicTvSettingsBuilderState extends State<DynamicTvSettingsBuilder> {
   @override
   void initState() {
     super.initState();
+    LocalEngineStorage.changes.addListener(_loadSettings);
     _loadSettings();
   }
 
@@ -686,7 +702,19 @@ class DynamicTvSettingsBuilderState extends State<DynamicTvSettingsBuilder> {
     _loadSettings();
   }
 
-  Future<void> _loadSettings() async {
+  final _settingsLoadLock = Lock();
+
+  @override
+  void dispose() {
+    LocalEngineStorage.changes.removeListener(_loadSettings);
+    super.dispose();
+  }
+
+  Future<void> _loadSettings() =>
+      _settingsLoadLock.synchronized(_loadSettingsNow);
+
+  Future<void> _loadSettingsNow() async {
+    if (!mounted) return;
     try {
       // Get engines with TV mode from registry
       final registry = EngineRegistry.instance;

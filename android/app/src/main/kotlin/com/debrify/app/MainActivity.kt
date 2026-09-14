@@ -53,6 +53,7 @@ class MainActivity : FlutterActivity() {
 	private val PLAYER_DIAGNOSTICS_CHANNEL = "debrify/player_diagnostics"
 	private val REMOTE_TRANSFER_DIAGNOSTICS_CHANNEL = "debrify/remote_transfer_diagnostics"
 	private val NATIVE_DIAGNOSTICS_CHANNEL = "debrify/native_diagnostics"
+	private val TV_PLAYBACK_RECOVERY_CHANNEL = "debrify/tv_playback_recovery"
 	// SecretVault key derivation. ANDROID_ID is per-device (scoped to our
 	// signing key + user since Android 8, stable across OTAs) — unlike the
 	// build/model fields device_info_plus exposes, which every unit of the
@@ -975,8 +976,26 @@ class MainActivity : FlutterActivity() {
         }
     }
 
+    private var diagnosticEngineId = 0
+
+    private fun recordActivityLifecycle(event: String, details: String = "") {
+        DiagnosticFileLog.recordCritical(
+            source = "android_main_activity",
+            event = event,
+            message = "pid=${android.os.Process.myPid()} activity=${System.identityHashCode(this)} " +
+                "engine=$diagnosticEngineId finishing=$isFinishing " +
+                "changingConfigurations=$isChangingConfigurations $details",
+        )
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         DiagnosticFileLog.initialize(this)
+        val alwaysFinish = runCatching {
+            android.provider.Settings.Global.getInt(
+                contentResolver, android.provider.Settings.Global.ALWAYS_FINISH_ACTIVITIES, 0,
+            )
+        }.getOrDefault(-1)
+        recordActivityLifecycle("create", "savedState=${savedInstanceState != null} alwaysFinishActivities=$alwaysFinish")
         DiagnosticFileLog.recordPreviousProcessExit(this)
         // A lock-on-resume profile must be protected BEFORE Flutter starts and
         // before Android can take a task snapshot. Dart later clears the flag
@@ -1030,10 +1049,12 @@ class MainActivity : FlutterActivity() {
 
     override fun onResume() {
         super.onResume()
+        recordActivityLifecycle("resume")
         ActivityTracker.currentActivity = this
     }
 
     override fun cleanUpFlutterEngine(flutterEngine: FlutterEngine) {
+        recordActivityLifecycle("engine_cleanup")
         super.cleanUpFlutterEngine(flutterEngine)
         // The trailer player's ExoPlayer listeners keep emitting onto this
         // engine's messenger after detach; invokeMethod on a detached engine
@@ -1063,6 +1084,7 @@ class MainActivity : FlutterActivity() {
     }
 
     override fun onDestroy() {
+        recordActivityLifecycle("destroy")
         tvTrailerPlayer?.releaseAll()
         tvTrailerPlayer = null
         // A live recognizer holds the microphone; never let one outlive the
@@ -1084,7 +1106,18 @@ class MainActivity : FlutterActivity() {
         super.onDestroy()
     }
 
+    override fun onStop() {
+        recordActivityLifecycle("stop")
+        super.onStop()
+    }
+
+    override fun onTrimMemory(level: Int) {
+        recordActivityLifecycle("trim_memory", "level=$level")
+        super.onTrimMemory(level)
+    }
+
     override fun onPause() {
+        recordActivityLifecycle("pause")
         // Set this BEFORE super.onPause: the task/recents snapshot belongs to
         // this transition, while Flutter's lock-on-resume callback happens far
         // too late (after the app becomes active again).
@@ -1256,6 +1289,8 @@ class MainActivity : FlutterActivity() {
     }
 
 	override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
+        diagnosticEngineId = System.identityHashCode(flutterEngine)
+        recordActivityLifecycle("engine_configure")
 		super.configureFlutterEngine(flutterEngine)
 		com.debrify.app.security.DeviceSecretCipherPlugin.register(flutterEngine)
 		MethodChannel(
@@ -1342,10 +1377,70 @@ class MainActivity : FlutterActivity() {
 		}
 		MethodChannel(
 			flutterEngine.dartExecutor.binaryMessenger,
+			TV_PLAYBACK_RECOVERY_CHANNEL,
+		).setMethodCallHandler { call, result ->
+			when (call.method) {
+				"allocatePlaybackSession" -> result.success(
+					com.debrify.app.tv.TvPlaybackRecoveryStore.allocateSessionId(filesDir) { error ->
+						DiagnosticFileLog.recordError(
+							source = "tv_playback_recovery",
+							event = "session_allocation_read_failed",
+							throwable = error,
+						)
+					},
+				)
+				"claimPlaybackReturnSession" -> {
+					val profileId = call.argument<String>("profileId")
+					val generation = call.argument<Number>("dataGeneration")?.toInt() ?: 0
+					result.success(if (profileId.isNullOrBlank() || generation <= 0) null else
+						com.debrify.app.tv.PlaybackReturnHandoff.consumeSession(profileId, generation))
+				}
+				"claimPlaybackReturn" -> {
+					val profileId = call.argument<String>("profileId")
+					val generation = call.argument<Number>("dataGeneration")?.toInt() ?: 0
+					val claimed = if (profileId.isNullOrBlank() || generation <= 0) {
+						false
+					} else {
+						com.debrify.app.tv.PlaybackReturnHandoff.consume(profileId, generation)
+					}
+					result.success(claimed)
+				}
+				"readCheckpoint" -> result.success(
+					com.debrify.app.tv.TvPlaybackRecoveryStore.read(filesDir),
+				)
+				"ackCheckpoint" -> {
+					val sessionId = call.argument<Number>("sessionId")?.toInt() ?: 0
+					val sequence = call.argument<Number>("sequence")?.toLong() ?: 0L
+					result.success(
+						com.debrify.app.tv.TvPlaybackRecoveryStore.acknowledge(
+							filesDir,
+							sessionId,
+							sequence,
+						),
+					)
+				}
+				"discardCheckpoint" -> result.success(
+					com.debrify.app.tv.TvPlaybackRecoveryStore.discard(
+						filesDir, call.argument<String>("encoded").orEmpty(),
+					),
+				)
+				"cancelPlaybackReturn" -> {
+					val sessionId = call.argument<Number>("sessionId")?.toInt() ?: 0
+					com.debrify.app.tv.PlaybackReturnHandoff.cancel(sessionId)
+					result.success(true)
+				}
+				else -> result.notImplemented()
+			}
+		}
+		MethodChannel(
+			flutterEngine.dartExecutor.binaryMessenger,
 			NATIVE_DIAGNOSTICS_CHANNEL,
 		).setMethodCallHandler { call, result ->
 			when (call.method) {
-				"flush" -> DiagnosticFileLog.flush { result.success(null) }
+				"flush" -> DiagnosticFileLog.flush { flushed ->
+                    if (flushed) result.success(null)
+                    else result.error("diagnostic_busy", "Diagnostic queue is full", null)
+                }
 				"clearForDeviceReset" -> DiagnosticFileLog.clearForDeviceReset { cleared ->
 					if (cleared) {
 						result.success(null)
@@ -2802,6 +2897,12 @@ class MainActivity : FlutterActivity() {
                 "startIndex=${(payload["startIndex"] as? Number)?.toInt() ?: -1}",
         )
 
+        val playbackSessionId =
+            (payload["sourcePersistenceSessionId"] as? Number)?.toInt() ?: 0
+        val ownerProfileId = payload["playbackOwnerProfileId"] as? String
+        val ownerGeneration =
+            (payload["playbackOwnerDataGeneration"] as? Number)?.toInt() ?: 0
+
         try {
             val payloadJson = mapToJson(payload).toString()
 
@@ -2822,7 +2923,14 @@ class MainActivity : FlutterActivity() {
                     "com.debrify.app.tv.AndroidTvTorrentPlayerActivity",
                 )
                 putExtra("payloadPath", tempFile.absolutePath)
+                putExtra("playbackSessionId", playbackSessionId)
             }
+            com.debrify.app.tv.TvPlaybackRecoveryStore.begin(filesDir, playbackSessionId)
+            com.debrify.app.tv.PlaybackReturnHandoff.begin(
+                playbackSessionId,
+                ownerProfileId.orEmpty(),
+                ownerGeneration,
+            )
             startActivity(intent)
             DiagnosticFileLog.record(
                 source = "android_tv_launcher",
@@ -2830,6 +2938,7 @@ class MainActivity : FlutterActivity() {
             )
             result.success(true)
         } catch (e: Exception) {
+            com.debrify.app.tv.PlaybackReturnHandoff.cancel(playbackSessionId)
             DiagnosticFileLog.recordError(
                 source = "android_tv_launcher",
                 event = "torrent_launch_failed",

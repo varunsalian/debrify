@@ -1,4 +1,7 @@
 import '../../models/sidebar_configuration.dart';
+import 'dart:convert';
+import 'package:collection/collection.dart';
+import '../../models/metadata_preferences.dart';
 
 /// The complete preference schema permitted in an unencrypted, shareable
 /// profile package.
@@ -97,7 +100,12 @@ abstract final class SanitizedProfilePreferences {
             const <String>{'classic', 'compass'}.contains(value);
       case 'iptv_style':
         return value is String &&
-            const <String>{'command', 'edition', 'console'}.contains(value);
+            const <String>{
+              'command',
+              'edition',
+              'console',
+              'spotlight',
+            }.contains(value);
       case 'player_dock_style':
         return value is String && _playerDockStyles.contains(value);
       case 'player_dock_palette':
@@ -146,6 +154,18 @@ abstract final class SanitizedProfilePreferences {
       case 'stremio_metadata_provider_v1':
         return value is String &&
             (value == 'automatic' || RegExp(r'^[a-f0-9]{64}$').hasMatch(value));
+      case 'metadata_providers_v1':
+        if (value is! String || value.length > 8192) return false;
+        try {
+          final decoded = jsonDecode(value);
+          return decoded is Map<String, dynamic> &&
+              const DeepCollectionEquality().equals(
+                decoded,
+                MetadataPreferences.fromJson(decoded).toJson(),
+              );
+        } on FormatException {
+          return false;
+        }
     }
     return false;
   }
@@ -160,6 +180,7 @@ abstract final class SanitizedProfilePreferences {
       value == 'cw' ||
       value == 'trakt' ||
       value == 'simkl' ||
+      value == 'tmdb' ||
       value == 'mdblist' ||
       (value.startsWith('a:') && value.length > 2 && value.length <= 514);
 

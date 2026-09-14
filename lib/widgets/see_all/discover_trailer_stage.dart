@@ -3,6 +3,7 @@ import 'dart:ui' show lerpDouble;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../models/stremio_addon.dart';
@@ -157,16 +158,29 @@ class _DiscoverTrailerStageState extends State<DiscoverTrailerStage>
 
   void _publishTakeover() => widget.takeover?.value = _promoteT;
 
+  bool _deferDuringBuild(VoidCallback callback) {
+    if (SchedulerBinding.instance.schedulerPhase !=
+        SchedulerPhase.persistentCallbacks) {
+      return false;
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) callback();
+    });
+    WidgetsBinding.instance.ensureVisualUpdate();
+    return true;
+  }
+
   /// Adopt a non-null meta (new title, or a late enrichment for the current one).
   /// Never clears here — the overlay must outlive the shared notifier's null
   /// during a graceful collapse; [_heldMeta] drops only when [_held] does.
   void _onMetaChanged() {
+    if (_deferDuringBuild(_onMetaChanged)) return;
     final m = widget.meta.value;
     if (m != null && mounted) setState(() => _heldMeta = m);
   }
 
   void _onTrailerChanged() {
-    if (!mounted) return;
+    if (!mounted || _deferDuringBuild(_onTrailerChanged)) return;
     final next = widget.trailer.value;
     if (next != null) {
       _collapsing = false;

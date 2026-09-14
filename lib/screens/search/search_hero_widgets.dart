@@ -82,7 +82,25 @@ class _HeroSpotlight extends StatefulWidget {
 }
 
 class _HeroSpotlightState extends State<_HeroSpotlight>
-    with TickerProviderStateMixin {
+    with TickerProviderStateMixin, MetadataPresentationMixin<_HeroSpotlight> {
+  @override
+  StremioMeta? _hostBaseline;
+  StremioMeta get originalMetadata => _hostBaseline ??= _buildHostBaseline();
+
+  StremioMeta _buildHostBaseline() => mergeHeroMetadata(
+    widget.item,
+    StremioMeta(
+      id: widget.item.id,
+      type: widget.item.type,
+      name: widget.item.name,
+      background: widget.background,
+      description: widget.description,
+      runtime: widget.runtime,
+      logo: widget.logo,
+      imdbRating: widget.rating,
+    ),
+  );
+
   // Slow, endless Ken Burns breathe on the backdrop — a pure bottom-anchored
   // zoom so a static poster reads as cinematic. It's a Transform on an
   // already-rasterised image (one saveLayer under the existing ShaderMask
@@ -166,6 +184,14 @@ class _HeroSpotlightState extends State<_HeroSpotlight>
 
   @override
   void didUpdateWidget(_HeroSpotlight old) {
+    if (!identical(old.item, widget.item) ||
+        old.background != widget.background ||
+        old.description != widget.description ||
+        old.runtime != widget.runtime ||
+        old.logo != widget.logo ||
+        old.rating != widget.rating) {
+      _hostBaseline = null;
+    }
     super.didUpdateWidget(old);
     if (!identical(old.trailerShowing, widget.trailerShowing)) {
       old.trailerShowing?.removeListener(_onHeroCoverChanged);
@@ -369,17 +395,19 @@ class _HeroSpotlightState extends State<_HeroSpotlight>
   @override
   Widget build(BuildContext context) {
     final app = AppThemeScope.of(context);
-    final item = widget.item;
-    final background = widget.background;
-    final description = widget.description;
+    final item = presentedMetadata!;
+    final background = usesMetadataProvider(MetadataCategory.backgrounds) ? item.background : widget.background;
+    final description = usesMetadataProvider(MetadataCategory.information) ? item.description : widget.description;
     final isTelevision = widget.isTelevision;
     final height = widget.height;
     final rating = widget.rating;
     final compact = widget.compact;
     final scheme = Theme.of(context).colorScheme;
     final hasBackgroundArtwork = background != null && background.isNotEmpty;
-    final bg = hasBackgroundArtwork ? background : (item.poster ?? '');
-    final runtime = widget.runtime;
+    final allowPosterFallback = !usesMetadataProvider(MetadataCategory.backgrounds) ||
+        metadataPreferences.fallback;
+    final bg = hasBackgroundArtwork ? background : (allowPosterFallback ? item.poster ?? '' : '');
+    final runtime = usesMetadataProvider(MetadataCategory.information) ? item.runtime : widget.runtime;
     // Chip-grammar meta line (type · year · runtime · genres, then the IMDb
     // mark) — replaces the old bordered type pill + star line for the flatter
     // OTT look. Facts-first order on purpose: the line ellipsizes from the
@@ -864,8 +892,8 @@ class _HeroSpotlightState extends State<_HeroSpotlight>
   /// The hero's title — see [_HeroTitleArt] for the image-first grammar.
   Widget _buildTitleArt() {
     return _HeroTitleArt(
-      title: widget.item.name,
-      logoUrl: widget.logo,
+      title: presentedMetadata!.name,
+      logoUrl: usesMetadataProvider(MetadataCategory.backgrounds) ? presentedMetadata!.logo : widget.logo,
       compact: widget.compact,
       isTelevision: widget.isTelevision,
     );

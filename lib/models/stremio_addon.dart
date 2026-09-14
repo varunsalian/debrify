@@ -457,9 +457,11 @@ class CatalogSection {
   /// True while a page fetch is in flight (re-entrancy guard).
   bool loadingMore;
 
-  /// True once the addon stops returning new items (empty or all-duplicate
-  /// page), so we stop asking.
+  /// True once the catalog has ended, so we stop asking.
   bool exhausted;
+
+  /// A bounded fetch found no visible titles; the cursor can be resumed.
+  bool pagingPaused;
 
   /// The search query that produced these items, when this section is a
   /// per-catalog SEARCH result (Search tab) rather than a browsed catalog
@@ -476,6 +478,7 @@ class CatalogSection {
     int? nextSkip,
     this.loadingMore = false,
     this.exhausted = false,
+    this.pagingPaused = false,
     this.query,
   }) : nextSkip = nextSkip ?? items.length;
 
@@ -525,6 +528,10 @@ class StremioAddon {
   /// Unique identifier for this addon (derived from manifest id)
   final String id;
 
+  /// Provider identity used by portable collection catalog references.
+  /// Separate from the profile-local configuration identity in [id].
+  final String? manifestId;
+
   /// Human-readable name from manifest
   final String name;
 
@@ -571,6 +578,7 @@ class StremioAddon {
 
   StremioAddon({
     required this.id,
+    this.manifestId,
     required this.name,
     required this.manifestUrl,
     required this.baseUrl,
@@ -769,6 +777,7 @@ class StremioAddon {
 
     return StremioAddon(
       id: id,
+      manifestId: id,
       name: name,
       manifestUrl: manifestUrl,
       baseUrl: baseUrl,
@@ -797,6 +806,7 @@ class StremioAddon {
 
     return StremioAddon(
       id: json['id'] as String,
+      manifestId: json['manifest_id'] as String?,
       name: json['name'] as String,
       manifestUrl: json['manifest_url'] as String,
       baseUrl: json['base_url'] as String,
@@ -826,8 +836,10 @@ class StremioAddon {
   Map<String, dynamic> toJson() {
     return {
       'id': id,
+      if (manifestId != null) 'manifest_id': manifestId,
       'name': name,
       'manifest_url': manifestUrl,
+      'subtitle_priority_id': portableConfigurationKey,
       'base_url': baseUrl,
       if (connectionResourceId != null)
         '_connectionResourceId': connectionResourceId,
@@ -855,6 +867,7 @@ class StremioAddon {
   /// Create a copy with updated fields
   StremioAddon copyWith({
     String? id,
+    String? manifestId,
     String? name,
     String? manifestUrl,
     String? baseUrl,
@@ -874,6 +887,7 @@ class StremioAddon {
   }) {
     return StremioAddon(
       id: id ?? this.id,
+      manifestId: manifestId ?? this.manifestId,
       name: name ?? this.name,
       manifestUrl: manifestUrl ?? this.manifestUrl,
       baseUrl: baseUrl ?? this.baseUrl,
@@ -951,6 +965,7 @@ class StremioStream {
   /// contains the addon's configured URL or credentials.
   final String? addonId;
   final String? addonKey;
+  final String? videoId;
 
   /// Stable-ish stream profile plus its original response position. The
   /// profile deliberately excludes the URL (often signed/expiring) and
@@ -970,6 +985,7 @@ class StremioStream {
     required this.source,
     this.addonId,
     this.addonKey,
+    this.videoId,
     this.streamKey,
     this.streamIndex = 0,
   });
@@ -1051,6 +1067,7 @@ class StremioStream {
     String? addonId,
     String? addonKey,
     int streamIndex = 0,
+    String? videoId,
   }) {
     String? infoHash = json['infoHash'] as String?;
     final behaviorHints = json['behaviorHints'] as Map<String, dynamic>?;
@@ -1090,6 +1107,7 @@ class StremioStream {
       source: source,
       addonId: addonId,
       addonKey: addonKey,
+      videoId: videoId,
       streamKey: _directStreamProfileKey(json),
       streamIndex: streamIndex,
     );

@@ -23,6 +23,13 @@ class RowTagPill extends StatelessWidget {
 
   const RowTagPill(this.text, {super.key, this.fontSize = 10});
 
+  static TextStyle textStyle(double fontSize) => TextStyle(
+    fontSize: fontSize,
+    fontWeight: FontWeight.w700,
+    letterSpacing: fontSize * 0.1,
+    height: 1.0,
+  );
+
   @override
   Widget build(BuildContext context) {
     final tx = AppThemeScope.of(context).core.tx;
@@ -39,13 +46,7 @@ class RowTagPill extends StatelessWidget {
         text.toUpperCase(),
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
-        style: TextStyle(
-          fontSize: fontSize,
-          fontWeight: FontWeight.w700,
-          letterSpacing: fontSize * 0.1,
-          height: 1.0,
-          color: tx.withValues(alpha: 0.55),
-        ),
+        style: textStyle(fontSize).copyWith(color: tx.withValues(alpha: 0.55)),
       ),
     );
   }

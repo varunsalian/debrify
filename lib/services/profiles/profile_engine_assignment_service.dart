@@ -14,6 +14,7 @@ import 'profile_authorization.dart';
 import 'profile_data_generation.dart';
 import 'profile_registry.dart';
 import 'profile_runtime.dart';
+import 'profile_preferences.dart';
 import 'profile_scope.dart';
 
 class ProfileEngineAssignment {
@@ -97,6 +98,19 @@ class ProfileEngineAssignmentService {
     required ProfileAuthorizationContext actor,
     required String targetProfileId,
     required Set<String> selectedEngineIds,
+  }) => ProfilePreferences.synchronizeExternalMutation(
+    () => _apply(
+      actor: actor,
+      targetProfileId: targetProfileId,
+      selectedEngineIds: selectedEngineIds,
+    ),
+    marksMutation: true,
+  );
+
+  Future<void> _apply({
+    required ProfileAuthorizationContext actor,
+    required String targetProfileId,
+    required Set<String> selectedEngineIds,
   }) async {
     await _validateManagingAdmin(actor);
     final managerScope = ProfileRuntime.capture();
@@ -130,7 +144,14 @@ class ProfileEngineAssignmentService {
     if (targetProfile.lifecycle == UserProfileLifecycle.staging) {
       // The profile is not picker-visible until its caller completes setup.
       // A failed setup deletes the whole staged profile and its generation.
-      await _writeSnapshot(_scopeFor(targetProfile), desired);
+      await _writeSnapshot(
+        _scopeFor(targetProfile),
+        desired,
+        {
+          ...target.deletedIds,
+          ...target.engines.keys,
+        }.difference(desired.keys.toSet()),
+      );
       await _validateManagingAdmin(actor);
       await _assertTargetUnchanged(targetProfile);
       return;
@@ -150,7 +171,14 @@ class ProfileEngineAssignmentService {
         dataGeneration: staged.generation,
         sessionEpoch: 0,
       );
-      await _writeSnapshot(stagedScope, desired);
+      await _writeSnapshot(
+        stagedScope,
+        desired,
+        {
+          ...target.deletedIds,
+          ...target.engines.keys,
+        }.difference(desired.keys.toSet()),
+      );
       staged = await ProfileDataGenerationManager(registry).finalize(staged);
 
       await _validateManagingAdmin(actor);
@@ -162,6 +190,10 @@ class ProfileEngineAssignmentService {
         operationId: operationId,
       );
       published = true;
+      ProfilePreferences.notifyWebDavSyncLocalChange(
+        targetProfile.id,
+        'engine_definitions_changed',
+      );
       try {
         await registry.markRestoreCleaned(operationId);
       } catch (error) {
@@ -283,12 +315,16 @@ class ProfileEngineAssignmentService {
         throw StateError('Torrent-engine definition changed while being read');
       }
     }
-    return _EngineSnapshot(engines);
+    return _EngineSnapshot(
+      engines,
+      Set<String>.from(decoded['deletedEngineIds'] as List? ?? []),
+    );
   }
 
   static Future<void> _writeSnapshot(
     ProfileScope scope,
     Map<String, _StoredEngine> engines,
+    Set<String> deletedIds,
   ) async {
     final root = await AppStorage.documents();
     final directory = Directory(
@@ -316,6 +352,7 @@ class ProfileEngineAssignmentService {
         'version': '1.0',
         'updatedAt': DateTime.now().toUtc().toIso8601String(),
         'engines': metadata,
+        'deletedEngineIds': deletedIds.toList()..sort(),
       }),
       flush: true,
     );
@@ -342,10 +379,13 @@ class ProfileEngineAssignmentService {
 }
 
 class _EngineSnapshot {
-  const _EngineSnapshot(this.engines);
-  const _EngineSnapshot.empty() : engines = const <String, _StoredEngine>{};
+  const _EngineSnapshot(this.engines, this.deletedIds);
+  const _EngineSnapshot.empty()
+    : engines = const <String, _StoredEngine>{},
+      deletedIds = const {};
 
   final Map<String, _StoredEngine> engines;
+  final Set<String> deletedIds;
 }
 
 class _StoredEngine {

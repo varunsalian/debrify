@@ -8,7 +8,9 @@ import 'package:debrify/services/profiles/profile_registry.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/profiles/profile_scope.dart';
 import 'package:debrify/utils/app_storage.dart';
+import 'package:debrify/utils/platform_util.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -89,6 +91,266 @@ void main() {
     await tester.tap(find.text(label));
     await pumpFrames(tester);
   }
+
+  Future<void> openFlow(
+    WidgetTester tester, {
+    required ValueChanged<bool> onClosed,
+  }) async {
+    await tester.binding.setSurfaceSize(const Size(1280, 720));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Builder(
+            builder: (context) => TextButton(
+              onPressed: () async {
+                onClosed(await ProfileSetupFlow.show(context));
+              },
+              child: const Text('Add profile'),
+            ),
+          ),
+        ),
+      ),
+    );
+    await nextByLabel(tester, 'Add profile');
+    expect(find.byType(ProfileSetupFlow), findsOneWidget);
+  }
+
+  testWidgets('Cancel exits an unnamed profile after validation fails', (
+    tester,
+  ) async {
+    bool? result;
+    await openFlow(tester, onClosed: (value) => result = value);
+    await nextByLabel(tester, 'Next');
+    expect(find.text('Give this profile a name first.'), findsOneWidget);
+
+    await nextByLabel(tester, 'Cancel');
+
+    expect(find.byType(ProfileSetupFlow), findsNothing);
+    expect(find.text('Add profile'), findsOneWidget);
+    expect(result, isFalse);
+    expect(await io(tester, registry.listProfiles), hasLength(1));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Cancel exits Review without creating the draft profile', (
+    tester,
+  ) async {
+    bool? result;
+    await openFlow(tester, onClosed: (value) => result = value);
+    await tester.enterText(find.byType(TextField).first, 'Maya');
+    for (var step = 0; step < 4; step++) {
+      await nextByLabel(tester, 'Next');
+    }
+    await nextByLabel(tester, 'Review');
+    expect(find.text("Maya's corner of Debrify"), findsOneWidget);
+
+    await nextByLabel(tester, 'Cancel');
+
+    expect(find.byType(ProfileSetupFlow), findsNothing);
+    expect(result, isFalse);
+    expect(await io(tester, registry.listProfiles), hasLength(1));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Back and Escape retrace steps and preserve the entered name', (
+    tester,
+  ) async {
+    bool? result;
+    await openFlow(tester, onClosed: (value) => result = value);
+    await tester.enterText(find.byType(TextField).first, 'Maya');
+    await nextByLabel(tester, 'Next');
+    await nextByLabel(tester, 'Next');
+    expect(find.text('How can Maya search?'), findsOneWidget);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await pumpFrames(tester);
+    expect(find.text('Who is this for?'), findsOneWidget);
+    expect(result, isNull);
+
+    await nextByLabel(tester, 'Back');
+    expect(find.text('Name them.'), findsOneWidget);
+    expect(
+      tester.widget<TextField>(find.byType(TextField).first).controller!.text,
+      'Maya',
+    );
+
+    // Escape must also work while the desktop name field owns focus.
+    await tester.tap(find.byType(TextField).first);
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await pumpFrames(tester);
+    expect(find.byType(ProfileSetupFlow), findsNothing);
+    expect(result, isFalse);
+    expect(await io(tester, registry.listProfiles), hasLength(1));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Escape exits before a desktop control has been focused', (
+    tester,
+  ) async {
+    bool? result;
+    await openFlow(tester, onClosed: (value) => result = value);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await pumpFrames(tester);
+
+    expect(find.byType(ProfileSetupFlow), findsNothing);
+    expect(result, isFalse);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('arrow navigation reaches Cancel and returns to the content', (
+    tester,
+  ) async {
+    bool? result;
+    await openFlow(tester, onClosed: (value) => result = value);
+    final nextNode = Focus.of(tester.element(find.text('Next')));
+    nextNode.requestFocus();
+    await tester.pump();
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+    await tester.pump();
+    final cancelNode = tester
+        .widget<TextButton>(find.byType(TextButton).first)
+        .focusNode!;
+    expect(cancelNode.hasFocus, isTrue);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pump();
+    expect(nextNode.hasFocus, isTrue);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await pumpFrames(tester);
+    expect(find.byType(ProfileSetupFlow), findsNothing);
+    expect(result, isFalse);
+    expect(tester.takeException(), isNull);
+  });
+
+  for (final key in [LogicalKeyboardKey.enter, LogicalKeyboardKey.select]) {
+    testWidgets('holding ${key.keyLabel} on Back does not cancel the draft', (
+      tester,
+    ) async {
+      bool? result;
+      await openFlow(tester, onClosed: (value) => result = value);
+      await tester.enterText(find.byType(TextField).first, 'Maya');
+      await nextByLabel(tester, 'Next');
+      final backNode = tester
+          .widget<TextButton>(find.widgetWithText(TextButton, 'Back'))
+          .focusNode!;
+      backNode.requestFocus();
+      await tester.pump();
+
+      await tester.sendKeyDownEvent(key);
+      await tester.pump();
+      expect(find.text('Name them.'), findsOneWidget);
+      expect(backNode.hasFocus, isTrue);
+      await tester.sendKeyRepeatEvent(key);
+      await tester.pump();
+      await tester.sendKeyUpEvent(key);
+      await pumpFrames(tester);
+
+      expect(find.byType(ProfileSetupFlow), findsOneWidget);
+      expect(result, isNull);
+      expect(
+        tester.widget<TextField>(find.byType(TextField).first).controller!.text,
+        'Maya',
+      );
+      expect(await io(tester, registry.listProfiles), hasLength(1));
+      expect(tester.takeException(), isNull);
+    });
+  }
+
+  testWidgets('TV arrows reach intermediate Cancel and return to the form', (
+    tester,
+  ) async {
+    bool? result;
+    await openFlow(tester, onClosed: (value) => result = value);
+    await tester.enterText(find.byType(TextField).first, 'Maya');
+    PlatformUtil.debugSetAndroidTvCached(true);
+    addTearDown(() => PlatformUtil.debugSetAndroidTvCached(null));
+    await nextByLabel(tester, 'Next');
+    final roleNode = Focus.of(tester.element(find.text('Member')));
+    roleNode.requestFocus();
+    await tester.pump();
+
+    final backNode = tester
+        .widget<TextButton>(find.widgetWithText(TextButton, 'Back'))
+        .focusNode!;
+    final cancelNode = Focus.of(tester.element(find.text('Cancel')));
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+    await tester.pump();
+    expect(backNode.hasFocus, isTrue);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pump();
+    expect(cancelNode.hasFocus, isTrue);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+    await tester.pump();
+    expect(backNode.hasFocus, isTrue);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pump();
+    expect(roleNode.hasFocus, isTrue);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    await pumpFrames(tester);
+    expect(find.byType(ProfileSetupFlow), findsNothing);
+    expect(result, isFalse);
+    expect(await io(tester, registry.listProfiles), hasLength(1));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('small phone can correct an empty name with the keyboard open', (
+    tester,
+  ) async {
+    const size = Size(320, 568);
+    await tester.binding.setSurfaceSize(size);
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    Widget phone({double keyboardHeight = 0}) => MaterialApp(
+      home: MediaQuery(
+        data: MediaQueryData(
+          size: size,
+          padding: const EdgeInsets.only(top: 24),
+          viewInsets: EdgeInsets.only(bottom: keyboardHeight),
+        ),
+        child: ProfileSetupFlow(
+          registry: registry,
+          authorization: authorization,
+        ),
+      ),
+    );
+    await tester.pumpWidget(phone());
+    final nameField = find.byType(TextField).first;
+    await tester.tap(nameField);
+    await tester.pumpWidget(phone(keyboardHeight: 253));
+    await nextByLabel(tester, 'Next');
+    expect(find.text('Give this profile a name first.'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+
+    final scrollView = find.byType(SingleChildScrollView);
+    expect(
+      tester.getSize(scrollView).height,
+      greaterThanOrEqualTo(tester.getSize(nameField).height),
+    );
+    await tester.ensureVisible(nameField);
+    await tester.pump();
+    expect(nameField.hitTestable(), findsOneWidget);
+    expect(
+      tester.getRect(scrollView).contains(tester.getCenter(nameField)),
+      isTrue,
+    );
+    await tester.enterText(nameField, 'Maya');
+    await nextByLabel(tester, 'Next');
+    expect(find.text('Who is this for?'), findsOneWidget);
+    expect(find.text('Give this profile a name first.'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets('the Kid walk-through writes the preset policy', (tester) async {
     await tester.binding.setSurfaceSize(const Size(420, 900));

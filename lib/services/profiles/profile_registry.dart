@@ -1,3 +1,4 @@
+import 'profile_session_unavailable.dart';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
@@ -7,12 +8,16 @@ import 'package:flutter/foundation.dart' show debugPrint, visibleForTesting;
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite/sqflite.dart';
+import 'package:synchronized/synchronized.dart';
 
 import '../../models/profiles/connection_resource.dart';
 import '../../models/profiles/profile_policy.dart';
+import '../../models/profiles/profile_avatar.dart';
 import '../../models/profiles/user_profile.dart';
 import '../../utils/app_storage.dart';
+import '../webdav_sync/webdav_sync_tombstones.dart';
 import 'profile_lock_controller.dart';
+import 'profile_preferences.dart';
 import 'profile_runtime.dart';
 import 'profile_scope.dart';
 import 'tvos_profile_recovery_store.dart';
@@ -21,9 +26,10 @@ import 'tvos_recovery_limits.dart';
 class ProfileRegistry {
   ProfileRegistry._(this._db);
 
-  static const int schemaVersion = 6;
+  static const int schemaVersion = 8;
   final Database _db;
   Future<void> _recoveryCheckpoint = Future<void>.value();
+  static final Lock _tombstoneOutboxDrainLock = Lock();
   Future<void> Function()? authorityWillChangeCallback;
   Future<void> Function()? authorityChangedCallback;
 
@@ -38,6 +44,7 @@ class ProfileRegistry {
     'profile_data_generations',
     'profile_restore_journal',
     'profile_restore_resources',
+    'webdav_sync_tombstone_outbox',
     // After their parents: the snapshot import replays inserts in list order
     // with foreign keys on.
     'resource_secret_chunks',
@@ -135,6 +142,8 @@ class ProfileRegistry {
         if (oldVersion < 6) {
           await _addRestoreResourceSettingsColumns(database);
         }
+        if (oldVersion < 7) await _addRegistrySyncColumns(database);
+        if (oldVersion < 8) await _createWebDavSyncTombstoneOutbox(database);
       },
     );
     return ProfileRegistry._(db);
@@ -182,6 +191,40 @@ class ProfileRegistry {
         'ADD COLUMN resource_enabled INTEGER NOT NULL DEFAULT 1',
       );
     }
+  }
+
+  /// v7: record-level WebDAV sync provenance and credential receiver state.
+  /// Plain ADD COLUMN keeps this compatible with the Android SQLite 3.9
+  /// floor. Grants are the only rows with a defensible historical stamp.
+  static Future<void> _addRegistrySyncColumns(DatabaseExecutor db) async {
+    await db.execute(
+      'ALTER TABLE profile_resource_grants '
+      'ADD COLUMN updated_at_ms INTEGER NOT NULL DEFAULT 0',
+    );
+    await db.execute(
+      'UPDATE profile_resource_grants '
+      'SET updated_at_ms = created_at_ms WHERE updated_at_ms = 0',
+    );
+    await db.execute(
+      'ALTER TABLE profile_resource_settings '
+      'ADD COLUMN updated_at_ms INTEGER NOT NULL DEFAULT 0',
+    );
+    await db.execute(
+      'ALTER TABLE connection_resources '
+      'ADD COLUMN secret_pending INTEGER NOT NULL DEFAULT 0',
+    );
+  }
+
+  /// v8: committed registry deletions wait here until their file-backed
+  /// WebDAV tombstones are durable. CREATE TABLE keeps the SQLite 3.9 floor.
+  static Future<void> _createWebDavSyncTombstoneOutbox(
+    DatabaseExecutor db,
+  ) async {
+    await db.execute(
+      _schemaStatements.firstWhere(
+        (statement) => statement.contains('webdav_sync_tombstone_outbox'),
+      ),
+    );
   }
 
   /// Test seam: lets the migration suite build an older-schema database (by
@@ -242,6 +285,7 @@ class ProfileRegistry {
       public_config_json TEXT NOT NULL,
       sealed_secret_payload TEXT,
       secret_payload_version INTEGER,
+      secret_pending INTEGER NOT NULL DEFAULT 0,
       authorization_revision INTEGER NOT NULL DEFAULT 1,
       created_at_ms INTEGER NOT NULL,
       updated_at_ms INTEGER NOT NULL,
@@ -255,6 +299,7 @@ class ProfileRegistry {
       granted_by_profile_id TEXT,
       grant_origin_json TEXT NOT NULL,
       created_at_ms INTEGER NOT NULL,
+      updated_at_ms INTEGER NOT NULL DEFAULT 0,
       PRIMARY KEY(profile_id, resource_id),
       FOREIGN KEY(profile_id) REFERENCES user_profiles(id) ON DELETE CASCADE,
       FOREIGN KEY(resource_id) REFERENCES connection_resources(id) ON DELETE CASCADE,
@@ -265,6 +310,7 @@ class ProfileRegistry {
       resource_id TEXT NOT NULL,
       enabled INTEGER NOT NULL DEFAULT 1,
       settings_json TEXT NOT NULL,
+      updated_at_ms INTEGER NOT NULL DEFAULT 0,
       PRIMARY KEY(profile_id, resource_id),
       FOREIGN KEY(profile_id, resource_id)
         REFERENCES profile_resource_grants(profile_id, resource_id) ON DELETE CASCADE
@@ -284,6 +330,13 @@ class ProfileRegistry {
       stage TEXT NOT NULL,
       payload_json TEXT NOT NULL,
       updated_at_ms INTEGER NOT NULL
+    )''',
+    '''CREATE TABLE IF NOT EXISTS webdav_sync_tombstone_outbox (
+      id INTEGER PRIMARY KEY,
+      namespace_id TEXT NOT NULL,
+      origin_device_id TEXT NOT NULL,
+      records_json TEXT NOT NULL,
+      created_at_ms INTEGER NOT NULL
     )''',
     '''CREATE TABLE profile_data_generations (
       profile_id TEXT NOT NULL,
@@ -594,6 +647,59 @@ class ProfileRegistry {
 
   Future<void> close() => _db.close();
 
+  /// Drains only rows whose registry deletion transaction has committed.
+  /// Recording is idempotent; a crash after the file write but before the row
+  /// delete safely repeats the same tombstones on the next drain.
+  Future<bool> drainWebDavSyncTombstoneOutbox() =>
+      _tombstoneOutboxDrainLock.synchronized(() async {
+        final rows = await _db.query(
+          'webdav_sync_tombstone_outbox',
+          orderBy: 'id',
+        );
+        for (final row in rows) {
+          final decoded = jsonDecode(row['records_json']! as String);
+          if (decoded is! List) {
+            throw const FormatException(
+              'Invalid registry tombstone outbox row',
+            );
+          }
+          final records = decoded
+              .map(WebDavSyncRegistryRecordId.fromJson)
+              .toSet();
+          await WebDavSyncTombstoneRecorder.drainRegistryOutboxBatch(
+            target: WebDavSyncRegistryTombstoneOutboxTarget(
+              namespaceId: row['namespace_id']! as String,
+              deviceId: row['origin_device_id']! as String,
+            ),
+            records: records,
+            timeMs: row['created_at_ms']! as int,
+          );
+          await _db.delete(
+            'webdav_sync_tombstone_outbox',
+            where: 'id = ?',
+            whereArgs: <Object>[row['id']!],
+          );
+        }
+        final remaining = Sqflite.firstIntValue(
+          await _db.rawQuery(
+            'SELECT COUNT(*) FROM webdav_sync_tombstone_outbox',
+          ),
+        );
+        return remaining == 0;
+      });
+
+  Future<void> _finishRegistryDelete() async {
+    try {
+      await drainWebDavSyncTombstoneOutbox();
+    } catch (error) {
+      debugPrint(
+        'WebDAV registry tombstone outbox drain deferred '
+        '(${error.runtimeType})',
+      );
+    }
+    await checkpointTvOsRecovery(webDavSyncRegistryChange: true);
+  }
+
   Future<String> exportRecoverySnapshot() async {
     final tables = <String, Object?>{};
     // One transaction across every table: a secret's marker row and its
@@ -652,11 +758,12 @@ class ProfileRegistry {
       // A table this snapshot's schema had not grown yet is EMPTY, not
       // missing — the v4 snapshot on an updated device predates the chunk
       // tables and must still boot.
-      if (snapshotSchema < 5 &&
-          const <String>{
-            'resource_secret_chunks',
-            'restore_secret_chunks',
-          }.contains(table)) {
+      if ((snapshotSchema < 5 &&
+              const <String>{
+                'resource_secret_chunks',
+                'restore_secret_chunks',
+              }.contains(table)) ||
+          (snapshotSchema < 8 && table == 'webdav_sync_tombstone_outbox')) {
         continue;
       }
       throw FormatException('Recovery snapshot is missing $table');
@@ -853,7 +960,9 @@ class ProfileRegistry {
     caseSensitive: false,
   );
 
-  Future<void> checkpointTvOsRecovery() async {
+  Future<void> checkpointTvOsRecovery({
+    bool webDavSyncRegistryChange = false,
+  }) async {
     if (TvOsProfileRecoveryStore.supported) {
       final prior = _recoveryCheckpoint;
       final checkpoint = () async {
@@ -868,6 +977,16 @@ class ProfileRegistry {
       await checkpoint;
     }
     await authorityChangedCallback?.call();
+    if (webDavSyncRegistryChange) {
+      final localProfileId =
+          ProfileRuntime.isInitialized && ProfileRuntime.isProfileCommitted
+          ? ProfileRuntime.capture().profileId
+          : '';
+      ProfilePreferences.notifyWebDavSyncLocalChange(
+        localProfileId,
+        ProfilePreferences.webDavSyncRegistryLogicalKey,
+      );
+    }
   }
 
   Future<UserProfile> createProfile({
@@ -880,6 +999,10 @@ class ProfileRegistry {
     bool disabled = false,
     bool lockOnResume = false,
     int? inactivityTimeoutMinutes,
+    // Original creation instant carried through backup restore / sync
+    // adoption so the profile list keeps the seed device's order. Ignored
+    // unless plausibly in the past; row bookkeeping still stamps `now`.
+    int? createdAtMs,
     UserProfileLifecycle lifecycle = UserProfileLifecycle.active,
     String? actingProfileId,
     int? actingAuthorizationRevision,
@@ -894,6 +1017,10 @@ class ProfileRegistry {
     }
     await authorityWillChangeCallback?.call();
     final now = DateTime.now().millisecondsSinceEpoch;
+    final effectiveCreatedAt =
+        (createdAtMs != null && createdAtMs > 0 && createdAtMs <= now)
+        ? createdAtMs
+        : now;
     final effectivePolicy = policy ?? ProfilePolicy.defaultsFor(role);
     await _db.transaction((txn) async {
       await _assertManagingActor(
@@ -917,7 +1044,7 @@ class ProfileRegistry {
         'lock_on_resume': lockOnResume ? 1 : 0,
         if (inactivityTimeoutMinutes != null)
           'inactivity_timeout_minutes': inactivityTimeoutMinutes,
-        'created_at_ms': now,
+        'created_at_ms': effectiveCreatedAt,
         'updated_at_ms': now,
         if (disabled) 'disabled_at_ms': now,
       });
@@ -932,7 +1059,7 @@ class ProfileRegistry {
       });
       await _seedDefaultGrantsForProfile(txn, profileId, now);
     });
-    await checkpointTvOsRecovery();
+    await checkpointTvOsRecovery(webDavSyncRegistryChange: true);
     return (await getProfile(profileId))!;
   }
 
@@ -1161,7 +1288,11 @@ class ProfileRegistry {
     await checkpointTvOsRecovery();
   }
 
-  Future<void> commitActivation({required String targetProfileId}) async {
+  Future<void> commitActivation({
+    required String targetProfileId,
+    bool completeOnboarding = false,
+    void Function()? onAuthorityCommitted,
+  }) async {
     final now = DateTime.now().millisecondsSinceEpoch;
     await _db.transaction((txn) async {
       final rows = await txn.query(
@@ -1177,7 +1308,19 @@ class ProfileRegistry {
       if (state is! Map || state['targetProfileId'] != targetProfileId) {
         throw StateError('Activation target does not match journal');
       }
-      await txn.rawUpdate(
+      if (completeOnboarding) {
+        final completed = await txn.update(
+          'user_profiles',
+          <String, Object?>{'profile_setup_complete': 1, 'updated_at_ms': now},
+          where:
+              "id = ? AND disabled_at_ms IS NULL AND lifecycle_state = 'active'",
+          whereArgs: <Object>[targetProfileId],
+        );
+        if (completed != 1) {
+          throw StateError('Activation target is unavailable');
+        }
+      }
+      final activated = await txn.rawUpdate(
         '''UPDATE device_state
            SET active_profile_id = ?,
                activation_revision = activation_revision + 1,
@@ -1186,7 +1329,14 @@ class ProfileRegistry {
            WHERE singleton_id = 1''',
         <Object>[targetProfileId, now],
       );
+      if (activated != 1) {
+        throw StateError('Device state is not initialized');
+      }
     });
+    // SQLite authority is durable at transaction return. Keep this callback
+    // synchronous and fast (publish runtime scope and handoff state) so
+    // recovery checkpoint failures below are classified as post-commit.
+    onAuthorityCommitted?.call();
     await checkpointTvOsRecovery();
   }
 
@@ -1202,8 +1352,14 @@ class ProfileRegistry {
   /// authoritative. Bootstrap discards only the incomplete preparation.
   Future<void> recoverInterruptedActivation() => abortActivation();
 
-  Future<void> deleteProfile(String id) async {
+  Future<void> deleteProfile(
+    String id, {
+    Iterable<WebDavSyncRegistryRecordId> mergedBaselineRecords =
+        const <WebDavSyncRegistryRecordId>[],
+  }) async {
     await authorityWillChangeCallback?.call();
+    final outboxTarget =
+        await WebDavSyncTombstoneRecorder.registryOutboxTarget();
     await _db.transaction((txn) async {
       final activeRows = await txn.rawQuery(
         'SELECT active_profile_id FROM device_state WHERE singleton_id = 1',
@@ -1236,13 +1392,19 @@ class ProfileRegistry {
           row['disabled_at_ms'] == null) {
         await _assertAdminInvariant(txn, excludingProfileId: id);
       }
+      await _recordRegistryDeleteCascade(
+        txn,
+        target: outboxTarget,
+        profileIds: <String>{id},
+        mergedBaselineRecords: mergedBaselineRecords,
+      );
       await txn.delete(
         'user_profiles',
         where: 'id = ?',
         whereArgs: <Object>[id],
       );
     });
-    await checkpointTvOsRecovery();
+    await _finishRegistryDelete();
   }
 
   Future<UserProfile> updateProfile({
@@ -1262,6 +1424,7 @@ class ProfileRegistry {
       throw ArgumentError.value(name, 'name');
     }
     _validateInactivityTimeout(inactivityTimeoutMinutes);
+    var syncFieldsChanged = false;
     await authorityWillChangeCallback?.call();
     await _db.transaction((txn) async {
       await _assertManagingActor(
@@ -1280,6 +1443,22 @@ class ProfileRegistry {
       final current = _decodeProfile(rows.single);
       final nextRole = role ?? current.role;
       final nextPolicy = policy ?? current.policy;
+      final parsedAvatar = ProfileAvatar.tryParse(avatarKey);
+      syncFieldsChanged =
+          (name != null && name.trim() != current.name) ||
+          (avatarKey != null &&
+              avatarKey != current.avatarKey &&
+              parsedAvatar != null &&
+              parsedAvatar.kind != ProfileAvatarKind.image) ||
+          nextRole != current.role ||
+          nextPolicy.encode() != current.policy.encode() ||
+          (lockOnResume != null && lockOnResume != current.lockOnResume) ||
+          (clearInactivityTimeout &&
+              current.inactivityTimeoutMinutes != null) ||
+          (!clearInactivityTimeout &&
+              inactivityTimeoutMinutes != null &&
+              inactivityTimeoutMinutes != current.inactivityTimeoutMinutes);
+
       await txn.update(
         'user_profiles',
         <String, Object?>{
@@ -1300,7 +1479,7 @@ class ProfileRegistry {
       );
       await _assertAdminInvariant(txn);
     });
-    await checkpointTvOsRecovery();
+    await checkpointTvOsRecovery(webDavSyncRegistryChange: syncFieldsChanged);
     return (await getProfile(id))!;
   }
 
@@ -1342,7 +1521,7 @@ class ProfileRegistry {
       );
     });
     if (changed != 1) throw StateError('Staging profile is unavailable');
-    await checkpointTvOsRecovery();
+    await checkpointTvOsRecovery(webDavSyncRegistryChange: true);
     return (await getProfile(id))!;
   }
 
@@ -1378,7 +1557,7 @@ class ProfileRegistry {
       );
     });
     if (changed != 1) throw StateError('Active profile is unavailable');
-    await checkpointTvOsRecovery();
+    await checkpointTvOsRecovery(webDavSyncRegistryChange: true);
     return (await getProfile(profileId))!;
   }
 
@@ -1404,6 +1583,7 @@ class ProfileRegistry {
       );
     }
     var changed = 0;
+    var syncFieldsChanged = false;
     await _db.transaction((txn) async {
       await _assertActiveSessionActor(
         txn,
@@ -1411,6 +1591,19 @@ class ProfileRegistry {
         authorizationRevision: actingAuthorizationRevision,
         sessionEpoch: actingSessionEpoch,
       );
+      final rows = await txn.query(
+        'user_profiles',
+        where: 'id = ?',
+        whereArgs: [profileId],
+      );
+      final current = _decodeProfile(rows.single);
+      final parsedAvatar = ProfileAvatar.tryParse(avatarKey);
+      syncFieldsChanged =
+          trimmedName != current.name ||
+          (avatarKey != current.avatarKey &&
+              (avatarKey == null ||
+                  parsedAvatar != null &&
+                      parsedAvatar.kind != ProfileAvatarKind.image));
       changed = await txn.update(
         'user_profiles',
         <String, Object?>{
@@ -1424,7 +1617,7 @@ class ProfileRegistry {
       );
     });
     if (changed != 1) throw StateError('Active profile is unavailable');
-    await checkpointTvOsRecovery();
+    await checkpointTvOsRecovery(webDavSyncRegistryChange: syncFieldsChanged);
     return (await getProfile(profileId))!;
   }
 
@@ -1462,7 +1655,7 @@ class ProfileRegistry {
       if (changed != 1) throw StateError('Profile does not exist');
       await _assertAdminInvariant(txn);
     });
-    await checkpointTvOsRecovery();
+    await checkpointTvOsRecovery(webDavSyncRegistryChange: true);
   }
 
   Future<void> enableProfile(
@@ -1488,7 +1681,7 @@ class ProfileRegistry {
       );
     });
     if (changed != 1) throw StateError('Disabled profile does not exist');
-    await checkpointTvOsRecovery();
+    await checkpointTvOsRecovery(webDavSyncRegistryChange: true);
   }
 
   Future<ProfileDeletionDependencies> deletionDependencies(String id) async {
@@ -1546,12 +1739,16 @@ class ProfileRegistry {
   /// authorization revisions are bumped so their live sessions revalidate.
   Future<int> revokeGrantsOnOwnedResources({
     required String ownerProfileId,
+    Iterable<WebDavSyncRegistryRecordId> mergedBaselineRecords =
+        const <WebDavSyncRegistryRecordId>[],
     String? actingProfileId,
     int? actingAuthorizationRevision,
     int? actingSessionEpoch,
   }) async {
     await authorityWillChangeCallback?.call();
     var revoked = 0;
+    final outboxTarget =
+        await WebDavSyncTombstoneRecorder.registryOutboxTarget();
     await _db.transaction((txn) async {
       await _assertManagingActor(
         txn,
@@ -1564,6 +1761,12 @@ class ProfileRegistry {
            INNER JOIN connection_resources r ON r.id = g.resource_id
            WHERE r.owner_profile_id = ? AND g.profile_id != ?''',
         <Object>[ownerProfileId, ownerProfileId],
+      );
+      await _recordRegistryBorrowerRevocation(
+        txn,
+        target: outboxTarget,
+        ownerProfileId: ownerProfileId,
+        mergedBaselineRecords: mergedBaselineRecords,
       );
       await txn.rawDelete(
         '''DELETE FROM profile_connection_bindings
@@ -1588,7 +1791,7 @@ class ProfileRegistry {
         );
       }
     });
-    await checkpointTvOsRecovery();
+    await _finishRegistryDelete();
     return revoked;
   }
 
@@ -1598,11 +1801,15 @@ class ProfileRegistry {
     required String id,
     required bool deleteOwnedResources,
     required bool detachPublicArtifacts,
+    Iterable<WebDavSyncRegistryRecordId> mergedBaselineRecords =
+        const <WebDavSyncRegistryRecordId>[],
     String? actingProfileId,
     int? actingAuthorizationRevision,
     int? actingSessionEpoch,
   }) async {
     await authorityWillChangeCallback?.call();
+    final outboxTarget =
+        await WebDavSyncTombstoneRecorder.registryOutboxTarget();
     await _db.transaction((txn) async {
       await _assertManagingActor(
         txn,
@@ -1683,6 +1890,13 @@ class ProfileRegistry {
         throw StateError('Public files need an explicit retention choice');
       }
 
+      await _recordRegistryDeleteCascade(
+        txn,
+        target: outboxTarget,
+        profileIds: <String>{id},
+        mergedBaselineRecords: mergedBaselineRecords,
+      );
+
       final detachedToken = _newId();
       await txn.update(
         'job_ownership',
@@ -1725,7 +1939,7 @@ class ProfileRegistry {
         whereArgs: <Object>[id],
       );
     });
-    await checkpointTvOsRecovery();
+    await _finishRegistryDelete();
   }
 
   /// Connection kinds that are PERSONAL and therefore excluded from the
@@ -1777,6 +1991,7 @@ class ProfileRegistry {
         'granted_by_profile_id': row['owner_profile_id'],
         'grant_origin_json': '{"origin":"defaultSeed"}',
         'created_at_ms': nowMs,
+        'updated_at_ms': nowMs,
       }, conflictAlgorithm: ConflictAlgorithm.ignore);
     }
   }
@@ -1808,6 +2023,7 @@ class ProfileRegistry {
         'granted_by_profile_id': resource.ownerProfileId,
         'grant_origin_json': '{"origin":"defaultSeed"}',
         'created_at_ms': nowMs,
+        'updated_at_ms': nowMs,
       }, conflictAlgorithm: ConflictAlgorithm.ignore);
     }
   }
@@ -1848,6 +2064,7 @@ class ProfileRegistry {
         'public_config_json': jsonEncode(resource.publicConfig),
         'sealed_secret_payload': _encodeEnvelopeColumn(sealedSecretPayload),
         'secret_payload_version': secretPayloadVersion,
+        'secret_pending': 0,
         'authorization_revision': resource.authorizationRevision,
         'created_at_ms': now,
         'updated_at_ms': now,
@@ -1866,6 +2083,7 @@ class ProfileRegistry {
         'granted_by_profile_id': resource.ownerProfileId,
         'grant_origin_json': '{"origin":"owner"}',
         'created_at_ms': now,
+        'updated_at_ms': now,
       });
       if (bindingSlot != null) {
         if (bindingSlot.trim().isEmpty) {
@@ -1898,7 +2116,7 @@ class ProfileRegistry {
         whereArgs: <Object>[resource.ownerProfileId],
       );
     });
-    await checkpointTvOsRecovery();
+    await checkpointTvOsRecovery(webDavSyncRegistryChange: true);
   }
 
   /// Columns [_decodeResource] needs — everything EXCEPT the sealed payload.
@@ -1914,6 +2132,7 @@ class ProfileRegistry {
     'label',
     'owner_profile_id',
     'public_config_json',
+    'secret_pending',
     'authorization_revision',
     'disabled_at_ms',
   ];
@@ -1984,6 +2203,46 @@ class ProfileRegistry {
     int? actingAuthorizationRevision,
     int? expectedResourceAuthorizationRevision,
   }) async {
+    return _updateResourceSecret(
+      resourceId: resourceId,
+      sealedSecretPayload: sealedSecretPayload,
+      secretPayloadVersion: secretPayloadVersion,
+      actingProfileId: actingProfileId,
+      actingAuthorizationRevision: actingAuthorizationRevision,
+      expectedResourceAuthorizationRevision:
+          expectedResourceAuthorizationRevision,
+    );
+  }
+
+  /// Token rotation maintains an existing Trakt session; it cannot bind or
+  /// replace an account. The service seals only the returned token fields.
+  Future<void> rotateTraktSession({
+    required String resourceId,
+    required String sealedSecretPayload,
+    required int secretPayloadVersion,
+    required String actingProfileId,
+    required int actingAuthorizationRevision,
+    required int expectedResourceAuthorizationRevision,
+  }) => _updateResourceSecret(
+    resourceId: resourceId,
+    sealedSecretPayload: sealedSecretPayload,
+    secretPayloadVersion: secretPayloadVersion,
+    actingProfileId: actingProfileId,
+    actingAuthorizationRevision: actingAuthorizationRevision,
+    expectedResourceAuthorizationRevision:
+        expectedResourceAuthorizationRevision,
+    traktRefresh: true,
+  );
+
+  Future<void> _updateResourceSecret({
+    required String resourceId,
+    required String sealedSecretPayload,
+    required int secretPayloadVersion,
+    String? actingProfileId,
+    int? actingAuthorizationRevision,
+    int? expectedResourceAuthorizationRevision,
+    bool traktRefresh = false,
+  }) async {
     _guardTvOsEnvelopeBound(sealedSecretPayload);
     await authorityWillChangeCallback?.call();
     final now = DateTime.now().millisecondsSinceEpoch;
@@ -2000,15 +2259,34 @@ class ProfileRegistry {
           txn,
           profileId: actingProfileId,
           authorizationRevision: actingAuthorizationRevision,
-          feature: ProfileFeature.manageConnections,
+          feature: traktRefresh
+              ? ProfileFeature.trackersAndDiscovery
+              : ProfileFeature.manageConnections,
           resourceId: resourceId,
           resourceAuthorizationRevision: expectedResourceAuthorizationRevision,
-          permission: ResourcePermission.manage,
+          permission: traktRefresh
+              ? ResourcePermission.use
+              : ResourcePermission.manage,
         );
+      }
+      if (traktRefresh) {
+        final bound = await txn.rawQuery(
+          'SELECT r.id FROM connection_resources r '
+          'JOIN profile_connection_bindings b ON b.resource_id = r.id '
+          'WHERE r.id = ? AND r.type = ? AND b.profile_id = ? AND b.slot = ?',
+          <Object?>[
+            resourceId,
+            ConnectionResourceType.trakt.name,
+            actingProfileId,
+            'tracker.trakt',
+          ],
+        );
+        if (bound.isEmpty) throw StateError('Trakt connection changed');
       }
       final changed = await txn.rawUpdate(
         '''UPDATE connection_resources
            SET sealed_secret_payload = ?, secret_payload_version = ?,
+               secret_pending = 0,
                authorization_revision = authorization_revision + 1,
                updated_at_ms = ?
            WHERE id = ? AND disabled_at_ms IS NULL
@@ -2030,22 +2308,26 @@ class ProfileRegistry {
         <String, Object?>{'resource_id': resourceId},
         sealedSecretPayload,
       );
-      final profiles = await txn.query(
-        'profile_resource_grants',
-        columns: const <String>['profile_id'],
-        where: 'resource_id = ?',
-        whereArgs: <Object>[resourceId],
-      );
-      for (final row in profiles) {
-        await txn.rawUpdate(
-          '''UPDATE user_profiles
+      // Rotating the same account keeps profile work authorized. The resource
+      // revision still advances to reject stale credential writes.
+      if (!traktRefresh) {
+        final profiles = await txn.query(
+          'profile_resource_grants',
+          columns: const <String>['profile_id'],
+          where: 'resource_id = ?',
+          whereArgs: <Object>[resourceId],
+        );
+        for (final row in profiles) {
+          await txn.rawUpdate(
+            '''UPDATE user_profiles
              SET authorization_revision = authorization_revision + 1,
                  updated_at_ms = ? WHERE id = ?''',
-          <Object>[now, row['profile_id']!],
-        );
+            <Object>[now, row['profile_id']!],
+          );
+        }
       }
     });
-    await checkpointTvOsRecovery();
+    await checkpointTvOsRecovery(webDavSyncRegistryChange: true);
   }
 
   /// Deletes an owned connection as one disposition transaction. Active jobs
@@ -2057,11 +2339,15 @@ class ProfileRegistry {
     required String resourceId,
     required String ownerProfileId,
     required bool revokeBorrowers,
+    Iterable<WebDavSyncRegistryRecordId> mergedBaselineRecords =
+        const <WebDavSyncRegistryRecordId>[],
     String? actingProfileId,
     int? actingAuthorizationRevision,
     int? expectedResourceAuthorizationRevision,
   }) async {
     await authorityWillChangeCallback?.call();
+    final outboxTarget =
+        await WebDavSyncTombstoneRecorder.registryOutboxTarget();
     await _db.transaction((txn) async {
       if (actingProfileId != null ||
           actingAuthorizationRevision != null ||
@@ -2122,6 +2408,13 @@ class ProfileRegistry {
         );
       }
 
+      await _recordRegistryDeleteCascade(
+        txn,
+        target: outboxTarget,
+        resourceIds: <String>{resourceId},
+        mergedBaselineRecords: mergedBaselineRecords,
+      );
+
       await txn.update(
         'job_ownership',
         <String, Object?>{'resource_id': null},
@@ -2149,7 +2442,7 @@ class ProfileRegistry {
         );
       }
     });
-    await checkpointTvOsRecovery();
+    await _finishRegistryDelete();
   }
 
   /// Atomically changes resource ownership together with the secret envelope
@@ -2233,6 +2526,7 @@ class ProfileRegistry {
             'previousOwnerProfileId': currentOwnerProfileId,
           }),
           'created_at_ms': now,
+          'updated_at_ms': now,
         },
         update: <String, Object?>{
           'permissions': ownerPermissions,
@@ -2241,6 +2535,7 @@ class ProfileRegistry {
             'origin': 'ownershipTransfer',
             'previousOwnerProfileId': currentOwnerProfileId,
           }),
+          'updated_at_ms': now,
         },
         key: <String, Object?>{
           'profile_id': newOwnerProfileId,
@@ -2250,7 +2545,7 @@ class ProfileRegistry {
       final changed = await txn.rawUpdate(
         '''UPDATE connection_resources
            SET owner_profile_id = ?, sealed_secret_payload = ?,
-               secret_payload_version = ?,
+               secret_payload_version = ?, secret_pending = 0,
                authorization_revision = authorization_revision + 1,
                updated_at_ms = ?
            WHERE id = ? AND owner_profile_id = ? AND disabled_at_ms IS NULL''',
@@ -2285,17 +2580,32 @@ class ProfileRegistry {
         );
       }
     });
-    await checkpointTvOsRecovery();
+    await checkpointTvOsRecovery(webDavSyncRegistryChange: true);
   }
 
-  Future<void> unbindResource(String profileId, String slot) async {
+  Future<void> unbindResource(
+    String profileId,
+    String slot, {
+    Iterable<WebDavSyncRegistryRecordId> mergedBaselineRecords =
+        const <WebDavSyncRegistryRecordId>[],
+  }) async {
     await authorityWillChangeCallback?.call();
-    await _db.delete(
-      'profile_connection_bindings',
-      where: 'profile_id = ? AND slot = ?',
-      whereArgs: <Object>[profileId, slot],
-    );
-    await checkpointTvOsRecovery();
+    final outboxTarget =
+        await WebDavSyncTombstoneRecorder.registryOutboxTarget();
+    await _db.transaction((txn) async {
+      await _recordRegistryDeleteCascade(
+        txn,
+        target: outboxTarget,
+        bindingKeys: <String>{_registryBindingKey(profileId, slot)},
+        mergedBaselineRecords: mergedBaselineRecords,
+      );
+      await txn.delete(
+        'profile_connection_bindings',
+        where: 'profile_id = ? AND slot = ?',
+        whereArgs: <Object>[profileId, slot],
+      );
+    });
+    await _finishRegistryDelete();
   }
 
   Future<List<ConnectionResource>> listGrantedResources(
@@ -2380,6 +2690,685 @@ class ProfileRegistry {
     orderBy: 'profile_id, resource_id',
   );
 
+  /// Transactionally consistent profile fields used by the circle-level
+  /// profiles document. Authentication churn may change [updatedAtMs], so the
+  /// document builder must still preserve its prior stamp when these
+  /// serialized fields are byte-identical.
+  Future<List<RegistrySyncProfileProjection>> readProfileSyncProjection() =>
+      _db.transaction(_readProfileSyncProjection);
+
+  /// One transactionally consistent registry projection for the circle-level
+  /// sync document builder. Operational models deliberately remain free of
+  /// database provenance; the timestamps live only on these sync rows.
+  Future<RegistrySyncProjection> readRegistrySyncProjection() =>
+      _db.transaction(_readRegistrySyncProjection);
+
+  /// The exact registry snapshot used for circle publication, together with
+  /// the outbox state from that same SQL transaction.
+  Future<RegistryCircleSyncProjection> readCircleSyncProjection() =>
+      _db.transaction((txn) async {
+        final profiles = await _readProfileSyncProjection(txn);
+        final registry = await _readRegistrySyncProjection(txn);
+        final outboxRowCount = Sqflite.firstIntValue(
+          await txn.rawQuery(
+            'SELECT COUNT(*) FROM webdav_sync_tombstone_outbox',
+          ),
+        );
+        return RegistryCircleSyncProjection(
+          profiles: profiles,
+          registry: registry,
+          outboxRowCount: outboxRowCount ?? 0,
+        );
+      });
+
+  Future<List<RegistrySyncProfileProjection>> _readProfileSyncProjection(
+    DatabaseExecutor db,
+  ) async {
+    final rows = await db.query('user_profiles', orderBy: 'id');
+    return rows
+        .map(
+          (row) => RegistrySyncProfileProjection(
+            profile: _decodeProfile(row),
+            pin: ProfilePinRecord(
+              hash: row['pin_hash'] as Uint8List?,
+              salt: row['pin_salt'] as Uint8List?,
+              paramsJson: row['pin_params_json'] as String?,
+              resetRequired: row['pin_reset_required'] == 1,
+              recoveryHash: row['recovery_hash'] as Uint8List?,
+              recoverySalt: row['recovery_salt'] as Uint8List?,
+              recoveryParamsJson: row['recovery_params_json'] as String?,
+            ),
+            updatedAtMs: row['updated_at_ms']! as int,
+          ),
+        )
+        .toList(growable: false);
+  }
+
+  Future<RegistrySyncProjection> _readRegistrySyncProjection(
+    DatabaseExecutor db,
+  ) async {
+    final resources = await db.query(
+      'connection_resources',
+      columns: <String>[..._resourceRowColumns, 'updated_at_ms'],
+      orderBy: 'id',
+    );
+    final grants = await db.query(
+      'profile_resource_grants',
+      columns: const <String>[
+        'profile_id',
+        'resource_id',
+        'permissions',
+        'updated_at_ms',
+      ],
+      orderBy: 'profile_id, resource_id',
+    );
+    final settings = await db.query(
+      'profile_resource_settings',
+      columns: const <String>[
+        'profile_id',
+        'resource_id',
+        'enabled',
+        'settings_json',
+        'updated_at_ms',
+      ],
+      orderBy: 'profile_id, resource_id',
+    );
+    final bindings = await db.query(
+      'profile_connection_bindings',
+      columns: const <String>[
+        'profile_id',
+        'slot',
+        'resource_id',
+        'updated_at_ms',
+      ],
+      orderBy: 'profile_id, slot',
+    );
+    return RegistrySyncProjection(
+      resources: resources
+          .map(
+            (row) => RegistrySyncResourceProjection(
+              resource: _decodeResource(row),
+              updatedAtMs: row['updated_at_ms']! as int,
+            ),
+          )
+          .toList(growable: false),
+      grants: grants
+          .map(
+            (row) => RegistrySyncGrantProjection(
+              profileId: row['profile_id']! as String,
+              resourceId: row['resource_id']! as String,
+              permissions: row['permissions']! as int,
+              updatedAtMs: row['updated_at_ms']! as int,
+            ),
+          )
+          .toList(growable: false),
+      settings: settings
+          .map(
+            (row) => RegistrySyncSettingsProjection(
+              profileId: row['profile_id']! as String,
+              resourceId: row['resource_id']! as String,
+              enabled: row['enabled'] == 1,
+              settings: Map<String, dynamic>.from(
+                jsonDecode(row['settings_json']! as String) as Map,
+              ),
+              updatedAtMs: row['updated_at_ms']! as int,
+            ),
+          )
+          .toList(growable: false),
+      bindings: bindings
+          .map(
+            (row) => RegistrySyncBindingProjection(
+              profileId: row['profile_id']! as String,
+              slot: row['slot']! as String,
+              resourceId: row['resource_id']! as String,
+              updatedAtMs: row['updated_at_ms']! as int,
+            ),
+          )
+          .toList(growable: false),
+    );
+  }
+
+  /// Applies a fully merged circle-registry delta without staged-graph or
+  /// restore journals. The caller supplies merge provenance; this writer owns
+  /// relational ordering, local authorization revisions, and secret storage.
+  Future<SyncedRegistryApplyResult> applySyncedRegistryDelta(
+    SyncedRegistryDelta delta,
+  ) async {
+    for (final item in delta.resources) {
+      final payload = item.sealedSecretPayload;
+      if ((payload == null) != (item.secretPayloadVersion == null)) {
+        throw ArgumentError('Synced secret payload is incomplete');
+      }
+      if (item.clearSecret && payload != null) {
+        throw ArgumentError('Synced secret cannot be set and cleared');
+      }
+      if (payload != null) _guardTvOsEnvelopeBound(payload);
+    }
+    await authorityWillChangeCallback?.call();
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final result = await _db.transaction((txn) async {
+      if (!await _syncedDeltaMatchesObservedState(txn, delta)) {
+        return SyncedRegistryApplyResult.conflict;
+      }
+      final activeRows = await txn.query(
+        'device_state',
+        columns: const <String>['active_profile_id'],
+        where: 'singleton_id = 1',
+        limit: 1,
+      );
+      final activeProfileId = activeRows.isEmpty
+          ? null
+          : activeRows.single['active_profile_id'] as String?;
+      final deletedProfileIds = delta.deletes
+          .where(
+            (item) => item.record.kind == WebDavSyncRegistryRecordKind.profile,
+          )
+          .map((item) => item.record.profileId!)
+          .toSet();
+      if (activeProfileId != null &&
+          deletedProfileIds.contains(activeProfileId)) {
+        throw StateError('Cannot delete the active profile');
+      }
+
+      final affectedProfileIds = <String>{};
+      final createdProfileIds = <String>{};
+
+      // Parents first. A remote create intentionally does not seed grants;
+      // the merged resources section is authoritative for those leaves.
+      for (final item in delta.profiles) {
+        _validateSyncedProfile(item);
+        final existing = await txn.query(
+          'user_profiles',
+          columns: const <String>['id', 'avatar_key', 'authorization_revision'],
+          where: 'id = ?',
+          whereArgs: <Object>[item.id],
+          limit: 1,
+        );
+        final isCreate = existing.isEmpty;
+        final existingAvatar = isCreate
+            ? null
+            : existing.single['avatar_key'] as String?;
+        final avatarKey =
+            item.avatarKey ??
+            (existingAvatar?.startsWith('file:') == true
+                ? existingAvatar
+                : null);
+        final pin = item.pin;
+        final insert = <String, Object?>{
+          'id': item.id,
+          'name': item.name.trim(),
+          'avatar_key': avatarKey,
+          'role': item.role.name,
+          'policy_json': item.policy.encode(),
+          'policy_schema_version': item.policy.schemaVersion,
+          'authorization_revision': 1,
+          'lifecycle_state': item.lifecycle.name,
+          'visible_data_generation': 1,
+          'profile_setup_complete': item.setupComplete ? 1 : 0,
+          'pin_reset_required': pin.resetRequired ? 1 : 0,
+          'pin_hash': pin.hash,
+          'pin_salt': pin.salt,
+          'pin_params_json': pin.paramsJson,
+          'failed_pin_attempts': 0,
+          'locked_until_ms': null,
+          'recovery_hash': pin.recoveryHash,
+          'recovery_salt': pin.recoverySalt,
+          'recovery_params_json': pin.recoveryParamsJson,
+          'lock_on_resume': item.lockOnResume ? 1 : 0,
+          'inactivity_timeout_minutes': item.inactivityTimeoutMinutes,
+          'created_at_ms': now,
+          'updated_at_ms': item.updatedAtMs,
+          'disabled_at_ms': item.enabled ? null : item.updatedAtMs,
+        };
+        final update = <String, Object?>{
+          'name': item.name.trim(),
+          'avatar_key': avatarKey,
+          'role': item.role.name,
+          'policy_json': item.policy.encode(),
+          'policy_schema_version': item.policy.schemaVersion,
+          'lifecycle_state': item.lifecycle.name,
+          'profile_setup_complete': item.setupComplete ? 1 : 0,
+          if (item.applyPin) 'pin_reset_required': pin.resetRequired ? 1 : 0,
+          if (item.applyPin) 'pin_hash': pin.hash,
+          if (item.applyPin) 'pin_salt': pin.salt,
+          if (item.applyPin) 'pin_params_json': pin.paramsJson,
+          if (item.applyPin) 'failed_pin_attempts': 0,
+          if (item.applyPin) 'locked_until_ms': null,
+          if (item.applyPin) 'recovery_hash': pin.recoveryHash,
+          if (item.applyPin) 'recovery_salt': pin.recoverySalt,
+          if (item.applyPin) 'recovery_params_json': pin.recoveryParamsJson,
+          'lock_on_resume': item.lockOnResume ? 1 : 0,
+          'inactivity_timeout_minutes': item.inactivityTimeoutMinutes,
+          'updated_at_ms': item.updatedAtMs,
+          'disabled_at_ms': item.enabled ? null : item.updatedAtMs,
+        };
+        await _compatUpsert(
+          txn,
+          table: 'user_profiles',
+          insert: insert,
+          update: update,
+          key: <String, Object?>{'id': item.id},
+        );
+        await txn.insert('profile_data_generations', <String, Object?>{
+          'profile_id': item.id,
+          'generation': 1,
+          'state': 'visible',
+          'manifest_json': '{}',
+          'manifest_hash': '',
+          'created_at_ms': now,
+          'updated_at_ms': now,
+        }, conflictAlgorithm: ConflictAlgorithm.ignore);
+        if (isCreate) {
+          createdProfileIds.add(item.id);
+        } else {
+          affectedProfileIds.add(item.id);
+        }
+      }
+
+      for (final item in delta.resources) {
+        _validateSyncedTimestamp(item.updatedAtMs);
+        if (!ProfileScope.isValidProfileId(item.resource.id) ||
+            !ProfileScope.isValidProfileId(item.resource.ownerProfileId)) {
+          throw ArgumentError('Invalid synced resource ID');
+        }
+        final encodedConfig = jsonEncode(item.resource.publicConfig);
+        final schema = item.resource.publicConfig['schemaVersion'];
+        if (schema is! int) {
+          throw ArgumentError('Synced resource schema is missing');
+        }
+        final existing = await txn.query(
+          'connection_resources',
+          columns: const <String>[
+            'authorization_revision',
+            'sealed_secret_payload',
+            'type',
+            'owner_profile_id',
+            'public_config_json',
+          ],
+          where: 'id = ?',
+          whereArgs: <Object>[item.resource.id],
+          limit: 1,
+        );
+        final existingPublicSchema = existing.isEmpty
+            ? null
+            : (jsonDecode(existing.single['public_config_json']! as String)
+                      as Map)['schemaVersion']
+                  as int?;
+        final hasLocalSecret =
+            !item.clearSecret &&
+            existing.isNotEmpty &&
+            existing.single['sealed_secret_payload'] != null &&
+            existing.single['type'] == item.resource.type.name &&
+            existing.single['owner_profile_id'] ==
+                item.resource.ownerProfileId &&
+            existingPublicSchema == schema;
+        final payload = item.sealedSecretPayload;
+        final nextRevision = existing.isEmpty
+            ? 1
+            : (existing.single['authorization_revision']! as int) + 1;
+        final pending = payload == null && !hasLocalSecret;
+        final insert = <String, Object?>{
+          'id': item.resource.id,
+          'type': item.resource.type.name,
+          'label': item.resource.label,
+          'owner_profile_id': item.resource.ownerProfileId,
+          'public_config_json': encodedConfig,
+          'sealed_secret_payload': payload == null
+              ? null
+              : _encodeEnvelopeColumn(payload),
+          'secret_payload_version': item.secretPayloadVersion,
+          'secret_pending': pending ? 1 : 0,
+          'authorization_revision': nextRevision,
+          'created_at_ms': now,
+          'updated_at_ms': item.updatedAtMs,
+          'disabled_at_ms': item.resource.enabled ? null : item.updatedAtMs,
+        };
+        final update = <String, Object?>{
+          'type': item.resource.type.name,
+          'label': item.resource.label,
+          'owner_profile_id': item.resource.ownerProfileId,
+          'public_config_json': encodedConfig,
+          if (payload != null || !hasLocalSecret)
+            'sealed_secret_payload': payload == null
+                ? null
+                : _encodeEnvelopeColumn(payload),
+          if (payload != null || !hasLocalSecret)
+            'secret_payload_version': item.secretPayloadVersion,
+          'secret_pending': pending ? 1 : 0,
+          'authorization_revision': nextRevision,
+          'updated_at_ms': item.updatedAtMs,
+          'disabled_at_ms': item.resource.enabled ? null : item.updatedAtMs,
+        };
+        await _compatUpsert(
+          txn,
+          table: 'connection_resources',
+          insert: insert,
+          update: update,
+          key: <String, Object?>{'id': item.resource.id},
+        );
+        if (payload != null) {
+          await _writeEnvelopeChunks(
+            txn,
+            'resource_secret_chunks',
+            <String, Object?>{'resource_id': item.resource.id},
+            payload,
+          );
+        } else if (!hasLocalSecret) {
+          await txn.delete(
+            'resource_secret_chunks',
+            where: 'resource_id = ?',
+            whereArgs: <Object>[item.resource.id],
+          );
+        }
+      }
+
+      for (final item in delta.grants) {
+        _validateSyncedTimestamp(item.updatedAtMs);
+        final knownPermissions = ResourcePermission.values.fold<int>(
+          0,
+          (mask, permission) => mask | permission.bit,
+        );
+        if (item.permissions < 0 || item.permissions & ~knownPermissions != 0) {
+          throw ArgumentError('Synced grant permissions are invalid');
+        }
+        await _compatUpsert(
+          txn,
+          table: 'profile_resource_grants',
+          insert: <String, Object?>{
+            'profile_id': item.profileId,
+            'resource_id': item.resourceId,
+            'permissions': item.permissions,
+            'granted_by_profile_id': null,
+            'grant_origin_json': '{"origin":"webDavSync"}',
+            'created_at_ms': now,
+            'updated_at_ms': item.updatedAtMs,
+          },
+          update: <String, Object?>{
+            'permissions': item.permissions,
+            'granted_by_profile_id': null,
+            'grant_origin_json': '{"origin":"webDavSync"}',
+            'updated_at_ms': item.updatedAtMs,
+          },
+          key: <String, Object?>{
+            'profile_id': item.profileId,
+            'resource_id': item.resourceId,
+          },
+        );
+        affectedProfileIds.add(item.profileId);
+      }
+
+      for (final item in delta.settings) {
+        _validateSyncedTimestamp(item.updatedAtMs);
+        final encoded = jsonEncode(item.settings);
+        if (encoded.length > 64 * 1024) {
+          throw StateError('Synced resource settings are too large');
+        }
+        await _compatUpsert(
+          txn,
+          table: 'profile_resource_settings',
+          insert: <String, Object?>{
+            'profile_id': item.profileId,
+            'resource_id': item.resourceId,
+            'enabled': item.enabled ? 1 : 0,
+            'settings_json': encoded,
+            'updated_at_ms': item.updatedAtMs,
+          },
+          update: <String, Object?>{
+            'enabled': item.enabled ? 1 : 0,
+            'settings_json': encoded,
+            'updated_at_ms': item.updatedAtMs,
+          },
+          key: <String, Object?>{
+            'profile_id': item.profileId,
+            'resource_id': item.resourceId,
+          },
+        );
+      }
+
+      for (final item in delta.bindings) {
+        _validateSyncedTimestamp(item.updatedAtMs);
+        if (item.slot.trim().isEmpty) {
+          throw ArgumentError.value(item.slot, 'slot');
+        }
+        await _compatUpsert(
+          txn,
+          table: 'profile_connection_bindings',
+          insert: <String, Object?>{
+            'profile_id': item.profileId,
+            'slot': item.slot,
+            'resource_id': item.resourceId,
+            'created_at_ms': now,
+            'updated_at_ms': item.updatedAtMs,
+          },
+          update: <String, Object?>{
+            'resource_id': item.resourceId,
+            'updated_at_ms': item.updatedAtMs,
+          },
+          key: <String, Object?>{
+            'profile_id': item.profileId,
+            'slot': item.slot,
+          },
+        );
+      }
+
+      final deletedResourceIds = delta.deletes
+          .where(
+            (item) => item.record.kind == WebDavSyncRegistryRecordKind.resource,
+          )
+          .map((item) => item.record.resourceId!)
+          .toSet();
+      for (final resourceId in <String>{
+        ...delta.resources.map((item) => item.resource.id),
+        ...deletedResourceIds,
+      }) {
+        final grants = await txn.query(
+          'profile_resource_grants',
+          columns: const <String>['profile_id'],
+          where: 'resource_id = ?',
+          whereArgs: <Object>[resourceId],
+        );
+        affectedProfileIds.addAll(
+          grants.map((row) => row['profile_id']! as String),
+        );
+      }
+
+      // Child-first physical removal keeps this explicit and works even if a
+      // future schema tightens one of today's cascading foreign keys.
+      for (final item in delta.deletes.where(
+        (item) => item.record.kind == WebDavSyncRegistryRecordKind.binding,
+      )) {
+        final record = item.record;
+        await txn.delete(
+          'profile_connection_bindings',
+          where: 'profile_id = ? AND slot = ?',
+          whereArgs: <Object>[record.profileId!, record.slot!],
+        );
+      }
+      for (final item in delta.deletes.where(
+        (item) => item.record.kind == WebDavSyncRegistryRecordKind.setting,
+      )) {
+        final record = item.record;
+        await txn.delete(
+          'profile_resource_settings',
+          where: 'profile_id = ? AND resource_id = ?',
+          whereArgs: <Object>[record.profileId!, record.resourceId!],
+        );
+      }
+      for (final item in delta.deletes.where(
+        (item) => item.record.kind == WebDavSyncRegistryRecordKind.grant,
+      )) {
+        final record = item.record;
+        affectedProfileIds.add(record.profileId!);
+        await txn.delete(
+          'profile_resource_grants',
+          where: 'profile_id = ? AND resource_id = ?',
+          whereArgs: <Object>[record.profileId!, record.resourceId!],
+        );
+      }
+      for (final resourceId in deletedResourceIds) {
+        await txn.delete(
+          'connection_resources',
+          where: 'id = ?',
+          whereArgs: <Object>[resourceId],
+        );
+      }
+      for (final profileId in deletedProfileIds) {
+        await txn.delete(
+          'user_profiles',
+          where: 'id = ?',
+          whereArgs: <Object>[profileId],
+        );
+      }
+
+      affectedProfileIds.removeAll(createdProfileIds);
+      affectedProfileIds.removeAll(deletedProfileIds);
+      for (final profileId in affectedProfileIds) {
+        await txn.rawUpdate(
+          '''UPDATE user_profiles
+             SET authorization_revision = authorization_revision + 1,
+                 updated_at_ms = ? WHERE id = ?''',
+          <Object>[now, profileId],
+        );
+      }
+      final foreignKeyFailures = await txn.rawQuery('PRAGMA foreign_key_check');
+      if (foreignKeyFailures.isNotEmpty) {
+        throw StateError('Synced registry delta violates foreign keys');
+      }
+      await _assertAdminInvariant(txn);
+      return SyncedRegistryApplyResult.applied;
+    });
+    await checkpointTvOsRecovery();
+    return result;
+  }
+
+  static Future<bool> _syncedDeltaMatchesObservedState(
+    DatabaseExecutor db,
+    SyncedRegistryDelta delta,
+  ) async {
+    Future<bool> matches(
+      String table,
+      String where,
+      List<Object> whereArgs,
+      int? expectedUpdatedAtMs,
+    ) async {
+      final rows = await db.query(
+        table,
+        columns: const <String>['updated_at_ms'],
+        where: where,
+        whereArgs: whereArgs,
+        limit: 1,
+      );
+      return expectedUpdatedAtMs == null
+          ? rows.isEmpty
+          : rows.length == 1 &&
+                rows.single['updated_at_ms'] == expectedUpdatedAtMs;
+    }
+
+    for (final item in delta.profiles) {
+      if (!await matches('user_profiles', 'id = ?', <Object>[
+        item.id,
+      ], item.expectedPriorUpdatedAtMs)) {
+        return false;
+      }
+    }
+    for (final item in delta.resources) {
+      if (!await matches('connection_resources', 'id = ?', <Object>[
+        item.resource.id,
+      ], item.expectedPriorUpdatedAtMs)) {
+        return false;
+      }
+    }
+    for (final item in delta.grants) {
+      if (!await matches(
+        'profile_resource_grants',
+        'profile_id = ? AND resource_id = ?',
+        <Object>[item.profileId, item.resourceId],
+        item.expectedPriorUpdatedAtMs,
+      )) {
+        return false;
+      }
+    }
+    for (final item in delta.settings) {
+      if (!await matches(
+        'profile_resource_settings',
+        'profile_id = ? AND resource_id = ?',
+        <Object>[item.profileId, item.resourceId],
+        item.expectedPriorUpdatedAtMs,
+      )) {
+        return false;
+      }
+    }
+    for (final item in delta.bindings) {
+      if (!await matches(
+        'profile_connection_bindings',
+        'profile_id = ? AND slot = ?',
+        <Object>[item.profileId, item.slot],
+        item.expectedPriorUpdatedAtMs,
+      )) {
+        return false;
+      }
+    }
+    for (final item in delta.deletes) {
+      final record = item.record;
+      final matched = switch (record.kind) {
+        WebDavSyncRegistryRecordKind.profile => await matches(
+          'user_profiles',
+          'id = ?',
+          <Object>[record.profileId!],
+          item.expectedPriorUpdatedAtMs,
+        ),
+        WebDavSyncRegistryRecordKind.resource => await matches(
+          'connection_resources',
+          'id = ?',
+          <Object>[record.resourceId!],
+          item.expectedPriorUpdatedAtMs,
+        ),
+        WebDavSyncRegistryRecordKind.grant => await matches(
+          'profile_resource_grants',
+          'profile_id = ? AND resource_id = ?',
+          <Object>[record.profileId!, record.resourceId!],
+          item.expectedPriorUpdatedAtMs,
+        ),
+        WebDavSyncRegistryRecordKind.setting => await matches(
+          'profile_resource_settings',
+          'profile_id = ? AND resource_id = ?',
+          <Object>[record.profileId!, record.resourceId!],
+          item.expectedPriorUpdatedAtMs,
+        ),
+        WebDavSyncRegistryRecordKind.binding => await matches(
+          'profile_connection_bindings',
+          'profile_id = ? AND slot = ?',
+          <Object>[record.profileId!, record.slot!],
+          item.expectedPriorUpdatedAtMs,
+        ),
+      };
+      if (!matched) return false;
+    }
+    return true;
+  }
+
+  static void _validateSyncedProfile(SyncedRegistryProfileRecord item) {
+    if (!ProfileScope.isValidProfileId(item.id) || item.name.trim().isEmpty) {
+      throw ArgumentError('Invalid synced profile');
+    }
+    _validateInactivityTimeout(item.inactivityTimeoutMinutes);
+    _validateSyncedTimestamp(item.updatedAtMs);
+    if (item.avatarKey?.startsWith('file:') == true) {
+      throw ArgumentError('Synced profiles cannot introduce file avatars');
+    }
+    final pin = item.pin;
+    if (pin.isCorrupt ||
+        (pin.recoveryHash == null) != (pin.recoverySalt == null) ||
+        (pin.recoveryHash == null) != (pin.recoveryParamsJson == null) ||
+        (pin.hasRecoveryCode && !pin.hasPin)) {
+      throw ArgumentError('Synced PIN record is incomplete');
+    }
+  }
+
+  static void _validateSyncedTimestamp(int value) {
+    if (value < 0) throw ArgumentError.value(value, 'updatedAtMs');
+  }
+
   /// Atomically replaces an owner's resources of [types]. This is used by
   /// legacy collection-shaped APIs (WebDAV, IPTV, addons, and indexers) so a
   /// crash can never expose a half-replaced list. Shared resources are never
@@ -2391,6 +3380,8 @@ class ProfileRegistry {
     required List<PreparedConnectionResource> replacements,
     required int ownerPermissions,
     bool revokeBorrowers = false,
+    Iterable<WebDavSyncRegistryRecordId> mergedBaselineRecords =
+        const <WebDavSyncRegistryRecordId>[],
     String? actingProfileId,
     int? actingAuthorizationRevision,
     ProfileFeature? actingFeature,
@@ -2409,6 +3400,8 @@ class ProfileRegistry {
       throw ArgumentError('Replacement resource does not match collection');
     }
     final now = DateTime.now().millisecondsSinceEpoch;
+    final outboxTarget =
+        await WebDavSyncTombstoneRecorder.registryOutboxTarget();
     await _db.transaction((txn) async {
       if (actingProfileId != null ||
           actingAuthorizationRevision != null ||
@@ -2478,6 +3471,12 @@ class ProfileRegistry {
           grants.map((row) => row['profile_id']! as String),
         );
       }
+      await _recordRegistryDeleteCascade(
+        txn,
+        target: outboxTarget,
+        resourceIds: removedIds,
+        mergedBaselineRecords: mergedBaselineRecords,
+      );
       for (final row in existing) {
         if (replacementIds.contains(row['id'])) continue;
         await txn.delete(
@@ -2503,6 +3502,7 @@ class ProfileRegistry {
               replacement.sealedSecretPayload,
             ),
             'secret_payload_version': replacement.secretPayloadVersion,
+            'secret_pending': 0,
             'authorization_revision': resource.authorizationRevision,
             'created_at_ms': now,
             'updated_at_ms': now,
@@ -2528,6 +3528,7 @@ class ProfileRegistry {
                 replacement.sealedSecretPayload,
               ),
               'secret_payload_version': replacement.secretPayloadVersion,
+              'secret_pending': 0,
               'authorization_revision': resource.authorizationRevision,
               'updated_at_ms': now,
               'disabled_at_ms': null,
@@ -2556,11 +3557,13 @@ class ProfileRegistry {
             'granted_by_profile_id': ownerProfileId,
             'grant_origin_json': '{"origin":"ownerCollection"}',
             'created_at_ms': now,
+            'updated_at_ms': now,
           },
           update: <String, Object?>{
             'permissions': ownerPermissions,
             'granted_by_profile_id': ownerProfileId,
             'grant_origin_json': '{"origin":"ownerCollection"}',
+            'updated_at_ms': now,
           },
           key: <String, Object?>{
             'profile_id': ownerProfileId,
@@ -2584,7 +3587,7 @@ class ProfileRegistry {
       }
       await _assertAdminInvariant(txn);
     });
-    await checkpointTvOsRecovery();
+    await _finishRegistryDelete();
   }
 
   Future<ProfileResourceGrant?> getGrant(
@@ -2655,6 +3658,7 @@ class ProfileRegistry {
     if (encoded.length > 64 * 1024) {
       throw ArgumentError.value(settings, 'settings', 'Settings are too large');
     }
+    final now = DateTime.now().millisecondsSinceEpoch;
     await _db.transaction((txn) async {
       await _assertResourceActor(
         txn,
@@ -2673,10 +3677,12 @@ class ProfileRegistry {
           'resource_id': resourceId,
           'enabled': enabled ? 1 : 0,
           'settings_json': encoded,
+          'updated_at_ms': now,
         },
         update: <String, Object?>{
           'enabled': enabled ? 1 : 0,
           'settings_json': encoded,
+          'updated_at_ms': now,
         },
         key: <String, Object?>{
           'profile_id': profileId,
@@ -2684,7 +3690,7 @@ class ProfileRegistry {
         },
       );
     });
-    await checkpointTvOsRecovery();
+    await checkpointTvOsRecovery(webDavSyncRegistryChange: true);
   }
 
   Future<void> upsertGrant({
@@ -2785,11 +3791,13 @@ class ProfileRegistry {
           'granted_by_profile_id': grantedByProfileId,
           'grant_origin_json': jsonEncode(origin),
           'created_at_ms': now,
+          'updated_at_ms': now,
         },
         update: <String, Object?>{
           'permissions': permissions,
           'granted_by_profile_id': grantedByProfileId,
           'grant_origin_json': jsonEncode(origin),
+          'updated_at_ms': now,
         },
         key: <String, Object?>{
           'profile_id': profileId,
@@ -2820,7 +3828,7 @@ class ProfileRegistry {
         whereArgs: <Object>[profileId],
       );
     });
-    await checkpointTvOsRecovery();
+    await checkpointTvOsRecovery(webDavSyncRegistryChange: true);
   }
 
   /// Repairs grants written by profile builds that shared singleton
@@ -2916,7 +3924,7 @@ class ProfileRegistry {
       return count;
     });
     if (repaired != 0) {
-      await checkpointTvOsRecovery();
+      await checkpointTvOsRecovery(webDavSyncRegistryChange: true);
     } else {
       // Balance the pre-mutation fail-closed callback when a concurrent
       // change made every preflight repair unnecessary or ambiguous.
@@ -2928,11 +3936,15 @@ class ProfileRegistry {
   Future<void> revokeGrant(
     String profileId,
     String resourceId, {
+    Iterable<WebDavSyncRegistryRecordId> mergedBaselineRecords =
+        const <WebDavSyncRegistryRecordId>[],
     String? actingProfileId,
     int? actingAuthorizationRevision,
     int? expectedResourceAuthorizationRevision,
   }) async {
     await authorityWillChangeCallback?.call();
+    final outboxTarget =
+        await WebDavSyncTombstoneRecorder.registryOutboxTarget();
     await _db.transaction((txn) async {
       if (actingProfileId != null ||
           actingAuthorizationRevision != null ||
@@ -2953,6 +3965,12 @@ class ProfileRegistry {
           requireAdmin: true,
         );
       }
+      await _recordRegistryDeleteCascade(
+        txn,
+        target: outboxTarget,
+        grantKeys: <String>{_registryGrantKey(profileId, resourceId)},
+        mergedBaselineRecords: mergedBaselineRecords,
+      );
       await txn.delete(
         'profile_connection_bindings',
         where: 'profile_id = ? AND resource_id = ?',
@@ -2974,7 +3992,7 @@ class ProfileRegistry {
         whereArgs: <Object>[profileId],
       );
     });
-    await checkpointTvOsRecovery();
+    await _finishRegistryDelete();
   }
 
   /// Atomically lets the active borrower reduce its own authority. This is
@@ -2986,8 +4004,12 @@ class ProfileRegistry {
     required int authorizationRevision,
     required String resourceId,
     required int expectedResourceAuthorizationRevision,
+    Iterable<WebDavSyncRegistryRecordId> mergedBaselineRecords =
+        const <WebDavSyncRegistryRecordId>[],
   }) async {
     await authorityWillChangeCallback?.call();
+    final outboxTarget =
+        await WebDavSyncTombstoneRecorder.registryOutboxTarget();
     await _db.transaction((txn) async {
       final active = await txn.query(
         'device_state',
@@ -3027,6 +4049,12 @@ class ProfileRegistry {
           grants.isEmpty) {
         throw StateError('Borrowed connection authorization changed');
       }
+      await _recordRegistryDeleteCascade(
+        txn,
+        target: outboxTarget,
+        grantKeys: <String>{_registryGrantKey(profileId, resourceId)},
+        mergedBaselineRecords: mergedBaselineRecords,
+      );
       await txn.delete(
         'profile_connection_bindings',
         where: 'profile_id = ? AND resource_id = ?',
@@ -3044,7 +4072,7 @@ class ProfileRegistry {
         <Object>[DateTime.now().millisecondsSinceEpoch, profileId],
       );
     });
-    await checkpointTvOsRecovery();
+    await _finishRegistryDelete();
   }
 
   Future<void> bindResource({
@@ -3089,7 +4117,7 @@ class ProfileRegistry {
         conflictAlgorithm: ConflictAlgorithm.replace,
       );
     });
-    await checkpointTvOsRecovery();
+    await checkpointTvOsRecovery(webDavSyncRegistryChange: true);
   }
 
   Future<String?> getBoundResourceId(String profileId, String slot) async {
@@ -3444,7 +4472,7 @@ class ProfileRegistry {
       );
     });
     if (changed != 1) throw StateError('Profile does not exist');
-    await checkpointTvOsRecovery();
+    await checkpointTvOsRecovery(webDavSyncRegistryChange: true);
   }
 
   /// Replaces the unlocked active profile's PIN only when the credential the
@@ -3523,7 +4551,7 @@ class ProfileRegistry {
         changed = count == 1;
       });
       if (!changed) throw StateError('PIN authorization changed');
-      await checkpointTvOsRecovery();
+      await checkpointTvOsRecovery(webDavSyncRegistryChange: true);
     } catch (error, stackTrace) {
       // `authorityWillChangeCallback` denies native readers before the
       // transaction. Any rejection or publication failure must republish the
@@ -3634,7 +4662,9 @@ class ProfileRegistry {
           ) ==
           1;
     });
-    if (changed) await checkpointTvOsRecovery();
+    if (changed) {
+      await checkpointTvOsRecovery(webDavSyncRegistryChange: true);
+    }
     return changed;
   }
 
@@ -3719,7 +4749,9 @@ class ProfileRegistry {
           ) ==
           1;
     });
-    if (changed) await checkpointTvOsRecovery();
+    if (changed) {
+      await checkpointTvOsRecovery(webDavSyncRegistryChange: replacing);
+    }
     return changed;
   }
 
@@ -3767,7 +4799,9 @@ class ProfileRegistry {
           ) ==
           1;
     });
-    if (changed) await checkpointTvOsRecovery();
+    if (changed) {
+      await checkpointTvOsRecovery(webDavSyncRegistryChange: true);
+    }
     return changed;
   }
 
@@ -3955,9 +4989,11 @@ class ProfileRegistry {
     required List<StagedGraphResource> resources,
     List<GraphRestoreDefaultGrantPrune> redundantDefaultAddonGrants =
         const <GraphRestoreDefaultGrantPrune>[],
+    Iterable<WebDavSyncRegistryRecordId> mergedBaselineRecords =
+        const <WebDavSyncRegistryRecordId>[],
   }) async {
     for (final item in resources) {
-      _guardTvOsEnvelopeBound(item.sealedSecretPayload);
+      _guardTvOsEnvelopeBound(await item.readSealedSecret());
     }
     await authorityWillChangeCallback?.call();
     final now = DateTime.now().millisecondsSinceEpoch;
@@ -3972,6 +5008,8 @@ class ProfileRegistry {
         throw ArgumentError('Invalid redundant default addon grant');
       }
     }
+    final outboxTarget =
+        await WebDavSyncTombstoneRecorder.registryOutboxTarget();
     await _db.transaction((txn) async {
       final journal = await txn.query(
         'profile_restore_journal',
@@ -4026,6 +5064,14 @@ class ProfileRegistry {
             !_isDefaultSeedGrantOrigin(rows.single['grant_origin_json'])) {
           throw StateError('Redundant default addon grant changed');
         }
+        await _recordRegistryDeleteCascade(
+          txn,
+          target: outboxTarget,
+          grantKeys: <String>{
+            _registryGrantKey(prune.profileId, prune.resourceId),
+          },
+          mergedBaselineRecords: mergedBaselineRecords,
+        );
         final deleted = await txn.delete(
           'profile_resource_grants',
           where: 'profile_id = ? AND resource_id = ?',
@@ -4039,16 +5085,17 @@ class ProfileRegistry {
         if (!profileIds.contains(item.ownerProfileId)) {
           throw StateError('Imported resource owner is not staged');
         }
+        final sealedPayload = await item.readSealedSecret();
+        _guardTvOsEnvelopeBound(sealedPayload);
         await txn.insert('connection_resources', <String, Object?>{
           'id': item.id,
           'type': item.type.name,
           'label': item.label,
           'owner_profile_id': item.ownerProfileId,
           'public_config_json': jsonEncode(item.publicConfig),
-          'sealed_secret_payload': _encodeEnvelopeColumn(
-            item.sealedSecretPayload,
-          ),
+          'sealed_secret_payload': _encodeEnvelopeColumn(sealedPayload),
           'secret_payload_version': item.secretPayloadVersion,
+          'secret_pending': 0,
           'authorization_revision': 1,
           'created_at_ms': now,
           'updated_at_ms': now,
@@ -4058,7 +5105,7 @@ class ProfileRegistry {
           txn,
           'resource_secret_chunks',
           <String, Object?>{'resource_id': item.id},
-          item.sealedSecretPayload,
+          sealedPayload,
         );
         for (final grant in item.grants) {
           if (!profileIds.contains(grant.profileId)) {
@@ -4074,6 +5121,7 @@ class ProfileRegistry {
               'restoreId': operationId,
             }),
             'created_at_ms': now,
+            'updated_at_ms': now,
           });
         }
         for (final settings in item.settings) {
@@ -4093,6 +5141,7 @@ class ProfileRegistry {
             'resource_id': item.id,
             'enabled': settings.enabled ? 1 : 0,
             'settings_json': encoded,
+            'updated_at_ms': now,
           });
         }
         for (final binding in item.bindings) {
@@ -4127,7 +5176,7 @@ class ProfileRegistry {
       );
       await _assertAdminInvariant(txn);
     });
-    await checkpointTvOsRecovery();
+    await _finishRegistryDelete();
   }
 
   static bool _isDefaultSeedGrantOrigin(Object? encoded) {
@@ -4307,6 +5356,7 @@ class ProfileRegistry {
     required int baseGeneration,
     required int stagedGeneration,
     required String operationId,
+    void Function()? onAuthorityCommitted,
     bool? profileSetupComplete,
     bool? profileLockOnResume,
     bool updateInactivityTimeout = false,
@@ -4365,6 +5415,7 @@ class ProfileRegistry {
           'public_config_json': row['public_config_json'],
           'sealed_secret_payload': _encodeEnvelopeColumn(envelope),
           'secret_payload_version': row['secret_payload_version'],
+          'secret_pending': 0,
           'authorization_revision': 1,
           'created_at_ms': now,
           'updated_at_ms': now,
@@ -4386,6 +5437,7 @@ class ProfileRegistry {
             'restoreId': operationId,
           }),
           'created_at_ms': now,
+          'updated_at_ms': now,
         });
         final profileEnabled = row['profile_enabled'];
         final profileSettingsJson = row['profile_settings_json'];
@@ -4398,6 +5450,7 @@ class ProfileRegistry {
             'resource_id': row['resource_id'],
             'enabled': profileEnabled == 0 ? 0 : 1,
             'settings_json': profileSettingsJson,
+            'updated_at_ms': now,
           });
         }
         if (row['binding_slot'] != null) {
@@ -4456,7 +5509,8 @@ class ProfileRegistry {
         whereArgs: <Object>[operationId, stagedGeneration],
       );
     });
-    await checkpointTvOsRecovery();
+    onAuthorityCommitted?.call();
+    await checkpointTvOsRecovery(webDavSyncRegistryChange: true);
     return (await getProfile(profileId))!;
   }
 
@@ -4871,7 +5925,188 @@ class ProfileRegistry {
           1,
       authorizationRevision: row['authorization_revision']! as int,
       enabled: row['disabled_at_ms'] == null,
+      secretPending: row['secret_pending'] == 1,
     );
+  }
+
+  static String _registryGrantKey(String profileId, String resourceId) =>
+      '$profileId\u0000$resourceId';
+
+  static String _registryBindingKey(String profileId, String slot) =>
+      '$profileId\u0000$slot';
+
+  /// Enqueues the complete deletion cascade in the same SQL transaction as
+  /// the rows it describes. Unbound registries skip the outbox; once bound,
+  /// an INSERT failure aborts the deletion transaction.
+  /// [target] must be captured before opening the transaction: its preference
+  /// barrier can wait for a sync snapshot that itself needs this registry.
+  static Future<void> _recordRegistryDeleteCascade(
+    DatabaseExecutor db, {
+    required WebDavSyncRegistryTombstoneOutboxTarget? target,
+    Set<String> profileIds = const <String>{},
+    Set<String> resourceIds = const <String>{},
+    Set<String> grantKeys = const <String>{},
+    Set<String> bindingKeys = const <String>{},
+    Iterable<WebDavSyncRegistryRecordId> mergedBaselineRecords =
+        const <WebDavSyncRegistryRecordId>[],
+  }) async {
+    if (profileIds.isEmpty &&
+        resourceIds.isEmpty &&
+        grantKeys.isEmpty &&
+        bindingKeys.isEmpty) {
+      return;
+    }
+    if (target == null) return;
+    final records = <WebDavSyncRegistryRecordId>{
+      ...await _registryRecordInventory(db),
+      ...mergedBaselineRecords,
+    };
+    final expandedResourceIds = <String>{...resourceIds};
+    for (final record in records) {
+      if (record.kind == WebDavSyncRegistryRecordKind.resource &&
+          profileIds.contains(record.ownerProfileId)) {
+        expandedResourceIds.add(record.resourceId!);
+      }
+    }
+    final selected = records
+        .where((record) {
+          final profileId = record.profileId;
+          final resourceId = record.resourceId;
+          final grantKey = profileId == null || resourceId == null
+              ? null
+              : _registryGrantKey(profileId, resourceId);
+          return switch (record.kind) {
+            WebDavSyncRegistryRecordKind.profile => profileIds.contains(
+              profileId,
+            ),
+            WebDavSyncRegistryRecordKind.resource =>
+              expandedResourceIds.contains(resourceId),
+            WebDavSyncRegistryRecordKind.grant ||
+            WebDavSyncRegistryRecordKind.setting =>
+              profileIds.contains(profileId) ||
+                  expandedResourceIds.contains(resourceId) ||
+                  grantKeys.contains(grantKey),
+            WebDavSyncRegistryRecordKind.binding =>
+              profileIds.contains(profileId) ||
+                  expandedResourceIds.contains(resourceId) ||
+                  grantKeys.contains(grantKey) ||
+                  bindingKeys.contains(
+                    _registryBindingKey(profileId!, record.slot!),
+                  ),
+          };
+        })
+        .toList(growable: false);
+    await _enqueueRegistryTombstones(db, target, selected);
+  }
+
+  static Future<void> _recordRegistryBorrowerRevocation(
+    DatabaseExecutor db, {
+    required WebDavSyncRegistryTombstoneOutboxTarget? target,
+    required String ownerProfileId,
+    Iterable<WebDavSyncRegistryRecordId> mergedBaselineRecords =
+        const <WebDavSyncRegistryRecordId>[],
+  }) async {
+    if (target == null) return;
+    final records = <WebDavSyncRegistryRecordId>{
+      ...await _registryRecordInventory(db),
+      ...mergedBaselineRecords,
+    };
+    final ownedResourceIds = records
+        .where(
+          (record) =>
+              record.kind == WebDavSyncRegistryRecordKind.resource &&
+              record.ownerProfileId == ownerProfileId,
+        )
+        .map((record) => record.resourceId!)
+        .toSet();
+    final revokedGrantKeys = records
+        .where(
+          (record) =>
+              record.kind == WebDavSyncRegistryRecordKind.grant &&
+              ownedResourceIds.contains(record.resourceId) &&
+              record.profileId != ownerProfileId,
+        )
+        .map(
+          (record) => _registryGrantKey(record.profileId!, record.resourceId!),
+        )
+        .toSet();
+    final selected = records
+        .where((record) {
+          final profileId = record.profileId;
+          final resourceId = record.resourceId;
+          if (profileId == null || resourceId == null) return false;
+          return revokedGrantKeys.contains(
+            _registryGrantKey(profileId, resourceId),
+          );
+        })
+        .toList(growable: false);
+    await _enqueueRegistryTombstones(db, target, selected);
+  }
+
+  static Future<void> _enqueueRegistryTombstones(
+    DatabaseExecutor db,
+    WebDavSyncRegistryTombstoneOutboxTarget target,
+    List<WebDavSyncRegistryRecordId> records,
+  ) async {
+    if (records.isEmpty) return;
+    await db.insert('webdav_sync_tombstone_outbox', <String, Object?>{
+      'namespace_id': target.namespaceId,
+      'origin_device_id': target.deviceId,
+      'records_json': jsonEncode(
+        records.map((record) => record.toJson()).toList(growable: false),
+      ),
+      'created_at_ms': DateTime.now().millisecondsSinceEpoch,
+    });
+  }
+
+  static Future<List<WebDavSyncRegistryRecordId>> _registryRecordInventory(
+    DatabaseExecutor db,
+  ) async {
+    final profiles = await db.query(
+      'user_profiles',
+      columns: const <String>['id'],
+    );
+    final resources = await db.query(
+      'connection_resources',
+      columns: const <String>['id', 'owner_profile_id'],
+    );
+    final grants = await db.query(
+      'profile_resource_grants',
+      columns: const <String>['profile_id', 'resource_id'],
+    );
+    final settings = await db.query(
+      'profile_resource_settings',
+      columns: const <String>['profile_id', 'resource_id'],
+    );
+    final bindings = await db.query(
+      'profile_connection_bindings',
+      columns: const <String>['profile_id', 'slot', 'resource_id'],
+    );
+    return <WebDavSyncRegistryRecordId>[
+      for (final row in profiles)
+        WebDavSyncRegistryRecordId.profile(row['id']! as String),
+      for (final row in resources)
+        WebDavSyncRegistryRecordId.resource(
+          row['id']! as String,
+          ownerProfileId: row['owner_profile_id']! as String,
+        ),
+      for (final row in grants)
+        WebDavSyncRegistryRecordId.grant(
+          row['profile_id']! as String,
+          row['resource_id']! as String,
+        ),
+      for (final row in settings)
+        WebDavSyncRegistryRecordId.setting(
+          row['profile_id']! as String,
+          row['resource_id']! as String,
+        ),
+      for (final row in bindings)
+        WebDavSyncRegistryRecordId.binding(
+          row['profile_id']! as String,
+          row['slot']! as String,
+          resourceId: row['resource_id']! as String,
+        ),
+    ];
   }
 
   static Future<int> _profileAuthorizationRevision(
@@ -5002,7 +6237,7 @@ class ProfileRegistry {
         ProfileLockController.instance.lockedProfileId.value != null ||
         runtimeScope?.profileId != profileId ||
         runtimeScope?.sessionEpoch != sessionEpoch) {
-      throw StateError('Active profile session has ended');
+      throw ProfileSessionUnavailable('Active profile session has ended');
     }
     final active = await db.query(
       'device_state',
@@ -5023,12 +6258,12 @@ class ProfileRegistry {
         profiles.single['authorization_revision'] != authorizationRevision ||
         profiles.single['lifecycle_state'] !=
             UserProfileLifecycle.active.name) {
-      throw StateError('Active profile authorization changed');
+      throw ProfileSessionUnavailable('Active profile authorization changed');
     }
     if (ProfileLockController.instance.lockedProfileId.value != null ||
         ProfileRuntime.scope.value?.profileId != profileId ||
         ProfileRuntime.scope.value?.sessionEpoch != sessionEpoch) {
-      throw StateError('Active profile session has ended');
+      throw ProfileSessionUnavailable('Active profile session has ended');
     }
   }
 
@@ -5068,7 +6303,7 @@ class ProfileRegistry {
         ProfileLockController.instance.lockedProfileId.value != null ||
         runtimeScope?.profileId != profileId ||
         runtimeScope?.sessionEpoch != sessionEpoch) {
-      throw StateError('Managing profile session has ended');
+      throw ProfileSessionUnavailable('Managing profile session has ended');
     }
     final active = await db.query(
       'device_state',
@@ -5077,7 +6312,7 @@ class ProfileRegistry {
       limit: 1,
     );
     if (active.isEmpty || active.single['active_profile_id'] != profileId) {
-      throw StateError('Managing profile is no longer active');
+      throw ProfileSessionUnavailable('Managing profile is no longer active');
     }
     final rows = await db.query(
       'user_profiles',
@@ -5089,19 +6324,19 @@ class ProfileRegistry {
     if (rows.isEmpty ||
         rows.single['authorization_revision'] != authorizationRevision ||
         rows.single['role'] != UserProfileRole.admin.name) {
-      throw StateError('Managing profile authorization changed');
+      throw ProfileSessionUnavailable('Managing profile authorization changed');
     }
     final policy = ProfilePolicy.decode(
       rows.single['policy_json']! as String,
       UserProfileRole.admin,
     );
     if (!policy.allows(UserProfileRole.admin, ProfileFeature.manageProfiles)) {
-      throw StateError('Profile management is not authorized');
+      throw ProfileSessionUnavailable('Profile management is not authorized');
     }
     if (ProfileLockController.instance.lockedProfileId.value != null ||
         ProfileRuntime.scope.value?.profileId != profileId ||
         ProfileRuntime.scope.value?.sessionEpoch != sessionEpoch) {
-      throw StateError('Managing profile session has ended');
+      throw ProfileSessionUnavailable('Managing profile session has ended');
     }
   }
 
@@ -5191,6 +6426,233 @@ class ProfileRegistry {
   }
 }
 
+enum SyncedRegistryApplyResult { applied, conflict }
+
+class SyncedRegistryDelta {
+  final List<SyncedRegistryProfileRecord> profiles;
+  final List<SyncedRegistryResourceRecord> resources;
+  final List<SyncedRegistryGrantRecord> grants;
+  final List<SyncedRegistrySettingsRecord> settings;
+  final List<SyncedRegistryBindingRecord> bindings;
+  final List<SyncedRegistryDeleteRecord> deletes;
+
+  const SyncedRegistryDelta({
+    this.profiles = const <SyncedRegistryProfileRecord>[],
+    this.resources = const <SyncedRegistryResourceRecord>[],
+    this.grants = const <SyncedRegistryGrantRecord>[],
+    this.settings = const <SyncedRegistrySettingsRecord>[],
+    this.bindings = const <SyncedRegistryBindingRecord>[],
+    this.deletes = const <SyncedRegistryDeleteRecord>[],
+  });
+}
+
+class SyncedRegistryDeleteRecord {
+  final WebDavSyncRegistryRecordId record;
+  final int? expectedPriorUpdatedAtMs;
+
+  const SyncedRegistryDeleteRecord({
+    required this.record,
+    this.expectedPriorUpdatedAtMs,
+  });
+}
+
+class SyncedRegistryProfileRecord {
+  final String id;
+  final String name;
+  final String? avatarKey;
+  final UserProfileRole role;
+  final ProfilePolicy policy;
+  final bool enabled;
+  final bool lockOnResume;
+  final int? inactivityTimeoutMinutes;
+  final bool setupComplete;
+  final UserProfileLifecycle lifecycle;
+  final ProfilePinRecord pin;
+
+  /// False for a metadata-only profile update so local failure/lockout state
+  /// remains device-local when the singular wire credential is unchanged.
+  final bool applyPin;
+  final int updatedAtMs;
+  final int? expectedPriorUpdatedAtMs;
+
+  const SyncedRegistryProfileRecord({
+    required this.id,
+    required this.name,
+    this.avatarKey,
+    required this.role,
+    required this.policy,
+    required this.enabled,
+    required this.lockOnResume,
+    this.inactivityTimeoutMinutes,
+    required this.setupComplete,
+    this.lifecycle = UserProfileLifecycle.active,
+    this.pin = const ProfilePinRecord(),
+    this.applyPin = true,
+    required this.updatedAtMs,
+    this.expectedPriorUpdatedAtMs,
+  });
+}
+
+class SyncedRegistryResourceRecord {
+  final ConnectionResource resource;
+  final int updatedAtMs;
+  final String? sealedSecretPayload;
+  final int? secretPayloadVersion;
+  final bool clearSecret;
+  final int? expectedPriorUpdatedAtMs;
+
+  const SyncedRegistryResourceRecord({
+    required this.resource,
+    required this.updatedAtMs,
+    this.sealedSecretPayload,
+    this.secretPayloadVersion,
+    this.clearSecret = false,
+    this.expectedPriorUpdatedAtMs,
+  });
+}
+
+class SyncedRegistryGrantRecord {
+  final String profileId;
+  final String resourceId;
+  final int permissions;
+  final int updatedAtMs;
+  final int? expectedPriorUpdatedAtMs;
+
+  const SyncedRegistryGrantRecord({
+    required this.profileId,
+    required this.resourceId,
+    required this.permissions,
+    required this.updatedAtMs,
+    this.expectedPriorUpdatedAtMs,
+  });
+}
+
+class SyncedRegistrySettingsRecord {
+  final String profileId;
+  final String resourceId;
+  final bool enabled;
+  final Map<String, dynamic> settings;
+  final int updatedAtMs;
+  final int? expectedPriorUpdatedAtMs;
+
+  const SyncedRegistrySettingsRecord({
+    required this.profileId,
+    required this.resourceId,
+    required this.enabled,
+    this.settings = const <String, dynamic>{},
+    required this.updatedAtMs,
+    this.expectedPriorUpdatedAtMs,
+  });
+}
+
+class SyncedRegistryBindingRecord {
+  final String profileId;
+  final String slot;
+  final String resourceId;
+  final int updatedAtMs;
+  final int? expectedPriorUpdatedAtMs;
+
+  const SyncedRegistryBindingRecord({
+    required this.profileId,
+    required this.slot,
+    required this.resourceId,
+    required this.updatedAtMs,
+    this.expectedPriorUpdatedAtMs,
+  });
+}
+
+class RegistrySyncProjection {
+  final List<RegistrySyncResourceProjection> resources;
+  final List<RegistrySyncGrantProjection> grants;
+  final List<RegistrySyncSettingsProjection> settings;
+  final List<RegistrySyncBindingProjection> bindings;
+
+  const RegistrySyncProjection({
+    required this.resources,
+    required this.grants,
+    required this.settings,
+    required this.bindings,
+  });
+}
+
+class RegistryCircleSyncProjection {
+  final List<RegistrySyncProfileProjection> profiles;
+  final RegistrySyncProjection registry;
+  final int outboxRowCount;
+
+  const RegistryCircleSyncProjection({
+    required this.profiles,
+    required this.registry,
+    required this.outboxRowCount,
+  });
+}
+
+class RegistrySyncProfileProjection {
+  final UserProfile profile;
+  final ProfilePinRecord pin;
+  final int updatedAtMs;
+
+  const RegistrySyncProfileProjection({
+    required this.profile,
+    required this.pin,
+    required this.updatedAtMs,
+  });
+}
+
+class RegistrySyncResourceProjection {
+  final ConnectionResource resource;
+  final int updatedAtMs;
+
+  const RegistrySyncResourceProjection({
+    required this.resource,
+    required this.updatedAtMs,
+  });
+}
+
+class RegistrySyncGrantProjection {
+  final String profileId;
+  final String resourceId;
+  final int permissions;
+  final int updatedAtMs;
+
+  const RegistrySyncGrantProjection({
+    required this.profileId,
+    required this.resourceId,
+    required this.permissions,
+    required this.updatedAtMs,
+  });
+}
+
+class RegistrySyncSettingsProjection {
+  final String profileId;
+  final String resourceId;
+  final bool enabled;
+  final Map<String, dynamic> settings;
+  final int updatedAtMs;
+
+  const RegistrySyncSettingsProjection({
+    required this.profileId,
+    required this.resourceId,
+    required this.enabled,
+    required this.settings,
+    required this.updatedAtMs,
+  });
+}
+
+class RegistrySyncBindingProjection {
+  final String profileId;
+  final String slot;
+  final String resourceId;
+  final int updatedAtMs;
+
+  const RegistrySyncBindingProjection({
+    required this.profileId,
+    required this.slot,
+    required this.resourceId,
+    required this.updatedAtMs,
+  });
+}
+
 class SealedResourceSecretRecord {
   final String resourceId;
   final ConnectionResourceType type;
@@ -5228,6 +6690,7 @@ class StagedGraphResource {
   final String ownerProfileId;
   final Map<String, dynamic> publicConfig;
   final String sealedSecretPayload;
+  final File? sealedSecretFile;
   final int secretPayloadVersion;
   final bool enabled;
   final List<StagedGraphGrant> grants;
@@ -5241,12 +6704,21 @@ class StagedGraphResource {
     required this.ownerProfileId,
     required this.publicConfig,
     required this.sealedSecretPayload,
+    this.sealedSecretFile,
     required this.secretPayloadVersion,
     this.enabled = true,
     required this.grants,
     required this.bindings,
     this.settings = const <StagedGraphSettings>[],
   });
+  Future<String> readSealedSecret() async {
+    final file = sealedSecretFile;
+    if (file == null) return sealedSecretPayload;
+    if (await file.length() > 128 * 1024 * 1024) {
+      throw StateError('Staged resource secret exceeds its size limit');
+    }
+    return file.readAsString();
+  }
 }
 
 /// An existing receiver addon grant inherited while an imported profile was

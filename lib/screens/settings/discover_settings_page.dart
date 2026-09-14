@@ -1,17 +1,19 @@
 import 'package:flutter/material.dart';
 
 import '../../models/stremio_addon.dart';
+import '../../models/metadata_preferences.dart';
 import '../../services/analytics_service.dart';
 import '../../services/discover_prefs.dart';
 import '../../services/main_page_bridge.dart';
 import '../../services/mdblist/mdblist_service.dart';
+import '../../services/metadata_preferences_service.dart';
 import '../../services/storage_service.dart';
 import '../../services/stremio_service.dart';
 import '../../utils/platform_util.dart';
 import 'widgets/settings_widgets.dart';
 
 /// Discover behavior settings. Source options mirror the Discover dropdown:
-/// fixed tracker/CW sources first, followed by installed browsable add-ons.
+/// fixed sources first, followed by installed browsable add-ons.
 class DiscoverSettingsPage extends StatefulWidget {
   final Future<bool> Function()? mdblistAuthLoader;
   final Future<List<StremioAddon>> Function()? addonLoader;
@@ -78,6 +80,24 @@ class _DiscoverSettingsPageState extends State<DiscoverSettingsPage> {
         'Always open Simkl browsing',
       ),
     ];
+
+    var tmdbEnabled = false;
+    try {
+      tmdbEnabled = (await MetadataPreferencesService.load()).features.contains(
+        MetadataFeature.discovery,
+      );
+    } catch (_) {}
+    if (tmdbEnabled || defaultSource == 'tmdb') {
+      options.add(
+        SettingsSelectOption(
+          'tmdb',
+          'TMDB',
+          tmdbEnabled
+              ? 'Always open TMDB browsing'
+              : 'Enable TMDB discovery to use this source again',
+        ),
+      );
+    }
 
     var mdblistAuthenticated = false;
     if (kMdblistEnabled) {

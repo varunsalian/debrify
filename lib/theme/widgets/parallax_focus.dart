@@ -128,9 +128,7 @@ class ParallaxRichScope extends InheritedWidget {
   const ParallaxRichScope({super.key, required super.child});
 
   static bool of(BuildContext context) =>
-      context
-          .dependOnInheritedWidgetOfExactType<ParallaxRichScope>() !=
-      null;
+      context.dependOnInheritedWidgetOfExactType<ParallaxRichScope>() != null;
 
   @override
   bool updateShouldNotify(ParallaxRichScope oldWidget) => false;
@@ -303,6 +301,7 @@ class _ParallaxBodyState extends State<_ParallaxBody>
   /// one: it is a function of how far the lift has progressed, so two springs
   /// could only ever drift out of phase with each other.
   Offset _lean = Offset.zero;
+  int _moveGeneration = 0;
 
   @override
   void initState() {
@@ -326,6 +325,7 @@ class _ParallaxBodyState extends State<_ParallaxBody>
   }
 
   void _drive() {
+    final generation = ++_moveGeneration;
     if (widget.focused) {
       final t = ParallaxTravel.take();
       // Rapid traversal leans harder and settles less — the felt difference
@@ -341,6 +341,7 @@ class _ParallaxBodyState extends State<_ParallaxBody>
     // that does not lift is a card with no cursor.
     if (_reduceMotion) {
       _c.stop();
+      _lite = false;
       _c.value = target;
       return;
     }
@@ -352,16 +353,15 @@ class _ParallaxBodyState extends State<_ParallaxBody>
     // tenth of the frames and reads crisper under DPAD repeat. Same
     // policy family as the lite body below.
     //
-    // Rich subtrees hybridize on Android TV: DURING a rapid run both cards
+    // Rich subtrees hybridize on Android TV: DURING every move both cards
     // of every step drop to this same lite pipeline — the tilt's perspective
     // re-raster and the glare's saveLayer, ×2 cards ×every repeat frame,
     // measured ~44ms of raster per janky frame on the Mi Box, for motion
-    // nobody can see at repeat speed. The full spring returns on the settle
-    // step, and the arriving card swaps its paint back to rich once the
+    // that also stalls deliberate, slower steps on a low-end TV. The
+    // arriving card swaps its paint back to rich once the
     // short ease-out lands (a static highlight appearing at rest, not a
     // mid-motion style change).
-    final lite = PlatformUtil.isAndroidTvCached &&
-        (!widget.richTv || ParallaxTravel.isTravelling);
+    final lite = PlatformUtil.isAndroidTvCached;
     if (lite != _lite) setState(() => _lite = lite);
     if (lite) {
       _c
@@ -371,29 +371,15 @@ class _ParallaxBodyState extends State<_ParallaxBody>
             curve: Curves.easeOutCubic,
           )
           .whenCompleteOrCancel(() {
-        if (mounted &&
-            widget.richTv &&
-            widget.focused &&
-            _lite &&
-            !_c.isAnimating) {
-          setState(() => _lite = false);
-        }
-      });
-      return;
-    }
-
-    // Android TV rich, at STEP cadence: keep the tilt and the glare but
-    // drive them with a short ease-out instead of the settle spring. The
-    // spring's ~1s tail kept BOTH cards of every step animating between
-    // moves — at a normal stepping pace the board never stopped rastering
-    // rich frames, which is most of what "Home still feels heavy" was.
-    // The tilt rides controller velocity, so the brief curve still leans.
-    if (PlatformUtil.isAndroidTvCached) {
-      _c.animateTo(
-        target,
-        duration: const Duration(milliseconds: 200),
-        curve: Curves.easeOutCubic,
-      );
+            if (mounted &&
+                generation == _moveGeneration &&
+                widget.richTv &&
+                widget.focused &&
+                _lite &&
+                !_c.isAnimating) {
+              setState(() => _lite = false);
+            }
+          });
       return;
     }
 
@@ -410,7 +396,10 @@ class _ParallaxBodyState extends State<_ParallaxBody>
     // much oversized. Land it exactly, and only if this is still the move
     // that was started (a later one will have set its own target).
     .whenCompleteOrCancel(() {
-      if (mounted && _c.value != target && !_c.isAnimating) {
+      if (mounted &&
+          generation == _moveGeneration &&
+          _c.value != target &&
+          !_c.isAnimating) {
         _c.value = target;
       }
     });
@@ -419,7 +408,7 @@ class _ParallaxBodyState extends State<_ParallaxBody>
   bool _reduceMotion = false;
 
   /// Whether the CURRENT move runs the lite pipeline on a rich-TV subtree
-  /// (rapid-travel hybrid — see [_drive]). Paint follows the same flag so
+  /// (move/settle hybrid — see [_drive]). Paint follows the same flag so
   /// the animation style and the body style can never disagree mid-flight.
   bool _lite = false;
 
@@ -434,13 +423,16 @@ class _ParallaxBodyState extends State<_ParallaxBody>
     // Someone who enables reduced motion because motion is hurting them should
     // not have to wait out the animation that prompted it.
     if (_reduceMotion && !was && _c.isAnimating) {
+      ++_moveGeneration;
       _c.stop();
+      _lite = false;
       _c.value = widget.focused ? 1.0 : 0.0;
     }
   }
 
   @override
   void dispose() {
+    ++_moveGeneration;
     debugLiveBodies--;
     _c.dispose();
     super.dispose();

@@ -1,6 +1,8 @@
 import 'package:debrify/screens/settings/discover_settings_page.dart';
 import 'package:debrify/screens/settings/widgets/settings_widgets.dart';
 import 'package:debrify/services/discover_prefs.dart';
+import 'package:debrify/models/metadata_preferences.dart';
+import 'package:debrify/services/metadata_preferences_service.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/storage_service.dart';
 import 'package:debrify/theme/app_theme.dart';
@@ -70,6 +72,34 @@ void main() {
     expect(typeTags.value, isTrue);
     expect(ratings.value, isTrue);
     expect(titles.value, isTrue);
+  });
+
+  testWidgets('TMDB can be saved as the default Discover source', (
+    tester,
+  ) async {
+    final dropdown = await pumpPage(tester, mdblistAuthenticated: false);
+    expect(dropdown.options.map((option) => option.value), contains('tmdb'));
+    dropdown.onChanged('tmdb');
+    await tester.pump();
+    expect(await StorageService.getDiscoverDefaultSource(), 'tmdb');
+    await StorageService.setDiscoverLastSource('tmdb');
+    expect(await StorageService.getDiscoverLastSource(), 'tmdb');
+  });
+
+  testWidgets('disabled TMDB is hidden unless already the configured default', (
+    tester,
+  ) async {
+    await MetadataPreferencesService.save(MetadataPreferences(features: {}));
+    final dropdown = await pumpPage(tester, mdblistAuthenticated: false);
+    expect(
+      dropdown.options.map((option) => option.value),
+      isNot(contains('tmdb')),
+    );
+    await tester.pumpWidget(const SizedBox());
+    await StorageService.setDiscoverDefaultSource('tmdb');
+    final restored = await pumpPage(tester, mdblistAuthenticated: false);
+    expect(restored.value, 'tmdb');
+    expect(restored.options.map((option) => option.value), contains('tmdb'));
   });
 
   testWidgets('poster detail toggles persist their choices', (tester) async {

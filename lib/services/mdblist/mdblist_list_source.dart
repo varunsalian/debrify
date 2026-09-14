@@ -81,16 +81,32 @@ class MdblistListSource {
 
   /// The user's own lists, ready to populate the "List" dropdown. Skips lists
   /// without a usable id. Returns [] when MDBList isn't connected or on error.
-  Future<List<MdblistListChoice>> loadUserLists() async =>
+  Future<List<MdblistListChoice>> loadUserLists({bool strict = false}) async =>
+      strict ? _completeDirectory(await service.fetchUserListsResult()) :
       _mapChoices(await service.fetchUserLists());
 
   /// MDBList's top/public lists (other users' popular lists). Same shape as
   /// [loadUserLists]; each choice carries its [MdblistListChoice.ownerName].
-  Future<List<MdblistListChoice>> loadTopLists() async =>
+  Future<List<MdblistListChoice>> loadTopLists({bool strict = false}) async =>
+      strict ? _completeDirectory(await service.fetchTopListsResult()) :
       _mapChoices(await service.fetchTopLists());
 
-  Future<List<MdblistListChoice>> loadLikedLists() async =>
+  Future<List<MdblistListChoice>> loadLikedLists({bool strict = false}) async =>
+      strict ? _completeDirectory(await service.fetchLikedListsResult()) :
       _mapChoices(await service.fetchLikedLists());
+
+  List<MdblistListChoice> _completeDirectory(
+    MdblistResult<List<Map<String, dynamic>>> result,
+  ) {
+    if (!result.isComplete || result.data == null) {
+      throw StateError('MDBList directory incomplete');
+    }
+    final choices = _mapChoices(result.data!);
+    if (choices.length != result.data!.length) {
+      throw const FormatException('MDBList directory identity missing');
+    }
+    return choices;
+  }
 
   /// Searches MDBList's public lists by name. Same shape as the others.
   Future<List<MdblistListChoice>> searchLists(String query) async =>
@@ -134,10 +150,22 @@ class MdblistListSource {
     return out;
   }
 
-  /// Load a list's items (movies + shows merged, deduped) + whether the fetch
-  /// failed. A genuinely empty list returns `(items: [], failed: false)`; only a
-  /// network/parse failure sets `failed: true`, so the UI can tell "empty" from
-  /// "couldn't load".
+  /// One page for Home. `complete` describes the preview request, not whether
+  /// the remote list has further pages; See All uses [loadListItems] instead.
+  Future<({List<StremioMeta> items, bool failed, bool complete})> loadHomePreview(
+    MdblistListChoice choice,
+  ) async {
+    final result = await service.fetchHomeListPreview(choice.id);
+    return (
+      items: _dedup(MdblistItemTransformer.transformItems(
+        result.data?.items ?? const [],
+      )),
+      failed: !result.isSuccess,
+      complete: result.isSuccess,
+    );
+  }
+
+  /// Load all list pages for See All, keeping errors distinct from empty lists.
   Future<({List<StremioMeta> items, bool failed, bool complete})> loadListItems(
     MdblistListChoice choice, {
     bool forceRefresh = false,

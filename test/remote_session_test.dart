@@ -12,6 +12,7 @@ RemoteSessionManager _manager(
   String name, {
   DateTime Function()? now,
   int protocolVersion = kProtoVersion,
+  int transferPort = kReliableTransferPort,
 }) {
   Future<SimpleKeyPair>? statics;
   return RemoteSessionManager(
@@ -20,6 +21,7 @@ RemoteSessionManager _manager(
     deviceName: () => name,
     now: now,
     protocolVersion: protocolVersion,
+    transferPort: transferPort,
   );
 }
 
@@ -56,6 +58,33 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('handshake', () {
+    test(
+      'negotiates authenticated transfer ports in both directions',
+      () async {
+        final pair = await _bridge(
+          _manager('Phone', transferPort: 43123),
+          _manager('TV', transferPort: 43124),
+        );
+        expect(pair.senderSession?.peerTransferPort, 43124);
+        expect(pair.receiverSession?.peerTransferPort, 43123);
+        expect(pair.senderSession?.sasCode, pair.receiverSession?.sasCode);
+      },
+    );
+
+    for (final messageType in [RemoteMessageType.hs1, RemoteMessageType.hs2]) {
+      test('rejects altered transfer port in $messageType', () async {
+        final pair = await _bridge(
+          _manager('Phone', transferPort: 43123),
+          _manager('TV', transferPort: 43124),
+          tamper: (message) => message['type'] == messageType
+              ? {...message, 'transferPort': 43125}
+              : message,
+        );
+        expect(pair.senderSession, isNull);
+        expect(pair.receiverSession, isNull);
+      });
+    }
+
     test('both sides derive identical keys and SAS', () async {
       // Deliberately NOT named "Phone": the receiver-side fallback is
       // 'Phone', and a sender by that name would mask a dropped hs1 name
@@ -78,6 +107,27 @@ void main() {
       // Sessions are keyed identically on both ends.
       expect(s.sidB64, r.sidB64);
     });
+
+    for (final versions in [(7, 6), (6, 7)]) {
+      test(
+        'v${versions.$1}/v${versions.$2} peers retain pairing and TCP capabilities',
+        () async {
+          final pair = await _bridge(
+            _manager(
+              'Phone',
+              protocolVersion: versions.$1,
+              transferPort: 43123,
+            ),
+            _manager('TV', protocolVersion: versions.$2, transferPort: 43124),
+          );
+          expect(pair.senderSession?.peerProtocolVersion, versions.$2);
+          expect(pair.receiverSession?.peerProtocolVersion, versions.$1);
+          expect(pair.senderSession?.peerTransferPort, 43124);
+          expect(pair.receiverSession?.peerTransferPort, 43123);
+          expect(pair.senderSession!.keys.c2s, pair.receiverSession!.keys.c2s);
+        },
+      );
+    }
 
     test('handshake records the peer capability version', () async {
       final result = await _bridge(

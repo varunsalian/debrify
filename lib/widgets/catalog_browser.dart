@@ -1,3 +1,4 @@
+import 'clear_pinned_sources_button.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -1556,6 +1557,7 @@ class CatalogBrowserState extends State<CatalogBrowser> {
                         children: [
                           Expanded(
                             child: FilledButton.icon(
+                              autofocus: true,
                               onPressed: () {
                                 Navigator.of(dialogContext).pop();
                                 _showAddSourcePicker(show, imdbId);
@@ -1577,82 +1579,24 @@ class CatalogBrowserState extends State<CatalogBrowser> {
                               ),
                             ),
                           ),
-                          if (!isMovie && sources.length > 1) ...[
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: OutlinedButton.icon(
-                                onPressed: () async {
-                                  await SeriesSourceService.removeAllSources(
-                                    imdbId,
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: ClearPinnedSourcesButton(
+                              onClear: () async {
+                                await SeriesSourceService.removeAllSources(
+                                  imdbId,
+                                );
+                                if (mounted) {
+                                  setState(
+                                    () => _boundSources.remove(imdbId),
                                   );
-                                  if (mounted) {
-                                    setState(
-                                      () => _boundSources.remove(imdbId),
-                                    );
-                                  }
-                                  if (dialogContext.mounted) {
-                                    Navigator.of(dialogContext).pop();
-                                  }
-                                },
-                                icon: const Icon(
-                                  Icons.delete_sweep_outlined,
-                                  size: 18,
-                                  color: Color(0xFFEF4444),
-                                ),
-                                label: const Text(
-                                  'Remove All',
-                                  style: TextStyle(color: Color(0xFFEF4444)),
-                                ),
-                                style: OutlinedButton.styleFrom(
-                                  side: const BorderSide(
-                                    color: Color(0xFFEF4444),
-                                    width: 1,
-                                  ),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(10),
-                                  ),
-                                ),
-                              ),
+                                }
+                                if (dialogContext.mounted) {
+                                  Navigator.of(dialogContext).pop();
+                                }
+                              },
                             ),
-                          ],
-                          if (isMovie) ...[
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: OutlinedButton.icon(
-                                onPressed: () async {
-                                  await SeriesSourceService.removeAllSources(
-                                    imdbId,
-                                  );
-                                  if (mounted) {
-                                    setState(
-                                      () => _boundSources.remove(imdbId),
-                                    );
-                                  }
-                                  if (dialogContext.mounted) {
-                                    Navigator.of(dialogContext).pop();
-                                  }
-                                },
-                                icon: const Icon(
-                                  Icons.delete_outline_rounded,
-                                  size: 18,
-                                  color: Color(0xFFEF4444),
-                                ),
-                                label: const Text(
-                                  'Remove',
-                                  style: TextStyle(color: Color(0xFFEF4444)),
-                                ),
-                                style: OutlinedButton.styleFrom(
-                                  side: const BorderSide(
-                                    color: Color(0xFFEF4444),
-                                    width: 1,
-                                  ),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(10),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
+                          ),
                         ],
                       ),
                       const SizedBox(height: 8),

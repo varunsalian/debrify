@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import '../../services/storage_service.dart';
 import '../../services/mdblist/mdblist_service.dart';
 import '../../services/iptv_transfer_payload.dart';
+import '../../services/stream_badges_service.dart';
 import '../../services/remote_control/remote_chunked_send.dart';
 import '../../services/remote_control/remote_control_state.dart';
 import 'remote_pairing_dialog.dart';
@@ -14,15 +15,27 @@ import '../../services/remote_control/remote_constants.dart';
 import '../../services/engine/local_engine_storage.dart';
 import '../../services/profiles/profile_async_authorization.dart';
 import '../../models/profiles/profile_policy.dart';
+import '../../models/stremio_addon.dart';
+import '../../models/webdav_item.dart';
+import '../../services/stremio_service.dart';
+import '../../services/remote_control/remote_webdav_sync_account.dart';
+import '../../services/remote_control/remote_webdav_accounts.dart';
 
 /// Widget for exporting setup/credentials to TV
 class RemoteConfigExport extends StatefulWidget {
   final VoidCallback onBack;
+  final bool headless;
+  final VoidCallback? onInventoryChanged;
 
-  const RemoteConfigExport({super.key, required this.onBack});
+  const RemoteConfigExport({
+    super.key,
+    required this.onBack,
+    this.headless = false,
+    this.onInventoryChanged,
+  });
 
   @override
-  State<RemoteConfigExport> createState() => _RemoteConfigExportState();
+  RemoteConfigExportState createState() => RemoteConfigExportState();
 }
 
 class _ConfigItem {
@@ -41,7 +54,36 @@ class _ConfigItem {
   });
 }
 
-class _RemoteConfigExportState extends State<RemoteConfigExport> {
+class RemoteConfigExportState extends State<RemoteConfigExport> {
+  bool get loading => _loading;
+  String? inventoryError;
+  List<({String id, String name})> get choices => [
+    for (final item in _allItems)
+      if (item.isConfigured) (id: item.id, name: item.name),
+  ];
+  int get filePlaylistCount => _iptvFileImported;
+  Future<void> reload() => _loadConfigs();
+  Future<bool> sendSelection(
+    Set<String> ids,
+    List<StremioAddon> addons,
+    String pikpakPassword,
+  ) async {
+    if (_sending || _loading) return false;
+    final old = {for (final item in _allItems) item.id: item.selected};
+    for (final item in _allItems) {
+      item.selected = ids.contains(item.id);
+    }
+    _pikpakPasswordController.text = pikpakPassword;
+    try {
+      return await _sendToTvNow(extraAddons: addons);
+    } finally {
+      for (final item in _allItems) {
+        item.selected = old[item.id] ?? false;
+      }
+      if (mounted) _pikpakPasswordController.clear();
+    }
+  }
+
   bool _loading = true;
   bool _sending = false;
 
@@ -57,10 +99,12 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
   _ConfigItem? _trackingPreferences;
   _ConfigItem? _searchEngines;
   _ConfigItem? _webDav;
+  _ConfigItem? _webDavSync;
   _ConfigItem? _indexerManagers;
   _ConfigItem? _iptvPlaylists;
   _ConfigItem? _iptvFavorites;
   _ConfigItem? _iptvLists;
+  _ConfigItem? _streamBadges;
 
   // Non-secret account labels used only for the transfer inventory.
   String? _traktUsername;
@@ -80,6 +124,7 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
   int _iptvFavoriteCount = 0;
   int _iptvListCount = 0;
   int _iptvListChannelCount = 0;
+  int _streamBadgeCount = 0;
 
   /// Playlists imported from a file, which can't be sent — their definition
   /// is the raw M3U text. Surfaced so the screen says so instead of quietly
@@ -99,6 +144,7 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
   }
 
   Future<void> _loadConfigs() async {
+    inventoryError = null;
     setState(() => _loading = true);
 
     try {
@@ -188,6 +234,12 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
         debugPrint('RemoteConfigExport: WebDAV inventory failed');
         _webDavCount = 0;
       }
+      var hasWebDavSync = false;
+      try {
+        hasWebDavSync = await readRemoteWebDavSyncAccount() != null;
+      } catch (_) {
+        // Sync account credentials are available only to an authorized Admin.
+      }
       try {
         final managers = await StorageService.getIndexerManagerConfigs(
           forSettings: false,
@@ -221,6 +273,14 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
         _iptvFavoriteCount = 0;
         _iptvListCount = 0;
         _iptvListChannelCount = 0;
+      }
+
+      try {
+        _streamBadgeCount =
+            (await StreamBadgesService.instance.getSources()).length;
+      } catch (_) {
+        debugPrint('RemoteConfigExport: stream badge inventory failed');
+        _streamBadgeCount = 0;
       }
 
       if (!mounted) return;
@@ -313,6 +373,12 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
           isConfigured: _webDavCount > 0,
           selected: _webDavCount > 0,
         );
+        _webDavSync = _ConfigItem(
+          id: remoteWebDavSyncAccountId,
+          name: 'WebDAV Sync account',
+          icon: 'wd',
+          isConfigured: hasWebDavSync,
+        );
 
         _indexerManagers = _ConfigItem(
           id: ConfigCommand.indexerManagers,
@@ -346,11 +412,22 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
           selected: _iptvListCount > 0,
         );
 
+        _streamBadges = _ConfigItem(
+          id: ConfigCommand.streamBadges,
+          name: 'Stream Badges',
+          icon: 'badges',
+          isConfigured: _streamBadgeCount > 0,
+          selected: _streamBadgeCount > 0,
+        );
+
         _loading = false;
       });
     } catch (_) {
+      inventoryError = 'Could not load accounts and setup';
       debugPrint('RemoteConfigExport: setup inventory failed');
       if (mounted) setState(() => _loading = false);
+    } finally {
+      if (mounted) widget.onInventoryChanged?.call();
     }
   }
 
@@ -369,10 +446,12 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
       _trackingPreferences,
       _searchEngines,
       _webDav,
+      _webDavSync,
       _indexerManagers,
       _iptvPlaylists,
       _iptvFavorites,
       _iptvLists,
+      _streamBadges,
     ])
       if (item != null) item,
   ];
@@ -390,8 +469,13 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
     return _pikpakPasswordController.text.isNotEmpty;
   }
 
-  Future<void> _sendToTv() async {
-    if (!_hasAnySelected || !_isPikpakPasswordValid) return;
+  Future<void> _sendToTv() =>
+      RemoteControlState().transferActivity.run(() => _sendToTvNow());
+
+  Future<bool> _sendToTvNow({List<StremioAddon> extraAddons = const []}) async {
+    if ((!_hasAnySelected && extraAddons.isEmpty) || !_isPikpakPasswordValid) {
+      return false;
+    }
 
     final connectedDevice = RemoteControlState().connectedDevice;
     if (connectedDevice == null) {
@@ -402,7 +486,7 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
           behavior: SnackBarBehavior.floating,
         ),
       );
-      return;
+      return false;
     }
 
     // Credential gate: encrypted session + pairing code (or remembered
@@ -412,7 +496,7 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
       RemoteControlState(),
       connectedDevice,
     );
-    if (session == null || !mounted) return;
+    if (session == null || !mounted) return false;
 
     setState(() => _sending = true);
     HapticFeedback.mediumImpact();
@@ -420,7 +504,7 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
     final targetIp = connectedDevice.ip;
     final state = RemoteControlState();
     final supportsApplicationResult =
-        connectedDevice.supportsRemoteTransferResult;
+        session.peerProtocolVersion >= kRemoteTransferResultProtocolVersion;
     final requestId = createRemoteTransferRequestId();
     final applicationResult = Completer<({bool ok, String message})>();
     StreamSubscription<({String requestId, bool ok, String message})>?
@@ -645,14 +729,24 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
         },
       );
       await sendSelected(
-        _webDav?.selected == true,
-        'WebDAV',
+        _webDav?.selected == true || _webDavSync?.selected == true,
+        _webDavSync?.selected == true ? 'WebDAV Sync account' : 'WebDAV',
         ConfigCommand.webDav,
         () async {
-          final servers = await StorageService.getWebDavServers(
-            forSettings: false,
-            forRemoteTransfer: true,
-          );
+          var servers = <WebDavConfig>[
+            if (_webDav?.selected == true)
+              ...await StorageService.getWebDavServers(
+                forSettings: false,
+                forRemoteTransfer: true,
+              ),
+          ];
+          if (_webDavSync?.selected == true) {
+            final sync = await readRemoteWebDavSyncAccount();
+            if (sync == null) return false;
+            // Keep the selected sync login when a media connection shares its
+            // endpoint. Both selections still use one correlated wire command.
+            servers = preferRemoteWebDavSyncAccount(servers, sync);
+          }
           if (servers.isEmpty) return false;
           return state.sendConfigCommandToDevice(
             ConfigCommand.webDav,
@@ -743,11 +837,59 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
               );
         },
       );
+      await sendSelected(
+        _streamBadges?.selected == true,
+        'Stream Badges',
+        ConfigCommand.streamBadges,
+        () async {
+          final payload = await StreamBadgesService.instance.exportTransferJson(
+            peerProtocolVersion: session.peerProtocolVersion,
+          );
+          return payload.isNotEmpty &&
+              await sendConfigPayloadToDevice(
+                state,
+                ConfigCommand.streamBadges,
+                targetIp,
+                jsonEncode(payload),
+                label: 'Stream badges',
+                transferRequestId: supportsApplicationResult ? requestId : null,
+              );
+        },
+      );
+
+      for (final addon in extraAddons) {
+        await sendSelected(true, addon.name, RemoteAction.addon, () async {
+          final current = await StremioService.instance.getAddons(
+            forRemoteTransfer: true,
+          );
+          final matches = current.where(
+            (candidate) =>
+                candidate.connectionResourceId == addon.connectionResourceId &&
+                candidate.connectionResourceRevision ==
+                    addon.connectionResourceRevision &&
+                candidate.manifestUrl == addon.manifestUrl,
+          );
+          if (matches.isEmpty) return false;
+          return state.sendAddonCommandToDevice(
+            AddonCommand.install,
+            targetIp,
+            manifestUrl: transferData(matches.first.manifestUrl),
+          );
+        });
+      }
+
+      // A selected batch is acknowledged as one unit. Never apply only the
+      // successfully staged subset and then offer the whole batch for retry.
+      if (widget.headless && supportsApplicationResult && failCount > 0) {
+        return false;
+      }
 
       // Send complete signal to trigger TV restart (only if at least one succeeded)
       if (successCount > 0) {
         // Small delay to ensure previous commands are processed
-        await Future.delayed(const Duration(milliseconds: 500));
+        if (session.peerProtocolVersion < kReliableTransferProtocolVersion) {
+          await Future.delayed(const Duration(milliseconds: 500));
+        }
         final completed = supportsApplicationResult
             ? await sendRemoteTransferCompletion(
                 state,
@@ -773,7 +915,7 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
       }
 
       // Show result
-      if (mounted) {
+      if (mounted && !widget.headless) {
         if (failCount == 0 && successCount > 0) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -810,9 +952,10 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
           );
         }
       }
+      return failCount == 0 && successCount > 0;
     } catch (_) {
       debugPrint('RemoteConfigExport: setup send failed');
-      if (mounted) {
+      if (mounted && !widget.headless) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Failed to send configuration'),
@@ -821,6 +964,7 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
           ),
         );
       }
+      return false;
     } finally {
       await resultSubscription?.cancel();
       if (mounted) {
@@ -831,6 +975,7 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
 
   @override
   Widget build(BuildContext context) {
+    if (widget.headless) return const SizedBox.shrink();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -987,6 +1132,13 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
                     '$_iptvListCount '
                     'list${_iptvListCount != 1 ? 's' : ''} · '
                     '$_iptvListChannelCount channels',
+              ),
+            if (_streamBadges?.isConfigured == true)
+              _buildConfigTile(
+                _streamBadges!,
+                subtitle:
+                    '$_streamBadgeCount '
+                    'ruleset${_streamBadgeCount != 1 ? 's' : ''}',
               ),
             if (_iptvFileImported > 0)
               Padding(
@@ -1380,6 +1532,8 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
         return Icons.star_rounded;
       case ConfigCommand.iptvLists:
         return Icons.playlist_play_rounded;
+      case ConfigCommand.streamBadges:
+        return Icons.sell_rounded;
       default:
         return Icons.settings;
     }
@@ -1415,6 +1569,8 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
         return const Color(0xFFF472B6); // Pink
       case ConfigCommand.iptvLists:
         return const Color(0xFFA78BFA); // Violet
+      case ConfigCommand.streamBadges:
+        return const Color(0xFFFBBF24); // Amber
       default:
         return Colors.white;
     }

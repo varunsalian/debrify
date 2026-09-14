@@ -1,12 +1,20 @@
+import 'widgets/settings_load_error.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../services/analytics_service.dart';
-import '../../services/storage_service.dart';
 import '../../services/pikpak_api_service.dart';
+import '../../services/profiles/profile_credential_facade.dart';
+import '../../services/storage_service.dart';
 import '../../utils/platform_util.dart';
 import '../../utils/tv_keys.dart';
 import 'widgets/settings_widgets.dart';
 import '../../theme/app_theme_scope.dart';
+
+@visibleForTesting
+bool pikPakProviderIsSelectable({
+  required bool isAuthenticated,
+  required bool secretPending,
+}) => isAuthenticated && !secretPending;
 
 /// Provider settings page for configuring default torrent provider.
 class ProviderSettingsPage extends StatefulWidget {
@@ -18,6 +26,8 @@ class ProviderSettingsPage extends StatefulWidget {
 
 class _ProviderSettingsPageState extends State<ProviderSettingsPage> {
   bool _loading = true;
+  bool _loadFailed = false;
+  int _loadGeneration = 0;
   String _selectedProvider = 'none';
 
   // Available providers based on connected services
@@ -57,88 +67,128 @@ class _ProviderSettingsPageState extends State<ProviderSettingsPage> {
   }
 
   Future<void> _loadSettings() async {
-    // Check which providers are available
-    final torboxConfigured = await StorageService.hasTorboxCredential();
-    final rdConfigured = await StorageService.hasRealDebridCredential();
-    final premiumizeConfigured = await StorageService.hasPremiumizeCredential();
-    final allDebridConfigured = await StorageService.hasAllDebridCredential();
-    final pikpakAuth = await PikPakApiService.instance.isAuthenticated();
+    final generation = ++_loadGeneration;
+    setState(() {
+      _loading = true;
+      _loadFailed = false;
+    });
+    try {
+      final (
+        torboxAvailable,
+        rdAvailable,
+        premiumizeAvailable,
+        allDebridAvailable,
+        pikpakAvailable,
+        currentProvider,
+      ) = await (() async {
+        // Check which providers are available
+        final torboxConfigured = await StorageService.hasTorboxCredential();
+        final rdConfigured = await StorageService.hasRealDebridCredential();
+        final premiumizeConfigured =
+            await StorageService.hasPremiumizeCredential();
+        final allDebridConfigured =
+            await StorageService.hasAllDebridCredential();
+        final pikpakAuthenticated = await PikPakApiService.instance
+            .isAuthenticated();
+        final pikpakPresence = await ProfileCredentialFacade.isConfigured(
+          'pikpak_email',
+        );
 
-    final torboxEnabled = await StorageService.getTorboxIntegrationEnabled();
-    final rdEnabled = await StorageService.getRealDebridIntegrationEnabled();
-    final premiumizeEnabled =
-        await StorageService.getPremiumizeIntegrationEnabled();
-    final allDebridEnabled =
-        await StorageService.getAllDebridIntegrationEnabled();
+        final torboxEnabled =
+            await StorageService.getTorboxIntegrationEnabled();
+        final rdEnabled =
+            await StorageService.getRealDebridIntegrationEnabled();
+        final premiumizeEnabled =
+            await StorageService.getPremiumizeIntegrationEnabled();
+        final allDebridEnabled =
+            await StorageService.getAllDebridIntegrationEnabled();
 
-    final torboxAvailable = torboxEnabled && torboxConfigured;
-    final rdAvailable = rdEnabled && rdConfigured;
-    final premiumizeAvailable = premiumizeEnabled && premiumizeConfigured;
-    final allDebridAvailable = allDebridEnabled && allDebridConfigured;
-    final pikpakAvailable = pikpakAuth;
+        final torboxAvailable = torboxEnabled && torboxConfigured;
+        final rdAvailable = rdEnabled && rdConfigured;
+        final premiumizeAvailable = premiumizeEnabled && premiumizeConfigured;
+        final allDebridAvailable = allDebridEnabled && allDebridConfigured;
+        final pikpakAvailable = pikPakProviderIsSelectable(
+          isAuthenticated: pikpakAuthenticated,
+          secretPending: pikpakPresence.pending,
+        );
 
-    // Load current setting
-    var currentProvider = await StorageService.getDefaultTorrentProvider();
+        // Load current setting
+        var currentProvider = await StorageService.getDefaultTorrentProvider();
 
-    // If the saved provider is no longer available, reset to 'none'
-    if (currentProvider == 'torbox' && !torboxAvailable) {
-      currentProvider = 'none';
-      await StorageService.setDefaultTorrentProvider('none');
-    } else if (currentProvider == 'debrid' && !rdAvailable) {
-      currentProvider = 'none';
-      await StorageService.setDefaultTorrentProvider('none');
-    } else if (currentProvider == 'premiumize' && !premiumizeAvailable) {
-      currentProvider = 'none';
-      await StorageService.setDefaultTorrentProvider('none');
-    } else if (currentProvider == 'alldebrid' && !allDebridAvailable) {
-      currentProvider = 'none';
-      await StorageService.setDefaultTorrentProvider('none');
-    } else if (currentProvider == 'pikpak' && !pikpakAvailable) {
-      currentProvider = 'none';
-      await StorageService.setDefaultTorrentProvider('none');
-    }
+        // Display an unavailable selection as 'Ask every time', but only a
+        // deliberate selection may change the saved preference.
+        if (currentProvider == 'torbox' && !torboxAvailable) {
+          currentProvider = 'none';
+        } else if (currentProvider == 'debrid' && !rdAvailable) {
+          currentProvider = 'none';
+        } else if (currentProvider == 'premiumize' && !premiumizeAvailable) {
+          currentProvider = 'none';
+        } else if (currentProvider == 'alldebrid' && !allDebridAvailable) {
+          currentProvider = 'none';
+        } else if (currentProvider == 'pikpak' && !pikpakAvailable) {
+          currentProvider = 'none';
+        }
 
-    if (!mounted) return;
+        return (
+          torboxAvailable,
+          rdAvailable,
+          premiumizeAvailable,
+          allDebridAvailable,
+          pikpakAvailable,
+          currentProvider,
+        );
+      })().timeout(const Duration(seconds: 5));
+      if (!mounted || generation != _loadGeneration) return;
 
-    // Initialize focus nodes for available providers
-    _providerFocusNodes.clear();
-    // +1 for "Ask every time" option
-    final providerCount =
-        1 +
-        (torboxAvailable ? 1 : 0) +
-        (rdAvailable ? 1 : 0) +
-        (premiumizeAvailable ? 1 : 0) +
-        (allDebridAvailable ? 1 : 0) +
-        (pikpakAvailable ? 1 : 0);
-    for (int i = 0; i < providerCount; i++) {
-      final node = FocusNode(debugLabel: 'provider-$i');
-      node.addListener(() => _onFocusChange(i));
-      _providerFocusNodes.add(node);
-    }
-
-    if (mounted) {
-      setState(() {
-        _torboxAvailable = torboxAvailable;
-        _realDebridAvailable = rdAvailable;
-        _premiumizeAvailable = premiumizeAvailable;
-        _allDebridAvailable = allDebridAvailable;
-        _pikpakAvailable = pikpakAvailable;
-        _selectedProvider = currentProvider;
-        _loading = false;
-      });
-      // TV entry focus: land DPAD users on the first option instead of nothing.
-      if (PlatformUtil.isTelevision) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (!mounted) return;
-          // Don't yank focus if it already landed on a real node (only the
-          // route's FocusScope holds focus while nothing is focused yet).
-          final primary = FocusManager.instance.primaryFocus;
-          if (primary != null && primary is! FocusScopeNode) return;
-          if (_providerFocusNodes.isNotEmpty) {
-            _providerFocusNodes.first.requestFocus();
-          }
-        });
+      // Initialize focus nodes for available providers
+      for (final node in _providerFocusNodes) {
+        node.dispose();
       }
+      _providerFocusNodes.clear();
+      // +1 for "Ask every time" option
+      final providerCount =
+          1 +
+          (torboxAvailable ? 1 : 0) +
+          (rdAvailable ? 1 : 0) +
+          (premiumizeAvailable ? 1 : 0) +
+          (allDebridAvailable ? 1 : 0) +
+          (pikpakAvailable ? 1 : 0);
+      for (int i = 0; i < providerCount; i++) {
+        final node = FocusNode(debugLabel: 'provider-$i');
+        node.addListener(() => _onFocusChange(i));
+        _providerFocusNodes.add(node);
+      }
+
+      if (mounted) {
+        setState(() {
+          _torboxAvailable = torboxAvailable;
+          _realDebridAvailable = rdAvailable;
+          _premiumizeAvailable = premiumizeAvailable;
+          _allDebridAvailable = allDebridAvailable;
+          _pikpakAvailable = pikpakAvailable;
+          _selectedProvider = currentProvider;
+          _loading = false;
+        });
+        // TV entry focus: land DPAD users on the first option instead of nothing.
+        if (PlatformUtil.isTelevision) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted || generation != _loadGeneration) return;
+            // Don't yank focus if it already landed on a real node (only the
+            // route's FocusScope holds focus while nothing is focused yet).
+            final primary = FocusManager.instance.primaryFocus;
+            if (primary != null && primary is! FocusScopeNode) return;
+            if (_providerFocusNodes.isNotEmpty) {
+              _providerFocusNodes.first.requestFocus();
+            }
+          });
+        }
+      }
+    } catch (_) {
+      if (!mounted || generation != _loadGeneration) return;
+      setState(() {
+        _loading = false;
+        _loadFailed = true;
+      });
     }
   }
 
@@ -160,6 +210,12 @@ class _ProviderSettingsPageState extends State<ProviderSettingsPage> {
       return const SettingsPageScaffold(
         title: 'Default Provider',
         body: Center(child: CircularProgressIndicator()),
+      );
+    }
+    if (_loadFailed) {
+      return SettingsPageScaffold(
+        title: 'Default Provider',
+        body: SettingsLoadError(onRetry: _loadSettings),
       );
     }
 

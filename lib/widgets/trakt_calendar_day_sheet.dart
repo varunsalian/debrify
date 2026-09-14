@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../models/trakt/trakt_calendar_entry.dart';
 import '../theme/app_theme.dart';
 import '../theme/app_theme_scope.dart';
+import 'calendar_display_preferences.dart';
 
 /// Bottom sheet showing all episodes airing on a specific day.
 ///
@@ -109,7 +110,10 @@ class _EpisodeRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final time = _formatTime(entry.firstAiredLocal);
+    final time = CalendarTimeFormatScope.formatTime(
+      context,
+      entry.firstAiredLocal,
+    );
     final badge = entry.isNewShow
         ? 'NEW SHOW'
         : entry.isSeasonPremiere
@@ -149,9 +153,7 @@ class _EpisodeRow extends StatelessWidget {
                     entry.showTitle,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w600,
-                    ),
+                    style: const TextStyle(fontWeight: FontWeight.w600),
                   ),
                   const SizedBox(height: 2),
                   Text(
@@ -195,11 +197,5 @@ class _EpisodeRow extends StatelessWidget {
         ),
       ),
     );
-  }
-
-  static String _formatTime(DateTime local) {
-    final h = local.hour.toString().padLeft(2, '0');
-    final m = local.minute.toString().padLeft(2, '0');
-    return '$h:$m';
   }
 }

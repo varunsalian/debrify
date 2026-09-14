@@ -114,6 +114,7 @@ void main() {
         tester,
         size: surface.size,
         onExport: () => exportOpened = true,
+        onDeleteAll: _noop,
       );
 
       await tester.tap(find.text('Export'));
@@ -261,6 +262,7 @@ Future<void> _pumpPhone(
   double textScale = 1,
   ValueChanged<DebrifyTvChannel>? onWatch,
   VoidCallback? onExport,
+  VoidCallback? onDeleteAll,
   VoidCallback? onSettings,
 }) async {
   tester.view.physicalSize = size;
@@ -294,6 +296,7 @@ Future<void> _pumpPhone(
             onAdd: _noop,
             onImport: _noop,
             onExport: onExport ?? _noop,
+            onDeleteAll: onDeleteAll ?? _noop,
             onSettings: onSettings ?? _noop,
             onWatch: onWatch ?? _noopChannel,
             onEdit: _noopChannel,

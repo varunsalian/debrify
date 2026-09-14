@@ -1,3 +1,5 @@
+import '../models/subtitle_source_priority.dart';
+import '../models/home_collection.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:http/http.dart' as http;
@@ -5,6 +7,7 @@ import 'package:flutter/foundation.dart';
 import 'package:synchronized/synchronized.dart';
 import 'dart:convert';
 import 'debrid_service.dart';
+import 'hide_watched_prefs.dart';
 import 'iptv_channel_order.dart';
 import 'iptv_media_store.dart';
 import 'profiles/profile_preferences.dart';
@@ -30,6 +33,11 @@ import '../models/tracking_source.dart';
 import '../utils/json_isolate.dart';
 import '../utils/platform_util.dart';
 import 'tracking_scrobble_preferences.dart';
+import 'playlist_dedupe_key.dart';
+import 'playback_recovery_intent.dart';
+import 'webdav_sync/webdav_sync_hot_merge.dart';
+import 'webdav_sync/webdav_sync_library_models.dart';
+import 'webdav_sync/webdav_sync_tombstones.dart';
 
 /// Which ambient-trailer surface a sound/volume preference belongs to.
 ///
@@ -126,7 +134,10 @@ class StorageService {
   //
   // To roll out a future flagship look: bump the generation, append its
   // bundle under a `gen < N` block below.
-  static const int _currentDefaultsGeneration = 3;
+  // Generation 4 repairs profiles imported with a remote defaults checkpoint
+  // but without its device-local appearance values. Fill only absent keys;
+  // explicit Looks and custom settings remain unchanged.
+  static const int _currentDefaultsGeneration = 4;
   static const String _defaultsGenerationKey = 'defaults_generation';
 
   /// MUST run before [TextBrightnessController.warm] / theme warms in
@@ -135,7 +146,7 @@ class StorageService {
     final prefs = await ProfilePreferences.instance();
     final gen = prefs.getInt(_defaultsGenerationKey) ?? 0;
     if (gen >= _currentDefaultsGeneration) return;
-    if (gen < 1) {
+    if (gen < 4) {
       // Dormant prefs are written too (desktop pill on a phone, TV home
       // style off-TV): harmless where they don't apply, correct if the
       // device class — or a window size — ever changes.
@@ -179,10 +190,10 @@ class StorageService {
         }
       }
     }
-    if (gen < 3) {
+    if (gen < 4) {
       // Debrify TV joins the flagship bundle. Raw prefs only — this runs
       // before any mirror is warmed, so `app_theme` is read directly rather
-      // than through `appThemeCached`. The gen<1 block above has already
+      // than through `appThemeCached`. The appearance block above has already
       // written `app_theme` for anyone who never chose, including a fresh
       // install, so this read is never against an absent key on a migrated
       // install.
@@ -444,7 +455,6 @@ class StorageService {
   // IPTV settings
   static const String _iptvPlaylistsKey = 'iptv_playlists';
   static const String _iptvDefaultPlaylistKey = 'iptv_default_playlist';
-  static const String _iptvDefaultsInitializedKey = 'iptv_defaults_initialized';
   static const String _iptvLastLiveChannelKey = 'iptv_last_live_channel';
 
   // PikPak API settings
@@ -1363,7 +1373,13 @@ class StorageService {
   }
 
   static const String _iptvStyleKey = 'iptv_style';
-  static const Set<String> _iptvStyles = {'command', 'edition', 'console'};
+  static const String kIptvStyleDefault = 'spotlight';
+  static const Set<String> _iptvStyles = {
+    'command',
+    'edition',
+    'console',
+    'spotlight',
+  };
 
   /// Whether browsing IPTV channels may open the focused channel in the
   /// embedded side preview. This is on by default to preserve the shipped
@@ -1382,26 +1398,24 @@ class StorageService {
     await prefs.setBool(_iptvChannelPreviewEnabledKey, enabled);
   }
 
-  /// IPTV cockpit look: 'command' (the shipped Command Center, the default),
-  /// 'edition' (First Edition — editorial ink/serif) or 'console' (Master
-  /// Control — black instrument). Only the TV/desktop cockpit reads it; the
-  /// phone classic layout and the touch-tablet two-pane never do. Unknown or
-  /// unset coerces to 'command' on BOTH read and write, so an old build
-  /// downgrading past a newer value can never pin a look the reader treats
-  /// as the exception.
-  /// Synchronous mirror of `iptvStyle`, kept so a Look can read
-  /// the current value without an await. Additive: every existing caller
-  /// still goes through the async getter, which now also refreshes this.
-  static String iptvStyleCached = 'command';
+  /// IPTV appearance for TV and desktop. Phones and touch tablets keep their
+  /// existing layouts. Missing or unknown values use Spotlight Guide; valid
+  /// saved choices remain unchanged.
+  ///
+  /// Synchronous mirror for Looks, refreshed by the async getter and reset
+  /// to the default when switching profiles.
+  static String iptvStyleCached = kIptvStyleDefault;
 
   static Future<String> getIptvStyle() async {
     final prefs = await ProfilePreferences.instance();
     final raw = prefs.getString(_iptvStyleKey);
-    return iptvStyleCached = _iptvStyles.contains(raw) ? raw! : 'command';
+    return iptvStyleCached = _iptvStyles.contains(raw)
+        ? raw!
+        : kIptvStyleDefault;
   }
 
   static Future<void> setIptvStyle(String style) async {
-    final normalized = _iptvStyles.contains(style) ? style : 'command';
+    final normalized = _iptvStyles.contains(style) ? style : kIptvStyleDefault;
     iptvStyleCached = normalized;
     final prefs = await ProfilePreferences.instance();
     await prefs.setString(_iptvStyleKey, normalized);
@@ -1542,6 +1556,26 @@ class StorageService {
     );
   }
 
+  static const tvCollectionListStyles = {
+    'grid',
+    'gallery',
+    'filmstrip',
+    'journal',
+  };
+  static Future<String> getTvCollectionListStyle() async {
+    final prefs = await ProfilePreferences.instance();
+    final value = prefs.getString('tv_collection_list_style');
+    return tvCollectionListStyles.contains(value) ? value! : 'filmstrip';
+  }
+
+  static Future<void> setTvCollectionListStyle(String value) async {
+    final prefs = await ProfilePreferences.instance();
+    await prefs.setString(
+      'tv_collection_list_style',
+      tvCollectionListStyles.contains(value) ? value : 'filmstrip',
+    );
+  }
+
   static const String _tvPlayerControlsStyleKey = 'tv_player_controls_style';
   static const Set<String> _tvPlayerControlsStyles = {
     'classic',
@@ -1625,6 +1659,7 @@ class StorageService {
       value == 'cw' ||
       value == 'trakt' ||
       value == 'simkl' ||
+      value == 'tmdb' ||
       value == 'mdblist' ||
       (value.startsWith('a:') && value.length > 2 && value.length <= 514);
 
@@ -1659,6 +1694,7 @@ class StorageService {
   static Future<void> setDiscoverLastSource(String value) async {
     if (!_isDiscoverSourceValue(value)) return;
     final prefs = await ProfilePreferences.instance();
+    if (prefs.getString(_discoverLastSourceKey) == value) return;
     await prefs.setString(_discoverLastSourceKey, value);
   }
 
@@ -1753,9 +1789,7 @@ class StorageService {
 
   static Future<void> setLaunchAnimation(String value) async {
     final prefs = await ProfilePreferences.instance();
-    final normalized = _launchAnimationValues.contains(value)
-        ? value
-        : 'trace';
+    final normalized = _launchAnimationValues.contains(value) ? value : 'trace';
     await prefs.setString(_launchAnimationKey, normalized);
     launchAnimationCached = normalized;
   }
@@ -2535,7 +2569,7 @@ class StorageService {
     // Keep max 50 items
     if (items.length > 50) items = items.sublist(0, 50);
 
-    await prefs.setString(_continueWatchingKey, jsonEncode(items));
+    await _saveContinueWatchingItems(items, tombstoneRemovals: false);
   }
 
   /// Remove a continue watching entry by IMDB ID.
@@ -2551,17 +2585,48 @@ class StorageService {
           .whereType<Map<String, dynamic>>()
           .map((e) => Map<String, dynamic>.from(e))
           .toList();
+      final before = items.length;
       items.removeWhere(
         (e) => (e['imdbId'] as String?)?.trim().toLowerCase() == normalized,
       );
-      await prefs.setString(_continueWatchingKey, jsonEncode(items));
+      if (items.length == before) return;
+      await _saveContinueWatchingItems(items);
     } catch (_) {}
   }
 
   /// Clear all continue watching items.
-  static Future<void> clearContinueWatching() async {
+  static Future<void> clearContinueWatching({
+    bool recordSyncDeletions = true,
+  }) async {
+    await _saveContinueWatchingItems(
+      const <Map<String, dynamic>>[],
+      tombstoneRemovals: recordSyncDeletions,
+    );
+  }
+
+  static Future<void> _saveContinueWatchingItems(
+    List<Map<String, dynamic>> items, {
+    bool tombstoneRemovals = true,
+  }) async {
     final prefs = await ProfilePreferences.instance();
-    await prefs.remove(_continueWatchingKey);
+    if (tombstoneRemovals) {
+      final previous = await getContinueWatchingItems();
+      final retained = <String>{
+        for (final item in items)
+          if ((item['imdbId']?.toString().trim().toLowerCase() ?? '')
+              .isNotEmpty)
+            item['imdbId'].toString().trim().toLowerCase(),
+      };
+      await WebDavSyncTombstoneRecorder.recordForCurrentProfile(
+        previous
+            .map(
+              (item) => item['imdbId']?.toString().trim().toLowerCase() ?? '',
+            )
+            .where((id) => id.isNotEmpty && !retained.contains(id))
+            .map(WebDavSyncRecordKey.continueWatching),
+      );
+    }
+    await prefs.setString(_continueWatchingKey, jsonEncode(items));
   }
 
   /// Movies finished locally by the Debrify player. This intentionally stays
@@ -2615,6 +2680,12 @@ class StorageService {
     final finished = await _getFinishedMovieIds();
     if (!finished.remove(normalized)) return;
 
+    await PlaybackRecoveryIntent.record({
+      WebDavSyncRecordKey.finishedMovie(normalized),
+    });
+    await WebDavSyncTombstoneRecorder.recordForCurrentProfile(<String>{
+      WebDavSyncRecordKey.finishedMovie(normalized),
+    });
     final prefs = await ProfilePreferences.instance();
     if (finished.isEmpty) {
       await prefs.remove(_finishedMoviesKey);
@@ -2642,6 +2713,11 @@ class StorageService {
     final ids = await getExplicitlyWatchedSeriesIds();
     final changed = watched ? ids.add(normalized) : ids.remove(normalized);
     if (!changed) return;
+    if (!watched) {
+      await WebDavSyncTombstoneRecorder.recordForCurrentProfile(<String>{
+        WebDavSyncRecordKey.explicitlyWatchedSeries(normalized),
+      });
+    }
     final prefs = await ProfilePreferences.instance();
     if (ids.isEmpty) {
       await prefs.remove(_explicitlyWatchedSeriesKey);
@@ -2685,7 +2761,7 @@ class StorageService {
     for (final key in keysToRemove) {
       map.remove(key);
     }
-    await _savePlaybackStateMap(map);
+    await _savePlaybackStateMap(map, recordDeletions: true);
     // Series finished-episode markers share this map, so clearing a Continue
     // Watching item must also invalidate derived series completion.
     localCompletionRevision.value++;
@@ -2694,9 +2770,190 @@ class StorageService {
     );
   }
 
-  static Future<void> _savePlaybackStateMap(Map<String, dynamic> map) async {
+  static Future<void> _savePlaybackStateMap(
+    Map<String, dynamic> map, {
+    bool recordDeletions = false,
+  }) async {
     final prefs = await ProfilePreferences.instance();
+    if (recordDeletions &&
+        (PlaybackRecoveryIntent.isSupported ||
+            await WebDavSyncTombstoneRecorder.shouldRecordForCurrentProfile())) {
+      final previous = await _getPlaybackStateMap();
+      if (PlaybackRecoveryIntent.isSupported) {
+        await PlaybackRecoveryIntent.record(
+          _playbackRecoveryRecordKeys(
+            previous,
+          ).difference(_playbackRecoveryRecordKeys(map)),
+        );
+      }
+      final retained = _webDavPlaybackRecordKeys(map);
+      await WebDavSyncTombstoneRecorder.recordForCurrentProfile(
+        _webDavPlaybackRecordKeys(previous).difference(retained),
+      );
+    }
     await prefs.setString(_playbackStateKey, jsonEncode(map));
+  }
+
+  static Set<String> _playbackRecoveryRecordKeys(Map<String, dynamic> map) => {
+    ..._webDavPlaybackRecordKeys(map),
+    for (final entry in map.entries)
+      if (entry.value is Map && entry.value['imdbId'] is String)
+        ..._webDavPlaybackRecordKeys({
+          'imdb:${(entry.value['imdbId'] as String).trim().toLowerCase()}':
+              entry.value,
+        }),
+  };
+
+  /// Deletions and sync intent fence every replay. Cold recovery also checks
+  /// local position timestamps; a proven return can finish an interrupted
+  /// normal save whose position was written just after its native snapshot.
+  static Future<bool> hasNewerPlaybackRecoveryIntent({
+    String? seriesTitle,
+    int? season,
+    int? episode,
+    String? imdbId,
+    String? resumeId,
+    required int checkpointAtMs,
+    bool includePositions = true,
+    bool includeSyncedPositions = true,
+    bool Function(Map<String, dynamic>)? isOwnRecoveryWrite,
+    bool Function(Map<String, dynamic>)? matchesRecoveryPosition,
+  }) async {
+    String alias(String type, String title) =>
+        '${type}_${title.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_')}';
+    final map = await _getPlaybackStateMap();
+    final stableId = imdbId?.trim().toLowerCase();
+    final keys = <String>{};
+    final ownRecoveryKeys = <String>{};
+    bool newerPosition(Object? value, String key) {
+      if (value is! Map) return false;
+      final state = Map<String, dynamic>.from(value);
+      if (isOwnRecoveryWrite?.call(state) ?? false) {
+        ownRecoveryKeys.add(key);
+        return false;
+      }
+      return includePositions &&
+          (state['updatedAt'] as num? ?? 0) >= checkpointAtMs;
+    }
+
+    final seriesAliases = <String>{
+      if (seriesTitle != null) alias('series', seriesTitle),
+    };
+    final videoAliases = <String>{
+      if (resumeId != null) alias('video', resumeId),
+    };
+    if (stableId != null && stableId.isNotEmpty) {
+      if (seriesTitle == null) {
+        keys.add(WebDavSyncRecordKey.finishedMovie(stableId));
+        keys.add(WebDavSyncRecordKey.playback('imdb:$stableId'));
+      }
+      for (final entry in map.entries) {
+        final value = entry.value;
+        if (value is! Map ||
+            value['imdbId']?.toString().trim().toLowerCase() != stableId) {
+          continue;
+        }
+        if (value['type'] == 'series' && seriesTitle != null) {
+          seriesAliases.add(entry.key);
+        } else if (value['type'] == 'video' && seriesTitle == null) {
+          videoAliases.add(entry.key);
+        }
+      }
+    }
+    for (final key in seriesAliases) {
+      if (season == null || episode == null) continue;
+      keys.addAll({
+        WebDavSyncRecordKey.playbackMeta(key),
+        WebDavSyncRecordKey.playbackEpisode(key, season, episode),
+        WebDavSyncRecordKey.playbackFinished(key, season, episode),
+        if (stableId != null) ...{
+          WebDavSyncRecordKey.playbackEpisode(
+            'imdb:$stableId',
+            season,
+            episode,
+          ),
+          WebDavSyncRecordKey.playbackFinished(
+            'imdb:$stableId',
+            season,
+            episode,
+          ),
+        },
+      });
+      final state =
+          map[key]?['seasons']?[season.toString()]?[episode.toString()];
+      if (newerPosition(
+        state,
+        WebDavSyncRecordKey.playbackEpisode(key, season, episode),
+      )) {
+        return true;
+      }
+    }
+    for (final key in videoAliases) {
+      keys.add(WebDavSyncRecordKey.playback(key));
+      final state = map[key];
+      if (newerPosition(state, WebDavSyncRecordKey.playback(key))) {
+        return true;
+      }
+    }
+    return await PlaybackRecoveryIntent.hasNewer(keys, checkpointAtMs) ||
+        await WebDavSyncTombstoneRecorder.hasNewerPlaybackIntent(
+          keys,
+          checkpointAtMs,
+          includePositions: includeSyncedPositions,
+          isOwnRecoveryWrite: (key, payload) =>
+              ownRecoveryKeys.contains(key) &&
+              (matchesRecoveryPosition?.call(payload) ?? false),
+        );
+  }
+
+  static Set<String> _webDavPlaybackRecordKeys(Map<String, dynamic> map) {
+    final keys = <String>{};
+    for (final entry in map.entries) {
+      final value = entry.value;
+      if (value is! Map) continue;
+      final record = Map<String, dynamic>.from(value);
+      final seasons = record['seasons'];
+      final finished = record['finishedEpisodes'];
+      if (seasons is Map || finished is Map || record['type'] == 'series') {
+        keys.add(WebDavSyncRecordKey.playbackMeta(entry.key));
+        void addEpisodes(Object? source, {required bool completion}) {
+          if (source is! Map) return;
+          for (final seasonEntry in source.entries) {
+            final season = int.tryParse(seasonEntry.key.toString());
+            if (season == null || season < 0 || seasonEntry.value is! Map) {
+              continue;
+            }
+            for (final episodeEntry in (seasonEntry.value as Map).entries) {
+              final episode = int.tryParse(episodeEntry.key.toString());
+              if (episode == null ||
+                  episode < 0 ||
+                  episodeEntry.value is! Map) {
+                continue;
+              }
+              keys.add(
+                completion
+                    ? WebDavSyncRecordKey.playbackFinished(
+                        entry.key,
+                        season,
+                        episode,
+                      )
+                    : WebDavSyncRecordKey.playbackEpisode(
+                        entry.key,
+                        season,
+                        episode,
+                      ),
+              );
+            }
+          }
+        }
+
+        addEpisodes(seasons, completion: false);
+        addEpisodes(finished, completion: true);
+      } else {
+        keys.add(WebDavSyncRecordKey.playback(entry.key));
+      }
+    }
+    return keys;
   }
 
   /// Save playback state for series content
@@ -2709,6 +2966,8 @@ class StorageService {
     double speed = 1.0,
     String aspect = 'contain',
     String? imdbId,
+    String? recoveryCheckpointId,
+    int? recoveryUpdatedAtMs,
   }) async {
     final map = await _getPlaybackStateMap();
     final key =
@@ -2733,7 +2992,9 @@ class StorageService {
       'durationMs': durationMs,
       'speed': speed,
       'aspect': aspect,
-      'updatedAt': DateTime.now().millisecondsSinceEpoch,
+      'updatedAt': recoveryUpdatedAtMs ?? DateTime.now().millisecondsSinceEpoch,
+      if (recoveryCheckpointId != null)
+        'recoveryCheckpointId': recoveryCheckpointId,
     };
 
     debugPrint(
@@ -2749,7 +3010,12 @@ class StorageService {
     required int season,
     required int episode,
     String? imdbId,
+    int? recoveryUpdatedAtMs,
   }) async {
+    // Recovery is a historical observation, not a new playback event. Both
+    // records must keep its original time so the latest episode remains last.
+    final completedAtMs =
+        recoveryUpdatedAtMs ?? DateTime.now().millisecondsSinceEpoch;
     final map = await _getPlaybackStateMap();
     final key =
         'series_${seriesTitle.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_')}';
@@ -2785,7 +3051,7 @@ class StorageService {
     }
 
     seriesData['finishedEpisodes'][season.toString()][episode.toString()] = {
-      'finishedAt': DateTime.now().millisecondsSinceEpoch,
+      'finishedAt': completedAtMs,
     };
 
     // Also add/update in seasons map so it appears in getEpisodeProgress()
@@ -2804,15 +3070,21 @@ class StorageService {
         'durationMs': 1,
         'speed': 1.0,
         'aspect': 'contain',
-        'updatedAt': DateTime.now().millisecondsSinceEpoch,
+        'updatedAt': completedAtMs,
       };
     } else {
       // Episode has existing progress - update it to show as finished
       // Set position = duration to show 100% progress
       final existingData = episodeData as Map<String, dynamic>;
-      final durationMs = existingData['durationMs'] as int? ?? 1;
-      existingData['positionMs'] = durationMs; // Mark as fully watched
-      existingData['updatedAt'] = DateTime.now().millisecondsSinceEpoch;
+      // A later rewatch can already be saved while the older watched marker
+      // is still pending. Preserve that newer bookmark when filling the gap.
+      if (recoveryUpdatedAtMs == null ||
+          (existingData['updatedAt'] as num? ?? 0) <= completedAtMs) {
+        final durationMs = existingData['durationMs'] as int? ?? 1;
+        existingData['positionMs'] = durationMs; // Mark as fully watched
+        existingData['updatedAt'] = completedAtMs;
+        existingData.remove('recoveryCheckpointId');
+      }
     }
 
     debugPrint(
@@ -2872,7 +3144,7 @@ class StorageService {
       'S${season}E$episode aliases=$aliasesChanged',
     );
 
-    await _savePlaybackStateMap(map);
+    await _savePlaybackStateMap(map, recordDeletions: true);
     localCompletionRevision.value++;
   }
 
@@ -2932,7 +3204,7 @@ class StorageService {
     }
 
     if (!changed) return;
-    await _savePlaybackStateMap(map);
+    await _savePlaybackStateMap(map, recordDeletions: true);
     localCompletionRevision.value++;
     debugPrint('StorageService: unmarkSeriesAsFinished imdbId="$normalized"');
   }
@@ -3486,6 +3758,8 @@ class StorageService {
     double speed = 1.0,
     String aspect = 'contain',
     String? imdbId,
+    String? recoveryCheckpointId,
+    int? recoveryUpdatedAtMs,
   }) async {
     final map = await _getPlaybackStateMap();
     final key =
@@ -3499,7 +3773,9 @@ class StorageService {
       'durationMs': durationMs,
       'speed': speed,
       'aspect': aspect,
-      'updatedAt': DateTime.now().millisecondsSinceEpoch,
+      'updatedAt': recoveryUpdatedAtMs ?? DateTime.now().millisecondsSinceEpoch,
+      if (recoveryCheckpointId != null)
+        'recoveryCheckpointId': recoveryCheckpointId,
       if (imdbId != null) 'imdbId': imdbId,
     };
 
@@ -3509,6 +3785,7 @@ class StorageService {
   /// Get playback state for non-series content
   static Future<Map<String, dynamic>?> getVideoPlaybackState({
     required String videoTitle,
+    bool includeFinished = false,
   }) async {
     final map = await _getPlaybackStateMap();
     final key =
@@ -3520,7 +3797,10 @@ class StorageService {
     final imdbId = (videoData['imdbId'] as String?)?.trim();
     // A finished movie can have a stale source-specific state from a final
     // autosave tick. Its local completion record wins over that stale resume.
-    if (imdbId != null && imdbId.isNotEmpty && await isMovieFinished(imdbId)) {
+    if (!includeFinished &&
+        imdbId != null &&
+        imdbId.isNotEmpty &&
+        await isMovieFinished(imdbId)) {
       return null;
     }
 
@@ -3822,14 +4102,31 @@ class StorageService {
     }
 
     if (keysToRemove.isNotEmpty) {
-      await _savePlaybackStateMap(map);
+      await _savePlaybackStateMap(map, recordDeletions: true);
     }
   }
 
   /// Clear all playback-related data (series and video states, track prefs, legacy resume)
-  static Future<void> clearAllPlaybackData() async {
+  /// [recordSyncDeletions] distinguishes a deliberate clear (default, which
+  /// deletes on every synced device) from a device-local wipe such as app
+  /// reset, which must never mint circle-wide deletions.
+  static Future<void> clearAllPlaybackData({
+    bool recordSyncDeletions = true,
+  }) async {
     final prefs = await ProfilePreferences.instance();
-    await prefs.remove(_playbackStateKey);
+    // Device-local clears must invalidate native recovery too, without
+    // publishing a deletion to the user's other devices.
+    await PlaybackRecoveryIntent.recordClearAll();
+    await _savePlaybackStateMap(
+      <String, dynamic>{},
+      recordDeletions: recordSyncDeletions,
+    );
+    if (recordSyncDeletions) {
+      final finishedMovies = await _getFinishedMovieIds();
+      await WebDavSyncTombstoneRecorder.recordForCurrentProfile(
+        finishedMovies.map(WebDavSyncRecordKey.finishedMovie),
+      );
+    }
     await prefs.remove(_finishedMoviesKey);
     await prefs.remove(localSeriesCompletionStateKey);
     await prefs.remove(localSeriesCalendarCheckedAtKey);
@@ -3838,7 +4135,11 @@ class StorageService {
     // Resume lives in the DB now; the prefs key only still exists for users
     // who wipe before the one-time import has run.
     await prefs.remove(_videoResumeKey);
-    await IptvMediaStore.clearVideoResume();
+    await IptvMediaStore.clearVideoResume(
+      origin: recordSyncDeletions
+          ? WebDavSyncMutationOrigin.user
+          : WebDavSyncMutationOrigin.maintenance,
+    );
     debugPrint(
       'StorageService: cleared playback state, completed movies, and video resume data',
     );
@@ -3949,7 +4250,7 @@ class StorageService {
 
     // Save the updated map if anything was removed
     if (keysToRemove.isNotEmpty) {
-      await _savePlaybackStateMap(map);
+      await _savePlaybackStateMap(map, recordDeletions: true);
       // Finished episodes live in this same map. Re-derive local series
       // completion so watched badges and Continue Watching update immediately.
       localCompletionRevision.value++;
@@ -3968,13 +4269,28 @@ class StorageService {
 
   static Future<void> upsertVideoResume(
     String key,
-    Map<String, dynamic> entry,
-  ) {
-    return IptvMediaStore.upsertVideoResume(key, entry);
+    Map<String, dynamic> entry, {
+    String? sourceId,
+    WebDavSyncMutationOrigin origin = WebDavSyncMutationOrigin.user,
+  }) {
+    return IptvMediaStore.upsertVideoResume(
+      key,
+      entry,
+      sourceId: sourceId,
+      origin: origin,
+    );
   }
 
-  static Future<void> removeVideoResume(String key) {
-    return IptvMediaStore.removeVideoResume(key);
+  static Future<void> removeVideoResume(
+    String key, {
+    bool playbackCheckpoint = false,
+    WebDavSyncMutationOrigin origin = WebDavSyncMutationOrigin.user,
+  }) {
+    return IptvMediaStore.removeVideoResume(
+      key,
+      origin: origin,
+      playbackCheckpoint: playbackCheckpoint,
+    );
   }
 
   /// Save audio and subtitle preferences for series content
@@ -4192,8 +4508,8 @@ class StorageService {
     try {
       final List<dynamic> list = await decodeJsonAsync(raw) as List<dynamic>;
       return list
-          .where((entry) => entry is Map)
-          .map((entry) => Map<String, dynamic>.from(entry as Map))
+          .whereType<Map>()
+          .map((entry) => Map<String, dynamic>.from(entry))
           .toList();
     } catch (_) {
       return <Map<String, dynamic>>[];
@@ -4224,77 +4540,25 @@ class StorageService {
   }
 
   static Future<void> savePlaylistItemsRaw(
-    List<Map<String, dynamic>> items,
-  ) async {
+    List<Map<String, dynamic>> items, {
+    bool recordSyncDeletions = true,
+  }) async {
     final prefs = await ProfilePreferences.instance();
+    if (recordSyncDeletions) {
+      final previous = await getPlaylistItemsRaw();
+      final retained = items.map(computePlaylistDedupeKey).toSet();
+      await WebDavSyncTombstoneRecorder.recordForCurrentProfile(
+        previous
+            .map(computePlaylistDedupeKey)
+            .where((key) => !retained.contains(key))
+            .map(WebDavSyncRecordKey.playlistItem),
+      );
+    }
     await prefs.setString(_playlistKey, jsonEncode(items));
   }
 
-  static String computePlaylistDedupeKey(Map<String, dynamic> item) {
-    final providerRaw = (item['provider'] as String?) ?? 'realdebrid';
-    final provider = providerRaw.toLowerCase();
-    if (provider == 'webdav') {
-      final server = (item['webdavServerId'] ?? item['webdavBaseUrl'] ?? '')
-          .toString();
-      final path = (item['webdavPath'] ?? item['webdavFolderPath'] ?? '')
-          .toString();
-      if (server.isNotEmpty && path.isNotEmpty) {
-        return '$provider|server:${server.toLowerCase()}|path:$path';
-      }
-    }
-    final String? torrentHash = item['torrent_hash'] as String?;
-    if (torrentHash != null && torrentHash.isNotEmpty) {
-      return '$provider|hash:${torrentHash.toLowerCase()}';
-    }
-    final dynamic torboxIdRaw = item['torboxTorrentId'];
-    if (torboxIdRaw != null) {
-      final String torboxId = torboxIdRaw.toString();
-      final dynamic singleFileId = item['torboxFileId'];
-      if (singleFileId != null) {
-        final fileKey = 'torbox:$torboxId:file:${singleFileId.toString()}';
-        return '$provider|${fileKey.toLowerCase()}';
-      }
-      final dynamic multiFileIds = item['torboxFileIds'];
-      if (multiFileIds is List && multiFileIds.isNotEmpty) {
-        final joined = multiFileIds.map((e) => e.toString()).join(',');
-        final filesKey = 'torbox:$torboxId:files:$joined';
-        return '$provider|${filesKey.toLowerCase()}';
-      }
-      return '$provider|torbox:${torboxId.toLowerCase()}';
-    }
-    // PikPak file ID based key
-    final dynamic pikpakFileId = item['pikpakFileId'];
-    if (pikpakFileId != null) {
-      return '$provider|pikpak:file:${pikpakFileId.toString().toLowerCase()}';
-    }
-    final dynamic pikpakFileIds = item['pikpakFileIds'];
-    if (pikpakFileIds is List && pikpakFileIds.isNotEmpty) {
-      final joined = pikpakFileIds.map((e) => e.toString()).join(',');
-      return '$provider|pikpak:files:${joined.toLowerCase()}';
-    }
-    // Premiumize cloud-browser items are keyed by cloud item id (they have no
-    // torrent hash, unlike items added from search).
-    final dynamic premiumizeItemId = item['premiumizeItemId'];
-    if (premiumizeItemId != null && premiumizeItemId.toString().isNotEmpty) {
-      return '$provider|premiumize:item:${premiumizeItemId.toString().toLowerCase()}';
-    }
-    final dynamic premiumizeItemIds = item['premiumizeItemIds'];
-    if (premiumizeItemIds is List && premiumizeItemIds.isNotEmpty) {
-      final joined = premiumizeItemIds.map((e) => e.toString()).join(',');
-      return '$provider|premiumize:items:${joined.toLowerCase()}';
-    }
-    final String? rdId = (item['rdTorrentId'] as String?);
-    if (rdId != null && rdId.isNotEmpty) {
-      return '$provider|rd:${rdId.toLowerCase()}';
-    }
-    final String source =
-        (item['restrictedLink'] as String?)?.trim() ??
-        (item['url'] as String?)?.trim() ??
-        '';
-    final String title = (item['title'] as String?)?.trim() ?? '';
-    final legacyKey = '$source|$title'.toLowerCase();
-    return '$provider|$legacyKey';
-  }
+  static String computePlaylistDedupeKey(Map<String, dynamic> item) =>
+      PlaylistDedupeKey.compute(item);
 
   /// Add a new playlist item if it does not already exist.
   /// Expected item shape (MVP): { url, title, restrictedLink, rdTorrentId }
@@ -4436,14 +4700,24 @@ class StorageService {
     return item['lastPlayedAt'] as int?;
   }
 
-  static Future<void> clearPlaylist() async {
-    final prefs = await ProfilePreferences.instance();
-    await prefs.remove(_playlistKey);
+  static Future<void> clearPlaylist({bool recordSyncDeletions = true}) async {
+    await savePlaylistItemsRaw(
+      const <Map<String, dynamic>>[],
+      recordSyncDeletions: recordSyncDeletions,
+    );
   }
 
   /// Clear all playlist-related metadata (view modes, favorites, poster overrides)
-  static Future<void> clearAllPlaylistMetadata() async {
+  static Future<void> clearAllPlaylistMetadata({
+    bool recordSyncDeletions = true,
+  }) async {
     final prefs = await ProfilePreferences.instance();
+    if (recordSyncDeletions) {
+      final favorites = await getPlaylistFavoriteKeys();
+      await WebDavSyncTombstoneRecorder.recordForCurrentProfile(
+        favorites.map(WebDavSyncRecordKey.playlistFavorite),
+      );
+    }
     await prefs.remove(_playlistViewModesKey);
     await prefs.remove(_playlistFavoritesKey);
     await prefs.remove(_playlistPosterOverridesKey);
@@ -4890,6 +5164,10 @@ class StorageService {
     if (isFavorited) {
       favorites[dedupeKey] = true;
     } else {
+      if (!favorites.containsKey(dedupeKey)) return;
+      await WebDavSyncTombstoneRecorder.recordForCurrentProfile(<String>{
+        WebDavSyncRecordKey.playlistFavorite(dedupeKey),
+      });
       favorites.remove(dedupeKey);
     }
 
@@ -6244,6 +6522,7 @@ class StorageService {
       'home_tick_sources': ticks
           .map((source) => source.storageName)
           .toList(growable: false),
+      'hide_watched': await HideWatchedPrefs.read(),
     };
   }
 
@@ -6284,6 +6563,8 @@ class StorageService {
           if (TrackingSourceStorageName.parse(value) case final source?) source,
       });
     }
+    final hideWatched = payload['hide_watched'];
+    if (hideWatched is bool) await HideWatchedPrefs.setEnabled(hideWatched);
   }
 
   static Future<String?> getRedditLastSubreddit() async {
@@ -6293,6 +6574,7 @@ class StorageService {
 
   static Future<void> setRedditLastSubreddit(String subreddit) async {
     final prefs = await ProfilePreferences.instance();
+    if (prefs.getString(_redditLastSubredditKey) == subreddit) return;
     await prefs.setString(_redditLastSubredditKey, subreddit);
   }
 
@@ -6365,12 +6647,38 @@ class StorageService {
     await prefs.setString(_traktUsernameKey, username);
   }
 
+  /// Replace the token pair and its expiry as one shared session write.
+  static Future<void> setTraktSession({
+    required String accessToken,
+    required String refreshToken,
+    required int? expiryMs,
+  }) async {
+    if (await ProfileCredentialFacade.storeTraktSession(
+      accessToken: accessToken,
+      refreshToken: refreshToken,
+      expiryMs: expiryMs,
+    )) {
+      return;
+    }
+    await setTraktAccessToken(accessToken);
+    await setTraktRefreshToken(refreshToken);
+    final prefs = await ProfilePreferences.instance();
+    if (expiryMs == null) {
+      await prefs.remove(_traktTokenExpiryKey);
+    } else {
+      await prefs.setInt(_traktTokenExpiryKey, expiryMs);
+    }
+  }
+
   static Future<int?> getTraktTokenExpiry() async {
+    final shared = await ProfileCredentialFacade.traktSessionExpiry();
+    if (shared.handled) return shared.value;
     final prefs = await ProfilePreferences.instance();
     return prefs.getInt(_traktTokenExpiryKey);
   }
 
   static Future<void> setTraktTokenExpiry(int expiryMs) async {
+    if (await ProfileCredentialFacade.setTraktSessionExpiry(expiryMs)) return;
     final prefs = await ProfilePreferences.instance();
     await prefs.setInt(_traktTokenExpiryKey, expiryMs);
   }
@@ -6744,7 +7052,7 @@ class StorageService {
     }
 
     if (purged > 0) {
-      await _savePlaybackStateMap(playback);
+      await _savePlaybackStateMap(playback, recordDeletions: true);
       localCompletionRevision.value++;
       debugPrint(
         'StorageService: purged $purged unwatched resume ghost(s) from playback state',
@@ -6889,7 +7197,7 @@ class StorageService {
                       !newlyCompletedMovieIds.contains(imdbId);
                 })
                 .toList();
-            await prefs.setString(_continueWatchingKey, jsonEncode(items));
+            await _saveContinueWatchingItems(items);
           }
         } catch (_) {
           // Leave malformed legacy data untouched; the normal CW reader also
@@ -6904,9 +7212,14 @@ class StorageService {
     // Do this before saving the removal so a database failure leaves enough
     // playback metadata for the next startup to retry the cleanup.
     for (final resumeKey in completedMovieResumeKeys) {
-      await removeVideoResume(resumeKey);
+      await removeVideoResume(
+        resumeKey,
+        origin: WebDavSyncMutationOrigin.migration,
+      );
     }
-    if (playbackChanged) await _savePlaybackStateMap(playback);
+    if (playbackChanged) {
+      await _savePlaybackStateMap(playback, recordDeletions: true);
+    }
     await prefs.setInt(
       _playbackCompletionMigrationGenerationKey,
       _currentPlaybackCompletionMigrationGeneration,
@@ -6921,8 +7234,12 @@ class StorageService {
   // PikPak API Settings
   static Future<bool> getPikPakEnabled() async {
     final prefs = await ProfilePreferences.instance();
-    return prefs.getBool(_pikpakEnabledKey) ?? false;
+    if (!(prefs.getBool(_pikpakEnabledKey) ?? false)) return false;
+    return _credentialConfigured(_pikpakEmailKey, () => getPikPakEmail());
   }
+
+  static Future<bool> hasPikPakCredential() =>
+      _credentialConfigured(_pikpakEmailKey, () => getPikPakEmail());
 
   static Future<void> setPikPakEnabled(bool value) async {
     final prefs = await ProfilePreferences.instance();
@@ -7292,11 +7609,13 @@ class StorageService {
     await prefs.setBool(_webDavShowVideosOnlyKey, value);
   }
 
-  static Future<void> clearWebDav() async {
+  static Future<void> clearWebDav({
+    ProfileFeature feature = ProfileFeature.cloud,
+  }) async {
     if (ProfileCollectionResourceFacade.active) {
       await ProfileCollectionResourceFacade.replace(
         types: const <ConnectionResourceType>{ConnectionResourceType.webDav},
-        feature: ProfileFeature.cloud,
+        feature: feature,
         items: const <ResourceCollectionItem>[],
       );
     }
@@ -7313,11 +7632,12 @@ class StorageService {
   static Future<List<WebDavConfig>> getWebDavServers({
     bool forSettings = true,
     bool forRemoteTransfer = false,
+    ProfileFeature feature = ProfileFeature.cloud,
   }) async {
     if (ProfileCollectionResourceFacade.active) {
       final rows = await ProfileCollectionResourceFacade.read(
         types: const <ConnectionResourceType>{ConnectionResourceType.webDav},
-        feature: ProfileFeature.cloud,
+        feature: feature,
         forSettings: forSettings,
         forRemoteTransfer: forRemoteTransfer,
       );
@@ -7361,7 +7681,7 @@ class StorageService {
               await SecretVault.getString(prefs, _webDavPasswordKey) ?? '',
         );
         servers.add(config);
-        await saveWebDavServers(servers);
+        await saveWebDavServers(servers, feature: feature);
         await setSelectedWebDavServerId(config.id);
       }
     }
@@ -7370,8 +7690,9 @@ class StorageService {
   }
 
   static Future<List<WebDavConfig>> saveWebDavServers(
-    List<WebDavConfig> servers,
-  ) async {
+    List<WebDavConfig> servers, {
+    ProfileFeature feature = ProfileFeature.cloud,
+  }) async {
     if (ProfileCollectionResourceFacade.active) {
       final expectedScope = ProfileRuntime.scope.value;
       if (expectedScope == null) throw StateError('No visible profile scope');
@@ -7381,7 +7702,7 @@ class StorageService {
       final prefs = await ProfilePreferences.instance();
       final rows = await ProfileCollectionResourceFacade.replaceAndRead(
         types: const <ConnectionResourceType>{ConnectionResourceType.webDav},
-        feature: ProfileFeature.cloud,
+        feature: feature,
         items: <ResourceCollectionItem>[
           for (final server in servers)
             ResourceCollectionItem(
@@ -7430,8 +7751,12 @@ class StorageService {
 
   static Future<WebDavConfig?> getSelectedWebDavServer({
     bool forSettings = true,
+    ProfileFeature feature = ProfileFeature.cloud,
   }) async {
-    final servers = await getWebDavServers(forSettings: forSettings);
+    final servers = await getWebDavServers(
+      forSettings: forSettings,
+      feature: feature,
+    );
     if (servers.isEmpty) return null;
     final selectedId = await getSelectedWebDavServerId();
     if (selectedId != null && selectedId.isNotEmpty) {
@@ -7443,12 +7768,15 @@ class StorageService {
     return servers.first;
   }
 
-  static Future<WebDavConfig> upsertWebDavServer(WebDavConfig config) async {
+  static Future<WebDavConfig> upsertWebDavServer(
+    WebDavConfig config, {
+    ProfileFeature feature = ProfileFeature.cloud,
+  }) async {
     final expectedScope = ProfileCollectionResourceFacade.active
         ? ProfileRuntime.scope.value
         : null;
     final selectionPrefs = await ProfilePreferences.instance();
-    final servers = (await getWebDavServers()).toList();
+    final servers = (await getWebDavServers(feature: feature)).toList();
     final priorResourceIds = <String>{
       for (final server in servers)
         if (server.connectionResourceId != null) server.connectionResourceId!,
@@ -7475,7 +7803,7 @@ class StorageService {
       );
       servers[index] = persisted;
     }
-    final saved = await saveWebDavServers(servers);
+    final saved = await saveWebDavServers(servers, feature: feature);
     final WebDavConfig canonical;
     final sourceResourceId = persisted.connectionResourceId;
     if (sourceResourceId != null) {
@@ -7501,17 +7829,20 @@ class StorageService {
     return canonical;
   }
 
-  static Future<void> deleteWebDavServer(String id) async {
+  static Future<void> deleteWebDavServer(
+    String id, {
+    ProfileFeature feature = ProfileFeature.cloud,
+  }) async {
     final expectedScope = ProfileCollectionResourceFacade.active
         ? ProfileRuntime.scope.value
         : null;
     final selectionPrefs = await ProfilePreferences.instance();
-    final servers = (await getWebDavServers()).toList();
+    final servers = (await getWebDavServers(feature: feature)).toList();
     if (expectedScope != null && ProfileRuntime.scope.value != expectedScope) {
       throw StateError('Profile changed while deleting a WebDAV connection');
     }
     servers.removeWhere((server) => server.id == id);
-    final saved = await saveWebDavServers(servers);
+    final saved = await saveWebDavServers(servers, feature: feature);
     final selected = selectionPrefs.getString(_webDavSelectedServerIdKey);
     if (selected == id) {
       if (saved.isEmpty) {
@@ -8824,8 +9155,23 @@ class StorageService {
     await prefs.setBool(_subtitleAutoSyncKey, enabled);
   }
 
-  /// Get default subtitle language code
-  /// Returns language code (e.g., 'en', 'es') or 'off' for disabled, null for no preference
+  /// Ordered, portable subtitle sources for automatic selection.
+  static Future<List<String>> getSubtitleSourcePriority() async {
+    final prefs = await ProfilePreferences.instance();
+    return SubtitleSourcePriority.decode(
+      prefs.getString(SubtitleSourcePriority.preferenceKey),
+    );
+  }
+
+  static Future<void> setSubtitleSourcePriority(List<String> order) async {
+    final prefs = await ProfilePreferences.instance();
+    await prefs.setString(
+      SubtitleSourcePriority.preferenceKey,
+      jsonEncode(SubtitleSourcePriority.normalize(order)),
+    );
+  }
+
+  /// Returns a language code, 'off', or null for no preference.
   static Future<String?> getDefaultSubtitleLanguage() async {
     final prefs = await ProfilePreferences.instance();
     return prefs.getString(_playerDefaultSubtitleLanguageKey);
@@ -9085,18 +9431,6 @@ class StorageService {
     } else {
       await prefs.setString(_iptvDefaultPlaylistKey, playlistId);
     }
-  }
-
-  /// Check if IPTV defaults have been initialized (to avoid re-adding after user deletes)
-  static Future<bool> getIptvDefaultsInitialized() async {
-    final prefs = await ProfilePreferences.instance();
-    return prefs.getBool(_iptvDefaultsInitializedKey) ?? false;
-  }
-
-  /// Mark IPTV defaults as initialized
-  static Future<void> setIptvDefaultsInitialized(bool initialized) async {
-    final prefs = await ProfilePreferences.instance();
-    await prefs.setBool(_iptvDefaultsInitializedKey, initialized);
   }
 
   // ==========================================================================
@@ -9801,7 +10135,22 @@ class StorageService {
     if (json == null) return {};
     try {
       final list = jsonDecode(json) as List<dynamic>;
-      return list.cast<String>().toSet();
+      final disabled = list.cast<String>().toSet();
+      final rows = disabled
+          .where((id) => !HomeCollectionRowIds.isFolderList(id))
+          .toSet();
+      // Folder-list controls were retired; migrate their hidden flags away.
+      if (rows.length != disabled.length) {
+        if (rows.isEmpty) {
+          await prefs.remove(_homeDisabledSectionsKey);
+        } else {
+          await prefs.setString(
+            _homeDisabledSectionsKey,
+            jsonEncode(rows.toList()),
+          );
+        }
+      }
+      return rows;
     } catch (e) {
       debugPrint('Error reading home disabled sections: $e');
       return {};
@@ -9811,12 +10160,15 @@ class StorageService {
   /// Save the set of hidden Home-row IDs.
   static Future<void> setHomeDisabledSections(Set<String> disabled) async {
     final prefs = await ProfilePreferences.instance();
-    if (disabled.isEmpty) {
+    final rows = disabled
+        .where((id) => !HomeCollectionRowIds.isFolderList(id))
+        .toSet();
+    if (rows.isEmpty) {
       await prefs.remove(_homeDisabledSectionsKey);
     } else {
       await prefs.setString(
         _homeDisabledSectionsKey,
-        jsonEncode(disabled.toList()),
+        jsonEncode(rows.toList()),
       );
     }
   }
@@ -9970,7 +10322,7 @@ class StorageService {
     appThemeCached = 'legacy';
     themeOverridesCached = '';
     parentsGuideStyleCached = 'compass';
-    iptvStyleCached = 'command';
+    iptvStyleCached = kIptvStyleDefault;
     discoverLayoutCached = 'stage';
     launchAnimationCached = 'trace';
     launchIdentPaletteCached = 'ident';

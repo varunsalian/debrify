@@ -1,0 +1,8 @@
+{
+  "generator": "Python cryptography AESGCM + HKDF; Tink AES-GCM-HKDF streaming specification",
+  "context": "fixture/circle/bootstrap",
+  "keyHex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+  "plainBase64": "RGVicmlmeSBpbmRlcGVuZGVudCBBRVMtR0NNLUhLREYgc3RyZWFtaW5nIHRlc3QgdmVjdG9yLgD/",
+  "encodedBase64": "REJSRkVOQzIAAAQAAAAAAAAAAAA5AAECAwQFBgcICQoLDA0ODwxSMoFtvhpspf4zKDgQRbeKbfo03BWz28vOpJ3w6Al/KCAhIiMkJSYnKCkqKywtLi8wMTIzNDU2Nzg5Ojs8PT4/QEFCQ0RFRt91ArACTOWB9COrV6jz17nBwtqhDPOqdwDGJQSsTI7yvwjtG46oPDB99Br4cQK0NGEKz7uTrEX1rzS008D6TnnZxb6Y9sm8Xvo=",
+  "encodedSha256": "f56e648c90bce21ae7a7c2864b8c2f9778b6529a58f057594ac7301baaa11c5b"
+}

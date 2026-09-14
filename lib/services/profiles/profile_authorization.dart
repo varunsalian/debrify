@@ -1,3 +1,4 @@
+import 'profile_session_unavailable.dart';
 import '../../models/profiles/profile_policy.dart';
 import '../../models/profiles/user_profile.dart';
 import 'profile_lock_controller.dart';
@@ -21,7 +22,7 @@ class ProfileAuthorizationContext {
     final scope = ProfileRuntime.capture();
     final profile = await registry.getProfile(scope.profileId);
     if (profile == null || !profile.isEnabled) {
-      throw StateError('Active profile is unavailable');
+      throw ProfileSessionUnavailable('Active profile is unavailable');
     }
     return ProfileAuthorizationContext._(
       profileId: profile.id,
@@ -67,18 +68,20 @@ class ProfileAuthorizationContext {
       throw StateError('Profile storage is in maintenance mode');
     }
     if (ProfileLockController.instance.lockedProfileId.value != null) {
-      throw StateError('Profile session is locked');
+      throw ProfileSessionUnavailable('Profile session is locked');
     }
     final scope = ProfileRuntime.capture();
     if (scope.profileId != profileId || scope.sessionEpoch != sessionEpoch) {
-      throw StateError('Profile authorization session has ended');
+      throw ProfileSessionUnavailable(
+        'Profile authorization session has ended',
+      );
     }
     final profile = await registry.getProfile(profileId);
     if (profile == null || !profile.isEnabled) {
-      throw StateError('Authorized profile is unavailable');
+      throw ProfileSessionUnavailable('Authorized profile is unavailable');
     }
     if (profile.authorizationRevision != authorizationRevision) {
-      throw StateError('Profile authorization has changed');
+      throw ProfileSessionUnavailable('Profile authorization has changed');
     }
     return profile;
   }

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../services/main_page_bridge.dart';
 import '../theme/app_theme_scope.dart';
+import '../utils/platform_util.dart';
 
 /// The TV shell's GLASS STAGE: the Home board's focused title art, blurred,
 /// filling the WHOLE screen — behind the tab content AND the sidebar rail
@@ -17,10 +18,12 @@ import '../theme/app_theme_scope.dart';
 /// this widget never rebuilds per keypress. Title changes crossfade 220ms
 /// between two cached textures (no re-raster); tint settles rebuild the
 /// washes in place (snap — the TV policy). Null art = the flat page ink,
-/// which is also what every non-Home tab sits on (their scaffolds are
-/// opaque and simply cover this).
+/// which is also what every non-Home tab sits on. Android TV unmounts the art
+/// outside Home, since even an opaque page becomes transparent during a fade.
 class TvAmbientArtStage extends StatelessWidget {
-  const TvAmbientArtStage({super.key});
+  const TvAmbientArtStage({super.key, this.homeActive = true});
+
+  final bool homeActive;
 
   @override
   Widget build(BuildContext context) {
@@ -28,6 +31,11 @@ class TvAmbientArtStage extends StatelessWidget {
     // ValueListenableBuilders below, never looked up inside them.
     final app = AppThemeScope.of(context);
     final bg = app.shell.ink;
+    if (PlatformUtil.isAndroidTvCached && !homeActive) {
+      // Outside the AnimatedSwitcher: fading to null would retain the old
+      // poster for another 220ms, exactly when the incoming tab is translucent.
+      return IgnorePointer(child: ColoredBox(color: bg));
+    }
     return IgnorePointer(
       child: RepaintBoundary(
         child: ValueListenableBuilder<String?>(

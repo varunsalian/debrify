@@ -1,3 +1,8 @@
+import 'dart:async';
+
+import 'package:debrify/services/webdav_sync/webdav_sync_save_feedback.dart';
+import 'package:debrify/services/webdav_sync/webdav_sync_scheduler.dart';
+
 import 'package:debrify/services/profiles/profile_preference_budget.dart';
 import 'package:debrify/services/profiles/profile_creation_service.dart';
 import 'package:debrify/services/profiles/profile_preferences.dart';
@@ -16,9 +21,14 @@ void main() {
       'p.two.g.1.theme': 'red',
     });
     ProfileRuntime.debugReset();
+    ProfilePreferences.debugResetMutationTracking();
+    ProfilePreferences.webDavSyncLocalChangeSink = null;
   });
 
-  tearDown(ProfileRuntime.debugReset);
+  tearDown(() {
+    ProfilePreferences.webDavSyncLocalChangeSink = null;
+    ProfileRuntime.debugReset();
+  });
 
   test(
     'committed reads and clear are restricted to captured generation',
@@ -51,6 +61,185 @@ void main() {
     expect(prefs.getString('legacy'), 'kept');
     await prefs.setBool('enabled', true);
     expect((await SharedPreferences.getInstance()).getBool('enabled'), isTrue);
+  });
+
+  test('captured and sync-apply writes emit no local-change signals', () async {
+    final scope = ProfileScope(
+      profileId: 'one',
+      dataGeneration: 1,
+      sessionEpoch: 1,
+    );
+    ProfileRuntime.initializeCommitted(scope);
+    final notifications = <String>[];
+    ProfilePreferences.webDavSyncLocalChangeSink = (_, key) {
+      notifications.add(key);
+    };
+
+    for (final access in const <CapturedProfilePreferenceAccess>[
+      CapturedProfilePreferenceAccess.migration,
+      CapturedProfilePreferenceAccess.profileCreation,
+      CapturedProfilePreferenceAccess.restore,
+      CapturedProfilePreferenceAccess.connectionGrant,
+      CapturedProfilePreferenceAccess.syncApply,
+    ]) {
+      final captured = await ProfilePreferences.forCapturedScope(scope, access);
+      expect(
+        await captured.setString('captured_${access.name}', 'value'),
+        isTrue,
+      );
+    }
+    final sync = await ProfilePreferences.forCapturedScope(
+      scope,
+      CapturedProfilePreferenceAccess.syncApply,
+    );
+    expect(
+      await sync.applySyncBatch(<String, Object>{
+        for (var index = 0; index < 10; index++) 'remote_$index': index,
+      }, authorizationBarrier: () {}),
+      isTrue,
+    );
+
+    expect(notifications, isEmpty);
+  });
+
+  test('a successful ordinary portable write emits one local change', () async {
+    final scope = ProfileScope(
+      profileId: 'one',
+      dataGeneration: 1,
+      sessionEpoch: 1,
+    );
+    ProfileRuntime.initializeCommitted(scope);
+    final notifications = <(String, String)>[];
+    ProfilePreferences.webDavSyncLocalChangeSink = (profileId, key) {
+      notifications.add((profileId, key));
+    };
+    final prefs = await ProfilePreferences.instance();
+
+    expect(await prefs.setString('language', 'en'), isTrue);
+
+    expect(notifications, <(String, String)>[('one', 'language')]);
+  });
+
+  test(
+    'unchanged scalar and list saves emit no new sync notification',
+    () async {
+      ProfileRuntime.initializeCommitted(
+        ProfileScope(profileId: 'one', dataGeneration: 1, sessionEpoch: 1),
+      );
+      var signals = 0;
+      ProfilePreferences.webDavSyncLocalChangeSink = (_, _) => signals++;
+      final prefs = await ProfilePreferences.instance();
+      await prefs.setString('discover_last_source', 'cw');
+      await prefs.setString('discover_last_source', 'cw');
+      await prefs.setStringList('tracking_scrobble_targets', ['local']);
+      await prefs.setStringList('tracking_scrobble_targets', ['local']);
+      expect(signals, 2);
+      await prefs.setStringList('tracking_scrobble_targets', [
+        'local',
+        'simkl',
+      ]);
+      expect(signals, 3);
+    },
+  );
+
+  for (final selection in [
+    ('subtitle_selected_font_id', 'custom_test_font', 'default'),
+    ('external_player_preferred', 'custom_app', 'vlc'),
+  ]) {
+    test(
+      'atomic ${selection.$1} uses its computed value for sync eligibility',
+      () async {
+        ProfileRuntime.initializeCommitted(
+          ProfileScope(profileId: 'one', dataGeneration: 1, sessionEpoch: 1),
+        );
+        final prefs = await ProfilePreferences.instance();
+        final signals = <String>[];
+        ProfilePreferences.webDavSyncLocalChangeSink = (_, key) =>
+            signals.add(key);
+        final (key, local, portable) = selection;
+        expect(await prefs.mutateStringAtomically(key, (_) => local), true);
+        expect(prefs.getString(key), local);
+        expect(signals, isEmpty);
+        expect(await prefs.mutateStringAtomically(key, (_) => portable), true);
+        expect(signals, [key]);
+        expect(await prefs.mutateStringAtomically(key, (_) => portable), true);
+        expect(signals, [key]); // Unchanged writes remain silent.
+        expect(await prefs.mutateStringAtomically(key, (_) => local), true);
+        expect(signals, [key]);
+        expect(await prefs.remove(key), true);
+        expect(
+          signals,
+          key == 'subtitle_selected_font_id' ? [key] : [key, key],
+        );
+      },
+    );
+  }
+
+  for (final selection in <(String, String, String)>[
+    ('subtitle_selected_font_id', 'custom_test_font', 'default'),
+    ('external_player_preferred', 'custom', 'vlc'),
+    ('external_player_preferred', 'custom_app', 'vlc'),
+    ('external_player_preferred', 'custom_command', 'vlc'),
+    ('ios_external_player_preferred', 'custom_scheme', 'vlc'),
+    ('linux_external_player_preferred', 'custom_command', 'vlc'),
+    ('windows_external_player_preferred', 'custom_command', 'vlc'),
+  ]) {
+    test(
+      'local-only ${selection.$1}=${selection.$2} emits no save receipt',
+      () async {
+        ProfileRuntime.initializeCommitted(
+          ProfileScope(profileId: 'one', dataGeneration: 1, sessionEpoch: 1),
+        );
+        final feedback = WebDavSyncSaveFeedback()..setEnabled(true);
+        addTearDown(feedback.dispose);
+        var sequence = 0;
+        ProfilePreferences.webDavSyncLocalChangeSink = (_, key) {
+          if (WebDavSyncScheduler.admitsLocalChangeKey(key)) {
+            feedback.saved(++sequence);
+          }
+        };
+        final prefs = await ProfilePreferences.instance();
+        final (key, custom, builtin) = selection;
+
+        expect(await prefs.setString(key, custom), isTrue);
+        expect(prefs.getString(key), custom);
+        expect(feedback.revision, 0);
+        expect(feedback.phase, WebDavSavePhase.inactive);
+
+        expect(await prefs.setString(key, builtin), isTrue);
+        expect(feedback.revision, 1);
+        feedback.finished(1, published: true);
+        expect(feedback.phase, WebDavSavePhase.synced);
+
+        expect(await prefs.setString(key, custom), isTrue);
+        expect(feedback.revision, 1);
+        expect(feedback.hasPending, isFalse);
+        expect(await prefs.remove(key), isTrue);
+        if (key == 'subtitle_selected_font_id') {
+          expect(feedback.revision, 1);
+          expect(feedback.hasPending, isFalse);
+        } else {
+          expect(feedback.revision, 2);
+          expect(feedback.hasPending, isTrue);
+        }
+      },
+    );
+  }
+
+  test('a throwing local-change sink cannot fail its write', () async {
+    final scope = ProfileScope(
+      profileId: 'one',
+      dataGeneration: 1,
+      sessionEpoch: 1,
+    );
+    ProfileRuntime.initializeCommitted(scope);
+    ProfilePreferences.webDavSyncLocalChangeSink = (_, _) {
+      throw StateError('scheduler failed');
+    };
+    final prefs = await ProfilePreferences.instance();
+
+    expect(await prefs.setString('language', 'fr'), isTrue);
+    expect(prefs.getString('language'), 'fr');
   });
 
   test('Home card orientation is isolated per profile', () async {
@@ -121,6 +310,9 @@ void main() {
   test(
     'Discover preference backup validation accepts only known source shapes',
     () {
+      for (final key in ['discover_default_source', 'discover_last_source']) {
+        expect(SanitizedProfilePreferences.allowsEntry(key, 'tmdb'), isTrue);
+      }
       expect(
         SanitizedProfilePreferences.allowsEntry(
           'discover_default_source',
@@ -371,6 +563,57 @@ void main() {
       );
     });
 
+    test('sync batch refuses unsafe growth before its first write', () async {
+      ProfileRuntime.initializeCommitted(scopeOne());
+      final sync = await ProfilePreferences.forCapturedScope(
+        scopeOne(),
+        CapturedProfilePreferenceAccess.syncApply,
+      );
+
+      expect(
+        await sync.applySyncBatch(<String, Object>{
+          'bulk': filler(ProfilePreferenceBudget.limitBytes),
+          'language': 'fr',
+        }, authorizationBarrier: () {}),
+        isFalse,
+      );
+      final raw = await SharedPreferences.getInstance();
+      expect(raw.getString('p.one.g.1.bulk'), isNull);
+      expect(raw.getString('p.one.g.1.language'), isNull);
+      expect(raw.getString('p.one.g.1.theme'), 'blue');
+    });
+
+    test(
+      'sync batch rechecks headroom immediately before each write',
+      () async {
+        ProfileRuntime.initializeCommitted(scopeOne());
+        final sync = await ProfilePreferences.forCapturedScope(
+          scopeOne(),
+          CapturedProfilePreferenceAccess.syncApply,
+        );
+        final raw = await SharedPreferences.getInstance();
+        var barriers = 0;
+
+        final wrote = await sync.applySyncBatch(
+          const <String, Object>{'language': 'fr'},
+          authorizationBarrier: () {
+            barriers++;
+            if (barriers == 2) {
+              unawaited(
+                raw.setString(
+                  'another_writer_bulk',
+                  filler(ProfilePreferenceBudget.emergencyLimitBytes),
+                ),
+              );
+            }
+          },
+        );
+
+        expect(wrote, isFalse);
+        expect(raw.getString('p.one.g.1.language'), isNull);
+      },
+    );
+
     test('off tvOS every write behaves exactly as before', () async {
       ProfilePreferenceBudget.debugEnforcedOverride = false;
       ProfileRuntime.initializeCommitted(scopeOne());
@@ -402,6 +645,282 @@ void main() {
     await expectLater(
       projection.setString('theme', 'red'),
       throwsA(isA<StateError>()),
+    );
+  });
+
+  test('sync batch refreshes only keys whose stored value changed', () async {
+    final scope = ProfileScope(
+      profileId: 'one',
+      dataGeneration: 1,
+      sessionEpoch: 1,
+    );
+    ProfileRuntime.initializeCommitted(scope);
+    final sync = await ProfilePreferences.forCapturedScope(
+      scope,
+      CapturedProfilePreferenceAccess.syncApply,
+    );
+    Set<String>? refreshed;
+
+    expect(
+      await sync.applySyncBatch(
+        const <String, Object>{'theme': 'blue', 'language': 'en'},
+        authorizationBarrier: () {},
+        afterApply: (appliedScope, changedKeys) async {
+          expect(appliedScope, scope);
+          refreshed = changedKeys;
+        },
+      ),
+      isTrue,
+    );
+
+    expect(refreshed, <String>{'language'});
+  });
+
+  test(
+    'sync batch refuses a target captured before a newer local write',
+    () async {
+      final scope = ProfileScope(
+        profileId: 'one',
+        dataGeneration: 1,
+        sessionEpoch: 1,
+      );
+      ProfileRuntime.initializeCommitted(scope);
+      late ProfilePreferenceMutationToken token;
+      await ProfilePreferences.captureMutationSnapshot((captured) async {
+        token = captured;
+      });
+      final ordinary = await ProfilePreferences.instance();
+      await ordinary.setString('theme', 'new-local-value');
+      final sync = await ProfilePreferences.forCapturedScope(
+        scope,
+        CapturedProfilePreferenceAccess.syncApply,
+      );
+      var journaled = false;
+
+      await expectLater(
+        sync.applySyncBatch(
+          const <String, Object>{'theme': 'stale-sync-value'},
+          authorizationBarrier: () {},
+          expectedMutationToken: token,
+          beforeWrite: () async => journaled = true,
+        ),
+        throwsA(isA<ProfilePreferenceMutationConflict>()),
+      );
+
+      expect(journaled, isFalse);
+      expect(ordinary.getString('theme'), 'new-local-value');
+    },
+  );
+
+  test(
+    'async string preparation releases the barrier and retries a racing sync',
+    () async {
+      final scope = ProfileScope(
+        profileId: 'one',
+        dataGeneration: 1,
+        sessionEpoch: 1,
+      );
+      ProfileRuntime.initializeCommitted(scope);
+      final prefs = await ProfilePreferences.instance();
+      final sync = await ProfilePreferences.forCapturedScope(
+        scope,
+        CapturedProfilePreferenceAccess.syncApply,
+      );
+      final preparing = Completer<void>();
+      final resume = Completer<void>();
+      final seen = <String?>[];
+      final mutation = prefs.mutateStringAsyncAtomically('theme', (
+        current,
+      ) async {
+        seen.add(current);
+        if (seen.length == 1) {
+          preparing.complete();
+          await resume.future;
+        }
+        return '$current-edited';
+      });
+      await preparing.future;
+      try {
+        await ProfilePreferences.captureMutationSnapshot(
+          (_) async {},
+        ).timeout(const Duration(seconds: 1));
+        expect(
+          await sync
+              .applySyncBatch({'theme': 'remote'}, authorizationBarrier: () {})
+              .timeout(const Duration(seconds: 1)),
+          true,
+        );
+      } finally {
+        resume.complete();
+      }
+      expect(await mutation, true);
+      expect(seen, ['blue', 'remote']);
+      expect(prefs.getString('theme'), 'remote-edited');
+    },
+  );
+
+  test('snapshot rejects atomic list mutation without deadlocking', () async {
+    final scope = ProfileScope(
+      profileId: 'one',
+      dataGeneration: 1,
+      sessionEpoch: 1,
+    );
+    ProfileRuntime.initializeCommitted(scope);
+    final prefs = await ProfilePreferences.instance();
+
+    await ProfilePreferences.captureMutationSnapshot((_) async {
+      expect(
+        () => prefs.mutateStringListAtomically(
+          'favorites',
+          (_) => const <String>['one'],
+        ),
+        throwsStateError,
+      );
+    }).timeout(const Duration(seconds: 1));
+  });
+
+  test('sync batch skips cache publication for an unchanged target', () async {
+    final scope = ProfileScope(
+      profileId: 'one',
+      dataGeneration: 1,
+      sessionEpoch: 1,
+    );
+    ProfileRuntime.initializeCommitted(scope);
+    final sync = await ProfilePreferences.forCapturedScope(
+      scope,
+      CapturedProfilePreferenceAccess.syncApply,
+    );
+    var refreshed = false;
+
+    expect(
+      await sync.applySyncBatch(
+        const <String, Object>{'theme': 'blue'},
+        authorizationBarrier: () {},
+        afterApply: (_, _) async => refreshed = true,
+      ),
+      isTrue,
+    );
+
+    expect(refreshed, isFalse);
+  });
+
+  test(
+    'pending replay republishes caches after values already landed',
+    () async {
+      final scope = ProfileScope(
+        profileId: 'one',
+        dataGeneration: 1,
+        sessionEpoch: 1,
+      );
+      ProfileRuntime.initializeCommitted(scope);
+      final sync = await ProfilePreferences.forCapturedScope(
+        scope,
+        CapturedProfilePreferenceAccess.syncApply,
+      );
+      Set<String>? refreshed;
+
+      expect(
+        await sync.applySyncBatch(
+          const <String, Object>{'theme': 'blue'},
+          authorizationBarrier: () {},
+          replayCommittedTarget: true,
+          afterApply: (_, changedKeys) async => refreshed = changedKeys,
+        ),
+        isTrue,
+      );
+
+      expect(refreshed, <String>{'theme'});
+    },
+  );
+
+  test(
+    'sync batch does not treat equal int and double values as unchanged',
+    () async {
+      final scope = ProfileScope(
+        profileId: 'one',
+        dataGeneration: 1,
+        sessionEpoch: 1,
+      );
+      ProfileRuntime.initializeCommitted(scope);
+      final raw = await SharedPreferences.getInstance();
+      await raw.setInt(scope.preferenceKey('scale'), 1);
+      final sync = await ProfilePreferences.forCapturedScope(
+        scope,
+        CapturedProfilePreferenceAccess.syncApply,
+      );
+      Set<String>? refreshed;
+
+      expect(
+        await sync.applySyncBatch(
+          const <String, Object>{'scale': 1.0},
+          authorizationBarrier: () {},
+          afterApply: (_, changedKeys) async => refreshed = changedKeys,
+        ),
+        isTrue,
+      );
+
+      expect(raw.getDouble(scope.preferenceKey('scale')), 1.0);
+      expect(refreshed, <String>{'scale'});
+    },
+  );
+
+  test('sync batch stops after its authorization barrier is revoked', () async {
+    final scope = ProfileScope(
+      profileId: 'one',
+      dataGeneration: 1,
+      sessionEpoch: 1,
+    );
+    ProfileRuntime.initializeCommitted(scope);
+    final sync = await ProfilePreferences.forCapturedScope(
+      scope,
+      CapturedProfilePreferenceAccess.syncApply,
+    );
+    var barriers = 0;
+    void barrier() {
+      barriers++;
+      if (barriers == 3) {
+        ProfileRuntime.publish(
+          ProfileScope(profileId: 'two', dataGeneration: 1, sessionEpoch: 2),
+        );
+      }
+      if (ProfileRuntime.scope.value != scope) {
+        throw StateError('profile switched');
+      }
+    }
+
+    await expectLater(
+      sync.applySyncBatch(const <String, Object>{
+        'theme': 'green',
+        'language': 'en',
+      }, authorizationBarrier: barrier),
+      throwsStateError,
+    );
+    final raw = await SharedPreferences.getInstance();
+    expect(raw.getString('p.one.g.1.theme'), 'green');
+    expect(raw.getString('p.one.g.1.language'), isNull);
+  });
+
+  test('sync batch rejects non-finite doubles before writing', () async {
+    final scope = ProfileScope(
+      profileId: 'one',
+      dataGeneration: 1,
+      sessionEpoch: 1,
+    );
+    ProfileRuntime.initializeCommitted(scope);
+    final sync = await ProfilePreferences.forCapturedScope(
+      scope,
+      CapturedProfilePreferenceAccess.syncApply,
+    );
+
+    await expectLater(
+      sync.applySyncBatch(<String, Object>{
+        'bad': double.nan,
+      }, authorizationBarrier: () {}),
+      throwsArgumentError,
+    );
+    expect(
+      (await SharedPreferences.getInstance()).containsKey('p.one.g.1.bad'),
+      isFalse,
     );
   });
 }

@@ -56,10 +56,7 @@ void main() {
   test('user data is durable by default; only named caches drop', () async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(scoped('my_watchlist_v1'), '[{"key":"movie:tt1"}]');
-    await prefs.setString(
-      scoped('debrify_tv_favorite_channels_v1'),
-      '["ch1"]',
-    );
+    await prefs.setString(scoped('debrify_tv_favorite_channels_v1'), '["ch1"]');
     await prefs.setString(scoped('playback_state_v1'), '{}');
     await prefs.setBool(scoped('home_continue_watching_enabled'), false);
     await prefs.setInt(scoped('theme_index'), 3);
@@ -138,5 +135,17 @@ void main() {
       (i) => exported.containsKey(scoped('note_$i')),
     ).where((kept) => kept).length;
     expect(notesKept, 7, reason: 'exactly the largest overflow is skipped');
+  });
+
+  test('device-owned WebDAV sync state never enters tvOS recovery', () async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('webdav_sync_state_v1', 'sealed-device-state');
+    await prefs.setString(scoped('theme_index'), '3');
+
+    final encoded = await registry.exportRecoverySnapshot();
+    final exported = await exportedPreferences();
+
+    expect(exported, isNot(contains('webdav_sync_state_v1')));
+    expect(encoded, isNot(contains('sealed-device-state')));
   });
 }

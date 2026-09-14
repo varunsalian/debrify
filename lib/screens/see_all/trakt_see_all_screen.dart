@@ -10,6 +10,7 @@ import '../../services/main_page_bridge.dart';
 import '../../widgets/see_all/see_all_filter_bar.dart';
 import '../../widgets/skeleton_poster.dart';
 import '../../services/trakt/trakt_list_source.dart';
+import '../../services/watched_filter.dart';
 import '../../widgets/see_all/see_all_filter_focus.dart';
 import '../../widgets/see_all/see_all_header.dart';
 import '../../widgets/see_all/see_all_poster_grid.dart';
@@ -389,6 +390,10 @@ class _TraktSeeAllScreenState extends State<TraktSeeAllScreen> {
       it = it.where(_isWatched);
     } else if (_showState && _watch == 'unwatched') {
       it = it.where((m) => !_isWatched(m));
+    }
+    // Discovery lists only; the account's own lists stay complete.
+    if (_list.builtin?.hidesWatched ?? false) {
+      it = it.where((m) => !WatchedFilter.hides(m));
     }
     final list = it.toList();
     switch (_effectiveSort) {

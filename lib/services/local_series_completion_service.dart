@@ -115,15 +115,26 @@ class LocalSeriesCompletionService {
     Future<void> commit() => _stateLock.synchronized(() async {
       final state = await _readState();
       final previous = state[id];
+      final inventoryChanged =
+          previous == null ||
+          previous['title'] != seriesTitle ||
+          !mapEquals(_episodeMap(previous['episodes']), episodes);
       final record = <String, dynamic>{
+        ...?previous,
         'title': seriesTitle,
         'episodes': episodes,
         'calendarEpisodes': _episodeMap(previous?['calendarEpisodes']),
         'caughtUp': previous?['caughtUp'] == true,
-        'validatedAt': DateTime.now().millisecondsSinceEpoch,
+        'validatedAt': inventoryChanged
+            ? DateTime.now().millisecondsSinceEpoch
+            : previous['validatedAt'],
       };
       state[id] = record;
-      await _recalculateRecord(id, record);
+      final progressChanged = await _recalculateRecord(id, record);
+      if (!inventoryChanged && !progressChanged) {
+        if (_isCurrentScope(recordScope)) _scheduleNextRelease(state);
+        return;
+      }
       await _writeState(state);
       if (_isCurrentScope(recordScope)) {
         _scheduleNextRelease(state);

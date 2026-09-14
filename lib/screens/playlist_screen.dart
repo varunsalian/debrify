@@ -82,6 +82,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
       _searchFocusNode.requestFocus();
     };
     MainPageBridge.registerTvContentFocusHandler(1, _tvContentFocusHandler!);
+    MainPageBridge.addPlaylistChangeListener(_refresh);
   }
 
   @override
@@ -92,6 +93,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
         _tvContentFocusHandler!,
       );
     }
+    MainPageBridge.removePlaylistChangeListener(_refresh);
     // Remove listener before disposing controller
     _searchController.removeListener(_onSearchChanged);
     _searchController.dispose();

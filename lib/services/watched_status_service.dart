@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'simkl/simkl_service.dart';
 import 'local_series_completion_service.dart';
 import 'storage_service.dart';
+import 'watched_snapshot_retry.dart';
 import 'trakt/trakt_service.dart';
 import 'mdblist/mdblist_service.dart';
 import '../models/tracking_source.dart';
@@ -35,6 +36,8 @@ class WatchedStatusService extends ChangeNotifier {
   Set<String> _mdblistSeries = const {};
   int _generation = 0;
   bool _started = false;
+  bool _hasSnapshot = false;
+  final List<Completer<void>> _snapshotWaiters = [];
   bool _refreshing = false;
   bool _refreshPending = false;
   int _localGeneration = 0;
@@ -44,6 +47,28 @@ class WatchedStatusService extends ChangeNotifier {
   Set<TrackingSource> _tickSources = Set<TrackingSource>.of(
     TrackingSource.values,
   );
+
+  /// True once the local snapshot has been published this profile session.
+  /// The hide-watched filter hides nothing before that, so a cold start never
+  /// paints a list that then loses items a beat later.
+  bool get hasSnapshot => _hasSnapshot;
+
+  /// Completes once [hasSnapshot] is true (immediately if it already is).
+  Future<void> get firstSnapshot {
+    if (_hasSnapshot) return Future.value();
+    final c = Completer<void>();
+    _snapshotWaiters.add(c);
+    return c.future;
+  }
+
+  void _markSnapshot() {
+    if (_hasSnapshot) return;
+    _hasSnapshot = true;
+    for (final c in _snapshotWaiters) {
+      if (!c.isCompleted) c.complete();
+    }
+    _snapshotWaiters.clear();
+  }
 
   bool isWatched(String imdbId, String contentType) {
     final id = imdbId.trim().toLowerCase();
@@ -123,6 +148,7 @@ class WatchedStatusService extends ChangeNotifier {
     _mdblistDirtyAt = null;
     _mdblistRefreshTimer?.cancel();
     _mdblistRefreshTimer = null;
+    _hasSnapshot = false;
     _localMovies = const {};
     _localSeries = const {};
     _traktMovies = const {};
@@ -181,50 +207,65 @@ class WatchedStatusService extends ChangeNotifier {
 
   void _refreshLocal() {
     final generation = ++_localGeneration;
-    unawaited(() async {
-      final results = await Future.wait([
-        StorageService.getFinishedMovieIds(),
-        LocalSeriesCompletionService.instance.caughtUpIds(),
-        StorageService.getExplicitlyWatchedSeriesIds(),
-      ]);
-      if (generation != _localGeneration) return;
-      _localMovies = results[0];
-      _localSeries = <String>{...results[1], ...results[2]};
-      notifyListeners();
+    unawaited(
+      () async {
+        final results = await readWatchedSnapshotWithRetry(
+          () => Future.wait([
+            StorageService.getFinishedMovieIds(),
+            LocalSeriesCompletionService.instance.caughtUpIds(),
+            StorageService.getExplicitlyWatchedSeriesIds(),
+          ]),
+        );
+        if (generation != _localGeneration) return;
+        _localMovies = results[0];
+        _localSeries = <String>{...results[1], ...results[2]};
+        _markSnapshot();
+        notifyListeners();
 
-      // Calendar reconciliation may involve network requests. Keep it behind
-      // the immediate local snapshot so card rendering never waits on Simkl.
-      final calendarSeries = await LocalSeriesCompletionService.instance
-          .refreshCalendarIfDue();
-      final explicitSeries =
-          await StorageService.getExplicitlyWatchedSeriesIds();
-      final combinedSeries = <String>{...calendarSeries, ...explicitSeries};
-      if (generation != _localGeneration ||
-          setEquals(_localSeries, combinedSeries)) {
-        return;
-      }
-      _localSeries = combinedSeries;
-      notifyListeners();
-    }());
+        // Calendar reconciliation may involve network requests. Keep it behind
+        // the immediate local snapshot so card rendering never waits on Simkl.
+        final calendarSeries = await LocalSeriesCompletionService.instance
+            .refreshCalendarIfDue();
+        final explicitSeries =
+            await StorageService.getExplicitlyWatchedSeriesIds();
+        final combinedSeries = <String>{...calendarSeries, ...explicitSeries};
+        if (generation != _localGeneration ||
+            setEquals(_localSeries, combinedSeries)) {
+          return;
+        }
+        _localSeries = combinedSeries;
+        notifyListeners();
+      }().catchError((Object error) {
+        debugPrint('WatchedStatusService: local snapshot read failed ($error)');
+        if (generation == _localGeneration && !_hasSnapshot) _started = false;
+      }),
+    );
   }
 
   void _startRefresh() {
     _refreshing = true;
     final generation = _generation;
     unawaited(
-      _refresh(generation).whenComplete(() {
-        _refreshing = false;
-        if (_refreshPending) {
-          _refreshPending = false;
-          _startRefresh();
-        } else if (_mdblistDirty && _mdblistDirtyAt != null) {
-          // A watched mutation can land while this pass is in flight. Badge
-          // rebuilds happen before `_refreshing` is cleared, so hand the dirty
-          // state off here rather than waiting for an unrelated future build.
-          // API failures leave dirtyAt null and deliberately do not auto-loop.
-          _consumeMdblistDirty();
-        }
-      }),
+      _refresh(generation)
+          .catchError((Object error) {
+            debugPrint(
+              'WatchedStatusService: snapshot refresh failed ($error)',
+            );
+          })
+          .whenComplete(() {
+            if (generation == _generation && !_hasSnapshot) _started = false;
+            _refreshing = false;
+            if (_refreshPending) {
+              _refreshPending = false;
+              _startRefresh();
+            } else if (_mdblistDirty && _mdblistDirtyAt != null) {
+              // A watched mutation can land while this pass is in flight. Badge
+              // rebuilds happen before `_refreshing` is cleared, so hand the dirty
+              // state off here rather than waiting for an unrelated future build.
+              // API failures leave dirtyAt null and deliberately do not auto-loop.
+              _consumeMdblistDirty();
+            }
+          }),
     );
   }
 
@@ -236,32 +277,45 @@ class WatchedStatusService extends ChangeNotifier {
     final traktFuture = _fetchTrakt();
     final simklFuture = SimklService.instance.fetchCompletedTitleIds();
     final mdblistFuture = MdblistService.instance.fetchCompletedTitleIds();
-    final localSeriesFuture = LocalSeriesCompletionService.instance
-        .caughtUpIds();
-    final explicitSeriesFuture = StorageService.getExplicitlyWatchedSeriesIds();
     final calendarFuture = LocalSeriesCompletionService.instance
         .refreshCalendarIfDue();
-
-    final localMovies = await StorageService.getFinishedMovieIds();
-    final localSeries = <String>{
-      ...await localSeriesFuture,
-      ...await explicitSeriesFuture,
-    };
-    if (generation == _generation && localGeneration == _localGeneration) {
-      _localMovies = localMovies;
-      _localSeries = localSeries;
+    // Capture errors immediately, while local reads may still be retrying.
+    // Unwrap after local publication so tracker latency cannot delay it.
+    final parallelReads = captureWatchedRead(
+      Future.wait<Object?>([
+        traktFuture,
+        simklFuture,
+        calendarFuture,
+        mdblistFuture,
+      ]),
+    );
+    List<Set<String>>? local;
+    try {
+      local = await readWatchedSnapshotWithRetry(
+        () => Future.wait([
+          StorageService.getFinishedMovieIds(),
+          LocalSeriesCompletionService.instance.caughtUpIds(),
+          StorageService.getExplicitlyWatchedSeriesIds(),
+        ]),
+      );
+    } catch (error) {
+      // Still join the tracker work below. A later activation may retry a
+      // failed first snapshot; do not latch ensureStarted permanently.
+      debugPrint('WatchedStatusService: local snapshot read failed ($error)');
+    }
+    if (local != null &&
+        generation == _generation &&
+        localGeneration == _localGeneration) {
+      _localMovies = local[0];
+      _localSeries = {...local[1], ...local[2]};
+      _markSnapshot();
       notifyListeners();
     }
 
     // Always join the requests this pass started, even if invalidated. That
     // keeps the coalescer honest: the follow-up cannot overlap abandoned page
     // loops from the superseded pass.
-    final results = await Future.wait<Object?>([
-      traktFuture,
-      simklFuture,
-      calendarFuture,
-      mdblistFuture,
-    ]);
+    final results = (await parallelReads).unwrap();
     if (generation != _generation) return;
     final trakt =
         results[0] as ({Map<String, double>? movies, Set<String>? series});

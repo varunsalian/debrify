@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:http/http.dart' as http;
 import 'package:xml/xml.dart';
 
 import '../models/webdav_item.dart';
@@ -10,20 +9,34 @@ import '../models/profiles/profile_policy.dart';
 import '../utils/file_utils.dart';
 import 'profiles/profile_collection_resource_facade.dart';
 import 'storage_service.dart';
+import 'webdav_protocol_client.dart';
 
 class WebDavService {
   WebDavService._();
 
-  static Future<WebDavConfig?> getConfig() async {
-    return StorageService.getSelectedWebDavServer(forSettings: false);
+  static Future<WebDavConfig?> getConfig({
+    ProfileFeature feature = ProfileFeature.cloud,
+  }) async {
+    return StorageService.getSelectedWebDavServer(
+      forSettings: false,
+      feature: feature,
+    );
   }
 
-  static Future<List<WebDavConfig>> getConfigs() {
-    return StorageService.getWebDavServers(forSettings: false);
+  static Future<List<WebDavConfig>> getConfigs({
+    ProfileFeature feature = ProfileFeature.cloud,
+  }) {
+    return StorageService.getWebDavServers(
+      forSettings: false,
+      feature: feature,
+    );
   }
 
-  static Future<bool> testConnection(WebDavConfig config) async {
-    await _authorize(config, allowUnbound: true);
+  static Future<bool> testConnection(
+    WebDavConfig config, {
+    ProfileFeature feature = ProfileFeature.cloud,
+  }) async {
+    await _authorize(config, feature: feature, allowUnbound: true);
     final items = await _listDirectoryRaw(config: config, path: '');
     return items.isNotEmpty || config.baseUrl.isNotEmpty;
   }
@@ -31,8 +44,9 @@ class WebDavService {
   static Future<List<WebDavItem>> listDirectory({
     required WebDavConfig config,
     required String path,
+    ProfileFeature feature = ProfileFeature.cloud,
   }) async {
-    await _authorize(config);
+    await _authorize(config, feature: feature);
     return _listDirectoryRaw(config: config, path: path);
   }
 
@@ -40,22 +54,33 @@ class WebDavService {
     required WebDavConfig config,
     required String path,
   }) async {
-    final uri = _uriForPath(config, path, collection: true);
-    final request = http.Request('PROPFIND', uri)
-      ..headers.addAll(_headers(config))
-      ..headers['Depth'] = '1'
-      ..headers['Content-Type'] = 'application/xml; charset=utf-8'
-      ..body =
-          '''<?xml version="1.0" encoding="utf-8" ?><D:propfind xmlns:D="DAV:"><D:prop><D:displayname/><D:getcontentlength/><D:getlastmodified/><D:getcontenttype/><D:resourcetype/></D:prop></D:propfind>''';
-
-    final response = await http.Response.fromStream(
-      await request.send().timeout(const Duration(seconds: 20)),
-    );
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw Exception(_formatWebDavError(response));
+    final client = _protocolClient(config);
+    late final WebDavBytesResult response;
+    try {
+      response = await client.propfind(
+        path: path,
+        depth: 1,
+        collection: true,
+        body:
+            '''<?xml version="1.0" encoding="utf-8" ?><D:propfind xmlns:D="DAV:"><D:prop><D:displayname/><D:getcontentlength/><D:getlastmodified/><D:getcontenttype/><D:resourcetype/></D:prop></D:propfind>''',
+      );
+    } finally {
+      client.close();
     }
-
-    final document = XmlDocument.parse(response.body);
+    late final XmlDocument document;
+    try {
+      document = XmlDocument.parse(utf8.decode(response.bytes));
+    } on XmlException catch (error) {
+      throw WebDavException.malformed(
+        'WebDAV returned an invalid directory listing',
+        cause: error,
+      );
+    } on FormatException catch (error) {
+      throw WebDavException.malformed(
+        'WebDAV returned a non-UTF-8 directory listing',
+        cause: error,
+      );
+    }
     final basePath = _normalizeDirPath(_pathFromUri(_baseUri(config)));
     final currentPath = _normalizeDirPath(path);
     final results = <WebDavItem>[];
@@ -149,29 +174,158 @@ class WebDavService {
   static Future<void> delete({
     required WebDavConfig config,
     required WebDavItem item,
+    ProfileFeature feature = ProfileFeature.cloud,
+    Future<void> Function()? beforeSend,
   }) async {
-    await _authorize(config);
-    final response = await http
-        .delete(
-          _uriForPath(config, item.path, collection: item.isDirectory),
-          headers: _headers(config),
-        )
-        .timeout(const Duration(seconds: 20));
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw Exception(_formatWebDavError(response));
+    await _authorize(config, feature: feature);
+    final client = _protocolClient(config);
+    try {
+      await client.deletePath(
+        path: item.path,
+        collection: item.isDirectory,
+        beforeSend: beforeSend,
+      );
+    } finally {
+      client.close();
     }
   }
 
-  static String directUrl(WebDavConfig config, String path) {
-    return _uriForPath(config, path).toString();
+  static Future<WebDavResponseMetadata> putBytes({
+    required WebDavConfig config,
+    required String path,
+    required List<int> bytes,
+    required int maxBytes,
+    String contentType = 'application/octet-stream',
+    String? ifNoneMatch,
+    String? ifMatch,
+    ProfileFeature feature = ProfileFeature.cloud,
+    Future<void> Function()? beforeSend,
+  }) async {
+    await _authorize(config, feature: feature);
+    final client = _protocolClient(config);
+    try {
+      return await client.putBytes(
+        path: path,
+        bytes: bytes,
+        maxBytes: maxBytes,
+        contentType: contentType,
+        ifNoneMatch: ifNoneMatch,
+        ifMatch: ifMatch,
+        beforeSend: beforeSend,
+      );
+    } finally {
+      client.close();
+    }
   }
 
-  static Map<String, String> authHeaders(WebDavConfig config) {
-    return _headers(config);
+  static Future<WebDavResponseMetadata> uploadFile({
+    required WebDavConfig config,
+    required String path,
+    required File file,
+    required int maxBytes,
+    String contentType = 'application/octet-stream',
+    String? ifNoneMatch,
+    String? ifMatch,
+    ProfileFeature feature = ProfileFeature.cloud,
+    Future<void> Function()? beforeSend,
+  }) async {
+    await _authorize(config, feature: feature);
+    final client = _protocolClient(config);
+    try {
+      return await client.uploadFile(
+        path: path,
+        file: file,
+        maxBytes: maxBytes,
+        contentType: contentType,
+        ifNoneMatch: ifNoneMatch,
+        ifMatch: ifMatch,
+        beforeSend: beforeSend,
+      );
+    } finally {
+      client.close();
+    }
   }
+
+  static Future<WebDavBytesResult> getBytes({
+    required WebDavConfig config,
+    required String path,
+    required int maxBytes,
+    ProfileFeature feature = ProfileFeature.cloud,
+    Future<void> Function()? beforeSend,
+  }) async {
+    await _authorize(config, feature: feature);
+    final client = _protocolClient(config);
+    try {
+      return await client.getBytes(
+        path: path,
+        maxBytes: maxBytes,
+        beforeSend: beforeSend,
+      );
+    } finally {
+      client.close();
+    }
+  }
+
+  static Future<WebDavFileResult> downloadToFile({
+    required WebDavConfig config,
+    required String path,
+    required File destination,
+    required int maxBytes,
+    ProfileFeature feature = ProfileFeature.cloud,
+    Future<void> Function()? beforeSend,
+  }) async {
+    await _authorize(config, feature: feature);
+    final client = _protocolClient(config);
+    try {
+      return await client.downloadToFile(
+        path: path,
+        destination: destination,
+        maxBytes: maxBytes,
+        beforeSend: beforeSend,
+      );
+    } finally {
+      client.close();
+    }
+  }
+
+  static Future<bool> exists({
+    required WebDavConfig config,
+    required String path,
+    bool collection = false,
+    ProfileFeature feature = ProfileFeature.cloud,
+    Future<void> Function()? beforeSend,
+  }) async {
+    await _authorize(config, feature: feature);
+    final client = _protocolClient(config);
+    try {
+      return (await client.exists(
+        path: path,
+        collection: collection,
+        beforeSend: beforeSend,
+      )).exists;
+    } finally {
+      client.close();
+    }
+  }
+
+  static String directUrl(WebDavConfig config, String path) =>
+      WebDavProtocolClient.resolvePath(
+        endpoint: _baseUri(config),
+        path: path,
+      ).toString();
+
+  static Map<String, String> authHeaders(WebDavConfig config) =>
+      WebDavProtocolClient.buildAuthorizationHeaders(_credentials(config));
+
+  static bool isInsecureConfig(WebDavConfig config) =>
+      WebDavProtocolClient.isInsecureUrl(config.baseUrl);
+
+  static bool isInsecureUrl(String url) =>
+      WebDavProtocolClient.isInsecureUrl(url);
 
   static Future<void> _authorize(
     WebDavConfig config, {
+    ProfileFeature feature = ProfileFeature.cloud,
     bool allowUnbound = false,
   }) => ProfileCollectionResourceFacade.authorizeExecution(
     resourceId: config.connectionResourceId,
@@ -179,43 +333,23 @@ class WebDavService {
     acceptedTypes: const <ConnectionResourceType>{
       ConnectionResourceType.webDav,
     },
-    feature: ProfileFeature.cloud,
+    feature: feature,
     allowUnbound: allowUnbound,
   );
 
   static Uri _baseUri(WebDavConfig config) {
-    final parsed = Uri.parse(config.baseUrl.trim());
-    if (!parsed.hasScheme) {
-      return Uri.parse('https://${config.baseUrl.trim()}');
-    }
-    return parsed;
+    return WebDavProtocolClient.parseEndpoint(config.baseUrl);
   }
 
-  static Uri _uriForPath(
-    WebDavConfig config,
-    String path, {
-    bool collection = false,
-  }) {
-    final base = _baseUri(config);
-    final baseSegments = base.pathSegments.where((s) => s.isNotEmpty).toList();
-    final extraSegments = _normalizeDirPath(
-      path,
-    ).split('/').where((s) => s.isNotEmpty).toList();
-    return base.replace(
-      pathSegments: [...baseSegments, ...extraSegments, if (collection) ''],
-    );
-  }
-
-  static Map<String, String> _headers(WebDavConfig config) {
-    final headers = <String, String>{'Accept': '*/*'};
-    if (config.username.isNotEmpty || config.password.isNotEmpty) {
-      final token = base64Encode(
-        utf8.encode('${config.username}:${config.password}'),
+  static WebDavProtocolClient _protocolClient(WebDavConfig config) =>
+      WebDavProtocolClient(
+        endpoint: _baseUri(config),
+        credentials: _credentials(config),
+        timeout: const Duration(seconds: 20),
       );
-      headers['Authorization'] = 'Basic $token';
-    }
-    return headers;
-  }
+
+  static WebDavCredentials _credentials(WebDavConfig config) =>
+      WebDavCredentials(username: config.username, password: config.password);
 
   static String? _childText(XmlElement element, String localName) {
     for (final child in element.descendants.whereType<XmlElement>()) {
@@ -274,13 +408,5 @@ class WebDavService {
   static DateTime? _parseHttpDate(String? value) {
     if (value == null || value.isEmpty) return null;
     return HttpDate.parse(value);
-  }
-
-  static String _formatWebDavError(http.Response response) {
-    if (response.statusCode == 401 || response.statusCode == 403) {
-      return 'WebDAV authentication failed';
-    }
-    if (response.statusCode == 404) return 'WebDAV folder not found';
-    return 'WebDAV request failed: ${response.statusCode}';
   }
 }

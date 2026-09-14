@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:math';
 
+import 'package:collection/collection.dart';
+
 import '../../models/profiles/connection_resource.dart';
 import '../../models/profiles/profile_policy.dart';
 import '../../models/profiles/user_profile.dart';
@@ -59,7 +61,7 @@ class ConnectionResourceService {
       );
     }
     final id = _newId();
-    final aad = _associatedData(
+    final aad = associatedDataForSecret(
       resourceId: id,
       type: type,
       ownerProfileId: owner.id,
@@ -162,7 +164,7 @@ class ConnectionResourceService {
       final publicConfig = _normalizePublicConfig(item.type, item.publicConfig);
       final sealed = await cipher.seal(
         utf8.encode(jsonEncode(item.secretConfig)),
-        associatedData: _associatedData(
+        associatedData: associatedDataForSecret(
           resourceId: replacementId,
           type: item.type,
           ownerProfileId: owner.id,
@@ -319,6 +321,11 @@ class ConnectionResourceService {
       permission: permission,
       feature: feature,
     );
+    if (authorized.secretPending) {
+      throw const ResourceAuthorizationException(
+        'Resource credentials are pending owner sign-in',
+      );
+    }
     final secret = await _openSecret(resourceId);
     await _revalidateResource(
       context: context,
@@ -329,10 +336,118 @@ class ConnectionResourceService {
     return secret;
   }
 
+  static final Map<(ProfileRegistry, String), Future<bool>> _traktRefreshes =
+      {};
+
+  /// Use-only borrowers may maintain this session, but cannot edit accounts.
+  /// All callers sharing a connection join the same refresh-token exchange.
+  Future<bool> refreshTraktSession({
+    required ProfileAuthorizationContext context,
+    required String resourceId,
+    required Future<({String accessToken, String refreshToken, int expiryMs})?>
+    Function(String refreshToken)
+    exchange,
+  }) async {
+    await authorize(
+      context: context,
+      resourceId: resourceId,
+      permission: ResourcePermission.use,
+      feature: ProfileFeature.trackersAndDiscovery,
+    );
+    final key = (registry, resourceId);
+    final pending = _traktRefreshes[key];
+    if (pending != null) return pending;
+    final operation = _refreshTraktSession(
+      context: context,
+      resourceId: resourceId,
+      exchange: exchange,
+    );
+    _traktRefreshes[key] = operation;
+    try {
+      return await operation;
+    } finally {
+      if (identical(_traktRefreshes[key], operation)) {
+        _traktRefreshes.remove(key);
+      }
+    }
+  }
+
+  Future<bool> _refreshTraktSession({
+    required ProfileAuthorizationContext context,
+    required String resourceId,
+    required Future<({String accessToken, String refreshToken, int expiryMs})?>
+    Function(String refreshToken)
+    exchange,
+  }) async {
+    final resource = await authorize(
+      context: context,
+      resourceId: resourceId,
+      permission: ResourcePermission.use,
+      feature: ProfileFeature.trackersAndDiscovery,
+    );
+    if (resource.type != ConnectionResourceType.trakt ||
+        resource.secretPending) {
+      throw const ResourceAuthorizationException('Trakt session unavailable');
+    }
+    final current = await _openSecret(resourceId);
+    final refreshToken = current['refreshToken'];
+    if (refreshToken is! String || refreshToken.isEmpty) return false;
+    await _revalidateResource(
+      context: context,
+      expected: resource,
+      permission: ResourcePermission.use,
+      feature: ProfileFeature.trackersAndDiscovery,
+    );
+    if (await registry.getBoundResourceId(context.profileId, 'tracker.trakt') !=
+        resourceId) {
+      throw StateError('Trakt connection changed');
+    }
+    final tokens = await exchange(refreshToken);
+    if (tokens == null) return false;
+    if (tokens.accessToken.isEmpty ||
+        tokens.refreshToken.isEmpty ||
+        tokens.expiryMs <= 0) {
+      throw const FormatException('Invalid Trakt tokens');
+    }
+    final sealed = await cipher.seal(
+      utf8.encode(
+        jsonEncode(<String, dynamic>{
+          ...current,
+          'accessToken': tokens.accessToken,
+          'refreshToken': tokens.refreshToken,
+          'expiryMs': tokens.expiryMs,
+        }),
+      ),
+      associatedData: associatedDataForSecret(
+        resourceId: resource.id,
+        type: resource.type,
+        ownerProfileId: resource.ownerProfileId,
+        publicSchemaVersion: resource.publicSchemaVersion,
+        payloadVersion: secretPayloadVersion,
+      ),
+    );
+    await _revalidateResource(
+      context: context,
+      expected: resource,
+      permission: ResourcePermission.use,
+      feature: ProfileFeature.trackersAndDiscovery,
+    );
+    await registry.rotateTraktSession(
+      resourceId: resourceId,
+      sealedSecretPayload: sealed,
+      secretPayloadVersion: secretPayloadVersion,
+      actingProfileId: context.profileId,
+      actingAuthorizationRevision: context.authorizationRevision,
+      expectedResourceAuthorizationRevision: resource.authorizationRevision,
+    );
+    return true;
+  }
+
   Future<void> updateSecret({
     required ProfileAuthorizationContext context,
     required String resourceId,
     required Map<String, dynamic> secretConfig,
+    bool allowEmpty = false,
   }) async {
     final authorized = await authorize(
       context: context,
@@ -340,7 +455,7 @@ class ConnectionResourceService {
       permission: ResourcePermission.manage,
       feature: ProfileFeature.manageConnections,
     );
-    if (secretConfig.isEmpty) {
+    if (secretConfig.isEmpty && !allowEmpty) {
       throw ArgumentError.value(
         secretConfig,
         'secretConfig',
@@ -352,9 +467,33 @@ class ConnectionResourceService {
         resource.authorizationRevision != authorized.authorizationRevision) {
       throw StateError('Resource is unavailable');
     }
+    // Compare JSON values, not randomized ciphertext. Account refreshes often
+    // save the existing credential; that must not invalidate jobs or wake sync.
+    final encoded = jsonEncode(secretConfig);
+    if (!resource.secretPending) {
+      Map<String, dynamic>? current;
+      try {
+        current = await _openSecret(resourceId);
+      } on StateError {
+        // A missing prior secret must not prevent an authorized replacement.
+      } on Exception {
+        // A replacement credential must still be able to repair an unreadable
+        // old envelope. The write below revalidates authority before committing.
+      }
+      if (current != null &&
+          const DeepCollectionEquality().equals(current, jsonDecode(encoded))) {
+        await _revalidateResource(
+          context: context,
+          expected: authorized,
+          permission: ResourcePermission.manage,
+          feature: ProfileFeature.manageConnections,
+        );
+        return;
+      }
+    }
     final sealed = await cipher.seal(
-      utf8.encode(jsonEncode(secretConfig)),
-      associatedData: _associatedData(
+      utf8.encode(encoded),
+      associatedData: associatedDataForSecret(
         resourceId: resource.id,
         type: resource.type,
         ownerProfileId: resource.ownerProfileId,
@@ -389,7 +528,7 @@ class ConnectionResourceService {
     if (sealed == null) throw StateError('Resource secret is unavailable');
     final opened = await cipher.open(
       sealed.envelope,
-      associatedData: _associatedData(
+      associatedData: associatedDataForSecret(
         resourceId: sealed.resourceId,
         type: sealed.type,
         ownerProfileId: sealed.ownerProfileId,
@@ -701,7 +840,7 @@ class ConnectionResourceService {
     final secret = await _openSecret(resourceId);
     final sealed = await cipher.seal(
       utf8.encode(jsonEncode(secret)),
-      associatedData: _associatedData(
+      associatedData: associatedDataForSecret(
         resourceId: resource.id,
         type: resource.type,
         ownerProfileId: newOwnerProfileId,
@@ -879,7 +1018,10 @@ class ConnectionResourceService {
     );
   }
 
-  static List<int> _associatedData({
+  /// Canonical local-vault attachment data. Circle sync reseals an imported
+  /// canonical secret through this same binding so it cannot be attached to a
+  /// different local resource, owner, type, or schema.
+  static List<int> associatedDataForSecret({
     required String resourceId,
     required ConnectionResourceType type,
     required String ownerProfileId,

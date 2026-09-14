@@ -1,0 +1,5 @@
+.dart_tool/
+build/
+/common/darwin/.cache/
+/ios/Headers/
+/macos/Headers/

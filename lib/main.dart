@@ -1,3 +1,6 @@
+import 'services/webdav_sync/webdav_log_upload.dart';
+import 'widgets/webdav_sync/webdav_save_status.dart';
+import 'services/local_validation_diagnostics.dart';
 import 'dart:async';
 import 'dart:io' show Platform, exit;
 import 'dart:ui' show AppExitResponse, PointerDeviceKind;
@@ -39,8 +42,13 @@ import 'screens/playlist_screen.dart';
 import 'screens/addons_screen.dart';
 import 'services/android_native_downloader.dart';
 import 'services/discover_prefs.dart';
+import 'services/hide_watched_prefs.dart';
+import 'services/stream_badges_service.dart';
 import 'services/iptv_catalog_db.dart';
+import 'services/profiles/local_backup/local_backup_archive.dart'
+    show LocalBackupScratch;
 import 'services/profiles/profile_bootstrap.dart';
+import 'services/profiles/profile_database_adoption_gate.dart';
 import 'services/profiles/profile_migration_service.dart';
 import 'services/profiles/profile_native_lock_bridge.dart';
 import 'services/profiles/profile_registry.dart';
@@ -58,6 +66,7 @@ import 'services/secret_vault.dart';
 import 'services/play_loader_style.dart';
 import 'services/storage_service.dart';
 import 'services/tv_hero_artwork_quality_controller.dart';
+import 'services/tv_playback_recovery.dart';
 import 'services/tvos_top_shelf_service.dart';
 import 'services/simkl/simkl_service.dart';
 import 'services/trakt/trakt_service.dart';
@@ -84,6 +93,7 @@ import 'widgets/window_drag_area.dart';
 import 'widgets/mobile_floating_nav.dart';
 import 'widgets/mobile_classic_nav.dart';
 import 'widgets/tv_ambient_art_stage.dart';
+import 'widgets/app_tab_switcher.dart';
 import 'widgets/tv_sidebar_nav.dart';
 import 'widgets/desktop_pill_nav.dart';
 import 'widgets/desktop_sidebar_nav.dart';
@@ -103,6 +113,7 @@ import 'utils/tvos_device.dart';
 import 'services/desktop_recording_service.dart';
 import 'services/desktop_schedule_service.dart';
 import 'services/update_service.dart';
+import 'services/webdav_sync/webdav_sync_runtime.dart';
 
 /// Flutter's default image cache (1000 images / 100 MB) is far too large for a
 /// 2 GB Android TV box — a screenful of full-res posters plus offscreen ones
@@ -230,7 +241,12 @@ String _describeStartupFailure(Object error, StackTrace stackTrace) {
 
 Future<void> _mainUnchecked(List<String> launchArguments) async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Reinstall an interrupted WebDAV adoption's process-wide database barrier
+  // before any startup service has a chance to open profile-owned bytes.
+  await ProfileDatabaseAdoptionGate.restorePersisted();
   await DiagnosticLog.instance.initialize();
+  LocalValidationDiagnostics.start();
+  WebDavLogUpload.instance.start();
   // On a release tvOS build, Dart's print() lands on stdout, which the device
   // console does not carry — so Flutter errors, and anything we log while
   // bringing the port up, are simply invisible on real hardware. Forward
@@ -271,6 +287,7 @@ Future<void> _mainUnchecked(List<String> launchArguments) async {
     DiagnosticLog.instance.recordError(
       source: 'dart',
       event: 'unhandled_async_error',
+      durable: true,
       error: error,
       stackTrace: stack,
     );
@@ -280,6 +297,7 @@ Future<void> _mainUnchecked(List<String> launchArguments) async {
   DiagnosticLog.instance.recordEvent(
     source: 'app',
     event: 'session_start',
+    durable: true,
     fields: <String, Object?>{
       'platform': DiagnosticLabel(kIsWeb ? 'web' : Platform.operatingSystem),
       'buildMode': DiagnosticLabel(
@@ -350,6 +368,15 @@ Future<void> _mainUnchecked(List<String> launchArguments) async {
   // cache, route, or background service can observe application state.
   try {
     await ProfileBootstrap.initialize();
+    // Scratch left behind by an interrupted local backup/restore is only
+    // ever intermediate state; finished backups live in the download
+    // destination. Nothing can be running yet, so sweep it unconditionally.
+    await LocalBackupScratch.cleanAbandoned().catchError((Object _) {
+      DiagnosticLog.instance.recordEvent(
+        source: 'local_backup',
+        event: 'scratch_cleanup_deferred',
+      );
+    });
   } on ProfileBootstrapRecoveryRequired {
     runApp(
       MaterialApp(
@@ -558,6 +585,14 @@ Future<void> _continueApplicationStartup() async {
   // Linux vault unlock; both must receive the same native lock authority as a
   // normal bootstrap.
   ProfileNativeLockBridge.initialize();
+  // Resume a crash-interrupted CircleAdoption before any profile database or
+  // preference warm can observe a half-copied target generation.
+  await WebDavSyncRuntime.instance.initialize();
+  // A Sony/Android lifecycle can reclaim MainActivity while the separate
+  // native player remains foreground. Recover only after WebDAV has finished
+  // any crash-interrupted generation adoption, but still before ProfileGate
+  // paints the recreated session.
+  await TvPlaybackRecovery.initialize();
   // These initializers may touch profile-sensitive state and therefore start
   // only after the immutable runtime mode and active scope are installed.
   unawaited(AnalyticsService.init());
@@ -693,6 +728,15 @@ Future<void> _continueApplicationStartup() async {
   try {
     await TvosDevice.warm();
   } catch (_) {}
+  // Recovery, preference migrations, and platform gates are now ready.
+  // Overlap launch sync with the remaining UI preparation without awaiting
+  // network work or extending the splash's readiness condition.
+  final applicationReady = Completer<void>();
+  unawaited(
+    WebDavSyncRuntime.instance.signalLaunch(
+      applicationReady: applicationReady.future,
+    ),
+  );
   // Resolve TV hero decode bounds before first paint. Otherwise a stored Full
   // HD choice would first decode the default smaller image, then immediately
   // throw it away and upload a second texture when the async preference lands.
@@ -709,12 +753,18 @@ Future<void> _continueApplicationStartup() async {
   // panels can read it synchronously in initState and paint already-sorted.
   // Cheap: SharedPreferences is already open by this point.
   await DiscoverPrefs.warmUp();
+  // Same for the hide-watched switch: the catalog filter reads it inline.
+  await HideWatchedPrefs.warmUp();
+  // Stream badge rulesets, for the same reason: source rows read the matcher
+  // synchronously, and a cold one would flash badges in after first paint.
+  await StreamBadgesService.instance.warmUp();
   // Old-playback-state cleanup is pure housekeeping — never block first frame
   // on a storage sweep (slow flash on TV boxes).
   unawaited(_cleanupPlaybackState());
   // NB: no manual app_open — Pug's autoTrack fires app_open/app_close from the
   // app lifecycle automatically (see AnalyticsService.init / PugOptions).
   runApp(const DebrifyApp());
+  applicationReady.complete();
   // Desktop scheduled recordings (Tier 1: fire while the app is running).
   // Arms stored timers + late-joins anything already in its window; no-op on
   // non-desktop platforms.
@@ -750,8 +800,11 @@ class _LinuxVaultBootstrapHost extends StatelessWidget {
     darkTheme: ThemeData.dark(useMaterial3: true),
     home: LinuxVaultScreen(
       existingVault: existingVault,
-      onSubmit: (passphrase) async {
-        await ProfileBootstrap.completeLinuxVault(passphrase);
+      onSubmit: (passphrase, autoUnlock) async {
+        await ProfileBootstrap.completeLinuxVault(
+          passphrase,
+          autoUnlock: autoUnlock,
+        );
         if (ProfileRuntime.isProfileCommitted) {
           await DeepLinkService.preflightLaunchIntent();
           await DeepLinkService.persistPreflightActions();
@@ -1050,7 +1103,7 @@ class _DebrifyAppState extends State<DebrifyApp> {
           // launch ident (see app_texture.dart). It short-circuits to `child`
           // for legacy and for the seventeen themes that declare neither, so
           // the common path costs one build and no layer.
-          child: AppTexture(child: child!),
+          child: WebDavSaveStatus(child: AppTexture(child: child!)),
         );
         // Pointer input counts as presence too — an Apple TV remote's
         // trackpad and an attached mouse both arrive here rather than through
@@ -1797,7 +1850,13 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
       }
 
       // Initialize remote control based on device type
-      _initializeRemoteControl(isTv);
+      unawaited(
+        _initializeRemoteControl(isTv).catchError((Object error) {
+          // Remote networking is optional at startup. The Remote screen owns
+          // retry and permission guidance if a listener cannot be opened.
+          debugPrint('Remote startup failed (${error.runtimeType})');
+        }),
+      );
     });
 
     // Initialize deep link service for magnet links
@@ -3167,11 +3226,13 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
           // keystroke — one scan per deliberate search, no per-keystroke storm.
           submitOnly: true,
           isTelevision: _isAndroidTv,
+          embedSearchHeaderInView: true,
           viewBuilder: (args) => IptvResultsView(
             key: args.resultKey,
             searchQuery: args.query,
             isTelevision: args.isTelevision,
             onUpArrowFromFilters: args.onUpArrowToSearch,
+            searchHeader: args.searchHeader,
           ),
         );
       case 14: // YouTube
@@ -3203,37 +3264,14 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     }
   }
 
-  /// Shared fade + slide page switcher used by every layout (TV, desktop
-  /// sidebar, top-bar/mobile). Keyed by [_selectedIndex] so tab swaps
-  /// animate. Each layout wraps this in its own SafeArea/Column as needed.
+  /// Keyed shell tab transitions. Android TV uses a single incoming fade;
+  /// other platforms retain their existing animations.
   Widget _buildAnimatedPage() {
-    return FadeTransition(
-      opacity: _fadeAnimation,
-      child: AnimatedSwitcher(
-        // TV: short fade-only swap — the 350ms fade+slide animates two
-        // full-screen layers at once, which reads as lag on weak TV GPUs.
-        duration: Duration(milliseconds: _isAndroidTv ? 150 : 350),
-        transitionBuilder: (child, animation) {
-          if (_isAndroidTv) {
-            return FadeTransition(opacity: animation, child: child);
-          }
-          final offsetAnimation =
-              Tween<Offset>(
-                begin: const Offset(0.02, 0.02),
-                end: Offset.zero,
-              ).animate(
-                CurvedAnimation(parent: animation, curve: Curves.easeOutCubic),
-              );
-          return FadeTransition(
-            opacity: animation,
-            child: SlideTransition(position: offsetAnimation, child: child),
-          );
-        },
-        child: KeyedSubtree(
-          key: ValueKey<int>(_selectedIndex),
-          child: _buildPage(_selectedIndex),
-        ),
-      ),
+    return AppTabSwitcher(
+      selectedIndex: _selectedIndex,
+      isTelevision: _isAndroidTv,
+      entranceAnimation: _fadeAnimation,
+      child: _buildPage(_selectedIndex),
     );
   }
 
@@ -3574,9 +3612,13 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
                         // focused title art, tiny-decode blurred, behind BOTH
                         // the content and the sidebar rail (the board's
                         // scaffold is transparent over it). Flat page ink
-                        // when nothing is published; other tabs' opaque
-                        // scaffolds simply cover it.
-                        const Positioned.fill(child: TvAmbientArtStage()),
+                        // when nothing is published. Android TV removes the
+                        // art immediately off Home, including during fades.
+                        Positioned.fill(
+                          child: TvAmbientArtStage(
+                            homeActive: _selectedIndex == 15,
+                          ),
+                        ),
                         Positioned.fill(
                           // Through the helper, not the constant: 'pill' draws
                           // no rail at rest, and a hardcoded 64 would leave a

@@ -8,6 +8,7 @@ import 'package:path/path.dart' as p;
 import 'package:sqflite/sqflite.dart';
 
 import '../../utils/app_storage.dart';
+import '../../utils/streamed_file_copy.dart';
 import '../iptv_catalog_key.dart';
 import 'profile_scope.dart';
 
@@ -105,6 +106,22 @@ class _DatabaseCompactionResult {
   });
 }
 
+/// Receives ownership of a finished snapshot file during a file-backed export
+/// and returns the opaque entry reference the package record should carry.
+/// The sink must move or copy the file; the snapshot scratch copy is deleted
+/// afterwards if it still exists.
+typedef ProfileDatabaseSnapshotFileSink =
+    Future<String> Function(
+      String databaseName,
+      File snapshot, {
+      required int bytes,
+      required String sha256,
+    });
+
+/// Maps a file-backed attachment's entry reference to the staged file that
+/// restore should copy from. Returning null rejects the attachment.
+typedef ProfileDatabaseFileResolver = File? Function(String entry);
+
 /// Consistent, bounded SQLite snapshots used by profile backup/restore.
 /// Imported SQL is never executed: only complete SQLite images for known
 /// profile database filenames are accepted, then integrity-checked while the
@@ -115,6 +132,10 @@ class ProfileDatabaseSnapshot {
   static const String debrifyTvDatabaseName = 'debrify_tv.db';
   static const int maxAttachmentBytes = 64 * 1024 * 1024;
   static const int maxTotalBytes = 128 * 1024 * 1024;
+
+  /// Disk-oriented cap for one file-backed database in a local archive. It
+  /// bounds staging space, not memory: file-backed restore streams the copy.
+  static const int maxFileBackedAttachmentBytes = 4 * 1024 * 1024 * 1024 - 1;
 
   /// Export-side budget for all database snapshots combined, deliberately
   /// tighter than the restore-side caps above: snapshot bytes are base64d
@@ -151,7 +172,21 @@ class ProfileDatabaseSnapshot {
   static Future<ProfileDatabaseSnapshotExport> export(
     ProfileScope scope, {
     bool compact = false,
+    Map<String, String> resourceIdProjection = const <String, String>{},
+    ProfileDatabaseSnapshotFileSink? fileSink,
+    bool pruneRebuildableCaches = false,
   }) async {
+    if (fileSink != null && compact) {
+      throw ArgumentError(
+        'File-backed exports never omit Debrify TV; use '
+        'pruneRebuildableCaches instead of compact',
+      );
+    }
+    if (pruneRebuildableCaches && fileSink == null) {
+      throw ArgumentError(
+        'pruneRebuildableCaches is only supported for file-backed exports',
+      );
+    }
     final attachmentCap = debugExportBudgetOverride ?? maxAttachmentBytes;
     final budget = debugExportBudgetOverride ?? maxExportRawBytes;
     final documents = await AppStorage.documents();
@@ -170,28 +205,71 @@ class ProfileDatabaseSnapshot {
         await _createConsistentSnapshot(source, snapshot, name);
       }
 
-      var lengths = await _snapshotLengths(snapshots);
-      final fullFits = _fitsBudget(lengths, attachmentCap, budget);
-      if (compact || !fullFits) {
-        for (final entry in snapshots.entries) {
-          final result = await _compactSnapshot(entry.key, entry.value);
-          if (result.removedRows > 0) {
-            compacted.add(entry.key);
+      if (fileSink != null) {
+        // Local archives carry whole databases as files, so the base64
+        // package budget does not apply. Only rebuildable IPTV caches may be
+        // dropped, and only on request; Debrify TV is never omitted here.
+        if (pruneRebuildableCaches) {
+          for (final entry in snapshots.entries) {
+            if (await _pruneRebuildableCaches(entry.key, entry.value) > 0) {
+              compacted.add(entry.key);
+            }
           }
-          debrifyTvOmission += result.debrifyTvOmission;
         }
-        lengths = await _snapshotLengths(snapshots);
+      } else {
+        var lengths = await _snapshotLengths(snapshots);
+        final fullFits = _fitsBudget(lengths, attachmentCap, budget);
+        if (compact || !fullFits) {
+          for (final entry in snapshots.entries) {
+            final result = await _compactSnapshot(entry.key, entry.value);
+            if (result.removedRows > 0) {
+              compacted.add(entry.key);
+            }
+            debrifyTvOmission += result.debrifyTvOmission;
+          }
+          lengths = await _snapshotLengths(snapshots);
+        }
+        if (!_fitsBudget(lengths, attachmentCap, budget)) {
+          final total = lengths.values.fold<int>(
+            0,
+            (sum, value) => sum + value,
+          );
+          throw StateError(
+            'Portable user library data is too large to back up '
+            '(${(total / (1024 * 1024)).ceil()} MB)',
+          );
+        }
       }
-      if (!_fitsBudget(lengths, attachmentCap, budget)) {
-        final total = lengths.values.fold<int>(0, (sum, value) => sum + value);
-        throw StateError(
-          'Portable user library data is too large to back up '
-          '(${(total / (1024 * 1024)).ceil()} MB)',
-        );
+
+      if (resourceIdProjection.isNotEmpty) {
+        for (final entry in snapshots.entries) {
+          await _remapDatabaseFile(
+            entry.value,
+            entry.key,
+            resourceIdProjection,
+          );
+        }
       }
 
       final result = <String, Object?>{};
       for (final entry in snapshots.entries) {
+        if (fileSink != null) {
+          final bytes = await entry.value.length();
+          final sha256 = await _hashFile(entry.value);
+          final reference = await fileSink(
+            entry.key,
+            entry.value,
+            bytes: bytes,
+            sha256: sha256,
+          );
+          result[entry.key] = <String, Object?>{
+            'encoding': 'file',
+            'entry': reference,
+            'bytes': bytes,
+            'sha256': sha256,
+          };
+          continue;
+        }
         final bytes = await entry.value.readAsBytes();
         result[entry.key] = <String, Object?>{
           'encoding': 'base64',
@@ -270,6 +348,82 @@ class ProfileDatabaseSnapshot {
       lengths.values.every((length) => length <= attachmentCap) &&
       lengths.values.fold<int>(0, (sum, length) => sum + length) <= totalBudget;
 
+  /// Durable IPTV catalog tables that every local archive keeps. Any table
+  /// in the catalog database that is neither here nor in
+  /// [rebuildableCatalogTables] fails the export: a new table must be
+  /// classified deliberately rather than silently kept or dropped.
+  static const Set<String> durableCatalogTables = <String>{
+    'category_default_selections',
+    'category_manual_orders',
+    'channel_manual_orders',
+    'channel_number_aliases',
+    'channel_number_assignments',
+    'channel_number_namespaces',
+    'hidden_groups',
+    'webdav_sync_meta',
+    'webdav_sync_record_state',
+  };
+
+  /// Provider catalog and guide caches that refresh from the network after a
+  /// restore. Dropped from local archives on request.
+  static const Set<String> rebuildableCatalogTables = <String>{
+    'meta',
+    'catalogs',
+    'channels',
+    'epg_programmes',
+    'epg_guides',
+  };
+
+  /// Removes rebuildable cache rows from an `iptv_catalog.db` snapshot and
+  /// leaves every other database untouched. Returns the rows removed.
+  static Future<int> _pruneRebuildableCaches(String name, File snapshot) async {
+    if (name != 'iptv_catalog.db') return 0;
+    final db = await openDatabase(snapshot.path, singleInstance: false);
+    var removedRows = 0;
+    try {
+      final rows = await db.query(
+        'sqlite_master',
+        columns: const <String>['name'],
+        where: "type = 'table'",
+      );
+      final existing = rows
+          .map((row) => row['name'])
+          .whereType<String>()
+          .where((table) => !table.startsWith('sqlite_'))
+          .where((table) => table != 'android_metadata')
+          .toSet();
+      final unclassified =
+          existing
+              .where(
+                (table) =>
+                    !durableCatalogTables.contains(table) &&
+                    !rebuildableCatalogTables.contains(table),
+              )
+              .toList()
+            ..sort();
+      if (unclassified.isNotEmpty) {
+        throw StateError(
+          'IPTV catalog tables are not classified for local backup: '
+          '${unclassified.join(', ')}',
+        );
+      }
+      await db.transaction((txn) async {
+        for (final table in rebuildableCatalogTables.where(existing.contains)) {
+          removedRows += await txn.delete(table);
+        }
+      });
+      if (removedRows > 0) await db.execute('VACUUM');
+      final integrity = await db.rawQuery('PRAGMA integrity_check');
+      if (!_integrityOk(integrity)) {
+        throw StateError('$name failed pruned snapshot integrity check');
+      }
+    } finally {
+      await db.close();
+      await _removeCompanions(snapshot);
+    }
+    return removedRows;
+  }
+
   static Future<_DatabaseCompactionResult> _compactSnapshot(
     String name,
     File snapshot,
@@ -284,13 +438,8 @@ class ProfileDatabaseSnapshot {
         'tv_channel_keywords',
         'tv_channels',
       ],
-      'iptv_catalog.db' => const <String>[
-        'meta',
-        'catalogs',
-        'channels',
-        'epg_programmes',
-        'epg_guides',
-      ],
+      // Same classification as the local archive's cache-only prune.
+      'iptv_catalog.db' => rebuildableCatalogTables.toList(growable: false),
       _ => const <String>[],
     };
     final db = await openDatabase(snapshot.path, singleInstance: false);
@@ -325,6 +474,17 @@ class ProfileDatabaseSnapshot {
         for (final table in compactedTables.where(existing.contains)) {
           removedRows += await txn.delete(table);
         }
+        // Omitted physical rows must take their sync sidecar stamps with
+        // them: a joiner that adopts stamps without rows would treat the
+        // matching remote records as already applied and never backfill.
+        if (name == debrifyTvDatabaseName &&
+            existing.contains('webdav_sync_record_state')) {
+          await txn.delete(
+            'webdav_sync_record_state',
+            where: 'kind IN (?, ?)',
+            whereArgs: const <Object>['tv_channels', 'tv_pool_generation'],
+          );
+        }
       });
       await db.execute('VACUUM');
       final integrity = await db.rawQuery('PRAGMA integrity_check');
@@ -348,38 +508,74 @@ class ProfileDatabaseSnapshot {
 
   static Future<int> restore(
     ProfileScope scope,
-    Map<Object?, Object?> attachments,
-  ) async {
+    Map<Object?, Object?> attachments, {
+    ProfileDatabaseFileResolver? fileResolver,
+  }) async {
     final documents = await AppStorage.documents();
     var total = 0;
     var restored = 0;
     for (final entry in attachments.entries) {
       final name = entry.key;
       final record = entry.value;
-      if (name is! String ||
-          !databaseNames.contains(name) ||
-          record is! Map ||
-          record['encoding'] != 'base64' ||
+      if (name is! String || !databaseNames.contains(name) || record is! Map) {
+        throw const FormatException('Invalid profile database attachment');
+      }
+      final fileBacked = record['encoding'] == 'file';
+      if (fileBacked) {
+        if (fileResolver == null) {
+          throw const FormatException(
+            'File-backed database attachments need a staged archive',
+          );
+        }
+        if (record['entry'] is! String ||
+            record['bytes'] is! num ||
+            record['sha256'] is! String) {
+          throw const FormatException('Invalid profile database attachment');
+        }
+      } else if (record['encoding'] != 'base64' ||
           record['bytes'] is! num ||
           record['sha256'] is! String ||
           record['data'] is! String) {
         throw const FormatException('Invalid profile database attachment');
       }
       final claimedBytes = (record['bytes'] as num).toInt();
-      if (claimedBytes < 0 || claimedBytes > maxAttachmentBytes) {
-        throw const FormatException('Database attachment exceeds limit');
-      }
-      final encoded = record['data'] as String;
-      if (encoded.length > ((maxAttachmentBytes + 2) ~/ 3) * 4) {
-        throw const FormatException('Encoded database attachment is too large');
-      }
-      final bytes = base64Decode(encoded);
-      total += bytes.length;
-      if (bytes.length != claimedBytes || total > maxTotalBytes) {
-        throw const FormatException('Database attachment size mismatch');
-      }
-      if (await _hashBytes(bytes) != record['sha256']) {
-        throw const FormatException('Database attachment digest mismatch');
+      File? stagedSource;
+      Uint8List? bytes;
+      if (fileBacked) {
+        if (claimedBytes < 0 || claimedBytes > maxFileBackedAttachmentBytes) {
+          throw const FormatException('Database attachment exceeds limit');
+        }
+        final staged = fileResolver!(record['entry'] as String);
+        if (staged == null || !await staged.exists()) {
+          throw const FormatException('Database attachment is missing');
+        }
+        if (await staged.length() != claimedBytes) {
+          throw const FormatException('Database attachment size mismatch');
+        }
+        // Verify the staged copy itself: a hash carried in the manifest only
+        // proves what the exporter saw, not what reached this device.
+        if (await _hashFile(staged) != record['sha256']) {
+          throw const FormatException('Database attachment digest mismatch');
+        }
+        stagedSource = staged;
+      } else {
+        if (claimedBytes < 0 || claimedBytes > maxAttachmentBytes) {
+          throw const FormatException('Database attachment exceeds limit');
+        }
+        final encoded = record['data'] as String;
+        if (encoded.length > ((maxAttachmentBytes + 2) ~/ 3) * 4) {
+          throw const FormatException(
+            'Encoded database attachment is too large',
+          );
+        }
+        bytes = base64Decode(encoded);
+        total += bytes.length;
+        if (bytes.length != claimedBytes || total > maxTotalBytes) {
+          throw const FormatException('Database attachment size mismatch');
+        }
+        if (await _hashBytes(bytes) != record['sha256']) {
+          throw const FormatException('Database attachment digest mismatch');
+        }
       }
 
       final destination = scope.fileIn(documents, 'documents', name);
@@ -387,7 +583,11 @@ class ProfileDatabaseSnapshot {
       final temp = File('${destination.path}.restore.tmp');
       if (await temp.exists()) await temp.delete();
       try {
-        await temp.writeAsBytes(bytes, flush: true);
+        if (stagedSource != null) {
+          await _copyFile(stagedSource, temp);
+        } else {
+          await temp.writeAsBytes(bytes!, flush: true);
+        }
         final db = await openDatabase(
           temp.path,
           readOnly: true,
@@ -426,78 +626,127 @@ class ProfileDatabaseSnapshot {
     for (final name in databaseNames) {
       final file = scope.fileIn(documents, 'documents', name);
       if (!await file.exists()) continue;
-      final db = await openDatabase(file.path, singleInstance: false);
-      try {
-        final tables = (await db.query(
-          'sqlite_master',
-          columns: const <String>['name'],
-          where: "type = 'table'",
-        )).map((row) => row['name']).whereType<String>().toSet();
-        await db.transaction((txn) async {
-          for (final entry in resourceIds.entries) {
-            if (name == debrifyTvDatabaseName) {
-              for (final table in const <String>{
-                'iptv_list_channels',
-                'iptv_watch_history',
-              }.where(tables.contains)) {
+      await _remapDatabaseFile(file, name, resourceIds);
+    }
+  }
+
+  static Future<void> _remapDatabaseFile(
+    File file,
+    String name,
+    Map<String, String> resourceIds,
+  ) async {
+    final db = await openDatabase(file.path, singleInstance: false);
+    try {
+      final tables = (await db.query(
+        'sqlite_master',
+        columns: const <String>['name'],
+        where: "type = 'table'",
+      )).map((row) => row['name']).whereType<String>().toSet();
+      await db.transaction((txn) async {
+        for (final entry in resourceIds.entries) {
+          if (name == debrifyTvDatabaseName) {
+            for (final table in const <String>{
+              'iptv_list_channels',
+              'iptv_watch_history',
+            }.where(tables.contains)) {
+              await txn.update(
+                table,
+                <String, Object?>{'playlist_id': entry.value},
+                where: 'playlist_id = ?',
+                whereArgs: <Object>[entry.key],
+              );
+            }
+            if (tables.contains('iptv_category_channel_orders')) {
+              await txn.update(
+                'iptv_category_channel_orders',
+                <String, Object?>{'source_id': entry.value},
+                where: 'source_id = ?',
+                whereArgs: <Object>[entry.key],
+              );
+            }
+            if (tables.contains('video_resume')) {
+              final columns = await txn.rawQuery(
+                'PRAGMA table_info(video_resume)',
+              );
+              if (columns.any((row) => row['name'] == 'source_id')) {
                 await txn.update(
-                  table,
-                  <String, Object?>{'playlist_id': entry.value},
-                  where: 'playlist_id = ?',
-                  whereArgs: <Object>[entry.key],
-                );
-              }
-              if (tables.contains('iptv_category_channel_orders')) {
-                await txn.update(
-                  'iptv_category_channel_orders',
+                  'video_resume',
                   <String, Object?>{'source_id': entry.value},
                   where: 'source_id = ?',
                   whereArgs: <Object>[entry.key],
                 );
               }
-            } else if (name == 'iptv_catalog.db') {
-              if (tables.contains('category_manual_orders')) {
-                await txn.update(
+            }
+            if (tables.contains('webdav_sync_record_state')) {
+              await txn.update(
+                'webdav_sync_record_state',
+                <String, Object?>{'owner_key': entry.value},
+                where: 'owner_key = ? AND kind IN (?, ?, ?)',
+                whereArgs: <Object>[
+                  entry.key,
+                  'iptv_category_channel_orders',
+                  'iptv_watch_history',
+                  'video_resume',
+                ],
+              );
+            }
+          } else if (name == 'iptv_catalog.db') {
+            if (tables.contains('category_manual_orders')) {
+              await txn.update(
+                'category_manual_orders',
+                <String, Object?>{
+                  'catalog_key': IptvCatalogKey.forLocalCategoryOrder(
+                    entry.value,
+                  ),
+                },
+                where: 'catalog_key = ?',
+                whereArgs: <Object>[
+                  IptvCatalogKey.forLocalCategoryOrder(entry.key),
+                ],
+              );
+            }
+            if (tables.contains('webdav_sync_record_state')) {
+              await txn.update(
+                'webdav_sync_record_state',
+                <String, Object?>{
+                  'owner_key': IptvCatalogKey.forLocalCategoryOrder(
+                    entry.value,
+                  ),
+                },
+                where: 'owner_key = ? AND kind = ?',
+                whereArgs: <Object>[
+                  IptvCatalogKey.forLocalCategoryOrder(entry.key),
                   'category_manual_orders',
-                  <String, Object?>{
-                    'catalog_key': IptvCatalogKey.forLocalCategoryOrder(
-                      entry.value,
-                    ),
-                  },
-                  where: 'catalog_key = ?',
-                  whereArgs: <Object>[
-                    IptvCatalogKey.forLocalCategoryOrder(entry.key),
-                  ],
-                );
-              }
-              if (tables.contains('channel_number_aliases')) {
-                await txn.update(
-                  'channel_number_aliases',
-                  <String, Object?>{'source_key': entry.value},
-                  where: 'source_key = ?',
-                  whereArgs: <Object>[entry.key],
-                );
-              }
-              if (tables.contains('channel_number_namespaces')) {
-                await txn.update(
-                  'channel_number_namespaces',
-                  <String, Object?>{'active_source_key': entry.value},
-                  where: 'active_source_key = ?',
-                  whereArgs: <Object>[entry.key],
-                );
-              }
+                ],
+              );
+            }
+            if (tables.contains('channel_number_aliases')) {
+              await txn.update(
+                'channel_number_aliases',
+                <String, Object?>{'source_key': entry.value},
+                where: 'source_key = ?',
+                whereArgs: <Object>[entry.key],
+              );
+            }
+            if (tables.contains('channel_number_namespaces')) {
+              await txn.update(
+                'channel_number_namespaces',
+                <String, Object?>{'active_source_key': entry.value},
+                where: 'active_source_key = ?',
+                whereArgs: <Object>[entry.key],
+              );
             }
           }
-        });
-        await db.rawQuery('PRAGMA wal_checkpoint(TRUNCATE)');
-        final integrity = await db.rawQuery('PRAGMA integrity_check');
-        if (!_integrityOk(integrity)) {
-          throw const FormatException('Remapped database is corrupt');
         }
-      } finally {
-        await db.close();
-        await _removeCompanions(file);
+      });
+      await db.rawQuery('PRAGMA wal_checkpoint(TRUNCATE)');
+      final integrity = await db.rawQuery('PRAGMA integrity_check');
+      if (!_integrityOk(integrity)) {
+        throw const FormatException('Remapped database is corrupt');
       }
+    } finally {
+      await db.close();
+      await _removeCompanions(file);
     }
   }
 
@@ -555,6 +804,29 @@ class ProfileDatabaseSnapshot {
 
   static Future<String> _hashBytes(List<int> bytes) async =>
       base64UrlEncode((await Sha256().hash(bytes)).bytes).replaceAll('=', '');
+
+  /// Streams a file through SHA-256 in fixed chunks; the digest shape matches
+  /// [_hashBytes] so file-backed and base64 records compare directly.
+  static Future<String> _hashFile(File file) async {
+    final sink = Sha256().newHashSink();
+    final input = await file.open();
+    try {
+      while (true) {
+        final chunk = await input.read(_fileChunkBytes);
+        if (chunk.isEmpty) break;
+        sink.add(chunk);
+      }
+    } finally {
+      await input.close();
+    }
+    sink.close();
+    return base64UrlEncode((await sink.hash()).bytes).replaceAll('=', '');
+  }
+
+  static Future<void> _copyFile(File source, File destination) =>
+      copyFileStreamed(source, destination, chunkSize: _fileChunkBytes);
+
+  static const int _fileChunkBytes = 256 * 1024;
 
   static String _token() {
     final random = Random.secure();

@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:debrify/services/local_series_completion_service.dart';
 import 'package:debrify/services/storage_service.dart';
 import 'package:debrify/services/tracking_source_policy.dart';
@@ -21,6 +22,97 @@ void main() {
     number: number,
     title: 'Episode $number',
     firstAired: released.toUtc().toIso8601String(),
+  );
+
+  test(
+    'reopening unchanged inventory keeps timestamp and emits no revision',
+    () async {
+      final prefs = await SharedPreferences.getInstance();
+      final episodes = [episode(1, DateTime.utc(2025))];
+      await LocalSeriesCompletionService.instance.recordEpisodeInventory(
+        imdbId: 'tt-noop',
+        seriesTitle: 'Unchanged',
+        seasons: [season(episodes)],
+      );
+      final state = jsonDecode(
+        prefs.getString(StorageService.localSeriesCompletionStateKey)!,
+      );
+      state['tt-noop']['validatedAt'] = 123;
+      state['tt-noop']['continueWatching'] = {
+        'title': 'Unchanged',
+        'posterUrl': 'poster',
+      };
+      final before = jsonEncode(state);
+      await prefs.setString(
+        StorageService.localSeriesCompletionStateKey,
+        before,
+      );
+      final revision = StorageService.localCompletionRevision.value;
+      await LocalSeriesCompletionService.instance.recordEpisodeInventory(
+        imdbId: 'tt-noop',
+        seriesTitle: 'Unchanged',
+        seasons: [season(episodes)],
+      );
+      expect(
+        prefs.getString(StorageService.localSeriesCompletionStateKey),
+        before,
+      );
+      expect(StorageService.localCompletionRevision.value, revision);
+
+      await LocalSeriesCompletionService.instance.recordEpisodeInventory(
+        imdbId: 'tt-noop',
+        seriesTitle: 'Renamed',
+        seasons: [season(episodes)],
+      );
+      final changed = jsonDecode(
+        prefs.getString(StorageService.localSeriesCompletionStateKey)!,
+      )['tt-noop'];
+      expect(changed['title'], 'Renamed');
+      expect(changed['validatedAt'], isNot(123));
+      expect(changed['continueWatching']['posterUrl'], 'poster');
+      expect(
+        StorageService.localCompletionRevision.value,
+        greaterThan(revision),
+      );
+    },
+  );
+
+  test(
+    'inventory comparison ignores ordering but persists release corrections',
+    () async {
+      final prefs = await SharedPreferences.getInstance();
+      final first = episode(1, DateTime.utc(2025));
+      final second = episode(2, DateTime.utc(2025, 2));
+      Future<void> record(List<TraktEpisode> episodes) =>
+          LocalSeriesCompletionService.instance.recordEpisodeInventory(
+            imdbId: 'tt-order',
+            seriesTitle: 'Order',
+            seasons: [season(episodes)],
+          );
+      await record([first, second]);
+      final before = prefs.getString(
+        StorageService.localSeriesCompletionStateKey,
+      );
+      final revision = StorageService.localCompletionRevision.value;
+      await record([second, first]);
+      expect(
+        prefs.getString(StorageService.localSeriesCompletionStateKey),
+        before,
+      );
+      expect(StorageService.localCompletionRevision.value, revision);
+      await record([first, episode(2, DateTime.utc(2025, 3))]);
+      final state = jsonDecode(
+        prefs.getString(StorageService.localSeriesCompletionStateKey)!,
+      );
+      expect(
+        state['tt-order']['episodes']['1-2'],
+        DateTime.utc(2025, 3).millisecondsSinceEpoch,
+      );
+      expect(
+        StorageService.localCompletionRevision.value,
+        greaterThan(revision),
+      );
+    },
   );
 
   test(

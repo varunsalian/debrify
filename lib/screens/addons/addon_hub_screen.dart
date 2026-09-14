@@ -105,6 +105,7 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
   final LocalEngineStorage _localEngines = LocalEngineStorage.instance;
   List<ImportedEngineMetadata> _importedEngines = const [];
   List<RemoteEngineInfo> _availableEngines = const [];
+  List<RemoteEngineInfo> _knownRemoteEngines = const [];
   bool _enginesLoading = false;
   String? _enginesError;
   bool _enginesLoadedOnce = false;
@@ -114,6 +115,7 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
     super.initState();
     AnalyticsService.screenView('addon_hub');
     _stremio.addAddonsChangedListener(_onAddonsChanged);
+    LocalEngineStorage.changes.addListener(_onEnginesChanged);
     _searchController.addListener(() {
       final q = _searchController.text.trim();
       if (q != _search) setState(() => _search = q);
@@ -144,6 +146,7 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
   @override
   void dispose() {
     _stremio.removeAddonsChangedListener(_onAddonsChanged);
+    LocalEngineStorage.changes.removeListener(_onEnginesChanged);
     if (_tvFocusHandler != null) {
       MainPageBridge.unregisterTvContentFocusHandler(
         _tabIndex,
@@ -167,7 +170,10 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
 
   void _onAddonsChanged() => _loadInstalled();
 
+  int _installedLoadRevision = 0;
+
   Future<void> _loadInstalled() async {
+    final revision = ++_installedLoadRevision;
     if (mounted) setState(() => _installedLoading = true);
     try {
       // This is the management inventory. It must include disabled addons so
@@ -179,7 +185,7 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
       ]);
       final addons = results[0] as List<StremioAddon>;
       final metadataPreference = results[1] as String?;
-      if (mounted) {
+      if (mounted && revision == _installedLoadRevision) {
         setState(() {
           _installed = addons;
           _metadataProviderPreference = metadataPreference;
@@ -187,7 +193,9 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
         });
       }
     } catch (_) {
-      if (mounted) setState(() => _installedLoading = false);
+      if (mounted && revision == _installedLoadRevision) {
+        setState(() => _installedLoading = false);
+      }
     }
   }
 
@@ -220,7 +228,33 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
 
   // ── Torrent engines ────────────────────────────────────────────────────────
 
+  int _engineLoadRevision = 0;
+  Future<void> _onEnginesChanged() async {
+    final revision = ++_engineLoadRevision;
+    try {
+      final imported = await _localEngines.getImportedEngines();
+      if (!mounted || revision != _engineLoadRevision) return;
+      setState(() {
+        _importedEngines = imported;
+        final installed = imported.map((e) => e.id).toSet();
+        _availableEngines = _knownRemoteEngines
+            .where((e) => !installed.contains(e.id))
+            .toList();
+        _enginesLoading = false;
+        _enginesError = null;
+      });
+    } catch (_) {
+      if (mounted && revision == _engineLoadRevision) {
+        setState(() {
+          _enginesLoading = false;
+          _enginesError = 'Could not refresh installed engines';
+        });
+      }
+    }
+  }
+
   Future<void> _loadEngines() async {
+    final revision = ++_engineLoadRevision;
     setState(() {
       _enginesLoading = true;
       _enginesError = null;
@@ -229,8 +263,14 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
     try {
       final imported = await _localEngines.getImportedEngines();
       final remote = await _remoteEngines.fetchAvailableEngines();
+      if (!mounted) return;
+      _knownRemoteEngines = remote;
+      if (revision != _engineLoadRevision) {
+        await _onEnginesChanged();
+        return;
+      }
       final importedIds = imported.map((e) => e.id).toSet();
-      if (mounted) {
+      if (mounted && revision == _engineLoadRevision) {
         setState(() {
           _importedEngines = imported;
           _availableEngines = remote
@@ -240,7 +280,7 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
         });
       }
     } catch (e) {
-      if (mounted) {
+      if (mounted && revision == _engineLoadRevision) {
         setState(() {
           _enginesError = e.toString().replaceFirst('Exception: ', '');
           _enginesLoading = false;

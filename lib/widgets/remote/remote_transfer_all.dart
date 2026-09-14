@@ -6,15 +6,19 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../models/stremio_addon.dart';
+import '../../theme/app_theme_scope.dart';
 import '../../services/engine/local_engine_storage.dart';
 import '../../services/iptv_transfer_payload.dart';
+import '../../services/stream_badges_service.dart';
 import '../../services/remote_control/remote_chunked_send.dart';
 import '../../services/remote_control/remote_constants.dart';
+import '../../services/profiles/local_backup/local_backup_archive.dart';
 import '../../services/remote_control/remote_control_state.dart';
 import '../../services/remote_control/remote_session.dart';
 import '../../services/remote_control/remote_transfer_diagnostics.dart';
 import 'remote_pairing_dialog.dart';
 import '../../services/storage_service.dart';
+import '../../services/webdav_sync/webdav_sync_runtime.dart';
 import '../../services/mdblist/mdblist_service.dart';
 import '../../services/stremio_service.dart';
 import '../../services/profiles/profile_async_authorization.dart';
@@ -30,8 +34,9 @@ import '../../models/profiles/profile_policy.dart';
 
 /// One-click "Transfer Everything" flow. Pushes all configured services
 /// (debrid keys, Trakt/Simkl sessions, search engines, PikPak, WebDAV,
-/// Jackett/Prowlarr, IPTV providers + favorites + lists, and installed Stremio
-/// addons) from this device to the currently connected receiver.
+/// Jackett/Prowlarr, IPTV providers + favorites + lists, stream badge
+/// rulesets, and installed Stremio addons) from this device to the currently
+/// connected receiver.
 class RemoteTransferAll extends StatefulWidget {
   final VoidCallback onBack;
 
@@ -41,7 +46,7 @@ class RemoteTransferAll extends StatefulWidget {
   State<RemoteTransferAll> createState() => _RemoteTransferAllState();
 }
 
-enum _ItemStatus { pending, sending, success, failure, skipped }
+enum _ItemStatus { pending, sending, success, failure }
 
 class _TransferItem {
   final String key;
@@ -76,6 +81,8 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
   /// items into the TV's current profile.
   bool _canSendProfileGraph = false;
   bool _includeProfiles = false;
+  bool _includeSync = true;
+  String? _inventoryError;
 
   String? _traktUsername;
   String? _simklUsername;
@@ -88,9 +95,9 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
   int _iptvListCount = 0;
   int _iptvListChannelCount = 0;
   int _iptvFileImported = 0;
+  int _streamBadgeCount = 0;
 
   final _pikpakPasswordController = TextEditingController();
-  bool _showPikpakPassword = false;
 
   final List<_TransferItem> _items = [];
 
@@ -124,7 +131,10 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
   }
 
   Future<void> _loadBundle() async {
-    setState(() => _loading = true);
+    setState(() {
+      _loading = true;
+      _inventoryError = null;
+    });
 
     try {
       final realDebridApiKey = await StorageService.getApiKey(
@@ -238,6 +248,14 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
         _iptvFavoriteCount = 0;
         _iptvListCount = 0;
         _iptvListChannelCount = 0;
+      }
+
+      try {
+        _streamBadgeCount =
+            (await StreamBadgesService.instance.getSources()).length;
+      } catch (_) {
+        debugPrint('RemoteTransferAll: stream badge inventory failed');
+        _streamBadgeCount = 0;
       }
 
       final hasWebDav = _webDavCount > 0;
@@ -402,6 +420,18 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
           ),
         );
       }
+      if (_streamBadgeCount > 0) {
+        items.add(
+          _TransferItem(
+            key: ConfigCommand.streamBadges,
+            label:
+                'Stream badges ($_streamBadgeCount '
+                'ruleset${_streamBadgeCount == 1 ? '' : 's'})',
+            icon: Icons.sell_rounded,
+            color: const Color(0xFFFBBF24),
+          ),
+        );
+      }
       for (final addon in addons) {
         items.add(
           _TransferItem(
@@ -420,11 +450,17 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
           ..clear()
           ..addAll(items);
         _canSendProfileGraph = canSendProfileGraph;
+        _includeProfiles = canSendProfileGraph;
         _loading = false;
       });
     } catch (_) {
       debugPrint('RemoteTransferAll: setup inventory failed');
-      if (mounted) setState(() => _loading = false);
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _inventoryError = 'Could not load this profile’s setup.';
+        });
+      }
     }
   }
 
@@ -460,7 +496,10 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
     }
   }
 
-  Future<void> _start() async {
+  Future<void> _start() =>
+      RemoteControlState().transferActivity.run(() => _startNow());
+
+  Future<void> _startNow() async {
     final state = _remoteState;
     final target = state.connectedDevice;
     if (target == null) {
@@ -476,20 +515,6 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
           'advertisedProtocol': target.protoVersion,
         },
       );
-    }
-    if (sendProfiles &&
-        target.protocolVersionKnown &&
-        !target.supportsComprehensiveProfileGraph) {
-      RemoteTransferDiagnostics.record(
-        'sender_gate_rejected_advertised_protocol',
-        fields: <String, Object?>{'protocol': target.protoVersion},
-      );
-      setState(() => _includeProfiles = false);
-      _toast(
-        'Update the receiving TV before sending all profiles',
-        error: true,
-      );
-      return;
     }
 
     // Credential gate: encrypted session + pairing code (or remembered
@@ -556,6 +581,15 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
       return;
     }
 
+    if (sendProfiles &&
+        _includeSync &&
+        session.peerProtocolVersion < kReliableTransferProtocolVersion) {
+      _toast(
+        'Update the receiving app to include WebDAV sync, or turn off Include WebDAV sync.',
+        error: true,
+      );
+      return;
+    }
     if (sendProfiles) {
       await _startProfileGraph(state, target.ip);
       return;
@@ -570,14 +604,19 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
     int success = 0;
     int failure = 0;
     final deliveredCommands = <String>[];
-    final supportsApplicationResult = target.supportsRemoteTransferResult;
+    final peerProtocolVersion = session.peerProtocolVersion;
+    final supportsApplicationResult =
+        peerProtocolVersion >= kRemoteTransferResultProtocolVersion;
     final requestId = createRemoteTransferRequestId();
 
     if (supportsApplicationResult &&
         !await beginRemoteTransfer(state, target.ip, requestId: requestId)) {
       if (!mounted) return;
       setState(() => _transferring = false);
-      _toast('The TV refused to start the transfer', error: true);
+      _toast(
+        state.lastError ?? 'The TV refused to start the transfer',
+        error: true,
+      );
       return;
     }
 
@@ -619,6 +658,7 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
             state,
             target.ip,
             item.key,
+            peerProtocolVersion: peerProtocolVersion,
             transferRequestId: supportsApplicationResult ? requestId : null,
           );
         }
@@ -702,16 +742,16 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
       _toast(finalApplicationResult.message, error: true);
     } else if (failure == 0) {
       _toast(
-        target.supportsRemoteTransferResult
+        supportsApplicationResult
             ? 'Applied $success item${success == 1 ? '' : 's'} on TV'
             : 'Delivered $success item${success == 1 ? '' : 's'} — confirm on TV',
-        warning: !target.supportsRemoteTransferResult,
+        warning: !supportsApplicationResult,
       );
     } else if (success == 0) {
       _toast('Transfer failed', error: true);
     } else {
       _toast(
-        '${target.supportsRemoteTransferResult ? 'Applied' : 'Delivered'} '
+        '${supportsApplicationResult ? 'Applied' : 'Delivered'} '
         '$success, $failure failed',
         warning: true,
       );
@@ -792,6 +832,27 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
             cipher: DeviceKeyProvider.cipher,
           ),
         );
+        if ((state.sessionFor(targetIp)?.peerProtocolVersion ?? 0) >=
+            kReliableTransferProtocolVersion) {
+          final staging = await LocalBackupScratch.create('remote-export');
+          try {
+            final exported = await LocalBackupExporter(service: service).export(
+              context: authorization,
+              staging: staging,
+              allProfiles: true,
+              captureSync: _includeSync
+                  ? WebDavSyncRuntime.instance.captureBackupConnection
+                  : null,
+            );
+            return await state.sendProfileArchive(
+              targetIp,
+              exported.archive,
+              requestId,
+            );
+          } finally {
+            await LocalBackupScratch.delete(staging);
+          }
+        }
         Future<bool> confirmDebrifyTvOmission(
           PortableProfilePackage candidate,
         ) async {
@@ -1000,14 +1061,22 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
       if (cancelled) {
         _toast('Profile transfer cancelled');
       } else {
-        _toast('Profile transfer failed', error: true);
+        final outcome = resultCompleter.isCompleted
+            ? await resultCompleter.future
+            : null;
+        _toast(
+          outcome?.message ?? state.lastError ?? 'Profile transfer failed',
+          error: true,
+        );
       }
       return;
     }
     // Delivered is not applied: the TV user still confirms, authorization
     // can refuse, the import can fail. Wait for the receiver's real
     // outcome instead of declaring victory at the first hop.
-    _toast('Delivered — confirm the import on the TV');
+    if (!resultCompleter.isCompleted) {
+      _toast('Delivered — confirm the import on the TV');
+    }
     try {
       final result = await resultCompleter.future.timeout(
         const Duration(seconds: 180),
@@ -1083,6 +1152,7 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
     RemoteControlState state,
     String targetIp,
     String key, {
+    required int peerProtocolVersion,
     String? transferRequestId,
   }) async {
     String transferData(String value) => transferRequestId == null
@@ -1285,6 +1355,19 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
           label: 'IPTV lists',
           transferRequestId: transferRequestId,
         );
+      case ConfigCommand.streamBadges:
+        final payload = await StreamBadgesService.instance.exportTransferJson(
+          peerProtocolVersion: peerProtocolVersion,
+        );
+        if (payload.isEmpty) return false;
+        return sendConfigPayloadToDevice(
+          state,
+          ConfigCommand.streamBadges,
+          targetIp,
+          jsonEncode(payload),
+          label: 'Stream badges',
+          transferRequestId: transferRequestId,
+        );
       default:
         return false;
     }
@@ -1307,370 +1390,168 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
     );
   }
 
+  Future<void> _reviewAndStart() async {
+    if (!_canStart) return;
+    final confirmed =
+        await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: Text(
+              _includeProfiles ? 'Send all profiles?' : 'Send current setup?',
+            ),
+            content: Text(
+              _includeProfiles
+                  ? 'Includes profile names, PINs, photos, settings, history, accounts, addons, channels with saved torrents, and IPTV data. The receiving device imports new profiles.'
+                        '${_includeSync ? " WebDAV sync will use this device’s connection and enabled or paused state." : ""}'
+                  : 'Sends this profile’s accounts, addons, search, tracking preferences and supported IPTV setup to the receiving device’s active profile.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('Send now'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+    if (confirmed && mounted) await _start();
+  }
+
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
+    final busy = _connecting || _transferring;
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        TextButton.icon(
-          onPressed: _transferring ? null : widget.onBack,
-          icon: const Icon(Icons.arrow_back, size: 18),
-          label: const Text('Back to menu'),
-          style: TextButton.styleFrom(
-            foregroundColor: Colors.white.withValues(alpha: 0.7),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton.icon(
+            onPressed: busy ? null : widget.onBack,
+            icon: const Icon(Icons.arrow_back),
+            label: const Text('Send'),
           ),
         ),
-        const SizedBox(height: 16),
-        const Text(
-          'Transfer Everything',
-          style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
-        ),
-        const SizedBox(height: 8),
         Text(
-          'Send all configured services and installed addons to the '
-          'connected device in one go.',
+          'Send everything',
           style: TextStyle(
-            color: Colors.white.withValues(alpha: 0.6),
-            fontSize: 14,
+            color: app.core.tx,
+            fontSize: 22,
+            fontWeight: FontWeight.w600,
           ),
         ),
-        const SizedBox(height: 24),
+        const SizedBox(height: 10),
+        Text(
+          'Choose how much to send.',
+          style: TextStyle(color: app.settings.dim),
+        ),
         if (_loading)
-          const Center(
-            child: Padding(
-              padding: EdgeInsets.all(32),
-              child: CircularProgressIndicator(
-                valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF6366F1)),
-              ),
-            ),
+          const Padding(
+            padding: EdgeInsets.all(24),
+            child: LinearProgressIndicator(),
           )
-        else if (_items.isEmpty && !_canSendProfileGraph) ...[
-          _buildEmpty(),
-          // Nothing sendable, but if the reason is a file-only IPTV setup the
-          // user deserves to know that rather than "nothing configured".
-          if (_iptvFileImported > 0) _buildFileImportedNote(),
-        ] else ...[
-          if (_canSendProfileGraph) _buildProfilesToggle(),
-          if (!_includeProfiles) ...[
-            if (_hasPikpak) _buildPikpakPassword(),
-            ..._items.map(_buildItemTile),
-            if (_iptvFileImported > 0) _buildFileImportedNote(),
-          ],
-          const SizedBox(height: 16),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton(
-              onPressed: _canStart ? _start : null,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF6366F1),
-                disabledBackgroundColor: const Color(
-                  0xFF6366F1,
-                ).withValues(alpha: 0.3),
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-              child: _transferring
-                  ? const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                      ),
-                    )
-                  : Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        if (_connecting)
-                          const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              valueColor: AlwaysStoppedAnimation<Color>(
-                                Colors.white,
-                              ),
-                            ),
-                          )
-                        else
-                          Icon(_done ? Icons.check : Icons.send, size: 18),
-                        const SizedBox(width: 8),
-                        Text(
-                          _connecting
-                              ? 'Connecting securely…'
-                              : _done
-                              ? 'Done'
-                              : _includeProfiles
-                              ? 'Send All Profiles'
-                              : 'Transfer Everything',
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
-                    ),
-            ),
-          ),
-          if (_hasPikpak &&
-              _pikpakPasswordController.text.isEmpty &&
-              !_transferring) ...[
-            const SizedBox(height: 8),
-            Text(
-              'Enter PikPak password to enable transfer',
-              style: TextStyle(
-                color: Colors.amber.withValues(alpha: 0.8),
-                fontSize: 12,
-              ),
-              textAlign: TextAlign.center,
+        else ...[
+          if (_inventoryError != null) ...[
+            Text(_inventoryError!),
+            TextButton(
+              onPressed: busy ? null : _loadBundle,
+              child: const Text('Try again'),
             ),
           ],
-        ],
-      ],
-    );
-  }
-
-  Widget _buildProfilesToggle() {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1E293B),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: const Color(
-            0xFF6366F1,
-          ).withValues(alpha: _includeProfiles ? 0.6 : 0.15),
-        ),
-      ),
-      child: SwitchListTile(
-        value: _includeProfiles,
-        onChanged: _transferring || _connecting
-            ? null
-            : (value) => setState(() => _includeProfiles = value),
-        title: const Text('Include all profiles'),
-        subtitle: Text(
-          'Recreates every profile on the TV — settings, connections, PINs, '
-          'playlists, favorites, and library state — instead of merging into '
-          'its signed-in profile. The TV asks before importing.',
-          style: TextStyle(
-            fontSize: 12,
-            color: Colors.white.withValues(alpha: 0.6),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildFileImportedNote() {
-    return Padding(
-      padding: const EdgeInsets.only(top: 8),
-      child: Text(
-        '$_iptvFileImported IPTV playlist'
-        '${_iptvFileImported == 1 ? '' : 's'} imported from a file can\'t be '
-        'sent — import the file on the TV. Starred channels from them still '
-        'go across.',
-        style: TextStyle(
-          color: Colors.amber.withValues(alpha: 0.75),
-          fontSize: 12,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildEmpty() {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          children: [
-            Container(
-              width: 80,
-              height: 80,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: const Color(0xFF1E293B),
-                border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
-              ),
-              child: Icon(
-                Icons.inbox_outlined,
-                size: 36,
-                color: Colors.white.withValues(alpha: 0.5),
-              ),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'Nothing to transfer',
-              style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.7),
-                fontSize: 16,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Set up a debrid provider, Trakt, search engines, or addons '
-              'first.',
-              style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.5),
-                fontSize: 14,
-              ),
-              textAlign: TextAlign.center,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildPikpakPassword() {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
-      child: Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: const Color(0xFF1E293B),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
+          RadioGroup<bool>(
+            groupValue: _includeProfiles,
+            onChanged: (value) {
+              if (!busy && value != null) {
+                setState(() => _includeProfiles = value);
+              }
+            },
+            child: Column(
               children: [
-                const Icon(Icons.cloud, color: Color(0xFF3B82F6), size: 18),
-                const SizedBox(width: 8),
-                Text(
-                  'PikPak password',
-                  style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.9),
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
+                if (_canSendProfileGraph)
+                  RadioListTile<bool>(
+                    value: true,
+                    enabled: !busy,
+                    title: const Text('All profiles & their data'),
+                    subtitle: const Text(
+                      'Profiles, PINs, photos, settings, accounts, addons, TV channels and IPTV data.',
+                    ),
+                  ),
+                RadioListTile<bool>(
+                  value: false,
+                  enabled: !busy,
+                  title: const Text('Current profile’s setup only'),
+                  subtitle: const Text(
+                    'Accounts, addons, tracking preferences, search and supported IPTV setup.',
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 4),
-            Text(
-              'Connected account',
-              style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.5),
-                fontSize: 12,
+          ),
+          if (!_includeProfiles && _items.isEmpty && _inventoryError == null)
+            const Text('No setup items are available for this profile.'),
+          if (_canSendProfileGraph)
+            CheckboxListTile(
+              value: _includeSync,
+              onChanged: busy || !_includeProfiles
+                  ? null
+                  : (value) => setState(() => _includeSync = value ?? true),
+              title: const Text('Include WebDAV sync'),
+              subtitle: const Text(
+                'Login and enabled or paused state. Requires all profiles.',
               ),
             ),
-            const SizedBox(height: 10),
+          if (!_includeProfiles && _hasPikpak)
             TextField(
               controller: _pikpakPasswordController,
-              obscureText: !_showPikpakPassword,
-              enabled: !_transferring && !_done,
-              decoration: InputDecoration(
-                hintText: 'Enter password',
-                hintStyle: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.3),
-                ),
-                filled: true,
-                fillColor: const Color(0xFF0F172A),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  borderSide: BorderSide.none,
-                ),
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 14,
-                ),
-                suffixIcon: IconButton(
-                  icon: Icon(
-                    _showPikpakPassword
-                        ? Icons.visibility_off
-                        : Icons.visibility,
-                    color: Colors.white.withValues(alpha: 0.5),
-                    size: 20,
-                  ),
-                  onPressed: () => setState(
-                    () => _showPikpakPassword = !_showPikpakPassword,
-                  ),
-                ),
-              ),
+              obscureText: true,
+              enabled: !busy,
+              autocorrect: false,
+              enableSuggestions: false,
+              decoration: const InputDecoration(labelText: 'PikPak password'),
               onChanged: (_) => setState(() {}),
             ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildItemTile(_TransferItem item) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        decoration: BoxDecoration(
-          color: const Color(0xFF1E293B),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 36,
-              height: 36,
-              decoration: BoxDecoration(
-                color: item.color.withValues(alpha: 0.2),
-                borderRadius: BorderRadius.circular(8),
+          const SizedBox(height: 12),
+          if (!_includeProfiles) ...[
+            for (final item in _items)
+              ListTile(
+                dense: true,
+                leading: Icon(item.icon, color: app.settings.dim),
+                title: Text(item.label),
+                trailing: busy || _done ? Text(item.status.name) : null,
               ),
-              child: Icon(item.icon, color: item.color, size: 18),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                item.label,
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
-                ),
-                overflow: TextOverflow.ellipsis,
+            if (_iptvFileImported > 0)
+              Text(
+                'File-imported IPTV playlists are included when sending all profiles.',
+                style: TextStyle(color: app.settings.dim),
               ),
-            ),
-            const SizedBox(width: 12),
-            _buildStatus(item.status),
           ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildStatus(_ItemStatus status) {
-    switch (status) {
-      case _ItemStatus.pending:
-        return Icon(
-          Icons.radio_button_unchecked,
-          color: Colors.white.withValues(alpha: 0.25),
-          size: 18,
-        );
-      case _ItemStatus.sending:
-        return const SizedBox(
-          width: 18,
-          height: 18,
-          child: CircularProgressIndicator(
-            strokeWidth: 2,
-            valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF6366F1)),
+          Text(
+            'The receiving device asks before importing. Keep both apps open until it finishes.',
+            style: TextStyle(color: app.settings.dim),
           ),
-        );
-      case _ItemStatus.success:
-        return const Icon(
-          Icons.check_circle,
-          color: Color(0xFF10B981),
-          size: 18,
-        );
-      case _ItemStatus.failure:
-        return const Icon(Icons.error, color: Color(0xFFEF4444), size: 18);
-      case _ItemStatus.skipped:
-        return Icon(
-          Icons.remove_circle_outline,
-          color: Colors.white.withValues(alpha: 0.3),
-          size: 18,
-        );
-    }
+          const SizedBox(height: 20),
+          FilledButton(
+            onPressed: _done
+                ? widget.onBack
+                : _canStart
+                ? _reviewAndStart
+                : null,
+            child: Text(
+              busy
+                  ? 'Sending…'
+                  : _done
+                  ? 'Done'
+                  : _includeProfiles
+                  ? 'Review full transfer'
+                  : 'Review current setup',
+            ),
+          ),
+        ],
+      ],
+    );
   }
 }

@@ -39,6 +39,12 @@ class _StremioCard extends StatefulWidget {
   /// centre-cropped poster.
   final String? artUrl;
 
+  /// Collection GIF shown over [artUrl] according to the device playback
+  /// preference. Videos continue to require focus or hover.
+  final String? focusArtUrl;
+  final String? focusVideoUrl;
+  final bool focusGlowEnabled;
+
   /// Whether the card may paint local title text, either on a landscape
   /// artwork overlay or inside a loading/missing-art placeholder. Home can
   /// suppress this while Search and Discover retain their defaults.
@@ -62,6 +68,9 @@ class _StremioCard extends StatefulWidget {
     this.heroTag,
     this.aspectRatio = 2 / 3,
     this.artUrl,
+    this.focusArtUrl,
+    this.focusVideoUrl,
+    this.focusGlowEnabled = false,
     this.showTitleOverlay = true,
     this.restVeil,
   });
@@ -71,7 +80,9 @@ class _StremioCard extends StatefulWidget {
 }
 
 class _StremioCardState extends State<_StremioCard>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, MetadataPresentationMixin<_StremioCard> {
+  @override
+  StremioMeta get originalMetadata => widget.item;
   bool _focused = false;
   bool _hovered = false;
   bool _keyDown = false;
@@ -119,9 +130,18 @@ class _StremioCardState extends State<_StremioCard>
   @override
   Widget build(BuildContext context) {
     final app = AppThemeScope.of(context);
-    final item = widget.item;
-    final wide = widget.aspectRatio > 1;
-    final poster = widget.artUrl ?? item.poster;
+    final item = presentedMetadata!;
+    final folder = item is CollectionFolderMeta ? item.folder : null;
+    final aspect = folder?.tileShape.aspectRatio ?? widget.aspectRatio;
+    final wide = aspect > 1;
+    final artwork = metadataCardArtwork(
+      presented: item, preferences: metadataPreferences, wide: wide,
+      overrideUrl: widget.artUrl,
+      collection: folder != null,
+    );
+    final poster = metadataArtworkPending(wide ? MetadataCategory.backgrounds : MetadataCategory.posters)
+        ? null : artwork.primary;
+    final fallbackPoster = artwork.fallback;
     final isMovie = item.type.toLowerCase() == 'movie';
     final supportsWatched = isMovie || item.type.toLowerCase() == 'series';
     final movieId = item.effectiveImdbId ?? item.id;
@@ -129,7 +149,7 @@ class _StremioCardState extends State<_StremioCard>
     // [CardFocusRise] so tuning lands once for every board card.
     final List<Widget> layers = [
       if (poster != null && poster.isNotEmpty)
-        CachedNetworkImage(
+        RecoverableNetworkImage(
           imageUrl: poster,
           fit: BoxFit.cover,
           // Decode board posters at a capped width — tiles are small,
@@ -148,11 +168,10 @@ class _StremioCardState extends State<_StremioCard>
           // A derived wide still (MetaHub) can 404 where the poster exists —
           // cover-crop the poster into the wide cell before giving up on art.
           errorWidget: (_, __, ___) =>
-              poster != item.poster &&
-                  item.poster != null &&
-                  item.poster!.isNotEmpty
-              ? CachedNetworkImage(
-                  imageUrl: item.poster!,
+              poster != fallbackPoster &&
+                  fallbackPoster != null && fallbackPoster.isNotEmpty
+              ? RecoverableNetworkImage(
+                  imageUrl: fallbackPoster,
                   fit: BoxFit.cover,
                   memCacheWidth: widget.isTelevision ? 320 : 480,
                   fadeInDuration: HomeTheme.imageFadeIn(widget.isTelevision),
@@ -164,6 +183,15 @@ class _StremioCardState extends State<_StremioCard>
         )
       else
         _placeholder(item.name),
+      if (widget.focusArtUrl != null || widget.focusVideoUrl != null)
+        Positioned.fill(
+          child: CollectionFocusArt(
+            focused: _active,
+            applyGifPreference: true,
+            gifUrl: widget.focusArtUrl,
+            videoUrl: widget.focusVideoUrl,
+          ),
+        ),
       // A landscape still rarely carries its title the way poster art does,
       // and off TV there is no hero identity revealing the focused card —
       // so a wide TOUCH card labels itself. TV keeps clean cards: browsing
@@ -280,15 +308,25 @@ class _StremioCardState extends State<_StremioCard>
       if (_holding) _holdLayer(),
     ];
 
-    final posterCard = CardFocusRise(
+    final artCard = CollectionFocusGlow(
       active: _active,
-      isTelevision: widget.isTelevision,
-      ringColor: widget.ringColor,
-      aspectRatio: widget.aspectRatio,
-      restVeil: widget.restVeil,
-      children: layers,
+      enabled: widget.focusGlowEnabled,
+      imageUrl: poster,
+      child: CardFocusRise(
+        active: _active,
+        isTelevision: widget.isTelevision,
+        ringColor: widget.ringColor,
+        aspectRatio: aspect,
+        restVeil: widget.restVeil,
+        children: layers,
+      ),
     );
 
+    final posterCard = folder == null
+        ? artCard
+        : Center(
+            child: AspectRatio(aspectRatio: aspect, child: artCard),
+          );
     return Focus(
       focusNode: widget.focusNode,
       onFocusChange: (f) {
@@ -430,6 +468,8 @@ class _StremioCardState extends State<_StremioCard>
 
   Widget _placeholder(String title) {
     final app = AppThemeScope.of(context);
+    final item = presentedMetadata!;
+    final emoji = item is CollectionFolderMeta ? item.folder.coverEmoji : null;
     return Container(
       // Subtle vertical gradient instead of a flat fill: while art loads the
       // tile reads as a designed surface, not a dead rectangle. Static —
@@ -443,7 +483,14 @@ class _StremioCardState extends State<_StremioCard>
         ),
       ),
       alignment: Alignment.center,
-      child: widget.showTitleOverlay
+      child: emoji != null
+          ? Padding(
+              padding: const EdgeInsets.all(16),
+              child: FittedBox(
+                child: Text(emoji, style: const TextStyle(fontSize: 64)),
+              ),
+            )
+          : widget.showTitleOverlay
           ? Padding(
               padding: const EdgeInsets.all(8),
               child: Text(

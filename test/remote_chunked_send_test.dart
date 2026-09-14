@@ -394,7 +394,10 @@ void main() {
         ).supportsComprehensiveProfileGraph,
         isTrue,
       );
-      expect(kProtoVersion, kComprehensiveProfileGraphProtocolVersion);
+      expect(
+        kProtoVersion,
+        greaterThanOrEqualTo(kComprehensiveProfileGraphProtocolVersion),
+      );
     });
 
     test(
@@ -481,7 +484,7 @@ void productionRouteIntegrationTest() {
   group('production encrypted chunk route', () {
     late Directory temporaryDirectory;
     late ProfileRegistry registry;
-    final state = RemoteControlState();
+    final state = RemoteControlState()..debugReliablePort = 0;
     final router = RemoteCommandRouter();
 
     setUpAll(() {
@@ -670,6 +673,7 @@ void productionRouteIntegrationTest() {
           ],
         );
         final sender = RemoteSession(
+          peerProtocolVersion: 5,
           sid: sid,
           role: RemoteSessionRole.sender,
           keys: keys,
@@ -680,6 +684,7 @@ void productionRouteIntegrationTest() {
           establishedAt: DateTime.utc(2026, 8, 13),
         )..authorized = true;
         final receiver = RemoteSession(
+          peerProtocolVersion: 5,
           sid: sid,
           role: RemoteSessionRole.receiver,
           keys: keys,

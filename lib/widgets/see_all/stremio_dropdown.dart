@@ -349,8 +349,8 @@ class _StremioDropdownState<T extends Object>
           // When a parent hands a TIGHT width (an equal-width filter column —
           // see SeeAllFilterBar's TV single row), fill it and pin the chevron to
           // the right edge, ellipsizing the value. Otherwise stay intrinsic (the
-          // Wrap/Row usages everywhere else are unaffected — they pass loose or
-          // unbounded width, so `hasTightWidth` is false).
+          // Wrap/Row usages use loose sizing, with the value allowed to shrink
+          // when a narrow sheet cannot fit the label and full value).
           child: widget.quiet
               ? _buildQuiet(active)
               : LayoutBuilder(
@@ -404,9 +404,11 @@ class _StremioDropdownState<T extends Object>
                           if (stretch)
                             Expanded(child: valueText)
                           else
-                            ConstrainedBox(
-                              constraints: const BoxConstraints(maxWidth: 200),
-                              child: valueText,
+                            Flexible(
+                              child: ConstrainedBox(
+                                constraints: const BoxConstraints(maxWidth: 200),
+                                child: valueText,
+                              ),
                             ),
                           const SizedBox(width: 8),
                           Icon(

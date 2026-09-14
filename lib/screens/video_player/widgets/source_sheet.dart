@@ -1,13 +1,16 @@
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 
 import '../../../models/torrent.dart';
 import '../../../services/series_source_fetcher.dart';
+import '../../../services/stream_badges_service.dart';
 import '../../../utils/platform_util.dart';
 import '../../../utils/source_quality.dart';
 import '../../../utils/tv_keys.dart';
+import '../../../widgets/stream_badge_strip.dart';
 
 /// Full-screen source browser.  It deliberately keeps the source list in its
 /// supplied order: grouping is only a view over the list, never a re-rank.
@@ -66,6 +69,11 @@ class _SourceSheetState extends State<SourceSheet> {
   int _selectedGroup = 0;
   int _focusedSource = 0;
   _FocusZone _focusZone = _FocusZone.sources;
+  bool _sourceScrollManuallyControlled = false;
+  bool _sourceFocusAnimationActive = false;
+  int _sourceFocusAnimationRun = 0;
+  double _pendingSourceHeightDelta = 0;
+  bool _sourceHeightCorrectionScheduled = false;
   int? _resolvingIndex;
   String? _errorMessage;
 
@@ -277,13 +285,67 @@ class _SourceSheetState extends State<SourceSheet> {
     _ensureFocusedVisible();
   }
 
-  void _ensureFocusedVisible() {
+  // Rows above the selection can grow after asynchronous badge matching.
+  // Compensate by their actual height deltas: an estimated index offset or
+  // ensureVisible cannot find a selected lazy child already pushed off-screen.
+  void _sourceHeightChanged(int index, double delta) {
+    if (_sourceScrollManuallyControlled ||
+        _focusZone != _FocusZone.sources ||
+        index > _focusedSource ||
+        (index == _focusedSource && !_sourceFocusAnimationActive)) {
+      return;
+    }
+    if (index < _focusedSource) _pendingSourceHeightDelta += delta;
+    if (_sourceHeightCorrectionScheduled) return;
+    _sourceHeightCorrectionScheduled = true;
+    final selection = _focusedEntry?.originalIndex;
+    final group = _groups[_selectedGroup].id;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      final GlobalKey? key = _sourceKeys[_focusedEntry?.originalIndex];
-      final context = key?.currentContext;
+      _sourceHeightCorrectionScheduled = false;
+      final correction = _pendingSourceHeightDelta;
+      _pendingSourceHeightDelta = 0;
+      if (!mounted ||
+          !_sourceScrollController.hasClients ||
+          _sourceScrollManuallyControlled ||
+          _focusZone != _FocusZone.sources ||
+          selection != _focusedEntry?.originalIndex ||
+          group != _groups[_selectedGroup].id) {
+        return;
+      }
+      final position = _sourceScrollController.position;
+      final resumeFocusAnimation = _sourceFocusAnimationActive;
+      if (resumeFocusAnimation) ++_sourceFocusAnimationRun;
+      _sourceScrollController.jumpTo(
+        (position.pixels + correction).clamp(
+          position.minScrollExtent,
+          position.maxScrollExtent,
+        ),
+      );
+      if (resumeFocusAnimation) {
+        // The correction can remount a selected lazy row. Once laid out,
+        // resume navigation toward its new position instead of stopping short.
+        _ensureFocusedVisible();
+        WidgetsBinding.instance.ensureVisualUpdate();
+      }
+    });
+  }
+
+  void _ensureFocusedVisible() {
+    _sourceScrollManuallyControlled = false;
+    WidgetsBinding.instance.addPostFrameCallback((_) => _alignFocusedSource());
+  }
+
+  Future<void> _alignFocusedSource() async {
+    if (!mounted || _sourceScrollManuallyControlled) {
+      _sourceFocusAnimationActive = false;
+      return;
+    }
+    final run = ++_sourceFocusAnimationRun;
+    _sourceFocusAnimationActive = true;
+    try {
+      final context = _sourceKeys[_focusedEntry?.originalIndex]?.currentContext;
       if (context != null) {
-        Scrollable.ensureVisible(
+        await Scrollable.ensureVisible(
           context,
           duration: const Duration(milliseconds: 160),
           curve: Curves.easeOutCubic,
@@ -294,13 +356,15 @@ class _SourceSheetState extends State<SourceSheet> {
           0.0,
           _sourceScrollController.position.maxScrollExtent,
         );
-        _sourceScrollController.animateTo(
+        await _sourceScrollController.animateTo(
           target,
           duration: const Duration(milliseconds: 160),
           curve: Curves.easeOutCubic,
         );
       }
-    });
+    } finally {
+      if (run == _sourceFocusAnimationRun) _sourceFocusAnimationActive = false;
+    }
   }
 
   void _ensureAddonVisible() {
@@ -703,34 +767,52 @@ class _SourceSheetState extends State<SourceSheet> {
                           style: _mutedStyle,
                         ),
                       ))
-              : ListView.builder(
-                  controller: _sourceScrollController,
-                  itemCount: _visibleEntries.length,
-                  itemBuilder: (context, index) {
-                    final entry = _visibleEntries[index];
-                    return KeyedSubtree(
-                      key: _sourceKeys.putIfAbsent(
-                        entry.originalIndex,
-                        GlobalKey.new,
-                      ),
-                      child: _SourceRow(
-                        entry: entry,
-                        current:
-                            entry.originalIndex == widget.currentSourceIndex,
-                        focused:
-                            _focusZone == _FocusZone.sources &&
-                            _focusedSource == index,
-                        resolving: _resolvingIndex == entry.originalIndex,
-                        onTap: () {
-                          setState(() {
-                            _focusZone = _FocusZone.sources;
-                            _focusedSource = index;
-                          });
-                          _selectSource(entry);
-                        },
-                      ),
-                    );
+              : NotificationListener<ScrollNotification>(
+                  onNotification: (notification) {
+                    if ((notification is UserScrollNotification &&
+                            notification.direction != ScrollDirection.idle) ||
+                        (notification is ScrollStartNotification &&
+                            notification.dragDetails != null)) {
+                      // Keep touch/wheel users in charge until keyboard
+                      // navigation explicitly returns to the selection.
+                      _sourceScrollManuallyControlled = true;
+                    }
+                    return false;
                   },
+                  child: ListView.builder(
+                    controller: _sourceScrollController,
+                    itemCount: _visibleEntries.length,
+                    itemBuilder: (context, index) {
+                      final entry = _visibleEntries[index];
+                      return KeyedSubtree(
+                        key: _sourceKeys.putIfAbsent(
+                          entry.originalIndex,
+                          GlobalKey.new,
+                        ),
+                        child: _SourceHeightObserver(
+                          onChanged: (delta) =>
+                              _sourceHeightChanged(index, delta),
+                          child: _SourceRow(
+                            entry: entry,
+                            current:
+                                entry.originalIndex ==
+                                widget.currentSourceIndex,
+                            focused:
+                                _focusZone == _FocusZone.sources &&
+                                _focusedSource == index,
+                            resolving: _resolvingIndex == entry.originalIndex,
+                            onTap: () {
+                              setState(() {
+                                _focusZone = _FocusZone.sources;
+                                _focusedSource = index;
+                              });
+                              _selectSource(entry);
+                            },
+                          ),
+                        ),
+                      );
+                    },
+                  ),
                 ),
         ),
       ],
@@ -966,7 +1048,12 @@ class _SourceRow extends StatelessWidget {
     required this.onTap,
   });
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => ValueListenableBuilder(
+    valueListenable: StreamBadgesService.instance.matcher,
+    builder: (_, matcher, __) => _buildRow(!matcher.isEmpty),
+  );
+
+  Widget _buildRow(bool customBadgesConfigured) {
     final torrent = entry.torrent;
     final inverse = focused;
     final tags = <String>[
@@ -985,9 +1072,15 @@ class _SourceRow extends StatelessWidget {
       ),
     );
     final badges = <Widget>[
-      if (quality != null)
+      if (!customBadgesConfigured && quality != null)
         _Pill(label: quality, inverse: inverse, emphasis: true),
       for (final tag in tags) _Pill(label: tag, inverse: inverse),
+      StreamBadgeStripFor(
+        name: torrent.name,
+        description: torrent.badgeDescription,
+        height: 24,
+        spacing: 6,
+      ),
     ];
     final activity = resolving
         ? SizedBox(
@@ -1031,52 +1124,20 @@ class _SourceRow extends StatelessWidget {
                 ]
               : null,
         ),
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            // Inline badges can otherwise squeeze an untruncated title into a
-            // column only a few characters wide on a narrow results pane.
-            if (constraints.maxWidth < 520) {
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  SizedBox(width: double.infinity, child: title),
-                  if (badges.isNotEmpty || activity != null) ...[
-                    const SizedBox(height: 9),
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        if (badges.isNotEmpty)
-                          Expanded(
-                            child: Wrap(
-                              spacing: 6,
-                              runSpacing: 6,
-                              children: badges,
-                            ),
-                          )
-                        else
-                          const Spacer(),
-                        if (activity != null) ...[
-                          const SizedBox(width: 14),
-                          activity,
-                        ],
-                      ],
-                    ),
-                  ],
-                ],
-              );
-            }
-
-            return Row(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
               children: [
                 Expanded(child: title),
-                if (badges.isNotEmpty) ...[
-                  const SizedBox(width: 14),
-                  Wrap(spacing: 6, children: badges),
-                ],
                 if (activity != null) ...[const SizedBox(width: 14), activity],
               ],
-            );
-          },
+            ),
+            if (badges.isNotEmpty) ...[
+              const SizedBox(height: 9),
+              Wrap(spacing: 6, runSpacing: 6, children: badges),
+            ],
+          ],
         ),
       ),
     );
@@ -1141,4 +1202,36 @@ class _ErrorBanner extends StatelessWidget {
       style: TextStyle(color: Colors.red.withValues(alpha: .9), fontSize: 12),
     ),
   );
+}
+
+/// Reports only changes after a row's first layout, including image/badge
+/// completion. Calling the owner during layout only queues a post-frame scroll.
+class _SourceHeightObserver extends SingleChildRenderObjectWidget {
+  const _SourceHeightObserver({required this.onChanged, required super.child});
+  final ValueChanged<double> onChanged;
+  @override
+  RenderObject createRenderObject(BuildContext context) =>
+      _SourceHeightRender(onChanged);
+  @override
+  void updateRenderObject(
+    BuildContext context,
+    _SourceHeightRender renderObject,
+  ) {
+    renderObject.onChanged = onChanged;
+  }
+}
+
+class _SourceHeightRender extends RenderProxyBox {
+  _SourceHeightRender(this.onChanged);
+  ValueChanged<double> onChanged;
+  double? _lastHeight;
+  @override
+  void performLayout() {
+    super.performLayout();
+    final previous = _lastHeight;
+    _lastHeight = size.height;
+    if (previous != null && previous != size.height) {
+      onChanged(size.height - previous);
+    }
+  }
 }

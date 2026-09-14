@@ -109,7 +109,8 @@ void main() {
     );
     expect(find.text('2160p REMUX HDR IMAX'), findsOneWidget);
     expect(find.textContaining('Torrentio'), findsOneWidget);
-    expect(find.text('⚡ TB | PM'), findsOneWidget);
+    expect(find.text('TB | PM'), findsOneWidget);
+    expect(find.byIcon(Icons.bolt_rounded), findsOneWidget);
     expect(find.byType(FormatBadge), findsNWidgets(tags.length));
   });
 
@@ -232,10 +233,10 @@ void main() {
     oldNode.dispose();
     await tester.pumpAndSettle(); // let the Focus widget attach the new node
 
-    expect(find.text('Play'), findsNothing);
+    expect(find.text('Play').hitTestable(), findsNothing);
     node.requestFocus();
     await tester.pumpAndSettle();
-    expect(find.text('Play'), findsOneWidget,
+    expect(find.text('Play').hitTestable(), findsOneWidget,
         reason: 'listener must have migrated to the new node');
   });
 
@@ -254,9 +255,9 @@ void main() {
         qualityTag: '4K',
       ),
     );
-    expect(find.text('Play'), findsNothing);
+    expect(find.text('Play').hitTestable(), findsNothing);
     node.requestFocus();
     await tester.pump();
-    expect(find.text('Play'), findsOneWidget);
+    expect(find.text('Play').hitTestable(), findsOneWidget);
   });
 }

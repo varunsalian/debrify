@@ -1,3 +1,6 @@
+import '../services/metadata_preferences_service.dart';
+import '../services/profiles/profile_runtime.dart';
+import '../services/metadata_episode_service.dart';
 import 'dart:async';
 
 import 'package:cached_network_image/cached_network_image.dart';
@@ -23,7 +26,6 @@ import 'detail/theme/detail_theme.dart';
 import 'episode_tile.dart';
 import 'trakt/trakt_menu_helpers.dart';
 import '../services/simkl/simkl_service.dart';
-import '../services/simkl/simkl_menu_helpers.dart';
 import '../services/mdblist/mdblist_service.dart';
 import '../services/mdblist/mdblist_continue_watching_service.dart';
 import '../services/mdblist/mdblist_models.dart';
@@ -328,8 +330,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
   /// watched/unwatched, rate) is only offered when this is true.
   bool _isTraktAuthenticated = false;
 
-  /// Whether a Simkl account is connected — mirrors [_isTraktAuthenticated],
-  /// gating the separate Simkl episode menu rows.
+  /// Whether Simkl is connected, for watched-action destinations and options.
   bool _isSimklAuthenticated = false;
   bool _isMdblistAuthenticated = false;
 
@@ -359,6 +360,8 @@ class EpisodesPanelState extends State<EpisodesPanel> {
   @override
   void initState() {
     super.initState();
+    MetadataPreferencesService.revision.addListener(_episodePolicyChanged);
+    ProfileRuntime.scope.addListener(_episodePolicyChanged);
     // The custom season-dropdown key handler deliberately traps Up/Left/Right
     // for the standalone route's single-row header. When hosted chromeless
     // (merged page), leave it to default directional focus so Up escapes to the
@@ -380,6 +383,8 @@ class EpisodesPanelState extends State<EpisodesPanel> {
 
   @override
   void dispose() {
+    MetadataPreferencesService.revision.removeListener(_episodePolicyChanged);
+    ProfileRuntime.scope.removeListener(_episodePolicyChanged);
     _mdblistRefreshToken++;
     _mdblistService.playbackRevision.removeListener(_onMdblistPlaybackRevision);
     _episodeScrollController.dispose();
@@ -760,50 +765,6 @@ class EpisodesPanelState extends State<EpisodesPanel> {
         if (rating == null) return;
         actionLabel = 'Rated $rating/10';
         success = await _traktService.rateEpisode(
-          showImdbId,
-          episode.season,
-          episode.number,
-          rating,
-        );
-    }
-
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(success ? actionLabel : 'Failed: $actionLabel'),
-        backgroundColor: success
-            ? const Color(0xFF34D399)
-            : const Color(0xFFEF4444),
-        duration: const Duration(seconds: 2),
-      ),
-    );
-  }
-
-  /// Handle the episode long-press menu against Simkl — mirrors
-  /// [_onEpisodeMenuAction], including the immediate local tick/bar update on
-  /// a successful watched-state change (a later refresh re-merges the truth
-  /// from all three sources).
-  Future<void> _onEpisodeSimklMenuAction(
-    TraktEpisode episode,
-    SimklEpisodeMenuAction action,
-  ) async {
-    final show = _selectedShow;
-    if (show == null) return;
-    final showImdbId = show.effectiveImdbId ?? show.id;
-    bool success = false;
-    String actionLabel = '';
-
-    switch (action) {
-      case SimklEpisodeMenuAction.markWatched:
-        return _setEpisodeWatchedEverywhere(episode, watched: true);
-      case SimklEpisodeMenuAction.markUnwatched:
-        return _setEpisodeWatchedEverywhere(episode, watched: false);
-      case SimklEpisodeMenuAction.rate:
-        if (!mounted) return;
-        final rating = await showSimklRatingDialog(context);
-        if (rating == null) return;
-        actionLabel = 'Rated $rating/10 on Simkl';
-        success = await _simklService.rateEpisode(
           showImdbId,
           episode.season,
           episode.number,
@@ -1222,6 +1183,10 @@ class EpisodesPanelState extends State<EpisodesPanel> {
         _focusIntent = EpisodeFocusIntent.landing;
         _viewGeneration++;
       });
+      _episodeMetadataBaselines
+        ..clear()
+        ..addEntries(seasons.map((season) => MapEntry(season.number, season)));
+      unawaited(_loadSelectedEpisodeMetadata());
       final mergedNext = _nextEpisode;
       if (mergedNext != null) {
         _publishNextEpisode(mergedNext);
@@ -1343,6 +1308,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
 
       if (changed && mounted && generation == _episodeModeGeneration) {
         setState(() {});
+        unawaited(_loadSelectedEpisodeMetadata());
       }
     } catch (e) {
       debugPrint('EpisodesPanel: Trakt rating enrichment failed: $e');
@@ -1423,6 +1389,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
 
     if (changed) {
       setState(() {});
+      unawaited(_loadSelectedEpisodeMetadata());
     }
   }
 
@@ -1479,6 +1446,68 @@ class EpisodesPanelState extends State<EpisodesPanel> {
     WidgetsBinding.instance.addPostFrameCallback((_) => attempt(0));
   }
 
+  final _episodeMetadataBaselines = <int, TraktSeason>{};
+  int _episodeMetadataGeneration = 0;
+  void _episodePolicyChanged() {
+    _episodeMetadataGeneration++;
+    if (!mounted) return;
+    setState(() {
+      _episodeSeasons = [
+        for (final season in _episodeSeasons)
+          _episodeMetadataBaselines[season.number] ?? season,
+      ];
+      _refreshMetadataLanding();
+      // Presentation changes preserve the season view and its focus/scroll.
+    });
+    unawaited(_loadSelectedEpisodeMetadata());
+  }
+
+  void _refreshMetadataLanding() {
+    final landing = _landing;
+    if (landing == null) return;
+    final season = _episodeSeasons
+        .where((s) => s.number == landing.season)
+        .firstOrNull;
+    _landing = season?.episodes
+        .where((e) => e.number == landing.number)
+        .firstOrNull;
+  }
+
+  Future<void> _loadSelectedEpisodeMetadata() async {
+    if (_isDirectSource || _episodeSeasons.isEmpty) return;
+    final generation = _episodeModeGeneration;
+    final selected = _selectedSeasonNumber;
+    final index = _episodeSeasons.indexWhere((s) => s.number == selected);
+    if (index < 0) return;
+    final original = _episodeMetadataBaselines.putIfAbsent(
+      selected,
+      () => _episodeSeasons[index],
+    );
+    final metadataGeneration = ++_episodeMetadataGeneration;
+    final scope = ProfileRuntime.scope.value;
+    try {
+      final result = await MetadataEpisodeService.instance.present(
+        widget.show,
+        original,
+      );
+      if (!mounted ||
+          generation != _episodeModeGeneration ||
+          selected != _selectedSeasonNumber ||
+          scope != ProfileRuntime.scope.value ||
+          metadataGeneration != _episodeMetadataGeneration ||
+          identical(result, _episodeSeasons[index])) {
+        return;
+      }
+      setState(() {
+        _episodeSeasons = [
+          for (final s in _episodeSeasons) s.number == selected ? result : s,
+        ];
+        _refreshMetadataLanding();
+        // Presentation changes preserve the season view and its focus/scroll.
+      });
+    } catch (_) {}
+  }
+
   void _onSeasonChanged(int? seasonNumber) {
     if (seasonNumber == null || seasonNumber == _selectedSeasonNumber) return;
 
@@ -1507,6 +1536,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
       _focusIntent = EpisodeFocusIntent.seasonControl;
       _viewGeneration++;
     });
+    unawaited(_loadSelectedEpisodeMetadata());
   }
 
   void _onEpisodeTap(TraktEpisode episode) {
@@ -2169,7 +2199,8 @@ class EpisodesPanelState extends State<EpisodesPanel> {
 
   /// Per-episode options menu (opened with Right / the ⋮ button): Play, Sources,
   /// a single Mark Watched/Unwatched that acts on local storage plus every
-  /// connected tracker, and per-tracker Rate rows.
+  /// connected tracker, and supported per-tracker Rate rows. Simkl ratings are
+  /// title-only, so its episode menu deliberately has no rating action.
   void _showEpisodeOptions(TraktEpisode episode) {
     final key = '${episode.season}-${episode.number}';
     final watched = (_episodeWatchProgress[key] ?? 0) >= 100;
@@ -2177,7 +2208,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
       context: context,
       backgroundColor: AppThemeScope.of(context).sheetSurface,
       showDragHandle: true,
-      // With both Trakt and Simkl connected the menu is 7 tiles — taller than
+      // With multiple trackers connected the menu can grow taller than
       // the default sheet cap (9/16 of screen height) on portrait phones, and
       // on TV the clipped rows stayed DPAD-focusable while invisible. Let the
       // sheet grow and scroll instead (same pattern as the merged-screen
@@ -2267,15 +2298,6 @@ class EpisodesPanelState extends State<EpisodesPanel> {
               Icons.star_rounded,
               'Rate on Trakt',
               () => _onEpisodeMenuAction(episode, TraktEpisodeMenuAction.rate),
-            ),
-          if (_isSimklAuthenticated)
-            tile(
-              Icons.star_rounded,
-              'Rate on Simkl',
-              () => _onEpisodeSimklMenuAction(
-                episode,
-                SimklEpisodeMenuAction.rate,
-              ),
             ),
           if (_isMdblistAuthenticated) ...[
             if (_episodeMdblistRatings[key] == null)

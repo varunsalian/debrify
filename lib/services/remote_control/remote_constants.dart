@@ -36,8 +36,16 @@ class RemoteMessageType {
 /// correlated receiver outcomes for single-addon transfers, v4 = correlated
 /// outcomes for configuration batches and Debrify TV channels, v5 = complete
 /// profile-graph transfers (including disabled resources, profile-local
-/// settings, lock policy, reference remapping, and bounded compression).
-const int kProtoVersion = 5;
+/// settings, lock policy, reference remapping, and bounded compression), v6 =
+/// reliable TCP transfers, v7 = badge transfers including the master switch.
+const int kProtoVersion = 7;
+
+/// Reliable, file-backed transfers and receiver receipts over TCP.
+const int kReliableTransferProtocolVersion = 6;
+const int kReliableTransferPort = 5557;
+
+/// Badge envelope support; older peers continue receiving the legacy array.
+const int kStreamBadgeEnvelopeProtocolVersion = 7;
 
 const int kAddonResultProtocolVersion = 3;
 const int kRemoteTransferResultProtocolVersion = 4;
@@ -110,6 +118,7 @@ class PairCommand {
   static const String confirm = 'confirm'; // phone sends code proof
   static const String ok = 'ok'; // TV: session authorized
   static const String err = 'err'; // TV: refused (data = reason)
+  static const String cancel = 'cancel'; // sender abandons this session's code
 }
 
 /// Session liveness commands (action: sys)
@@ -168,6 +177,9 @@ class ConfigCommand {
   static const String iptvPlaylists = 'iptv_playlists';
   static const String iptvFavorites = 'iptv_favorites';
   static const String iptvLists = 'iptv_lists';
+
+  /// Stream badge rulesets (imported badges.json sources), as one JSON array.
+  static const String streamBadges = 'stream_badges';
   static const String debrifyChannel = 'debrify_channel';
   // The chunked-transfer envelope. Named for Debrify TV channels because that
   // was the first thing big enough to need it, but the start packet carries a

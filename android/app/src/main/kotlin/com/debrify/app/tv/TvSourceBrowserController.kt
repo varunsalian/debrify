@@ -1,6 +1,7 @@
 package com.debrify.app.tv
 
 import android.app.Activity
+import android.animation.ValueAnimator
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.view.KeyEvent
@@ -20,6 +21,8 @@ data class TvSourceBrowserEntry(
     val seeders: Int,
     val direct: Boolean,
     val seasonPack: Boolean,
+    val badgeName: String = title,
+    val badgeDescription: String? = null,
 )
 
 class TvSourceBrowserController(
@@ -44,6 +47,7 @@ class TvSourceBrowserController(
         fun requestLoadMore(mode: String)
         fun onSourceSelected(index: Int)
         fun onHidden()
+        fun requestBadges(entry: TvSourceBrowserEntry, complete: (TvSourceBadgeResult?) -> Unit) { complete(TvSourceBadgeResult(false, emptyList())) }
 
         /** Applicable addons with no entries yet, as (groupId, label) — shown
          * as zero-count rail groups so a silent addon stays visible. */
@@ -71,13 +75,207 @@ class TvSourceBrowserController(
     var isVisible = false
         private set
 
+    private val badgeCache = object : LinkedHashMap<String, List<Map<*, *>>>(64, .75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, List<Map<*, *>>>?): Boolean = size > 400
+    }
+    private val pendingBadges = mutableMapOf<String, Any>()
+    private val badgeTimeouts = mutableSetOf<Runnable>()
+    private var sourceScrollAnimator: ValueAnimator? = null
+    private var badgeGeneration = 0
+    private var destroyed = false
+    private var sourceScrollStart = 0f
+    private var sourceScrollTarget = 0f
+    private val unresolvedBadges = linkedSetOf<String>()
+    private var badgeRetryScheduled = false
+    private var badgeRetryDelayMs = 1000L
+    private val badgeRetry = Runnable {
+        badgeRetryScheduled = false
+        badgeRetryDelayMs = (badgeRetryDelayMs * 2).coerceAtMost(10_000L)
+        unresolvedBadges.clear()
+        requestVisibleBadges()
+    }
+    private var badgeScanScheduled = false
+    private val badgeScan = Runnable {
+        badgeScanScheduled = false
+        scanVisibleBadges()
+    }
+    private val badgeLayoutListener = View.OnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> requestVisibleBadges() }
+    private val badgeScrollListener = android.view.ViewTreeObserver.OnScrollChangedListener { requestVisibleBadges() }
+    private var customBadgesConfigured = false
+    private data class BadgeSlot(
+        val entry: TvSourceBrowserEntry,
+        val title: TextView,
+        val view: TvStreamBadgeStrip,
+        val builtIn: TvStreamBadgeStrip,
+        val current: Boolean,
+        var active: Boolean,
+    ) {
+        fun showBuiltIn(configured: Boolean) {
+            fun badge(label: String): Map<String, Any> = mapOf(
+                "label" to label,
+                "textColor" to if (current && label == "▮▮▮") {
+                    if (active) 0xFFAB2733.toInt() else 0xFFE23D4C.toInt()
+                } else if (active) Color.BLACK else 0xCCFFFFFF.toInt(),
+                "fillColor" to if (active) 0x0F000000 else 0x14FFFFFF,
+            )
+            builtIn.show(buildList {
+                if (!configured && entry.quality.isNotBlank()) add(badge(entry.quality))
+                entry.size?.let { add(badge(it)) }
+                if (!entry.direct && entry.seeders > 0) add(badge("${entry.seeders} seeders"))
+                if (entry.direct) add(badge("DIRECT"))
+                if (current) add(badge("▮▮▮"))
+            })
+        }
+    }
+    private fun updateBadgeMode(configured: Boolean) {
+        if (customBadgesConfigured == configured) return
+        customBadgesConfigured = configured
+        for (i in 0 until results.childCount) {
+            (results.getChildAt(i).tag as? BadgeSlot)?.showBuiltIn(configured)
+        }
+    }
+    private fun badgeKey(entry: TvSourceBrowserEntry) = "${entry.badgeName}\u0000${entry.badgeDescription.orEmpty()}"
+
+    private fun clearBadgeRequests() {
+        badgeTimeouts.forEach { root.removeCallbacks(it) }
+        badgeTimeouts.clear()
+        pendingBadges.clear()
+        unresolvedBadges.clear()
+        root.removeCallbacks(badgeRetry)
+        root.removeCallbacks(badgeScan)
+        badgeRetryScheduled = false
+        badgeRetryDelayMs = 1000L
+        badgeScanScheduled = false
+    }
+
+    fun destroy() {
+        destroyed = true
+        isVisible = false
+        badgeGeneration++
+        clearBadgeRequests()
+        sourceScrollAnimator?.cancel()
+        sourceScrollAnimator = null
+        root.animate().cancel()
+        results.removeOnLayoutChangeListener(badgeLayoutListener)
+        if (resultsScroll.viewTreeObserver.isAlive) {
+            resultsScroll.viewTreeObserver.removeOnScrollChangedListener(badgeScrollListener)
+        }
+    }
+
+    private fun retryBadge(key: String) {
+        unresolvedBadges.add(key)
+        if (unresolvedBadges.size > 400) unresolvedBadges.remove(unresolvedBadges.first())
+        if (!badgeRetryScheduled && isVisible) {
+            badgeRetryScheduled = true
+            root.postDelayed(badgeRetry, badgeRetryDelayMs)
+        }
+    }
+
+    private fun animateSourceFocus() {
+        if (!isVisible) return
+        val focusTop = results.getChildAt(selectedResult)?.top ?: return
+        val target = (focusTop - resultsScroll.height / 3).coerceAtLeast(0)
+        sourceScrollAnimator?.cancel()
+        sourceScrollStart = resultsScroll.scrollY.toFloat()
+        sourceScrollTarget = target.toFloat()
+        sourceScrollAnimator = ValueAnimator.ofFloat(0f, 1f).apply {
+            duration = 250
+            addUpdateListener {
+                val fraction = it.animatedValue as Float
+                resultsScroll.scrollTo(0, (sourceScrollStart + (sourceScrollTarget - sourceScrollStart) * fraction).toInt())
+            }
+            start()
+        }
+    }
+
+    private fun preserveBadgeAnchor(row: View, top: Int, oldTop: Int, oldHeight: Int) {
+        if (!isVisible || zone != Zone.RESULTS || oldHeight <= 0 || top == oldTop ||
+            results.getChildAt(selectedResult) !== row) return
+        if (sourceScrollAnimator?.isRunning != true &&
+            (oldTop + oldHeight <= resultsScroll.scrollY ||
+            oldTop >= resultsScroll.scrollY + resultsScroll.height)) return
+        val correction = top - oldTop
+        // Correct before this layout is drawn. Scans are posted separately so
+        // scrolling here cannot mutate badge children during layout.
+        resultsScroll.scrollTo(0, resultsScroll.scrollY + correction)
+        if (sourceScrollAnimator?.isRunning == true) {
+            val fraction = sourceScrollAnimator?.animatedValue as? Float ?: 0f
+            sourceScrollTarget = (top - resultsScroll.height / 3).coerceAtLeast(0).toFloat()
+            if (fraction < 1f) {
+                sourceScrollStart = (resultsScroll.scrollY - fraction * sourceScrollTarget) / (1f - fraction)
+            }
+        }
+    }
+
+    private fun requestVisibleBadges() {
+        if (!isVisible || destroyed || badgeScanScheduled) return
+        badgeScanScheduled = true
+        root.post(badgeScan)
+    }
+
+    private fun scanVisibleBadges() {
+        if (!isVisible || destroyed || !results.isLaidOut || results.isLayoutRequested) return
+        val top = resultsScroll.scrollY
+        val bottom = top + resultsScroll.height
+        for (i in 0 until results.childCount) {
+            val row = results.getChildAt(i)
+            if (row.top > bottom) break
+            if (row.bottom < top) continue
+            val slot = row.tag as? BadgeSlot ?: continue
+            val key = badgeKey(slot.entry)
+            val cached = badgeCache[key]
+            if (cached != null) { slot.view.show(cached); continue }
+            if (key in unresolvedBadges) continue
+            if (pendingBadges.size >= 16 || pendingBadges.containsKey(key)) continue
+            val admission = Any()
+            pendingBadges[key] = admission
+            val generation = badgeGeneration
+            // A dead Flutter channel must not leave a permanent pending row.
+            lateinit var timeout: Runnable
+            timeout = Runnable {
+                badgeTimeouts.remove(timeout)
+                if (generation == badgeGeneration && pendingBadges[key] === admission) {
+                    pendingBadges.remove(key)
+                    retryBadge(key)
+                    requestVisibleBadges()
+                }
+            }
+            badgeTimeouts.add(timeout)
+            // Covers startup, preparation, cold execution and the bounded
+            // shared worker queue. Hidden pickers cancel this fallback.
+            root.postDelayed(timeout, 45_000)
+            callbacks.requestBadges(slot.entry) { reply ->
+                root.removeCallbacks(timeout)
+                badgeTimeouts.remove(timeout)
+                if (generation == badgeGeneration && pendingBadges[key] === admission) {
+                    pendingBadges.remove(key)
+                    if (reply != null) updateBadgeMode(reply.configured)
+                    val badges = reply?.badges
+                    if (badges == null) {
+                        retryBadge(key)
+                    } else {
+                        badgeRetryDelayMs = 1000L
+                        badgeCache[key] = badges
+                    }
+                    requestVisibleBadges()
+                }
+            }
+        }
+    }
+
     init {
         root.isFocusable = true
         root.isFocusableInTouchMode = true
         loadMore.visibility = View.GONE
+        results.addOnLayoutChangeListener(badgeLayoutListener)
+        resultsScroll.viewTreeObserver.addOnScrollChangedListener(badgeScrollListener)
     }
 
     fun show() {
+        if (destroyed) return
+        badgeGeneration++
+        badgeCache.clear()
+        clearBadgeRequests()
         rebuild(landOnCurrent = true)
         isVisible = true
         root.visibility = View.VISIBLE
@@ -90,6 +288,10 @@ class TvSourceBrowserController(
     fun hide() {
         if (!isVisible) return
         isVisible = false
+        badgeGeneration++
+        clearBadgeRequests()
+        sourceScrollAnimator?.cancel()
+        sourceScrollAnimator = null
         root.animate().cancel()
         root.animate().alpha(0f).setDuration(120).withEndAction {
             if (!isVisible) root.visibility = View.GONE
@@ -130,13 +332,19 @@ class TvSourceBrowserController(
         if (event.action != KeyEvent.ACTION_DOWN) return true
         when (event.keyCode) {
             KeyEvent.KEYCODE_BACK, KeyEvent.KEYCODE_ESCAPE -> hide()
-            KeyEvent.KEYCODE_DPAD_LEFT -> if (zone == Zone.RESULTS) { zone = Zone.RAIL; render() }
-            KeyEvent.KEYCODE_DPAD_RIGHT -> if (zone == Zone.RAIL) { zone = Zone.RESULTS; render() }
+            KeyEvent.KEYCODE_DPAD_LEFT -> if (zone == Zone.RESULTS) changeZone(Zone.RAIL)
+            KeyEvent.KEYCODE_DPAD_RIGHT -> if (zone == Zone.RAIL) changeZone(Zone.RESULTS)
             KeyEvent.KEYCODE_DPAD_UP -> move(-1)
             KeyEvent.KEYCODE_DPAD_DOWN -> move(1)
             KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_NUMPAD_ENTER -> activate()
         }
         return true
+    }
+
+    private fun changeZone(next: Zone) {
+        zone = next
+        renderRail()
+        if (visible().isEmpty()) renderResults() else refreshResultSelection(selectedResult)
     }
 
     private fun move(delta: Int) {
@@ -153,7 +361,7 @@ class TvSourceBrowserController(
     }
 
     private fun activate() {
-        if (zone == Zone.RAIL) { zone = Zone.RESULTS; render(); return }
+        if (zone == Zone.RAIL) { changeZone(Zone.RESULTS); return }
         val entry = visible().getOrNull(selectedResult)
         if (entry != null) {
             callbacks.onSourceSelected(entry.index)
@@ -254,29 +462,25 @@ class TvSourceBrowserController(
             })
         }
         resultsScroll.post {
-            val focusTop = results.getChildAt(selectedResult)?.top ?: 0
-            resultsScroll.smoothScrollTo(0, (focusTop - resultsScroll.height / 3).coerceAtLeast(0))
+            animateSourceFocus()
+            requestVisibleBadges()
         }
     }
 
     private fun refreshResultSelection(oldSelection: Int) {
-        val entries = visible()
         listOf(oldSelection, selectedResult).distinct().forEach { index ->
-            val entry = entries.getOrNull(index) ?: return@forEach
-            val replacement = sourceRow(
-                entry,
-                index == selectedResult,
-                entry.index == callbacks.currentIndex(),
-            ) {
-                selectedResult = index
-                callbacks.onSourceSelected(entry.index)
-            }
-            results.removeViewAt(index)
-            results.addView(replacement, index)
+            val row = results.getChildAt(index) ?: return@forEach
+            val slot = row.tag as? BadgeSlot ?: return@forEach
+            val active = zone == Zone.RESULTS && index == selectedResult
+            if (slot.active == active) return@forEach
+            slot.active = active
+            (row.background as GradientDrawable).setColor(if (active) Color.WHITE else 0x07FFFFFF)
+            slot.title.setTextColor(if (active) Color.BLACK else 0xE6FFFFFF.toInt())
+            slot.showBuiltIn(customBadgesConfigured)
         }
         resultsScroll.post {
-            val focusTop = results.getChildAt(selectedResult)?.top ?: 0
-            resultsScroll.smoothScrollTo(0, (focusTop - resultsScroll.height / 3).coerceAtLeast(0))
+            if (zone == Zone.RESULTS) animateSourceFocus()
+            requestVisibleBadges()
         }
     }
 
@@ -305,37 +509,31 @@ class TvSourceBrowserController(
     }
 
     private fun sourceRow(entry: TvSourceBrowserEntry, active: Boolean, current: Boolean, click: () -> Unit): View = LinearLayout(activity).apply {
-        // Below this width, inline badges consume nearly the entire results
-        // pane and squeeze an untruncated title down to a few characters.
-        // 413dp is the rail, divider, and results-pane padding; the row itself
-        // adds another 18dp on each side before laying out its children.
-        val rowContentWidth = activity.resources.configuration.screenWidthDp - 449
-        val stacked = rowContentWidth < 520
-        orientation = if (stacked) LinearLayout.VERTICAL else LinearLayout.HORIZONTAL
-        gravity = if (stacked) android.view.Gravity.START else android.view.Gravity.CENTER_VERTICAL
+        orientation = LinearLayout.VERTICAL
         minimumHeight = dp(58)
         setPadding(dp(18), dp(11), dp(18), dp(11))
         background = bg(active, false)
         setOnClickListener { click() }
-        val titleParams = if (stacked) {
-            LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
-        } else {
-            LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+        val title = TextView(activity).apply {
+            text = entry.title
+            setTextColor(if (active) Color.BLACK else 0xE6FFFFFF.toInt())
+            textSize = 14f
+            setTypeface(typeface, 1)
         }
-        addView(TextView(activity).apply { text = entry.title; setTextColor(if (active) Color.BLACK else 0xE6FFFFFF.toInt()); textSize = 14f; setTypeface(typeface, 1) }, titleParams)
-        val tags = listOfNotNull(entry.quality.takeIf { it.isNotBlank() }, entry.size, if (!entry.direct && entry.seeders > 0) "${entry.seeders} seeders" else null, if (entry.direct) "DIRECT" else null)
-        if (stacked) {
-            addView(LinearLayout(activity).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = android.view.Gravity.CENTER_VERTICAL
-                tags.forEach { tag -> addView(tagView(tag, active)) }
-                if (current) addView(TextView(activity).apply { text = "▮▮▮"; setTextColor(if (active) 0xFFAB2733.toInt() else 0xFFE23D4C.toInt()); textSize = 11f; setPadding(dp(14), 0, 0, 0) })
-                layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(9) }
-            })
-        } else {
-            tags.forEach { tag -> addView(tagView(tag, active)) }
-            if (current) addView(TextView(activity).apply { text = "▮▮▮"; setTextColor(if (active) 0xFFAB2733.toInt() else 0xFFE23D4C.toInt()); textSize = 11f; setPadding(dp(14), 0, 0, 0) })
+        addView(title, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+        val builtIn = TvStreamBadgeStrip(activity, chipHeightDp = 22)
+        addView(builtIn, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+        val badges = TvStreamBadgeStrip(activity)
+        addView(badges, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+        // Unlike Flutter's lazy list, every native row remains laid out. The
+        // selected row's top delta directly captures expansion above it.
+        addOnLayoutChangeListener { view, _, top, _, _, _, oldTop, _, oldBottom ->
+            preserveBadgeAnchor(view, top, oldTop, oldBottom - oldTop)
         }
+        val slot = BadgeSlot(entry, title, badges, builtIn, current, active)
+        tag = slot
+        slot.showBuiltIn(customBadgesConfigured)
+        badgeCache[badgeKey(entry)]?.let { badges.show(it) }
         layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(5) }
     }
 

@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import '../../utils/tv_reveal.dart';
 import 'package:flutter/services.dart';
 
+import '../../models/home_collection.dart';
 import '../../models/stremio_addon.dart';
+import '../../services/home_collections_store.dart';
 import '../../services/home_list_rows.dart';
 import '../../services/home_row_order.dart';
 import '../../services/iptv_media_store.dart' show IptvListMeta;
@@ -60,6 +62,9 @@ class HomeSectionsFilterPage extends StatefulWidget {
   /// already has the `fav:iptv` leaf).
   final List<IptvListMeta> iptvLists;
 
+  /// Imported collections (each is one default-on `collection:<id>` row).
+  final List<HomeCollection> collections;
+
   final bool isTelevision;
 
   const HomeSectionsFilterPage({
@@ -73,6 +78,7 @@ class HomeSectionsFilterPage extends StatefulWidget {
     this.mdblistLiked = const [],
     this.mdblistTop = const [],
     this.iptvLists = const [],
+    this.collections = const [],
     required this.isTelevision,
   });
 
@@ -91,6 +97,7 @@ class _Item {
   final bool defaultOn;
   final String? extraTitle;
   final bool unavailable;
+
   bool on;
   _Item(
     this.id,
@@ -159,7 +166,15 @@ class _HomeSectionsFilterPageState extends State<HomeSectionsFilterPage> {
       additions: const ['mdblist:movies', 'mdblist:shows'],
       anchors: const ['simkl:movies', 'simkl:shows'],
     );
-    _orderIds = HomeRowOrder.reconcile(seededOrder, _canonicalOrderIds());
+    _orderIds = HomeRowOrder.reconcile(
+      HomeRowOrder.seedCollections(seededOrder, [
+        for (final c in widget.collections)
+          if (c.pinToTop) HomeCollectionRowIds.collection(c.id),
+        for (final c in widget.collections)
+          if (!c.pinToTop) HomeCollectionRowIds.collection(c.id),
+      ]),
+      _canonicalOrderIds(),
+    );
     _railNodes = List.generate(
       _groups.length,
       (i) => FocusNode(debugLabel: 'homeRail$i'),
@@ -266,6 +281,16 @@ class _HomeSectionsFilterPageState extends State<HomeSectionsFilterPage> {
             if (!m.isFavorites)
               opt(HomeExtraRowIds.iptvList(m.id), m.name, badge: 'LIST'),
         ]),
+      if (widget.collections.isNotEmpty)
+        _Group('Collections', [
+          for (final c in widget.collections)
+            _Item(
+              c.rowId,
+              c.title,
+              on(c.rowId),
+              badge: c.pinToTop ? 'PINNED' : 'FOLDERS',
+            ),
+        ]),
       _Group('My Watchlist', [
         _Item('watchlist:movies', 'Movies', on('watchlist:movies')),
         _Item('watchlist:series', 'Series', on('watchlist:series')),
@@ -319,20 +344,27 @@ class _HomeSectionsFilterPageState extends State<HomeSectionsFilterPage> {
       }
     }
 
+    // Catalogs claimed by a collection folder are listed under that folder
+    // above, not under their addon (the board skips them too).
+    final claimed = HomeCollectionsStore.claimedCatalogKeys(
+      widget.collections,
+      [for (final e in widget.catalogTree) e.addon],
+      disabledRows: widget.disabled,
+    );
     for (final entry in widget.catalogTree) {
       final addon = entry.addon;
-      if (entry.catalogs.isEmpty) continue;
-      groups.add(
-        _Group(addon.name, [
-          for (final c in entry.catalogs)
+      final items = [
+        for (final c in entry.catalogs)
+          if (!claimed.contains('${addon.id}:${c.type}:${c.id}'))
             _Item(
               '${addon.id}:${c.type}:${c.id}',
               c.name,
               on('${addon.id}:${c.type}:${c.id}'),
               badge: c.type,
             ),
-        ]),
-      );
+      ];
+      if (items.isEmpty) continue;
+      groups.add(_Group(addon.name, items));
     }
     return groups;
   }
@@ -352,6 +384,9 @@ class _HomeSectionsFilterPageState extends State<HomeSectionsFilterPage> {
       if (items.containsKey(id) && seen.add(id)) out.add(id);
     }
 
+    for (final c in widget.collections) {
+      if (c.pinToTop) add(HomeCollectionRowIds.collection(c.id));
+    }
     for (final id in const [
       'cw:movies',
       'cw:series',
@@ -382,6 +417,12 @@ class _HomeSectionsFilterPageState extends State<HomeSectionsFilterPage> {
         if (HomeExtraRowIds.isTracker(item.id)) add(item.id);
       }
     }
+    // Gather the remaining collections; defaults groups them after CW.
+    for (final group in _groups) {
+      for (final item in group.items) {
+        if (HomeCollectionRowIds.isCollection(item.id)) add(item.id);
+      }
+    }
     // Anything left is an addon catalog (or a future row family unknown to
     // this version). Stable group/item order is the safest default for both.
     for (final group in _groups) {
@@ -389,7 +430,7 @@ class _HomeSectionsFilterPageState extends State<HomeSectionsFilterPage> {
         add(item.id);
       }
     }
-    return out;
+    return HomeRowOrder.defaults(out, (id) => id);
   }
 
   List<_ArrangeEntry> get _arrangeEntries {
@@ -475,6 +516,9 @@ class _HomeSectionsFilterPageState extends State<HomeSectionsFilterPage> {
     for (final r in widget.extraRows) {
       if (!modelIds.contains(r.id)) extras.add(r);
     }
+    // A collection can temporarily own/hide an addon leaf. Preserve saved
+    // choices which this screen could not edit, including disabled folders.
+    out.addAll(widget.disabled.where((id) => !modelIds.contains(id)));
     await StorageService.setHomeDisabledSections(out);
     await StorageService.setHomeExtraRows(extras);
     await StorageService.setHomeRowOrder(_orderIds);

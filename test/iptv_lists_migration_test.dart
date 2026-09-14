@@ -4,6 +4,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:debrify/services/debrify_tv_database.dart';
+import 'package:debrify/services/webdav_sync/webdav_sync_library_models.dart';
+import 'package:debrify/services/webdav_sync/webdav_sync_library_mutation.dart';
 
 /// The v5 migration: favorites stop being their own table and become the
 /// built-in list of the custom-lists schema.
@@ -164,6 +166,54 @@ void main() {
       dbPath,
       options: OpenDatabaseOptions(
         version: 6,
+        onConfigure: configure,
+        onCreate: (db, _) => DebrifyTvDatabase.createIptvStoreTables(db),
+        onUpgrade: DebrifyTvDatabase.runUpgrade,
+      ),
+    );
+  }
+
+  Future<Database> upgradeToV7() {
+    return databaseFactoryFfiNoIsolate.openDatabase(
+      dbPath,
+      options: OpenDatabaseOptions(
+        version: 7,
+        onConfigure: configure,
+        onCreate: (db, _) => DebrifyTvDatabase.createIptvStoreTables(db),
+        onUpgrade: DebrifyTvDatabase.runUpgrade,
+      ),
+    );
+  }
+
+  Future<Database> upgradeToV8() {
+    return databaseFactoryFfiNoIsolate.openDatabase(
+      dbPath,
+      options: OpenDatabaseOptions(
+        version: 8,
+        onConfigure: configure,
+        onCreate: (db, _) => DebrifyTvDatabase.createIptvStoreTables(db),
+        onUpgrade: DebrifyTvDatabase.runUpgrade,
+      ),
+    );
+  }
+
+  Future<Database> upgradeToV9() {
+    return databaseFactoryFfiNoIsolate.openDatabase(
+      dbPath,
+      options: OpenDatabaseOptions(
+        version: 9,
+        onConfigure: configure,
+        onCreate: (db, _) => DebrifyTvDatabase.createIptvStoreTables(db),
+        onUpgrade: DebrifyTvDatabase.runUpgrade,
+      ),
+    );
+  }
+
+  Future<Database> upgradeToV10() {
+    return databaseFactoryFfiNoIsolate.openDatabase(
+      dbPath,
+      options: OpenDatabaseOptions(
+        version: 10,
         onConfigure: configure,
         onCreate: (db, _) => DebrifyTvDatabase.createIptvStoreTables(db),
         onUpgrade: DebrifyTvDatabase.runUpgrade,
@@ -379,5 +429,225 @@ void main() {
     expect(rows.map((row) => row['name']), ['alpha', 'Mike', 'Zulu']);
     expect(rows.map((row) => row['position']), [0, 1, 2]);
     expect(await hasTable(db, 'iptv_category_channel_orders'), isTrue);
+  });
+
+  test('fresh v7 and v6→v7 both create the library-sync sidecars', () async {
+    var db = await upgradeToV7();
+    expect(await hasTable(db, 'webdav_sync_record_state'), isTrue);
+    expect(await hasTable(db, 'webdav_sync_meta'), isTrue);
+    expect(
+      (await db.query(
+        'webdav_sync_meta',
+        where: 'key = ?',
+        whereArgs: const <Object>['mutation_revision'],
+      )).single['value'],
+      '0',
+    );
+    await db.close();
+
+    await File(dbPath).delete();
+    db = await openAt(6, (db, _) async {
+      await DebrifyTvDatabase.createIptvStoreTables(db);
+      await db.delete('webdav_sync_meta');
+      await db.execute('DROP TABLE webdav_sync_record_state');
+      await db.execute('DROP TABLE webdav_sync_meta');
+    });
+    await db.close();
+    db = await upgradeToV7();
+    addTearDown(db.close);
+    expect(await hasTable(db, 'webdav_sync_record_state'), isTrue);
+    expect(await hasTable(db, 'webdav_sync_meta'), isTrue);
+  });
+
+  test(
+    'v7→v8 adds resume source identity and backfills all IPTV states',
+    () async {
+      var db = await openAt(7, (db, _) async {
+        await DebrifyTvDatabase.createIptvStoreTables(db);
+        await db.execute('DROP TABLE video_resume');
+        await db.execute('''
+        CREATE TABLE video_resume (
+          resume_key TEXT PRIMARY KEY,
+          position_ms INTEGER NOT NULL DEFAULT 0,
+          duration_ms INTEGER NOT NULL DEFAULT 0,
+          speed REAL NOT NULL DEFAULT 1.0,
+          aspect TEXT NOT NULL DEFAULT 'contain',
+          updated_at INTEGER NOT NULL DEFAULT 0
+        )
+      ''');
+      });
+      await db.insert('iptv_watch_history', <String, Object?>{
+        'url': 'https://panel.invalid/movie/1',
+        'playlist_id': 'source-1',
+        'last_played_at': 120,
+      });
+      await db.insert('video_resume', <String, Object?>{
+        'resume_key': 'https://panel.invalid/movie/1',
+        'position_ms': 10,
+        'duration_ms': 20,
+        'updated_at': 130,
+      });
+      await db.insert('iptv_category_channel_orders', <String, Object?>{
+        'source_id': 'source-1',
+        'channel_group': 'News',
+        'url': 'https://panel.invalid/live/1',
+        'name': 'One',
+        'occurrence': 0,
+        'position': 0,
+      });
+      await db.close();
+
+      db = await upgradeToV8();
+      addTearDown(db.close);
+      final columns = await db.rawQuery('PRAGMA table_info(video_resume)');
+      expect(columns.map((row) => row['name']), contains('source_id'));
+      expect((await db.query('video_resume')).single['source_id'], 'source-1');
+      final states = await db.query('webdav_sync_record_state');
+      expect(states.map((row) => row['kind']).toSet(), <Object?>{
+        WebDavSyncLibraryKinds.iptvCategoryChannelOrders,
+        WebDavSyncLibraryKinds.iptvWatchHistory,
+        WebDavSyncLibraryKinds.videoResume,
+      });
+      expect(
+        states.map((row) => row['origin_device_id']),
+        everyElement('migration'),
+      );
+    },
+  );
+
+  test('v8→v9 backfills channels and pools with migration origin', () async {
+    WebDavSyncLibraryMutation.debugTvGenerationId = () => 'migration-gen';
+    addTearDown(WebDavSyncLibraryMutation.resetDebugTvHooks);
+    var db = await openAt(8, (db, _) async {
+      await DebrifyTvDatabase.createIptvStoreTables(db);
+      await db.execute('''
+        CREATE TABLE tv_channels (
+          channel_id TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          avoid_nsfw INTEGER NOT NULL DEFAULT 1,
+          channel_number INTEGER NOT NULL UNIQUE,
+          created_at INTEGER NOT NULL,
+          updated_at INTEGER NOT NULL
+        )
+      ''');
+      await db.execute('''
+        CREATE TABLE tv_cached_torrents (
+          channel_id TEXT NOT NULL,
+          infohash TEXT NOT NULL,
+          name TEXT NOT NULL,
+          size_bytes INTEGER NOT NULL,
+          created_unix INTEGER NOT NULL,
+          seeders INTEGER NOT NULL,
+          leechers INTEGER NOT NULL,
+          completed INTEGER NOT NULL,
+          scraped_date INTEGER NOT NULL,
+          keywords_json TEXT NOT NULL,
+          sources_json TEXT NOT NULL,
+          added_at INTEGER NOT NULL,
+          PRIMARY KEY (channel_id, infohash)
+        )
+      ''');
+    });
+    await db.insert('tv_channels', <String, Object?>{
+      'channel_id': 'channel-a',
+      'name': 'Alpha',
+      'avoid_nsfw': 1,
+      'channel_number': 4,
+      'created_at': 10,
+      'updated_at': 123,
+    });
+    await db.insert('tv_cached_torrents', <String, Object?>{
+      'channel_id': 'channel-a',
+      'infohash': 'a' * 40,
+      'name': 'Pool',
+      'size_bytes': 1,
+      'created_unix': 2,
+      'seeders': 3,
+      'leechers': 4,
+      'completed': 5,
+      'scraped_date': 6,
+      'keywords_json': '[]',
+      'sources_json': '[]',
+      'added_at': 999999,
+    });
+    await db.close();
+
+    db = await upgradeToV9();
+    addTearDown(db.close);
+    final channelState = (await db.query(
+      'webdav_sync_record_state',
+      where: 'kind = ?',
+      whereArgs: const <Object>[WebDavSyncLibraryKinds.tvChannels],
+    )).single;
+    final generationState = (await db.query(
+      'webdav_sync_record_state',
+      where: 'kind = ?',
+      whereArgs: const <Object>[WebDavSyncLibraryKinds.tvPoolGeneration],
+    )).single;
+    expect(channelState['updated_at_ms'], 123);
+    expect(channelState['origin_device_id'], 'migration');
+    expect(generationState['origin_device_id'], 'migration');
+    expect(generationState['aux'], 'migration-gen');
+    expect(generationState['updated_at_ms'], isNot(999999));
+  });
+
+  test('v9→v10 seeds custom lists and every membership', () async {
+    var db = await openAt(
+      9,
+      (db, _) => DebrifyTvDatabase.createIptvStoreTables(db),
+    );
+    await db.insert('iptv_lists', <String, Object?>{
+      'id': 'list_100_1',
+      'name': 'Sports',
+      'position': 1,
+      'is_builtin': 0,
+      'created_at': 90,
+      'updated_at': 100,
+    });
+    await db.insert('iptv_list_channels', <String, Object?>{
+      'list_id': 'favorites',
+      'url': 'https://panel.invalid/live/1',
+      'added_at': 110,
+      'position': 0,
+    });
+    await db.insert('iptv_list_channels', <String, Object?>{
+      'list_id': 'list_100_1',
+      'url': 'https://panel.invalid/live/2',
+      'added_at': 120,
+      'position': 0,
+    });
+    await db.close();
+
+    db = await upgradeToV10();
+    addTearDown(db.close);
+    final listStates = await db.query(
+      'webdav_sync_record_state',
+      where: 'kind = ?',
+      whereArgs: const <Object?>[WebDavSyncLibraryKinds.iptvLists],
+    );
+    expect(listStates, hasLength(1));
+    expect(listStates.single['owner_key'], 'list_100_1');
+    expect(listStates.single['updated_at_ms'], 100);
+    expect(listStates.single['origin_device_id'], 'migration');
+
+    final memberStates = await db.query(
+      'webdav_sync_record_state',
+      where: 'kind = ?',
+      whereArgs: const <Object?>[WebDavSyncLibraryKinds.iptvListChannels],
+      orderBy: 'owner_key',
+    );
+    expect(memberStates, hasLength(2));
+    expect(memberStates.map((row) => row['owner_key']).toSet(), <Object?>{
+      'favorites',
+      'list_100_1',
+    });
+    expect(memberStates.map((row) => row['updated_at_ms']).toSet(), <Object?>{
+      110,
+      120,
+    });
+    expect(
+      memberStates.map((row) => row['origin_device_id']),
+      everyElement('migration'),
+    );
   });
 }

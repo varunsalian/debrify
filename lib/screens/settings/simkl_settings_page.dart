@@ -1,3 +1,4 @@
+import 'widgets/settings_load_error.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -21,6 +22,8 @@ class SimklSettingsPage extends StatefulWidget {
 
 class _SimklSettingsPageState extends State<SimklSettingsPage> {
   bool _loading = true;
+  bool _loadFailed = false;
+  int _loadGeneration = 0;
   bool _isConnected = false;
   bool _isConnecting = false;
   String? _username;
@@ -63,28 +66,43 @@ class _SimklSettingsPageState extends State<SimklSettingsPage> {
   }
 
   Future<void> _loadSettings() async {
-    final isAuth = await SimklService.instance.isAuthenticated();
-    final username = await SimklService.instance.getUsername();
-
-    if (!mounted) return;
-
+    final generation = ++_loadGeneration;
     setState(() {
-      _isConnected = isAuth;
-      _username = username;
-      _loading = false;
+      _loading = true;
+      _loadFailed = false;
     });
-    // TV entry focus: land DPAD users on the login/logout button — unless
-    // the user already focused something (e.g. the AppBar back button)
-    // while the async load ran. Reseeds elsewhere skip this guard on
-    // purpose: there the focused node just unmounted.
-    if (PlatformUtil.isTelevision) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        final primary = FocusManager.instance.primaryFocus;
-        if (primary != null && primary is! FocusScopeNode) return;
-        if (_primaryButtonFocus.context != null) {
-          _primaryButtonFocus.requestFocus();
-        }
+    try {
+      final (isAuth, username) = await (() async => (
+        await SimklService.instance.isAuthenticated(),
+        await SimklService.instance.getUsername(),
+      ))().timeout(const Duration(seconds: 5));
+
+      if (!mounted || generation != _loadGeneration) return;
+
+      setState(() {
+        _isConnected = isAuth;
+        _username = username;
+        _loading = false;
+      });
+      // TV entry focus: land DPAD users on the login/logout button — unless
+      // the user already focused something (e.g. the AppBar back button)
+      // while the async load ran. Reseeds elsewhere skip this guard on
+      // purpose: there the focused node just unmounted.
+      if (PlatformUtil.isTelevision) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted || generation != _loadGeneration) return;
+          final primary = FocusManager.instance.primaryFocus;
+          if (primary != null && primary is! FocusScopeNode) return;
+          if (_primaryButtonFocus.context != null) {
+            _primaryButtonFocus.requestFocus();
+          }
+        });
+      }
+    } catch (_) {
+      if (!mounted || generation != _loadGeneration) return;
+      setState(() {
+        _loading = false;
+        _loadFailed = true;
       });
     }
   }
@@ -269,6 +287,12 @@ class _SimklSettingsPageState extends State<SimklSettingsPage> {
       return const SettingsPageScaffold(
         title: 'Simkl Settings',
         body: Center(child: CircularProgressIndicator()),
+      );
+    }
+    if (_loadFailed) {
+      return SettingsPageScaffold(
+        title: 'Simkl Settings',
+        body: SettingsLoadError(onRetry: _loadSettings),
       );
     }
 

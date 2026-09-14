@@ -4,7 +4,9 @@ import '../debrify_tv_cache_service.dart';
 
 class ChannelYamlBuilder {
   static Future<String> build(DebrifyTvChannelRecord channel) async {
-    final cacheEntry = await DebrifyTvCacheService.getEntry(channel.channelId);
+    final cacheEntry = await DebrifyTvCacheService.getEntryForPortableExport(
+      channel.channelId,
+    );
     return buildFromEntry(channel, cacheEntry);
   }
 
@@ -22,10 +24,32 @@ class ChannelYamlBuilder {
     final keywordStats =
         cacheEntry?.keywordStats ?? const <String, KeywordStat>{};
 
+    // A saved pool may outlive a keyword edit or contain legacy rows with no
+    // keyword association. Preserve those hashes under the first current
+    // keyword rather than silently exporting an incomplete channel.
+    final normalized = channel.keywords
+        .map((keyword) => keyword.trim().toLowerCase())
+        .toSet();
+    final fallback = normalized.firstOrNull;
+    final byKeyword = <String, Map<String, CachedTorrent>>{};
+    for (final torrent in cachedTorrents) {
+      final matches = torrent.keywords
+          .map((keyword) => keyword.trim().toLowerCase())
+          .where(normalized.contains)
+          .toSet();
+      if (matches.isEmpty && fallback != null) matches.add(fallback);
+      for (final keyword in matches) {
+        (byKeyword[keyword] ??= <String, CachedTorrent>{}).putIfAbsent(
+          torrent.infohash,
+          () => torrent,
+        );
+      }
+    }
+
     for (final keyword in channel.keywords) {
       buffer.writeln('  "${escapeYamlString(keyword)}":');
 
-      final keywordLower = keyword.toLowerCase();
+      final keywordLower = keyword.trim().toLowerCase();
       final stat = keywordStats[keywordLower];
       if (stat != null) {
         buffer.writeln('    total_fetched: ${stat.totalFetched}');
@@ -34,15 +58,8 @@ class ChannelYamlBuilder {
         buffer.writeln('    pirate_bay_hits: ${stat.pirateBayHits}');
       }
 
-      final seen = <String>{};
-      final matchingTorrents = cachedTorrents
-          .where((t) => t.keywords.contains(keywordLower))
-          .where((t) {
-            if (seen.contains(t.infohash)) return false;
-            seen.add(t.infohash);
-            return true;
-          })
-          .toList();
+      final matchingTorrents =
+          byKeyword[keywordLower]?.values ?? const <CachedTorrent>[];
 
       if (matchingTorrents.isEmpty) {
         buffer.writeln('    torrents: []');

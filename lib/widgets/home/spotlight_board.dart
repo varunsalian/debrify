@@ -1,3 +1,7 @@
+import '../../services/diagnostic_log.dart';
+import '../recoverable_network_image.dart';
+import '../../models/metadata_preferences.dart';
+import '../metadata_presentation_mixin.dart';
 import 'dart:async';
 
 import 'package:cached_network_image/cached_network_image.dart';
@@ -16,6 +20,9 @@ import '../../utils/dominant_color.dart';
 import '../../utils/dialog_tap_guard.dart';
 import '../../utils/tv_keys.dart';
 import 'row_tag_pill.dart';
+import 'home_row_focus.dart';
+import '../collections/collection_focus_glow.dart';
+import '../collections/collection_focus_art.dart';
 import '../movie_watched_badge.dart';
 import '../../utils/platform_util.dart';
 import '../../utils/wide_touch_scale.dart';
@@ -29,12 +36,57 @@ import '../../utils/wide_touch_scale.dart';
 /// through a poster model is how they end up looking wrong in four different
 /// ways.
 class SpotlightCard {
+  final StremioMeta? metadata;
+  final bool episodeArtwork;
   /// Poster, channel logo, or a user override. Null draws the placeholder.
   final String? image;
 
   /// Used when [image] fails to load. Landscape title cards point this at the
   /// portrait poster because synchronously-derived MetaHub backdrops can 404.
   final String? fallbackImage;
+  /// Image-download errors obey the same policy as missing metadata artwork.
+  String? imageErrorFallback(
+    StremioMeta? presented,
+    MetadataPreferences preferences,
+  ) {
+    if (episodeArtwork) {
+      return preferences.provider(MetadataCategory.episodeArtwork) != MetadataPreferences.current &&
+          !preferences.fallback ? null : fallbackImage;
+    }
+    if (presented == null || identical(presented, metadata)) return fallbackImage;
+    bool selected(MetadataCategory category) =>
+        preferences.provider(category) != MetadataPreferences.current;
+    final selectedArtwork =
+        (shape == SpotlightCardShape.wide && selected(MetadataCategory.backgrounds)) ||
+        (shape == SpotlightCardShape.poster && selected(MetadataCategory.posters));
+    if (selectedArtwork && !preferences.fallback) return null;
+    return selectedArtwork || selected(MetadataCategory.posters)
+        ? presented.poster
+        : fallbackImage;
+  }
+
+  String? imageForPresentation(
+    StremioMeta? presented,
+    MetadataPreferences preferences,
+  ) {
+    final changed = presented != null && !identical(presented, metadata);
+    bool selected(MetadataCategory category) =>
+        preferences.provider(category) != MetadataPreferences.current;
+    final primary = !changed || episodeArtwork
+        ? image
+        : shape == SpotlightCardShape.poster &&
+              selected(MetadataCategory.posters)
+        ? presented.poster
+        : shape == SpotlightCardShape.wide &&
+              selected(MetadataCategory.backgrounds)
+        ? presented.background
+        : image;
+    return primary?.trim().isNotEmpty == true
+        ? primary
+        : imageErrorFallback(presented, preferences);
+  }
+
+  final String? coverEmoji;
   final String title;
 
   /// Item count, "LIVE", a genre — whatever this KIND of thing is identified
@@ -52,29 +104,47 @@ class SpotlightCard {
   final VoidCallback onOpen;
   final VoidCallback? onOptions;
   final SpotlightCardShape shape;
+  final bool showCaption;
 
   /// Title identity for the effective watched marker. Null for channels,
   /// playlists, and other non-title cards.
   final String? watchedImdbId;
   final String? watchedContentType;
 
+  /// Collection GIFs follow the device preference; collection videos need focus.
+  final String? collectionGifUrl;
+  final String? collectionVideoUrl;
+
   /// A lightweight, in-card preview for the one card the user is actively
   /// inspecting. It is built only while the card is hovered on pointer
   /// surfaces, or holds DPAD focus on television; resting cards never mount a
   /// player/decoder.
   final WidgetBuilder? previewBuilder;
+  final bool focusGlowEnabled;
+
+  /// Collection art also follows keyboard focus on desktop. Live IPTV keeps
+  /// its pointer-only desktop preview policy.
+  final bool previewOnKeyboardFocus;
 
   const SpotlightCard({
+    this.metadata,
+    this.episodeArtwork = false,
     required this.title,
     required this.onOpen,
     this.image,
     this.fallbackImage,
+    this.coverEmoji,
     this.subtitle,
     this.rating,
     this.progress,
     this.onOptions,
     this.shape = SpotlightCardShape.poster,
+    this.showCaption = true,
     this.previewBuilder,
+    this.collectionGifUrl,
+    this.collectionVideoUrl,
+    this.focusGlowEnabled = false,
+    this.previewOnKeyboardFocus = false,
     this.watchedImdbId,
     this.watchedContentType,
   });
@@ -84,6 +154,9 @@ class SpotlightCard {
 enum SpotlightCardShape {
   /// 2:3, art cropped to fill. Titles.
   poster(2 / 3, BoxFit.cover),
+
+  /// Square collection cover, cropped to fill.
+  square(1, BoxFit.cover),
 
   /// 1:1, art CONTAINED on a plate. A channel logo is a mark, not a still:
   /// cropping it to fill cuts the wordmark in half.
@@ -211,6 +284,10 @@ class SpotlightBoard extends StatefulWidget {
   /// being swallowed at the old end of the board.
   final Future<bool> Function()? onLoadMoreShelves;
 
+  /// The host has already reserved rows that can still arrive independently.
+  /// Keep a DPAD-down pending if requesting another batch cannot start yet.
+  final bool pendingShelves;
+
   /// The hero has been resting on [item] long enough to be worth a trailer.
   ///
   /// The board owns the CADENCE; the host owns the video. That split is why
@@ -264,6 +341,7 @@ class SpotlightBoard extends StatefulWidget {
     required this.heroAddon,
     this.onLoadMoreRow,
     this.onLoadMoreShelves,
+    this.pendingShelves = false,
     this.onDwell,
     this.onTrailerStop,
     this.trailer,
@@ -441,7 +519,89 @@ class _M {
   double get captionBlock => compact ? 40.0 : 0;
 }
 
-class SpotlightBoardState extends State<SpotlightBoard> {
+class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentationMixin<SpotlightBoard> {
+  _M? _lastMetrics;
+  @override
+  bool get prioritizeMetadata => true;
+  @override
+  StremioMeta? get originalMetadata => widget.hero.isEmpty ? null : widget.hero[_heroIndex];
+  @override
+  void onMetadataPresentationChanged() => unawaited(_probe());
+
+  @override
+  void onMetadataPolicyChanged() {
+    // A previous image's tint must not publish after the policy changes.
+    _probeGen++;
+    _preloadHeroes();
+  }
+
+  final _cancelHeroWarmups = <VoidCallback>{};
+
+  void _cancelWarmups() {
+    for (final cancel in _cancelHeroWarmups.toList()) { cancel(); }
+  }
+
+  int get _heroDecodeWidth => widget.dpad
+      ? 1400
+      : (MediaQuery.devicePixelRatioOf(context) * MediaQuery.sizeOf(context).width)
+          .round().clamp(720, 1920);
+
+  Duration get _heroImageFadeIn =>
+      (MediaQuery.maybeOf(context)?.disableAnimations ?? false)
+      ? Duration.zero
+      : Duration(milliseconds: widget.dpad ? 180 : 420);
+
+  Duration get _heroImageFadeOut =>
+      widget.dpad || (MediaQuery.maybeOf(context)?.disableAnimations ?? false)
+      ? Duration.zero
+      : const Duration(milliseconds: 1000);
+
+  @visibleForTesting
+  ImageProvider heroWarmupProvider(String url) => ResizeImage.resizeIfNeeded(
+      _heroDecodeWidth, null,
+      CachedNetworkImageProvider(url, cacheManager: DebrifyImageCache.manager));
+
+  Future<bool> _warmHeroImage(String url) {
+    final result = Completer<bool>();
+    final stream = heroWarmupProvider(url).resolve(createLocalImageConfiguration(context));
+    Timer? timer;
+    late ImageStreamListener listener;
+    late VoidCallback cancel;
+    void finish(bool success) {
+      if (result.isCompleted) return;
+      timer?.cancel();
+      stream.removeListener(listener);
+      _cancelHeroWarmups.remove(cancel);
+      result.complete(success);
+    }
+    cancel = () => finish(false);
+    listener = ImageStreamListener((image, _) {
+      image.dispose();
+      finish(true);
+    }, onError: (_, _) => finish(false));
+    _cancelHeroWarmups.add(cancel);
+    timer = Timer(const Duration(seconds: 15), cancel);
+    stream.addListener(listener);
+    return result.future;
+  }
+
+  void _preloadHeroes() {
+    _cancelWarmups();
+    unawaited(preloadMetadata(widget.hero, (item, prefs) async {
+      if (!mounted) return;
+      final selected = prefs.provider(MetadataCategory.backgrounds) != MetadataPreferences.current;
+      final url = highQualityArtworkUrl(item.background) ??
+          (!selected && (item.imdbId ?? item.id).startsWith('tt')
+              ? 'https://images.metahub.space/background/large/${item.imdbId ?? item.id}/img'
+              : !selected || prefs.fallback ? highQualityArtworkUrl(item.poster) : null);
+      if (url == null || url.isEmpty) return;
+      final timer = Stopwatch()..start();
+      final failed = !await _warmHeroImage(url);
+      DiagnosticLog.instance.recordEvent(source: 'metadata', event: 'hero_image_warm',
+        fields: {'elapsed_ms': timer.elapsedMilliseconds, 'failed': failed});
+    }));
+  }
+
   /// Start fetching the next shelf batch before touch scrolling reaches the
   /// hard end. TV has its own DPAD-at-last-shelf trigger in [_down].
   static const double _touchLoadMoreThreshold = 600;
@@ -481,15 +641,10 @@ class SpotlightBoardState extends State<SpotlightBoard> {
   /// measure with.
   double _heroBandH = 0;
 
-  /// The extent the veil rebuild below was last run for.
-  ///
-  /// `ScrollMetricsNotification` is dispatched once per SCROLLED FRAME, not
-  /// only when the extent moves — `_isMetricsChanged` compares `extentBefore`,
-  /// which is `pixels - minScrollExtent`. Rebuilding the board on each one is
-  /// a full rebuild of every shelf and every visible card per frame, which is
-  /// what made touch scrolling lag. The offset ramp does not need it: the veil
-  /// listens to `_scroll` directly. Only an extent CHANGE does.
+  /// Lazy-list extent estimates can change during scrolling. Refresh only
+  /// the veil when metrics change, never the board and its mounted shelves.
   double _lastMaxExtent = -1;
+  final _veilMetricsRevision = ValueNotifier<int>(0);
 
   /// True once the board is scrolled far enough that the pinned hero is
   /// effectively covered. Owns the trailer's lifecycle for SCROLLING, which
@@ -533,6 +688,7 @@ class SpotlightBoardState extends State<SpotlightBoard> {
   /// While true, repeated key events cannot start duplicate loads and the
   /// board paints a visible acknowledgement instead of looking exhausted.
   bool _loadingMoreShelves = false;
+  ({FocusNode origin, DateTime at})? _pendingProgressiveDown;
 
   /// Left-third luminance per backdrop URL. Probed once; the result decides
   /// which side the identity sits on.
@@ -639,6 +795,7 @@ class SpotlightBoardState extends State<SpotlightBoard> {
     if (i < 0 || i >= widget.hero.length) return;
     _stopRolling();
     setState(() => _heroId = widget.hero[i].id);
+    refreshMetadataPresentation();
     _probe();
     _restartCadence();
   }
@@ -692,9 +849,16 @@ class SpotlightBoardState extends State<SpotlightBoard> {
   /// decode budgets. The poster fallback is what blurry heroes are made of
   /// (~350px of 2:3 art cover-cropped over a full screen), so it is LAST, not
   /// second.
-  static String? _heroArt(StremioMeta item) {
+  String? _heroPoster(StremioMeta item) =>
+      metadataArtworkPending(MetadataCategory.backgrounds) ? null :
+      usesMetadataProvider(MetadataCategory.backgrounds) && !metadataPreferences.fallback
+          ? null : highQualityArtworkUrl(item.poster);
+
+  String? _heroArt(StremioMeta item) {
+    if (metadataArtworkPending(MetadataCategory.backgrounds)) return null;
     final b = item.background;
     if (b != null && b.isNotEmpty) return highQualityArtworkUrl(b);
+    if (usesMetadataProvider(MetadataCategory.backgrounds)) return _heroPoster(item);
     final tt = item.imdbId ?? (item.id.startsWith('tt') ? item.id : null);
     if (tt != null) {
       return 'https://images.metahub.space/background/large/$tt/img';
@@ -709,8 +873,13 @@ class SpotlightBoardState extends State<SpotlightBoard> {
     return i < 0 ? 0 : i;
   }
 
-  StremioMeta? get _heroItem =>
-      widget.hero.isEmpty ? null : widget.hero[_heroIndex];
+  StremioMeta? get _heroItem => heroPresentation;
+
+  void _openHero() {
+    final item = originalMetadata;
+    final addon = widget.heroAddon;
+    if (item != null && addon != null) widget.onHeroOpen(item, addon);
+  }
 
   /// The id of the slide currently SHOWING — the host's suppression snapshot
   /// reads this at content-playback launch, because its own bookkeeping only
@@ -726,12 +895,32 @@ class SpotlightBoardState extends State<SpotlightBoard> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _probe();
       _restartCadence();
+      _preloadHeroes();
     });
   }
 
   @override
   void didUpdateWidget(SpotlightBoard old) {
     super.didUpdateWidget(old);
+    _finishProgressiveDown();
+    if (widget.dpad && PlatformUtil.isAndroidTvCached && _lastMetrics != null) {
+      for (final section in old.sections) {
+        if (section.id == null || !section.nodes.any((node) => node.hasFocus)) continue;
+        preserveHomeInsertionAnchor(scroll: _scroll,
+          previous: [for (final s in old.sections) s.id ?? ''],
+          next: [for (final s in widget.sections) s.id ?? ''],
+          anchor: section.id!,
+          extentOf: (id) => _tvShelfExtent(
+            widget.sections.firstWhere((s) => s.id == id), _lastMetrics!),
+        );
+        break;
+      }
+    }
+    if (old.hero.length != widget.hero.length ||
+        List.generate(widget.hero.length, (i) => i).any((i) =>
+            !identical(old.hero[i], widget.hero[i]))) {
+      _preloadHeroes();
+    }
     // The reel can change under us as sections load. Keep the parked item if
     // it is still present; otherwise fall back to the head rather than to a
     // stale index pointing at a different title.
@@ -825,6 +1014,8 @@ class SpotlightBoardState extends State<SpotlightBoard> {
 
   @override
   void dispose() {
+    _cancelWarmups();
+    _veilMetricsRevision.dispose();
     widget.heroNode.removeListener(_onHeroFocus);
     if (_rolling) widget.onTrailerStop?.call();
     _cadence?.cancel();
@@ -836,28 +1027,44 @@ class SpotlightBoardState extends State<SpotlightBoard> {
   /// paged on must not publish its colour over the current one.
   int _probeGen = 0;
   final Map<String, Color?> _tints = {};
+  ({String? art, Color? tint})? _lastAmbient;
+  void Function(String?, Color?)? _lastAmbientSink;
+
+  void _emitAmbient(String? art, Color? tint) {
+    final next = (art: art, tint: tint);
+    final sink = widget.onAmbient;
+    if (identical(sink, _lastAmbientSink) && next == _lastAmbient) return;
+    _lastAmbientSink = sink;
+    _lastAmbient = next;
+    sink?.call(art, tint);
+  }
 
   Future<void> _probe() async {
     // The RESOLVED art, not the raw fields — tint and side-flip must be
     // measured on the image actually drawn.
+    final gen = ++_probeGen;
     final item = _heroItem;
     final url = item == null ? null : _heroArt(item);
-    if (url == null || url.isEmpty) return;
-    final gen = ++_probeGen;
+    if (url == null || url.isEmpty) {
+      _emitAmbient(null, null);
+      return;
+    }
 
     // Publish FIRST from cache when we have it. Skipping the publish for a
     // cached URL meant paging A→B→A left B's art and tint on the shell —
     // the cache short-circuited the only code path that told anyone.
     if (_tints.containsKey(url)) {
-      widget.onAmbient?.call(url, _tints[url]);
+      _emitAmbient(url, _tints[url]);
     } else {
+      // Update the shell immediately; colour extraction may wait on a decode.
+      _emitAmbient(url, null);
       final tint = await extractDominantColor(
         CachedNetworkImageProvider(url,
             cacheManager: DebrifyImageCache.manager),
       );
       if (!mounted || gen != _probeGen) return;
       setState(() => _remember(url, tint));
-      widget.onAmbient?.call(url, tint);
+      _emitAmbient(url, tint);
     }
     unawaited(_warmNext());
   }
@@ -893,6 +1100,9 @@ class SpotlightBoardState extends State<SpotlightBoard> {
   String? _flipFor;
   bool _flipValue = false;
 
+  @visibleForTesting
+  String? get heroAlignmentItemId => _flipFor;
+
   /// The side the identity sits on, FROZEN for as long as an item is showing.
   ///
   /// This used to read `_leftThird` directly on every build. That map is
@@ -907,6 +1117,9 @@ class SpotlightBoardState extends State<SpotlightBoard> {
   bool get _flip {
     final item = _heroItem;
     if (item == null) return false;
+    // The missing URL is temporary during provider loading. Do not freeze
+    // the default side before the resolved artwork's cached tint is usable.
+    if (metadataArtworkPending(MetadataCategory.backgrounds)) return false;
     if (_flipFor != item.id) {
       _flipFor = item.id;
       final url = _heroArt(item);
@@ -929,9 +1142,40 @@ class SpotlightBoardState extends State<SpotlightBoard> {
     final next = (_heroIndex + delta + n) % n;
     _stopRolling();
     setState(() => _heroId = widget.hero[next].id);
+    refreshMetadataPresentation();
     ParallaxTravel.note(Offset(delta.toDouble(), 0));
     _probe();
     _restartCadence();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!(ModalRoute.isCurrentOf(context) ?? true)) {
+      _pendingProgressiveDown = null;
+    }
+  }
+
+  void _finishProgressiveDown() {
+    if (_pendingProgressiveDown == null) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final pending = _pendingProgressiveDown;
+      if (!mounted || pending == null) return;
+      if (!(ModalRoute.isCurrentOf(context) ?? true) ||
+          !identical(FocusManager.instance.primaryFocus, pending.origin) ||
+          DateTime.now().difference(pending.at) > const Duration(seconds: 3)) {
+        _pendingProgressiveDown = null;
+        return;
+      }
+      final row = widget.sections.indexWhere((s) => s.nodes.contains(pending.origin));
+      if (row < 0 || row + 1 >= widget.sections.length) {
+        if (!widget.pendingShelves) _pendingProgressiveDown = null;
+        return;
+      }
+      _pendingProgressiveDown = null;
+      setState(() => _row = row + 1);
+      _focusRow(_row, const Offset(0, 1));
+    });
   }
 
   Future<void> _loadShelvesAndFinishDown() async {
@@ -951,7 +1195,13 @@ class SpotlightBoardState extends State<SpotlightBoard> {
     }
     if (!mounted) return;
     setState(() => _loadingMoreShelves = false);
-    if (!appended) return;
+    if (!appended) {
+      if (widget.pendingShelves && origin != null) {
+        _pendingProgressiveDown = (origin: origin, at: DateTime.now());
+        _finishProgressiveDown();
+      }
+      return;
+    }
 
     // The host's setState that appended the shelves mounts their focus nodes
     // on the next frame. Complete the original DOWN only if the user is still
@@ -1019,6 +1269,11 @@ class SpotlightBoardState extends State<SpotlightBoard> {
 
   void _up() {
     if (_row <= 0) {
+      // Local shelves can precede hero data. Do not leave a pending focus
+      // request that steals the cursor when the hero eventually mounts.
+      if (widget.hero.isEmpty || !(widget.heroNode.context?.mounted ?? false)) {
+        return;
+      }
       setState(() => _row = -1);
       _restartCadence();
       _go(widget.heroNode, const Offset(0, -1));
@@ -1151,7 +1406,7 @@ class SpotlightBoardState extends State<SpotlightBoard> {
         final item = _heroItem;
         final addon = widget.heroAddon;
         if (_row < 0 && item != null && addon != null) {
-          widget.onHeroOpen(item, addon);
+          _openHero();
           return KeyEventResult.handled;
         }
         return KeyEventResult.ignored;
@@ -1182,13 +1437,39 @@ class SpotlightBoardState extends State<SpotlightBoard> {
     return KeyEventResult.ignored;
   }
 
-  /// Where the shell should land focus on re-entry.
+  /// Initial entry and re-entry must only target mounted content. Shelves
+  /// may arrive before the independently loaded hero, and late hero data
+  /// must not move an already placed card cursor.
   FocusNode? focusTarget() {
-    if (_row < 0) return widget.heroNode;
-    if (_row >= widget.sections.length) return widget.heroNode;
-    final nodes = widget.sections[_row].nodes;
-    if (nodes.isEmpty) return widget.heroNode;
-    return nodes[(_col[_row] ?? 0).clamp(0, nodes.length - 1)];
+    bool available(FocusNode node) =>
+        (node.context?.mounted ?? false) && node.canRequestFocus;
+    if (widget.heroNode.hasFocus && available(widget.heroNode)) {
+      return widget.heroNode;
+    }
+    for (final section in widget.sections) {
+      for (final node in section.nodes) {
+        if (node.hasFocus && available(node)) return node;
+      }
+    }
+    if (_row >= 0 && _row < widget.sections.length) {
+      final nodes = widget.sections[_row].nodes;
+      if (nodes.isNotEmpty) {
+        final col = (_col[_row] ?? 0).clamp(0, nodes.length - 1);
+        if (available(nodes[col])) return nodes[col];
+        for (final node in nodes) {
+          if (available(node)) return node;
+        }
+      }
+    }
+    if (widget.hero.isNotEmpty && available(widget.heroNode)) {
+      return widget.heroNode;
+    }
+    for (final section in widget.sections) {
+      for (final node in section.nodes) {
+        if (available(node)) return node;
+      }
+    }
+    return null;
   }
 
   // ── paint ──────────────────────────────────────────────────────────────
@@ -1226,6 +1507,7 @@ class SpotlightBoardState extends State<SpotlightBoard> {
   }
 
   Widget _board(_M m, double heroH) {
+    _lastMetrics = m;
     _heroBandH = heroH;
     final app = AppThemeScope.of(context);
     final ground = SpotlightBoard.groundOf(app);
@@ -1303,31 +1585,22 @@ class SpotlightBoardState extends State<SpotlightBoard> {
     // clamps the offset during layout WITHOUT notifying the controller, so
     // the veil and the scrolled-away trailer gate would keep acting on an
     // offset the list no longer has — a hero veiled opaque with nothing left
-    // to scroll back from. Metrics changes on the board's own axis are rare
-    // (shelf batches, viewport resizes), so a rebuild is cheap; depth 0
-    // filters out every horizontal shelf list bubbling through.
+    // to scroll back from. Notify only the veil; extent estimates also change
+    // as differently sized shelves enter the lazy viewport during a fling.
+    // Depth 0 excludes the horizontal shelf lists.
     final content = NotificationListener<ScrollMetricsNotification>(
       onNotification: (n) {
         if (n.depth == 0) {
           // Always re-run the crossing detector — a clamped offset never
           // notifies the controller (cheap: no rebuild of its own).
           _onBoardScrolled();
-          // The rebuild exists ONLY for the touch veil, and only for the
-          // case the controller cannot report: a board reload that SHRINKS
-          // the list under a parked scroll is clamped during layout without
-          // notifying it. The continuous offset ramp is already covered —
-          // the veil's own `AnimatedBuilder` listens to `_scroll`.
-          //
-          // Gated on the EXTENT, because this notification arrives once per
-          // scrolled frame (see [_lastMaxExtent]). Ungated it rebuilt the
-          // hero and every shelf and card on the board every frame of every
-          // touch scroll, which is exactly the lag it was meant to avoid on
-          // TV — where it is skipped, so that path is unchanged.
+          // The controller already drives normal scrolling. Metrics changes
+          // cover silent layout corrections without rebuilding the shelves.
           if (!widget.dpad &&
               mounted &&
               n.metrics.maxScrollExtent != _lastMaxExtent) {
             _lastMaxExtent = n.metrics.maxScrollExtent;
-            setState(() {});
+            _veilMetricsRevision.value++;
           }
         }
         return false;
@@ -1434,7 +1707,7 @@ class SpotlightBoardState extends State<SpotlightBoard> {
     final item = _heroItem;
     if (item == null) return const SizedBox.shrink();
     final url = _heroArt(item);
-    final posterUrl = highQualityArtworkUrl(item.poster);
+    final posterUrl = _heroPoster(item);
     final app = AppThemeScope.of(context);
     final ground = SpotlightBoard.groundOf(app);
     final rolling = _rolling;
@@ -1449,7 +1722,7 @@ class SpotlightBoardState extends State<SpotlightBoard> {
       },
       onTap: () {
         final addon = widget.heroAddon;
-        if (addon != null) widget.onHeroOpen(item, addon);
+        if (addon != null) _openHero();
       },
       child: Stack(
         fit: StackFit.expand,
@@ -1464,11 +1737,9 @@ class SpotlightBoardState extends State<SpotlightBoard> {
               // 900 was under a 1080-class phone's physical width (390 × 3),
               // so the one full-bleed image on the screen was the soft one.
               // Clamped: metahub art tops out around 1920.
-              memCacheWidth: (MediaQuery.devicePixelRatioOf(context) *
-                      MediaQuery.sizeOf(context).width)
-                  .round()
-                  .clamp(720, 1920),
-              fadeInDuration: const Duration(milliseconds: 420),
+              memCacheWidth: _heroDecodeWidth,
+              fadeInDuration: _heroImageFadeIn,
+              fadeOutDuration: _heroImageFadeOut,
               placeholder: (_, __) => ColoredBox(color: ground),
               // Same guess-404 fallback as the wide backdrop: derived
               // metahub art can miss, and the poster beats a blank hero.
@@ -1566,7 +1837,7 @@ class SpotlightBoardState extends State<SpotlightBoard> {
         _HeroOpenPill(
           onTap: () {
             final addon = widget.heroAddon;
-            if (addon != null) widget.onHeroOpen(item, addon);
+            if (addon != null) _openHero();
           },
         ),
         if (widget.hero.length > 1) ...[
@@ -1603,7 +1874,7 @@ class SpotlightBoardState extends State<SpotlightBoard> {
       },
       onTap: () {
         final addon = widget.heroAddon;
-        if (addon != null) widget.onHeroOpen(item, addon);
+        if (addon != null) _openHero();
       },
       child: wide,
     );
@@ -1616,7 +1887,7 @@ class SpotlightBoardState extends State<SpotlightBoard> {
     final item = _heroItem;
     if (item == null) return const SizedBox.shrink();
     final url = _heroArt(item);
-    final posterUrl = highQualityArtworkUrl(item.poster);
+    final posterUrl = _heroPoster(item);
     final flip = _flip;
     // Both scrims below were tuned against a STILL, where they only have to
     // keep white text off busy artwork. Left at that strength over a moving
@@ -1654,13 +1925,9 @@ class SpotlightBoardState extends State<SpotlightBoard> {
             // TV keeps the 1400: its panels sit behind the box's own
             // upscaler and the decode budget there is the tighter constraint
             // (see TvHeroArtworkQuality).
-            memCacheWidth: widget.dpad
-                ? 1400
-                : (MediaQuery.devicePixelRatioOf(context) *
-                        MediaQuery.sizeOf(context).width)
-                    .round()
-                    .clamp(720, 1920),
-            fadeInDuration: const Duration(milliseconds: 420),
+            memCacheWidth: _heroDecodeWidth,
+            fadeInDuration: _heroImageFadeIn,
+            fadeOutDuration: _heroImageFadeOut,
             placeholder: (_, __) => ColoredBox(color: ground),
             // The derived metahub URL is a GUESS — when it 404s (no still
             // for that title), fall back to the poster rather than a flat
@@ -1789,7 +2056,7 @@ class SpotlightBoardState extends State<SpotlightBoard> {
             child: widget.dpad
                 ? _veil(ground, _row < 0 ? 0.0 : (_row == 0 ? 0.72 : 1.0))
                 : AnimatedBuilder(
-                    animation: _scroll,
+                    animation: Listenable.merge([_scroll, _veilMetricsRevision]),
                     builder: (context, _) {
                       final off = _scroll.hasClients ? _scroll.offset : 0.0;
                       final t = (off / (heroH * 0.8)).clamp(0.0, 1.0);
@@ -1939,13 +2206,13 @@ class SpotlightBoardState extends State<SpotlightBoard> {
   /// rail paginates as focus walks it — there is nothing to tap. The
   /// provenance pill is the one piece BOTH inputs wear: which addon fills a
   /// row is a fact on every device.
-  Widget _shelfTitle(SpotlightShelf section, _M m) {
+  TextStyle _shelfTitleStyle(_M m) {
     final fontSize = widget.dpad
         ? m.title
         : m.compact
             ? 22.0
             : (m.title < 24.0 ? 24.0 : m.title);
-    final style = TextStyle(
+    return TextStyle(
       fontSize: fontSize,
       fontWeight: widget.dpad ? FontWeight.w600 : FontWeight.w700,
       letterSpacing: widget.dpad ? 0.0 : -0.2,
@@ -1958,6 +2225,35 @@ class SpotlightBoardState extends State<SpotlightBoard> {
           .tx
           .withValues(alpha: widget.dpad ? 0.84 : 0.96),
     );
+  }
+
+  double _tvShelfExtent(SpotlightShelf section, _M m) {
+    double textHeight(String text, TextStyle style) {
+      final painter = TextPainter(
+        text: TextSpan(text: text, style: DefaultTextStyle.of(context).style.merge(style)),
+        textDirection: Directionality.of(context),
+        textScaler: MediaQuery.textScalerOf(context),
+        maxLines: 1,
+      )..layout();
+      final height = painter.height;
+      painter.dispose();
+      return height;
+    }
+    var header = textHeight(section.title, _shelfTitleStyle(m));
+    final tag = section.tag;
+    if (tag != null && tag.isNotEmpty) {
+      final size = m.title * .72;
+      final tagHeight = textHeight(tag.toUpperCase(), RowTagPill.textStyle(size)) +
+          size * .56 + 2; // vertical padding and the two 1px borders
+      if (tagHeight > header) header = tagHeight;
+    }
+    final cardHeight = _shelfCardHeight(section, m);
+    return 20 + header + m.liftUpFor(cardHeight) + cardHeight + m.liftDownFor(cardHeight);
+  }
+
+  Widget _shelfTitle(SpotlightShelf section, _M m) {
+    final style = _shelfTitleStyle(m);
+    final fontSize = style.fontSize!;
     final onSeeAll = section.onSeeAll;
     final Widget heading = (widget.dpad || onSeeAll == null)
         ? Text(
@@ -1997,9 +2293,7 @@ class SpotlightBoardState extends State<SpotlightBoard> {
     );
   }
 
-  Widget _shelf(int i, _M m) {
-    final section = widget.sections[i];
-    final nodes = section.nodes;
+  double _shelfCardHeight(SpotlightShelf section, _M m) {
     // Wide cards use their own rail width. Keeping the portrait card's
     // width makes a 16:9 tile too short to read, while keeping its height
     // makes it enormous and leaves only two titles on a TV row. The rule is
@@ -2008,9 +2302,15 @@ class SpotlightBoardState extends State<SpotlightBoard> {
     final uniformlyWide =
         section.items.isNotEmpty &&
         section.items.every((item) => item.shape.aspect > 1);
-    final cardHeight = uniformlyWide
+    return uniformlyWide
         ? m.wideCardW / SpotlightCardShape.wide.aspect
         : m.posterH;
+  }
+
+  Widget _shelf(int i, _M m) {
+    final section = widget.sections[i];
+    final nodes = section.nodes;
+    final cardHeight = _shelfCardHeight(section, m);
     // Caption-free rows off TV (see [SpotlightShelf.captions]); TV keeps its
     // overlay captions everywhere. Compact must also keep a caption whenever
     // a card carries metadata: otherwise portrait mode discards ratings and
@@ -2085,7 +2385,7 @@ class SpotlightBoardState extends State<SpotlightBoard> {
                 radius: m.radius,
                 captionBelow: m.compact && captions,
                 captionBlock: captions ? m.captionBlock : 0,
-                showCaption: captions,
+                showCaption: captions && section.items[c].showCaption,
                 showTitleAndRating: widget.showCardTitlesAndRatings,
                 hoverable: !widget.dpad,
                 dpad: widget.dpad,
@@ -2353,7 +2653,9 @@ class _Card extends StatefulWidget {
   State<_Card> createState() => _CardState();
 }
 
-class _CardState extends State<_Card> {
+class _CardState extends State<_Card> with MetadataPresentationMixin<_Card> {
+  @override
+  StremioMeta? get originalMetadata => widget.card.metadata;
   bool _f = false;
 
   /// DPAD centre is a key gesture, not a pointer long-press. Keep the short
@@ -2372,16 +2674,21 @@ class _CardState extends State<_Card> {
   final Object _previewOwner = Object();
   bool _previewActivityReported = false;
 
+  bool get _previewActive => widget.dpad
+      ? _f
+      : _h || (widget.card.previewOnKeyboardFocus && _f);
+
   void _setHover(bool hovered) {
     if (_h == hovered) return;
     setState(() => _h = hovered);
-    _reportDesktopPreviewActivity(hovered);
+    _reportDesktopPreviewActivity(_previewActive);
   }
 
   void _reportDesktopPreviewActivity(bool active) {
     final report = active &&
         !widget.dpad &&
-        widget.card.previewBuilder != null;
+        (widget.card.previewBuilder != null ||
+            widget.card.collectionVideoUrl != null);
     if (_previewActivityReported == report) return;
     _previewActivityReported = report;
     widget.onDesktopPreviewActivityChanged?.call(_previewOwner, report);
@@ -2391,7 +2698,10 @@ class _CardState extends State<_Card> {
   void didUpdateWidget(_Card oldWidget) {
     super.didUpdateWidget(oldWidget);
     final shouldReport =
-        _h && !widget.dpad && widget.card.previewBuilder != null;
+        _previewActive &&
+        !widget.dpad &&
+        (widget.card.previewBuilder != null ||
+            widget.card.collectionVideoUrl != null);
     if (_previewActivityReported && !shouldReport) {
       _previewActivityReported = false;
       oldWidget.onDesktopPreviewActivityChanged?.call(_previewOwner, false);
@@ -2426,8 +2736,19 @@ class _CardState extends State<_Card> {
     final decodeW = (w * MediaQuery.devicePixelRatioOf(context) * 1.1)
         .round()
         .clamp(100, 1000);
-    final url = c.image;
-    final fallbackUrl = c.fallbackImage;
+    final meta = presentedMetadata;
+    final changed = meta != null && !identical(meta, originalMetadata);
+    final pending = !c.episodeArtwork && metadataArtworkPending(
+      c.shape == SpotlightCardShape.wide ? MetadataCategory.backgrounds : MetadataCategory.posters);
+    final url = pending ? null : c.imageForPresentation(meta, metadataPreferences);
+    final displayedTitle = changed ? meta.name : c.title;
+    final fallbackUrl = c.imageErrorFallback(meta, metadataPreferences);
+    Widget artPlaceholder() => Center(child: Padding(
+      padding: const EdgeInsets.all(12),
+      child: Text(displayedTitle, maxLines: 2, overflow: TextOverflow.ellipsis,
+        textAlign: TextAlign.center,
+        style: TextStyle(color: app.core.tx.withValues(alpha: 0.5))),
+    ));
     final contained = c.shape.fit == BoxFit.contain;
     // The caption's second line — kind and/or rating, dot-joined. One line
     // whatever it carries, so the caption bed math stays two-state.
@@ -2436,7 +2757,7 @@ class _CardState extends State<_Card> {
       if (widget.showTitleAndRating && (c.rating ?? 0) > 0)
         '★ ${c.rating!.toStringAsFixed(1)}',
     ].join(' · ');
-    final hasTitle = widget.showTitleAndRating && c.title.isNotEmpty;
+    final hasTitle = widget.showTitleAndRating && displayedTitle.isNotEmpty;
     final hasSubtitle = metaLine.isNotEmpty;
     final hasCaptionContent = hasTitle || hasSubtitle;
     final preview = c.previewBuilder;
@@ -2444,7 +2765,7 @@ class _CardState extends State<_Card> {
     // follows the remote cursor. The preview is unmounted immediately when it
     // stops being active, which tears its player down instead of leaving a
     // decoder alive for every card crossed while browsing.
-    final previewActive = widget.dpad ? _f : _h;
+    final previewActive = _previewActive;
 
     // The gradient remains part of the artwork so it covers and clips to the
     // whole poster as that poster grows. Only the glyph layer is counter-
@@ -2476,7 +2797,7 @@ class _CardState extends State<_Card> {
                         children: [
                           if (hasTitle)
                             Text(
-                              c.title,
+                              displayedTitle,
                               maxLines: 1,
                               textAlign: TextAlign.center,
                               overflow: TextOverflow.ellipsis,
@@ -2537,6 +2858,10 @@ class _CardState extends State<_Card> {
                   contained ? 0.10 : 0.045,
                 )!,
               ),
+              if (c.coverEmoji != null)
+                Center(child: Padding(padding: const EdgeInsets.all(20), child: FittedBox(child: Text(c.coverEmoji!, style: const TextStyle(fontSize: 64))))),
+              if ((url == null || url.isEmpty) && c.metadata != null)
+                artPlaceholder(),
               if (url != null && url.isNotEmpty)
                 Padding(
                   // The breathing room around a contained mark keys off the
@@ -2547,7 +2872,7 @@ class _CardState extends State<_Card> {
                         ? (w < widget.height ? w : widget.height) * 0.14
                         : 0,
                   ),
-                  child: CachedNetworkImage(
+                  child: RecoverableNetworkImage(
                     imageUrl: url,
                     fit: c.shape.fit,
                     cacheManager: DebrifyImageCache.manager,
@@ -2564,28 +2889,35 @@ class _CardState extends State<_Card> {
                     // GPU actually pays for.
                     fadeInDuration: PlatformUtil.isAndroidTvCached
                         ? const Duration(milliseconds: 220)
-                        : const Duration(milliseconds: 500),
+                        : const Duration(milliseconds: 180),
                     fadeOutDuration: PlatformUtil.isAndroidTvCached
                         ? const Duration(milliseconds: 180)
-                        : const Duration(milliseconds: 1000),
-                    placeholder: (_, __) => const SizedBox.shrink(),
+                        : const Duration(milliseconds: 100),
+                    placeholder: (_, __) => artPlaceholder(),
                     errorWidget: (_, __, ___) =>
                         fallbackUrl != null &&
                             fallbackUrl.isNotEmpty &&
                             fallbackUrl != url
-                        ? CachedNetworkImage(
+                        ? RecoverableNetworkImage(
                             imageUrl: fallbackUrl,
                             fit: c.shape.fit,
                             cacheManager: DebrifyImageCache.manager,
                             memCacheWidth: decodeW,
                             fadeInDuration:
                                 const Duration(milliseconds: 220),
-                            placeholder: (_, __) => const SizedBox.shrink(),
+                            placeholder: (_, __) => artPlaceholder(),
                             errorWidget: (_, __, ___) =>
-                                const SizedBox.shrink(),
+                                artPlaceholder(),
                           )
-                        : const SizedBox.shrink(),
+                        : artPlaceholder(),
                   ),
+                ),
+              if (c.collectionGifUrl != null || c.collectionVideoUrl != null)
+                CollectionFocusArt(
+                  gifUrl: c.collectionGifUrl,
+                  videoUrl: c.collectionVideoUrl,
+                  focused: previewActive,
+                  applyGifPreference: true,
                 ),
               if (preview != null && previewActive)
                 // The art stays underneath until the first live frame lands,
@@ -2650,13 +2982,21 @@ class _CardState extends State<_Card> {
     // FocusExpressionBox: its parallax arm clips the glare at the theme's
     // scaled radius, and Spotlight's 0.7 shape scale would shrink the
     // shipped look's clip from 7 to 4.9.
-    final cursored = app.focus.expression == FocusExpression.parallax
+    final cursor = app.focus.expression == FocusExpression.parallax
         ? art
         : FocusExpressionBox(
             focused: _f || _h,
             radius: widget.radius,
             child: art,
           );
+
+    final cursored = CollectionFocusGlow(
+      active: _f || _h,
+      enabled: c.focusGlowEnabled,
+      imageUrl: c.image,
+      radius: widget.radius,
+      child: cursor,
+    );
 
     // Compact: art + its caption below, one Column — the caption is part of
     // the card so the tap target covers both. Keep the same metadata line as
@@ -2676,7 +3016,7 @@ class _CardState extends State<_Card> {
                       children: [
                         if (hasTitle)
                           Text(
-                            c.title,
+                            displayedTitle,
                             maxLines: 1,
                             textAlign: TextAlign.center,
                             overflow: TextOverflow.ellipsis,
@@ -2741,6 +3081,7 @@ class _CardState extends State<_Card> {
       skipTraversal: true,
       onFocusChange: (v) {
         setState(() => _f = v);
+        _reportDesktopPreviewActivity(_previewActive);
         if (!v) _hold.reset();
         if (v && context.findRenderObject() is RenderBox) {
           Scrollable.ensureVisible(

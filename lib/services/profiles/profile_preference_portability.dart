@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'profile_preferences.dart';
+import 'subtitle_appearance_preferences.dart';
 
 /// Portability policy for encrypted profile backups and authenticated profile
 /// transfers.
@@ -15,7 +16,9 @@ abstract final class ProfilePreferencePortability {
     String key, {
     bool includeCredentialEngineSettings = false,
   }) {
+    if (key == 'remote_home_collections_v2') return true;
     if (key.isEmpty || key.length > 256) return false;
+    if (key == 'resolved_playback_links_v1') return false;
     final credentialShaped = _credentialPattern.hasMatch(key);
     final portableEngineCredential =
         includeCredentialEngineSettings && key.startsWith('engine_');
@@ -74,10 +77,10 @@ abstract final class ProfilePreferencePortability {
           ? (include: false, value: null)
           : (include: true, value: value);
     }
-    if (key == 'subtitle_selected_font_id' &&
-        value is String &&
-        value.startsWith('custom_')) {
-      return (include: false, value: null);
+    if (key == SubtitleAppearancePreferences.selectedFontKey) {
+      return SubtitleAppearancePreferences.isBuiltInFontId(value)
+          ? (include: true, value: value)
+          : (include: false, value: null);
     }
     return (include: true, value: value);
   }
@@ -168,6 +171,7 @@ abstract final class ProfilePreferencePortability {
   };
 
   static const Set<String> _playbackExecutionFields = <String>{
+    'recoverycheckpointid',
     'url',
     'videourl',
     'streamurl',

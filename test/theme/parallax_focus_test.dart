@@ -24,7 +24,10 @@ void main() {
       MaterialApp(
         home: MediaQuery(
           data: MediaQueryData(disableAnimations: reduceMotion),
-          child: AppThemeScope(theme: theme, child: Center(child: child)),
+          child: AppThemeScope(
+            theme: theme,
+            child: Center(child: child),
+          ),
         ),
       );
 
@@ -35,23 +38,22 @@ void main() {
   AppTheme themeWith(
     FocusExpression e, {
     MotionCharacter m = MotionCharacter.settle,
-  }) =>
-      ThemeSpec(
-        id: 'probe',
-        label: 'Probe',
-        subtitle: 'test fixture',
-        ground: const Color(0xFF101010),
-        sunken: const Color(0xFF0A0A0A),
-        raised: const Color(0xFF1A1A1A),
-        ink: const Color(0xFFFFFFFF),
-        accent: const Color(0xFFFFFFFF),
-        separation: SeparationModel.fill,
-        scrim: ScrimStyle.bottomGradient,
-        frame: ArtFrame.bleed,
-        focusExpression: e,
-        motion: m,
-        radius: 7,
-      ).build();
+  }) => ThemeSpec(
+    id: 'probe',
+    label: 'Probe',
+    subtitle: 'test fixture',
+    ground: const Color(0xFF101010),
+    sunken: const Color(0xFF0A0A0A),
+    raised: const Color(0xFF1A1A1A),
+    ink: const Color(0xFFFFFFFF),
+    accent: const Color(0xFFFFFFFF),
+    separation: SeparationModel.fill,
+    scrim: ScrimStyle.bottomGradient,
+    frame: ArtFrame.bleed,
+    focusExpression: e,
+    motion: m,
+    radius: 7,
+  ).build();
 
   group('the spring', () {
     test('settle carries a spring; every other character does not', () {
@@ -69,8 +71,9 @@ void main() {
       // The failure this guards is silent: ThemeSpec does
       // `MotionTokens.of(c).copyWith(entrance: …)`, so a copyWith that forgets
       // the field leaves every themed surface on the curve path with no error.
-      final copied = MotionTokens.of(MotionCharacter.settle)
-          .copyWith(entrance: EntranceStyle.fadeUp);
+      final copied = MotionTokens.of(
+        MotionCharacter.settle,
+      ).copyWith(entrance: EntranceStyle.fadeUp);
       expect(copied.focusSpring, isNotNull);
       expect(copied.entrance, EntranceStyle.fadeUp);
     });
@@ -117,12 +120,12 @@ void main() {
 
     testWidgets('lifts on focus and settles back', (tester) async {
       Widget build(bool focused) => host(
-            themeWith(FocusExpression.parallax),
-            ParallaxFocus(
-              focused: focused,
-              child: const SizedBox(width: 100, height: 60),
-            ),
-          );
+        themeWith(FocusExpression.parallax),
+        ParallaxFocus(
+          focused: focused,
+          child: const SizedBox(width: 100, height: 60),
+        ),
+      );
 
       await tester.pumpWidget(build(false));
       final rest = tester.getRect(find.byType(SizedBox).first).width;
@@ -154,14 +157,21 @@ void main() {
       // What matters is that an overshoot exists at all, which a decelerating
       // curve cannot produce.
       final overshoot = peak - settled;
-      expect(overshoot, greaterThan(0.04),
-          reason: 'it must OVERSHOOT — the whole difference from an ease-out');
-      expect(overshoot, lessThan(0.5),
-          reason: 'but not bounce: ζ 0.82, not 0.4');
+      expect(
+        overshoot,
+        greaterThan(0.04),
+        reason: 'it must OVERSHOOT — the whole difference from an ease-out',
+      );
+      expect(
+        overshoot,
+        lessThan(0.5),
+        reason: 'but not bounce: ζ 0.82, not 0.4',
+      );
     });
 
-    testWidgets('reduced motion lands on the lifted state immediately',
-        (tester) async {
+    testWidgets('reduced motion lands on the lifted state immediately', (
+      tester,
+    ) async {
       await tester.pumpWidget(
         host(
           themeWith(FocusExpression.parallax),
@@ -193,20 +203,21 @@ void main() {
       expect(w, closeTo(100 * ParallaxShape.poster.scale, 0.5));
     });
 
-    testWidgets('the tilt swings THROUGH neutral, not in one direction only',
-        (tester) async {
+    testWidgets('the tilt swings THROUGH neutral, not in one direction only', (
+      tester,
+    ) async {
       // The defect this pins: deriving tilt from a bell curve over the
       // controller's POSITION can only ever lean one way — it rises, hits
       // zero at the top, and leans the same way again on the rebound. Riding
       // the spring's VELOCITY reverses the lean when the spring reverses,
       // which is what "kick the rotation and let it swing back" means.
       Widget build(bool focused) => host(
-            themeWith(FocusExpression.parallax),
-            ParallaxFocus(
-              focused: focused,
-              child: const SizedBox(width: 100, height: 60),
-            ),
-          );
+        themeWith(FocusExpression.parallax),
+        ParallaxFocus(
+          focused: focused,
+          child: const SizedBox(width: 100, height: 60),
+        ),
+      );
       await tester.pumpWidget(build(false));
       ParallaxTravel.note(const Offset(1, 0));
       await tester.pumpWidget(build(true));
@@ -230,14 +241,21 @@ void main() {
       }
       await tester.pumpAndSettle();
 
-      expect(sawPositive && sawNegative, isTrue,
-          reason: 'the lean must reverse as the spring rebounds');
-      expect(shiftX(), closeTo(0, 0.01),
-          reason: 'and end flat — the lean is an arrival, not a pose');
+      expect(
+        sawPositive && sawNegative,
+        isTrue,
+        reason: 'the lean must reverse as the spring rebounds',
+      );
+      expect(
+        shiftX(),
+        closeTo(0, 0.01),
+        reason: 'and end flat — the lean is an arrival, not a pose',
+      );
     });
 
-    testWidgets('a focused card holds no RUNNING ticker once settled',
-        (tester) async {
+    testWidgets('a focused card holds no RUNNING ticker once settled', (
+      tester,
+    ) async {
       await tester.pumpWidget(
         host(
           themeWith(FocusExpression.parallax),
@@ -251,38 +269,33 @@ void main() {
       expect(tester.hasRunningAnimations, isFalse);
     });
 
-    testWidgets('a fixed-scale caption follows the card without growing',
-        (tester) async {
+    testWidgets('a fixed-scale caption follows the card without growing', (
+      tester,
+    ) async {
       Widget build(bool focused) => host(
-            themeWith(FocusExpression.parallax),
-            ParallaxFocus(
-              focused: focused,
-              fixedScaleForeground: const Align(
-                alignment: Alignment.bottomCenter,
-                child: SizedBox(
-                  key: ValueKey('caption'),
-                  width: 40,
-                  height: 10,
-                ),
-              ),
-              child: const SizedBox(
-                key: ValueKey('art'),
-                width: 100,
-                height: 60,
-              ),
-            ),
-          );
+        themeWith(FocusExpression.parallax),
+        ParallaxFocus(
+          focused: focused,
+          fixedScaleForeground: const Align(
+            alignment: Alignment.bottomCenter,
+            child: SizedBox(key: ValueKey('caption'), width: 40, height: 10),
+          ),
+          child: const SizedBox(key: ValueKey('art'), width: 100, height: 60),
+        ),
+      );
 
       await tester.pumpWidget(build(false));
       final restingArt = tester.getRect(find.byKey(const ValueKey('art')));
-      final restingCaption =
-          tester.getRect(find.byKey(const ValueKey('caption')));
+      final restingCaption = tester.getRect(
+        find.byKey(const ValueKey('caption')),
+      );
 
       await tester.pumpWidget(build(true));
       await tester.pumpAndSettle();
       final liftedArt = tester.getRect(find.byKey(const ValueKey('art')));
-      final liftedCaption =
-          tester.getRect(find.byKey(const ValueKey('caption')));
+      final liftedCaption = tester.getRect(
+        find.byKey(const ValueKey('caption')),
+      );
 
       expect(liftedArt.width, closeTo(restingArt.width * 1.1, 0.5));
       expect(
@@ -321,15 +334,18 @@ void main() {
       var now = Duration.zero;
       ParallaxTravel.clock = () => now;
 
-      ParallaxTravel.note(const Offset(1, 0));   // first move of a burst
-      expect(ParallaxTravel.take().rapid, isFalse,
-          reason: 'an isolated step is not a traversal');
+      ParallaxTravel.note(const Offset(1, 0)); // first move of a burst
+      expect(
+        ParallaxTravel.take().rapid,
+        isFalse,
+        reason: 'an isolated step is not a traversal',
+      );
 
-      now += const Duration(milliseconds: 90);   // held down
+      now += const Duration(milliseconds: 90); // held down
       ParallaxTravel.note(const Offset(1, 0));
       expect(ParallaxTravel.take().rapid, isTrue);
 
-      now += const Duration(milliseconds: 900);  // thought about it
+      now += const Duration(milliseconds: 900); // thought about it
       ParallaxTravel.note(const Offset(1, 0));
       expect(ParallaxTravel.take().rapid, isFalse);
     });
@@ -349,7 +365,9 @@ void main() {
   });
 
   group('the expression is wired into the shared cursor', () {
-    testWidgets('FocusExpressionBox delegates to ParallaxFocus', (tester) async {
+    testWidgets('FocusExpressionBox delegates to ParallaxFocus', (
+      tester,
+    ) async {
       await tester.pumpWidget(
         host(
           themeWith(FocusExpression.parallax),
@@ -380,19 +398,54 @@ void main() {
   group('the Android TV lite body', () {
     setUp(ParallaxTravel.resetForTest);
 
-    testWidgets('keeps the lift, sheds the glare and the rounded clip',
-        (tester) async {
+    testWidgets('rich TV keeps the finished highlight but uses a cheap move', (
+      tester,
+    ) async {
+      PlatformUtil.debugSetAndroidTvCached(true);
+      addTearDown(() => PlatformUtil.debugSetAndroidTvCached(null));
+      Widget build(bool focused) => host(
+        themeWith(FocusExpression.parallax),
+        ParallaxRichScope(
+          child: ParallaxFocus(
+            focused: focused,
+            radius: BorderRadius.circular(7),
+            child: const SizedBox(width: 100, height: 60),
+          ),
+        ),
+      );
+      await tester.pumpWidget(build(false));
+      await tester.pumpWidget(build(true));
+      await tester.pump(const Duration(milliseconds: 70));
+      expect(find.byType(ClipRRect), findsNothing);
+      await tester.pumpAndSettle();
+      expect(find.byType(ClipRRect), findsOneWidget);
+      final width = tester.getRect(find.byType(SizedBox).first).width;
+      expect(width, closeTo(100 * ParallaxShape.poster.scale, 0.5));
+      // An interrupted departure must not restore a highlight on the old card.
+      await tester.pumpWidget(build(false));
+      await tester.pump(const Duration(milliseconds: 40));
+      await tester.pumpWidget(build(true));
+      await tester.pump(const Duration(milliseconds: 40));
+      expect(find.byType(ClipRRect), findsNothing);
+      await tester.pumpWidget(build(false));
+      await tester.pumpAndSettle();
+      expect(find.byType(ClipRRect), findsNothing);
+    });
+
+    testWidgets('keeps the lift, sheds the glare and the rounded clip', (
+      tester,
+    ) async {
       PlatformUtil.debugSetAndroidTvCached(true);
       addTearDown(() => PlatformUtil.debugSetAndroidTvCached(null));
 
       Widget build(bool focused) => host(
-            themeWith(FocusExpression.parallax),
-            ParallaxFocus(
-              focused: focused,
-              radius: BorderRadius.circular(7),
-              child: const SizedBox(width: 100, height: 60),
-            ),
-          );
+        themeWith(FocusExpression.parallax),
+        ParallaxFocus(
+          focused: focused,
+          radius: BorderRadius.circular(7),
+          child: const SizedBox(width: 100, height: 60),
+        ),
+      );
 
       await tester.pumpWidget(build(false));
       final rest = tester.getRect(find.byType(SizedBox).first).width;
@@ -410,9 +463,11 @@ void main() {
       expect(find.byType(ClipRRect), findsNothing);
       final glare = tester
           .widgetList<DecoratedBox>(find.byType(DecoratedBox))
-          .where((d) =>
-              d.decoration is BoxDecoration &&
-              (d.decoration as BoxDecoration).gradient is RadialGradient);
+          .where(
+            (d) =>
+                d.decoration is BoxDecoration &&
+                (d.decoration as BoxDecoration).gradient is RadialGradient,
+          );
       expect(glare, isEmpty);
     });
   });

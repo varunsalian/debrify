@@ -138,10 +138,9 @@ void main() {
   );
 
   test(
-    'committed Linux registry without a wrapped key requests vault creation',
+    'committed Linux registry without a wrapped key unlocks automatically',
     () async {
       DeviceKeyProvider.debugLinuxOverride = true;
-      const passphrase = 'new Linux vault passphrase';
 
       final registry = await ProfileRegistry.open();
       final admin = await registry.createProfile(
@@ -156,14 +155,35 @@ void main() {
 
       await ProfileBootstrap.initialize();
 
-      expect(ProfileBootstrap.requiresLinuxVault, isTrue);
-      expect(ProfileBootstrap.linuxVaultAlreadyConfigured, isFalse);
-
-      await ProfileBootstrap.completeLinuxVault(passphrase);
+      expect(ProfileBootstrap.requiresLinuxVault, isFalse);
+      expect(DeviceKeyProvider.linuxAutoUnlockEnabled, isTrue);
 
       expect(DeviceKeyProvider.isUnlocked, isTrue);
       expect(await DeviceKeyProvider.linuxHasWrappedKey(), isTrue);
       expect(ProfileBootstrap.requiresLinuxVault, isFalse);
+    },
+  );
+
+  test(
+    'automatic Linux vault does not classify a fresh install as legacy',
+    () async {
+      DeviceKeyProvider.debugLinuxOverride = true;
+      await ProfileBootstrap.initialize();
+      expect(DeviceKeyProvider.linuxAutoUnlockEnabled, isTrue);
+      expect(ProfileBootstrap.requiresLinuxVault, isFalse);
+      expect(
+        (await ProfileBootstrap.registry.activeProfile())?.id,
+        ProfileBootstrap.freshAdminId,
+      );
+      final prefs = await SharedPreferences.getInstance();
+      expect(
+        prefs.getKeys().where(
+          (key) =>
+              key.startsWith('p.') &&
+              key.endsWith(DeviceKeyProvider.linuxStateKey),
+        ),
+        isEmpty,
+      );
     },
   );
 

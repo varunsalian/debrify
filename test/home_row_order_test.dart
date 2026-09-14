@@ -11,6 +11,48 @@ void main() {
 
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
+  test('default families put every CW provider before all collections', () {
+    final rows = [
+      'collection:pinned',
+      'fav:playlist',
+      ...HomeRowOrder.continueWatchingIds,
+      'traktlist:watchlist',
+      'collection:ordinary',
+      'addon:top',
+    ];
+    expect(HomeRowOrder.defaults(rows, (id) => id), [
+      ...HomeRowOrder.continueWatchingIds,
+      'collection:pinned',
+      'collection:ordinary',
+      'fav:playlist',
+      'traktlist:watchlist',
+      'addon:top',
+    ]);
+  });
+
+  test('new collections preserve manual and unavailable positions', () {
+    const saved = [
+      'collection:old',
+      'addon:missing',
+      'cw:movies',
+      'fav:playlist',
+    ];
+    expect(
+      HomeRowOrder.seedCollections(saved, ['collection:new', 'collection:old']),
+      [
+        'collection:old',
+        'addon:missing',
+        'cw:movies',
+        'collection:new',
+        'fav:playlist',
+      ],
+    );
+    expect(HomeRowOrder.seedCollections(['fav:playlist'], ['collection:new']), [
+      'collection:new',
+      'fav:playlist',
+    ]);
+  });
+
   test('saved order round-trips, deduplicates, and clears', () async {
     await StorageService.setHomeRowOrder([
       'fav:playlist',

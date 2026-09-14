@@ -23,6 +23,9 @@ class Torrent {
 
   // Direct URL for non-torrent streams (directUrl or externalUrl types)
   final String? directUrl;
+  final Map<String, String>? httpHeaders;
+  final String? stremioBingeGroup;
+  final String? stremioVideoId;
 
   // Full torrent acquisition URLs from indexers. Prefer magnetUrl when present;
   // torrentUrl is usually a protected .torrent download URL.
@@ -46,6 +49,13 @@ class Torrent {
   final String? transformedTitle; // The improved, user-friendly title
   final String? episodeIdentifier; // e.g., "S01E01" for what's being played
 
+  /// The addon's short stream label ("Torrentio 4K RD+") and its description
+  /// block. Neither survives in [name] (the filename or stream title), and
+  /// imported stream badge rules match on this text too. Null for non-addon
+  /// sources.
+  final String? streamLabel;
+  final String? streamDescription;
+
   Torrent({
     required this.rowid,
     required this.infohash,
@@ -60,6 +70,9 @@ class Torrent {
     String? source,
     this.streamType = StreamType.torrent,
     this.directUrl,
+    this.httpHeaders,
+    this.stremioBingeGroup,
+    this.stremioVideoId,
     this.magnetUrl,
     this.torrentUrl,
     this.hasRealInfoHash = true,
@@ -73,7 +86,21 @@ class Torrent {
     this.seasonNumber,
     this.transformedTitle,
     this.episodeIdentifier,
+    this.streamLabel,
+    this.streamDescription,
   }) : source = (source ?? '').trim().toLowerCase();
+
+  /// The *description* half of the stream badge matcher's input ([name] is
+  /// the other half): [streamLabel] and [streamDescription] as one block,
+  /// null when neither is set.
+  String? get badgeDescription {
+    final parts = [
+      if (streamLabel != null && streamLabel!.isNotEmpty) streamLabel!,
+      if (streamDescription != null && streamDescription!.isNotEmpty)
+        streamDescription!,
+    ];
+    return parts.isEmpty ? null : parts.join('\n');
+  }
 
   /// Whether this is a direct playable stream (not torrent)
   bool get isDirectStream => streamType == StreamType.directUrl;
@@ -141,6 +168,9 @@ class Torrent {
       source: rawSource?.toString(),
       streamType: streamType,
       directUrl: json['direct_url'] as String?,
+      httpHeaders: (json['http_headers'] as Map?)?.cast<String, String>(),
+      stremioBingeGroup: json['stremio_binge_group'] as String?,
+      stremioVideoId: json['stremio_video_id'] as String?,
       magnetUrl: (json['magnet_url'] ?? json['magnet'])?.toString(),
       torrentUrl: (json['torrent_url'] ?? json['download_url'])?.toString(),
       hasRealInfoHash: json['has_real_infohash'] as bool? ?? true,
@@ -154,6 +184,8 @@ class Torrent {
       seasonNumber: json['season_number'] as int?,
       transformedTitle: json['transformed_title']?.toString(),
       episodeIdentifier: json['episode_identifier']?.toString(),
+      streamLabel: json['stream_label']?.toString(),
+      streamDescription: json['stream_description']?.toString(),
     );
   }
 
@@ -172,6 +204,9 @@ class Torrent {
       if (source.isNotEmpty) 'source': source,
       if (streamType != StreamType.torrent) 'stream_type': streamType.name,
       if (directUrl != null) 'direct_url': directUrl,
+      if (httpHeaders != null) 'http_headers': httpHeaders,
+      if (stremioBingeGroup != null) 'stremio_binge_group': stremioBingeGroup,
+      if (stremioVideoId != null) 'stremio_video_id': stremioVideoId,
       if (magnetUrl != null) 'magnet_url': magnetUrl,
       if (torrentUrl != null) 'torrent_url': torrentUrl,
       if (!hasRealInfoHash) 'has_real_infohash': hasRealInfoHash,
@@ -186,6 +221,8 @@ class Torrent {
       if (seasonNumber != null) 'season_number': seasonNumber,
       if (transformedTitle != null) 'transformed_title': transformedTitle,
       if (episodeIdentifier != null) 'episode_identifier': episodeIdentifier,
+      if (streamLabel != null) 'stream_label': streamLabel,
+      if (streamDescription != null) 'stream_description': streamDescription,
     };
   }
 

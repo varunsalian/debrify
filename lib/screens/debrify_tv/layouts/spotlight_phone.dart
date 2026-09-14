@@ -185,6 +185,13 @@ class _SpotlightPhoneArmState extends State<SpotlightPhoneArm> {
                           ? null
                           : view.onExport,
                     ),
+                    _PhoneAction(
+                      icon: Icons.delete_sweep_rounded,
+                      label: 'Delete all',
+                      onTap: view.busy || allChannels.isEmpty
+                          ? null
+                          : view.onDeleteAll,
+                    ),
                   ],
                 ),
                 const SizedBox(height: 14),

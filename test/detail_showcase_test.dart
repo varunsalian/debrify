@@ -1,3 +1,8 @@
+import 'package:debrify/services/metadata_explore_service.dart';
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:debrify/widgets/detail/showcase_availability.dart';
+import 'package:debrify/models/metadata_preferences.dart';
+import 'package:debrify/screens/metadata_explore_page.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -77,8 +82,12 @@ DetailModel _model({
   List<StremioMeta> recs = const [],
   void Function(bool)? onDepth,
   VoidCallback? onPrimary,
+  VoidCallback? onExplore,
   VoidCallback? onPrimaryLongPress,
   bool openingDataReady = true,
+  DetailFocusCoordinator? focus,
+  bool peopleEnabled = false,
+  Set<MetadataFeature>? features,
 }) {
   final item = StremioMeta(
     id: 'tt0903747',
@@ -91,13 +100,14 @@ DetailModel _model({
   );
   return DetailModel(
     item: item,
+    metadataPreferences: MetadataPreferences(features: features ?? {if (peopleEnabled) MetadataFeature.people}),
     isMovie: isMovie,
     isTelevision: true,
     accent: const Color(0xFFABA124),
     imdbExtra: withCast
         ? const ImdbEnrichment(
             cast: [
-              CastMember(name: 'A Person', character: 'Someone'),
+              CastMember(name: 'A Person', character: 'Someone', tmdbPersonId: 42),
               CastMember(name: 'B Person', character: 'Someone Else'),
             ],
           )
@@ -130,6 +140,7 @@ DetailModel _model({
     onTrailer: () {},
     onSelectSource: () {},
     onAppMenu: () {},
+    onMetadataExplore: onExplore,
     onTraktMenu: () {},
     onSimklMenu: () {},
     onMdblistMenu: () {},
@@ -142,7 +153,7 @@ DetailModel _model({
     onRecommendationTap: (_) {},
     onAmbientStill: (_) {},
     onDepth: onDepth,
-    focus: DetailFocusCoordinator(
+    focus: focus ?? DetailFocusCoordinator(
       backNode: FocusNode(debugLabel: 'test-back'),
       primaryEntry: FocusNode(debugLabel: 'test-primary'),
     ),
@@ -158,6 +169,7 @@ Widget _host(
   bool manySeasons = true,
   int count = 5,
   bool tall = false,
+  MetadataExploreService? exploreService,
 }) => MediaQuery(
   data: MediaQueryData(size: tall ? const Size(960, 2000) : _tv),
   child: MaterialApp(
@@ -177,6 +189,7 @@ Widget _host(
             ),
             DetailShowcase(
               model: m,
+              exploreService: exploreService,
               episodesHost: m.isMovie
                   ? null
                   : (builder) => Builder(
@@ -207,7 +220,163 @@ Future<void> _press(WidgetTester t, LogicalKeyboardKey k) async {
   await t.pump(const Duration(milliseconds: 320));
 }
 
+class _ExploreFixture extends MetadataExploreService {
+  int calls = 0;
+  int failures = 0;
+  @override
+  Future<MetadataExploreData> details(StremioMeta item, MetadataPreferences prefs) async {
+    calls++;
+    if (failures-- > 0) throw Exception('Temporary failure');
+    return const MetadataExploreData(
+      companies: [{'id': 97, 'name': 'Castle Rock Entertainment'}],
+      providers: {'flatrate': [{'provider_name': 'Philo'}],
+        'rent': [{'provider_name': 'Apple TV Store'}]},
+      providerLink: 'https://www.themoviedb.org/movie/1/watch',
+    );
+  }
+}
+
 void main() {
+  testWidgets('showcase extras retry temporary failures and stop after disposal', (tester) async {
+    final service = _ExploreFixture()..failures = 1;
+    await tester.pumpWidget(_host(_model(isMovie: true,
+      features: {MetadataFeature.companies}), exploreService: service));
+    await tester.pump();
+    expect(service.calls, 1);
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pump();
+    expect(service.calls, 2);
+    await tester.pumpWidget(const SizedBox());
+    final failing = _ExploreFixture()..failures = 10;
+    await tester.pumpWidget(_host(_model(isMovie: true,
+      features: {MetadataFeature.availability}), exploreService: failing));
+    await tester.pump();
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(seconds: 5));
+    expect(failing.calls, 1);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('disabling extras removes rows and stops requests', (tester) async {
+    _surface(tester, const Size(960, 2200));
+    final service = _ExploreFixture();
+    await tester.pumpWidget(_host(_model(isMovie: true,
+      features: {MetadataFeature.companies}), tall: true, exploreService: service));
+    await tester.pumpAndSettle();
+    expect(service.calls, 1);
+    await tester.pumpWidget(_host(_model(isMovie: true, features: {}),
+      tall: true, exploreService: service));
+    await tester.pumpAndSettle();
+    expect(find.byType(ShowcaseAvailabilityBand), findsNothing);
+    expect(service.calls, 1);
+  });
+
+  testWidgets('availability bands follow recommendations and participate in the DPAD ladder', (tester) async {
+    _surface(tester, const Size(960, 2200));
+    final service = _ExploreFixture();
+    await tester.pumpWidget(_host(_model(isMovie: true,
+      features: {MetadataFeature.companies, MetadataFeature.availability},
+      recs: [const StremioMeta(id: 'tmdb:2', type: 'movie', name: 'Related')]),
+      tall: true, exploreService: service));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.text('Studios & networks'), 500,
+      scrollable: find.byType(Scrollable).first);
+    await tester.pumpAndSettle();
+    final bands = tester.widgetList<ShowcaseAvailabilityBand>(find.byType(ShowcaseAvailabilityBand)).toList();
+    expect(bands.map((b) => b.row.key), ['studios', 'watch-flatrate', 'watch-rent', 'watch-attribution']);
+    expect(tester.getTopLeft(find.byType(ShowcaseAvailabilityBand).first).dy,
+      greaterThan(tester.getTopLeft(find.byType(ShowcaseRecs)).dy));
+    bands.first.nodes.first.requestFocus();
+    await tester.pumpAndSettle();
+    await _press(tester, LogicalKeyboardKey.arrowDown);
+    expect(bands[1].nodes.first.hasFocus, isTrue);
+    await _press(tester, LogicalKeyboardKey.arrowUp);
+    expect(bands.first.nodes.first.hasFocus, isTrue);
+    await _press(tester, LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    final destination = tester.widget<MetadataBrowsePage>(find.byType(MetadataBrowsePage));
+    expect(destination.id, 97);
+    expect(destination.kind, 'company');
+    expect(service.calls, 1);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('disabled showcase extras issue no requests', (tester) async {
+    final service = _ExploreFixture();
+    await tester.pumpWidget(_host(_model(isMovie: true, features: {}), exploreService: service));
+    await tester.pumpAndSettle();
+    expect(service.calls, 0);
+    expect(find.byType(ShowcaseAvailabilityBand), findsNothing);
+  });
+
+  for (final enabled in [false, true]) {
+    testWidgets('Showcase person navigation respects feature toggle $enabled', (tester) async {
+      _surface(tester, const Size(960, 1400));
+      await tester.pumpWidget(_host(_model(isMovie: true, peopleEnabled: enabled), tall: true));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('A Person'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('A Person'));
+      await tester.pumpAndSettle();
+      expect(find.byType(MetadataBrowsePage), enabled ? findsOneWidget : findsNothing);
+      if (enabled) {
+        final page = tester.widget<MetadataBrowsePage>(find.byType(MetadataBrowsePage));
+        expect(page.id, 42);
+        expect(page.kind, 'person');
+        expect(page.title, 'A Person');
+        expect(page.isTelevision, isTrue);
+      }
+      await tester.pumpWidget(const SizedBox());
+    });
+  }
+
+  for (final enabled in [false, true]) {
+    for (final personId in [null, 42]) {
+      testWidgets('cast opens by tap and remote only with an enabled person link enabled=$enabled id=$personId', (tester) async {
+        tester.view.physicalSize = _tv;
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        final node = FocusNode();
+        addTearDown(node.dispose);
+        var opens = 0;
+        final member = CastMember(name: 'Actor', character: 'Role', tmdbPersonId: personId);
+        await tester.pumpWidget(MaterialApp(home: AppThemeScope(
+          theme: AppThemes.legacy,
+          child: Scaffold(body: ShowcaseCast(cast: [member], nodes: [node],
+            onPersonOpen: enabled ? (person) { expect(person, same(member)); opens++; } : null)),
+        )));
+        await tester.tap(find.text('Actor'));
+        await tester.pump();
+        final expected = enabled && personId != null ? 1 : 0;
+        expect(opens, expected);
+        node.requestFocus();
+        await tester.pump();
+        await tester.sendKeyEvent(LogicalKeyboardKey.select);
+        expect(opens, expected * 2);
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox());
+      });
+    }
+  }
+
+  testWidgets('Explore is a registered Showcase action for the remote', (tester) async {
+    tester.view.physicalSize = _tv;
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    var opens = 0;
+    final model = _model(onExplore: () => opens++);
+    await tester.pumpWidget(_host(model));
+    await tester.pump(const Duration(seconds: 2));
+    expect(find.byIcon(Icons.explore_outlined), findsOneWidget);
+    Focus.of(tester.element(find.byIcon(Icons.explore_outlined))).requestFocus();
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pump();
+    expect(opens, 1);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('Showcase Play hold invokes sources without also playing', (
     tester,
   ) async {
@@ -231,10 +400,10 @@ void main() {
   });
 
   testWidgets(
-    'TV holds a composed opening skeleton before revealing Showcase',
+    'tvOS holds a composed opening skeleton before revealing Showcase',
     (tester) async {
-      PlatformUtil.debugSetAndroidTvCached(true);
-      addTearDown(() => PlatformUtil.debugSetAndroidTvCached(null));
+      PlatformUtil.debugSetTvOS(true);
+      addTearDown(() => PlatformUtil.debugSetTvOS(null));
       _surface(tester, _tv);
       final model = _model();
 
@@ -260,11 +429,11 @@ void main() {
     },
   );
 
-  testWidgets('TV reveal preserves focus deliberately moved to shell chrome', (
+  testWidgets('tvOS reveal preserves focus deliberately moved to shell chrome', (
     tester,
   ) async {
-    PlatformUtil.debugSetAndroidTvCached(true);
-    addTearDown(() => PlatformUtil.debugSetAndroidTvCached(null));
+    PlatformUtil.debugSetTvOS(true);
+    addTearDown(() => PlatformUtil.debugSetTvOS(null));
     _surface(tester, _tv);
     final model = _model();
 
@@ -286,11 +455,11 @@ void main() {
     expect(model.focus.primaryEntry.hasFocus, isFalse);
   });
 
-  testWidgets('TV gate stays composed while opening metadata is pending', (
+  testWidgets('tvOS gate stays composed while opening metadata is pending', (
     tester,
   ) async {
-    PlatformUtil.debugSetAndroidTvCached(true);
-    addTearDown(() => PlatformUtil.debugSetAndroidTvCached(null));
+    PlatformUtil.debugSetTvOS(true);
+    addTearDown(() => PlatformUtil.debugSetTvOS(null));
     _surface(tester, _tv);
     final loading = _model(openingDataReady: false);
 
@@ -301,6 +470,57 @@ void main() {
       find.byKey(const ValueKey('showcase-tv-opening-skeleton')),
       findsOneWidget,
     );
+  });
+
+  testWidgets('Android TV can activate details before opening metadata arrives', (
+    tester,
+  ) async {
+    PlatformUtil.debugSetAndroidTvCached(true);
+    addTearDown(() => PlatformUtil.debugSetAndroidTvCached(null));
+    _surface(tester, _tv);
+    var plays = 0;
+    final model = _model(openingDataReady: false, onPrimary: () => plays++);
+    await tester.pumpWidget(_host(model));
+    await tester.pump();
+    expect(find.byKey(const ValueKey('showcase-tv-opening-skeleton')), findsNothing);
+    expect(model.focus.primaryEntry.hasFocus, isTrue);
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    expect(plays, 1);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Android TV late metadata does not steal shell focus', (tester) async {
+    PlatformUtil.debugSetAndroidTvCached(true);
+    addTearDown(() => PlatformUtil.debugSetAndroidTvCached(null));
+    _surface(tester, _tv);
+    final model = _model(openingDataReady: false, withCast: false);
+    await tester.pumpWidget(_host(model));
+    await tester.pump();
+    model.focus.backNode.requestFocus();
+    await tester.pump();
+    await tester.pumpWidget(_host(_model(focus: model.focus)));
+    await tester.pumpAndSettle();
+    expect(model.focus.backNode.hasFocus, isTrue);
+    expect(model.focus.primaryEntry.hasFocus, isFalse);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Android TV mounts distant recommendation controls without requesting their images', (tester) async {
+    PlatformUtil.debugSetAndroidTvCached(true);
+    addTearDown(() => PlatformUtil.debugSetAndroidTvCached(null));
+    _surface(tester, _tv);
+    final model = _model(isMovie: true, recs: [
+      for (var i = 0; i < 6; i++) StremioMeta(
+        id: 'fixture:$i', type: 'movie', name: 'Recommendation $i',
+        poster: 'https://example.invalid/poster-$i.jpg'),
+    ]);
+    await tester.pumpWidget(_host(model));
+    await tester.pumpAndSettle();
+    expect(find.byType(ShowcaseRecs, skipOffstage: false), findsOneWidget);
+    expect(find.byType(CachedNetworkImage, skipOffstage: false), findsNothing);
+    expect(model.focus.primaryEntry.hasFocus, isTrue);
+    await tester.pumpWidget(const SizedBox());
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('a series walks identity → seasons → episodes → cast → sources', (
@@ -365,7 +585,7 @@ void main() {
     expect(find.byType(ShowcaseSources, skipOffstage: false), findsOneWidget);
   });
 
-  testWidgets('the Sources band always exists, with the Find tile alone when '
+  testWidgets('the Sources band keeps its count card and Pin source when '
       'nothing is bound', (tester) async {
     _surface(tester, const Size(960, 2000));
     await tester.pumpWidget(_host(_model(), tall: true));
@@ -377,6 +597,7 @@ void main() {
     // An empty Sources band is not an empty state to hide — "Pin source" is
     // exactly what someone with no bound sources needs to see.
     expect(find.text('＋  Pin source', skipOffstage: false), findsOneWidget);
+    expect(find.text('Pinned sources (0)', skipOffstage: false), findsOneWidget);
   });
 
   testWidgets('trackers are READOUT in the meta line, never focusable', (

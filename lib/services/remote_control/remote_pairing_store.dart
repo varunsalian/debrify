@@ -22,8 +22,16 @@ class RemotePairingStore {
 
   /// This device's static keypair, created on first use. The private key is
   /// sealed by [SecretVault] like every other stored secret.
-  static Future<SimpleKeyPair> loadOrCreateKeypair() =>
-      _keyPairFuture ??= _loadOrCreate();
+  static Future<SimpleKeyPair> loadOrCreateKeypair() {
+    final existing = _keyPairFuture;
+    if (existing != null) return existing;
+    late final Future<SimpleKeyPair> attempt;
+    attempt = _loadOrCreate().catchError((Object error, StackTrace stack) {
+      if (identical(_keyPairFuture, attempt)) _keyPairFuture = null;
+      Error.throwWithStackTrace(error, stack);
+    });
+    return _keyPairFuture = attempt;
+  }
 
   static Future<SimpleKeyPair> _loadOrCreate() async {
     final prefs = await SharedPreferences.getInstance();

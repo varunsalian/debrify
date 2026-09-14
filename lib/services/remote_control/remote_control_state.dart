@@ -1,13 +1,19 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 
+import '../../utils/app_storage.dart';
 import '../../models/profiles/profile_policy.dart';
 import '../profiles/profile_avatar_ingest.dart';
 import '../profiles/profile_async_authorization.dart';
+import '../profiles/profile_runtime.dart';
 import 'remote_chunked_send.dart';
+import 'remote_reliable_transfer.dart';
+import 'remote_transfer_encoding.dart';
+import 'remote_transfer_activity.dart';
 import 'remote_constants.dart';
 import 'remote_command_router.dart';
 import 'remote_pairing_store.dart';
@@ -62,9 +68,14 @@ class RemoteControlState extends ChangeNotifier {
         ({String requestId, bool ok, String message})
       >.broadcast();
 
+  final transferActivity = RemoteTransferActivityController();
+
   // Services
   UdpDiscoveryService? _discoveryService;
   UdpCommandService? _commandService;
+  RemoteReliableTransfer? _reliableTransfer;
+  Future<RemoteReliableTransfer>? _reliableStarting;
+  final Map<String, Future<void> Function()> _receivingActivity = {};
 
   // State
   RemoteConnectionState _connectionState = RemoteConnectionState.disconnected;
@@ -101,6 +112,10 @@ class RemoteControlState extends ChangeNotifier {
   Future<bool> Function(Map<String, dynamic> command, String ip, int port)?
   debugPlainSender;
   bool _debugReceiverBound = false;
+  @visibleForTesting
+  int debugReliablePort = RemoteReliableTransfer.defaultPort;
+  @visibleForTesting
+  int debugCommandPort = kCommandPort;
 
   // Callbacks for TV mode
   void Function(String action, String command, String? data)? onCommandReceived;
@@ -198,7 +213,8 @@ class RemoteControlState extends ChangeNotifier {
     if (_role == _RemoteRole.receiver &&
         _receiverName == deviceName &&
         (_debugReceiverBound ||
-            (_discoveryService != null && _commandService != null))) {
+            (_discoveryService?.isRunning == true &&
+                _commandService?.isRunning == true))) {
       return;
     }
     _isTv = true;
@@ -246,7 +262,6 @@ class RemoteControlState extends ChangeNotifier {
       isTv: true,
       tvDeviceName: deviceName,
     );
-    await _discoveryService!.start();
     // Advertise our static key once loaded so senders can pin this receiver.
     unawaited(
       RemotePairingStore.publicKeyBytes()
@@ -262,7 +277,11 @@ class RemoteControlState extends ChangeNotifier {
     );
 
     // Start command service (to receive commands)
-    _commandService = UdpCommandService(isTv: true);
+    _commandService = UdpCommandService(
+      isTv: true,
+      commandPort: debugCommandPort,
+    );
+    _commandService!.onError = _reportSocketError;
     _commandService!.onCommandReceived = _handleCommand;
     _commandService!.onHeartbeatReceived = () {
       if (_connectionState != RemoteConnectionState.connected) {
@@ -276,7 +295,9 @@ class RemoteControlState extends ChangeNotifier {
       notifyListeners();
     };
     await _commandService!.start();
-    _wireSession(_commandService!);
+    await _wireSession(_commandService!);
+    // Advertise only after the receiving transport is ready.
+    await _discoveryService!.start();
 
     _role = _RemoteRole.receiver;
     _connectionState = RemoteConnectionState.disconnected;
@@ -376,7 +397,8 @@ class RemoteControlState extends ChangeNotifier {
     if (_role == _RemoteRole.receiver &&
         _receiverName == deviceName &&
         (_debugReceiverBound ||
-            (_discoveryService != null && _commandService != null))) {
+            (_discoveryService?.isRunning == true &&
+                _commandService?.isRunning == true))) {
       return;
     }
     if (_role != _RemoteRole.stopped ||
@@ -507,7 +529,19 @@ class RemoteControlState extends ChangeNotifier {
 
   /// Connect to a specific TV (for mobile)
   Future<void> connectToDevice(DiscoveredDevice device) async {
-    return _authorizedRemote(() => _connectToDeviceRaw(device));
+    return _authorizedRemote(
+      () => _enqueueRoleChange(() async {
+        try {
+          await _connectToDeviceRaw(device);
+        } catch (_) {
+          await _stopRaw();
+          _lastError =
+              'Could not start the connection. Check local network access and retry.';
+          notifyListeners();
+          rethrow;
+        }
+      }),
+    );
   }
 
   Future<void> _connectToDeviceRaw(DiscoveredDevice device) async {
@@ -529,12 +563,18 @@ class RemoteControlState extends ChangeNotifier {
     await _commandService?.stop();
     _commandService = null;
 
+    _teardownSessions();
+
     // Stop discovery (we've selected a device)
     await _discoveryService?.stop();
     _discoveryService = null;
 
     // Start command service
-    _commandService = UdpCommandService(isTv: false);
+    _commandService = UdpCommandService(
+      isTv: false,
+      commandPort: debugCommandPort,
+    );
+    _commandService!.onError = _reportSocketError;
     _commandService!.onHeartbeatReceived = () {
       if (_connectionState != RemoteConnectionState.connected) {
         _connectionState = RemoteConnectionState.connected;
@@ -542,28 +582,58 @@ class RemoteControlState extends ChangeNotifier {
       }
     };
     _commandService!.onConnectionLost = () {
+      if (transferActivity.active) return;
       debugPrint('RemoteControlState: Connection lost');
       _connectionState = RemoteConnectionState.disconnected;
       notifyListeners();
     };
 
     await _commandService!.start(targetIp: device.ip);
-    _wireSession(_commandService!);
+    await _wireSession(_commandService!);
 
-    // Opportunistic session: harmless against a v1 TV (hs1 is silently
-    // dropped); against a v2 TV every subsequent keypress rides encrypted
-    // and the credential flows find a session already warm.
-    unawaited(ensureEncryptedSession(device.ip));
+    unawaited(_probeConnection(device, _commandService!));
+  }
 
-    // Mark as connected after a short delay to allow heartbeat exchange
-    // (real heartbeats now arrive from v2 peers — this stays as the v1
-    // fallback).
-    Future.delayed(const Duration(milliseconds: 500), () {
-      if (_connectionState == RemoteConnectionState.connecting) {
-        _connectionState = RemoteConnectionState.connected;
-        notifyListeners();
-      }
-    });
+  Future<void> _probeConnection(
+    DiscoveredDevice device,
+    UdpCommandService service,
+  ) async {
+    RemoteSession? session;
+    try {
+      session = await ensureEncryptedSession(device.ip);
+    } catch (_) {
+      // Report below, only if this attempt still owns the selected device.
+    }
+    if (!identical(service, _commandService) ||
+        _connectedDevice?.ip != device.ip ||
+        _isTv) {
+      return;
+    }
+    // Discovered v1 receivers support one-way controls, but ignore handshakes
+    // and send heartbeats to fixed port 5556, not our ephemeral sender port.
+    // Only an explicitly known legacy peer gets this compatibility fallback:
+    // a manual address with unknown capabilities is not evidence of v1.
+    final legacyControlsAvailable =
+        device.protocolVersionKnown &&
+        device.protoVersion == 1 &&
+        !_encryptedPeerIps.contains(device.ip) &&
+        service.isRunning;
+    if (session != null || service.isConnected || legacyControlsAvailable) {
+      _connectionState = RemoteConnectionState.connected;
+      _lastError = null;
+    } else {
+      _connectionState = RemoteConnectionState.disconnected;
+      _lastError =
+          'The receiving device did not complete the connection. Check Receive mode and local network access, then retry.';
+    }
+    notifyListeners();
+  }
+
+  void _reportSocketError(String error) {
+    _lastError =
+        'Remote networking failed. Check local network access and retry.';
+    _connectionState = RemoteConnectionState.disconnected;
+    notifyListeners();
   }
 
   /// Send [command] through a current encrypted session when the peer supports
@@ -801,6 +871,9 @@ class RemoteControlState extends ChangeNotifier {
   /// semantics unchanged; tests need a hermetic way to clear process state.
   @visibleForTesting
   Future<void> debugResetForTesting() async {
+    await _reliableTransfer?.close();
+    _reliableTransfer = null;
+
     await _enqueueRoleChange(() async {
       await _stopRaw();
       _isTv = false;
@@ -818,6 +891,10 @@ class RemoteControlState extends ChangeNotifier {
     debugRawSender = null;
     debugPlainSender = null;
   }
+
+  @visibleForTesting
+  Future<int> debugStartReliableReceiver() async =>
+      (await _ensureReliableTransfer()).port;
 
   @visibleForTesting
   void debugInstallOutboundSession(
@@ -853,12 +930,14 @@ class RemoteControlState extends ChangeNotifier {
 
   /// Disconnect from current device (for mobile)
   Future<void> disconnect() async {
-    await _commandService?.stop();
-    _commandService = null;
-    _teardownSessions();
-    _connectionState = RemoteConnectionState.disconnected;
-    _connectedDevice = null;
-    notifyListeners();
+    return _enqueueRoleChange(() async {
+      await _commandService?.stop();
+      _commandService = null;
+      _teardownSessions();
+      _connectionState = RemoteConnectionState.disconnected;
+      _connectedDevice = null;
+      notifyListeners();
+    });
   }
 
   void _handleDeviceDiscovered(DiscoveredDevice device) {
@@ -1044,13 +1123,33 @@ class RemoteControlState extends ChangeNotifier {
   /// The established session for [ip], if any.
   RemoteSession? sessionFor(String ip) => _sessionByIp[ip];
 
-  void _wireSession(UdpCommandService service) {
+  Future<void> _wireSession(UdpCommandService service) async {
+    final reliable = await _ensureReliableTransfer();
+    if (!identical(_commandService, service)) {
+      await service.stop();
+      throw StateError('Remote connection was replaced during startup');
+    }
     _sessionManager ??= RemoteSessionManager(
       loadStaticKeyPair: RemotePairingStore.loadOrCreateKeypair,
       deviceName: () => _receiverName ?? 'Debrify',
+      transferPort: reliable.port,
+      onEvent: (event, fields) =>
+          RemoteTransferDiagnostics.record(event, fields: fields),
     );
     _pairingGate ??= PairingGate(
       isRemembered: _rememberedFingerprints.contains,
+      onEnded: (session, reason) {
+        unawaited(
+          _sendOverSession(
+            session,
+            RemoteCommand(
+              action: RemoteAction.pair,
+              command: PairCommand.err,
+              data: reason,
+            ),
+          ),
+        );
+      },
     );
     service.onSessionMessage = (json, address, port) {
       unawaited(_onSessionMessage(service, json, address.address, port));
@@ -1104,6 +1203,10 @@ class RemoteControlState extends ChangeNotifier {
 
     if (type == RemoteMessageType.ecmd) {
       final opened = await manager.openCommand(json);
+      if (!identical(_sessionManager, manager) ||
+          !identical(_commandService, service)) {
+        return;
+      }
       if (opened.serr != null) {
         service.sendRaw(opened.serr!, ip, port: port);
         return;
@@ -1138,6 +1241,11 @@ class RemoteControlState extends ChangeNotifier {
     }
 
     final result = await manager.handle(json);
+    // A role/profile change may close this socket while key loading yields.
+    if (!identical(_sessionManager, manager) ||
+        !identical(_commandService, service)) {
+      return;
+    }
     // Cache the endpoint only when the manager ACCEPTED the message (it
     // produced a reply or a session). Merely knowing the sid is not enough:
     // session IDs cross the wire in the clear, so a LAN host could replay one
@@ -1296,6 +1404,18 @@ class RemoteControlState extends ChangeNotifier {
     RemoteCommand command, {
     Future<void> Function()? authorizationBarrier,
   }) async {
+    if (session.peerProtocolVersion >= kReliableTransferProtocolVersion &&
+        debugRawSender == null &&
+        (command.action == RemoteAction.config ||
+            command.action == RemoteAction.addon ||
+            (command.action == RemoteAction.pair &&
+                command.data?.startsWith('profile_avatar:') == true))) {
+      return _sendReliableCommand(
+        session,
+        command,
+        authorizationBarrier: authorizationBarrier,
+      );
+    }
     final manager = _sessionManager;
     final service = _commandService;
     final peer = _sessionPeers[session.sidB64];
@@ -1319,6 +1439,261 @@ class RemoteControlState extends ChangeNotifier {
     }
     return testSender?.call(envelope, peer.ip, peer.port) ??
         service!.sendRaw(envelope, peer.ip, port: peer.port);
+  }
+
+  Future<RemoteReliableTransfer> _ensureReliableTransfer() {
+    final existing = _reliableTransfer;
+    if (existing != null) return Future.value(existing);
+    return _reliableStarting ??= ProfileRuntime.withoutCapturedScope(() async {
+      final cache = await AppStorage.cache();
+      final directory = Directory('${cache.path}/remote-transfers');
+      final service = RemoteReliableTransfer(
+        directory: directory,
+        runInRequestScope: (action) {
+          final scope = ProfileRuntime.scope.value;
+          return scope == null
+              ? action()
+              : ProfileRuntime.withCapturedScope(scope, action);
+        },
+        onActivity: (id, active) {
+          if (active) {
+            _receivingActivity[id] = transferActivity.begin();
+            transferActivity.update('Receiving transfer…');
+          } else {
+            final release = _receivingActivity.remove(id);
+            if (release != null) unawaited(release());
+          }
+        },
+        onReceiveProgress: (done, total) {
+          if (done == total) transferActivity.update('Checking received data…');
+        },
+        onEvent: (event, fields) =>
+            RemoteTransferDiagnostics.record(event, fields: fields),
+        receiveKey: (sid, ip) async {
+          final session = _sessionManager?.sessionBySid(sid);
+          if (session == null || _sessionPeers[sid]?.ip != ip) return null;
+          if (!session.authorized &&
+              kRememberPairedSenders &&
+              _rememberedFingerprints.contains(session.peerFingerprint)) {
+            session.authorized = true;
+          }
+          if (!session.authorized ||
+              DateTime.now().difference(session.establishedAt) >
+                  kSessionMaxAge) {
+            return null;
+          }
+          session.lastUsed = DateTime.now();
+          return session.recvKey;
+        },
+        onReceive: (transfer) => transferActivity.run(() async {
+          transferActivity.update('Importing received data…');
+          await _receiveReliableTransfer(transfer);
+        }),
+      );
+      try {
+        try {
+          await service.start(port: debugReliablePort);
+        } on SocketException {
+          // Advertise the actual port during pairing if another local service
+          // owns the preferred port. Both directions use the negotiated port.
+          if (debugReliablePort == 0) rethrow;
+          await service.start(port: 0);
+        }
+        _reliableTransfer = service;
+        return service;
+      } catch (_) {
+        await service.close();
+        rethrow;
+      } finally {
+        _reliableStarting = null;
+      }
+    });
+  }
+
+  Future<void> _receiveReliableTransfer(RemoteTransferFile transfer) async {
+    final session = _sessionManager?.sessionBySid(transfer.sessionId);
+    if (session == null || !session.authorized) {
+      throw const RemoteTransferException('Pairing expired');
+    }
+    final archive = transfer.metadata['format'] == 'profile-archive-v1';
+    final channelArchive = transfer.metadata['format'] == 'channel-records-v1';
+    final RemoteCommand command;
+    if (archive) {
+      final requestId = transfer.metadata['requestId'];
+      if (requestId is! String || requestId.isEmpty || requestId.length > 128) {
+        throw const RemoteTransferException('Invalid profile transfer receipt');
+      }
+      command = RemoteCommand.config(
+        ConfigCommand.profileGraph,
+        configData: jsonEncode({
+          'format': 'debrify-profile-transport',
+          'requestId': requestId,
+        }),
+      );
+    } else if (channelArchive) {
+      final requestId = transfer.metadata['requestId'];
+      if (requestId is! String || requestId.isEmpty || requestId.length > 128) {
+        throw const RemoteTransferException('Invalid channel transfer receipt');
+      }
+      command = RemoteCommand.config(
+        ConfigCommand.debrifyChannel,
+        configData: remoteChannelTransferBody(
+          requestId: requestId,
+          uri: 'debrify://file',
+        ),
+      );
+    } else if (transfer.metadata['format'] == 'command-gzip-v1') {
+      command = RemoteCommand.fromJson(
+        await RemoteTransferEncoding.readCommand(transfer.file),
+      );
+    } else {
+      throw const RemoteTransferException('Unsupported transfer format');
+    }
+    final context = RemoteCommandContext(
+      transferReply: (command, body) async {
+        transfer.reportResult(
+          RemoteCommand.config(command, configData: body).toJson(),
+        );
+        return true;
+      },
+      profileArchive: archive ? transfer.file : null,
+      channelArchive: channelArchive ? transfer.file : null,
+      encrypted: true,
+      authorized: true,
+      remembered: _rememberedFingerprints.contains(session.peerFingerprint),
+      sidB64: session.sidB64,
+      peerFingerprint: session.peerFingerprint,
+      peerName: session.peerName,
+      sourceIp: transfer.sourceIp,
+      reject: (code) async {
+        transfer.reportResult(
+          RemoteCommand(
+            action: RemoteAction.pair,
+            command: PairCommand.err,
+            data: code,
+          ).toJson(),
+        );
+      },
+    );
+    if (command.action == RemoteAction.config &&
+        (command.command == ConfigCommand.remoteTransferResult ||
+            command.command == ConfigCommand.addonTransferResult ||
+            command.command == ConfigCommand.profileGraphResult)) {
+      _dispatch(command.action, command.command, command.data, context);
+    } else if (command.action == RemoteAction.pair &&
+        _handleProfileAvatarReply(command.command, command.data)) {
+      return;
+    } else {
+      await RemoteCommandRouter().receiveTransferCommand(
+        command.action,
+        command.command,
+        command.data,
+        context,
+      );
+    }
+  }
+
+  Future<bool> sendProfileArchive(
+    String targetIp,
+    File file,
+    String requestId, {
+    RemoteTransferProgress? onProgress,
+    bool channel = false,
+  }) => _authorizedFeature(ProfileFeature.remoteTransfer, () async {
+    final session = sessionFor(targetIp);
+    if (session == null ||
+        session.peerProtocolVersion < kReliableTransferProtocolVersion) {
+      return false;
+    }
+    final service = await _ensureReliableTransfer();
+    final result = await service.send(
+      host: targetIp,
+      port: session.peerTransferPort,
+      sessionId: session.sidB64,
+      key: session.sendKey,
+      file: file,
+      metadata: {
+        'format': channel ? 'channel-records-v1' : 'profile-archive-v1',
+        'requestId': requestId,
+      },
+      onProgress: (done, total) {
+        transferActivity.progress(done, total);
+        onProgress?.call(done, total);
+      },
+      authorizationBarrier: () async {
+        await ProfileAsyncAuthorization.currentOutboundBarrier?.call();
+        session.lastUsed = DateTime.now();
+      },
+    );
+    return _acceptReliableResult(session, result);
+  });
+
+  Future<bool> _sendReliableCommand(
+    RemoteSession session,
+    RemoteCommand command, {
+    Future<void> Function()? authorizationBarrier,
+  }) async {
+    final peer = _sessionPeers[session.sidB64];
+    if (peer == null) return false;
+    final service = await _ensureReliableTransfer();
+    final staging = await Directory.systemTemp.createTemp('debrify-send-');
+    try {
+      final file = File('${staging.path}/command.gz');
+      await RemoteTransferEncoding.writeCommand(file, command.toJson());
+      final result = await service.send(
+        host: peer.ip,
+        port: session.peerTransferPort,
+        sessionId: session.sidB64,
+        key: session.sendKey,
+        file: file,
+        metadata: {'format': 'command-gzip-v1'},
+        onProgress: transferActivity.progress,
+        authorizationBarrier: () async {
+          await (authorizationBarrier ??
+                  ProfileAsyncAuthorization.currentOutboundBarrier)
+              ?.call();
+          session.lastUsed = DateTime.now();
+        },
+      );
+      return _acceptReliableResult(session, result);
+    } finally {
+      await staging.delete(recursive: true);
+    }
+  }
+
+  bool _acceptReliableResult(
+    RemoteSession session,
+    Map<String, dynamic>? result,
+  ) {
+    if (result == null) return true;
+    final command = RemoteCommand.fromJson(result);
+    if (command.action == RemoteAction.pair) {
+      if (!_handleProfileAvatarReply(command.command, command.data)) {
+        throw const RemoteTransferException(
+          'Receiving profile is locked or transfer is not allowed',
+        );
+      }
+      return true;
+    }
+    _dispatch(
+      command.action,
+      command.command,
+      command.data,
+      RemoteCommandContext(
+        encrypted: true,
+        authorized: true,
+        sidB64: session.sidB64,
+        peerFingerprint: session.peerFingerprint,
+      ),
+    );
+    final body = command.data == null ? null : jsonDecode(command.data!);
+    if (body is Map && body['ok'] == false) {
+      _lastError =
+          body['message'] as String? ??
+          'The receiving device could not apply the transfer';
+      return false;
+    }
+    return true;
   }
 
   /// Liveness probe over an existing session.
@@ -1361,11 +1736,11 @@ class RemoteControlState extends ChangeNotifier {
   Future<UdpCommandService> _ensureCommandService() async {
     var service = _commandService;
     if (service == null || !service.isRunning) {
-      service = UdpCommandService(isTv: _isTv);
+      service = UdpCommandService(isTv: _isTv, commandPort: debugCommandPort);
       _commandService = service;
       await service.start();
     }
-    _wireSession(service);
+    await _wireSession(service);
     return service;
   }
 
@@ -1395,8 +1770,9 @@ class RemoteControlState extends ChangeNotifier {
     // very future — and whenComplete AWAITS a future-returning callback, so
     // the arrow form deadlocks the attempt on itself. Every caller (and the
     // dedup reusers) then hangs forever with the 6s timeout long fired.
-    final attempt = _ensureEncryptedSessionInner(ip, timeout).whenComplete(() {
-      _handshakesByIp.remove(ip);
+    late final Future<RemoteSession?> attempt;
+    attempt = _ensureEncryptedSessionInner(ip, timeout).whenComplete(() {
+      if (identical(_handshakesByIp[ip], attempt)) _handshakesByIp.remove(ip);
     });
     _handshakesByIp[ip] = attempt;
     return attempt;
@@ -1421,8 +1797,15 @@ class RemoteControlState extends ChangeNotifier {
     }
 
     final service = await _ensureCommandService();
+    // A fresh handshake targets the receiver listener, not a temporary port
+    // learned before a peer restart or role change.
+    service.forgetPeerEndpoint(ip);
     final manager = _sessionManager!;
     final hs1 = await manager.startHandshake();
+    if (!identical(manager, _sessionManager) ||
+        !identical(service, _commandService)) {
+      return null;
+    }
     final sid = hs1['sid'] as String;
     _sessionPeers[sid] = (ip: ip, port: service.portFor(ip));
     final completer = Completer<RemoteSession?>();
@@ -1433,7 +1816,10 @@ class RemoteControlState extends ChangeNotifier {
       final session = await completer.future.timeout(timeout);
       return session;
     } on TimeoutException {
-      debugPrint('RemoteHs: no reply within ${timeout.inSeconds}s — v1 peer');
+      debugPrint(
+        'RemoteHs: handshake did not complete within ${timeout.inSeconds}s',
+      );
+      RemoteTransferDiagnostics.record('handshake_timeout');
       _pendingHandshakes.remove(sid);
       return null;
     }
@@ -1457,6 +1843,7 @@ class RemoteControlState extends ChangeNotifier {
   }
 
   void _teardownSessions() {
+    _handshakesByIp.clear();
     _sessionTimer?.cancel();
     _sessionTimer = null;
     _sessionManager = null;

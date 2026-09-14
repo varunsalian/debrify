@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../models/stremio_addon.dart';
+import '../../services/home_collections_store.dart';
 import '../../services/iptv_media_store.dart' show IptvListMeta;
 import '../../services/main_page_bridge.dart';
 import '../../services/mdblist/mdblist_list_source.dart';
@@ -411,6 +412,8 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
       final disabled = await StorageService.getHomeDisabledSections();
       final extras = await StorageService.getHomeExtraRows();
       final rowOrder = await StorageService.getHomeRowOrder();
+      final collections = await HomeCollectionsStore.instance
+          .getEnabledCollections();
       var iptvLists = const <IptvListMeta>[];
       try {
         iptvLists = await StorageService.getIptvLists();
@@ -466,6 +469,7 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
             mdblistLiked: mdblistLiked,
             mdblistTop: mdblistTop,
             iptvLists: iptvLists,
+            collections: collections,
             isTelevision: PlatformUtil.isTelevision,
           ),
         ),

@@ -1,3 +1,6 @@
+import 'playback_settings_section.dart';
+import 'tv_collection_list_style_page.dart';
+import '../../widgets/collections/tmdb_attribution.dart';
 import 'package:flutter/material.dart';
 import '../../utils/tv_reveal.dart';
 import 'package:flutter/services.dart';
@@ -45,7 +48,10 @@ class SettingsTvLayout extends StatefulWidget {
   final VoidCallback onOpenSearch;
 
   final Future<void> Function() onOpenHomePageSettings;
-  final Future<void> Function() onOpenExternalPlayerSettings;
+  final Future<void> Function() onOpenMetadataSettings;
+  final Future<void> Function() onOpenCollectionsSettings;
+  final Future<void> Function() onOpenBadgesSettings;
+  final Future<void> Function(PlaybackSettingsSection) onOpenPlaybackSection;
   final VoidCallback onOpenRemoteControl;
   final bool showSwitchProfile;
   final Future<void> Function()? onSwitchProfile;
@@ -64,6 +70,7 @@ class SettingsTvLayout extends StatefulWidget {
   final String downloadLocationSubtitle;
   final Future<void> Function() onCreateBackup;
   final Future<void> Function() onRestoreBackup;
+  final Future<void> Function() onOpenSyncAndMigrate;
   final Future<void> Function()? onExportDiagnosticLogs;
   final Future<void> Function() onDangerAction;
   final String appVersion;
@@ -94,6 +101,7 @@ class SettingsTvLayout extends StatefulWidget {
   final Future<void> Function() onOpenTvSidebarStyle;
   final String discoverLayoutLabel;
   final Future<void> Function() onOpenDiscoverLayout;
+  final Future<void> Function()? onOpenCollectionListStyle;
   final String tvHomeStyleLabel;
   final Future<void> Function() onOpenTvHomeStyle;
   final String iptvStyleLabel;
@@ -155,7 +163,10 @@ class SettingsTvLayout extends StatefulWidget {
     required this.firstFocusNode,
     required this.onOpenSearch,
     required this.onOpenHomePageSettings,
-    required this.onOpenExternalPlayerSettings,
+    required this.onOpenMetadataSettings,
+    required this.onOpenCollectionsSettings,
+    required this.onOpenBadgesSettings,
+    required this.onOpenPlaybackSection,
     required this.onOpenRemoteControl,
     this.showSwitchProfile = false,
     this.onSwitchProfile,
@@ -173,6 +184,7 @@ class SettingsTvLayout extends StatefulWidget {
     this.downloadLocationSubtitle = '',
     required this.onCreateBackup,
     required this.onRestoreBackup,
+    required this.onOpenSyncAndMigrate,
     this.onExportDiagnosticLogs,
     required this.onDangerAction,
     required this.appVersion,
@@ -197,6 +209,7 @@ class SettingsTvLayout extends StatefulWidget {
     required this.onOpenTvSidebarStyle,
     required this.discoverLayoutLabel,
     required this.onOpenDiscoverLayout,
+    this.onOpenCollectionListStyle,
     required this.tvHomeStyleLabel,
     required this.onOpenTvHomeStyle,
     required this.iptvStyleLabel,
@@ -283,6 +296,27 @@ const List<_Category> _kCategories = [
     'Arrange the home screen and tune this television for the room.',
   ),
   _Category(
+    Icons.collections_bookmark_rounded,
+    'Collections',
+    'Import and manage folder collections',
+    'Collections',
+    'Import and manage folder collections.',
+  ),
+  _Category(
+    Icons.sell_rounded,
+    'Badges',
+    'Import and manage stream badge rules',
+    'Badges',
+    'Import and manage stream badge rules.',
+  ),
+  _Category(
+    Icons.info_outline_rounded,
+    'Metadata',
+    'Providers, artwork, languages & discovery',
+    'Choose your metadata.',
+    'Choose providers for title information, artwork and trailers, and set your preferred languages.',
+  ),
+  _Category(
     Icons.auto_awesome_rounded,
     'Appearance',
     'Text, home, sidebar, IPTV & player looks',
@@ -332,6 +366,13 @@ const List<_Category> _kCategories = [
     'Switch between people, add someone new, and shape their access.',
   ),
   _Category(
+    Icons.sync_alt_rounded,
+    'Sync and Migrate',
+    'Sync across devices with WebDAV',
+    'Keep your devices in sync.',
+    'Sync profiles, settings and watch progress with WebDAV.',
+  ),
+  _Category(
     Icons.storage_rounded,
     'Data & Backup',
     'Downloads, backup & restore',
@@ -369,7 +410,7 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
   /// so a row added past the pool throws on build.
   /// Appearance is the longest fixed category. The pool must cover it, or the
   /// last row of that category has no node and cannot be reached.
-  static const int _kMaxCategoryRows = 19;
+  static const int _kMaxCategoryRows = 20;
 
   /// Selected category. A [ValueNotifier] (not setState) so a rail focus-move
   /// only rebuilds the pane and the two affected rail items via their
@@ -903,7 +944,46 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
             ],
           ),
         ];
-      case 3: // Appearance — grouped by the QUESTION each row answers.
+      case 3:
+        return [
+          SettingsSection(
+            title: '',
+            children: [
+              SettingsTile.spec(
+                SettingsRows.collections,
+                onTap: widget.onOpenCollectionsSettings,
+                focusNode: _paneNodes[0],
+              ),
+            ],
+          ),
+        ];
+      case 4:
+        return [
+          SettingsSection(
+            title: '',
+            children: [
+              SettingsTile.spec(
+                SettingsRows.badges,
+                onTap: widget.onOpenBadgesSettings,
+                focusNode: _paneNodes[0],
+              ),
+            ],
+          ),
+        ];
+      case 5: // Metadata
+        return [
+          SettingsSection(
+            title: '',
+            children: [
+              SettingsTile.spec(
+                SettingsRows.metadata,
+                onTap: widget.onOpenMetadataSettings,
+                focusNode: _paneNodes[0],
+              ),
+            ],
+          ),
+        ];
+      case 6: // Appearance — grouped by the QUESTION each row answers.
         // Four groups, not one list of fifteen. The rows used to interleave
         // four different kinds of decision — a global theme, a per-screen
         // layout, a per-device performance cap and a preset that sets several
@@ -977,52 +1057,63 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
                 focusNode: _paneNodes[5],
               ),
               SettingsTile.spec(
+                SettingsRows.collectionListStyle,
+                subtitle: 'Grid · Gallery · Filmstrip · Journal',
+                onTap:
+                    widget.onOpenCollectionListStyle ??
+                    () => pushSettingsPage(
+                      context,
+                      const TvCollectionListStylePage(),
+                    ),
+                focusNode: _paneNodes[6],
+              ),
+              SettingsTile.spec(
                 SettingsRows.detailPageStyle,
                 subtitle: widget.detailPageStyleLabel,
                 onTap: widget.onOpenDetailPageStyle,
-                focusNode: _paneNodes[6],
+                focusNode: _paneNodes[7],
               ),
               SettingsTile.spec(
                 SettingsRows.tvSidebarStyle,
                 subtitle: widget.tvSidebarStyleLabel,
                 onTap: widget.onOpenTvSidebarStyle,
-                focusNode: _paneNodes[7],
+                focusNode: _paneNodes[8],
               ),
               SettingsTile.spec(
                 SettingsRows.iptvAppearance,
                 subtitle: widget.iptvStyleLabel,
                 onTap: widget.onOpenIptvStyle,
-                focusNode: _paneNodes[8],
+                focusNode: _paneNodes[9],
               ),
               SettingsTile.spec(
                 SettingsRows.debrifyTvAppearance,
                 subtitle: widget.debrifyTvStyleLabel,
                 onTap: widget.onOpenDebrifyTvStyle,
-                focusNode: _paneNodes[9],
+                focusNode: _paneNodes[10],
               ),
               SettingsTile.spec(
                 SettingsRows.playerGuideStyle,
                 subtitle: widget.playerGuideStyleLabel,
                 onTap: widget.onOpenPlayerGuideStyle,
-                focusNode: _paneNodes[10],
+                focusNode: _paneNodes[11],
               ),
               SettingsTile.spec(
                 SettingsRows.playLoaderStyle,
                 subtitle: widget.playLoaderStyleLabel,
                 onTap: widget.onOpenPlayLoaderStyle,
-                focusNode: _paneNodes[11],
+                focusNode: _paneNodes[12],
               ),
               SettingsTile.spec(
                 SettingsRows.parentsGuideStyle,
                 subtitle: widget.parentsGuideStyleLabel,
                 onTap: widget.onOpenParentsGuideStyle,
-                focusNode: _paneNodes[12],
+                focusNode: _paneNodes[13],
               ),
               SettingsTile.spec(
                 SettingsRows.profileAppearance,
                 subtitle: widget.profileAppearanceLabel,
                 onTap: widget.onOpenProfileAppearance,
-                focusNode: _paneNodes[13],
+                focusNode: _paneNodes[14],
               ),
             ],
           ),
@@ -1037,19 +1128,19 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
                 SettingsRows.tvScreenSize,
                 subtitle: tvUiScaleLabel(widget.tvUiScalePercent),
                 onTap: widget.onOpenTvScreenSize,
-                focusNode: _paneNodes[14],
+                focusNode: _paneNodes[15],
               ),
               SettingsTile.spec(
                 SettingsRows.tvRenderQuality,
                 subtitle: widget.tvRenderQualityLabel,
                 onTap: widget.onOpenTvRenderQuality,
-                focusNode: _paneNodes[15],
+                focusNode: _paneNodes[16],
               ),
               SettingsTile.spec(
                 SettingsRows.tvHeroArtworkQuality,
                 subtitle: widget.tvHeroArtworkQualityLabel,
                 onTap: widget.onOpenTvHeroArtworkQuality,
-                focusNode: _paneNodes[16],
+                focusNode: _paneNodes[17],
               ),
             ],
           ),
@@ -1070,32 +1161,36 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
                   SettingsRows.tvPlayerControls,
                   subtitle: widget.tvPlayerControlsStyleLabel,
                   onTap: widget.onOpenTvPlayerControlsStyle,
-                  focusNode: _paneNodes[17],
+                  focusNode: _paneNodes[18],
                 ),
                 SettingsTile.spec(
                   SettingsRows.debrifyTvPlayer,
                   subtitle: widget.debrifyTvPlayerStyleLabel,
                   onTap: widget.onOpenDebrifyTvPlayerStyle,
-                  focusNode: _paneNodes[18],
+                  focusNode: _paneNodes[19],
                 ),
               ],
             ),
           ],
         ];
-      case 4: // Playback
+      case 7: // Playback
         return [
           SettingsSection(
             title: '',
             children: [
-              SettingsTile.spec(
-                SettingsRows.player,
-                onTap: widget.onOpenExternalPlayerSettings,
-                focusNode: _paneNodes[0],
-              ),
+              for (final section in PlaybackSettingsSection.values)
+                SettingsTile(
+                  key: ValueKey('playback-category-${section.name}'),
+                  icon: section.icon,
+                  title: section.label,
+                  subtitle: section.description,
+                  onTap: () => widget.onOpenPlaybackSection(section),
+                  focusNode: _paneNodes[section.index],
+                ),
             ],
           ),
         ];
-      case 5: // Search
+      case 8: // Search
         return [
           SettingsSection(
             title: '',
@@ -1123,7 +1218,7 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
             ],
           ),
         ];
-      case 6: // Discover
+      case 9: // Discover
         return [
           SettingsSection(
             title: '',
@@ -1136,7 +1231,7 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
             ],
           ),
         ];
-      case 7: // Live TV & DVR
+      case 10: // Live TV & DVR
         return [
           SettingsSection(
             title: '',
@@ -1159,7 +1254,7 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
             ],
           ),
         ];
-      case 8: // Devices
+      case 11: // Devices
         return [
           SettingsSection(
             title: '',
@@ -1172,7 +1267,7 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
             ],
           ),
         ];
-      case 9: // Profiles — its own card (it was a tenant row under Devices).
+      case 12: // Profiles — its own card (it was a tenant row under Devices).
         return [
           SettingsSection(
             title: '',
@@ -1214,7 +1309,21 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
             ],
           ),
         ];
-      case 10: // Data & Backup
+      case 13: // Sync and Migrate
+        return [
+          SettingsSection(
+            title: '',
+            children: [
+              SettingsTile.spec(
+                SettingsRows.syncAndMigrate,
+                onTap: widget.onOpenSyncAndMigrate,
+                focusNode: _paneNodes[0],
+                trailing: const WebDavSyncPendingBadge(),
+              ),
+            ],
+          ),
+        ];
+      case 14: // Data & Backup
         {
           // Focus nodes are claimed sequentially so the optional
           // download-location row doesn't shift hardcoded indices.
@@ -1285,7 +1394,7 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
             ],
           ];
         }
-      case 11: // About (Updates + Support merged — matches the phone layout)
+      case 15: // About (Updates + Support merged — matches the phone layout)
         {
           // The donation row is conditional, so index the pane nodes off a
           // running counter to keep Up/Down wiring contiguous.
@@ -1315,6 +1424,7 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
                         )
                       : null,
                 ),
+                const TmdbAttribution(),
                 SettingsInfoTile.spec(
                   SettingsRows.version,
                   value: widget.appVersion,
@@ -1353,7 +1463,7 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
             ),
           ];
         }
-      case 12: // Danger Zone
+      case 16: // Danger Zone
         return [
           SettingsSection(
             title: '',

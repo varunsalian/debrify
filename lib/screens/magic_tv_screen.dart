@@ -49,6 +49,7 @@ import '../services/main_page_bridge.dart';
 import '../models/profiles/profile_policy.dart';
 import '../services/profiles/profile_policy_guard.dart';
 import '../services/profiles/profile_async_authorization.dart';
+import '../services/webdav_sync/webdav_sync_library_models.dart';
 import '../theme/app_surfaces.dart';
 import '../theme/app_theme_scope.dart';
 import '../theme/overlay_theme.dart';
@@ -499,6 +500,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
     // Register watch channel handler for external calls (e.g., from home screen)
     MainPageBridge.watchDebrifyTvChannel = _watchChannelById;
+    MainPageBridge.registerDebrifyTvLibraryListener(
+      _handleSyncedDebrifyTvLibraryChanged,
+    );
 
     // Register TV sidebar focus handler (tab index 3 = Debrify TV)
     _tvContentFocusHandler = () {
@@ -517,6 +521,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     _spotlightStatsDebounce?.cancel();
     // Clear watch channel handler
     MainPageBridge.watchDebrifyTvChannel = null;
+    MainPageBridge.unregisterDebrifyTvLibraryListener(
+      _handleSyncedDebrifyTvLibraryChanged,
+    );
     if (_tvContentFocusHandler != null) {
       MainPageBridge.unregisterTvContentFocusHandler(
         3,
@@ -1044,6 +1051,16 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     if (_debrifyTvStyle == 'spotlight') {
       await _loadSpotlightRailHealth();
     }
+  }
+
+  void _handleSyncedDebrifyTvLibraryChanged() {
+    if (!mounted) return;
+    setState(() {
+      _channelCache.clear();
+      _spotlightStats.clear();
+      _spotlightRailHealth = const <String, DebrifyTvRailHealth>{};
+    });
+    unawaited(_loadChannels());
   }
 
   Future<void> _loadFavoriteChannels() async {
@@ -3914,7 +3931,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
     try {
       await DebrifyTvRepository.instance.clearAll();
-      await DebrifyTvCacheService.clearAll();
+      await DebrifyTvCacheService.clearAll(
+        origin: WebDavSyncMutationOrigin.maintenance,
+      );
       setState(() {
         _channels = const <DebrifyTvChannel>[];
         _channelCache.clear();
@@ -4097,13 +4116,19 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
             _spotlightStats.remove(channel.id);
           });
           _refreshSpotlightStatsIfFocused(channel.id);
-          await DebrifyTvCacheService.saveEntry(baseline);
+          await DebrifyTvCacheService.saveEntry(
+            baseline,
+            origin: WebDavSyncMutationOrigin.rollback,
+          );
         } else {
           setState(() {
             _channelCache.remove(channel.id);
             _spotlightStats.remove(channel.id);
           });
-          await DebrifyTvCacheService.removeEntry(channel.id);
+          await DebrifyTvCacheService.removeEntry(
+            channel.id,
+            origin: WebDavSyncMutationOrigin.rollback,
+          );
         }
 
         _showSnack(message, color: Colors.orange);
@@ -7914,6 +7939,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       onAdd: _handleAddChannel,
       onImport: _handleImportChannels,
       onExport: _handleExportChannels,
+      onDeleteAll: _handleDeleteAllChannels,
       onSettings: _showGlobalSettingsDialog,
       onWatch: _watchChannel,
       onEdit: _handleEditChannel,

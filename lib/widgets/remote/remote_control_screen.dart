@@ -12,12 +12,16 @@ import '../../services/remote_control/remote_constants.dart';
 import '../../services/remote_control/remote_control_state.dart';
 import '../../services/remote_control/udp_discovery_service.dart';
 import 'remote_dpad_widget.dart';
-import 'remote_addon_export.dart';
-import 'remote_channel_export.dart';
-import 'remote_config_export.dart';
 import 'remote_keyboard_input.dart';
 import 'remote_pairing_dialog.dart';
 import 'remote_transfer_all.dart';
+import 'remote_transfer_progress.dart';
+import 'remote_send_workspace.dart';
+import 'remote_receive_screen.dart';
+import '../../services/storage_service.dart';
+import '../../utils/platform_util.dart';
+import '../../theme/app_theme_scope.dart';
+import '../../services/profiles/profile_runtime.dart';
 
 /// Full remote control UI modal
 class RemoteControlScreen extends StatefulWidget {
@@ -49,6 +53,35 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
   void _onStateChanged() {
     if (mounted) {
       setState(() {});
+    }
+  }
+
+  Future<void> _receiveInstead() async {
+    final state = RemoteControlState();
+    try {
+      final name =
+          await StorageService.getRemoteTvDeviceName() ??
+          await PlatformUtil.getDeviceName() ??
+          'This device';
+      if (!mounted) return;
+      await state.switchToReceiverMode(name);
+      if (!mounted) return;
+      await Navigator.of(context).push(
+        MaterialPageRoute<void>(builder: (_) => const RemoteReceiveScreen()),
+      );
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Could not start receiving. Please try again.'),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        await state.switchToSenderMode();
+        if (mounted) _closeView();
+      }
     }
   }
 
@@ -88,131 +121,137 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
   @override
   Widget build(BuildContext context) {
     final state = RemoteControlState();
-    final isConnected = state.isConnected;
-    final deviceName = state.connectedDevice?.deviceName ?? 'TV';
-
-    return Scaffold(
-      backgroundColor: const Color(0xFF0F172A),
-      body: SafeArea(
-        child: Column(
-          children: [
-            // Header
-            _buildHeader(context, isConnected, deviceName),
-
-            // Main content
-            Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
+    final app = AppThemeScope.of(context);
+    return ListenableBuilder(
+      listenable: state.transferActivity.status,
+      builder: (context, _) {
+        final busy = state.transferActivity.active || _sendingAvatar;
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: Theme.of(context).colorScheme.copyWith(
+              primary: app.core.tx,
+              onPrimary: app.inkOn(app.core.tx),
+              surface: app.settings.panel2,
+              onSurface: app.core.tx,
+            ),
+          ),
+          child: PopScope(
+            canPop: !busy,
+            child: Scaffold(
+              backgroundColor: app.core.ground,
+              appBar: AppBar(
+                backgroundColor: app.core.ground,
+                foregroundColor: app.core.tx,
+                title: const Text('Remote'),
+                actions: [
+                  TextButton(
+                    onPressed: busy ? null : _receiveInstead,
+                    child: const Text('Receive instead'),
+                  ),
+                ],
+                leading: BackButton(
+                  onPressed: busy
+                      ? null
+                      : () => Navigator.of(context).maybePop(),
+                ),
+              ),
+              body: SafeArea(
                 child: Column(
                   children: [
-                    const SizedBox(height: 20),
-
-                    // Connection status
-                    if (!isConnected) ...[
-                      _buildNotConnectedView(state),
-                    ] else if (_activeView == 'navigate') ...[
-                      // Navigate view - D-pad and media controls
-                      _buildNavigateView(state),
-                    ] else if (_activeView == 'addons') ...[
-                      // Addons view - export addons to TV
-                      RemoteAddonExport(onBack: _closeView),
-                    ] else if (_activeView == 'config') ...[
-                      // Config view - send setup to TV
-                      RemoteConfigExport(onBack: _closeView),
-                    ] else if (_activeView == 'channels') ...[
-                      // Channels view - send Debrify TV channels to TV
-                      RemoteChannelExport(onBack: _closeView),
-                    ] else if (_activeView == 'transfer_all') ...[
-                      RemoteTransferAll(onBack: _closeView),
-                    ] else ...[
-                      // Main menu
-                      _buildConnectedMenu(state),
+                    if (state.isConnected) ...[
+                      ListTile(
+                        title: Text(
+                          state.connectedDevice?.deviceName ?? 'TV',
+                          style: TextStyle(color: app.core.tx),
+                        ),
+                        subtitle: Text(
+                          'Connected',
+                          style: TextStyle(color: app.settings.dim),
+                        ),
+                        trailing: TextButton(
+                          onPressed: busy
+                              ? null
+                              : () async {
+                                  await state.disconnect();
+                                  await _connectSafely(state.rescan);
+                                },
+                          child: const Text('Change'),
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 20),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: _activeView != 'navigate'
+                                  ? FilledButton(
+                                      onPressed: busy ? null : _closeView,
+                                      child: const Text('Send'),
+                                    )
+                                  : OutlinedButton(
+                                      onPressed: busy ? null : _closeView,
+                                      child: const Text('Send'),
+                                    ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: _activeView == 'navigate'
+                                  ? FilledButton(
+                                      onPressed: busy
+                                          ? null
+                                          : () => _openView('navigate'),
+                                      child: const Text('Control'),
+                                    )
+                                  : OutlinedButton(
+                                      onPressed: busy
+                                          ? null
+                                          : () => _openView('navigate'),
+                                      child: const Text('Control'),
+                                    ),
+                            ),
+                          ],
+                        ),
+                      ),
                     ],
-
-                    const SizedBox(height: 32),
+                    const RemoteTransferProgressPanel(),
+                    Expanded(
+                      child: SingleChildScrollView(
+                        padding: const EdgeInsets.all(20),
+                        child: Column(
+                          children: [
+                            if (!state.isConnected)
+                              _buildNotConnectedView(state)
+                            else ...[
+                              Offstage(
+                                offstage: _activeView != null,
+                                child: ValueListenableBuilder(
+                                  valueListenable: ProfileRuntime.scope,
+                                  builder: (context, scope, _) =>
+                                      RemoteSendWorkspace(
+                                        key: ValueKey(scope),
+                                        onEverything: () =>
+                                            _openView('transfer_all'),
+                                        onPhoto: () =>
+                                            _pickAndSendAvatar(state),
+                                      ),
+                                ),
+                              ),
+                              if (_activeView == 'navigate')
+                                _buildNavigateView(state),
+                              if (_activeView == 'transfer_all')
+                                RemoteTransferAll(onBack: _closeView),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ),
                   ],
                 ),
               ),
             ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildHeader(
-    BuildContext context,
-    bool isConnected,
-    String deviceName,
-  ) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: BoxDecoration(
-        border: Border(
-          bottom: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
-        ),
-      ),
-      child: Row(
-        children: [
-          // Back button
-          IconButton(
-            icon: const Icon(Icons.arrow_back, color: Colors.white),
-            onPressed: () => Navigator.of(context).pop(),
           ),
-
-          const SizedBox(width: 8),
-
-          // Title
-          Expanded(
-            child: Text(
-              'Remote Control',
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-            ),
-          ),
-
-          // Connection indicator
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(
-              color: isConnected
-                  ? const Color(0xFF10B981).withValues(alpha: 0.2)
-                  : const Color(0xFFEF4444).withValues(alpha: 0.2),
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(
-                color: isConnected
-                    ? const Color(0xFF10B981).withValues(alpha: 0.5)
-                    : const Color(0xFFEF4444).withValues(alpha: 0.5),
-              ),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 8,
-                  height: 8,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: isConnected
-                        ? const Color(0xFF10B981)
-                        : const Color(0xFFEF4444),
-                  ),
-                ),
-                const SizedBox(width: 6),
-                Text(
-                  isConnected ? deviceName : 'Disconnected',
-                  style: TextStyle(
-                    color: isConnected
-                        ? const Color(0xFF10B981)
-                        : const Color(0xFFEF4444),
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 
@@ -228,20 +267,26 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
           children: [
             // Status indicator
             if (state.isScanning) ...[
-              const SizedBox(
+              SizedBox(
                 width: 20,
                 height: 20,
                 child: CircularProgressIndicator(
                   strokeWidth: 2,
-                  valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF6366F1)),
+                  valueColor: AlwaysStoppedAnimation<Color>(
+                    AppThemeScope.of(context).core.tx,
+                  ),
                 ),
               ),
               const SizedBox(width: 12),
-              Text(
-                'Scanning...',
-                style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.7),
-                  fontSize: 14,
+              Expanded(
+                child: Text(
+                  'Scanning...',
+                  style: TextStyle(
+                    color: AppThemeScope.of(
+                      context,
+                    ).core.tx.withValues(alpha: 0.7),
+                    fontSize: 14,
+                  ),
                 ),
               ),
             ] else ...[
@@ -250,21 +295,23 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
                 size: 20,
                 color: hasDevices
                     ? const Color(0xFF10B981)
-                    : Colors.white.withValues(alpha: 0.5),
+                    : AppThemeScope.of(context).core.tx.withValues(alpha: 0.5),
               ),
               const SizedBox(width: 12),
-              Text(
-                hasDevices
-                    ? '${state.discoveredDevices.length} TV${state.discoveredDevices.length > 1 ? 's' : ''} found'
-                    : 'No TVs found',
-                style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.7),
-                  fontSize: 14,
+              Expanded(
+                child: Text(
+                  hasDevices
+                      ? '${state.discoveredDevices.length} TV${state.discoveredDevices.length > 1 ? 's' : ''} found'
+                      : 'No TVs found',
+                  style: TextStyle(
+                    color: AppThemeScope.of(
+                      context,
+                    ).core.tx.withValues(alpha: 0.7),
+                    fontSize: 14,
+                  ),
                 ),
               ),
             ],
-
-            const Spacer(),
 
             // Scan/Rescan button
             TextButton.icon(
@@ -272,21 +319,21 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
                   ? null
                   : () {
                       HapticFeedback.mediumImpact();
-                      state.rescan();
+                      _connectSafely(state.rescan);
                     },
               icon: Icon(
                 Icons.radar,
                 size: 18,
                 color: state.isScanning
-                    ? Colors.white.withValues(alpha: 0.3)
-                    : const Color(0xFF6366F1),
+                    ? AppThemeScope.of(context).core.tx.withValues(alpha: 0.3)
+                    : AppThemeScope.of(context).core.tx,
               ),
               label: Text(
                 hasDevices ? 'Rescan' : 'Scan',
                 style: TextStyle(
                   color: state.isScanning
-                      ? Colors.white.withValues(alpha: 0.3)
-                      : const Color(0xFF6366F1),
+                      ? AppThemeScope.of(context).core.tx.withValues(alpha: 0.3)
+                      : AppThemeScope.of(context).core.tx,
                 ),
               ),
             ),
@@ -309,20 +356,22 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
             height: 80,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: const Color(0xFF1E293B),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+              color: AppThemeScope.of(context).settings.panel2,
+              border: Border.all(
+                color: AppThemeScope.of(context).core.tx.withValues(alpha: 0.1),
+              ),
             ),
             child: Icon(
               Icons.tv_off,
               size: 36,
-              color: Colors.white.withValues(alpha: 0.5),
+              color: AppThemeScope.of(context).core.tx.withValues(alpha: 0.5),
             ),
           ),
           const SizedBox(height: 16),
           Text(
             state.lastError ?? 'No TVs found on your network',
             style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.7),
+              color: AppThemeScope.of(context).core.tx.withValues(alpha: 0.7),
               fontSize: 14,
             ),
             textAlign: TextAlign.center,
@@ -331,7 +380,7 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
           Text(
             'Make sure Debrify is running on your TV',
             style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.5),
+              color: AppThemeScope.of(context).core.tx.withValues(alpha: 0.5),
               fontSize: 12,
             ),
             textAlign: TextAlign.center,
@@ -352,11 +401,15 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
         HapticFeedback.mediumImpact();
         _showManualIpDialog(state);
       },
-      icon: const Icon(Icons.lan_rounded, size: 18),
-      label: const Text('Connect by IP (Tailscale / VPN)'),
+      icon: Icon(Icons.lan_rounded, size: 18),
+      label: Text('Connect by IP (Tailscale / VPN)'),
       style: OutlinedButton.styleFrom(
-        foregroundColor: Colors.white.withValues(alpha: 0.85),
-        side: BorderSide(color: Colors.white.withValues(alpha: 0.18)),
+        foregroundColor: AppThemeScope.of(
+          context,
+        ).core.tx.withValues(alpha: 0.85),
+        side: BorderSide(
+          color: AppThemeScope.of(context).core.tx.withValues(alpha: 0.18),
+        ),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
@@ -371,11 +424,11 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
       context: context,
       builder: (dialogContext) {
         return AlertDialog(
-          backgroundColor: const Color(0xFF1E293B),
+          backgroundColor: AppThemeScope.of(context).settings.panel2,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
           ),
-          title: const Text(
+          title: Text(
             'Connect by IP',
             style: TextStyle(fontWeight: FontWeight.w600),
           ),
@@ -386,7 +439,9 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
               Text(
                 'Enter the receiver\'s IP. For Tailscale, this is the 100.x.y.z address shown on the receiving device.',
                 style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.65),
+                  color: AppThemeScope.of(
+                    context,
+                  ).core.tx.withValues(alpha: 0.65),
                   fontSize: 13,
                   height: 1.4,
                 ),
@@ -397,7 +452,7 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
                 child: TextFormField(
                   controller: controller,
                   autofocus: true,
-                  style: const TextStyle(fontSize: 15),
+                  style: TextStyle(fontSize: 15),
                   keyboardType: TextInputType.numberWithOptions(decimal: true),
                   inputFormatters: [
                     FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
@@ -405,30 +460,36 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
                   decoration: InputDecoration(
                     hintText: '100.64.0.5',
                     hintStyle: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.3),
+                      color: AppThemeScope.of(
+                        context,
+                      ).core.tx.withValues(alpha: 0.3),
                     ),
                     filled: true,
-                    fillColor: const Color(0xFF0F172A),
+                    fillColor: AppThemeScope.of(context).core.ground,
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(10),
                       borderSide: BorderSide(
-                        color: Colors.white.withValues(alpha: 0.1),
+                        color: AppThemeScope.of(
+                          context,
+                        ).core.tx.withValues(alpha: 0.1),
                       ),
                     ),
                     enabledBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(10),
                       borderSide: BorderSide(
-                        color: Colors.white.withValues(alpha: 0.1),
+                        color: AppThemeScope.of(
+                          context,
+                        ).core.tx.withValues(alpha: 0.1),
                       ),
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(10),
-                      borderSide: const BorderSide(
-                        color: Color(0xFF6366F1),
+                      borderSide: BorderSide(
+                        color: AppThemeScope.of(context).core.tx,
                         width: 1.5,
                       ),
                     ),
-                    errorStyle: const TextStyle(
+                    errorStyle: TextStyle(
                       color: Color(0xFFEF4444),
                       fontSize: 12,
                     ),
@@ -449,16 +510,20 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
               onPressed: () => Navigator.of(dialogContext).pop(),
               child: Text(
                 'Cancel',
-                style: TextStyle(color: Colors.white.withValues(alpha: 0.6)),
+                style: TextStyle(
+                  color: AppThemeScope.of(
+                    context,
+                  ).core.tx.withValues(alpha: 0.6),
+                ),
               ),
             ),
             FilledButton(
               onPressed: () =>
                   _submitManualIp(dialogContext, formKey, controller, state),
               style: FilledButton.styleFrom(
-                backgroundColor: const Color(0xFF6366F1),
+                backgroundColor: AppThemeScope.of(context).core.tx,
               ),
-              child: const Text('Connect'),
+              child: Text('Connect'),
             ),
           ],
         );
@@ -476,7 +541,22 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
     final ip = controller.text.trim();
     Navigator.of(dialogContext).pop();
     HapticFeedback.mediumImpact();
-    state.connectToManualIp(ip);
+    _connectSafely(() => state.connectToManualIp(ip));
+  }
+
+  Future<void> _connectSafely(Future<void> Function() connect) async {
+    try {
+      await connect();
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Could not start the connection. Check local network access and retry.',
+          ),
+        ),
+      );
+    }
   }
 
   String? _validateIpv4(String? value) {
@@ -506,15 +586,17 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
               ? null
               : () {
                   HapticFeedback.mediumImpact();
-                  state.connectToDevice(device);
+                  _connectSafely(() => state.connectToDevice(device));
                 },
           borderRadius: BorderRadius.circular(12),
           child: Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: const Color(0xFF1E293B),
+              color: AppThemeScope.of(context).settings.panel2,
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+              border: Border.all(
+                color: AppThemeScope.of(context).core.tx.withValues(alpha: 0.1),
+              ),
             ),
             child: Row(
               children: [
@@ -523,10 +605,16 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
                   width: 48,
                   height: 48,
                   decoration: BoxDecoration(
-                    color: const Color(0xFF334155),
+                    color: AppThemeScope.of(context).settings.panel2,
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: const Icon(Icons.tv, color: Colors.white, size: 24),
+                  child: Icon(
+                    Icons.tv,
+                    color: AppThemeScope.of(
+                      context,
+                    ).inkOn(AppThemeScope.of(context).core.tx),
+                    size: 24,
+                  ),
                 ),
 
                 const SizedBox(width: 16),
@@ -538,7 +626,7 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
                     children: [
                       Text(
                         device.deviceName,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w500,
                         ),
@@ -547,7 +635,9 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
                       Text(
                         device.ip,
                         style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.5),
+                          color: AppThemeScope.of(
+                            context,
+                          ).core.tx.withValues(alpha: 0.5),
                           fontSize: 12,
                         ),
                       ),
@@ -557,13 +647,13 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
 
                 // Connect button/indicator
                 if (isConnecting)
-                  const SizedBox(
+                  SizedBox(
                     width: 24,
                     height: 24,
                     child: CircularProgressIndicator(
                       strokeWidth: 2,
                       valueColor: AlwaysStoppedAnimation<Color>(
-                        Color(0xFF6366F1),
+                        AppThemeScope.of(context).core.tx,
                       ),
                     ),
                   )
@@ -574,13 +664,15 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
                       vertical: 6,
                     ),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF6366F1).withValues(alpha: 0.2),
+                      color: AppThemeScope.of(
+                        context,
+                      ).core.tx.withValues(alpha: 0.2),
                       borderRadius: BorderRadius.circular(16),
                     ),
-                    child: const Text(
+                    child: Text(
                       'Connect',
                       style: TextStyle(
-                        color: Color(0xFF6366F1),
+                        color: AppThemeScope.of(context).core.tx,
                         fontSize: 12,
                         fontWeight: FontWeight.w500,
                       ),
@@ -594,84 +686,12 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
     );
   }
 
-  Widget _buildConnectedMenu(RemoteControlState state) {
-    return Column(
-      children: [
-        // Menu items
-        _buildMenuItem(
-          icon: Icons.bolt_rounded,
-          title: 'Transfer Everything',
-          subtitle: 'One-click: send all setup and addons',
-          onTap: () => _openView('transfer_all'),
-        ),
+  Future<void> _pickAndSendAvatar(RemoteControlState state) =>
+      RemoteControlState().transferActivity.run(
+        () => _pickAndSendAvatarNow(state),
+      );
 
-        const SizedBox(height: 8),
-
-        _buildMenuItem(
-          icon: Icons.gamepad_rounded,
-          title: 'Navigate',
-          subtitle: 'D-pad and media controls',
-          onTap: () => _openView('navigate'),
-        ),
-
-        const SizedBox(height: 8),
-
-        _buildMenuItem(
-          icon: Icons.extension_rounded,
-          title: 'Stremio Addons',
-          subtitle: 'Send addons to your TV',
-          onTap: () => _openView('addons'),
-        ),
-
-        const SizedBox(height: 8),
-
-        _buildMenuItem(
-          icon: Icons.live_tv_rounded,
-          title: 'Debrify TV Channels',
-          subtitle: 'Send channels to your TV',
-          onTap: () => _openView('channels'),
-        ),
-
-        const SizedBox(height: 8),
-
-        _buildMenuItem(
-          icon: Icons.settings_remote_rounded,
-          title: 'Send Setup to TV',
-          subtitle: 'API keys, credentials, engines',
-          onTap: () => _openView('config'),
-        ),
-
-        const SizedBox(height: 8),
-
-        _buildMenuItem(
-          icon: Icons.account_circle_outlined,
-          title: _sendingAvatar ? 'Sending Avatar…' : 'Send Profile Avatar',
-          subtitle: 'Apply a photo to the active Admin on TV',
-          onTap: _sendingAvatar ? () {} : () => _pickAndSendAvatar(state),
-        ),
-
-        const SizedBox(height: 20),
-
-        // Switch TV option
-        TextButton(
-          onPressed: () {
-            HapticFeedback.lightImpact();
-            state.disconnect();
-            state.rescan();
-          },
-          child: Text(
-            'Switch TV',
-            style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.5),
-              fontSize: 13,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Future<void> _pickAndSendAvatar(RemoteControlState state) async {
+  Future<void> _pickAndSendAvatarNow(RemoteControlState state) async {
     if (!await ProfilePolicyGuard.allows(ProfileFeature.remoteTransfer) ||
         !mounted) {
       return;
@@ -748,84 +768,6 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
     return builder.takeBytes();
   }
 
-  Widget _buildMenuItem({
-    required IconData icon,
-    required String title,
-    required String subtitle,
-    required VoidCallback onTap,
-  }) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: () {
-          HapticFeedback.mediumImpact();
-          onTap();
-        },
-        borderRadius: BorderRadius.circular(12),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-          decoration: BoxDecoration(
-            color: const Color(0xFF1E293B).withValues(alpha: 0.7),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
-                  ),
-                  borderRadius: BorderRadius.circular(10),
-                  boxShadow: [
-                    BoxShadow(
-                      color: const Color(0xFF6366F1).withValues(alpha: 0.3),
-                      blurRadius: 8,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-                ),
-                child: Icon(icon, color: Colors.white, size: 20),
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: const TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      subtitle,
-                      style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.5),
-                        fontSize: 12,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Icon(
-                Icons.chevron_right_rounded,
-                color: Colors.white.withValues(alpha: 0.3),
-                size: 20,
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
   Widget _buildNavigateView(RemoteControlState state) {
     return Column(
       children: [
@@ -843,7 +785,9 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
             icon: const Icon(Icons.arrow_back, size: 18),
             label: Text(_showKeyboard ? 'Hide keyboard' : 'Back to menu'),
             style: TextButton.styleFrom(
-              foregroundColor: Colors.white.withValues(alpha: 0.7),
+              foregroundColor: AppThemeScope.of(
+                context,
+              ).core.tx.withValues(alpha: 0.7),
             ),
           ),
         ),
@@ -885,12 +829,14 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
                 label: Text(_showKeyboard ? 'Hide' : 'Keyboard'),
                 style: OutlinedButton.styleFrom(
                   foregroundColor: _showKeyboard
-                      ? const Color(0xFF6366F1)
-                      : Colors.white,
+                      ? AppThemeScope.of(context).core.tx
+                      : AppThemeScope.of(context).core.tx,
                   side: BorderSide(
                     color: _showKeyboard
-                        ? const Color(0xFF6366F1)
-                        : Colors.white.withValues(alpha: 0.3),
+                        ? AppThemeScope.of(context).core.tx
+                        : AppThemeScope.of(
+                            context,
+                          ).core.tx.withValues(alpha: 0.3),
                   ),
                   padding: const EdgeInsets.symmetric(vertical: 14),
                   shape: RoundedRectangleBorder(
@@ -912,8 +858,12 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
                 icon: const Icon(Icons.arrow_back, size: 20),
                 label: const Text('Back'),
                 style: OutlinedButton.styleFrom(
-                  foregroundColor: Colors.white,
-                  side: BorderSide(color: Colors.white.withValues(alpha: 0.3)),
+                  foregroundColor: AppThemeScope.of(context).core.tx,
+                  side: BorderSide(
+                    color: AppThemeScope.of(
+                      context,
+                    ).core.tx.withValues(alpha: 0.3),
+                  ),
                   padding: const EdgeInsets.symmetric(vertical: 14),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
@@ -1005,32 +955,18 @@ class _MediaButtonState extends State<_MediaButton> {
           height: widget.size,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            gradient: widget.isPrimary
-                ? const LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
-                  )
-                : null,
-            color: widget.isPrimary ? null : const Color(0xFF334155),
-            border: Border.all(
-              color: widget.isPrimary
-                  ? Colors.transparent
-                  : Colors.white.withValues(alpha: 0.1),
-            ),
-            boxShadow: widget.isPrimary
-                ? [
-                    BoxShadow(
-                      color: const Color(0xFF6366F1).withValues(alpha: 0.4),
-                      blurRadius: 12,
-                      offset: const Offset(0, 4),
-                    ),
-                  ]
-                : null,
+            color: widget.isPrimary
+                ? AppThemeScope.of(context).core.tx
+                : AppThemeScope.of(context).settings.panel2,
+            border: Border.all(color: AppThemeScope.of(context).settings.line),
           ),
           child: Icon(
             widget.icon,
-            color: Colors.white,
+            color: widget.isPrimary
+                ? AppThemeScope.of(
+                    context,
+                  ).inkOn(AppThemeScope.of(context).core.tx)
+                : AppThemeScope.of(context).core.tx,
             size: widget.size * 0.5,
           ),
         ),

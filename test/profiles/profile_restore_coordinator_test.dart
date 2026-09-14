@@ -1,5 +1,20 @@
+import 'package:debrify/services/profiles/local_backup/local_backup_archive.dart';
 import 'dart:convert';
+import 'dart:math';
+import 'package:debrify/models/home_collection.dart';
+import 'package:debrify/services/profiles/profile_preference_budget.dart';
+import 'package:debrify/models/home_collection_inventory.dart';
 import 'dart:io';
+import 'package:debrify/models/indexer_manager_config.dart';
+import 'package:debrify/models/iptv_playlist.dart';
+import 'package:debrify/models/webdav_item.dart';
+import 'package:debrify/services/storage_service.dart';
+import 'package:debrify/services/profiles/profile_collection_resource_facade.dart';
+import 'package:debrify/services/webdav_sync/webdav_sync_adoption.dart';
+import 'package:debrify/services/webdav_sync/webdav_sync_adoption_models.dart';
+import 'package:debrify/services/webdav_sync/webdav_sync_adoption_operations.dart';
+import 'package:debrify/services/webdav_sync/webdav_sync_engine_state.dart';
+import 'package:debrify/services/webdav_sync/webdav_sync_graph.dart';
 
 import 'package:cryptography/cryptography.dart';
 import 'package:debrify/models/profiles/connection_resource.dart';
@@ -193,6 +208,700 @@ void main() {
     await temporaryDirectory.delete(recursive: true);
   });
 
+  test(
+    'sync bootstrap excludes appearance but explicit backup restores it',
+    () async {
+      final prefs = await ProfilePreferences.instance();
+      await prefs.setString('tv_home_style', 'spotlight');
+      await prefs.setString('app_theme', 'aurora');
+      await prefs.setInt('defaults_generation', 3);
+      await prefs.setString('tv_player_controls_style', 'frost');
+      await prefs.setString('debrify_tv_player_style', 'cinema');
+      await prefs.setString('player_dock_style', 'compact');
+
+      await prefs.setString('tv_sidebar_style', 'pill');
+      await prefs.setString('desktop_sidebar_style', 'rail');
+      await prefs.setString('phone_nav_style', 'floating');
+      await prefs.setBool('home_hide_catalog_addon_names', true);
+      await prefs.setInt('home_hero_trailer_volume', 20);
+      await prefs.setInt('detail_trailer_volume', 20);
+      await prefs.setInt('subtitle_size_index', 4);
+      await prefs.setInt('subtitle_style_index', 2);
+      await prefs.setInt('subtitle_color_index', 1);
+      await prefs.setInt('subtitle_bg_index', 3);
+      await prefs.setInt('subtitle_outline_color_index', 7);
+      await prefs.setInt('subtitle_elevation_index', 0);
+      await prefs.setBool('subtitle_bold', true);
+      await prefs.setString('subtitle_selected_font_id', 'notosans');
+      await prefs.setString('default_torrent_provider_v1', 'torbox');
+      final packages = ProfilePackageService(
+        registry: registry,
+        resources: ConnectionResourceService(
+          registry: registry,
+          cipher: cipher,
+        ),
+      );
+      final authorization = await ProfileAuthorizationContext.capture(registry);
+      final backup = await packages.exportAllProfiles(
+        context: authorization,
+        includeSecrets: true,
+        includeDatabases: false,
+      );
+      final sync = await packages.exportAllProfilesForSync(
+        context: authorization,
+        profileIdProjection: const {},
+        resourceIdProjection: const {},
+        includeDatabases: false,
+        includePreferences: true,
+      );
+      Map valuesOf(PortableProfilePackage package) =>
+          package.sections[package
+                  .profiles
+                  .single['preferencesSection']]['values']
+              as Map;
+      expect(valuesOf(backup)['tv_home_style'], 'spotlight');
+      expect(valuesOf(sync.package)['tv_player_controls_style'], 'frost');
+      expect(valuesOf(sync.package)['debrify_tv_player_style'], 'cinema');
+      expect(valuesOf(sync.package)['player_dock_style'], 'compact');
+
+      expect(valuesOf(backup)['defaults_generation'], 3);
+      expect(valuesOf(sync.package), isNot(contains('defaults_generation')));
+      expect(valuesOf(sync.package), isNot(contains('tv_home_style')));
+      expect(valuesOf(sync.package), isNot(contains('app_theme')));
+      expect(valuesOf(sync.package)['default_torrent_provider_v1'], 'torbox');
+      expect(valuesOf(sync.package)['tv_sidebar_style'], 'pill');
+      expect(valuesOf(sync.package)['desktop_sidebar_style'], 'rail');
+      expect(valuesOf(sync.package)['phone_nav_style'], 'floating');
+      expect(valuesOf(sync.package)['home_hide_catalog_addon_names'], true);
+      expect(valuesOf(sync.package)['home_hero_trailer_volume'], 20);
+      expect(valuesOf(sync.package)['detail_trailer_volume'], 20);
+      expect(valuesOf(sync.package)['subtitle_size_index'], 4);
+      expect(valuesOf(sync.package)['subtitle_style_index'], 2);
+      expect(valuesOf(sync.package)['subtitle_color_index'], 1);
+      expect(valuesOf(sync.package)['subtitle_bg_index'], 3);
+      expect(valuesOf(sync.package)['subtitle_outline_color_index'], 7);
+      expect(valuesOf(sync.package)['subtitle_elevation_index'], 0);
+      expect(valuesOf(sync.package)['subtitle_bold'], true);
+      expect(valuesOf(sync.package)['subtitle_selected_font_id'], 'notosans');
+      expect(
+        valuesOf(sync.package),
+        isNot(contains('subtitle_extreme_bottom_default_adopted_v1')),
+      );
+      final restore = ProfileRestoreCoordinator(
+        registry: registry,
+        cipher: cipher,
+      );
+      final lifecycle = ProfileLifecycleCoordinator(registry: registry);
+      addTearDown(lifecycle.dispose);
+      final operations = DefaultWebDavSyncAdoptionOperations(
+        registry: registry,
+        restoreCoordinator: restore,
+        lifecycleCoordinator: lifecycle,
+      );
+      // A legacy bootstrap still contains appearance, just like this backup.
+      final joined = await operations.restoreGraph(
+        package: backup,
+        authorization: authorization,
+      );
+      final raw = await SharedPreferences.getInstance();
+      Future<ProfileScope> scopeFor(String id) async => ProfileScope(
+        profileId: id,
+        dataGeneration: (await registry.getProfile(id))!.visibleDataGeneration,
+        sessionEpoch: 1,
+      );
+      final joinedScope = await scopeFor(joined.importedProfileIds.single);
+      expect(
+        raw.getBool(joinedScope.preferenceKey('home_hide_catalog_addon_names')),
+        true,
+      );
+      expect(
+        raw.getInt(joinedScope.preferenceKey('home_hero_trailer_volume')),
+        20,
+      );
+      expect(
+        raw.getInt(joinedScope.preferenceKey('detail_trailer_volume')),
+        20,
+      );
+      expect(
+        raw.getInt(joinedScope.preferenceKey('subtitle_elevation_index')),
+        0,
+      );
+      expect(
+        raw.getString(joinedScope.preferenceKey('subtitle_selected_font_id')),
+        'notosans',
+      );
+      expect(
+        raw.getBool(
+          joinedScope.preferenceKey(
+            'subtitle_extreme_bottom_default_adopted_v1',
+          ),
+        ),
+        true,
+      );
+      expect(
+        raw.containsKey(joinedScope.preferenceKey('tv_home_style')),
+        isFalse,
+      );
+      expect(raw.containsKey(joinedScope.preferenceKey('app_theme')), isFalse);
+      expect(
+        raw.containsKey(joinedScope.preferenceKey('defaults_generation')),
+        isFalse,
+      );
+      expect(
+        raw.getString(joinedScope.preferenceKey('default_torrent_provider_v1')),
+        'torbox',
+      );
+      expect(
+        raw.getString(joinedScope.preferenceKey('tv_sidebar_style')),
+        'pill',
+      );
+      expect(
+        raw.getString(joinedScope.preferenceKey('desktop_sidebar_style')),
+        'rail',
+      );
+      expect(
+        raw.getString(joinedScope.preferenceKey('phone_nav_style')),
+        'floating',
+      );
+      expect(
+        raw.getString(joinedScope.preferenceKey('tv_player_controls_style')),
+        'frost',
+      );
+      expect(
+        raw.getString(joinedScope.preferenceKey('debrify_tv_player_style')),
+        'cinema',
+      );
+      expect(
+        raw.getString(joinedScope.preferenceKey('player_dock_style')),
+        'compact',
+      );
+      // Rejoining an existing profile carries its LOCAL appearance to the new ID.
+      await operations.carryLocalState(
+        oldProfileId: profileId,
+        newProfileId: joined.importedProfileIds.single,
+        oldToNewResources: const {},
+        unmappedOldResourceIds: const {},
+      );
+      expect(
+        raw.getString(joinedScope.preferenceKey('tv_home_style')),
+        'spotlight',
+      );
+      final manual = await restore.restoreDeviceGraph(
+        package: backup,
+        authorization: authorization,
+      );
+      final manualScope = await scopeFor(manual.importedProfileIds.single);
+      expect(
+        raw.getString(manualScope.preferenceKey('tv_home_style')),
+        'spotlight',
+      );
+      expect(raw.getString(manualScope.preferenceKey('app_theme')), 'aurora');
+    },
+  );
+
+  test(
+    'legacy backup salvages valid collections and restores other preferences',
+    () async {
+      final authorization = await ProfileAuthorizationContext.capture(registry);
+      final package = PortableProfilePackage(
+        mode: 'singleProfile',
+        createdAt: DateTime.utc(2026),
+        profiles: [
+          {
+            'backupId': 'profile-0',
+            'name': 'Backup',
+            'preferencesSection': 'prefs',
+          },
+        ],
+        resources: [],
+        sections: {
+          'prefs': await PortableProfilePackage.buildSection({
+            'app_theme': 'spotlight',
+            HomeCollectionInventory.legacyPrefsKey: jsonEncode({
+              'version': 2,
+              'records': {
+                'valid': {'id': 'valid', 'title': 'Kept'},
+                'bad': 42,
+              },
+              'order': ['valid', 'bad'],
+            }),
+          }),
+        },
+      );
+      await ProfileRestoreCoordinator(
+        registry: registry,
+        cipher: cipher,
+      ).restore(
+        package: package,
+        destinationProfileId: profileId,
+        authorization: authorization,
+      );
+      final prefs = await ProfilePreferences.instance();
+      expect(prefs.getString('app_theme'), 'spotlight');
+      expect(
+        HomeCollectionInventory.decode(
+          prefs.getString(HomeCollectionInventory.prefsKey),
+        ).hadCorruption,
+        true,
+      );
+      expect(
+        HomeCollectionInventory.decode(
+          prefs.getString(HomeCollectionInventory.prefsKey),
+        ).collections.map((c) => c.id),
+        ['valid'],
+      );
+    },
+  );
+
+  test(
+    'oversized backup collections stay out of legacy preferences and restore in full',
+    () async {
+      final random = Random(42);
+      final original = HomeCollectionInventory()
+        ..put(
+          HomeCollection(
+            id: 'large',
+            title: String.fromCharCodes(
+              List.generate(7 * 1024 * 1024, (_) => 33 + random.nextInt(90)),
+            ),
+          ),
+        );
+      final prefs = await ProfilePreferences.instance();
+      await prefs.setString(
+        HomeCollectionInventory.prefsKey,
+        original.encode(),
+      );
+      final authorization = await ProfileAuthorizationContext.capture(registry);
+      final service = ProfilePackageService(
+        registry: registry,
+        resources: ConnectionResourceService(
+          registry: registry,
+          cipher: cipher,
+        ),
+      );
+      final package = await service.exportProfile(
+        context: authorization,
+        scope: ProfileRuntime.capture(),
+        includeSecrets: true,
+        sanitized: false,
+      );
+      final section = package.sections['profile-0-preferences'] as Map;
+      final legacyValues = section['values'] as Map;
+      expect(legacyValues.containsKey(HomeCollectionInventory.prefsKey), false);
+      expect(
+        legacyValues.containsKey(HomeCollectionInventory.legacyPrefsKey),
+        false,
+      );
+      expect(section['collectionInventory'], isA<List>());
+      for (final part in section['collectionInventory'] as List) {
+        expect(
+          utf8.encode(part as String).length,
+          lessThan(PortableProfilePackage.maxStringBytes),
+        );
+      }
+      expect(package.omissions['collectionsRequireNewerBuild'], true);
+      final decoded = await PortableProfilePackage.decodeAuthenticatedMap(
+        await PortableProfilePackage.withIntegrity(package),
+      );
+      await prefs.remove(HomeCollectionInventory.prefsKey);
+      await ProfileRestoreCoordinator(
+        registry: registry,
+        cipher: cipher,
+      ).restore(
+        package: decoded,
+        destinationProfileId: profileId,
+        authorization: authorization,
+      );
+      final restored = await ProfilePreferences.instance();
+      expect(
+        HomeCollectionInventory.decode(
+          restored.getString(HomeCollectionInventory.prefsKey),
+        ).collections.single.title,
+        original.collections.single.title,
+      );
+
+      // Sanitized exports use a strict allowlist: neither collection key nor the
+      // full inventory extension can escape into a shareable package.
+      final shareable = await service.exportProfile(
+        context: await ProfileAuthorizationContext.capture(registry),
+        scope: ProfileRuntime.capture(),
+        includeSecrets: false,
+        sanitized: true,
+      );
+      final shareSection = shareable.sections['profile-0-preferences'] as Map;
+      expect(shareSection.containsKey('collectionInventory'), false);
+      expect(
+        (shareSection['values'] as Map).keys.any(
+          (k) => '$k'.contains('collections'),
+        ),
+        false,
+      );
+      await PortableProfilePackage.decodeAuthenticatedMap(
+        await PortableProfilePackage.withIntegrity(shareable),
+      );
+      final small =
+          (HomeCollectionInventory()
+                ..put(const HomeCollection(id: 'kept', title: 'Kept')))
+              .encode();
+      await restored.setString(HomeCollectionInventory.prefsKey, small);
+      final before = ProfileRuntime.capture();
+      final freshAuthorization = await ProfileAuthorizationContext.capture(
+        registry,
+      );
+      ProfilePreferenceBudget.debugEnforcedOverride = true;
+      try {
+        await expectLater(
+          ProfileRestoreCoordinator(registry: registry, cipher: cipher).restore(
+            package: decoded,
+            destinationProfileId: profileId,
+            authorization: freshAuthorization,
+          ),
+          throwsStateError,
+        );
+        expect(ProfileRuntime.capture(), before);
+        expect(
+          (await ProfilePreferences.instance()).getString(
+            HomeCollectionInventory.prefsKey,
+          ),
+          small,
+        );
+      } finally {
+        ProfilePreferenceBudget.debugReset();
+      }
+    },
+  );
+
+  test(
+    'collection backup is legacy-readable and restores compact rich data',
+    () async {
+      final inventory = HomeCollectionInventory()
+        ..put(
+          HomeCollection.fromJson({
+            'id': 'native',
+            'title': 'Native',
+            'viewMode': 'TABBED_GRID',
+            'folders': [
+              {
+                'id': 'f',
+                'title': 'Folder',
+                'heroVideoUrl': 'https://example.test/hero.mp4',
+                'sources': [
+                  {'provider': 'tmdb', 'tmdbSourceType': 'LIST', 'tmdbId': 42},
+                ],
+              },
+            ],
+          })!,
+        );
+      final prefs = await ProfilePreferences.instance();
+      await prefs.setString(
+        HomeCollectionInventory.prefsKey,
+        inventory.encode(),
+      );
+      final authorization = await ProfileAuthorizationContext.capture(registry);
+      final service = ConnectionResourceService(
+        registry: registry,
+        cipher: cipher,
+      );
+      final package =
+          await ProfilePackageService(
+            registry: registry,
+            resources: service,
+          ).exportProfile(
+            context: authorization,
+            scope: ProfileRuntime.capture(),
+            includeSecrets: true,
+            sanitized: false,
+          );
+      final values =
+          (package.sections['profile-0-preferences'] as Map)['values'] as Map;
+      expect(values.containsKey(HomeCollectionInventory.prefsKey), false);
+      final legacy =
+          jsonDecode(values[HomeCollectionInventory.legacyPrefsKey] as String)
+              as Map;
+      expect(legacy['version'], 2);
+      expect((legacy['records'] as Map).containsKey('native'), true);
+      await ProfileRestoreCoordinator(
+        registry: registry,
+        cipher: cipher,
+      ).restore(
+        package: package,
+        destinationProfileId: profileId,
+        authorization: authorization,
+      );
+      final restoredPrefs = await ProfilePreferences.instance();
+      final restored = HomeCollectionInventory.decode(
+        restoredPrefs.getString(HomeCollectionInventory.prefsKey),
+      );
+      expect(restored.collections.single.sourceCount, 1);
+      expect(restored.collections.single.viewMode, 'TABBED_GRID');
+      expect(
+        restoredPrefs.getString(HomeCollectionInventory.legacyPrefsKey),
+        isNull,
+      );
+    },
+  );
+
+  test(
+    'restored backup then circle adoption leaves every collection usable',
+    () async {
+      final resources = ConnectionResourceService(
+        registry: registry,
+        cipher: cipher,
+      );
+      const types = {
+        ConnectionResourceType.iptvM3u,
+        ConnectionResourceType.iptvXtream,
+        ConnectionResourceType.stremioAddon,
+        ConnectionResourceType.webDav,
+        ConnectionResourceType.jackett,
+        ConnectionResourceType.prowlarr,
+      };
+      for (final type in types) {
+        final secret = <String, dynamic>{
+          'id': 'old-${type.name}',
+          'name': type.name,
+          'enabled': true,
+          // Deliberately retain old compatibility authority in the encrypted
+          // payload. Only registry readback may mint an executable model.
+          '_connectionResourceId': 'pre-backup-resource',
+          '_connectionResourceRevision': 73,
+          if (type == ConnectionResourceType.iptvM3u ||
+              type == ConnectionResourceType.iptvXtream) ...{
+            'url': type == ConnectionResourceType.iptvM3u
+                ? 'https://example.invalid/list.m3u'
+                : '',
+            'addedAt': '2026-08-01T00:00:00.000Z',
+            if (type == ConnectionResourceType.iptvXtream) ...{
+              'serverUrl': 'https://example.invalid',
+              'username': 'test-user',
+              'password': 'test-password',
+            },
+          },
+          if (type == ConnectionResourceType.stremioAddon) ...{
+            'manifest_url': 'https://example.invalid/manifest.json',
+            'base_url': 'https://example.invalid',
+            'types': ['movie'],
+            'resources': ['catalog'],
+            'catalogs': [
+              {'id': 'top', 'type': 'movie', 'name': 'Popular'},
+            ],
+          },
+          if (type == ConnectionResourceType.webDav) ...{
+            'baseUrl': 'https://example.invalid/dav',
+            'username': 'test-user',
+            'password': 'test-password',
+          },
+          if (type == ConnectionResourceType.jackett ||
+              type == ConnectionResourceType.prowlarr) ...{
+            'type': type.name,
+            'base_url': 'https://example.invalid',
+            'api_key': 'test-key',
+          },
+        };
+        final created = await resources.create(
+          context: await ProfileAuthorizationContext.capture(registry),
+          type: type,
+          label: type.name,
+          publicConfig: const {},
+          secretConfig: secret,
+        );
+        if (type == ConnectionResourceType.stremioAddon) {
+          await StorageService.setHomeDisabledSections({
+            '${created.id}:movie:top',
+            'cw:movies',
+          });
+          await StorageService.setHomeRowOrder([
+            'cw:movies',
+            '${created.id}:movie:top',
+          ]);
+        }
+      }
+      final packages = ProfilePackageService(
+        registry: registry,
+        resources: resources,
+      );
+      final circle = await packages.exportAllProfiles(
+        context: await ProfileAuthorizationContext.capture(registry),
+        includeSecrets: true,
+        includeDatabases: false,
+      );
+      final restore = ProfileRestoreCoordinator(
+        registry: registry,
+        cipher: cipher,
+      );
+      final restoredBackup = await restore.restoreDeviceGraph(
+        package: circle,
+        authorization: await ProfileAuthorizationContext.capture(registry),
+      );
+      final lifecycle = ProfileLifecycleCoordinator(registry: registry);
+      addTearDown(lifecycle.dispose);
+      await lifecycle.switchTo(restoredBackup.importedProfileIds.single);
+
+      final operations = DefaultWebDavSyncAdoptionOperations(
+        registry: registry,
+        restoreCoordinator: restore,
+        lifecycleCoordinator: lifecycle,
+      );
+      // The backup source is not part of the restored phone. Remove it before
+      // seeding so the circle contains exactly the restored resource graph.
+      await operations.pruneProfile(profileId);
+      StremioService.instance.invalidateCache();
+      final backupAddon = (await StremioService.instance.getAddons()).single;
+      expect(await StorageService.getHomeDisabledSections(), {
+        '${backupAddon.id}:movie:top',
+        'cw:movies',
+      });
+      expect(await StorageService.getHomeRowOrder(), [
+        'cw:movies',
+        '${backupAddon.id}:movie:top',
+      ]);
+      final localProfiles = await registry.listProfiles(includeDisabled: true);
+      final localResources = await registry.listAllResourcesIncludingDisabled();
+      final seedMaps = WebDavSyncGraphIdentityPlanner.ensure(
+        localProfileIds: localProfiles.map((profile) => profile.id),
+        localResourceIds: localResources.map((resource) => resource.id),
+      ).maps;
+      final retained = WebDavSyncGraphIdentityPlanner.ensure(
+        localProfileIds: localProfiles.map((profile) => profile.id),
+        localResourceIds: localResources.map((resource) => resource.id),
+        currentCircleToLocalProfiles: seedMaps.circleToLocalProfiles,
+        currentCircleToLocalResources: seedMaps.circleToLocalResources,
+      ).maps;
+      expect(retained.circleToLocalResources, seedMaps.circleToLocalResources);
+      final seed = await WebDavSyncGraphBuilder(packages).build(
+        kind: WebDavSyncGraphKind.bootstrap,
+        authorization: await ProfileAuthorizationContext.capture(registry),
+        identityMaps: retained,
+      );
+
+      Future<List<Map<String, dynamic>>> read() =>
+          ProfileCollectionResourceFacade.read(
+            types: types,
+            feature: ProfileFeature.manageConnections,
+          );
+      final preJoinScope = ProfileRuntime.capture();
+      final oldModels = await read();
+      expect(oldModels.length, greaterThanOrEqualTo(types.length));
+      final states = _JoinStateRepository();
+      final adoption = WebDavSyncCircleAdoption(
+        stateRepository: states,
+        // Restore, registry publication, handoff, remapping and prune are real.
+        operations: operations,
+      );
+      final archive = seed.snapshot!.archive;
+      final stage = await LocalBackupRestorer.stage(
+        archive: archive,
+        staging: await LocalBackupScratch.create('join-test'),
+        inspection: await LocalBackupRestorer.inspect(archive),
+      );
+      addTearDown(stage.dispose);
+      addTearDown(seed.snapshot!.dispose);
+      final preferenceSection =
+          stage.package.sections[stage
+                  .package
+                  .profiles
+                  .single['preferencesSection']]
+              as Map;
+      final preferenceBytes = <int>[];
+      for (final part
+          in preferenceSection['preferencePages']['parts'] as List) {
+        preferenceBytes.addAll(
+          await stage.resolveDatabase(part['entry'] as String)!.readAsBytes(),
+        );
+      }
+      final stagedPrefs = jsonDecode(utf8.decode(preferenceBytes)) as Map;
+      final circleAddon = retained.localToCircleResources[backupAddon.id]!;
+      expect(
+        jsonDecode(stagedPrefs['home_disabled_sections_v1'] as String),
+        unorderedEquals(['$circleAddon:movie:top', 'cw:movies']),
+      );
+      expect(jsonDecode(stagedPrefs['home_row_order_v1'] as String), [
+        'cw:movies',
+        '$circleAddon:movie:top',
+      ]);
+      final joined = await adoption.adopt(
+        WebDavSyncAdoptionRequest(
+          namespaceId: 'circle:regression',
+          mode: WebDavSyncAdoptionMode.firstJoin,
+          package: stage.package,
+          databaseFileResolver: stage.resolveDatabase,
+          graphSemanticDigest: seed.semanticDigest,
+          profileMap: seed.profileMap,
+          resourceMap: seed.resourceMap,
+          authorization: await ProfileAuthorizationContext.capture(registry),
+          replacementConfirmed: true,
+        ),
+      );
+      expect(joined.phase, WebDavSyncAdoptionPhase.complete);
+      expect(states.state.adoption, isNull);
+      final current = await read();
+      expect(current, hasLength(types.length));
+      Future<void> authorize(Map<String, dynamic> row) =>
+          ProfileCollectionResourceFacade.authorizeExecution(
+            resourceId: row['_connectionResourceId'] as String?,
+            resourceRevision: row['_connectionResourceRevision'] as int?,
+            acceptedTypes: types,
+            feature: ProfileFeature.manageConnections,
+          );
+      for (final row in current) {
+        final resource = await registry.getResource(
+          row['_connectionResourceId'] as String,
+        );
+        expect(
+          row['_connectionResourceRevision'],
+          resource!.authorizationRevision,
+        );
+        await authorize(row);
+      }
+      for (final row in oldModels) {
+        await expectLater(
+          authorize(row),
+          throwsA(isA<ResourceAuthorizationException>()),
+        );
+      }
+      // Exercise the production model getters (not just raw facade records).
+      final List<IptvPlaylist> playlists =
+          await StorageService.getIptvPlaylists(forSettings: false);
+      expect(playlists.where((p) => !p.isVirtual), hasLength(2));
+      final List<WebDavConfig> servers = await StorageService.getWebDavServers(
+        forSettings: false,
+      );
+      expect(servers, hasLength(1));
+      final List<IndexerManagerConfig> managers =
+          await StorageService.getIndexerManagerConfigs(forSettings: false);
+      expect(managers, hasLength(2));
+      StremioService.instance.invalidateCache();
+      // A retired display read must fail soft, without caching an empty result
+      // over the new profile's catalog or reviving its old resource authority.
+      expect(
+        await ProfileRuntime.withCapturedScope(
+          preJoinScope,
+          () => StremioService.instance.getAddons(),
+        ),
+        isEmpty,
+      );
+      final addons = await StremioService.instance.getAddons();
+      expect(addons, hasLength(1));
+      expect(addons.single.id, isNot(backupAddon.id));
+      expect(await StorageService.getHomeDisabledSections(), {
+        '${addons.single.id}:movie:top',
+        'cw:movies',
+      });
+      expect(await StorageService.getHomeRowOrder(), [
+        'cw:movies',
+        '${addons.single.id}:movie:top',
+      ]);
+      for (final row in [
+        ...playlists.where((p) => !p.isVirtual).map((p) => p.toJson()),
+        ...servers.map((p) => p.toJson()),
+        ...managers.map((p) => p.toJson()),
+        ...addons.map((p) => p.toJson()),
+      ]) {
+        await authorize(row);
+      }
+    },
+  );
+
   test('sanitized export emits only reviewed settings and values', () async {
     final prefs = await SharedPreferences.getInstance();
     final prefix = 'p.$profileId.g.1.';
@@ -341,6 +1050,107 @@ void main() {
     },
   );
 
+  test(
+    'compacted TV omission drops matching sync stamps so a joiner backfills',
+    () async {
+      final scope = ProfileRuntime.capture();
+      final source = scope.fileIn(documents, 'documents', 'debrify_tv.db');
+      await source.parent.create(recursive: true);
+      final database = await openDatabase(source.path, singleInstance: false);
+      await database.execute(
+        'CREATE TABLE tv_channels (channel_id TEXT PRIMARY KEY)',
+      );
+      await database.execute(
+        'CREATE TABLE tv_cached_torrents '
+        '(channel_id TEXT NOT NULL, infohash TEXT NOT NULL)',
+      );
+      await database.execute(
+        'CREATE TABLE webdav_sync_record_state ('
+        'kind TEXT NOT NULL, owner_key TEXT NOT NULL, '
+        'item_key TEXT NOT NULL, updated_at_ms INTEGER NOT NULL, '
+        'origin_device_id TEXT NOT NULL, normalized INTEGER NOT NULL, '
+        'deleted INTEGER NOT NULL, aux TEXT, '
+        'PRIMARY KEY (kind, owner_key, item_key))',
+      );
+      await database.insert('tv_channels', <String, Object?>{
+        'channel_id': 'portable-channel',
+      });
+      await database.insert('tv_cached_torrents', <String, Object?>{
+        'channel_id': 'portable-channel',
+        'infohash': 'portable-hash',
+      });
+      for (final kind in const <String>[
+        'tv_channels',
+        'tv_pool_generation',
+        'video_resume',
+      ]) {
+        await database.insert('webdav_sync_record_state', <String, Object?>{
+          'kind': kind,
+          'owner_key': 'portable-channel',
+          'item_key': '',
+          'updated_at_ms': 111,
+          'origin_device_id': 'other-device',
+          'normalized': 1,
+          'deleted': 0,
+          'aux': kind == 'tv_pool_generation' ? 'generation-one' : null,
+        });
+      }
+      await database.close();
+
+      final authorization = await ProfileAuthorizationContext.capture(registry);
+      final package =
+          await ProfilePackageService(
+            registry: registry,
+            resources: ConnectionResourceService(
+              registry: registry,
+              cipher: cipher,
+            ),
+          ).exportAllProfiles(
+            context: authorization,
+            includeSecrets: true,
+            compactDatabaseSnapshots: true,
+          );
+      expect(package.omissions, contains(DebrifyTvBackupOmission.key));
+
+      final report = await ProfileRestoreCoordinator(
+        registry: registry,
+        cipher: cipher,
+      ).restoreDeviceGraph(package: package, authorization: authorization);
+      expect(report.profilesImported, 1);
+      final imported = (await registry.listProfiles()).singleWhere(
+        (profile) => profile.id != profileId,
+      );
+      final importedScope = ProfileScope(
+        profileId: imported.id,
+        dataGeneration: imported.visibleDataGeneration,
+        sessionEpoch: 0,
+      );
+      final restored = await openDatabase(
+        importedScope.fileIn(documents, 'documents', 'debrify_tv.db').path,
+        readOnly: true,
+        singleInstance: false,
+      );
+      expect(await restored.query('tv_channels'), isEmpty);
+      expect(
+        await restored.query(
+          'webdav_sync_record_state',
+          where: 'kind IN (?, ?)',
+          whereArgs: const <Object>['tv_channels', 'tv_pool_generation'],
+        ),
+        isEmpty,
+      );
+      expect(
+        await restored.query(
+          'webdav_sync_record_state',
+          where: 'kind = ?',
+          whereArgs: const <Object>['video_resume'],
+        ),
+        hasLength(1),
+      );
+      await restored.close();
+    },
+  );
+
   test('publishes only the finalized staged generation', () async {
     final section = await PortableProfilePackage.buildSection(
       const <String, Object?>{'theme_mode': 'restored', 'language': 'en'},
@@ -376,6 +1186,39 @@ void main() {
     expect(prefs.getString('p.$profileId.g.2.theme_mode'), 'restored');
     expect(prefs.getString('p.$profileId.g.2.language'), 'en');
   });
+
+  test(
+    'active restore republishes generation before recovery checkpoint',
+    () async {
+      final original = ProfileRuntime.capture();
+      var observedPublication = false;
+      registry.authorityChangedCallback = () async {
+        final active = (await registry.getProfile(profileId))!;
+        if (active.visibleDataGeneration == original.dataGeneration) return;
+        observedPublication = true;
+        expect(
+          ProfileRuntime.capture().dataGeneration,
+          active.visibleDataGeneration,
+        );
+        expect(
+          ProfileRuntime.capture().sessionEpoch,
+          greaterThan(original.sessionEpoch),
+        );
+        await (await ProfileAuthorizationContext.capture(
+          registry,
+        )).validate(registry);
+      };
+      await ProfileRestoreCoordinator(
+        registry: registry,
+        cipher: cipher,
+      ).restore(
+        package: await _singleProfilePackage(setupComplete: false),
+        destinationProfileId: profileId,
+        authorization: await ProfileAuthorizationContext.capture(registry),
+      );
+      expect(observedPublication, isTrue);
+    },
+  );
 
   for (final importedSetupComplete in <bool?>[null, false]) {
     final sourceLabel = importedSetupComplete == null
@@ -1367,10 +2210,22 @@ void main() {
         registry: registry,
         resources: resourceService,
       ).exportAllProfiles(context: authorization, includeSecrets: true);
-      await ProfileRestoreCoordinator(
+      final report = await ProfileRestoreCoordinator(
         registry: registry,
         cipher: cipher,
       ).restoreDeviceGraph(package: package, authorization: authorization);
+
+      for (final record in package.resources) {
+        final backupId = record['backupId']! as String;
+        final restoredId = report.importedResourceIdsByBackupId[backupId];
+        expect(restoredId, isNotNull);
+        expect(
+          (await registry.listAllResourcesIncludingDisabled()).map(
+            (resource) => resource.id,
+          ),
+          contains(restoredId),
+        );
+      }
 
       final imported = (await registry.listProfiles()).singleWhere(
         (profile) => profile.id != profileId,
@@ -1560,6 +2415,79 @@ void main() {
   );
 
   test(
+    'structure-only graph excludes preferences and databases and still restores',
+    () async {
+      final source = ProfileRuntime.capture();
+      final preferences = await ProfilePreferences.instance();
+      await preferences.setString('theme_mode', 'source-only');
+      final sourceDatabase = source.fileIn(
+        documents,
+        'documents',
+        'debrify_tv.db',
+      );
+      await sourceDatabase.parent.create(recursive: true);
+      final database = await openDatabase(
+        sourceDatabase.path,
+        singleInstance: false,
+      );
+      await database.execute('CREATE TABLE proof(value TEXT NOT NULL)');
+      await database.close();
+
+      final authorization = await ProfileAuthorizationContext.capture(registry);
+      final package =
+          await ProfilePackageService(
+            registry: registry,
+            resources: ConnectionResourceService(
+              registry: registry,
+              cipher: cipher,
+            ),
+          ).exportAllProfiles(
+            context: authorization,
+            includeSecrets: true,
+            includeDatabases: false,
+            includePreferences: false,
+          );
+
+      expect(
+        package.profiles,
+        everyElement(isNot(contains('preferencesSection'))),
+      );
+      expect(
+        package.profiles,
+        everyElement(isNot(contains('databasesSection'))),
+      );
+      expect(
+        package.sections.keys,
+        isNot(
+          contains(anyOf(endsWith('-preferences'), endsWith('-databases'))),
+        ),
+      );
+      final decoded = await PortableProfilePackage.decodeAuthenticatedMap(
+        await PortableProfilePackage.withIntegrity(package),
+        allowMissingPreferences: true,
+      );
+      final report = await ProfileRestoreCoordinator(
+        registry: registry,
+        cipher: cipher,
+      ).restoreDeviceGraph(package: decoded, authorization: authorization);
+
+      expect(report.profilesImported, 1);
+      final imported = (await registry.listProfiles()).singleWhere(
+        (profile) => profile.id != profileId,
+      );
+      final importedPreferences = await ProfilePreferences.forCapturedScope(
+        ProfileScope(
+          profileId: imported.id,
+          dataGeneration: imported.visibleDataGeneration,
+          sessionEpoch: 0,
+        ),
+        CapturedProfilePreferenceAccess.restore,
+      );
+      expect(importedPreferences.getString('theme_mode'), isNull);
+    },
+  );
+
+  test(
     'device graph publishes a final manifest covering preferences db and file',
     () async {
       final source = ProfileRuntime.capture();
@@ -1726,4 +2654,92 @@ void main() {
       expect(preferences.getString('theme_mode'), 'old');
     },
   );
+
+  test('restore preserves original profile creation order', () async {
+    final actor = await ProfileAuthorizationContext.capture(registry);
+    // Created in REVERSE of their carried instants: if the adopting device
+    // ordered by insertion, Later-but-created-first would sort first and this
+    // fixture would fail.
+    await registry.createProfile(
+      name: 'Second by instant',
+      role: UserProfileRole.member,
+      createdAtMs: DateTime.utc(2026, 6, 1).millisecondsSinceEpoch,
+      actingProfileId: actor.profileId,
+      actingAuthorizationRevision: actor.authorizationRevision,
+      actingSessionEpoch: actor.sessionEpoch,
+    );
+    await registry.createProfile(
+      name: 'First by instant',
+      role: UserProfileRole.member,
+      createdAtMs: DateTime.utc(2026, 1, 1).millisecondsSinceEpoch,
+      actingProfileId: actor.profileId,
+      actingAuthorizationRevision: actor.authorizationRevision,
+      actingSessionEpoch: actor.sessionEpoch,
+    );
+
+    final authorization = await ProfileAuthorizationContext.capture(registry);
+    final service = ProfilePackageService(
+      registry: registry,
+      resources: ConnectionResourceService(registry: registry, cipher: cipher),
+    );
+    final package = await service.exportAllProfiles(
+      context: authorization,
+      includeSecrets: true,
+    );
+    final originals = (await registry.listProfiles())
+        .map((profile) => profile.id)
+        .toSet();
+    await ProfileRestoreCoordinator(
+      registry: registry,
+      cipher: cipher,
+    ).restoreDeviceGraph(package: package, authorization: authorization);
+
+    final importedMembers = (await registry.listProfiles())
+        .where(
+          (profile) =>
+              !originals.contains(profile.id) &&
+              profile.role == UserProfileRole.member,
+        )
+        .toList();
+    expect(importedMembers, hasLength(2));
+    // listProfiles orders by created_at_ms — the ORIGINAL instants traveled,
+    // so the January profile sorts first despite being inserted last on both
+    // the seed and the adopting device.
+    expect(importedMembers.first.name, 'First by instant');
+    expect(importedMembers.last.name, 'Second by instant');
+    expect(
+      importedMembers.first.createdAt.millisecondsSinceEpoch,
+      DateTime.utc(2026, 1, 1).millisecondsSinceEpoch,
+    );
+  });
+
+  test('a missing or future createdAt falls back to import time', () async {
+    final actor = await ProfileAuthorizationContext.capture(registry);
+    final before = DateTime.now().millisecondsSinceEpoch;
+    final profile = await registry.createProfile(
+      name: 'Clock skew',
+      role: UserProfileRole.member,
+      createdAtMs: DateTime.now()
+          .add(const Duration(days: 365))
+          .millisecondsSinceEpoch,
+      actingProfileId: actor.profileId,
+      actingAuthorizationRevision: actor.authorizationRevision,
+      actingSessionEpoch: actor.sessionEpoch,
+    );
+    expect(
+      profile.createdAt.millisecondsSinceEpoch,
+      greaterThanOrEqualTo(before),
+    );
+  });
+}
+
+final class _JoinStateRepository implements WebDavSyncEngineStateRepository {
+  WebDavSyncEngineState state = const WebDavSyncEngineState();
+  @override
+  Future<WebDavSyncEngineState> load(String namespaceId) async => state;
+  @override
+  Future<WebDavSyncEngineState> update(
+    String namespaceId,
+    WebDavSyncEngineState Function(WebDavSyncEngineState) update,
+  ) async => state = update(state);
 }

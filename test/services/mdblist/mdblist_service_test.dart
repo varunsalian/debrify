@@ -21,6 +21,42 @@ MdblistService serviceWith(
 void main() {
   setUp(EpisodeTrackerSnapshotRevision.resetForTesting);
 
+  test('strict Home directory rejects failure and partial pagination', () async {
+    for (final outcome in ['empty', 'failure', 'partial']) {
+      var calls = 0;
+      final service = serviceWith((_) async {
+        calls++;
+        if (outcome == 'failure' || calls > 1) return http.Response('{}', 503);
+        return http.Response(outcome == 'empty' ? '[]' : '[{"id":7,"name":"Mine"}]', 200,
+          headers: {'x-has-more': outcome == 'partial' ? 'true' : 'false'});
+      });
+      final future = MdblistListSource.forTesting(service).loadUserLists(strict: true);
+      if (outcome == 'empty') {
+        expect(await future, isEmpty);
+      } else {
+        await expectLater(future, throwsStateError);
+      }
+    }
+  });
+
+  test('Home preview stops at one page and does not poison full-list cache', () async {
+    final requests = <http.Request>[];
+    final service = serviceWith((request) async {
+      requests.add(request);
+      final preview = request.url.queryParameters['limit'] == '100';
+      return http.Response(jsonEncode({'movies': [{'imdb_id': 'tt1234567', 'title': 'Title', 'mediatype': 'movie'}], 'shows': []}), 200,
+        headers: {'x-has-more': preview ? 'true' : 'false', if (preview) 'x-next-cursor': 'next'});
+    });
+    final source = MdblistListSource.forTesting(service);
+    final preview = await source.loadHomePreview(const MdblistListChoice(id: 42, name: 'Mine'));
+    expect(preview.items.single.id, 'tt1234567');
+    expect(preview.failed, isFalse);
+    expect(requests, hasLength(1));
+    await service.fetchListItemsResult(42);
+    expect(requests, hasLength(2));
+    expect(requests.last.url.queryParameters['limit'], '1000');
+  });
+
   group('MDBList transport error taxonomy', () {
     for (final testCase in <({int status, MdblistResultKind kind})>[
       (status: 401, kind: MdblistResultKind.unauthenticated),

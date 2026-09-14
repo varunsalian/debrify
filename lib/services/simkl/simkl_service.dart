@@ -298,7 +298,7 @@ class SimklService {
   /// than crashing the caller.
   ///
   /// Only catches a show/movie-level mismatch. For the episode-scoped writes
-  /// (markEpisodeWatched/Unwatched, rateEpisode) this can't detect an
+  /// (markEpisodeWatched/Unwatched) this can't detect an
   /// unrecognized season/episode number within an otherwise-matched show —
   /// Simkl's `not_found` isn't documented to report at that granularity, so
   /// an episode-level false-success is a known limitation, not something
@@ -816,42 +816,6 @@ class SimklService {
     _invalidateLibraryCache();
     EpisodeTrackerSnapshotRevision.invalidateTitle('simkl', showImdbId);
     StorageService.movieFinishedRevision.value++;
-    return true;
-  }
-
-  /// Rate a single episode 1–10 via `POST /sync/ratings`. The nested
-  /// `seasons[].episodes[].rating` shape mirrors history's episode nesting —
-  /// not separately confirmed from docs, flagged for a live-test check.
-  Future<bool> rateEpisode(
-    String showImdbId,
-    int season,
-    int episode,
-    int rating,
-  ) async {
-    final token = await StorageService.getSimklAccessToken();
-    if (token == null || token.isEmpty) return false;
-    final result = await _postOrNull(
-      '/sync/ratings',
-      {
-        'shows': [
-          {
-            'ids': {'imdb': showImdbId},
-            'seasons': [
-              {
-                'number': season,
-                'episodes': [
-                  {'number': episode, 'rating': rating},
-                ],
-              },
-            ],
-          },
-        ],
-      },
-      token: token,
-      label: 'rateEpisode',
-    );
-    if (!_wasMatched(result, 'shows')) return false;
-    _invalidateLibraryCache();
     return true;
   }
 
@@ -1466,22 +1430,8 @@ class SimklService {
   /// `POST /sync/watched?extended=episodes`. Empty set on failure — mirrors
   /// TraktService.fetchWatchedShowEpisodes's contract.
   Future<Set<String>> fetchWatchedShowEpisodes(String showImdbId) async {
-    final token = await StorageService.getSimklAccessToken();
-    if (token == null || token.isEmpty) return {};
-    final result = await _postOrNull(
-      '/sync/watched',
-      [
-        {
-          'ids': {'imdb': showImdbId},
-        },
-      ],
-      token: token,
-      label: 'fetchWatchedShowEpisodes',
-      query: {'extended': 'episodes'},
-    );
-    if (result is! List || result.isEmpty) return {};
-    final item = result.first;
-    if (item is! Map<String, dynamic>) return {};
+    final item = await _fetchWatchedShowEpisodeItem(showImdbId);
+    if (item == null) return {};
     final out = <String>{};
     final seasons = item['seasons'];
     if (seasons is! List) return out;
@@ -1498,5 +1448,52 @@ class SimklService {
       }
     }
     return out;
+  }
+
+  /// Episode-specific completion evidence for stale playback reconciliation.
+  /// Missing dates and failed reads deliberately supply no evidence.
+  Future<Map<String, DateTime>> fetchWatchedShowEpisodeTimes(
+    String showImdbId,
+  ) async {
+    final item = await _fetchWatchedShowEpisodeItem(showImdbId);
+    final out = <String, DateTime>{};
+    final seasons = item?['seasons'];
+    if (seasons is! List) return out;
+    for (final season in seasons) {
+      if (season is! Map) continue;
+      final number = season['number'];
+      final episodes = season['episodes'];
+      if (number is! int || episodes is! List) continue;
+      for (final episode in episodes) {
+        if (episode is! Map || episode['watched'] != true) continue;
+        final ep = episode['number'];
+        final rawAt = episode['last_watched_at'];
+        final at = rawAt is String ? DateTime.tryParse(rawAt) : null;
+        if (ep is int && at != null) out['$number-$ep'] = at;
+      }
+    }
+    return out;
+  }
+
+  Future<Map<String, dynamic>?> _fetchWatchedShowEpisodeItem(
+    String showImdbId,
+  ) async {
+    final token = await StorageService.getSimklAccessToken();
+    if (token == null || token.isEmpty) return null;
+    final result = await _postOrNull(
+      '/sync/watched',
+      [
+        {
+          'ids': {'imdb': showImdbId},
+        },
+      ],
+      token: token,
+      label: 'fetchWatchedShowEpisodes',
+      query: {'extended': 'episodes'},
+    );
+    if (result is! List || result.isEmpty) return null;
+    final item = result.first;
+    if (item is! Map<String, dynamic>) return null;
+    return item;
   }
 }

@@ -1,3 +1,4 @@
+import 'package:debrify/services/profiles/profile_preferences.dart';
 import 'dart:convert';
 import 'dart:io';
 
@@ -36,6 +37,72 @@ void main() {
     await registry.close();
     await temporaryDirectory.delete(recursive: true);
   });
+
+  for (final selfService in [false, true]) {
+    test(
+      'photo-only identity changes do not request publication ($selfService)',
+      () async {
+        final profile = await registry.createProfile(
+          name: 'Admin',
+          role: UserProfileRole.admin,
+        );
+        await registry.commitBootstrap(
+          activeProfileId: profile.id,
+          migratedLegacyInstall: false,
+        );
+        ProfileRuntime.initializeCommitted(
+          ProfileScope(
+            profileId: profile.id,
+            dataGeneration: 1,
+            sessionEpoch: 1,
+          ),
+        );
+        final keys = <String>[];
+        ProfilePreferences.webDavSyncLocalChangeSink = (_, key) =>
+            keys.add(key);
+        Future<void> save(String name, String avatar) async {
+          final current = (await registry.getProfile(profile.id))!;
+          if (selfService) {
+            await registry.updateActiveProfileIdentity(
+              profileId: profile.id,
+              name: name,
+              avatarKey: avatar,
+              actingAuthorizationRevision: current.authorizationRevision,
+              actingSessionEpoch: 1,
+            );
+          } else {
+            await registry.updateProfile(
+              id: profile.id,
+              name: name,
+              avatarKey: avatar,
+              actingProfileId: profile.id,
+              actingAuthorizationRevision: current.authorizationRevision,
+              actingSessionEpoch: 1,
+            );
+          }
+        }
+
+        try {
+          await save('Admin', 'file:avatars/a1b2.gif#4A90D9');
+          expect(
+            (await registry.getProfile(profile.id))!.avatarKey,
+            'file:avatars/a1b2.gif#4A90D9',
+          );
+          expect(keys, isEmpty);
+          await save('Renamed', 'file:avatars/other.webp');
+          expect(keys, [ProfilePreferences.webDavSyncRegistryLogicalKey]);
+          keys.clear();
+          await save('Renamed', 'art:aurora');
+          expect(keys, [ProfilePreferences.webDavSyncRegistryLogicalKey]);
+          keys.clear();
+          await save('Renamed', 'art:aurora');
+          expect(keys, isEmpty);
+        } finally {
+          ProfilePreferences.webDavSyncLocalChangeSink = null;
+        }
+      },
+    );
+  }
 
   test('stale Admin cannot commit after switching away and back', () async {
     final first = await registry.createProfile(

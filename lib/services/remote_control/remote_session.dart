@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'dart:math';
 
 import 'package:cryptography/cryptography.dart';
@@ -74,6 +75,8 @@ class RemoteSessionCrypto {
     required List<int> nc,
     int? senderProtocolVersion,
     int? receiverProtocolVersion,
+    int senderTransferPort = kReliableTransferPort,
+    int receiverTransferPort = kReliableTransferPort,
   }) => sha256Of([
     ...utf8.encode(_transcriptLabel),
     ...sid,
@@ -92,6 +95,12 @@ class RemoteSessionCrypto {
       ...utf8.encode('capabilities'),
       ..._nBytes(senderProtocolVersion!),
       ..._nBytes(receiverProtocolVersion!),
+    ],
+    if ((senderProtocolVersion ?? 0) >= 6 &&
+        (receiverProtocolVersion ?? 0) >= 6) ...[
+      ...utf8.encode('transfer-ports'),
+      ..._nBytes(senderTransferPort),
+      ..._nBytes(receiverTransferPort),
     ],
   ]);
 
@@ -323,6 +332,7 @@ class RemoteSession {
   /// manual-IP/VPN peers report capabilities without a broadcast discovery
   /// record. Early encrypted peers that omit the field are treated as v2.
   final int peerProtocolVersion;
+  final int peerTransferPort;
 
   /// The 6-digit SAS, derived locally. Displayed on the receiver; compared on
   /// the sender against what the user reads off the TV.
@@ -346,6 +356,7 @@ class RemoteSession {
     required this.peerFingerprint,
     required this.peerName,
     this.peerProtocolVersion = kProtoVersion,
+    this.peerTransferPort = kReliableTransferPort,
     required this.sasCode,
     required this.establishedAt,
   }) : sidB64 = base64Encode(sid),
@@ -398,6 +409,12 @@ class RemoteCommandContext {
   /// deliberately absent for plaintext traffic.
   final Future<void> Function(String code)? reject;
 
+  /// Only supplied by the authenticated file transport; never decoded from
+  /// a peer-provided filesystem path.
+  final File? profileArchive;
+  final File? channelArchive;
+  final Future<bool> Function(String command, String body)? transferReply;
+
   const RemoteCommandContext({
     required this.encrypted,
     required this.authorized,
@@ -407,6 +424,9 @@ class RemoteCommandContext {
     this.peerName,
     this.sourceIp,
     this.reject,
+    this.profileArchive,
+    this.channelArchive,
+    this.transferReply,
   });
 
   static const plaintext = RemoteCommandContext(
@@ -462,6 +482,7 @@ class _ReceiverPending {
   /// established session (created on hs3) can name its peer.
   final String senderName;
   final int senderProtocolVersion;
+  final int senderTransferPort;
   final Map<String, dynamic> hs2; // cached: duplicate hs1 → identical hs2
   Map<String, dynamic>? hs4; // cached: duplicate hs3 → identical hs4
 
@@ -473,6 +494,7 @@ class _ReceiverPending {
     required this.createdAt,
     required this.senderName,
     required this.senderProtocolVersion,
+    required this.senderTransferPort,
     required this.hs2,
   });
 }
@@ -486,6 +508,8 @@ class RemoteSessionManager {
   final DateTime Function() now;
   final List<int> Function(int) randomBytes;
   final int protocolVersion;
+  final int transferPort;
+  final void Function(String event, Map<String, Object?> fields)? onEvent;
 
   final Map<String, _SenderHandshake> _senderHandshakes = {};
   final Map<String, _ReceiverPending> _receiverPending = {};
@@ -497,6 +521,8 @@ class RemoteSessionManager {
     DateTime Function()? now,
     List<int> Function(int)? randomBytes,
     this.protocolVersion = kProtoVersion,
+    this.transferPort = kReliableTransferPort,
+    this.onEvent,
   }) : assert(protocolVersion >= 2),
        now = now ?? DateTime.now,
        randomBytes = randomBytes ?? _secureRandomBytes;
@@ -530,6 +556,7 @@ class RemoteSessionManager {
   Map<String, dynamic> _hs1For(_SenderHandshake handshake) => {
     'type': RemoteMessageType.hs1,
     'v': protocolVersion,
+    if (protocolVersion >= 6) 'transferPort': transferPort,
     'sid': handshake.sidB64,
     'com': base64Encode(handshake.com),
     'name': deviceName(),
@@ -582,8 +609,51 @@ class RemoteSessionManager {
 
   /// Route an inbound v2 message (hs1..hs4, serr). Unknown/invalid input is
   /// dropped silently — this is a UDP port on a LAN.
-  Future<SessionHandleResult> handle(Map<String, dynamic> json) async {
+  final Map<String, Future<SessionHandleResult>> _handling = {};
+  final Map<String, int> _queued = {};
+
+  Future<SessionHandleResult> handle(Map<String, dynamic> json) {
+    final sid = json['sid'];
+    if (sid is! String ||
+        sid.length > 128 ||
+        (_queued[sid] ?? 0) >= 8 ||
+        (!_handling.containsKey(sid) && _handling.length >= kMaxSessions * 2)) {
+      return Future.value(SessionHandleResult());
+    }
+    // Reserve the lane before key loading yields. Retransmissions must see
+    // the same ephemeral keys, including while the first request is loading.
+    final previous = _handling[sid];
+    _queued[sid] = (_queued[sid] ?? 0) + 1;
+    late final Future<SessionHandleResult> pending;
+    pending =
+        (previous == null
+                ? _handleMessage(json)
+                : previous.then((_) => _handleMessage(json)))
+            .whenComplete(() {
+              final remaining = (_queued[sid] ?? 1) - 1;
+              if (remaining == 0) {
+                _queued.remove(sid);
+              } else {
+                _queued[sid] = remaining;
+              }
+              if (identical(_handling[sid], pending)) _handling.remove(sid);
+            });
+    _handling[sid] = pending;
+    return pending;
+  }
+
+  Future<SessionHandleResult> _handleMessage(Map<String, dynamic> json) async {
     final result = SessionHandleResult();
+    final type = json['type'];
+    if (!const {
+      RemoteMessageType.hs1,
+      RemoteMessageType.hs2,
+      RemoteMessageType.hs3,
+      RemoteMessageType.hs4,
+    }.contains(type)) {
+      return result;
+    }
+    onEvent?.call('handshake_received', {'stage': type});
     try {
       switch (json['type']) {
         case RemoteMessageType.hs1:
@@ -599,10 +669,23 @@ class RemoteSessionManager {
           await _onHs4(json, result);
           break;
       }
-    } catch (_) {
+    } catch (error) {
       debugPrint('RemoteSessionManager: dropped malformed message');
+      onEvent?.call('handshake_rejected', {
+        'stage': type,
+        'errorType': error.runtimeType,
+      });
     }
     return result;
+  }
+
+  Future<SimpleKeyPair> _loadIdentity() async {
+    try {
+      return await loadStaticKeyPair();
+    } catch (error) {
+      onEvent?.call('identity_load_failed', {'errorType': error.runtimeType});
+      rethrow;
+    }
   }
 
   Future<void> _onHs2(
@@ -622,8 +705,9 @@ class RemoteSessionManager {
     final spkR = base64Decode(json['spk'] as String);
     final peerName = (json['name'] as String?) ?? 'TV';
     final peerProtocolVersion = _readProtocolVersion(json['v']);
+    final peerTransferPort = _readTransferPort(json['transferPort']);
 
-    final statics = await loadStaticKeyPair();
+    final statics = await _loadIdentity();
     final spkS = (await statics.extractPublicKey()).bytes;
 
     final ee = await _dh(handshake.ephemeral, epkR);
@@ -639,6 +723,8 @@ class RemoteSessionManager {
       nc: handshake.nc,
       senderProtocolVersion: protocolVersion,
       receiverProtocolVersion: peerProtocolVersion,
+      senderTransferPort: transferPort,
+      receiverTransferPort: peerTransferPort,
     );
     final keys = await RemoteSessionCrypto.deriveKeys(
       ikm: [...ee, ...es, ...se],
@@ -649,6 +735,7 @@ class RemoteSessionManager {
       'drc2 hs3 sender',
     );
 
+    if (!identical(_senderHandshakes[sidB64], handshake)) return;
     handshake.hs3 = {
       'type': RemoteMessageType.hs3,
       'sid': handshake.sidB64,
@@ -664,6 +751,7 @@ class RemoteSessionManager {
       peerSpk: spkR,
       peerName: peerName,
       peerProtocolVersion: peerProtocolVersion,
+      peerTransferPort: peerTransferPort,
     );
     result.outgoing.add(handshake.hs3!);
   }
@@ -675,6 +763,7 @@ class RemoteSessionManager {
       List<int> peerSpk,
       String peerName,
       int peerProtocolVersion,
+      int peerTransferPort,
     })
   >
   _senderDerived = {};
@@ -694,6 +783,7 @@ class RemoteSessionManager {
     final tag = base64Decode(json['tag'] as String);
     if (!RemoteSessionCrypto.constantTimeEquals(expected, tag)) {
       debugPrint('RemoteSessionManager: hs4 tag mismatch, dropping');
+      onEvent?.call('handshake_tag_mismatch', {'stage': 'hs4'});
       return;
     }
     final session = RemoteSession(
@@ -704,9 +794,11 @@ class RemoteSessionManager {
       peerFingerprint: await RemoteSessionCrypto.fingerprint(derived.peerSpk),
       peerName: derived.peerName,
       peerProtocolVersion: derived.peerProtocolVersion,
+      peerTransferPort: derived.peerTransferPort,
       sasCode: await RemoteSessionCrypto.sasCode(derived.keys.sas),
       establishedAt: now(),
     );
+    if (!identical(_senderHandshakes[sidB64], handshake)) return;
     sessions[session.sidB64] = session;
     _senderHandshakes.remove(sidB64);
     _senderDerived.remove(sidB64);
@@ -740,10 +832,13 @@ class RemoteSessionManager {
       return;
     }
 
-    final statics = await loadStaticKeyPair();
+    final statics = await _loadIdentity();
     final spkR = (await statics.extractPublicKey()).bytes;
     final ephemeral = await RemoteSessionCrypto.x25519.newKeyPair();
     final epkR = (await ephemeral.extractPublicKey()).bytes;
+    // Other handshake IDs may have filled the pending table while key
+    // generation yielded. The preflight cap alone cannot bound that race.
+    if (_receiverPending.length >= kMaxSessions * 2) return;
     final pending = _ReceiverPending(
       sid: base64Decode(sidB64),
       com: com,
@@ -752,9 +847,11 @@ class RemoteSessionManager {
       createdAt: now(),
       senderName: (json['name'] as String?) ?? 'Phone',
       senderProtocolVersion: _readProtocolVersion(json['v']),
+      senderTransferPort: _readTransferPort(json['transferPort']),
       hs2: {
         'type': RemoteMessageType.hs2,
         'v': protocolVersion,
+        if (protocolVersion >= 6) 'transferPort': transferPort,
         'sid': sidB64,
         'epk': base64Encode(epkR),
         'spk': base64Encode(spkR),
@@ -790,7 +887,7 @@ class RemoteSessionManager {
       return;
     }
 
-    final statics = await loadStaticKeyPair();
+    final statics = await _loadIdentity();
     final spkR = (await statics.extractPublicKey()).bytes;
     final ee = await _dh(pending.ephemeral, epkS);
     final es = await _dh(statics, epkS);
@@ -805,6 +902,8 @@ class RemoteSessionManager {
       nc: nc,
       senderProtocolVersion: pending.senderProtocolVersion,
       receiverProtocolVersion: protocolVersion,
+      senderTransferPort: pending.senderTransferPort,
+      receiverTransferPort: transferPort,
     );
     final keys = await RemoteSessionCrypto.deriveKeys(
       ikm: [...ee, ...es, ...se],
@@ -816,6 +915,7 @@ class RemoteSessionManager {
     );
     if (!RemoteSessionCrypto.constantTimeEquals(expectedTag, tagS)) {
       debugPrint('RemoteSessionManager: hs3 tag mismatch, dropping');
+      onEvent?.call('handshake_tag_mismatch', {'stage': 'hs3'});
       return;
     }
 
@@ -823,6 +923,7 @@ class RemoteSessionManager {
       keys.conf,
       'drc2 hs4 receiver',
     );
+    if (!identical(_receiverPending[sidB64], pending)) return;
     pending.hs4 = {
       'type': RemoteMessageType.hs4,
       'sid': sidB64,
@@ -838,13 +939,23 @@ class RemoteSessionManager {
       // hs3 carries no name field — the sender introduced itself in hs1.
       peerName: pending.senderName,
       peerProtocolVersion: pending.senderProtocolVersion,
+      peerTransferPort: pending.senderTransferPort,
       sasCode: await RemoteSessionCrypto.sasCode(keys.sas),
       establishedAt: now(),
     );
+    if (!identical(_receiverPending[sidB64], pending)) return;
     sessions[session.sidB64] = session;
     _expireSessions(now());
     result.outgoing.add(pending.hs4!);
     result.established = session;
+  }
+
+  static int _readTransferPort(dynamic value) {
+    if (value == null) return kReliableTransferPort;
+    if (value is! int || value < 1 || value > 65535) {
+      throw const FormatException('Invalid transfer port');
+    }
+    return value;
   }
 
   static Future<List<int>> _dh(
@@ -970,9 +1081,13 @@ class PairingDisplay {
 class PairingGate extends ChangeNotifier {
   final DateTime Function() now;
   final bool Function(String fingerprint) isRemembered;
+  final void Function(RemoteSession session, String reason)? onEnded;
 
-  PairingGate({required this.isRemembered, DateTime Function()? now})
-    : now = now ?? DateTime.now;
+  PairingGate({
+    required this.isRemembered,
+    DateTime Function()? now,
+    this.onEnded,
+  }) : now = now ?? DateTime.now;
 
   PairingDisplay? _current;
   PairingDisplay? get current => _current;
@@ -1009,6 +1124,16 @@ class PairingGate extends ChangeNotifier {
     RemoteSession session,
     List<int> proof,
   ) async {
+    tick();
+    if (session.authorized) {
+      final expected = await RemoteSessionCrypto.pairProof(
+        session.keys.conf,
+        session.sasCode,
+      );
+      return RemoteSessionCrypto.constantTimeEquals(expected, proof)
+          ? PairProofOutcome.ok
+          : PairProofOutcome.wrong;
+    }
     final display = _current;
     if (display == null || display.session.sidB64 != session.sidB64) {
       return PairProofOutcome.noRequest;
@@ -1040,9 +1165,19 @@ class PairingGate extends ChangeNotifier {
   }
 
   void cancel() {
+    _end('cancelled');
+  }
+
+  void cancelSession(RemoteSession session) {
+    if (_current?.session.sidB64 == session.sidB64) cancel();
+  }
+
+  void _end(String reason) {
     if (_current == null) return;
+    final session = _current!.session;
     _current = null;
     notifyListeners();
+    onEnded?.call(session, reason);
   }
 
   /// Expire a stale code (call on a timer).
@@ -1050,8 +1185,7 @@ class PairingGate extends ChangeNotifier {
     final display = _current;
     if (display != null &&
         now().difference(display.shownAt) > kPairingCodeTimeout) {
-      _current = null;
-      notifyListeners();
+      _end('expired');
     }
   }
 }

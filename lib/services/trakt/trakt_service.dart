@@ -6,8 +6,12 @@ import 'package:http/http.dart' as http;
 import '../../models/profiles/profile_policy.dart';
 import '../../models/tracking_source.dart';
 import '../episode_tracker_snapshot_revision.dart';
+import '../diagnostic_log.dart';
+import 'trakt_continue_watching_merge.dart';
+import 'trakt_watched_history_reader.dart';
 import '../profiles/profile_async_authorization.dart';
 import '../profiles/profile_runtime.dart';
+import '../profiles/profile_credential_facade.dart';
 import '../storage_service.dart';
 import 'trakt_calendar_service.dart';
 import 'trakt_constants.dart';
@@ -429,30 +433,52 @@ class TraktService {
 
   Future<bool> _refreshAccessTokenScoped() async {
     try {
-      final refreshToken = await StorageService.getTraktRefreshToken();
-      if (refreshToken == null || refreshToken.isEmpty) return false;
-
-      final response = await http
-          .post(
-            Uri.parse(kTraktTokenUrl),
-            headers: {'Content-Type': 'application/json'},
-            body: jsonEncode({
-              'refresh_token': refreshToken,
-              'client_id': kTraktClientId,
-              'client_secret': kTraktClientSecret,
-              'grant_type': 'refresh_token',
-            }),
-          )
-          .timeout(const Duration(seconds: 10));
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body) as Map<String, dynamic>;
-        await _storeTokens(data);
-        return true;
+      Future<Map<String, dynamic>?> exchange(String refreshToken) async {
+        final response = await http
+            .post(
+              Uri.parse(kTraktTokenUrl),
+              headers: {'Content-Type': 'application/json'},
+              body: jsonEncode({
+                'refresh_token': refreshToken,
+                'client_id': kTraktClientId,
+                'client_secret': kTraktClientSecret,
+                'grant_type': 'refresh_token',
+              }),
+            )
+            .timeout(const Duration(seconds: 10));
+        if (response.statusCode == 200) {
+          return jsonDecode(response.body) as Map<String, dynamic>;
+        }
+        debugPrint('Trakt: Token refresh failed (${response.statusCode})');
+        return null;
       }
 
-      debugPrint('Trakt: Token refresh failed (${response.statusCode})');
-      return false;
+      final shared = await ProfileCredentialFacade.refreshTraktSession((
+        token,
+      ) async {
+        final data = await exchange(token);
+        if (data == null) return null;
+        final expiresIn = data['expires_in'] as int;
+        if (expiresIn <= 0) throw const FormatException('Invalid Trakt expiry');
+        return (
+          accessToken: data['access_token'] as String,
+          refreshToken: data['refresh_token'] as String,
+          expiryMs: DateTime.now().millisecondsSinceEpoch + expiresIn * 1000,
+        );
+      });
+      if (shared != null) {
+        if (shared) {
+          _invalidateLibraryCache();
+          StorageService.movieFinishedRevision.value++;
+        }
+        return shared;
+      }
+      final refreshToken = await StorageService.getTraktRefreshToken();
+      if (refreshToken == null || refreshToken.isEmpty) return false;
+      final data = await exchange(refreshToken);
+      if (data == null) return false;
+      await _storeTokens(data);
+      return true;
     } catch (error) {
       debugPrint('Trakt: Token refresh error (${error.runtimeType})');
       return false;
@@ -500,16 +526,17 @@ class TraktService {
     // previous user's watchlist/collection/ratings can't be served. Harmless on
     // a same-account refresh — it just forces one re-fetch.
     _invalidateLibraryCache();
-    await StorageService.setTraktAccessToken(data['access_token'] as String);
-    await StorageService.setTraktRefreshToken(data['refresh_token'] as String);
-
     final expiresIn = data['expires_in'] as int?;
-    if (expiresIn != null) {
-      final expiryMs = DateTime.now()
-          .add(Duration(seconds: expiresIn))
-          .millisecondsSinceEpoch;
-      await StorageService.setTraktTokenExpiry(expiryMs);
-    }
+    final expiryMs = expiresIn == null
+        ? null
+        : DateTime.now()
+              .add(Duration(seconds: expiresIn))
+              .millisecondsSinceEpoch;
+    await StorageService.setTraktSession(
+      accessToken: data['access_token'] as String,
+      refreshToken: data['refresh_token'] as String,
+      expiryMs: expiryMs,
+    );
     StorageService.movieFinishedRevision.value++;
   }
 
@@ -643,12 +670,23 @@ class TraktService {
   /// Authenticated POST request with automatic token refresh on 401.
   Future<http.Response?> _authenticatedPost(
     String path,
-    Map<String, dynamic> body,
-  ) async {
+    Map<String, dynamic> body, {
+    bool requireScrobbleEnabled = false,
+  }) async {
     var accessToken = await StorageService.getTraktAccessToken();
     if (accessToken == null) return null;
 
     try {
+      // Players retain launch-time flags. Recheck the current profile's
+      // switch at the send boundary so a running session cannot keep writing
+      // after scrobbling is disabled. Explicit history/rating actions use
+      // this helper too, but remain independent of automatic scrobbling.
+      if (requireScrobbleEnabled &&
+          !(await StorageService.getTrackingScrobbleTargets()).contains(
+            TrackingSource.trakt,
+          )) {
+        return null;
+      }
       var response = await http
           .post(
             Uri.parse('$kTraktApiBaseUrl$path'),
@@ -665,6 +703,13 @@ class TraktService {
         accessToken = await StorageService.getTraktAccessToken();
         if (accessToken == null) return null;
 
+        // The preference may have changed while the refresh was in flight.
+        if (requireScrobbleEnabled &&
+            !(await StorageService.getTrackingScrobbleTargets()).contains(
+              TrackingSource.trakt,
+            )) {
+          return null;
+        }
         response = await http
             .post(
               Uri.parse('$kTraktApiBaseUrl$path'),
@@ -762,7 +807,21 @@ class TraktService {
         'progress': progress,
       };
     }
-    final response = await _authenticatedPost(path, body);
+    final response = await _authenticatedPost(
+      path,
+      body,
+      requireScrobbleEnabled: true,
+    );
+    DiagnosticLog.instance.recordEvent(
+      source: 'trakt',
+      event: 'scrobble_result',
+      fields: {
+        'action': DiagnosticLabel(path.split('/').last),
+        'status': response?.statusCode,
+        'episode': season != null && episode != null,
+        'progress': progress,
+      },
+    );
     if (response == null) return false;
     if (response.statusCode >= 200 && response.statusCode < 300) {
       if (season != null && episode != null) {
@@ -1070,7 +1129,8 @@ class TraktService {
   }
 
   /// Fetch the user's custom lists.
-  Future<List<Map<String, dynamic>>> fetchCustomLists() async {
+  Future<List<Map<String, dynamic>>> fetchCustomLists({bool strict = false}) async {
+    if (strict) return _fetchHomeListDirectory('/users/me/lists');
     final response = await _authenticatedGet('/users/me/lists');
     if (response == null || response.statusCode != 200) {
       debugPrint('Trakt: fetchCustomLists failed (${response?.statusCode})');
@@ -1087,7 +1147,8 @@ class TraktService {
   }
 
   /// Fetch lists the authenticated user has liked on Trakt.
-  Future<List<Map<String, dynamic>>> fetchLikedLists() async {
+  Future<List<Map<String, dynamic>>> fetchLikedLists({bool strict = false}) async {
+    if (strict) return _fetchHomeListDirectory('/users/me/likes/lists', liked: true);
     final response = await _authenticatedGet('/users/me/likes/lists?limit=100');
     if (response == null || response.statusCode != 200) {
       debugPrint('Trakt: fetchLikedLists failed (${response?.statusCode})');
@@ -1106,6 +1167,37 @@ class TraktService {
       debugPrint('Trakt: fetchLikedLists parse error (${error.runtimeType})');
       return [];
     }
+  }
+
+  /// Home needs an authoritative directory before removing retained rows.
+  /// Never turn a transport/parse failure or partial page walk into emptiness.
+  Future<List<Map<String, dynamic>>> _fetchHomeListDirectory(
+    String path, {bool liked = false}
+  ) async {
+    final lists = <Map<String, dynamic>>[];
+    var pages = 1;
+    for (var page = 1; page <= pages; page++) {
+      final response = await _authenticatedGet('$path?page=$page&limit=100');
+      if (response == null || response.statusCode != 200) {
+        throw StateError('Trakt list directory unavailable');
+      }
+      final decoded = jsonDecode(response.body) as List;
+      for (final entry in decoded) {
+        final value = liked ? (entry as Map)['list'] : entry;
+        final list = Map<String, dynamic>.from(value as Map);
+        final ids = list['ids'];
+        if (ids is! Map || (ids['trakt'] == null && ids['slug'] == null)) {
+          throw const FormatException('Trakt list identity missing');
+        }
+        lists.add(list);
+      }
+      final count = response.headers['x-pagination-page-count'];
+      pages = count == null ? 1 : int.parse(count);
+      if (pages < 0 || pages > 100 || (pages == 0 && decoded.isNotEmpty)) {
+        throw const FormatException('Invalid Trakt directory pagination');
+      }
+    }
+    return lists;
   }
 
   /// Fetch items from a liked list owned by another user.
@@ -1180,10 +1272,13 @@ class TraktService {
   /// [basePath] is the list segment without the trailing `/items` — e.g.
   /// `/users/me/lists/{slug}` (own) or `/lists/{traktId}` / `/users/{owner}/
   /// lists/{slug}` (liked).
+  /// Home requests [preview] to stop after page one; all other callers retain
+  /// the complete ordered list walk.
   Future<List<dynamic>?> _fetchListItemsOrderedOrNull(
     String basePath,
-    String logLabel,
-  ) async {
+    String logLabel, {
+    bool preview = false,
+  }) async {
     final items = <dynamic>[];
     var page = 1;
     var pageCount = 1;
@@ -1206,27 +1301,32 @@ class TraktService {
         return items.isEmpty ? null : items;
       }
       page += 1;
-    } while (page <= pageCount);
+    } while (!preview && page <= pageCount);
     return items;
   }
 
   /// Own custom list items (movies + shows) in list order, null on failure.
   /// [listRef] is the list's slug (preferred) or Trakt id.
-  Future<List<dynamic>?> fetchCustomListItemsOrderedOrNull(String listRef) {
+  Future<List<dynamic>?> fetchCustomListItemsOrderedOrNull(
+    String listRef, {
+    bool preview = false,
+  }) {
     return _fetchListItemsOrderedOrNull(
       '/users/me/lists/$listRef',
       'customList $listRef',
+      preview: preview,
     );
   }
 
   /// Liked list items (movies + shows) in list order, null on failure. Resolves
   /// the list's global-id path when possible, else the owner/slug path.
   Future<List<dynamic>?> fetchLikedListItemsOrderedOrNull(
-    Map<String, dynamic> list,
-  ) {
+    Map<String, dynamic> list, {
+    bool preview = false,
+  }) {
     final base = _likedListBasePath(list);
     if (base == null) return Future.value(null);
-    return _fetchListItemsOrderedOrNull(base, 'likedList $base');
+    return _fetchListItemsOrderedOrNull(base, 'likedList $base', preview: preview);
   }
 
   /// Search Trakt for movies or shows by query.
@@ -1359,102 +1459,38 @@ class TraktService {
     return debugNormalizeContinueWatchingShows(raw);
   }
 
-  /// Build the complete episode-shaped Continue Watching feed.
-  ///
-  /// The intent-aware endpoint owns membership, order, and the next episode.
-  /// Paused playback is optional enrichment for that exact episode; it must
-  /// never add a show or replace Trakt's authoritative episode coordinate.
-  /// Returns null when the authoritative read fails so UI callers can retain
-  /// their last successful snapshot instead of publishing an approximation.
+  /// Resume checkpoints and Up Next are independent: a new show can have
+  /// paused playback before any episode reaches watched history.
   Future<List<dynamic>?> fetchContinueWatchingEpisodeItemsOrNull() async {
-    final reads = await Future.wait<Object?>([
-      fetchContinueWatchingShowsOrNull(),
-      fetchPlaybackItemsOrNull('episodes'),
-    ]);
-    final authoritative = reads[0] as List<Map<String, dynamic>>?;
-    if (authoritative == null) return null;
-
-    // Playback progress is useful but not authoritative. A playback outage
-    // should not hide a valid Up Next row; the play path performs its own fresh
-    // checkpoint lookup before launch.
-    final playback = reads[1] as List<dynamic>? ?? const <dynamic>[];
-    return debugMergeContinueWatchingShows(playback, authoritative);
+    return loadTraktContinueWatching(
+      upNext: fetchContinueWatchingShowsOrNull,
+      playback: () => fetchPlaybackItemsOrNull('episodes'),
+      hidden: () => _fetchAllPagesOrNull(
+        basePath: '/users/hidden/progress_watched',
+        logLabel: 'continue watching hidden',
+      ),
+      dropped: () => _fetchAllPagesOrNull(
+        basePath: '/users/hidden/dropped',
+        logLabel: 'continue watching dropped',
+      ),
+      // Show-level activity is sufficient to reject a checkpoint superseded
+      // by a subsequent watch. Do not request the entire season breakdown.
+      watched: () => readTraktWatchedShowHistory(_authenticatedGet),
+    );
   }
 
   @visibleForTesting
   static List<dynamic> debugMergeContinueWatchingShows(
     List<dynamic> playback,
-    List<Map<String, dynamic>> authoritative,
-  ) {
-    final playbackByShow = <String, List<Map<String, dynamic>>>{};
-    for (final raw in playback) {
-      if (raw is! Map<String, dynamic>) continue;
-      final show = raw['show'] as Map<String, dynamic>?;
-      final key = _traktShowIdentity(show);
-      if (key == null) continue;
-      playbackByShow.putIfAbsent(key, () => []).add(raw);
-    }
-
-    final result = <dynamic>[];
-    for (final raw in authoritative) {
-      final show = raw['show'] as Map<String, dynamic>?;
-      final key = _traktShowIdentity(show);
-      final checkpoints = key == null
-          ? const <Map<String, dynamic>>[]
-          : playbackByShow[key] ?? const <Map<String, dynamic>>[];
-      final merged = Map<String, dynamic>.from(raw);
-
-      // Keep every deletion id for the existing deliberate remove behaviour,
-      // but don't let unrelated paused episodes influence the displayed or
-      // launched episode.
-      final playbackIds = <int>[
-        for (final checkpoint in checkpoints)
-          if (checkpoint['id'] is int) checkpoint['id'] as int,
-      ];
-      if (playbackIds.isNotEmpty) merged['_playback_ids'] = playbackIds;
-
-      final authoritativeEpisode = raw['episode'] as Map<String, dynamic>?;
-      final season = authoritativeEpisode?['season'] as int?;
-      final episode = authoritativeEpisode?['number'] as int?;
-      Map<String, dynamic>? matchingCheckpoint;
-      if (season != null && episode != null) {
-        for (final checkpoint in checkpoints) {
-          final candidate = checkpoint['episode'] as Map<String, dynamic>?;
-          if (candidate?['season'] == season &&
-              candidate?['number'] == episode) {
-            matchingCheckpoint = checkpoint;
-            break;
-          }
-        }
-      }
-
-      if (matchingCheckpoint != null) {
-        final progress = matchingCheckpoint['progress'];
-        if (progress is num) merged['progress'] = progress;
-
-        // Extended playback can contain richer episode metadata. Preserve it
-        // while making the authoritative season/number win on any conflict.
-        final checkpointEpisode =
-            matchingCheckpoint['episode'] as Map<String, dynamic>?;
-        if (checkpointEpisode != null && authoritativeEpisode != null) {
-          merged['episode'] = <String, dynamic>{
-            ...checkpointEpisode,
-            ...authoritativeEpisode,
-          };
-        }
-      }
-      result.add(merged);
-    }
-    return result;
-  }
-
-  static String? _traktShowIdentity(Map<String, dynamic>? show) {
-    final ids = show?['ids'] as Map<String, dynamic>?;
-    final traktId = ids?['trakt'];
-    if (traktId != null) return 'trakt:$traktId';
-    final imdbId = (ids?['imdb'] as String?)?.trim().toLowerCase();
-    return imdbId == null || imdbId.isEmpty ? null : 'imdb:$imdbId';
-  }
+    List<Map<String, dynamic>> authoritative, {
+    List<dynamic> hidden = const [],
+    List<dynamic> watched = const [],
+  }) => mergeTraktContinueWatching(
+    playback,
+    authoritative,
+    hidden: hidden,
+    watched: watched,
+  );
 
   /// Convert Trakt's `{show, progress: {next_episode, last_watched_at}}`
   /// response into the playback-like shape shared by the existing transformer.

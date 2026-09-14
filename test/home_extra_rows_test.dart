@@ -293,6 +293,192 @@ void main() {
       ]);
     });
 
+    test(
+      'late custom list publishes after fast rows without a deadline',
+      () async {
+        final pending = Completer<({List<StremioMeta> items, bool failed})>();
+        final updates = <List<HomeListSection>>[];
+        final service = HomeListRowsService(
+          traktUserLists: () async => [_userList(7, 'Mine')],
+          traktLoad: (c) =>
+              c.isBuiltin ? Future.value(_ok('fast')) : pending.future,
+        );
+        final result = service.resolve(const [
+          (id: 'traktlist:watchlist', title: ''),
+          (id: 'traktlist:custom:7', title: ''),
+        ], onUpdate: updates.add);
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+        expect(updates.last.map((r) => r.rowId), ['traktlist:watchlist']);
+        pending.complete(_ok('late'));
+        expect((await result).map((r) => r.rowId), [
+          'traktlist:watchlist',
+          'traktlist:custom:7',
+        ]);
+        expect(updates.last.last.items.single.id, 'late');
+      },
+    );
+
+    test(
+      'refresh retains failures but removes disabled and successfully empty rows',
+      () async {
+        HomeListSection previous(String id) => HomeListSection(
+          rowId: id,
+          title: id,
+          items: [_meta('old')],
+          traktChoice: const TraktListChoice.builtin(TraktSeeAllList.watchlist),
+        );
+        final failed = previous('traktlist:custom:7');
+        final result =
+            await HomeListRowsService(
+              traktUserLists: () async => [
+                _userList(7, 'Failed'),
+                _userList(8, 'Empty'),
+              ],
+              traktLoad: (c) async => c.userListId == '7' ? _failed : _empty,
+            ).resolve(
+              const [
+                (id: 'traktlist:custom:7', title: ''),
+                (id: 'traktlist:custom:8', title: ''),
+              ],
+              previous: [
+                failed,
+                previous('traktlist:custom:8'),
+                previous('traktlist:custom:9'),
+              ],
+            );
+        expect(result, [same(failed)]);
+      },
+    );
+
+    test(
+      'cancelled generation does not publish or start queued requests',
+      () async {
+        var current = true;
+        var calls = 0;
+        final pending = Completer<({List<StremioMeta> items, bool failed})>();
+        final updates = <List<HomeListSection>>[];
+        final result =
+            HomeListRowsService(
+              traktLoad: (_) {
+                calls++;
+                return pending.future;
+              },
+              traktUserLists: () async => [_userList(7, 'Queued')],
+            ).resolve(
+              const [
+                (id: 'traktlist:watchlist', title: ''),
+                (id: 'traktlist:trending', title: ''),
+                (id: 'traktlist:popular', title: ''),
+                (id: 'traktlist:custom:7', title: ''),
+              ],
+              onUpdate: updates.add,
+              isCurrent: () => current,
+            );
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+        expect(calls, 3);
+        current = false;
+        pending.complete(_ok('late'));
+        await result;
+        expect(calls, 3);
+        expect(updates, isEmpty);
+      },
+    );
+
+    for (final fails in [false, true]) {
+      test(
+        'Trakt vanished directory rows are removed only on success ($fails)',
+        () async {
+          final previous = [
+            for (final liked in [false, true])
+              HomeListSection(
+                rowId: liked ? 'traktlist:liked:7' : 'traktlist:custom:7',
+                title: 'Old',
+                items: [_meta('old')],
+                traktChoice: _userList(7, 'Old', liked: liked),
+              ),
+          ];
+          final rows =
+              await HomeListRowsService(
+                traktUserLists: () async {
+                  if (fails) throw StateError('offline');
+                  return [];
+                },
+              ).resolve([
+                for (final r in previous) (id: r.rowId, title: r.title),
+              ], previous: previous);
+          expect(rows, fails ? previous : isEmpty);
+        },
+      );
+    }
+
+    test(
+      'MDBList missing rows are removed independently of failed directories',
+      () async {
+        final previous = [
+          for (final prefix in ['mine', 'liked', 'top'])
+            HomeListSection(
+              rowId: 'mdblistlist:$prefix:7',
+              title: prefix,
+              items: [_meta('old')],
+              mdblistList: const MdblistListChoice(id: 7, name: 'Old'),
+            ),
+        ];
+        final rows =
+            await HomeListRowsService(
+              mdblistMine: () async => [],
+              mdblistLiked: () async => throw StateError('offline'),
+              mdblistTop: () async => [],
+            ).resolve([
+              for (final r in previous) (id: r.rowId, title: r.title),
+            ], previous: previous);
+        expect(rows, [previous[1]]);
+      },
+    );
+
+    for (final simkl in [false, true]) {
+      for (final retained in [false, true]) {
+        test(
+          'partial refresh preserves previous row but supports first load (simkl=$simkl, retained=$retained)',
+          () async {
+            final id = simkl ? 'simkllist:planToWatch' : 'traktlist:watchlist';
+            final old = HomeListSection(
+              rowId: id,
+              title: 'Saved',
+              items: [_meta('movie'), _meta('show')],
+              traktChoice: simkl
+                  ? null
+                  : const TraktListChoice.builtin(TraktSeeAllList.watchlist),
+              simklList: simkl ? SimklSeeAllList.planToWatch : null,
+            );
+            final updates = <List<HomeListSection>>[];
+            final service = HomeListRowsService(
+              traktLoad: (_) async => (items: [_meta('partial')], failed: true),
+              simklLoad: (_) async => (items: [_meta('partial')], failed: true),
+            );
+            final result = await service.resolve(
+              [(id: id, title: '')],
+              previous: retained ? [old] : [],
+              onUpdate: updates.add,
+            );
+            expect(result, hasLength(1));
+            expect(
+              result.single.items.map((m) => m.id),
+              retained ? ['movie', 'show'] : ['partial'],
+            );
+            for (final update in updates) {
+              expect(update, hasLength(1));
+              if (retained) {
+                expect(update.single, same(old));
+              } else {
+                expect(update.single.items.single.id, 'partial');
+              }
+            }
+            if (retained) expect(result.single, same(old));
+          },
+        );
+      }
+    }
+
     test('caps concurrent fetches per provider at 3', () async {
       var active = 0;
       var peak = 0;

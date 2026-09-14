@@ -9,12 +9,10 @@ import android.os.Looper
 import android.os.Process
 import org.json.JSONObject
 import java.io.File
-import java.io.FileOutputStream
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
-import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
@@ -29,14 +27,13 @@ object DiagnosticFileLog {
     private const val FILE_PREFIX = "debrify-diagnostics-"
     private const val FILE_SUFFIX = ".jsonl"
     private const val RETENTION_MS = 2L * 60L * 60L * 1_000L
+    private const val CRITICAL_RETENTION_MS = 24L * 60L * 60L * 1_000L
     private const val SEGMENT_MS = 15L * 60L * 1_000L
     private const val MAX_SEGMENT_BYTES = 256L * 1_024L
     private const val PREFS_NAME = "debrify_diagnostics"
     private const val LAST_EXIT_TIMESTAMP = "last_exit_timestamp"
 
-    private val executor = Executors.newSingleThreadExecutor { runnable ->
-        Thread(runnable, "debrify-diagnostics").apply { isDaemon = true }
-    }
+    private val executor = DiagnosticWorkQueue()
     private val initialized = AtomicBoolean(false)
     private val crashHandlerInstalled = AtomicBoolean(false)
     private val fileLock = Any()
@@ -57,22 +54,23 @@ object DiagnosticFileLog {
         applicationContext = appContext
         accepting = true
         installCrashHandler(appContext)
-        executor.execute {
-            if (!accepting) return@execute
-            pruneExpired(appContext, System.currentTimeMillis())
-            append(
-                context = appContext,
-                source = "android",
-                event = "native_diagnostics_initialized",
-                message = "sdk=${Build.VERSION.SDK_INT} " +
-                    "manufacturer=${safeLabel(Build.MANUFACTURER)} " +
-                    "model=${safeLabel(Build.MODEL)} " +
-                    "abi=${safeLabel(Build.SUPPORTED_ABIS.firstOrNull() ?: "unknown")}",
-                level = "info",
-                timestampMs = System.currentTimeMillis(),
-                fileKind = "android",
-                forceSync = false,
-            )
+        recordCritical(
+            source = "android", event = "native_diagnostics_initialized",
+            message = "pid=${Process.myPid()} sdk=${Build.VERSION.SDK_INT} " +
+                "manufacturer=${safeLabel(Build.MANUFACTURER)} " +
+                "model=${safeLabel(Build.MODEL)} " +
+                "abi=${safeLabel(Build.SUPPORTED_ABIS.firstOrNull() ?: "unknown")}",
+        )
+    }
+
+    /** Retain lifecycle evidence longer, without blocking the calling thread. */
+    fun recordCritical(source: String, event: String, message: String? = null, level: String = "info") {
+        if (!accepting) return
+        val context = applicationContext ?: return
+        val timestamp = System.currentTimeMillis()
+        val boundedMessage = message?.take(8192)
+        executor.submit {
+            append(context, source, event, boundedMessage, level, timestamp, "android-critical", true)
         }
     }
 
@@ -85,13 +83,14 @@ object DiagnosticFileLog {
         if (!accepting) return
         val context = applicationContext ?: return
         val timestamp = System.currentTimeMillis()
-        executor.execute {
-            if (!accepting) return@execute
+        val boundedMessage = message?.take(8192)
+        executor.submit {
+            if (!accepting) return@submit
             append(
                 context = context,
                 source = source,
                 event = event,
-                message = message,
+                message = boundedMessage,
                 level = level,
                 timestampMs = timestamp,
                 fileKind = "android",
@@ -105,18 +104,15 @@ object DiagnosticFileLog {
         event: String,
         throwable: Throwable,
     ) {
-        val message = buildString {
-            append("type=")
-            append(throwable.javaClass.name)
-            append(" stack=")
-            append(throwable.stackTrace.take(24).joinToString(" | "))
-        }
-        record(source, event, message, "error")
+        val message = DiagnosticFailure.describe(throwable)
+        recordCritical(source, event, message, "error")
     }
 
     /** Completes only after every native event queued before this call. */
-    fun flush(onComplete: () -> Unit) {
-        executor.execute { mainHandler.post(onComplete) }
+    fun flush(onComplete: (Boolean) -> Unit) {
+        if (!executor.submit { mainHandler.post { onComplete(true) } }) {
+            mainHandler.post { onComplete(false) }
+        }
     }
 
     /**
@@ -127,7 +123,7 @@ object DiagnosticFileLog {
     fun clearForDeviceReset(onComplete: (Boolean) -> Unit) {
         accepting = false
         val context = applicationContext
-        executor.execute {
+        if (!executor.submit {
             val cleared = try {
                 if (context != null) {
                     synchronized(fileLock) {
@@ -148,6 +144,8 @@ object DiagnosticFileLog {
                 false
             }
             mainHandler.post { onComplete(cleared) }
+        }) {
+            mainHandler.post { onComplete(false) }
         }
     }
 
@@ -159,7 +157,7 @@ object DiagnosticFileLog {
     fun recordPreviousProcessExit(context: Context) {
         if (!accepting || Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return
         val appContext = context.applicationContext
-        executor.execute {
+        executor.submit {
             if (accepting) recordPreviousProcessExitApi30(appContext)
         }
     }
@@ -183,12 +181,14 @@ object DiagnosticFileLog {
                 .filter { it.timestamp > lastRecorded }
                 .sortedBy { it.timestamp }
                 .forEach { exit ->
-                    append(
+                    val stored = append(
                         context = context,
                         source = "android_process",
                         event = "previous_exit",
                         message = buildString {
-                            append("reason=")
+                            append("pid=")
+                            append(exit.pid)
+                            append(" reason=")
                             append(exitReason(exit.reason))
                             append(" status=")
                             append(exit.status)
@@ -206,16 +206,19 @@ object DiagnosticFileLog {
                             exit.reason == ApplicationExitInfo.REASON_LOW_MEMORY
                         ) "warning" else "info",
                         timestampMs = exit.timestamp,
-                        fileKind = "android",
-                        forceSync = false,
+                        fileKind = "android-critical",
+                        forceSync = true,
                     )
+                    if (!stored) return
                     if (exit.timestamp > newestRecorded) newestRecorded = exit.timestamp
                 }
+            recordCritical("android_process", "exit_history_checked",
+                "pid=${Process.myPid()} available=${exits.size} new=${exits.count { it.timestamp > lastRecorded }}")
             if (newestRecorded > lastRecorded) {
                 preferences.edit().putLong(LAST_EXIT_TIMESTAMP, newestRecorded).commit()
             }
-        } catch (_: Throwable) {
-            // Exit-history capture is diagnostic only and must never affect launch.
+        } catch (error: Throwable) {
+            recordCritical("android_process", "exit_history_unavailable", "type=${error.javaClass.name}", "warning")
         }
     }
 
@@ -245,10 +248,8 @@ object DiagnosticFileLog {
                 val message = buildString {
                     append("thread=")
                     append(safeLabel(thread.name))
-                    append(" type=")
-                    append(throwable.javaClass.name)
-                    append(" stack=")
-                    append(throwable.stackTrace.take(32).joinToString(" | "))
+                    append(" ")
+                    append(DiagnosticFailure.describe(throwable))
                 }
                 append(
                     context = context,
@@ -282,12 +283,12 @@ object DiagnosticFileLog {
         timestampMs: Long,
         fileKind: String,
         forceSync: Boolean,
-    ) {
+    ): Boolean {
         try {
             synchronized(fileLock) {
-                if (!accepting) return
+                if (!accepting) return false
                 val directory = File(context.filesDir, "diagnostics")
-                if (!directory.exists() && !directory.mkdirs()) return
+                if (!directory.exists() && !directory.mkdirs()) return false
                 val segmentStart = timestampMs - (timestampMs % SEGMENT_MS)
                 val file = File(
                     directory,
@@ -298,15 +299,11 @@ object DiagnosticFileLog {
                     .put("level", safeLabel(level))
                     .put("source", safeLabel(source))
                     .put("event", safeLabel(event))
+                    .put("droppedQueueEntries", executor.dropped.get())
                 if (!message.isNullOrBlank()) {
                     record.put("message", redact(message))
                 }
-                val bytes = (record.toString() + "\n").toByteArray(Charsets.UTF_8)
-                FileOutputStream(file, true).use { output ->
-                    output.write(bytes)
-                    if (forceSync) output.fd.sync()
-                }
-                trimSegment(file)
+                DiagnosticSegmentFile.append(file, record.toString(), forceSync, MAX_SEGMENT_BYTES)
                 if (lastPrunedSegment != segmentStart) {
                     lastPrunedSegment = segmentStart
                     // Historical ApplicationExitInfo entries retain their
@@ -315,21 +312,11 @@ object DiagnosticFileLog {
                     pruneExpired(context, System.currentTimeMillis())
                 }
             }
+            return true
         } catch (_: Throwable) {
             // No logging failure may alter playback or crash delegation.
+            return false
         }
-    }
-
-    private fun trimSegment(file: File) {
-        if (file.length() <= MAX_SEGMENT_BYTES) return
-        val bytes = file.readBytes()
-        // Keep headroom after a trim so a burst cannot make every following
-        // event rewrite the entire segment on slower TV storage.
-        var start = (bytes.size - (MAX_SEGMENT_BYTES / 2L).toInt()).coerceAtLeast(0)
-        while (start < bytes.size && bytes[start] != '\n'.code.toByte()) start++
-        if (start < bytes.size) start++
-        val retained = if (start < bytes.size) bytes.copyOfRange(start, bytes.size) else byteArrayOf()
-        file.writeBytes(retained)
     }
 
     private fun pruneExpired(context: Context, nowMs: Long) {
@@ -338,13 +325,18 @@ object DiagnosticFileLog {
         directory.listFiles()?.forEach { file ->
             if (!file.isFile ||
                 !file.name.startsWith(FILE_PREFIX) ||
-                !file.name.endsWith(FILE_SUFFIX)
+                !file.name.endsWith(FILE_SUFFIX) ||
+                !(file.name.endsWith("-android.jsonl") ||
+                    file.name.endsWith("-android-critical.jsonl") ||
+                    file.name.endsWith("-android-crash.jsonl"))
             ) return@forEach
             val segment = file.name
                 .removePrefix(FILE_PREFIX)
                 .substringBefore('-')
                 .toLongOrNull() ?: return@forEach
-            if (segment + SEGMENT_MS <= cutoff) {
+            val effectiveCutoff = if (file.name.endsWith("-critical.jsonl") || file.name.endsWith("-android-crash.jsonl"))
+                nowMs - CRITICAL_RETENTION_MS else cutoff
+            if (segment + SEGMENT_MS <= effectiveCutoff) {
                 try {
                     file.delete()
                 } catch (_: Throwable) {}

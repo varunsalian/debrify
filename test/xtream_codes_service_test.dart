@@ -29,6 +29,8 @@ void main() {
     List<int>? streamsRawBytes;
     var vodRows = <Map<String, dynamic>>[];
     var seriesRows = <Map<String, dynamic>>[];
+    ContentType? categoriesContentType;
+    List<int>? categoriesRawBytes;
     var categoriesFail = false;
     var streamsError = false;
     var streamsHttpStatus = HttpStatus.ok;
@@ -90,14 +92,18 @@ void main() {
             request.response.close();
             return;
           }
-          request.response
-            ..headers.contentType = ContentType.json
-            ..write(
+          request.response.headers.contentType =
+              categoriesContentType ?? ContentType.json;
+          if (categoriesRawBytes != null) {
+            request.response.add(categoriesRawBytes!);
+          } else {
+            request.response.write(
               jsonEncode([
                 {'category_id': '1', 'category_name': 'Sports'},
                 {'category_id': '2', 'category_name': 'News'},
               ]),
             );
+          }
           request.response.close();
           return;
         }
@@ -133,6 +139,8 @@ void main() {
     tearDownAll(() async => server.close(force: true));
 
     setUp(() {
+      categoriesContentType = null;
+      categoriesRawBytes = null;
       categoriesFail = false;
       streamsError = false;
       streamsHttpStatus = HttpStatus.ok;
@@ -499,8 +507,7 @@ void main() {
     // `Response.body` would have burned that decode on the calling thread,
     // which for a tens-of-MB panel is hundreds of milliseconds of the freeze
     // the isolate exists to remove. These lock the two halves of that: the
-    // decode must still be correct, and it must still match what package:http
-    // would have produced.
+    // decode must preserve Unicode and stay off the calling thread.
     test('non-ASCII names survive the byte handoff intact', () async {
       liveRows = [
         for (var i = 0; i < 1200; i++)
@@ -533,37 +540,75 @@ void main() {
       expect(result.channels.first.url, '$base/live/u20/p20/0.ts');
     });
 
-    test(
-      'an undeclared charset falls back to latin1, as package:http does',
-      () async {
-        // A panel that serves UTF-8 bytes without saying so. package:http's
-        // `Response.body` resolves an absent charset to latin1, so it produced
-        // mojibake here long before any isolate existed. Moving the decode must
-        // not quietly change what a user's channel list says — fixing that is a
-        // separate, deliberate change with its own migration story for the
-        // URL-keyed favorites that would suddenly disagree.
-        const name = 'Спорт';
-        streamsContentType = ContentType('application', 'json');
-        streamsRawBytes = utf8.encode(
-          jsonEncode([
-            {'name': name, 'stream_id': 7},
-          ]),
-        );
+    for (final charset in <String?>[null, 'iso-8859-1', 'windows-1252']) {
+      for (final large in [false, true]) {
+        test('UTF-8 names survive charset=$charset, large=$large', () async {
+          const name = 'US| CW ᴴᴰ ▶ Спорт';
+          streamsContentType = ContentType(
+            'application',
+            'json',
+            charset: charset,
+          );
+          categoriesContentType = streamsContentType;
+          categoriesRawBytes = utf8.encode(
+            jsonEncode([
+              {'category_id': '1', 'category_name': name},
+            ]),
+          );
+          streamsRawBytes = utf8.encode(
+            jsonEncode([
+              {
+                'name': name,
+                'stream_id': 7,
+                'category_id': '1',
+                if (large) 'plot': 'x' * 110000,
+              },
+            ]),
+          );
 
-        final result = await XtreamCodesService.instance.fetchLiveStreams(
-          base,
-          'u21',
-          'p21',
-        );
+          final result = await XtreamCodesService.instance.fetchLiveStreams(
+            base,
+            'u21',
+            'p21',
+          );
 
-        expect(
-          result.channels.single.name,
-          latin1.decode(utf8.encode(name)),
-          reason: 'byte-for-byte what Response.body would have returned',
-        );
-        expect(result.channels.single.name, isNot(name));
-      },
-    );
+          expect(result.error, isNull);
+          expect(result.channels.single.name, name);
+          expect(result.channels.single.group, name);
+          expect(result.categories, [name]);
+          expect(XtreamCodesService.isolateBuilds, large ? 1 : 0);
+          expect(XtreamCodesService.buildsOnThisIsolate, large ? 0 : 1);
+        });
+      }
+    }
+
+    test('legacy Latin-1 channel and category names remain readable', () async {
+      const name = 'Cinéma';
+      streamsContentType = ContentType(
+        'application',
+        'json',
+        charset: 'iso-8859-1',
+      );
+      categoriesContentType = streamsContentType;
+      streamsRawBytes = latin1.encode(
+        jsonEncode([
+          {'name': name, 'stream_id': 7, 'category_id': '1'},
+        ]),
+      );
+      categoriesRawBytes = latin1.encode(
+        jsonEncode([
+          {'category_id': '1', 'category_name': name},
+        ]),
+      );
+      final result = await XtreamCodesService.instance.fetchLiveStreams(
+        base,
+        'legacy',
+        'p',
+      );
+      expect(result.channels.single.name, name);
+      expect(result.channels.single.group, name);
+      expect(result.categories, [name]);
+    });
 
     test('a declared charset is honoured on the worker', () async {
       const name = 'Спорт';

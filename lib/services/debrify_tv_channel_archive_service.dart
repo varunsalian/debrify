@@ -80,44 +80,13 @@ Uint8List _buildDebrifyTvChannelZip(List<Map<String, Object?>> messages) {
             Map<String, dynamic>.from(cacheRaw),
           )
         : null;
-    final yaml = ChannelYamlBuilder.buildFromEntry(
-      channel,
-      _makeEntirePoolPortable(channel, cacheEntry),
-    );
+    final yaml = ChannelYamlBuilder.buildFromEntry(channel, cacheEntry);
     final bytes = utf8.encode(yaml);
     archive.addFile(
       ArchiveFile(_archiveMemberName(channel.name, index), bytes.length, bytes),
     );
   }
   return Uint8List.fromList(ZipEncoder().encode(archive));
-}
-
-DebrifyTvChannelCacheEntry? _makeEntirePoolPortable(
-  DebrifyTvChannelRecord channel,
-  DebrifyTvChannelCacheEntry? entry,
-) {
-  if (entry == null || entry.torrents.isEmpty) return entry;
-  final channelKeywords = channel.keywords
-      .map((keyword) => keyword.trim().toLowerCase())
-      .where((keyword) => keyword.isNotEmpty)
-      .toSet();
-  if (channelKeywords.isEmpty) return entry;
-
-  var changed = false;
-  final fallbackKeyword = channelKeywords.first;
-  final portableTorrents = entry.torrents
-      .map((torrent) {
-        final represented = torrent.keywords.any(
-          (keyword) => channelKeywords.contains(keyword.toLowerCase()),
-        );
-        if (represented) return torrent;
-        // YAML stores torrents below keywords. Associate a stale/orphaned cache
-        // row with the first current keyword so its hash is not silently lost.
-        changed = true;
-        return torrent.merge(keywords: <String>[fallbackKeyword]);
-      })
-      .toList(growable: false);
-  return changed ? entry.copyWith(torrents: portableTorrents) : entry;
 }
 
 String _archiveMemberName(String channelName, int index) {

@@ -42,6 +42,10 @@ class AndroidNativeDownloader {
   static Stream<Map<String, dynamic>>? _eventStream;
 
   static Stream<Map<String, dynamic>> get events {
+    // Only Android registers this channel. Subscribing elsewhere throws a
+    // MissingPluginException on every profile-scope remount (three listeners
+    // re-subscribe), which showed up as repeated framework errors on macOS.
+    if (!Platform.isAndroid) return const Stream<Map<String, dynamic>>.empty();
     _eventStream ??= _events.receiveBroadcastStream().map(
       (e) => Map<String, dynamic>.from(e as Map),
     );

@@ -4,6 +4,7 @@ import 'dart:ui' show PointerDeviceKind;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:debrify/models/iptv_playlist.dart';
 import 'package:debrify/models/stremio_addon.dart';
@@ -16,6 +17,7 @@ import 'package:debrify/theme/widgets/parallax_focus.dart';
 import 'package:debrify/widgets/detail/theme/detail_themes.dart';
 import 'package:debrify/widgets/hero_trailer_backdrop.dart';
 import 'package:debrify/widgets/home/spotlight_board.dart';
+import 'package:debrify/widgets/collections/collection_focus_glow.dart';
 
 /// Spotlight's hero, which is the piece that changes Home's focus topology
 /// rather than its paint.
@@ -67,6 +69,7 @@ void main() {
   late List<List<FocusNode>> rows;
 
   setUp(() {
+    SharedPreferences.setMockInitialValues({});
     hero = FocusNode(debugLabel: 'hero');
     rows = [
       [FocusNode(debugLabel: 'r0c0'), FocusNode(debugLabel: 'r0c1')],
@@ -107,6 +110,58 @@ void main() {
       ),
     ),
   );
+
+  testWidgets(
+    'cards receive entry focus before hero data and retain it on arrival',
+    (tester) async {
+      final a = _meta('tt1', 'Alpha');
+      final b = _meta('tt2', 'Bravo');
+      final shelves = [
+        _section('Saved', [a, b], nodes: rows.first),
+      ];
+      await tester.pumpWidget(host([], shelves));
+      await tester.pumpAndSettle();
+      final board = tester.state<SpotlightBoardState>(
+        find.byType(SpotlightBoard),
+      );
+      expect(hero.context, isNull);
+      expect(board.focusTarget(), same(rows.first.first));
+      board.focusTarget()!.requestFocus();
+      await tester.pumpAndSettle();
+      expect(rows.first.first.hasFocus, isTrue);
+      // UP must not latch a request on the still-unmounted hero.
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+      await tester.pumpAndSettle();
+      expect(rows.first.first.hasFocus, isTrue);
+      await tester.pumpWidget(host([a], shelves));
+      await tester.pumpAndSettle();
+      expect(rows.first.first.hasFocus, isTrue);
+      // Model the host's next autofocus pass when the hero arrives. Even a
+      // user who has not moved horizontally keeps the available card anchor.
+      expect(board.focusTarget(), same(rows.first.first));
+      board.focusTarget()!.requestFocus();
+      await tester.pumpAndSettle();
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+      await tester.pumpAndSettle();
+      expect(rows.first[1].hasFocus, isTrue);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+      await tester.pumpAndSettle();
+      expect(hero.hasFocus, isTrue);
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
+
+  testWidgets('empty Spotlight has no detached initial focus target', (
+    tester,
+  ) async {
+    await tester.pumpWidget(host([], []));
+    await tester.pumpAndSettle();
+    final board = tester.state<SpotlightBoardState>(
+      find.byType(SpotlightBoard),
+    );
+    expect(board.focusTarget(), isNull);
+    await tester.pumpWidget(const SizedBox());
+  });
 
   testWidgets('the hero parks by ITEM ID across a reel re-order', (
     tester,
@@ -1105,6 +1160,28 @@ void main() {
     expect(find.byKey(preview), findsNothing);
   });
 
+  testWidgets('collection previews follow desktop keyboard focus and row glow', (tester) async {
+    const preview = ValueKey('collection-card-preview');
+    await tester.pumpWidget(host([_meta('tt1', 'Alpha')], [
+      SpotlightShelf(title: 'Collections', nodes: rows[0], items: [
+        SpotlightCard(title: 'Brand', shape: SpotlightCardShape.wide,
+          onOpen: _noop, focusGlowEnabled: true, previewOnKeyboardFocus: true,
+          previewBuilder: (_) => const SizedBox.expand(key: preview)),
+      ]),
+    ], dpad: false));
+    await tester.pumpAndSettle();
+    expect(find.byKey(preview), findsNothing);
+    rows[0][0].requestFocus();
+    await tester.pumpAndSettle();
+    expect(find.byKey(preview), findsOneWidget);
+    final glow = tester.widget<CollectionFocusGlow>(find.byType(CollectionFocusGlow));
+    expect(glow.enabled, isTrue);
+    expect(glow.active, isTrue);
+    hero.requestFocus();
+    await tester.pumpAndSettle();
+    expect(find.byKey(preview), findsNothing);
+  });
+
   testWidgets('an IPTV preview follows desktop hover, not keyboard focus', (
     tester,
   ) async {
@@ -1317,6 +1394,24 @@ void main() {
       closeTo(2 / 3, 0.005),
       reason: 'a poster is 2:3 — anything else means it was stretched',
     );
+  });
+
+  testWidgets('square collection covers retain their ratio and per-card hidden titles', (tester) async {
+    await tester.pumpWidget(host([_meta('tt1', 'Hero')], [
+      SpotlightShelf(title: 'Folders', nodes: rows[0], items: [
+        SpotlightCard(title: 'Hidden folder', shape: SpotlightCardShape.square,
+          showCaption: false, onOpen: _noop),
+        SpotlightCard(title: 'Visible folder', shape: SpotlightCardShape.square,
+          onOpen: _noop),
+      ]),
+    ]));
+    await tester.pumpAndSettle();
+    final cardHost = tester.widgetList<ParallaxFocus>(find.byType(ParallaxFocus))
+        .firstWhere((p) => p.fixedScaleForeground != null);
+    final box = tester.getSize(find.byWidget(cardHost));
+    expect(box.width / box.height, closeTo(1, 0.005));
+    expect(find.text('Hidden folder'), findsNothing);
+    expect(find.text('Visible folder'), findsOneWidget);
   });
 
   testWidgets('a wide shelf uses the readable landscape rail width', (

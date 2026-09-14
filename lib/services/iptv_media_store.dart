@@ -7,10 +7,13 @@ import 'package:sqflite/sqflite.dart';
 import '../models/iptv_playlist.dart';
 import '../utils/json_isolate.dart';
 import 'debrify_tv_database.dart';
+import 'diagnostic_log.dart' as app_diagnostics;
 import 'iptv_catalog_db.dart';
 import 'iptv_channel_order.dart';
 import 'profiles/profile_preferences.dart';
 import 'profiles/profile_runtime.dart';
+import 'webdav_sync/webdav_sync_library_models.dart';
+import 'webdav_sync/webdav_sync_library_mutation.dart';
 
 /// SQLite-backed store for IPTV favorites, IPTV watch history and the shared
 /// video-resume map.
@@ -152,6 +155,10 @@ class IptvMediaStore {
   /// reads cannot inherit its captured database handle and bypass admission.
   static void _bumpListsRevision() => listsRevision.value++;
 
+  /// Replays list invalidation after exact-stamp sync materialization.
+  /// This is UI-only and deliberately does not schedule another sync cycle.
+  static void notifyListsChanged() => _bumpListsRevision();
+
   static const String _legacyFavoritesKey = 'iptv_favorite_channels_v1';
   static const String _legacyWatchHistoryKey = 'iptv_watch_history_v1';
   static const String _legacyVideoResumeKey = 'video_resume_v1';
@@ -177,6 +184,16 @@ class IptvMediaStore {
     _migration = null;
     _migrationScopeKey = null;
   }
+
+  @visibleForTesting
+  static DateTime Function() debugLibraryClock = DateTime.now;
+
+  static final WebDavSyncMonotonicStamp _monotonicStamp =
+      WebDavSyncMonotonicStamp();
+
+  /// Stamp time for a user library mutation; strictly increasing per clock so
+  /// a backwards clock step cannot reuse a stamp for a different mutation.
+  static int _nextStampMs() => _monotonicStamp.next(debugLibraryClock);
 
   static Future<void> _ensureMigrated() {
     final scopeKey = ProfileRuntime.mode == ProfileRuntimeMode.profileCommitted
@@ -209,6 +226,59 @@ class IptvMediaStore {
     final prefs = await ProfilePreferences.instance();
     final db = DebrifyTvDatabase.instance;
 
+    // Every family lands through one batch commit per transaction: a restored
+    // legacy blob can hold years of entries, and issuing two awaited platform
+    // calls per row once froze the shared connection for minutes while every
+    // screen queued behind it.
+    Map<String, Object?> migrationState({
+      required String kind,
+      required String ownerKey,
+      required String itemKey,
+      required int updatedAtMs,
+    }) => <String, Object?>{
+      'kind': kind,
+      'owner_key': ownerKey,
+      'item_key': itemKey,
+      'updated_at_ms': updatedAtMs,
+      'origin_device_id': WebDavSyncMutationOrigin.migration.name,
+      'normalized': 0,
+      'deleted': 0,
+      'aux': null,
+    };
+
+    Future<
+      ({
+        Set<(String, String, String)> keys,
+        Set<(String, String)> physicalItems,
+      })
+    >
+    existingStateKeys(DatabaseExecutor txn) async {
+      final rows = await txn.query(
+        'webdav_sync_record_state',
+        columns: const <String>['kind', 'owner_key', 'item_key'],
+      );
+      return (
+        keys: <(String, String, String)>{
+          for (final row in rows)
+            (
+              row['kind']! as String,
+              row['owner_key']! as String,
+              row['item_key']! as String,
+            ),
+        },
+        physicalItems: <(String, String)>{
+          for (final row in rows)
+            (row['kind']! as String, row['item_key']! as String),
+        },
+      );
+    }
+
+    Future<void> removeImportedPreference(String key) async {
+      if (!await prefs.remove(key)) {
+        _recordLegacyPreferenceRemovalFailure();
+      }
+    }
+
     final favoritesRaw = prefs.getString(_legacyFavoritesKey);
     if (favoritesRaw != null) {
       final favorites = await _decodeLegacyMap(favoritesRaw);
@@ -216,48 +286,167 @@ class IptvMediaStore {
         // A very old install can reach v5 with the prefs blob still present,
         // so the import lands straight in the built-in Favorites list.
         await DebrifyTvDatabase.seedBuiltinList(txn);
+        final existing = await existingStateKeys(txn);
+        final batch = txn.batch();
+        var imported = false;
         for (final entry in favorites.entries) {
-          await txn.insert(
+          final stateKey = (
+            WebDavSyncLibraryKinds.iptvListChannels,
+            favoritesListId,
+            entry.key,
+          );
+          if (existing.keys.contains(stateKey)) continue;
+          final row = _favoriteRowFromLegacy(entry.key, entry.value);
+          batch.insert(
             'iptv_list_channels',
-            _favoriteRowFromLegacy(entry.key, entry.value),
+            row,
             conflictAlgorithm: ConflictAlgorithm.replace,
           );
+          batch.insert(
+            'webdav_sync_record_state',
+            migrationState(
+              kind: WebDavSyncLibraryKinds.iptvListChannels,
+              ownerKey: favoritesListId,
+              itemKey: entry.key,
+              updatedAtMs: row['added_at']! as int,
+            ),
+            conflictAlgorithm: ConflictAlgorithm.replace,
+          );
+          existing.keys.add(stateKey);
+          existing.physicalItems.add((stateKey.$1, stateKey.$3));
+          imported = true;
         }
+        await batch.commit(noResult: true);
+        if (imported) await _bumpLibraryRevision(txn);
       });
-      await prefs.remove(_legacyFavoritesKey);
+      await removeImportedPreference(_legacyFavoritesKey);
     }
 
     final historyRaw = prefs.getString(_legacyWatchHistoryKey);
     if (historyRaw != null) {
       final history = await _decodeLegacyMap(historyRaw);
+      // The store prunes history to [_watchHistoryMax] rows on every write;
+      // importing an unbounded legacy blob beyond that only feeds the prune.
+      final rows =
+          history.entries
+              .map((entry) => _historyRowFromLegacy(entry.key, entry.value))
+              .toList(growable: false)
+            ..sort(
+              (left, right) => (right['last_played_at']! as int).compareTo(
+                left['last_played_at']! as int,
+              ),
+            );
+      final kept = rows.take(_watchHistoryMax).toList(growable: false);
       await db.runTxn((txn) async {
-        for (final entry in history.entries) {
-          await txn.insert(
+        final existing = await existingStateKeys(txn);
+        final batch = txn.batch();
+        var imported = false;
+        for (final row in kept) {
+          final stateKey = (
+            WebDavSyncLibraryKinds.iptvWatchHistory,
+            row['playlist_id']! as String,
+            row['url']! as String,
+          );
+          if (existing.physicalItems.contains((stateKey.$1, stateKey.$3))) {
+            continue;
+          }
+          batch.insert(
             'iptv_watch_history',
-            _historyRowFromLegacy(entry.key, entry.value),
+            row,
             conflictAlgorithm: ConflictAlgorithm.replace,
           );
+          batch.insert(
+            'webdav_sync_record_state',
+            migrationState(
+              kind: WebDavSyncLibraryKinds.iptvWatchHistory,
+              ownerKey: row['playlist_id']! as String,
+              itemKey: row['url']! as String,
+              updatedAtMs: row['last_played_at']! as int,
+            ),
+            conflictAlgorithm: ConflictAlgorithm.replace,
+          );
+          existing.keys.add(stateKey);
+          existing.physicalItems.add((stateKey.$1, stateKey.$3));
+          imported = true;
         }
+        await batch.commit(noResult: true);
+        if (imported) await _bumpLibraryRevision(txn);
       });
-      await prefs.remove(_legacyWatchHistoryKey);
+      await removeImportedPreference(_legacyWatchHistoryKey);
     }
 
     final resumeRaw = prefs.getString(_legacyVideoResumeKey);
     if (resumeRaw != null) {
       final resume = await _decodeLegacyMap(resumeRaw);
       await db.runTxn((txn) async {
+        final existing = await existingStateKeys(txn);
+        final historyRows = await txn.query(
+          'iptv_watch_history',
+          columns: const <String>['url', 'playlist_id'],
+        );
+        final sourceByUrl = <String, String?>{
+          for (final row in historyRows)
+            row['url']! as String: row['playlist_id'] as String?,
+        };
+        final batch = txn.batch();
+        var imported = false;
         for (final entry in resume.entries) {
           final value = entry.value;
           if (value is! Map) continue;
-          await txn.insert(
+          final sourceId = sourceByUrl[entry.key];
+          final ownerKey = (sourceId == null || sourceId.isEmpty)
+              ? '_'
+              : sourceId;
+          final stateKey = (
+            WebDavSyncLibraryKinds.videoResume,
+            ownerKey,
+            entry.key,
+          );
+          if (existing.physicalItems.contains((stateKey.$1, stateKey.$3))) {
+            continue;
+          }
+          final row = _resumeRow(
+            entry.key,
+            Map<String, dynamic>.from(value),
+            sourceId: sourceId,
+          );
+          batch.insert(
             'video_resume',
-            _resumeRow(entry.key, Map<String, dynamic>.from(value)),
+            row,
             conflictAlgorithm: ConflictAlgorithm.replace,
           );
+          batch.insert(
+            'webdav_sync_record_state',
+            migrationState(
+              kind: WebDavSyncLibraryKinds.videoResume,
+              ownerKey: ownerKey,
+              itemKey: entry.key,
+              updatedAtMs: row['updated_at']! as int,
+            ),
+            conflictAlgorithm: ConflictAlgorithm.replace,
+          );
+          existing.keys.add(stateKey);
+          existing.physicalItems.add((stateKey.$1, stateKey.$3));
+          imported = true;
         }
+        await batch.commit(noResult: true);
+        if (imported) await _bumpLibraryRevision(txn);
       });
-      await prefs.remove(_legacyVideoResumeKey);
+      await removeImportedPreference(_legacyVideoResumeKey);
     }
+  }
+
+  static void _recordLegacyPreferenceRemovalFailure() {
+    app_diagnostics.DiagnosticLog.instance.recordEvent(
+      source: 'iptv_media_store',
+      event: 'legacy_preference_remove_failed',
+      level: app_diagnostics.DiagnosticLevel.warning,
+      fields: const <String, Object?>{
+        'reason': app_diagnostics.DiagnosticLabel(
+          'legacy_import_cleanup_failed',
+        ),
+      },
+    );
   }
 
   /// Decoded off the UI isolate: the resume blob in particular can have
@@ -349,11 +538,21 @@ class IptvMediaStore {
   /// Create a list and return its id. Names are not unique-enforced here —
   /// the picker validates before calling, and a duplicate name is a display
   /// annoyance rather than a data problem.
-  static Future<String> createList(String name) async {
+  static Future<String> createList(
+    String name, {
+    WebDavSyncMutationOrigin origin = WebDavSyncMutationOrigin.user,
+  }) async {
+    var stamped = false;
     final id = await _runScoped((_) async {
       final trimmed = name.trim();
-      final now = DateTime.now().millisecondsSinceEpoch;
-      final id = 'list_${now}_${math.Random().nextInt(1 << 20)}';
+      final now = origin == WebDavSyncMutationOrigin.user
+          ? _nextStampMs()
+          : DateTime.now().millisecondsSinceEpoch;
+      final random = math.Random.secure();
+      final suffix = base64UrlEncode(
+        List<int>.generate(8, (_) => random.nextInt(256), growable: false),
+      ).replaceAll('=', '');
+      final id = 'list_${now}_$suffix';
       await DebrifyTvDatabase.instance.runTxn((txn) async {
         final maxRow = await txn.rawQuery(
           'SELECT MAX(position) AS p FROM iptv_lists',
@@ -367,67 +566,172 @@ class IptvMediaStore {
           'created_at': now,
           'updated_at': now,
         });
+        if (origin == WebDavSyncMutationOrigin.user) {
+          await _writeLibraryState(
+            txn,
+            kind: WebDavSyncLibraryKinds.iptvLists,
+            ownerKey: id,
+            itemKey: '',
+            updatedAtMs: now,
+            deleted: false,
+            origin: origin,
+          );
+          await _bumpLibraryRevision(txn);
+          stamped = true;
+        }
       });
       return id;
     });
     _bumpListsRevision();
+    if (stamped) WebDavSyncLibraryMutation.notifyUserMutation();
     return id;
   }
 
   /// Rename a custom list. The built-in Favorites list is not renameable.
-  static Future<void> renameList(String listId, String name) async {
+  static Future<void> renameList(
+    String listId,
+    String name, {
+    WebDavSyncMutationOrigin origin = WebDavSyncMutationOrigin.user,
+  }) async {
     if (listId == favoritesListId) return;
+    var changed = false;
     await _runScoped((_) async {
       await DebrifyTvDatabase.instance.runTxn((txn) async {
-        await txn.update(
+        final now = origin == WebDavSyncMutationOrigin.user
+            ? _nextStampMs()
+            : DateTime.now().millisecondsSinceEpoch;
+        final updated = await txn.update(
           'iptv_lists',
-          {
-            'name': name.trim(),
-            'updated_at': DateTime.now().millisecondsSinceEpoch,
-          },
+          {'name': name.trim(), 'updated_at': now},
           where: 'id = ? AND is_builtin = 0',
           whereArgs: [listId],
         );
-      });
-    });
-    _bumpListsRevision();
-  }
-
-  /// Delete a custom list. Memberships go with it via ON DELETE CASCADE —
-  /// the channels themselves are untouched, they just stop being in a list.
-  static Future<void> deleteList(String listId) async {
-    if (listId == favoritesListId) return;
-    await _runScoped((_) async {
-      await DebrifyTvDatabase.instance.runTxn((txn) async {
-        await txn.delete(
-          'iptv_lists',
-          where: 'id = ? AND is_builtin = 0',
-          whereArgs: [listId],
-        );
-      });
-    });
-    _bumpListsRevision();
-  }
-
-  /// Reorder custom lists. Favorites is pinned at position 0 and ignored
-  /// here; everything named in [orderedIds] takes 1..n in that order.
-  static Future<void> reorderLists(List<String> orderedIds) async {
-    await _runScoped((_) async {
-      await DebrifyTvDatabase.instance.runTxn((txn) async {
-        var position = 1;
-        for (final id in orderedIds) {
-          if (id == favoritesListId) continue;
-          await txn.update(
-            'iptv_lists',
-            {'position': position},
-            where: 'id = ? AND is_builtin = 0',
-            whereArgs: [id],
+        if (updated == 0) return;
+        changed = true;
+        if (origin == WebDavSyncMutationOrigin.user) {
+          await _writeLibraryState(
+            txn,
+            kind: WebDavSyncLibraryKinds.iptvLists,
+            ownerKey: listId,
+            itemKey: '',
+            updatedAtMs: now,
+            deleted: false,
+            origin: origin,
           );
-          position += 1;
+          await _bumpLibraryRevision(txn);
         }
       });
     });
     _bumpListsRevision();
+    if (changed && origin == WebDavSyncMutationOrigin.user) {
+      WebDavSyncLibraryMutation.notifyUserMutation();
+    }
+  }
+
+  /// Delete a custom list. Memberships go with it via ON DELETE CASCADE —
+  /// the channels themselves are untouched, they just stop being in a list.
+  static Future<void> deleteList(
+    String listId, {
+    WebDavSyncMutationOrigin origin = WebDavSyncMutationOrigin.user,
+  }) async {
+    if (listId == favoritesListId) return;
+    var changed = false;
+    var stamped = false;
+    await _runScoped((_) async {
+      await DebrifyTvDatabase.instance.runTxn((txn) async {
+        final deleted = await txn.delete(
+          'iptv_lists',
+          where: 'id = ? AND is_builtin = 0',
+          whereArgs: [listId],
+        );
+        changed = deleted != 0;
+        if (origin != WebDavSyncMutationOrigin.user) return;
+        final liveStates = await txn.query(
+          'webdav_sync_record_state',
+          columns: const <String>['item_key'],
+          where: 'kind = ? AND owner_key = ? AND item_key = ? AND deleted = 0',
+          whereArgs: <Object?>[WebDavSyncLibraryKinds.iptvLists, listId, ''],
+          limit: 1,
+        );
+        if (!changed && liveStates.isEmpty) return;
+        await _writeLibraryState(
+          txn,
+          kind: WebDavSyncLibraryKinds.iptvLists,
+          ownerKey: listId,
+          itemKey: '',
+          updatedAtMs: _nextStampMs(),
+          deleted: true,
+          origin: origin,
+        );
+        await _bumpLibraryRevision(txn);
+        stamped = true;
+      });
+    });
+    if (changed) _bumpListsRevision();
+    if (stamped) WebDavSyncLibraryMutation.notifyUserMutation();
+  }
+
+  /// Reorder custom lists. Favorites is pinned at position 0 and ignored
+  /// here; everything named in [orderedIds] takes 1..n in that order.
+  static Future<void> reorderLists(
+    List<String> orderedIds, {
+    WebDavSyncMutationOrigin origin = WebDavSyncMutationOrigin.user,
+  }) async {
+    var changed = false;
+    await _runScoped((_) async {
+      await DebrifyTvDatabase.instance.runTxn((txn) async {
+        final rows = await txn.query(
+          'iptv_lists',
+          columns: const <String>['id', 'position'],
+          where: 'is_builtin = 0',
+        );
+        final positions = <String, int>{
+          for (final row in rows)
+            row['id']! as String: (row['position'] as num).toInt(),
+        };
+        final moved = <(String, int)>[];
+        var position = 1;
+        for (final id in orderedIds) {
+          if (id == favoritesListId) continue;
+          final oldPosition = positions[id];
+          if (oldPosition != null && oldPosition != position) {
+            moved.add((id, position));
+          }
+          position += 1;
+        }
+        if (moved.isEmpty) return;
+        final now = origin == WebDavSyncMutationOrigin.user
+            ? _nextStampMs()
+            : DateTime.now().millisecondsSinceEpoch;
+        for (final item in moved) {
+          await txn.update(
+            'iptv_lists',
+            {'position': item.$2, 'updated_at': now},
+            where: 'id = ? AND is_builtin = 0',
+            whereArgs: [item.$1],
+          );
+          if (origin == WebDavSyncMutationOrigin.user) {
+            await _writeLibraryState(
+              txn,
+              kind: WebDavSyncLibraryKinds.iptvLists,
+              ownerKey: item.$1,
+              itemKey: '',
+              updatedAtMs: now,
+              deleted: false,
+              origin: origin,
+            );
+          }
+        }
+        changed = true;
+        if (origin == WebDavSyncMutationOrigin.user) {
+          await _bumpLibraryRevision(txn);
+        }
+      });
+    });
+    _bumpListsRevision();
+    if (changed && origin == WebDavSyncMutationOrigin.user) {
+      WebDavSyncLibraryMutation.notifyUserMutation();
+    }
   }
 
   // ── Membership ────────────────────────────────────────────────────────────
@@ -441,7 +745,10 @@ class IptvMediaStore {
   /// catalogs — the only reconcile path those sources ever take, so the
   /// backfill has to live here too or their migrated VOD favorites would
   /// present as live forever.
-  static Future<void> reconcileFavoriteUrls(List<IptvChannel> channels) async {
+  static Future<void> reconcileFavoriteUrls(
+    List<IptvChannel> channels, {
+    WebDavSyncMutationOrigin origin = WebDavSyncMutationOrigin.user,
+  }) async {
     final changed = await _runScoped((db) async {
       final urlRows = await db.rawQuery(
         'SELECT DISTINCT url FROM iptv_list_channels',
@@ -498,16 +805,23 @@ class IptvMediaStore {
           }
         }
       }
-      return _applyReconcile(renames, meta);
+      return _applyReconcile(renames, meta, origin: origin);
     });
-    if (changed) _bumpListsRevision();
+    if (!changed) return;
+    _bumpListsRevision();
+    if (origin == WebDavSyncMutationOrigin.user) {
+      WebDavSyncLibraryMutation.notifyUserMutation();
+    }
   }
 
   /// DB-catalog variant of [reconcileFavoriteUrls]: the fresh rows are read
   /// straight from the catalog on a WORKER isolate — walking a paging
   /// facade here would keep the scan's cost on the UI isolate, which is
   /// tens of near-saturated seconds on a big playlist.
-  static Future<void> reconcileFavoriteUrlsForCatalog(String catalogKey) async {
+  static Future<void> reconcileFavoriteUrlsForCatalog(
+    String catalogKey, {
+    WebDavSyncMutationOrigin origin = WebDavSyncMutationOrigin.user,
+  }) async {
     final changed = await _runScoped((db) async {
       if (!IptvCatalogDb.isOpen) return false;
       final urlRows = await db.rawQuery(
@@ -526,9 +840,13 @@ class IptvMediaStore {
         ),
       );
       if (result.isEmpty) return false;
-      return _applyReconcile(result.renames, result.meta);
+      return _applyReconcile(result.renames, result.meta, origin: origin);
     });
-    if (changed) _bumpListsRevision();
+    if (!changed) return;
+    _bumpListsRevision();
+    if (origin == WebDavSyncMutationOrigin.user) {
+      WebDavSyncLibraryMutation.notifyUserMutation();
+    }
   }
 
   /// Stored URLs whose presentation metadata is still unknown — rows carried
@@ -550,54 +868,134 @@ class IptvMediaStore {
   /// own list_id.
   static Future<bool> _applyReconcile(
     Map<String, String> renames,
-    Map<String, ChannelPresentation> meta,
-  ) async {
+    Map<String, ChannelPresentation> meta, {
+    required WebDavSyncMutationOrigin origin,
+  }) async {
     // The empty short-circuit doubles as the revision guard: a reconcile
     // that changed nothing must not trigger list-row reloads elsewhere.
     if (renames.isEmpty && meta.isEmpty) return false;
+    var changed = false;
     await DebrifyTvDatabase.instance.runTxn((txn) async {
-      for (final entry in renames.entries) {
-        final rows = await txn.query(
-          'iptv_list_channels',
-          where: 'url = ?',
-          whereArgs: [entry.key],
+      int? sharedStamp;
+      int stamp() => sharedStamp ??= _nextStampMs();
+      // One preload plus one batch: a provider-wide URL migration can rename
+      // hundreds of stored rows, and per-row awaited calls held the shared
+      // database long enough to freeze every screen.
+      final renamedRows = <Map<String, Object?>>[];
+      final oldUrls = renames.keys.toList(growable: false);
+      for (var start = 0; start < oldUrls.length; start += 500) {
+        final chunk = oldUrls.sublist(
+          start,
+          start + 500 > oldUrls.length ? oldUrls.length : start + 500,
         );
-        if (rows.isEmpty) continue; // removed during the scan
-        final backfill = meta[entry.key];
-        for (final existing in rows) {
-          final row = Map<String, Object?>.from(existing);
-          row['url'] = entry.value;
-          if (backfill != null) {
-            row['content_type'] ??= backfill.contentType;
-            row['duration'] ??= backfill.duration;
-          }
-          await txn.delete(
+        renamedRows.addAll(
+          await txn.query(
             'iptv_list_channels',
-            where: 'list_id = ? AND url = ?',
-            whereArgs: [row['list_id'], entry.key],
+            where:
+                'url IN (${List.filled(chunk.length, '?').join(', ')})',
+            whereArgs: chunk,
+          ),
+        );
+      }
+      final renameBatch = txn.batch();
+      for (final existing in renamedRows) {
+        final oldUrl = existing['url']! as String;
+        final newUrl = renames[oldUrl];
+        if (newUrl == null) continue;
+        final row = Map<String, Object?>.from(existing);
+        row['url'] = newUrl;
+        final backfill = meta[oldUrl];
+        if (backfill != null) {
+          row['content_type'] ??= backfill.contentType;
+          row['duration'] ??= backfill.duration;
+        }
+        renameBatch.delete(
+          'iptv_list_channels',
+          where: 'list_id = ? AND url = ?',
+          whereArgs: [row['list_id'], oldUrl],
+        );
+        renameBatch.insert(
+          'iptv_list_channels',
+          row,
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+        changed = true;
+        if (origin == WebDavSyncMutationOrigin.user) {
+          final now = stamp();
+          renameBatch.insert(
+            'webdav_sync_record_state',
+            _libraryStateRow(
+              kind: WebDavSyncLibraryKinds.iptvListChannels,
+              ownerKey: row['list_id']! as String,
+              itemKey: oldUrl,
+              updatedAtMs: now,
+              deleted: true,
+              origin: origin,
+            ),
+            conflictAlgorithm: ConflictAlgorithm.replace,
           );
-          await txn.insert(
-            'iptv_list_channels',
-            row,
+          renameBatch.insert(
+            'webdav_sync_record_state',
+            _libraryStateRow(
+              kind: WebDavSyncLibraryKinds.iptvListChannels,
+              ownerKey: row['list_id']! as String,
+              itemKey: newUrl,
+              updatedAtMs: now,
+              deleted: false,
+              origin: origin,
+            ),
             conflictAlgorithm: ConflictAlgorithm.replace,
           );
         }
       }
+      if (changed) await renameBatch.commit(noResult: true);
       // Rows that kept their URL but still need presentation metadata.
       // COALESCE so a known value is never overwritten by a later scan.
       for (final entry in meta.entries) {
         if (renames.containsKey(entry.key)) continue;
         if (entry.value.isEmpty) continue;
-        await txn.rawUpdate(
+        final predicates = <String>[];
+        if (entry.value.contentType != null) {
+          predicates.add('content_type IS NULL');
+        }
+        if (entry.value.duration != null) predicates.add('duration IS NULL');
+        if (predicates.isEmpty) continue;
+        final rows = await txn.query(
+          'iptv_list_channels',
+          columns: const <String>['list_id'],
+          where: 'url = ? AND (${predicates.join(' OR ')})',
+          whereArgs: <Object?>[entry.key],
+        );
+        if (rows.isEmpty) continue;
+        final updated = await txn.rawUpdate(
           'UPDATE iptv_list_channels SET '
           'content_type = COALESCE(content_type, ?), '
           'duration = COALESCE(duration, ?) '
-          'WHERE url = ? AND (content_type IS NULL OR duration IS NULL)',
+          'WHERE url = ? AND (${predicates.join(' OR ')})',
           [entry.value.contentType, entry.value.duration, entry.key],
         );
+        if (updated == 0) continue;
+        changed = true;
+        if (origin == WebDavSyncMutationOrigin.user) {
+          final now = stamp();
+          for (final row in rows) {
+            await _writeLibraryState(
+              txn,
+              kind: WebDavSyncLibraryKinds.iptvListChannels,
+              ownerKey: row['list_id']! as String,
+              itemKey: entry.key,
+              updatedAtMs: now,
+              deleted: false,
+              origin: origin,
+            );
+          }
+        }
+      }
+      if (changed && origin == WebDavSyncMutationOrigin.user) {
+        await _bumpLibraryRevision(txn);
       }
     });
-    return true;
+    return changed;
   }
 
   /// Add or remove [channelUrl] in [listId].
@@ -613,7 +1011,9 @@ class IptvMediaStore {
     String? contentType,
     int? duration,
     Map<String, String>? httpHeaders,
+    WebDavSyncMutationOrigin origin = WebDavSyncMutationOrigin.user,
   }) async {
+    var changed = false;
     await _runScoped((_) async {
       final canonical = canonicalChannelKey(channelUrl);
       await DebrifyTvDatabase.instance.runTxn((txn) async {
@@ -630,11 +1030,13 @@ class IptvMediaStore {
         );
         int? retainedPosition;
         int? retainedAddedAt;
+        final removedUrls = <String>[];
         for (final row in rows) {
           final url = row['url'] as String;
           if (canonicalChannelKey(url) == canonical) {
             retainedPosition ??= (row['position'] as num?)?.toInt();
             retainedAddedAt ??= (row['added_at'] as num?)?.toInt();
+            removedUrls.add(url);
             await txn.delete(
               'iptv_list_channels',
               where: 'list_id = ? AND url = ?',
@@ -642,6 +1044,7 @@ class IptvMediaStore {
             );
           }
         }
+        changed = removedUrls.isNotEmpty || inList;
         if (inList) {
           if (retainedPosition == null) {
             final maxRows = await txn.rawQuery(
@@ -676,9 +1079,40 @@ class IptvMediaStore {
             'position': retainedPosition,
           }, conflictAlgorithm: ConflictAlgorithm.replace);
         }
+        if (changed && origin == WebDavSyncMutationOrigin.user) {
+          final now = _nextStampMs();
+          for (final url in removedUrls) {
+            if (inList && url == channelUrl) continue;
+            await _writeLibraryState(
+              txn,
+              kind: WebDavSyncLibraryKinds.iptvListChannels,
+              ownerKey: listId,
+              itemKey: url,
+              updatedAtMs: now,
+              deleted: true,
+              origin: origin,
+            );
+          }
+          if (inList) {
+            await _writeLibraryState(
+              txn,
+              kind: WebDavSyncLibraryKinds.iptvListChannels,
+              ownerKey: listId,
+              itemKey: channelUrl,
+              updatedAtMs: now,
+              deleted: false,
+              origin: origin,
+            );
+          }
+          await _bumpLibraryRevision(txn);
+        }
       });
     });
+    if (!changed) return;
     _bumpListsRevision();
+    if (origin == WebDavSyncMutationOrigin.user) {
+      WebDavSyncLibraryMutation.notifyUserMutation();
+    }
   }
 
   /// Which lists each stored channel belongs to, url → list ids.
@@ -736,17 +1170,48 @@ class IptvMediaStore {
 
   /// Drop every membership belonging to [playlistId], across ALL lists —
   /// the provider is gone, so its channels can't play from anywhere.
-  static Future<void> removeListChannelsByPlaylistId(String playlistId) async {
+  static Future<void> removeListChannelsByPlaylistId(
+    String playlistId, {
+    WebDavSyncMutationOrigin origin = WebDavSyncMutationOrigin.user,
+  }) async {
+    var changed = false;
     await _runScoped((_) async {
       await DebrifyTvDatabase.instance.runTxn((txn) async {
+        final rows = await txn.query(
+          'iptv_list_channels',
+          columns: const <String>['list_id', 'url'],
+          where: 'playlist_id = ?',
+          whereArgs: [playlistId],
+        );
+        if (rows.isEmpty) return;
         await txn.delete(
           'iptv_list_channels',
           where: 'playlist_id = ?',
           whereArgs: [playlistId],
         );
+        changed = true;
+        if (origin == WebDavSyncMutationOrigin.user) {
+          final now = _nextStampMs();
+          for (final row in rows) {
+            await _writeLibraryState(
+              txn,
+              kind: WebDavSyncLibraryKinds.iptvListChannels,
+              ownerKey: row['list_id']! as String,
+              itemKey: row['url']! as String,
+              updatedAtMs: now,
+              deleted: true,
+              origin: origin,
+            );
+          }
+          await _bumpLibraryRevision(txn);
+        }
       });
     });
+    if (!changed) return;
     _bumpListsRevision();
+    if (origin == WebDavSyncMutationOrigin.user) {
+      WebDavSyncLibraryMutation.notifyUserMutation();
+    }
   }
 
   /// One list's channels, url → metadata, in the same map shape the prefs
@@ -769,18 +1234,24 @@ class IptvMediaStore {
   /// request are collapsed — the save can never resurrect stale membership.
   static Future<void> reorderListChannels(
     String listId,
-    Iterable<String> orderedUrls,
-  ) async {
+    Iterable<String> orderedUrls, {
+    WebDavSyncMutationOrigin origin = WebDavSyncMutationOrigin.user,
+  }) async {
+    var changed = false;
     await _runScoped((_) async {
       await DebrifyTvDatabase.instance.runTxn((txn) async {
         final rows = await txn.query(
           'iptv_list_channels',
-          columns: ['url'],
+          columns: ['url', 'position'],
           where: 'list_id = ?',
           whereArgs: [listId],
           orderBy: 'position ASC, added_at ASC, url ASC',
         );
         final current = [for (final row in rows) row['url'] as String];
+        final positions = <String, int>{
+          for (final row in rows)
+            row['url']! as String: (row['position'] as num).toInt(),
+        };
         final currentSet = current.toSet();
         final seen = <String>{};
         final resolved = <String>[
@@ -789,18 +1260,52 @@ class IptvMediaStore {
           for (final url in current)
             if (seen.add(url)) url,
         ];
-        for (var position = 0; position < resolved.length; position++) {
-          await txn.update(
+        final moved = <(String, int)>[
+          for (var position = 0; position < resolved.length; position++)
+            if (positions[resolved[position]] != position)
+              (resolved[position], position),
+        ];
+        if (moved.isEmpty) return;
+        final now = origin == WebDavSyncMutationOrigin.user
+            ? _nextStampMs()
+            : DateTime.now().millisecondsSinceEpoch;
+        // One batch commit: a large list reorder must not hold the shared
+        // database for one awaited call per moved row.
+        final batch = txn.batch();
+        for (final item in moved) {
+          batch.update(
             'iptv_list_channels',
-            {'position': position},
+            {'position': item.$2},
             where: 'list_id = ? AND url = ?',
-            whereArgs: [listId, resolved[position]],
+            whereArgs: [listId, item.$1],
           );
+          if (origin == WebDavSyncMutationOrigin.user) {
+            batch.insert(
+              'webdav_sync_record_state',
+              _libraryStateRow(
+                kind: WebDavSyncLibraryKinds.iptvListChannels,
+                ownerKey: listId,
+                itemKey: item.$1,
+                updatedAtMs: now,
+                deleted: false,
+                origin: origin,
+              ),
+              conflictAlgorithm: ConflictAlgorithm.replace,
+            );
+          }
+        }
+        await batch.commit(noResult: true);
+        changed = true;
+        if (origin == WebDavSyncMutationOrigin.user) {
+          await _bumpLibraryRevision(txn);
         }
       });
     });
     _bumpListsRevision();
     IptvChannelOrderSignal.notifyListChanged(listId);
+    if (changed && origin == WebDavSyncMutationOrigin.user) {
+      WebDavSyncLibraryMutation.notifyUserMutation();
+    }
   }
 
   /// Imported-file category rows in their saved order. The parsed provider
@@ -846,8 +1351,14 @@ class IptvMediaStore {
   static Future<void> setCategoryChannelOrder(
     String sourceId,
     String group,
-    Iterable<IptvChannelOrderIdentity> ordered,
-  ) async {
+    Iterable<IptvChannelOrderIdentity> ordered, {
+    WebDavSyncMutationOrigin origin = WebDavSyncMutationOrigin.user,
+  }) async {
+    final items = <IptvChannelOrderIdentity>[];
+    final seen = <IptvChannelOrderIdentity>{};
+    for (final item in ordered) {
+      if (seen.add(item)) items.add(item);
+    }
     await _runScoped((_) async {
       await DebrifyTvDatabase.instance.runTxn((txn) async {
         await txn.delete(
@@ -856,7 +1367,7 @@ class IptvMediaStore {
           whereArgs: [sourceId, group],
         );
         var position = 0;
-        for (final identity in ordered) {
+        for (final identity in items) {
           await txn.insert('iptv_category_channel_orders', {
             'source_id': sourceId,
             'channel_group': group,
@@ -866,9 +1377,24 @@ class IptvMediaStore {
             'position': position++,
           });
         }
+        if (origin == WebDavSyncMutationOrigin.user) {
+          await _writeLibraryState(
+            txn,
+            kind: WebDavSyncLibraryKinds.iptvCategoryChannelOrders,
+            ownerKey: sourceId,
+            itemKey: group,
+            updatedAtMs: _nextStampMs(),
+            deleted: items.isEmpty,
+            origin: origin,
+          );
+          await _bumpLibraryRevision(txn);
+        }
       });
     });
     IptvChannelOrderSignal.notifySourceChanged(sourceId);
+    if (origin == WebDavSyncMutationOrigin.user) {
+      WebDavSyncLibraryMutation.notifyUserMutation();
+    }
   }
 
   /// Apply every saved per-category order without moving category slots in
@@ -942,14 +1468,59 @@ class IptvMediaStore {
     });
   }
 
-  static Future<void> removeCategoryOrdersForSource(String sourceId) {
-    return _runScoped((db) async {
-      await db.delete(
-        'iptv_category_channel_orders',
-        where: 'source_id = ?',
-        whereArgs: [sourceId],
-      );
+  static Future<void> removeCategoryOrdersForSource(
+    String sourceId, {
+    WebDavSyncMutationOrigin origin = WebDavSyncMutationOrigin.user,
+  }) async {
+    var changed = false;
+    await _runScoped((_) async {
+      await DebrifyTvDatabase.instance.runTxn((txn) async {
+        final physical = await txn.query(
+          'iptv_category_channel_orders',
+          columns: const <String>['channel_group'],
+          where: 'source_id = ?',
+          whereArgs: <Object?>[sourceId],
+          distinct: true,
+        );
+        final state = origin == WebDavSyncMutationOrigin.user
+            ? await txn.query(
+                'webdav_sync_record_state',
+                columns: const <String>['item_key'],
+                where: 'kind = ? AND owner_key = ? AND deleted = 0',
+                whereArgs: <Object?>[
+                  WebDavSyncLibraryKinds.iptvCategoryChannelOrders,
+                  sourceId,
+                ],
+              )
+            : const <Map<String, Object?>>[];
+        final groups = <String>{
+          for (final row in physical) row['channel_group']! as String,
+          for (final row in state) row['item_key']! as String,
+        };
+        await txn.delete(
+          'iptv_category_channel_orders',
+          where: 'source_id = ?',
+          whereArgs: <Object?>[sourceId],
+        );
+        if (groups.isNotEmpty && origin == WebDavSyncMutationOrigin.user) {
+          final now = _nextStampMs();
+          for (final group in groups) {
+            await _writeLibraryState(
+              txn,
+              kind: WebDavSyncLibraryKinds.iptvCategoryChannelOrders,
+              ownerKey: sourceId,
+              itemKey: group,
+              updatedAtMs: now,
+              deleted: true,
+              origin: origin,
+            );
+          }
+          await _bumpLibraryRevision(txn);
+          changed = true;
+        }
+      });
     });
+    if (changed) WebDavSyncLibraryMutation.notifyUserMutation();
   }
 
   // ── Favorites compatibility ───────────────────────────────────────────────
@@ -967,6 +1538,7 @@ class IptvMediaStore {
     String? contentType,
     int? duration,
     Map<String, String>? httpHeaders,
+    WebDavSyncMutationOrigin origin = WebDavSyncMutationOrigin.user,
   }) {
     return setChannelInList(
       favoritesListId,
@@ -980,13 +1552,17 @@ class IptvMediaStore {
       contentType: contentType,
       duration: duration,
       httpHeaders: httpHeaders,
+      origin: origin,
     );
   }
 
   /// Deleting a provider sweeps its channels out of EVERY list, not just
   /// Favorites — they have nowhere left to play from.
-  static Future<void> removeFavoritesByPlaylistId(String playlistId) {
-    return removeListChannelsByPlaylistId(playlistId);
+  static Future<void> removeFavoritesByPlaylistId(
+    String playlistId, {
+    WebDavSyncMutationOrigin origin = WebDavSyncMutationOrigin.user,
+  }) {
+    return removeListChannelsByPlaylistId(playlistId, origin: origin);
   }
 
   static Future<Map<String, Map<String, dynamic>>> favoriteChannels() {
@@ -1007,10 +1583,12 @@ class IptvMediaStore {
     int? season,
     int? episode,
     bool? hasNextEpisode,
-  }) {
+    WebDavSyncMutationOrigin origin = WebDavSyncMutationOrigin.user,
+  }) async {
     if (channelUrl.isEmpty) return Future<void>.value();
-    return _runScoped((_) async {
+    await _runScoped((_) async {
       await DebrifyTvDatabase.instance.runTxn((txn) async {
+        final now = _nextStampMs();
         await txn.insert('iptv_watch_history', {
           'url': channelUrl,
           'name': channelName ?? '',
@@ -1029,8 +1607,20 @@ class IptvMediaStore {
           'season': season,
           'episode': episode,
           'has_next': hasNextEpisode == null ? null : (hasNextEpisode ? 1 : 0),
-          'last_played_at': DateTime.now().millisecondsSinceEpoch,
+          'last_played_at': now,
         }, conflictAlgorithm: ConflictAlgorithm.replace);
+        if (origin == WebDavSyncMutationOrigin.user) {
+          await _writeLibraryState(
+            txn,
+            kind: WebDavSyncLibraryKinds.iptvWatchHistory,
+            ownerKey: playlistId ?? '',
+            itemKey: channelUrl,
+            updatedAtMs: now,
+            deleted: false,
+            origin: origin,
+          );
+          await _bumpLibraryRevision(txn);
+        }
         await txn.execute(
           '''
           DELETE FROM iptv_watch_history
@@ -1044,18 +1634,63 @@ class IptvMediaStore {
         );
       });
     });
+    if (origin == WebDavSyncMutationOrigin.user) {
+      WebDavSyncLibraryMutation.notifyUserMutation(playbackCheckpoint: true);
+    }
   }
 
-  static Future<void> removeWatchHistoryByPlaylistId(String playlistId) {
-    return _runScoped((_) async {
+  static Future<void> removeWatchHistoryByPlaylistId(
+    String playlistId, {
+    WebDavSyncMutationOrigin origin = WebDavSyncMutationOrigin.user,
+  }) async {
+    var changed = false;
+    await _runScoped((_) async {
       await DebrifyTvDatabase.instance.runTxn((txn) async {
+        final physical = await txn.query(
+          'iptv_watch_history',
+          columns: const <String>['url'],
+          where: 'playlist_id = ?',
+          whereArgs: <Object?>[playlistId],
+        );
+        final state = origin == WebDavSyncMutationOrigin.user
+            ? await txn.query(
+                'webdav_sync_record_state',
+                columns: const <String>['item_key'],
+                where: 'kind = ? AND owner_key = ? AND deleted = 0',
+                whereArgs: <Object?>[
+                  WebDavSyncLibraryKinds.iptvWatchHistory,
+                  playlistId,
+                ],
+              )
+            : const <Map<String, Object?>>[];
+        final urls = <String>{
+          for (final row in physical) row['url']! as String,
+          for (final row in state) row['item_key']! as String,
+        };
         await txn.delete(
           'iptv_watch_history',
           where: 'playlist_id = ?',
           whereArgs: [playlistId],
         );
+        if (urls.isNotEmpty && origin == WebDavSyncMutationOrigin.user) {
+          final now = _nextStampMs();
+          for (final url in urls) {
+            await _writeLibraryState(
+              txn,
+              kind: WebDavSyncLibraryKinds.iptvWatchHistory,
+              ownerKey: playlistId,
+              itemKey: url,
+              updatedAtMs: now,
+              deleted: true,
+              origin: origin,
+            );
+          }
+          await _bumpLibraryRevision(txn);
+          changed = true;
+        }
       });
     });
+    if (changed) WebDavSyncLibraryMutation.notifyUserMutation();
   }
 
   /// Drop one on-demand item from Continue Watching: its history row AND its
@@ -1063,10 +1698,58 @@ class IptvMediaStore {
   /// would be enough to hide it — but the resume entry is what makes the
   /// removal stick (it still drives the progress bar wherever the item is
   /// listed, and a re-play would silently jump back into the middle).
-  static Future<void> removeWatchEntry(String url) {
+  static Future<void> removeWatchEntry(
+    String url, {
+    WebDavSyncMutationOrigin origin = WebDavSyncMutationOrigin.user,
+  }) async {
     if (url.isEmpty) return Future<void>.value();
-    return _runScoped((_) async {
+    var changed = false;
+    await _runScoped((_) async {
       await DebrifyTvDatabase.instance.runTxn((txn) async {
+        final history = await txn.query(
+          'iptv_watch_history',
+          columns: const <String>['playlist_id'],
+          where: 'url = ?',
+          whereArgs: <Object?>[url],
+          limit: 1,
+        );
+        final resumes = await txn.query(
+          'video_resume',
+          columns: const <String>['source_id'],
+          where: 'resume_key = ?',
+          whereArgs: <Object?>[url],
+          limit: 1,
+        );
+        final historyStates = origin == WebDavSyncMutationOrigin.user
+            ? await txn.query(
+                'webdav_sync_record_state',
+                columns: const <String>['owner_key'],
+                where: 'kind = ? AND item_key = ? AND deleted = 0',
+                whereArgs: <Object?>[
+                  WebDavSyncLibraryKinds.iptvWatchHistory,
+                  url,
+                ],
+              )
+            : const <Map<String, Object?>>[];
+        final resumeStates = origin == WebDavSyncMutationOrigin.user
+            ? await txn.query(
+                'webdav_sync_record_state',
+                columns: const <String>['owner_key'],
+                where: 'kind = ? AND item_key = ? AND deleted = 0',
+                whereArgs: <Object?>[WebDavSyncLibraryKinds.videoResume, url],
+              )
+            : const <Map<String, Object?>>[];
+        final historyOwners = <String>{
+          for (final row in history) row['playlist_id']! as String,
+          for (final row in historyStates) row['owner_key']! as String,
+        };
+        final resumeOwners = <String>{
+          for (final row in resumes)
+            ((row['source_id'] as String?)?.isNotEmpty == true)
+                ? row['source_id']! as String
+                : '_',
+          for (final row in resumeStates) row['owner_key']! as String,
+        };
         await txn.delete(
           'iptv_watch_history',
           where: 'url = ?',
@@ -1077,8 +1760,37 @@ class IptvMediaStore {
           where: 'resume_key = ?',
           whereArgs: [url],
         );
+        if (origin == WebDavSyncMutationOrigin.user &&
+            (historyOwners.isNotEmpty || resumeOwners.isNotEmpty)) {
+          final now = _nextStampMs();
+          for (final owner in historyOwners) {
+            await _writeLibraryState(
+              txn,
+              kind: WebDavSyncLibraryKinds.iptvWatchHistory,
+              ownerKey: owner,
+              itemKey: url,
+              updatedAtMs: now,
+              deleted: true,
+              origin: origin,
+            );
+          }
+          for (final owner in resumeOwners) {
+            await _writeLibraryState(
+              txn,
+              kind: WebDavSyncLibraryKinds.videoResume,
+              ownerKey: owner,
+              itemKey: url,
+              updatedAtMs: now,
+              deleted: true,
+              origin: origin,
+            );
+          }
+          await _bumpLibraryRevision(txn);
+          changed = true;
+        }
       });
     });
+    if (changed) WebDavSyncLibraryMutation.notifyUserMutation();
   }
 
   /// The series counterpart of [removeWatchEntry]: a series shows as ONE
@@ -1088,9 +1800,11 @@ class IptvMediaStore {
   static Future<void> removeWatchSeries({
     required String playlistId,
     required String seriesId,
-  }) {
+    WebDavSyncMutationOrigin origin = WebDavSyncMutationOrigin.user,
+  }) async {
     if (seriesId.isEmpty) return Future<void>.value();
-    return _runScoped((_) async {
+    var changed = false;
+    await _runScoped((_) async {
       // Read the affected URLs and delete both tables in one transaction so
       // the plan cannot be derived from one profile and applied to another.
       await DebrifyTvDatabase.instance.runTxn((txn) async {
@@ -1121,8 +1835,44 @@ class IptvMediaStore {
             whereArgs: chunk,
           );
         }
+        if (urls.isNotEmpty && origin == WebDavSyncMutationOrigin.user) {
+          final now = _nextStampMs();
+          for (final url in urls) {
+            await _writeLibraryState(
+              txn,
+              kind: WebDavSyncLibraryKinds.iptvWatchHistory,
+              ownerKey: playlistId,
+              itemKey: url,
+              updatedAtMs: now,
+              deleted: true,
+              origin: origin,
+            );
+            final resumeState = await txn.query(
+              'webdav_sync_record_state',
+              columns: const <String>['owner_key'],
+              where: 'kind = ? AND item_key = ?',
+              whereArgs: <Object?>[WebDavSyncLibraryKinds.videoResume, url],
+              limit: 1,
+            );
+            final resumeOwner = resumeState.isEmpty
+                ? playlistId
+                : resumeState.single['owner_key']! as String;
+            await _writeLibraryState(
+              txn,
+              kind: WebDavSyncLibraryKinds.videoResume,
+              ownerKey: resumeOwner,
+              itemKey: url,
+              updatedAtMs: now,
+              deleted: true,
+              origin: origin,
+            );
+          }
+          await _bumpLibraryRevision(txn);
+          changed = true;
+        }
       });
     });
+    if (changed) WebDavSyncLibraryMutation.notifyUserMutation();
   }
 
   /// All remembered on-demand items, url → metadata, oldest-played first.
@@ -1155,32 +1905,119 @@ class IptvMediaStore {
   /// (positionMs/durationMs/speed/aspect/updatedAt) for [key].
   static Future<void> upsertVideoResume(
     String key,
-    Map<String, dynamic> entry,
-  ) {
-    return _runScoped((_) async {
+    Map<String, dynamic> entry, {
+    String? sourceId,
+    WebDavSyncMutationOrigin origin = WebDavSyncMutationOrigin.user,
+  }) async {
+    await _runScoped((_) async {
       await DebrifyTvDatabase.instance.runTxn((txn) async {
+        var resolvedSourceId = sourceId;
+        if (resolvedSourceId == null || resolvedSourceId.isEmpty) {
+          final history = await txn.query(
+            'iptv_watch_history',
+            columns: const <String>['playlist_id'],
+            where: 'url = ?',
+            whereArgs: <Object?>[key],
+            limit: 1,
+          );
+          if (history.isNotEmpty) {
+            resolvedSourceId = history.single['playlist_id'] as String?;
+          } else {
+            final prior = await txn.query(
+              'video_resume',
+              columns: const <String>['source_id'],
+              where: 'resume_key = ?',
+              whereArgs: <Object?>[key],
+              limit: 1,
+            );
+            if (prior.isNotEmpty) {
+              resolvedSourceId = prior.single['source_id'] as String?;
+            }
+          }
+        }
         await txn.insert(
           'video_resume',
-          _resumeRow(key, entry),
+          _resumeRow(key, entry, sourceId: resolvedSourceId),
           conflictAlgorithm: ConflictAlgorithm.replace,
         );
+        if (origin == WebDavSyncMutationOrigin.user) {
+          await _writeLibraryState(
+            txn,
+            kind: WebDavSyncLibraryKinds.videoResume,
+            ownerKey: (resolvedSourceId == null || resolvedSourceId.isEmpty)
+                ? '_'
+                : resolvedSourceId,
+            itemKey: key,
+            updatedAtMs: _nextStampMs(),
+            deleted: false,
+            origin: origin,
+          );
+          await _bumpLibraryRevision(txn);
+        }
       });
     });
+    if (origin == WebDavSyncMutationOrigin.user) {
+      WebDavSyncLibraryMutation.notifyUserMutation(playbackCheckpoint: true);
+    }
   }
 
   /// Removes the resume entry for one media item without touching the rest of
   /// the user's IPTV/on-demand playback history.
-  static Future<void> removeVideoResume(String key) {
+  static Future<void> removeVideoResume(
+    String key, {
+    bool playbackCheckpoint = false,
+    WebDavSyncMutationOrigin origin = WebDavSyncMutationOrigin.user,
+  }) async {
     if (key.isEmpty) return Future<void>.value();
-    return _runScoped((_) async {
+    var changed = false;
+    await _runScoped((_) async {
       await DebrifyTvDatabase.instance.runTxn((txn) async {
+        final rows = await txn.query(
+          'video_resume',
+          columns: const <String>['source_id'],
+          where: 'resume_key = ?',
+          whereArgs: <Object?>[key],
+          limit: 1,
+        );
+        final states = origin == WebDavSyncMutationOrigin.user
+            ? await txn.query(
+                'webdav_sync_record_state',
+                columns: const <String>['owner_key'],
+                where: 'kind = ? AND item_key = ? AND deleted = 0',
+                whereArgs: <Object?>[WebDavSyncLibraryKinds.videoResume, key],
+              )
+            : const <Map<String, Object?>>[];
+        final owners = <String>{
+          for (final row in rows)
+            ((row['source_id'] as String?)?.isNotEmpty == true)
+                ? row['source_id']! as String
+                : '_',
+          for (final row in states) row['owner_key']! as String,
+        };
         await txn.delete(
           'video_resume',
           where: 'resume_key = ?',
           whereArgs: [key],
         );
+        if (owners.isNotEmpty && origin == WebDavSyncMutationOrigin.user) {
+          final now = _nextStampMs();
+          for (final owner in owners) {
+            await _writeLibraryState(
+              txn,
+              kind: WebDavSyncLibraryKinds.videoResume,
+              ownerKey: owner,
+              itemKey: key,
+              updatedAtMs: now,
+              deleted: true,
+              origin: origin,
+            );
+          }
+          await _bumpLibraryRevision(txn);
+          changed = true;
+        }
       });
     });
+    if (changed) WebDavSyncLibraryMutation.notifyUserMutation(playbackCheckpoint: playbackCheckpoint);
   }
 
   /// Stored resume entries for whichever of [keys] exist. Batched `IN`
@@ -1213,12 +2050,66 @@ class IptvMediaStore {
     });
   }
 
-  static Future<void> clearVideoResume() {
-    return _runScoped((_) async {
+  static Future<void> clearVideoResume({
+    WebDavSyncMutationOrigin origin = WebDavSyncMutationOrigin.user,
+  }) async {
+    var changed = false;
+    await _runScoped((_) async {
       await DebrifyTvDatabase.instance.runTxn((txn) async {
+        final rows = await txn.query(
+          'video_resume',
+          columns: const <String>['resume_key', 'source_id'],
+        );
+        final states = origin == WebDavSyncMutationOrigin.user
+            ? await txn.query(
+                'webdav_sync_record_state',
+                columns: const <String>['owner_key', 'item_key'],
+                where: 'kind = ? AND deleted = 0',
+                whereArgs: const <Object?>[WebDavSyncLibraryKinds.videoResume],
+              )
+            : const <Map<String, Object?>>[];
+        final targets = <(String, String)>{
+          for (final row in rows)
+            (
+              ((row['source_id'] as String?)?.isNotEmpty == true)
+                  ? row['source_id']! as String
+                  : '_',
+              row['resume_key']! as String,
+            ),
+          for (final row in states)
+            (row['owner_key']! as String, row['item_key']! as String),
+        };
         await txn.delete('video_resume');
+        if (origin != WebDavSyncMutationOrigin.user) {
+          // A silent wipe takes its live stamps with it, exactly like the
+          // physical rows: a retained exact stamp would otherwise stop the
+          // circle's untouched resume records from re-materializing here.
+          // Tombstones stay — they are published intent, not row provenance.
+          await txn.delete(
+            'webdav_sync_record_state',
+            where: 'kind = ? AND deleted = 0',
+            whereArgs: const <Object?>[WebDavSyncLibraryKinds.videoResume],
+          );
+        }
+        if (targets.isNotEmpty && origin == WebDavSyncMutationOrigin.user) {
+          final now = _nextStampMs();
+          for (final target in targets) {
+            await _writeLibraryState(
+              txn,
+              kind: WebDavSyncLibraryKinds.videoResume,
+              ownerKey: target.$1,
+              itemKey: target.$2,
+              updatedAtMs: now,
+              deleted: true,
+              origin: origin,
+            );
+          }
+          await _bumpLibraryRevision(txn);
+          changed = true;
+        }
       });
     });
+    if (changed) WebDavSyncLibraryMutation.notifyUserMutation();
   }
 
   // ── Row/meta mapping ──────────────────────────────────────────────────────
@@ -1328,10 +2219,12 @@ class IptvMediaStore {
 
   static Map<String, Object?> _resumeRow(
     String key,
-    Map<String, dynamic> entry,
-  ) {
+    Map<String, dynamic> entry, {
+    String? sourceId,
+  }) {
     return {
       'resume_key': key,
+      'source_id': (sourceId == null || sourceId.isEmpty) ? null : sourceId,
       'position_ms': (entry['positionMs'] as num?)?.toInt() ?? 0,
       'duration_ms': (entry['durationMs'] as num?)?.toInt() ?? 0,
       'speed': (entry['speed'] as num?)?.toDouble() ?? 1.0,
@@ -1352,5 +2245,56 @@ class IptvMediaStore {
       // fires instead of sorting the item to 1970.
       if (updatedAt != 0) 'updatedAt': updatedAt,
     };
+  }
+
+  static Map<String, Object?> _libraryStateRow({
+    required String kind,
+    required String ownerKey,
+    required String itemKey,
+    required int updatedAtMs,
+    required bool deleted,
+    required WebDavSyncMutationOrigin origin,
+  }) => <String, Object?>{
+    'kind': kind,
+    'owner_key': ownerKey,
+    'item_key': itemKey,
+    'updated_at_ms': updatedAtMs,
+    'origin_device_id': origin == WebDavSyncMutationOrigin.user
+        ? WebDavSyncLibraryMutation.originDeviceId
+        : origin.name,
+    'normalized': 0,
+    'deleted': deleted ? 1 : 0,
+    'aux': null,
+  };
+
+  static Future<void> _writeLibraryState(
+    DatabaseExecutor db, {
+    required String kind,
+    required String ownerKey,
+    required String itemKey,
+    required int updatedAtMs,
+    required bool deleted,
+    required WebDavSyncMutationOrigin origin,
+  }) {
+    return db.insert(
+      'webdav_sync_record_state',
+      _libraryStateRow(
+        kind: kind,
+        ownerKey: ownerKey,
+        itemKey: itemKey,
+        updatedAtMs: updatedAtMs,
+        deleted: deleted,
+        origin: origin,
+      ),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  static Future<void> _bumpLibraryRevision(DatabaseExecutor db) {
+    return db.execute('''
+      UPDATE webdav_sync_meta
+      SET value = CAST(CAST(value AS INTEGER) + 1 AS TEXT)
+      WHERE key = 'mutation_revision'
+    ''');
   }
 }

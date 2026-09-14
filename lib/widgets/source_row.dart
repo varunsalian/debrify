@@ -4,10 +4,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../theme/app_theme_scope.dart';
+import '../services/stream_badges_service.dart';
 import '../theme/widgets/focus_expression.dart';
 import '../utils/format_tag_detector.dart';
 import '../utils/tv_keys.dart';
 import 'format_badge.dart';
+import 'stream_badge_strip.dart';
+import 'source_list_scroll_anchor.dart';
 
 /// The unified row for the redesigned Sources page. Drives two looks from one
 /// widget:
@@ -29,12 +32,16 @@ class SourceRow extends StatefulWidget {
     required this.subtitle,
     required this.focusNode,
     required this.onTap,
+    this.listIndex,
     this.formatTags = const [],
+    this.badgeName,
+    this.badgeDescription,
     this.qualityTag,
     this.cacheLabel,
     this.coverageBadge,
     this.streamBadge,
     this.isTelevision = false,
+    this.cinemaLayout = false,
     this.showPlayPill = false,
     this.isSelectionMode = false,
     this.isSelected = false,
@@ -50,8 +57,17 @@ class SourceRow extends StatefulWidget {
   final FocusNode focusNode;
   final VoidCallback onTap;
 
+  /// Index within an enclosing [SourceListScrollAnchor], when present.
+  final int? listIndex;
+
   /// Non-empty → format-logo row (Concept F). Empty → compact row.
   final List<FormatTag> formatTags;
+
+  /// The name and description halves of the imported stream badge rules'
+  /// input (see [StreamBadgeStripFor]; `Torrent.name` and
+  /// `Torrent.badgeDescription`). A null [badgeName] draws no rule badges.
+  final String? badgeName;
+  final String? badgeDescription;
 
   /// Neutral resolution pill for the compact row (e.g. "1080p"). Ignored when
   /// [formatTags] is non-empty (the logos carry resolution).
@@ -67,6 +83,10 @@ class SourceRow extends StatefulWidget {
   final String? streamBadge;
 
   final bool isTelevision;
+
+  /// Larger typography and spacing in the two-pane source browser. Badge
+  /// matching, replacement, wrapping, and stable focus geometry stay shared.
+  final bool cinemaLayout;
 
   /// Show the "Play" pill when focused (TV). The tap still runs the configured
   /// activate action; the pill is an affordance, not a promise of "play".
@@ -107,6 +127,7 @@ class _SourceRowState extends State<SourceRow> {
   static final _tagFg = const Color(0xFFF1F1F6).withValues(alpha: 0.74);
 
   bool _isFocused = false;
+  Widget? _body;
   Timer? _longPressTimer;
   bool _longPressTriggered = false;
 
@@ -125,6 +146,7 @@ class _SourceRowState extends State<SourceRow> {
   @override
   void didUpdateWidget(covariant SourceRow oldWidget) {
     super.didUpdateWidget(oldWidget);
+    _body = null;
     // A toolbar rebuild (sort/filter/source pill) replaces the FocusNode while
     // this State is reused by position — migrate the listener to the new node
     // or the focus border / Play pill / auto-scroll silently stop reacting.
@@ -134,6 +156,14 @@ class _SourceRowState extends State<SourceRow> {
       widget.focusNode.addListener(_onFocusChange);
       final focused = widget.focusNode.hasFocus;
       if (focused != _isFocused) _isFocused = focused;
+    }
+    if (widget.focusNode.hasFocus &&
+        widget.listIndex != null &&
+        (oldWidget.listIndex != widget.listIndex ||
+            oldWidget.focusNode != widget.focusNode)) {
+      SourceListScrollAnchor.maybeOf(
+        context,
+      )?.focusRow(context, widget.focusNode, widget.listIndex!);
     }
   }
 
@@ -158,12 +188,22 @@ class _SourceRowState extends State<SourceRow> {
     if (_isFocused != focused) {
       setState(() => _isFocused = focused);
       if (focused) {
-        Scrollable.ensureVisible(
-          context,
-          alignment: 0.3,
-          duration: const Duration(milliseconds: 150),
-          curve: Curves.easeOutCubic,
-        );
+        final anchor = SourceListScrollAnchor.maybeOf(context);
+        if (anchor != null && widget.listIndex != null) {
+          anchor.focusRow(context, widget.focusNode, widget.listIndex!);
+          return;
+        }
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          // Coalesce fast DPAD moves and measure the final layout, not the
+          // previous frame's text/badge geometry.
+          if (!mounted || !widget.focusNode.hasFocus) return;
+          Scrollable.ensureVisible(
+            context,
+            alignment: 0.3,
+            duration: const Duration(milliseconds: 150),
+            curve: Curves.easeOutCubic,
+          );
+        });
       }
     }
   }
@@ -227,16 +267,24 @@ class _SourceRowState extends State<SourceRow> {
           color: _isFocused && ownCursor
               ? _accent
               : widget.isSelected
-                  ? _accent.withValues(alpha: 0.55)
-                  : Colors.transparent,
+              ? _accent.withValues(alpha: 0.55)
+              : Colors.transparent,
           width: 1.5,
         ),
         boxShadow: _isFocused && ownCursor
-            ? [BoxShadow(color: _accent.withValues(alpha: 0.22), blurRadius: 0, spreadRadius: 3)]
+            ? [
+                BoxShadow(
+                  color: _accent.withValues(alpha: 0.22),
+                  blurRadius: 0,
+                  spreadRadius: 3,
+                ),
+              ]
             : null,
       ),
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
+        padding: widget.cinemaLayout
+            ? const EdgeInsets.fromLTRB(18, 16, 16, 16)
+            : const EdgeInsets.fromLTRB(14, 12, 12, 12),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
@@ -251,10 +299,18 @@ class _SourceRowState extends State<SourceRow> {
                   color: widget.isSelected ? _accent : _dim2,
                 ),
               ),
-            Expanded(child: _buildBody()),
-            if (widget.showPlayPill && _isFocused && !widget.isSelectionMode) ...[
+            Expanded(child: _body ??= _buildBody()),
+            if (widget.showPlayPill && !widget.isSelectionMode) ...[
               const SizedBox(width: 8),
-              _playPill(),
+              // Keep exactly the same content width in both focus states.
+              // Otherwise a badge or long title wraps on every DPAD step.
+              Visibility(
+                visible: _isFocused,
+                maintainState: true,
+                maintainAnimation: true,
+                maintainSize: true,
+                child: _playPill(),
+              ),
             ],
             if (widget.onCopy != null && !widget.isSelectionMode)
               SizedBox.square(
@@ -310,8 +366,8 @@ class _SourceRowState extends State<SourceRow> {
             ),
     );
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
+    final row = Padding(
+      padding: EdgeInsets.symmetric(vertical: widget.cinemaLayout ? 5 : 2),
       child: widget.isTelevision
           ? focusable
           : GestureDetector(
@@ -321,18 +377,38 @@ class _SourceRowState extends State<SourceRow> {
               child: focusable,
             ),
     );
+    final anchor = SourceListScrollAnchor.maybeOf(context);
+    return anchor != null && widget.listIndex != null
+        ? SourceRowHeightObserver(
+            onChanged: (delta) =>
+                anchor.rowHeightChanged(widget.listIndex!, delta),
+            child: row,
+          )
+        : row;
   }
 
-  Widget _buildBody() {
+  Widget _buildBody() => ValueListenableBuilder(
+    valueListenable: StreamBadgesService.instance.matcher,
+    builder: (_, matcher, __) => _buildBadgeBody(!matcher.isEmpty),
+  );
+
+  Widget _buildBadgeBody(bool customBadgesConfigured) {
     final topBadges = <Widget>[
-      if (widget.formatTags.isEmpty && widget.qualityTag != null)
+      if (!customBadgesConfigured &&
+          widget.formatTags.isEmpty &&
+          widget.qualityTag != null)
         _pill(widget.qualityTag!, _tagFg, _tagBg, weight: FontWeight.w700),
       if (widget.coverageBadge != null)
         _pill(widget.coverageBadge!, _tagFg, _tagBg),
       if (widget.streamBadge != null)
         _pill(widget.streamBadge!, _tagFg, _tagBg),
       if (widget.cacheLabel != null)
-        _pill('⚡ ${widget.cacheLabel}', _cache, _cache.withValues(alpha: 0.12)),
+        _pill(
+          widget.cacheLabel!,
+          _cache,
+          _cache.withValues(alpha: 0.12),
+          icon: Icons.bolt_rounded,
+        ),
     ];
 
     return Column(
@@ -350,8 +426,14 @@ class _SourceRowState extends State<SourceRow> {
           overflow: TextOverflow.ellipsis,
           style: TextStyle(
             color: _fg,
-            fontSize: widget.formatTags.isEmpty ? 13 : 15,
-            fontWeight: widget.formatTags.isEmpty ? FontWeight.w500 : FontWeight.w700,
+            fontSize: widget.cinemaLayout
+                ? (widget.isTelevision ? 17 : 16)
+                : widget.formatTags.isEmpty
+                ? 13
+                : 15,
+            fontWeight: widget.formatTags.isEmpty
+                ? FontWeight.w500
+                : FontWeight.w700,
             height: 1.3,
           ),
         ),
@@ -362,10 +444,14 @@ class _SourceRowState extends State<SourceRow> {
               widget.subtitle,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: TextStyle(color: _dim, fontSize: 12, height: 1.3),
+              style: TextStyle(
+                color: _dim,
+                fontSize: widget.cinemaLayout ? 13 : 12,
+                height: 1.3,
+              ),
             ),
           ),
-        if (widget.formatTags.isNotEmpty)
+        if (!customBadgesConfigured && widget.formatTags.isNotEmpty)
           Padding(
             padding: const EdgeInsets.only(top: 12),
             child: FormatBadgeRow(
@@ -373,25 +459,75 @@ class _SourceRowState extends State<SourceRow> {
               scale: widget.isTelevision ? 1.12 : 1.0,
             ),
           ),
+        if (widget.badgeName != null)
+          StreamBadgeStripFor(
+            name: widget.badgeName!,
+            description: widget.badgeDescription,
+            height: widget.isTelevision ? 26 : 24,
+            builder: (strip) => Padding(
+              padding: EdgeInsets.only(
+                top: !customBadgesConfigured && widget.formatTags.isNotEmpty
+                    ? 8
+                    : 10,
+              ),
+              child: strip,
+            ),
+          ),
       ],
     );
   }
 
-  Widget _pill(String text, Color fg, Color bg, {FontWeight weight = FontWeight.w700}) => Container(
+  Widget _pill(
+    String text,
+    Color fg,
+    Color bg, {
+    FontWeight weight = FontWeight.w700,
+    IconData? icon,
+  }) => Container(
     padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
-    decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(6)),
-    child: Text(text, style: TextStyle(color: fg, fontSize: 10.5, fontWeight: weight, height: 1)),
+    decoration: BoxDecoration(
+      color: bg,
+      borderRadius: BorderRadius.circular(6),
+    ),
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (icon != null) ...[
+          Icon(icon, color: fg, size: 13),
+          const SizedBox(width: 3),
+        ],
+        Text(
+          text,
+          style: TextStyle(
+            color: fg,
+            fontSize: 10.5,
+            fontWeight: weight,
+            height: 1,
+          ),
+        ),
+      ],
+    ),
   );
 
   Widget _playPill() => Container(
     padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 7),
-    decoration: BoxDecoration(color: _accent, borderRadius: BorderRadius.circular(999)),
+    decoration: BoxDecoration(
+      color: _accent,
+      borderRadius: BorderRadius.circular(999),
+    ),
     child: const Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         Icon(Icons.play_arrow_rounded, size: 16, color: Colors.white),
         SizedBox(width: 5),
-        Text('Play', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w700)),
+        Text(
+          'Play',
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
       ],
     ),
   );

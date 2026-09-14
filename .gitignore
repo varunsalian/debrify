@@ -47,6 +47,9 @@ app.*.map.json
 # Release automation secrets/tooling — never commit
 .release/
 
+# Local Flutter build credentials (--dart-define-from-file)
+/.env.local.json
+
 # Discord bot secrets & deps — code is tracked, secrets/deps are not
 dev/tool/discord/.dev.vars
 dev/tool/discord/.deploy.env

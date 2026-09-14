@@ -37,7 +37,12 @@ class PlatformUtil {
   /// system name is the only reliable discriminator.
   ///
   /// `static final` so the string compare happens once, not per call.
-  static final bool isTvOS = Platform.operatingSystem == 'tvos';
+  static final bool _isTvOS = Platform.operatingSystem == 'tvos';
+  static bool? _tvOSOverride;
+  static bool get isTvOS => _tvOSOverride ?? _isTvOS;
+
+  @visibleForTesting
+  static void debugSetTvOS(bool? value) => _tvOSOverride = value;
 
   /// iPhone / iPad ONLY — the thing `Platform.isIOS` is usually meant to say.
   ///
@@ -45,6 +50,12 @@ class PlatformUtil {
   /// device rotation, the iOS external-player URL schemes (VLC / Infuse /
   /// nPlayer handoff, which Apple TV has no working equivalent for).
   static bool get isIosMobile => Platform.isIOS && !isTvOS;
+
+  /// A windowed desktop OS. Unlike phones and televisions, a "paused"
+  /// lifecycle state here usually means the window is merely occluded or
+  /// minimized while the machine keeps running on wall power.
+  static bool get isDesktop =>
+      Platform.isMacOS || Platform.isWindows || Platform.isLinux;
 
   /// Whether this device is a TELEVISION — Android TV **or** Apple TV.
   ///

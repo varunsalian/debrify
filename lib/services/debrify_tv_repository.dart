@@ -3,6 +3,8 @@ import 'package:sqflite/sqflite.dart';
 import '../models/debrify_tv_cache.dart';
 import '../models/debrify_tv_channel_record.dart';
 import 'debrify_tv_database.dart';
+import 'webdav_sync/webdav_sync_library_models.dart';
+import 'webdav_sync/webdav_sync_library_mutation.dart';
 
 class DebrifyTvRepository {
   DebrifyTvRepository._();
@@ -72,8 +74,12 @@ class DebrifyTvRepository {
         .toList(growable: false);
   }
 
-  Future<void> upsertChannel(DebrifyTvChannelRecord record) async {
-    await DebrifyTvDatabase.instance.runTxn((txn) async {
+  Future<void> upsertChannel(
+    DebrifyTvChannelRecord record, {
+    WebDavSyncMutationOrigin origin = WebDavSyncMutationOrigin.user,
+    Transaction? transaction,
+  }) async {
+    Future<void> write(Transaction txn) async {
       var channelNumber = record.channelNumber;
 
       if (channelNumber <= 0) {
@@ -125,25 +131,94 @@ class DebrifyTvRepository {
         'error_message': null,
         'fetched_at': 0,
       }, conflictAlgorithm: ConflictAlgorithm.replace);
-    });
+
+      if (origin == WebDavSyncMutationOrigin.user) {
+        final now = WebDavSyncLibraryMutation.nextTvStampMs();
+        await txn.insert('webdav_sync_record_state', <String, Object?>{
+          'kind': WebDavSyncLibraryKinds.tvChannels,
+          'owner_key': record.channelId,
+          'item_key': '',
+          'updated_at_ms': now,
+          'origin_device_id': WebDavSyncLibraryMutation.originDeviceId,
+          'normalized': 0,
+          'deleted': 0,
+          'aux': null,
+        }, conflictAlgorithm: ConflictAlgorithm.replace);
+        await _incrementWebDavSyncRevision(txn);
+        await DebrifyTvDatabase.markWebDavTvChangesPending(txn);
+      }
+    }
+
+    if (transaction != null) {
+      await write(transaction);
+    } else {
+      await DebrifyTvDatabase.instance.runTxn(write);
+    }
   }
 
-  Future<void> deleteChannel(String channelId) async {
+  Future<void> deleteChannel(
+    String channelId, {
+    WebDavSyncMutationOrigin origin = WebDavSyncMutationOrigin.user,
+  }) async {
     await DebrifyTvDatabase.instance.runTxn((txn) async {
-      await txn.delete(
+      final deleted = await txn.delete(
         'tv_channels',
         where: 'channel_id = ?',
         whereArgs: [channelId],
       );
+      if (deleted != 0 && origin == WebDavSyncMutationOrigin.user) {
+        await _writeChannelTombstone(txn, channelId);
+        await _incrementWebDavSyncRevision(txn);
+        await DebrifyTvDatabase.markWebDavTvChangesPending(txn);
+      }
     });
   }
 
-  Future<void> clearAll() async {
+  Future<void> clearAll({
+    WebDavSyncMutationOrigin origin = WebDavSyncMutationOrigin.user,
+  }) async {
     await DebrifyTvDatabase.instance.runTxn((txn) async {
+      final channelIds = origin == WebDavSyncMutationOrigin.user
+          ? (await txn.query(
+                  'tv_channels',
+                  columns: const <String>['channel_id'],
+                ))
+                .map((row) => row['channel_id']! as String)
+                .toList(growable: false)
+          : const <String>[];
       await txn.delete('tv_cached_torrents');
       await txn.delete('tv_keyword_stats');
       await txn.delete('tv_channel_keywords');
       await txn.delete('tv_channels');
+      if (channelIds.isNotEmpty) {
+        final now = WebDavSyncLibraryMutation.nextTvStampMs();
+        for (final channelId in channelIds) {
+          await _writeChannelTombstone(txn, channelId, updatedAtMs: now);
+        }
+        await _incrementWebDavSyncRevision(txn);
+        await DebrifyTvDatabase.markWebDavTvChangesPending(txn);
+      }
     });
   }
 }
+
+Future<void> _writeChannelTombstone(
+  DatabaseExecutor db,
+  String channelId, {
+  int? updatedAtMs,
+}) => db.insert('webdav_sync_record_state', <String, Object?>{
+  'kind': WebDavSyncLibraryKinds.tvChannels,
+  'owner_key': channelId,
+  'item_key': '',
+  'updated_at_ms': updatedAtMs ?? WebDavSyncLibraryMutation.nextTvStampMs(),
+  'origin_device_id': WebDavSyncLibraryMutation.originDeviceId,
+  'normalized': 0,
+  'deleted': 1,
+  'aux': null,
+}, conflictAlgorithm: ConflictAlgorithm.replace);
+
+Future<void> _incrementWebDavSyncRevision(DatabaseExecutor db) => db.execute('''
+  UPDATE webdav_sync_meta
+  SET value = CAST(CAST(value AS INTEGER) + 1 AS TEXT)
+  WHERE key = 'mutation_revision'
+''');

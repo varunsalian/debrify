@@ -1,3 +1,10 @@
+import 'dart:async';
+import 'dart:developer' as developer;
+import '../../services/metadata_explore_service.dart';
+import '../../services/profiles/profile_runtime.dart';
+import 'showcase_availability.dart';
+import '../../models/metadata_preferences.dart';
+import '../../screens/metadata_explore_page.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show ScrollCacheExtent;
@@ -12,6 +19,7 @@ import '../../utils/artwork_url.dart';
 import '../../utils/platform_util.dart';
 import '../episodes_panel.dart';
 import '../section_reveal.dart';
+import '../viewport_artwork_scope.dart';
 import 'detail_episode_cells.dart';
 import 'detail_model.dart';
 import 'detail_style.dart';
@@ -52,12 +60,14 @@ class DetailShowcase extends StatefulWidget {
   /// implies input — a narrow TV keeps the wide presentation so the DPAD
   /// ladder's widgets all exist.
   final bool dpad;
+  final MetadataExploreService? exploreService;
 
   const DetailShowcase({
     super.key,
     required this.model,
     required this.episodesHost,
     this.dpad = true,
+    this.exploreService,
   });
 
   @override
@@ -189,10 +199,94 @@ class _Band {
 }
 
 class _DetailShowcaseState extends State<DetailShowcase> {
+  MetadataExploreData? _explore;
+  final _exploreScope = ProfileRuntime.scope.value;
+  int _exploreGeneration = 0;
+  Timer? _exploreRetry;
+  bool _exploreFailed = false;
+  final _extraNodes = <String, List<FocusNode>>{};
+  final _extraKeys = <String, GlobalKey>{};
+
+  List<ShowcaseAvailabilityRow> get _extraRows => showcaseAvailabilityRows(
+    _explore, widget.model.metadataPreferences,
+    failed: _exploreFailed,
+  );
+
+  Object? _explorePolicy(MetadataPreferences? prefs) => prefs == null ? null : (
+    prefs.language, prefs.region,
+    prefs.features.contains(MetadataFeature.companies),
+    prefs.features.contains(MetadataFeature.availability),
+  );
+
+  void _scopeChanged() {
+    ++_exploreGeneration;
+    _exploreRetry?.cancel();
+    if (mounted) setState(() { _explore = null; _exploreFailed = false; });
+  }
+
+  @override
+  void didUpdateWidget(covariant DetailShowcase oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.model.item.id != widget.model.item.id ||
+        oldWidget.model.item.type != widget.model.item.type ||
+        _explorePolicy(oldWidget.model.metadataPreferences) !=
+            _explorePolicy(widget.model.metadataPreferences) ||
+        oldWidget.exploreService != widget.exploreService) {
+      _loadExplore();
+    }
+  }
+
+  void _loadExplore() {
+    final generation = ++_exploreGeneration;
+    _exploreRetry?.cancel();
+    _explore = null;
+    _exploreFailed = false;
+    final prefs = widget.model.metadataPreferences;
+    if (prefs == null || _exploreScope != ProfileRuntime.scope.value) return;
+    final features = prefs.features.intersection({
+      MetadataFeature.companies, MetadataFeature.availability,
+    });
+    if (features.isEmpty) return;
+    _fetchExplore(generation, prefs.copyWith(features: features), 0);
+  }
+
+  Future<void> _fetchExplore(int generation, MetadataPreferences prefs, int attempt) async {
+    bool current() => mounted && generation == _exploreGeneration &&
+        _exploreScope == ProfileRuntime.scope.value;
+    try {
+      final data = await (widget.exploreService ?? MetadataExploreService.instance)
+          .details(widget.model.item, prefs);
+      if (current()) setState(() => _explore = data);
+    } catch (_) {
+      if (!current()) return;
+      if (attempt < 2) {
+        _exploreRetry = Timer(Duration(seconds: 1 << attempt), () {
+          if (current()) _fetchExplore(generation, prefs, attempt + 1);
+        });
+      } else {
+        setState(() => _exploreFailed = true);
+      }
+    }
+  }
+
+  void _openStudio(ShowcaseAvailabilityEntry entry) {
+    final onOpen = widget.model.onRecommendationTap;
+    final prefs = widget.model.metadataPreferences;
+    if (onOpen == null || prefs == null || entry.id == null ||
+        !prefs.features.contains(MetadataFeature.companies)) {
+      return;
+    }
+    Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => MetadataBrowsePage(
+      title: entry.name, kind: entry.kind!, id: entry.id,
+      type: widget.model.item.type == 'series' ? 'tv' : 'movie',
+      preferences: prefs, onOpen: onOpen, isTelevision: widget.model.isTelevision,
+    )));
+  }
+
   final ScrollController _scroll = ScrollController();
   final DetailCellNodes _cells = DetailCellNodes('showcase');
 
-  /// A TV opens on one composed frame, instead of asking the GPU to reveal a
+  /// Apple TV opens on one composed frame, instead of asking the GPU to reveal a
   /// backdrop, wordmark and several off-screen rails independently. The shell
   /// starts its backdrop decode before this body builds; this gate warms the
   /// matching image-cache keys, then lets the page crossfade in once the first
@@ -328,6 +422,14 @@ class _DetailShowcaseState extends State<DetailShowcase> {
   void initState() {
     super.initState();
     if (!widget.dpad) _scroll.addListener(_onScrollDepth);
+    ProfileRuntime.scope.addListener(_scopeChanged);
+    _loadExplore();
+    if (widget.dpad && PlatformUtil.isAndroidTvCached) {
+      developer.Timeline.instantSync('Showcase.mounted');
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) developer.Timeline.instantSync('Showcase.firstContentFrame');
+      });
+    }
   }
 
   @override
@@ -341,7 +443,10 @@ class _DetailShowcaseState extends State<DetailShowcase> {
     }
   }
 
-  bool get _usesTvOpeningGate => widget.dpad && PlatformUtil.isTelevision;
+  // Android TV publishes usable controls immediately and admits nearby band
+  // artwork separately. Preserve Apple TV's composed opening and animation.
+  bool get _usesTvOpeningGate =>
+      widget.dpad && PlatformUtil.isTelevision && !PlatformUtil.isAndroidTvCached;
 
   Future<void> _warmTvOpening() async {
     if (!mounted || !_usesTvOpeningGate) return;
@@ -465,9 +570,13 @@ class _DetailShowcaseState extends State<DetailShowcase> {
   @override
   void dispose() {
     _detachOpeningKeyHandler();
+    ++_exploreGeneration;
+    _exploreRetry?.cancel();
+    ProfileRuntime.scope.removeListener(_scopeChanged);
     _scroll.dispose();
     _epScroll.dispose();
     for (final n in [
+      ..._extraNodes.values.expand((nodes) => nodes),
       ..._actionNodes,
       ..._seasonNodes,
       ..._castNodes,
@@ -679,7 +788,13 @@ class _DetailShowcaseState extends State<DetailShowcase> {
   /// once their data lands, and without a key the arriving band would inherit
   /// the state of whatever sat at its index before.
   Widget _band(String id, Widget child) => widget.dpad
-      ? child
+      ? PlatformUtil.isAndroidTvCached
+          ? ViewportArtworkScope(
+              key: ValueKey('showcase-artwork-$id'),
+              focused: _bandKey == id,
+              child: child,
+            )
+          : child
       : SectionReveal(
           key: ValueKey('showcase-band-$id'),
           startWhenVisible: true,
@@ -941,11 +1056,11 @@ class _DetailShowcaseState extends State<DetailShowcase> {
         'sources',
         _grow(
           _sourceNodes,
-          // Bound cards + "Pin source" + the browse entry (movies: "Browse
+          // Pinned-source summary + "Pin source" + the browse entry (movies: "Browse
           // all"; series: "Season packs"). The count mirrors ShowcaseSources'
           // itemCount exactly — a node the rendering doesn't mount is a place
           // arrow keys can strand focus.
-          m.boundSources.length + 1 + (m.onBrowse != null ? 1 : 0),
+          2 + (m.onBrowse != null ? 1 : 0),
           'showcase-source',
         ),
         _sourcesKey,
@@ -961,6 +1076,11 @@ class _DetailShowcaseState extends State<DetailShowcase> {
           150,
         ),
       );
+    }
+    for (final row in _extraRows) {
+      bands.add(_Band(row.key,
+        _grow(_extraNodes.putIfAbsent(row.key, () => []), row.entries.length, row.key),
+        _extraKeys.putIfAbsent(row.key, GlobalKey.new), 150));
     }
     if (_universe.isNotEmpty) {
       bands.add(
@@ -1169,6 +1289,21 @@ class _DetailShowcaseState extends State<DetailShowcase> {
                       ShowcaseCast(
                         key: _castKey,
                         cast: m.cast,
+                        onPersonOpen: m.metadataPreferences?.features.contains(MetadataFeature.people) == true &&
+                                m.onRecommendationTap != null
+                            ? (person) {
+                                final id = person.tmdbPersonId;
+                                if (id == null || id <= 0) return;
+                                Navigator.of(context).push(MaterialPageRoute<void>(
+                                  builder: (_) => MetadataBrowsePage(
+                                    title: person.name, kind: 'person', id: id,
+                                    preferences: m.metadataPreferences!,
+                                    onOpen: m.onRecommendationTap!,
+                                    isTelevision: m.isTelevision,
+                                  ),
+                                ));
+                              }
+                            : null,
                         nodes: _grow(
                           _castNodes,
                           m.cast.length,
@@ -1197,9 +1332,7 @@ class _DetailShowcaseState extends State<DetailShowcase> {
                       sources: m.boundSources,
                       nodes: _grow(
                         _sourceNodes,
-                        m.boundSources.length +
-                            1 +
-                            (m.onBrowse != null ? 1 : 0),
+                        2 + (m.onBrowse != null ? 1 : 0),
                         'showcase-source',
                       ),
                       onOpen: m.onManageSources ?? m.onSelectSource,
@@ -1223,6 +1356,16 @@ class _DetailShowcaseState extends State<DetailShowcase> {
                         onTap: m.onRecommendationTap,
                       ),
                     ),
+                  for (final row in _extraRows)
+                    _band(row.key, ShowcaseAvailabilityBand(
+                      key: _extraKeys.putIfAbsent(row.key, GlobalKey.new),
+                      row: row,
+                      nodes: _grow(_extraNodes.putIfAbsent(row.key, () => []),
+                        row.entries.length, row.key),
+                      accent: m.accent,
+                      onStudio: m.onRecommendationTap == null ? null : _openStudio,
+                      onRetry: () => setState(_loadExplore),
+                    )),
                   if (_universe.isNotEmpty)
                     _band(
                       'universe',
@@ -1278,6 +1421,7 @@ class _DetailShowcaseState extends State<DetailShowcase> {
     // trailer and the app menu by ShowcaseIdentity; the count here is what
     // keeps its node real.
     if (m.onBrowse != null) n++;
+    if (m.onMetadataExplore != null) n++;
     if (m.onAppMenu != null) n++;
     return n;
   }

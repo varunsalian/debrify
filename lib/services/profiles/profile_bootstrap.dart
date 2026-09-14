@@ -527,7 +527,10 @@ class ProfileBootstrap {
 
   /// Completes the interactive Linux bootstrap without exposing a partially
   /// migrated profile tree. The app child has not mounted while this runs.
-  static Future<void> completeLinuxVault(String passphrase) async {
+  static Future<void> completeLinuxVault(
+    String passphrase, {
+    bool autoUnlock = true,
+  }) async {
     if (!DeviceKeyProvider.isLinux) throw UnsupportedError('Linux only');
     if (!DeviceKeyProvider.isUnlocked) {
       if (await DeviceKeyProvider.linuxHasWrappedKey()) {
@@ -536,6 +539,7 @@ class ProfileBootstrap {
         await DeviceKeyProvider.createLinuxVault(passphrase);
       }
     }
+    if (autoUnlock) await DeviceKeyProvider.enableLinuxAutoUnlock();
     if (_linuxCommittedAwaitingUnlock) {
       if (!ProfileRuntime.isInitialized ||
           !ProfileRuntime.isProfileCommitted ||
@@ -606,6 +610,7 @@ class ProfileBootstrap {
 
   static const Set<String> _deviceOwnedLegacyKeys = <String>{
     ...DevicePreferences.nativeLaunchSnapshotKeys,
+    DeviceKeyProvider.linuxStateKey,
     'profiles_runtime_mode_v1',
     'profiles_feature_enabled_v1',
     'profiles_native_mirror_v1',

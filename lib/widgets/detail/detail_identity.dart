@@ -763,6 +763,9 @@ class DetailActionRow extends StatelessWidget {
           focusNode: model.showPrimary ? null : model.focus.primaryEntry,
           autofocus: model.isTelevision && !model.showPrimary,
         ),
+      if (model.onMetadataExplore != null)
+        DetailGhostButton(label: 'Explore', icon: Icons.explore_outlined,
+          onTap: model.onMetadataExplore!),
       if (model.onAppMenu != null)
         DetailRoundButton(
           icon: Icons.more_horiz_rounded,

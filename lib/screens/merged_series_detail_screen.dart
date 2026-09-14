@@ -1,3 +1,12 @@
+import '../widgets/metadata_franchise_rail.dart';
+import '../widgets/metadata_title_navigation.dart';
+import '../services/metadata_provider_service.dart';
+import '../services/metadata_preferences_service.dart';
+import '../models/metadata_preferences.dart';
+import '../services/profiles/profile_runtime.dart';
+import 'metadata_explore_page.dart';
+import '../services/metadata_details_service.dart';
+import '../widgets/metadata_presentation_mixin.dart';
 import 'dart:async';
 
 import 'package:cached_network_image/cached_network_image.dart';
@@ -85,7 +94,9 @@ class MergedDetailScreen extends StatefulWidget {
   /// continue-watching list resolves here to S1E2 and there to the S1E1
   /// empty-candidates fallback). Null means this screen has nothing better than
   /// what the host can work out for itself.
-  final Future<void> Function(({bool started, int season, int episode})? promised)
+  final Future<void> Function(
+    ({bool started, int season, int episode})? promised,
+  )
   onResume;
 
   /// Resolves whether the title has prior progress and, for a series, the
@@ -221,7 +232,7 @@ class MergedDetailScreen extends StatefulWidget {
 }
 
 class _MergedDetailScreenState extends State<MergedDetailScreen>
-    with RouteAware {
+    with RouteAware, MetadataPresentationMixin<MergedDetailScreen> {
   // ── Stremio-flat palette (neutral glass + gold state) ──
   static const Color _bg = Color(0xFF0B0B0E);
   static const Color _gold = Color(0xFFF5B942);
@@ -238,7 +249,13 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
 
   ImdbEnrichment? _imdbExtra;
   ParentsGuideResult? _parentsGuide;
+  void _openMetadataRecommendation(StremioMeta item) {
+    final onOpen = widget.onRecommendationTap;
+    if (onOpen != null) unawaited(openMetadataTitle(context, _recommendationOriginals[item] ?? item, onOpen));
+  }
+
   List<StremioMeta>? _recommendations;
+  final _recommendationOriginals = Map<StremioMeta, StremioMeta>.identity();
   StremioMeta? _enriched;
 
   /// Trailer YouTube ID, resolved from Cinemeta meta. Null until loaded / when
@@ -391,7 +408,11 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
     primaryEntry: _leftEntryFocusNode,
   );
 
-  StremioMeta get _item => _enriched ?? widget.item;
+  @override
+  StremioMeta get originalMetadata => _enriched ?? widget.item;
+  // Presentation is for rendering; source searches retain widget.item so a
+  // translated display title cannot change file matching or binding queries.
+  StremioMeta get _item => presentedMetadata!;
 
   /// Primary-button resume state. Until loaded the button keeps its static
   /// label; once resolved it reads "Start Watching" (no progress) or "Resume"
@@ -1086,6 +1107,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
           logo: full.logo ?? item.logo,
         );
       });
+      refreshMetadataPresentation();
     } catch (_) {}
   }
 
@@ -1094,9 +1116,11 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
   /// can't be relied on to carry the trailer). The `fetchMetaDetails` result is
   /// cached in [StremioService], so this shares that fetch rather than doubling
   /// network. Silent on failure — the button simply never appears.
-  Future<void> _loadTrailer() async {
-    // Resolve the trailer id: prefer what the item arrived with, else ask the
-    // metadata addon (Cinemeta).
+  int _trailerGeneration = 0;
+  List<MetadataTrailer> _trailerCandidates = [];
+  bool _allowTrailerFallback = true;
+
+  Future<String?> _currentTrailerId() async {
     String? ytId = widget.item.trailerYtId;
     if (ytId == null || ytId.isEmpty) {
       final enrich = widget.metaEnricher;
@@ -1108,67 +1132,105 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
         } catch (_) {}
       }
     }
-    if (ytId == null || ytId.isEmpty || !mounted) return;
-    setState(() => _trailerYtId = ytId);
+    return ytId;
+  }
 
-    // OTT autoplay: honour the setting, then pre-resolve the stream (also reused
-    // by the Trailer button). Silent on failure — the poster simply stays.
-    final autoplay = await StorageService.getDetailTrailerAutoplayEnabled();
-    // The ambient sound pair is shared with the TV hero (one live surface per
-    // platform), so off-TV it governs this backdrop. Read unconditionally so
-    // all three land in the one setState below — [autoplay] is false on TV
-    // anyway, and these are two prefs reads.
-    final soundOn = await StorageService.getAmbientTrailerAudioEnabled(
-      AmbientTrailerSurface.detail,
-    );
-    final volume = await StorageService.getAmbientTrailerVolume(
-      AmbientTrailerSurface.detail,
-    );
-    if (!mounted) return;
-    // The backdrop refuses to autoplay under OS reduced-motion — skip the whole
-    // pipeline (no resolve, no spinner) rather than spin forever waiting for a
-    // player that will never start.
-    final reduceMotion =
-        MediaQuery.maybeOf(context)?.disableAnimations ?? false;
-    final willAutoplay = autoplay && !reduceMotion;
-    setState(() {
-      _trailerAutoplayEnabled = autoplay;
-      _trailerAmbientVolume = soundOn ? volume.toDouble() : 0;
-      // Spinner from here until the backdrop reports first frames (or fails).
-      _trailerResolving = willAutoplay;
-    });
-    if (!willAutoplay) return;
-    YoutubeResolvedStreams? streams;
+  Future<void> _loadTrailer() async {
+    final generation = ++_trailerGeneration;
+    final scope = ProfileRuntime.scope.value;
+    final policyRevision = MetadataPreferencesService.revision.value;
+    bool current() =>
+        mounted &&
+        generation == _trailerGeneration &&
+        scope == ProfileRuntime.scope.value &&
+        policyRevision == MetadataPreferencesService.revision.value;
     try {
-      streams = await YoutubeService.resolveStreams(ytId);
+      final prefs = await MetadataPreferencesService.loadForBackground(
+        isCurrent: current,
+      );
+      if (prefs == null) return;
+      final candidates = await MetadataProviderService.instance.trailers(
+        widget.item,
+        _currentTrailerId,
+        preferences: prefs,
+      );
+      if (!mounted || !current()) return;
+      _trailerCandidates = candidates;
+      _allowTrailerFallback =
+          prefs.provider(MetadataCategory.trailers) ==
+              MetadataPreferences.current ||
+          prefs.fallback;
+      final ytId = candidates.firstOrNull?.key;
+      if (ytId == null || ytId.isEmpty || !current()) return;
+      setState(() => _trailerYtId = ytId);
+
+      // OTT autoplay: honour the setting, then pre-resolve the stream (also reused
+      // by the Trailer button). Silent on failure — the poster simply stays.
+      final autoplay = await StorageService.getDetailTrailerAutoplayEnabled();
+      // The ambient sound pair is shared with the TV hero (one live surface per
+      // platform), so off-TV it governs this backdrop. Read unconditionally so
+      // all three land in the one setState below — [autoplay] is false on TV
+      // anyway, and these are two prefs reads.
+      final soundOn = await StorageService.getAmbientTrailerAudioEnabled(
+        AmbientTrailerSurface.detail,
+      );
+      final volume = await StorageService.getAmbientTrailerVolume(
+        AmbientTrailerSurface.detail,
+      );
+      if (!mounted || !current()) return;
+      // The backdrop refuses to autoplay under OS reduced-motion — skip the whole
+      // pipeline (no resolve, no spinner) rather than spin forever waiting for a
+      // player that will never start.
+      final reduceMotion =
+          MediaQuery.maybeOf(context)?.disableAnimations ?? false;
+      final willAutoplay = autoplay && !reduceMotion;
+      setState(() {
+        _trailerAutoplayEnabled = autoplay;
+        _trailerAmbientVolume = soundOn ? volume.toDouble() : 0;
+        // Spinner from here until the backdrop reports first frames (or fails).
+        _trailerResolving = willAutoplay;
+      });
+      if (!willAutoplay) return;
+      YoutubeResolvedStreams? streams;
+      try {
+        streams = await YoutubeService.resolveStreams(ytId);
+      } catch (_) {
+        streams = null;
+      }
+      // Backup source: IMDb's own trailer MP4s, for when YouTube resolution is
+      // blocked (regional client kills) — the backdrop still gets to move.
+      if (_allowTrailerFallback &&
+          (streams == null || !(streams.playUrl?.isNotEmpty ?? false))) {
+        final imdbId = _item.effectiveImdbId;
+        if (imdbId != null) {
+          streams = await ImdbTrailerService.resolveTrailer(imdbId);
+        }
+      }
+      if (!mounted || !current()) return;
+      final playable = streams?.playUrl?.isNotEmpty ?? false;
+      setState(() {
+        _trailerStreams = streams;
+        // No playable stream → the backdrop never starts, so stop the spinner
+        // here; on success the backdrop's onPlayingChanged(true) clears it once
+        // frames actually flow.
+        if (!playable) _trailerResolving = false;
+      });
+      if (!playable) return;
+      // Safety net: a stream that opens but never renders a first frame would
+      // otherwise leave the spinner up forever.
+      Future.delayed(const Duration(seconds: 25), () {
+        if (current() && _trailerResolving) {
+          setState(() => _trailerResolving = false);
+        }
+      });
     } catch (_) {
-      streams = null;
-    }
-    // Backup source: IMDb's own trailer MP4s, for when YouTube resolution is
-    // blocked (regional client kills) — the backdrop still gets to move.
-    if (streams == null || !(streams.playUrl?.isNotEmpty ?? false)) {
-      final imdbId = _item.effectiveImdbId;
-      if (imdbId != null) {
-        streams = await ImdbTrailerService.resolveTrailer(imdbId);
+      if (current()) {
+        setState(() {
+          _trailerResolving = false;
+          _trailerLoading = false;
+        });
       }
     }
-    if (!mounted) return;
-    final playable = streams?.playUrl?.isNotEmpty ?? false;
-    setState(() {
-      _trailerStreams = streams;
-      // No playable stream → the backdrop never starts, so stop the spinner
-      // here; on success the backdrop's onPlayingChanged(true) clears it once
-      // frames actually flow.
-      if (!playable) _trailerResolving = false;
-    });
-    if (!playable) return;
-    // Safety net: a stream that opens but never renders a first frame would
-    // otherwise leave the spinner up forever.
-    Future.delayed(const Duration(seconds: 25), () {
-      if (mounted && _trailerResolving) {
-        setState(() => _trailerResolving = false);
-      }
-    });
   }
 
   void _exitTrailerForeground() {
@@ -1196,12 +1258,37 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
   /// second decoder, no re-buffer. Fallback path (autoplay off / not resolved /
   /// reduced motion): resolve fresh and launch the standalone player as before.
   Future<void> _playTrailer() async {
-    if (_backdropKey.currentState?.canPromote ?? false) {
+    if (_trailerLoading) return;
+    final generation = _trailerGeneration;
+    final scope = ProfileRuntime.scope.value;
+    final revision = MetadataPreferencesService.revision.value;
+    String? chosen;
+    if (_trailerCandidates.length > 1) {
+      chosen = await showDialog<String>(context: context, builder: (context) => SimpleDialog(
+        title: const Text('Choose trailer'),
+        children: [for (final video in _trailerCandidates) SimpleDialogOption(
+          onPressed: () => Navigator.pop(context, video.key),
+          child: Text('${video.title}${video.language.isEmpty ? '' : ' · ${video.language}'}'))]));
+      if (!mounted || chosen == null ||
+          generation != _trailerGeneration ||
+          scope != ProfileRuntime.scope.value ||
+          revision != MetadataPreferencesService.revision.value) {
+        return;
+      }
+    }
+    await _playSelectedTrailer(chosen);
+  }
+
+  Future<void> _playSelectedTrailer(String? chosen) async {
+    final generation = _trailerGeneration;
+    final scope = ProfileRuntime.scope.value;
+    bool current() => mounted && generation == _trailerGeneration && scope == ProfileRuntime.scope.value;
+    if ((chosen == null || chosen == _trailerYtId) && (_backdropKey.currentState?.canPromote ?? false)) {
       setState(() => _trailerForeground = true);
       return;
     }
 
-    final ytId = _trailerYtId;
+    final ytId = chosen ?? _trailerYtId;
     if (ytId == null || _trailerLoading) return;
 
     // Always resolve fresh on tap. The autoplay-prefetched [_trailerStreams] is
@@ -1237,14 +1324,14 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
     // Same backup as the ambient path: a blocked YouTube must not reduce the
     // Trailer button to a "Couldn't load trailer" snackbar when IMDb hosts
     // the same trailer as a plain MP4.
-    if (streams == null || !(streams.playUrl?.isNotEmpty ?? false)) {
+    if (_allowTrailerFallback && (streams == null || !(streams.playUrl?.isNotEmpty ?? false))) {
       final imdbId = _item.effectiveImdbId;
       if (imdbId != null) {
         streams = await ImdbTrailerService.resolveTrailer(imdbId);
       }
     }
 
-    if (!mounted) return;
+    if (!mounted || !current()) return;
     ScaffoldMessenger.of(context).hideCurrentSnackBar();
     setState(() => _trailerLoading = false);
 
@@ -1270,12 +1357,49 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
     );
   }
 
+  VoidCallback? get _metadataExploreAction =>
+      metadataPreferences.features.isNotEmpty && widget.onRecommendationTap != null
+        ? _openMetadataExplore : null;
+
+  void _openMetadataExplore() {
+    final prefs = metadataPreferences;
+    final onOpen = widget.onRecommendationTap;
+    if (prefs.features.isEmpty || onOpen == null) return;
+    Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) =>
+      MetadataExplorePage(item: _item, preferences: prefs, onOpen: onOpen,
+        isTelevision: widget.isTelevision)));
+  }
+
+  int _detailsMetadataGeneration = 0;
+  @override
+  void onMetadataPolicyChanged() {
+    _detailsMetadataGeneration++;
+    if (!mounted) return;
+    setState(() { _imdbExtra = null; _recommendations = []; });
+    unawaited(_loadImdbEnrichment());
+    unawaited(_loadRecommendations());
+    _trailerGeneration++;
+    setState(() {
+      _trailerYtId = null; _trailerCandidates = []; _trailerStreams = null;
+      _trailerForeground = false; _trailerResolving = false; _trailerLoading = false;
+    });
+    unawaited(_loadTrailer());
+  }
+
   Future<void> _loadImdbEnrichment() async {
+    final generation = _detailsMetadataGeneration;
+    final scope = ProfileRuntime.scope.value;
+    final revision = MetadataPreferencesService.revision.value;
+    bool valid() => mounted && generation == _detailsMetadataGeneration && scope == ProfileRuntime.scope.value && revision == MetadataPreferencesService.revision.value;
     final imdbId = _item.effectiveImdbId;
-    if (imdbId == null) return;
     try {
-      final extra = await ImdbEnrichmentService.fetch(imdbId);
-      if (mounted) setState(() => _imdbExtra = extra);
+      final extra = await MetadataDetailsService.instance.enrich(
+        _item,
+        loadExisting: () async => imdbId == null
+            ? null
+            : ImdbEnrichmentService.fetch(imdbId),
+      );
+      if (mounted && valid()) setState(() => _imdbExtra = extra);
     } catch (_) {}
   }
 
@@ -1289,11 +1413,28 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
   }
 
   Future<void> _loadRecommendations() async {
+    final generation = _detailsMetadataGeneration;
+    final scope = ProfileRuntime.scope.value;
+    final revision = MetadataPreferencesService.revision.value;
+    bool valid() => mounted && generation == _detailsMetadataGeneration && scope == ProfileRuntime.scope.value && revision == MetadataPreferencesService.revision.value;
     final loader = widget.recommendationsLoader;
-    if (loader == null) return;
     try {
-      final recs = await loader();
-      if (mounted) setState(() => _recommendations = recs);
+      final recs = await MetadataDetailsService.instance.recommendations(
+        _item,
+        loader,
+      );
+      if (mounted && valid()) {
+        _recommendationOriginals.clear();
+        setState(() => _recommendations = recs);
+      }
+      if (!valid()) return;
+      await for (final batch in MetadataProviderService.instance.presentBatches(recs, isRelevant: valid)) {
+        if (!valid()) return;
+        for (var index = 0; index < batch.length; index++) {
+          _recommendationOriginals[batch[index]] = recs[index];
+        }
+        setState(() => _recommendations = batch);
+      }
     } catch (_) {}
   }
 
@@ -1331,7 +1472,9 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
     AppThemeScope.of(context);
     // The backdrop is the one display-sized detail hero. Keep the model's
     // catalog URL intact for rails, but ask MetaHub for the large source here.
-    final backdropUrl = highQualityArtworkUrl(_item.background ?? _item.poster);
+    final backdropUrl = highQualityArtworkUrl(
+      MetadataDetailsService.backdrop(_item, metadataPreferences),
+    );
     return PopScope(
       // While the trailer is fullscreen, Back closes it instead of leaving the
       // page — the same player stays alive and settles back into the backdrop.
@@ -1588,6 +1731,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
   DetailModel _buildDetailModel() {
     return DetailModel(
       item: _item,
+      metadataPreferences: metadataPreferences,
       isMovie: _isMovie,
       isTelevision: widget.isTelevision,
       // Signal keeps the poster-extracted accent, which is what ships today.
@@ -1600,7 +1744,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
       openingDataReady: _showcaseOpeningDataReady,
       primaryLabel: _primaryLabel,
       primaryBusy: _primaryBusy,
-      sourceCount: widget.boundSourceCount?.call(_item) ?? 0,
+      sourceCount: widget.boundSourceCount?.call(widget.item) ?? 0,
       boundSources: _boundSources,
       hasTrailer: _trailerYtId != null,
       trailerBusy: _trailerResolving || _trailerLoading,
@@ -1641,9 +1785,10 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
       onSelectSource: widget.onSelectSource == null
           ? null
           : () async {
-              await widget.onSelectSource!(_item);
+              await widget.onSelectSource!(widget.item);
               if (mounted) setState(() {});
             },
+      onMetadataExplore: _metadataExploreAction,
       onAppMenu: (_appMenuOptions.isNotEmpty && widget.onTraktAction != null)
           ? _showAppActionsMenu
           : null,
@@ -1713,12 +1858,12 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
       onManageSources: widget.onSelectSource == null
           ? null
           : () async {
-              await widget.onSelectSource!(_item);
+              await widget.onSelectSource!(widget.item);
               if (!mounted) return;
               setState(() {});
               await _loadBoundSources();
             },
-      onRecommendationTap: widget.onRecommendationTap,
+      onRecommendationTap: widget.onRecommendationTap == null ? null : _openMetadataRecommendation,
       onAmbientStill: (url) {
         if (!mounted || _focusedStillUrl == url) return;
         setState(() => _focusedStillUrl = url);
@@ -2019,9 +2164,11 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
     final t = _tight;
     final rating = extra?.rating ?? item.imdbRating;
     final year = item.year ?? extra?.year;
-    final genres = (item.genres?.isNotEmpty ?? false)
-        ? item.genres!
-        : (extra?.genres ?? const []);
+    final genres = MetadataDetailsService.informationGenres(
+      item,
+      extra,
+      metadataPreferences,
+    );
     final summary = (item.description?.isNotEmpty ?? false)
         ? item.description
         : extra?.plot;
@@ -2143,9 +2290,11 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
     final extra = _imdbExtra;
     final rating = extra?.rating ?? item.imdbRating;
     final year = item.year ?? extra?.year;
-    final genres = (item.genres?.isNotEmpty ?? false)
-        ? item.genres!
-        : (extra?.genres ?? const []);
+    final genres = MetadataDetailsService.informationGenres(
+      item,
+      extra,
+      metadataPreferences,
+    );
 
     // No boxed hero image: the page already paints one continuous full-bleed
     // backdrop (HeroTrailerBackdrop + dark tint) behind everything — exactly
@@ -2247,7 +2396,11 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
       parts.add(w);
     }
 
-    final runtime = extra?.runtime;
+    final runtime = MetadataDetailsService.informationRuntime(
+      _item,
+      extra,
+      metadataPreferences,
+    );
     if (runtime != null) add(_metaText(runtime));
     if (year != null && year.isNotEmpty) add(_metaText(year));
     final cert = extra?.certificate;
@@ -2457,7 +2610,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
   }
 
   Widget _buildActionRow() {
-    final count = widget.boundSourceCount?.call(_item) ?? 0;
+    final count = widget.boundSourceCount?.call(widget.item) ?? 0;
     return Focus(
       canRequestFocus: false,
       skipTraversal: true,
@@ -2530,13 +2683,16 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
             // auto-focus and no Play to autofocus — start the remote here.
             autofocus: widget.isTelevision && _isMovie && !widget.showQuickPlay,
             onTap: () async {
-              await widget.onSelectSource!(_item);
+              await widget.onSelectSource!(widget.item);
               if (mounted) setState(() {});
             },
           ),
         // Debrify's own actions (bind source, Stremio TV, random episode,
         // season packs, local Continue Watching) — no tracker involved, so a
         // neutral button rather than a branded one.
+        if (_metadataExploreAction != null)
+          _RoundIconButton(icon: Icons.explore_outlined, tooltip: 'Explore',
+            onTap: _metadataExploreAction!),
         if (_appMenuOptions.isNotEmpty && widget.onTraktAction != null)
           _RoundIconButton(
             icon: Icons.more_horiz_rounded,
@@ -3065,6 +3221,9 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
         ..add(const SizedBox(height: 22));
     }
 
+    sections.add(MetadataFranchiseRail(item: _item,
+      onOpen: widget.onRecommendationTap == null ? null : _openMetadataRecommendation, isTelevision: widget.isTelevision));
+
     // More Like This — placed high (right after Cast) so it's an easy DPAD-down
     // reach, ahead of the long focusable Parents-Guide list.
     final recs = (_recommendations ?? const <StremioMeta>[]).take(10).toList();
@@ -3149,7 +3308,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
   Widget _recCard(StremioMeta rec) => _RecCard(
     rec: rec,
     fallback: _glass2,
-    onTap: () => widget.onRecommendationTap?.call(rec),
+    onTap: () => _openMetadataRecommendation(rec),
   );
 
   Widget _sectionLabel(String s) => Text(

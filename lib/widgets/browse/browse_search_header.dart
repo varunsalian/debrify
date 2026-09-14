@@ -74,6 +74,10 @@ class BrowseSearchHeader extends StatefulWidget {
   /// invisible.
   final Color? keyboardInkOnAccent;
 
+  /// Outer spacing around the field. Spotlight narrows this inside its source
+  /// rail; every existing caller keeps the shipped spacing by default.
+  final EdgeInsetsGeometry padding;
+
   const BrowseSearchHeader({
     super.key,
     required this.controller,
@@ -90,6 +94,7 @@ class BrowseSearchHeader extends StatefulWidget {
     this.keyboardGround,
     this.keyboardInk,
     this.keyboardInkOnAccent,
+    this.padding = const EdgeInsets.fromLTRB(20, 14, 20, 10),
   });
 
   @override
@@ -128,7 +133,7 @@ class _BrowseSearchHeaderState extends State<BrowseSearchHeader> {
     final hasText = widget.controller.text.isNotEmpty;
     final ink = widget.ink;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 14, 20, 10),
+      padding: widget.padding,
       child: TvTextField(
         controller: widget.controller,
         focusNode: widget.focusNode,

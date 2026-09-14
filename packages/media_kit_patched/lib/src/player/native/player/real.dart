@@ -116,9 +116,10 @@ class NativePlayer extends PlatformPlayer {
 
       final closeWakeupCallback = Initializer(mpv).dispose(ctx) ?? () {};
 
-      if (Platform.isIOS) {
-        // tvOS reports itself as iOS through dart:io. Await the worker so
-        // Player.dispose (and Debrify's VideoOutputLease) completes only after
+      if (Platform.isIOS || Platform.isMacOS) {
+        // tvOS reports itself as iOS through dart:io. Await the worker on
+        // Apple platforms so Player.dispose (and Debrify's VideoOutputLease)
+        // completes only after
         // the native output has actually gone away. The main isolate remains
         // free to service VideoOutput's shutdown callbacks meanwhile.
         await completeNativePlayerDisposal(

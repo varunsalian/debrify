@@ -8,6 +8,7 @@ import 'package:debrify/services/profiles/connection_resource_service.dart';
 import 'package:debrify/services/profiles/device_key_provider.dart';
 import 'package:debrify/services/profiles/profile_authorization.dart';
 import 'package:debrify/services/profiles/profile_bootstrap.dart';
+import 'package:debrify/services/profiles/profile_credential_facade.dart';
 import 'package:debrify/services/profiles/profile_registry.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/profiles/profile_scope.dart';
@@ -215,6 +216,115 @@ void main() {
     expect(await registry.getResource(resource.id), isNotNull);
     expect(await registry.getGrant(memberId, resource.id), isNotNull);
   });
+
+  test('an owner can replace a synced secret-pending credential', () async {
+    const resourceId = 'pending-rd';
+    await registry.applySyncedRegistryDelta(
+      SyncedRegistryDelta(
+        resources: <SyncedRegistryResourceRecord>[
+          SyncedRegistryResourceRecord(
+            resource: ConnectionResource(
+              id: resourceId,
+              type: ConnectionResourceType.realDebrid,
+              label: 'Pending Real-Debrid',
+              ownerProfileId: adminId,
+              publicConfig: const <String, dynamic>{'schemaVersion': 1},
+              publicSchemaVersion: 1,
+              authorizationRevision: 1,
+              enabled: true,
+              secretPending: true,
+            ),
+            updatedAtMs: 10,
+          ),
+        ],
+        grants: <SyncedRegistryGrantRecord>[
+          SyncedRegistryGrantRecord(
+            profileId: adminId,
+            resourceId: resourceId,
+            permissions: ResourcePermission.values.fold<int>(
+              0,
+              (mask, permission) => mask | permission.bit,
+            ),
+            updatedAtMs: 11,
+          ),
+        ],
+      ),
+    );
+    await registry.bindResource(
+      profileId: adminId,
+      slot: 'provider.realDebrid',
+      resourceId: resourceId,
+    );
+
+    expect(
+      await ProfileCredentialFacade.write('real_debrid_api_key', 'fresh-key'),
+      isTrue,
+    );
+
+    expect((await registry.getResource(resourceId))!.secretPending, isFalse);
+    expect(await StorageService.getApiKey(), 'fresh-key');
+    expect(await StorageService.hasRealDebridCredential(), isTrue);
+  });
+
+  test(
+    'pending shared credential field removal updates instead of deleting',
+    () async {
+      const resourceId = 'pending-shared-rd';
+      await registry.applySyncedRegistryDelta(
+        SyncedRegistryDelta(
+          resources: <SyncedRegistryResourceRecord>[
+            SyncedRegistryResourceRecord(
+              resource: ConnectionResource(
+                id: resourceId,
+                type: ConnectionResourceType.realDebrid,
+                label: 'Pending shared Real-Debrid',
+                ownerProfileId: adminId,
+                publicConfig: const <String, dynamic>{'schemaVersion': 1},
+                publicSchemaVersion: 1,
+                authorizationRevision: 1,
+                enabled: true,
+                secretPending: true,
+              ),
+              updatedAtMs: 10,
+            ),
+          ],
+          grants: <SyncedRegistryGrantRecord>[
+            SyncedRegistryGrantRecord(
+              profileId: adminId,
+              resourceId: resourceId,
+              permissions: ResourcePermission.values.fold<int>(
+                0,
+                (mask, permission) => mask | permission.bit,
+              ),
+              updatedAtMs: 11,
+            ),
+            SyncedRegistryGrantRecord(
+              profileId: memberId,
+              resourceId: resourceId,
+              permissions: ResourcePermission.use.bit,
+              updatedAtMs: 12,
+            ),
+          ],
+        ),
+      );
+      await registry.bindResource(
+        profileId: adminId,
+        slot: 'provider.realDebrid',
+        resourceId: resourceId,
+      );
+
+      expect(
+        await ProfileCredentialFacade.remove('real_debrid_api_key'),
+        isTrue,
+      );
+
+      final resource = await registry.getResource(resourceId);
+      expect(resource, isNotNull);
+      expect(resource!.secretPending, isFalse);
+      expect(await registry.getGrant(memberId, resourceId), isNotNull);
+      expect(await StorageService.getApiKey(), isNull);
+    },
+  );
 
   test(
     'unshared owner logout deletes resource then permits remote revoke',

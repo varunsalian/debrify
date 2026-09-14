@@ -38,6 +38,21 @@ final Color kSettingsDim2 = Colors.white.withValues(alpha: 0.28);
 /// edge-to-edge on TV/desktop.
 const double kSettingsMaxWidth = 720;
 
+class WebDavSyncPendingBadge extends StatelessWidget {
+  const WebDavSyncPendingBadge({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Icon(
+      Icons.chevron_right_rounded,
+      size: 20,
+      color:
+          IconTheme.of(context).color ??
+          AppThemeScope.of(context).settings.dim2,
+    );
+  }
+}
+
 /// Uniform monochrome initials chip for a connection provider ("RD", "JP").
 /// Replaces the old per-provider colored gradient icon boxes — status is
 /// carried by the dot/text instead, keeping the chrome calm like Stremio.
@@ -78,15 +93,30 @@ class SettingsRowContent {
 
 /// Single source of truth for every settings row's icon + copy.
 abstract final class SettingsRows {
+  static const metadata = SettingsRowContent(
+    icon: Icons.info_outline_rounded,
+    title: 'Metadata',
+    subtitle: 'Providers, artwork, languages & discovery',
+  );
   static const homePage = SettingsRowContent(
     icon: Icons.home_rounded,
     title: 'Home Screen',
     subtitle: 'Layout, rows, trailer & continue watching',
   );
+  static const collections = SettingsRowContent(
+    icon: Icons.collections_bookmark_rounded,
+    title: 'Collections',
+    subtitle: 'Import Nuvio-style folder collections as Home rows',
+  );
+  static const badges = SettingsRowContent(
+    icon: Icons.sell_rounded,
+    title: 'Badges',
+    subtitle: 'Import and manage stream badge rules',
+  );
   static const player = SettingsRowContent(
     icon: Icons.play_circle_outline_rounded,
     title: 'Playback',
-    subtitle: 'Player, skip segments, subtitles, audio & VR',
+    subtitle: 'Player, video, audio & subtitles',
   );
   static const remote = SettingsRowContent(
     icon: Icons.phonelink_rounded,
@@ -186,6 +216,12 @@ abstract final class SettingsRows {
     subtitle: '',
   );
   // Subtitle is dynamic (the chosen layout) — passed per call site.
+  static const collectionListStyle = SettingsRowContent(
+    icon: Icons.view_carousel_outlined,
+    title: 'Collection list style',
+    subtitle: '',
+  );
+
   static const discoverLayout = SettingsRowContent(
     icon: Icons.explore_rounded,
     title: 'Discover Layout',
@@ -329,17 +365,37 @@ abstract final class SettingsRows {
   static const createBackup = SettingsRowContent(
     icon: Icons.save_alt_rounded,
     title: 'Create Backup',
-    subtitle: 'Save services, addons, and search engines to a file',
+    subtitle: 'Back up all profiles and shared connections (Admin)',
   );
   static const restoreBackup = SettingsRowContent(
     icon: Icons.restore_rounded,
     title: 'Restore from Backup',
     subtitle: 'Import services and addons from a backup file',
   );
+  static const syncAndMigrate = SettingsRowContent(
+    icon: Icons.sync_alt_rounded,
+    title: 'Sync and Migrate',
+    subtitle: 'Sync across devices with WebDAV',
+  );
+  static const enableWebDavSync = SettingsRowContent(
+    icon: Icons.sync_rounded,
+    title: 'Enable WebDAV Sync',
+    subtitle: 'Keep supported profile state in one WebDAV account',
+  );
+  static const createWebDavBackup = SettingsRowContent(
+    icon: Icons.cloud_upload_outlined,
+    title: 'Save backup to WebDAV',
+    subtitle: 'Save an encrypted backup of all profiles (Admin)',
+  );
+  static const restoreWebDavBackup = SettingsRowContent(
+    icon: Icons.cloud_download_outlined,
+    title: 'Restore backup from WebDAV',
+    subtitle: 'Choose an encrypted profile package on your server',
+  );
   static const exportDiagnosticLogs = SettingsRowContent(
     icon: Icons.bug_report_outlined,
     title: 'Export Diagnostic Logs',
-    subtitle: 'Save privacy-filtered logs from the last 2 hours',
+    subtitle: 'Save recent logs (2h) and critical events (24h)',
   );
   static const resetDebrify = SettingsRowContent(
     icon: Icons.warning_rounded,
@@ -2151,14 +2207,23 @@ class _SettingsTileState extends State<SettingsTile> {
                       ],
                     ),
                   ),
-                  widget.trailing ??
-                      Icon(
-                        Icons.chevron_right_rounded,
-                        size: 20,
+                  if (widget.trailing case final trailing?)
+                    IconTheme.merge(
+                      data: IconThemeData(
                         color: inverse
                             ? foreground.withValues(alpha: 0.42)
                             : t.dim2,
                       ),
+                      child: trailing,
+                    )
+                  else
+                    Icon(
+                      Icons.chevron_right_rounded,
+                      size: 20,
+                      color: inverse
+                          ? foreground.withValues(alpha: 0.42)
+                          : t.dim2,
+                    ),
                 ],
               ),
             ),

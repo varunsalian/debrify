@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../models/profiles/connection_resource.dart';
+import '../../models/subtitle_source_priority.dart';
 import '../../models/profiles/profile_policy.dart';
 import 'connection_resource_service.dart';
 import 'profile_collection_resource_facade.dart';
@@ -235,6 +236,9 @@ class NativeProfileProjection {
         manifestUrl.isNotEmpty && !hasStoredBaseUrl && resources.isEmpty;
     return <String, Object?>{
       'id': id?.isNotEmpty == true ? id! : manifestUrl,
+      'subtitle_priority_id': SubtitleSourcePriority.configurationId(
+        manifestUrl,
+      ),
       'name': rawName?.isNotEmpty == true
           ? rawName!
           : (host.isNotEmpty ? host : 'Stremio addon'),

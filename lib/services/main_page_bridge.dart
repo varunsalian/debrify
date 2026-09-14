@@ -6,6 +6,15 @@ import 'package:flutter/foundation.dart';
 import '../models/advanced_search_selection.dart';
 import '../models/rd_torrent.dart';
 import '../models/torbox_torrent.dart';
+import 'home_return_cache.dart';
+
+typedef SyncedProfileOutcomeApply = Future<void> Function();
+typedef SyncedProfileRetirementHandoff =
+    Future<bool> Function(
+      String profileId, {
+      required bool delete,
+      required SyncedProfileOutcomeApply applyOutcome,
+    });
 
 /// Stable page identities for [MainPageBridge.switchTab], deep links and the
 /// nav — indices into main.dart's `_pages`/`_titles`, NEVER visible-nav
@@ -54,6 +63,10 @@ class MainPageBridge {
 
   static VoidCallback? showProfilePicker;
   static ValueChanged<String>? switchProfile;
+
+  /// Gate-owned handoff for a circle value which makes the active profile
+  /// ineligible. Returns true only after the deferred delete/disable lands.
+  static SyncedProfileRetirementHandoff? retireProfileFromSync;
 
   /// Re-reads the ACTIVE profile's policy into MainPage's tab gating and the
   /// ProfilePolicyGuard sync mirror. Editing screens call this after saving
@@ -118,6 +131,39 @@ class MainPageBridge {
   /// labels change. MainPage re-reads the atomic configuration and rebuilds
   /// both sidebar variants without disturbing routing or visibility policy.
   static VoidCallback? sidebarConfigurationChanged;
+
+  /// Reloads the mounted Playlist tab after recurring sync changes its
+  /// profile-backed items or favourites.
+  static final Set<Future<void> Function()> _playlistChangeListeners = {};
+
+  static void addPlaylistChangeListener(Future<void> Function() listener) {
+    _playlistChangeListeners.add(listener);
+  }
+
+  static void removePlaylistChangeListener(Future<void> Function() listener) {
+    _playlistChangeListeners.remove(listener);
+  }
+
+  static Future<void> notifyPlaylistChanged() async {
+    final listeners = List<Future<void> Function()>.from(
+      _playlistChangeListeners,
+    );
+    await Future.wait<void>(
+      listeners.map((listener) async {
+        try {
+          await listener();
+        } catch (error) {
+          // A stale or failed mounted consumer must not prevent the other
+          // playlist surfaces from observing the committed sync revision.
+          debugPrint(
+            'MainPageBridge: playlist refresh listener failed '
+            '(${error.runtimeType})',
+          );
+        }
+      }),
+    );
+  }
+
   static void Function(RDTorrent torrent)? openDebridOptions;
   static void Function(TorboxTorrent torrent)? openTorboxFolder;
   static void Function(String fileId, String folderName)? openPikPakFolder;
@@ -261,8 +307,12 @@ class MainPageBridge {
   /// Tab handlers registered by key (e.g., "realdebrid", "torbox", "pikpak")
   static final Map<String, bool Function()> _tabHandlers = {};
 
-  /// Currently active tab key
-  static String? _activeTabKey;
+  static final _activeTabKey = ValueNotifier<String?>(null);
+
+  /// The selected tab's back-routing key, or null for tabs without a handler.
+  /// Published before the outgoing page is unmounted, so async actions can
+  /// cancel as soon as the user leaves their tab.
+  static ValueListenable<String?> get activeTab => _activeTabKey;
 
   /// Stack of handlers for pushed routes (on top of tab screens)
   static final List<bool Function()> _pushedRouteStack = [];
@@ -285,7 +335,7 @@ class MainPageBridge {
 
   /// Set the currently active tab. Call from main.dart when tab changes.
   static void setActiveTab(String? key) {
-    _activeTabKey = key;
+    _activeTabKey.value = key;
   }
 
   /// Push a handler for a pushed route. Call in initState of pushed screens.
@@ -311,8 +361,9 @@ class MainPageBridge {
     }
 
     // Then, check the active tab's handler
-    if (_activeTabKey != null && _tabHandlers.containsKey(_activeTabKey)) {
-      return _tabHandlers[_activeTabKey]!();
+    final key = _activeTabKey.value;
+    if (key != null && _tabHandlers.containsKey(key)) {
+      return _tabHandlers[key]!();
     }
 
     return false;
@@ -330,6 +381,7 @@ class MainPageBridge {
   }
 
   static void notifyIntegrationChanged() {
+    HomeReturnCache.invalidate();
     for (final listener in List<VoidCallback>.from(_integrationListeners)) {
       listener();
     }
@@ -347,6 +399,7 @@ class MainPageBridge {
   }
 
   static void notifyHomeSettingsChanged() {
+    HomeReturnCache.invalidate();
     for (final listener in List<VoidCallback>.from(_homeSettingsListeners)) {
       listener();
     }
@@ -365,6 +418,8 @@ class MainPageBridge {
   }
 
   static final Set<VoidCallback> _playerLaunchListeners = {};
+  static final Set<VoidCallback> _contentPlaybackStopListeners = {};
+  static bool _contentPlaybackActive = false;
 
   /// Notified right before the real content player launches (movie/series),
   /// on every path — in-app route, native TV activity, or external app.
@@ -376,12 +431,48 @@ class MainPageBridge {
     _playerLaunchListeners.remove(listener);
   }
 
+  /// Completion signal shared by in-app and external content players.
+  static void addContentPlaybackStopListener(VoidCallback listener) {
+    _contentPlaybackStopListeners.add(listener);
+  }
+
+  static void removeContentPlaybackStopListener(VoidCallback listener) {
+    _contentPlaybackStopListeners.remove(listener);
+  }
+
+  static void notifyContentPlaybackStopped() {
+    if (!_contentPlaybackActive) return;
+    _contentPlaybackActive = false;
+    for (final listener in List.of(_contentPlaybackStopListeners)) {
+      listener();
+    }
+  }
+
+  /// Human handoff moments inside playback — pause, a settled seek, an
+  /// explicit checkpoint save. Listeners (WebDAV sync) may flush immediately.
+  static final Set<VoidCallback> _playbackCheckpointListeners = {};
+
+  static void addPlaybackCheckpointListener(VoidCallback listener) {
+    _playbackCheckpointListeners.add(listener);
+  }
+
+  static void removePlaybackCheckpointListener(VoidCallback listener) {
+    _playbackCheckpointListeners.remove(listener);
+  }
+
+  static void notifyPlaybackCheckpoint() {
+    for (final listener in List.of(_playbackCheckpointListeners)) {
+      listener();
+    }
+  }
+
   /// [isTrailer] true for a trailer launch: it still hides the auto-launch
   /// overlay, but does NOT fire the content-launch listeners — watching a
   /// trailer must not suppress the ambient trailer backdrop.
   static void notifyPlayerLaunching({bool isTrailer = false}) {
     hideAutoLaunchOverlay?.call();
     if (isTrailer) return;
+    _contentPlaybackActive = true;
     // Copy so a listener removing itself mid-iteration can't break the loop.
     for (final listener in List.of(_playerLaunchListeners)) {
       listener();
@@ -430,11 +521,40 @@ class MainPageBridge {
     for (final listener in List.of(_playbackReturnListeners)) {
       listener();
     }
+    notifyContentPlaybackStopped();
+  }
+
+  /// Re-read playback-derived UI after a committed background materialization
+  /// without claiming that an active mobile playback session stopped.
+  static void notifyPlaybackDataChanged() {
+    for (final listener in List.of(_playbackReturnListeners)) {
+      listener();
+    }
+  }
+
+  // Debrify TV has one mounted library surface. Keep this hook deliberately
+  // narrower than the generic playback-return listeners: a remote channel or
+  // pool apply only asks that screen to invalidate its private DB mirrors.
+  static VoidCallback? _debrifyTvLibraryListener;
+
+  static void registerDebrifyTvLibraryListener(VoidCallback listener) {
+    _debrifyTvLibraryListener = listener;
+  }
+
+  static void unregisterDebrifyTvLibraryListener(VoidCallback listener) {
+    if (_debrifyTvLibraryListener == listener) {
+      _debrifyTvLibraryListener = null;
+    }
+  }
+
+  static void notifyDebrifyTvLibraryChanged() {
+    _debrifyTvLibraryListener?.call();
   }
 
   static void notifyAutoLaunchFailed([String? reason]) {
     debugPrint('MainPageBridge: Auto-launch failed: $reason');
     hideAutoLaunchOverlay?.call();
+    notifyContentPlaybackStopped();
   }
 
   // Store a Debrify TV channel ID that should be auto-played when DebrifyTVScreen initializes

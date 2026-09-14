@@ -37,6 +37,7 @@ void main() {
     NativeProfileProjection.debugAfterInvalidation = null;
     NativeProfileProjection.debugBeforeAddonRead = null;
     ProfileNativeLockBridge.debugReset();
+    ProfilePreferences.webDavSyncLocalChangeSink = null;
     ProfileLockController.instance.dispose();
     ProfileRuntime.debugReset();
     temporaryDirectory = await Directory.systemTemp.createTemp(
@@ -69,6 +70,7 @@ void main() {
     NativeProfileProjection.debugAfterInvalidation = null;
     NativeProfileProjection.debugBeforeAddonRead = null;
     ProfileNativeLockBridge.debugReset();
+    ProfilePreferences.webDavSyncLocalChangeSink = null;
     ProfileLockController.instance.dispose();
     await NativeProfileProjection.clear();
     ProfileRuntime.debugReset();
@@ -123,6 +125,10 @@ void main() {
 
       final profilePrefs = await ProfilePreferences.instance();
       await profilePrefs.setString('player_default_subtitle_language', 'es');
+      await profilePrefs.setString(
+        'subtitle_source_priority_v1',
+        '["addon:config-b","embedded"]',
+      );
       await profilePrefs.setString('player_default_audio_language', 'ja');
       await profilePrefs.setInt('subtitle_color_index', 3);
       await profilePrefs.setBool('subtitle_bold', true);
@@ -134,6 +140,10 @@ void main() {
               as Map<String, dynamic>;
       var values = projection['values'] as Map<String, dynamic>;
       expect(values['player_default_subtitle_language'], 'es');
+      expect(
+        values['subtitle_source_priority_v1'],
+        '["addon:config-b","embedded"]',
+      );
       expect(values['player_default_audio_language'], 'ja');
       expect(values['subtitle_color_index'], 3);
       expect(values['subtitle_bold'], isTrue);
@@ -156,6 +166,9 @@ void main() {
     await NativeProfileProjection.publish(scope);
 
     var publications = 0;
+    final syncSignals = <String>[];
+    ProfilePreferences.webDavSyncLocalChangeSink = (_, key) =>
+        syncSignals.add(key);
     NativeProfileProjection.debugAfterInvalidation = (_) async {
       publications++;
     };
@@ -166,6 +179,8 @@ void main() {
         'subtitle_color_index': 2,
         'subtitle_bold': true,
         'subtitle_selected_font_id': 'roboto',
+        'subtitle_elevation_index': 0,
+        'subtitle_extreme_bottom_default_adopted_v1': true,
       }),
       isTrue,
     );
@@ -180,6 +195,18 @@ void main() {
     expect(values['subtitle_color_index'], 2);
     expect(values['subtitle_bold'], isTrue);
     expect(values['subtitle_selected_font_id'], 'roboto');
+    expect(values['subtitle_elevation_index'], 0);
+    expect(values['subtitle_extreme_bottom_default_adopted_v1'], isTrue);
+    expect(
+      syncSignals,
+      unorderedEquals(<String>[
+        'subtitle_size_index',
+        'subtitle_color_index',
+        'subtitle_bold',
+        'subtitle_selected_font_id',
+        'subtitle_elevation_index',
+      ]),
+    );
   });
 
   test('a profile switch cannot relabel an in-flight addon read', () async {

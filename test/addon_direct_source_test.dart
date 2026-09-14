@@ -349,7 +349,7 @@ void main() {
     expect(stored.single.streamKey, 'valid-later-switch');
   });
 
-  test('fresh direct matcher prefers profile then original response index', () {
+  test('fresh direct matcher only uses position within a matching profile', () {
     final sources = [
       direct(url: 'https://fresh.test/a', key: 'other', index: 0),
       direct(url: 'https://fresh.test/b', key: 'wanted', index: 4),
@@ -370,7 +370,7 @@ void main() {
         streamKey: 'changed-for-next-episode',
         streamIndex: 4,
       )?.directUrl,
-      'https://fresh.test/b',
+      isNull,
     );
   });
 

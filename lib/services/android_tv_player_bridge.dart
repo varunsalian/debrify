@@ -1,3 +1,6 @@
+import 'stream_badges_service.dart';
+import 'stream_badge_matcher.dart';
+import 'player_visibility.dart';
 import 'dart:async';
 import 'dart:io';
 
@@ -7,6 +10,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/material.dart' show debugPrint;
 
 import '../utils/format_tag_detector.dart';
+import '../utils/stream_badge_appearance.dart';
 import '../utils/movie_parser.dart';
 import '../utils/series_parser.dart';
 import 'analytics_service.dart';
@@ -20,6 +24,11 @@ import 'stremio_service.dart';
 import 'subtitle_font_service.dart';
 import 'profiles/profile_preferences.dart';
 import 'profiles/profile_runtime.dart';
+import 'profiles/profile_lock_controller.dart';
+import 'profiles/profile_session_memory.dart';
+import 'native_playback_progress_session.dart';
+import 'diagnostic_log.dart';
+import 'tv_playback_recovery.dart';
 
 typedef StreamNextProvider = Future<Map<String, String>?> Function();
 typedef TorboxNextProvider = StreamNextProvider; // Backward compatibility
@@ -112,7 +121,6 @@ class AndroidTvPlayerBridge {
   static ChannelByIdSwitchProvider? _channelByIdSwitchProvider;
   static PlaybackFinishedCallback? _playbackFinishedCallback;
   static bool _handlerInitialized = false;
-  static AndroidTvProgressCallback? _torrentProgressCallback;
   static PlaybackFinishedCallback? _torrentFinishedCallback;
   static TorrentStreamProvider? _torrentStreamProvider;
   static MovieMetadataProvider? _movieMetadataProvider;
@@ -121,8 +129,21 @@ class AndroidTvPlayerBridge {
   _sourcePlaylistResolver;
   static Future<void> Function(int)? _stremioSourceCommitter;
   static PlaybackFinishedCallback? _startupSourcesExhaustedCallback;
-  static int _nextSourcePersistenceSessionId = 0;
   static _StremioSourcePersistenceSession? _sourcePersistenceSession;
+  static NativePlaybackProgressSession? _progressSession;
+  static Future<void> _progressDrain = Future<void>.value();
+  static Object _beginNativePlayback() {
+    final owner = ProfileLockController.instance.beginNativePlayback();
+    PlayerVisibility.opened(owner);
+    return owner;
+  }
+
+  static void _endNativePlayback(Object owner) {
+    PlayerVisibility.closed(owner);
+    ProfileLockController.instance.endNativePlayback(owner);
+  }
+
+  static Object? _nativePlaybackLockOwner;
   // Series source tabs: fetches the not-yet-loaded category ('packs' |
   // 'episodes') for the currently playing season/episode and returns the full
   // updated source list + fetch flags.
@@ -212,6 +233,7 @@ class AndroidTvPlayerBridge {
       }
       if (elevation is int) {
         update['subtitle_elevation_index'] = elevation.clamp(0, 5);
+        update['subtitle_extreme_bottom_default_adopted_v1'] = true;
       }
       if (bold is bool) update['subtitle_bold'] = bold;
       if (fontId is String && fontId.isNotEmpty) {
@@ -272,6 +294,46 @@ class AndroidTvPlayerBridge {
     }
     _channel.setMethodCallHandler((call) async {
       switch (call.method) {
+        case 'requestStreamBadges':
+          final args = call.arguments;
+          final session = _sourcePersistenceSession;
+          if (args is! Map ||
+              session == null ||
+              args['sourcePersistenceSessionId'] != session.id ||
+              args['name'] is! String) {
+            return null;
+          }
+          final scope = ProfileRuntime.scope.value;
+          await StreamBadgesService.instance.warmUp();
+          if (!identical(session, _sourcePersistenceSession) ||
+              scope != ProfileRuntime.scope.value) {
+            return null;
+          }
+          final activeMatcher = StreamBadgesService.instance.matcher.value;
+          final result = await activeMatcher.matchResultFor(
+            name: args['name'] as String,
+            description: args['description'] is String
+                ? args['description'] as String
+                : null,
+          );
+          if (!identical(session, _sourcePersistenceSession) ||
+              scope != ProfileRuntime.scope.value ||
+              !identical(
+                activeMatcher,
+                StreamBadgesService.instance.matcher.value,
+              )) {
+            return null;
+          }
+          return {
+            'configured': !activeMatcher.isEmpty,
+            'badges': result.status != StreamBadgeMatchStatus.resolved
+                ? null
+                : [
+                    for (final rule in result.badges)
+                      StreamBadgeAppearance(rule).nativeBadge(rule),
+                  ],
+          };
+
         case 'requestTorboxNext':
         case 'requestRealDebridNext':
         case 'requestStreamNext':
@@ -377,6 +439,24 @@ class AndroidTvPlayerBridge {
             }
           }
           return null;
+        case 'torrentPlaybackActivityState':
+          final state = call.arguments;
+          final sessionId = _sourcePersistenceSession?.id;
+          if (state is! Map ||
+              sessionId == null ||
+              state['sourcePersistenceSessionId'] != sessionId) {
+            return false;
+          }
+          if (state['active'] == true) {
+            _nativePlaybackLockOwner ??= _beginNativePlayback();
+          } else {
+            final owner = _nativePlaybackLockOwner;
+            _nativePlaybackLockOwner = null;
+            if (owner != null) {
+              _endNativePlayback(owner);
+            }
+          }
+          return true;
         case 'torrentPlaybackProgress':
           // Keep the analytics session alive during native TV playback (the
           // Flutter UI is backgrounded, so this progress ping is our activity
@@ -387,21 +467,10 @@ class AndroidTvPlayerBridge {
               (call.arguments as Map)['isPlaying'] == true) {
             _maybeSendPlaybackHeartbeat('android_tv');
           }
-          final handler = _torrentProgressCallback;
-          if (handler == null) {
-            return null;
-          }
           final args = call.arguments;
-          if (args is Map) {
-            try {
-              await handler(Map<String, dynamic>.from(args));
-            } catch (e, stack) {
-              debugPrint(
-                'AndroidTvPlayerBridge: progress callback error $e\n$stack',
-              );
-            }
-          }
-          return null;
+          final session = _progressSession;
+          if (session == null || args is! Map) return false;
+          return session.enqueue(Map<String, dynamic>.from(args));
         case 'requestStremioSourceResolve':
           debugPrint(
             'AndroidTvPlayerBridge: requestStremioSourceResolve received - args: ${call.arguments}',
@@ -743,12 +812,27 @@ class AndroidTvPlayerBridge {
           }
           _lastPlaybackHeartbeat =
               null; // reset so the next watch isn't throttled
+          final finishedProgress = _progressSession;
+          _progressDrain = finishedProgress?.closeAndDrain() ?? _progressDrain;
+          final finishedDrain = _progressDrain;
+          _progressSession = null;
+          final lockOwner = _nativePlaybackLockOwner;
+          _nativePlaybackLockOwner = null;
+          if (lockOwner != null) {
+            _endNativePlayback(lockOwner);
+          }
+          DiagnosticLog.instance.recordEvent(
+            source: 'android_tv_bridge',
+            durable: true,
+            event: 'playback_finished_received',
+            fields: <String, Object?>{'session': finishedSessionId},
+          );
+          await TvPlaybackRecovery.cancelReturn(finishedSessionId);
           final finishedTorrent = _torrentFinishedCallback;
           final startupExhausted =
               finishedArgs is Map &&
               finishedArgs['startupSourcesExhausted'] == true;
           final recoverFromStartupExhaustion = _startupSourcesExhaustedCallback;
-          _torrentProgressCallback = null;
           _torrentFinishedCallback = null;
           _torrentStreamProvider = null;
           _movieMetadataProvider = null;
@@ -766,6 +850,7 @@ class AndroidTvPlayerBridge {
           if (identical(_sourcePersistenceSession, persistenceSession)) {
             _sourcePersistenceSession = null;
           }
+          await finishedDrain;
           if (persistenceSession != null) {
             await persistenceSession.closeAndDrain();
           }
@@ -1617,13 +1702,35 @@ class AndroidTvPlayerBridge {
       return false;
     }
 
+    final sessionId = await TvPlaybackRecovery.allocateSessionId();
+    await _progressDrain;
+    await _progressSession?.closeAndDrain();
     await _sourcePersistenceSession?.closeAndDrain();
-    final persistenceSession = _StremioSourcePersistenceSession(
-      ++_nextSourcePersistenceSessionId,
-    );
+    final oldLockOwner = _nativePlaybackLockOwner;
+    if (oldLockOwner != null) {
+      _endNativePlayback(oldLockOwner);
+    }
+    final lockOwner = _beginNativePlayback();
+    _nativePlaybackLockOwner = lockOwner;
+    final persistenceSession = _StremioSourcePersistenceSession(sessionId);
     _sourcePersistenceSession = persistenceSession;
+    final profileOwner = ProfileSessionMemory.captureOwner();
+    final progressSession = onProgress == null
+        ? null
+        : NativePlaybackProgressSession(
+            id: persistenceSession.id,
+            persist: onProgress,
+            isCurrent: () =>
+                profileOwner == ProfileSessionMemory.captureOwner(),
+          );
+    _progressSession = progressSession;
+    DiagnosticLog.instance.recordEvent(
+      source: 'android_tv_bridge',
+      durable: true,
+      event: 'playback_session_created',
+      fields: <String, Object?>{'session': persistenceSession.id},
+    );
     _ensureInitialized();
-    _torrentProgressCallback = onProgress;
     _torrentFinishedCallback = onFinished;
     _torrentStreamProvider = onRequestStream;
     _movieMetadataProvider = onRequestMovieMetadata;
@@ -1652,6 +1759,15 @@ class AndroidTvPlayerBridge {
       // Add font info to payload
       final payloadWithFont = Map<String, dynamic>.from(payload);
       payloadWithFont['sourcePersistenceSessionId'] = persistenceSession.id;
+      // Native keeps this owner only for the lifetime of the playback return
+      // handoff/checkpoint. It lets a recreated Flutter host prove that it is
+      // continuing the same unlocked profile rather than cold-starting into
+      // an unguarded profile session.
+      if (ProfileRuntime.isProfileCommitted) {
+        final scope = ProfileRuntime.capture();
+        payloadWithFont['playbackOwnerProfileId'] = scope.profileId;
+        payloadWithFont['playbackOwnerDataGeneration'] = scope.dataGeneration;
+      }
       if (fontInfo['customFontPath'] != null) {
         payloadWithFont['customFontPath'] = fontInfo['customFontPath'];
         payloadWithFont['customFontName'] = fontInfo['customFontName'];
@@ -1695,10 +1811,15 @@ class AndroidTvPlayerBridge {
       debugPrint('AndroidTvPlayerBridge: unexpected torrent launch error: $e');
     }
 
+    await progressSession?.closeAndDrain();
+    _endNativePlayback(lockOwner);
+    if (identical(_nativePlaybackLockOwner, lockOwner)) {
+      _nativePlaybackLockOwner = null;
+    }
+    if (identical(_progressSession, progressSession)) _progressSession = null;
     persistenceSession.retire();
     if (identical(_sourcePersistenceSession, persistenceSession)) {
       _sourcePersistenceSession = null;
-      _torrentProgressCallback = null;
       _torrentFinishedCallback = null;
       _stremioSourceCommitter = null;
       _startupSourcesExhaustedCallback = null;
@@ -1790,16 +1911,18 @@ class AndroidTvPlayerBridge {
       debugPrint(
         'AndroidTvPlayerBridge: Pushing ${metadataUpdates.length} metadata updates to native (imdbId=$imdbId)',
       );
-      final bool? success = await _channel
-          .invokeMethod<bool>('updateEpisodeMetadata', {
-            'updates': metadataUpdates,
-            if (imdbId != null) 'imdbId': imdbId,
-            if (guideEpisodes != null && guideEpisodes.isNotEmpty)
-              'guideEpisodes': guideEpisodes,
-            // TVMaze's official show title, for the native OTT dock's
-            // "Show — Episode" identity line.
-            if (showName != null && showName.isNotEmpty) 'showName': showName,
-          });
+      final bool? success = await _channel.invokeMethod<bool>(
+        'updateEpisodeMetadata',
+        {
+          'updates': metadataUpdates,
+          if (imdbId != null) 'imdbId': imdbId,
+          if (guideEpisodes != null && guideEpisodes.isNotEmpty)
+            'guideEpisodes': guideEpisodes,
+          // TVMaze's official show title, for the native OTT dock's
+          // "Show — Episode" identity line.
+          if (showName != null && showName.isNotEmpty) 'showName': showName,
+        },
+      );
       debugPrint('AndroidTvPlayerBridge: Metadata update result: $success');
       return success == true;
     } on PlatformException catch (e) {

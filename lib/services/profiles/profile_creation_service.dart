@@ -51,6 +51,7 @@ class ProfileCreationService {
     'player_night_mode_index',
     'player_system_audio_effects',
     'player_default_subtitle_language',
+    'subtitle_source_priority_v1',
     'player_default_audio_language',
     'subtitle_auto_sync_enabled',
     'iptv_channel_preview_enabled',

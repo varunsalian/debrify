@@ -60,9 +60,18 @@ void main() {
       'Future<void> _saveResume(',
       'bool _tvAutoHideBlocked',
     );
+    // The gate moved into _resumeSaveBlocked when saves became serialized;
+    // the contract follows the indirection: every save path consults the
+    // blocker, and the blocker still enforces the validation gate.
+    final resumeBlocked = _between(
+      flutterPlayer,
+      'bool _resumeSaveBlocked(',
+      'Future<void> _saveResume(',
+    );
 
     expect(ended, contains('if (_validationGateActive) return;'));
-    expect(resume, contains('_validationGateActive'));
+    expect(resume, contains('_resumeSaveBlocked'));
+    expect(resumeBlocked, contains('_validationGateActive'));
     expect(
       flutterPlayer,
       contains('void _resumeTrackingAfterValidationGate()'),

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:debrify/models/indexer_manager_config.dart';
@@ -11,10 +12,13 @@ import 'package:debrify/services/profiles/device_key_provider.dart';
 import 'package:debrify/services/profiles/profile_authorization.dart';
 import 'package:debrify/services/profiles/profile_bootstrap.dart';
 import 'package:debrify/services/profiles/profile_collection_resource_facade.dart';
+import 'package:debrify/services/profiles/profile_credential_facade.dart';
 import 'package:debrify/services/profiles/profile_registry.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/profiles/profile_scope.dart';
+import 'package:debrify/services/pikpak_api_service.dart';
 import 'package:debrify/services/storage_service.dart';
+import 'package:debrify/screens/settings/provider_settings_page.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -193,6 +197,214 @@ void main() {
       );
     },
   );
+
+  test(
+    'secret-pending resource is visible in settings but not selectable',
+    () async {
+      const resourceId = 'pending-webdav';
+      final pending = ConnectionResource(
+        id: resourceId,
+        type: ConnectionResourceType.webDav,
+        label: 'Pending DAV',
+        ownerProfileId: adminId,
+        publicConfig: const <String, dynamic>{'schemaVersion': 1},
+        publicSchemaVersion: 1,
+        authorizationRevision: 1,
+        enabled: true,
+        secretPending: true,
+      );
+      await registry.applySyncedRegistryDelta(
+        SyncedRegistryDelta(
+          resources: <SyncedRegistryResourceRecord>[
+            SyncedRegistryResourceRecord(resource: pending, updatedAtMs: 10),
+          ],
+          grants: <SyncedRegistryGrantRecord>[
+            SyncedRegistryGrantRecord(
+              profileId: adminId,
+              resourceId: resourceId,
+              permissions: ResourcePermission.values.fold<int>(
+                0,
+                (mask, permission) => mask | permission.bit,
+              ),
+              updatedAtMs: 11,
+            ),
+          ],
+          bindings: <SyncedRegistryBindingRecord>[
+            SyncedRegistryBindingRecord(
+              profileId: adminId,
+              slot: 'provider.webDav.legacy',
+              resourceId: resourceId,
+              updatedAtMs: 12,
+            ),
+          ],
+        ),
+      );
+
+      final presence = await ProfileCredentialFacade.isConfigured(
+        'webdav_base_url',
+      );
+      expect(presence.configured, isFalse);
+      expect(presence.pending, isTrue);
+      expect(
+        await ProfileCollectionResourceFacade.read(
+          types: const <ConnectionResourceType>{ConnectionResourceType.webDav},
+          feature: ProfileFeature.cloud,
+        ),
+        isEmpty,
+      );
+      final settings = await ProfileCollectionResourceFacade.read(
+        types: const <ConnectionResourceType>{ConnectionResourceType.webDav},
+        feature: ProfileFeature.cloud,
+        forSettings: true,
+      );
+      expect(settings.single['_connectionResourceSecretPending'], isTrue);
+      expect(settings.single['_connectionResourceCredentialsRedacted'], isTrue);
+
+      const secret = <String, dynamic>{
+        'baseUrl': 'https://dav.invalid/files',
+        'username': 'owner',
+        'password': 'secret',
+      };
+      final sealed = await cipher.seal(
+        utf8.encode(jsonEncode(secret)),
+        associatedData: ConnectionResourceService.associatedDataForSecret(
+          resourceId: resourceId,
+          type: ConnectionResourceType.webDav,
+          ownerProfileId: adminId,
+          publicSchemaVersion: 1,
+          payloadVersion: ConnectionResourceService.secretPayloadVersion,
+        ),
+      );
+      await registry.applySyncedRegistryDelta(
+        SyncedRegistryDelta(
+          resources: <SyncedRegistryResourceRecord>[
+            SyncedRegistryResourceRecord(
+              resource: pending,
+              updatedAtMs: 12,
+              sealedSecretPayload: sealed,
+              secretPayloadVersion:
+                  ConnectionResourceService.secretPayloadVersion,
+              expectedPriorUpdatedAtMs: 10,
+            ),
+          ],
+        ),
+      );
+
+      final completed = await ProfileCredentialFacade.isConfigured(
+        'webdav_base_url',
+      );
+      expect(completed.configured, isTrue);
+      expect(completed.pending, isFalse);
+      expect(
+        (await ProfileCollectionResourceFacade.read(
+          types: const <ConnectionResourceType>{ConnectionResourceType.webDav},
+          feature: ProfileFeature.cloud,
+        )).single['baseUrl'],
+        'https://dav.invalid/files',
+      );
+    },
+  );
+
+  test(
+    'secret-pending PikPak is reported pending and not selectable',
+    () async {
+      const resourceId = 'pending-pikpak';
+      await registry.applySyncedRegistryDelta(
+        SyncedRegistryDelta(
+          resources: <SyncedRegistryResourceRecord>[
+            SyncedRegistryResourceRecord(
+              resource: ConnectionResource(
+                id: resourceId,
+                type: ConnectionResourceType.pikpak,
+                label: 'Pending PikPak',
+                ownerProfileId: adminId,
+                publicConfig: const <String, dynamic>{'schemaVersion': 1},
+                publicSchemaVersion: 1,
+                authorizationRevision: 1,
+                enabled: true,
+                secretPending: true,
+              ),
+              updatedAtMs: 10,
+            ),
+          ],
+          grants: <SyncedRegistryGrantRecord>[
+            SyncedRegistryGrantRecord(
+              profileId: adminId,
+              resourceId: resourceId,
+              permissions: ResourcePermission.values.fold<int>(
+                0,
+                (mask, permission) => mask | permission.bit,
+              ),
+              updatedAtMs: 11,
+            ),
+          ],
+          bindings: <SyncedRegistryBindingRecord>[
+            SyncedRegistryBindingRecord(
+              profileId: adminId,
+              slot: 'provider.pikpak',
+              resourceId: resourceId,
+              updatedAtMs: 12,
+            ),
+          ],
+        ),
+      );
+      await StorageService.setPikPakEnabled(true);
+
+      final presence = await ProfileCredentialFacade.isConfigured(
+        'pikpak_email',
+      );
+
+      expect(presence.pending, isTrue);
+      expect(presence.configured, isFalse);
+      expect(await StorageService.hasPikPakCredential(), isFalse);
+      expect(await StorageService.getPikPakEnabled(), isFalse);
+    },
+  );
+
+  test('PikPak selection requires authentication and a ready secret', () async {
+    await StorageService.setPikPakEmail('ready@example.test');
+    await StorageService.setPikPakAccessToken('access-token');
+    await StorageService.setPikPakRefreshToken('refresh-token');
+    final authenticated = await PikPakApiService.instance.isAuthenticated();
+    final readyPresence = await ProfileCredentialFacade.isConfigured(
+      'pikpak_email',
+    );
+
+    expect(authenticated, isTrue);
+    expect(readyPresence.pending, isFalse);
+    expect(
+      pikPakProviderIsSelectable(
+        isAuthenticated: authenticated,
+        secretPending: readyPresence.pending,
+      ),
+      isTrue,
+    );
+    expect(
+      pikPakProviderIsSelectable(
+        isAuthenticated: authenticated,
+        secretPending: true,
+      ),
+      isFalse,
+      reason: 'authenticated but pending must not be selectable',
+    );
+
+    ProfileRuntime.debugReset();
+    ProfileRuntime.initializeLegacy();
+    await StorageService.setPikPakEmail('restored@example.test');
+    final restoredAuthentication = await PikPakApiService.instance
+        .isAuthenticated();
+
+    expect(await StorageService.getPikPakEmail(), 'restored@example.test');
+    expect(restoredAuthentication, isFalse);
+    expect(
+      pikPakProviderIsSelectable(
+        isAuthenticated: restoredAuthentication,
+        secretPending: false,
+      ),
+      isFalse,
+      reason: 'a restored email without tokens is not authentication',
+    );
+  });
 
   test(
     'confirmed IPTV collection removal revokes borrower grants atomically',
@@ -557,16 +769,16 @@ void main() {
     final existingResourceId = migrated.single.connectionResourceId;
     final existingResourceRevision = migrated.single.connectionResourceRevision;
 
-    // This is the upgrade path that used to fail: the starter is a raw UI
+    // This is the add-provider path that used to fail: the addition is a raw UI
     // model while the existing provider is replaced in the resource graph.
-    final starter = IptvPlaylist(
-      id: 'iptv-org-default',
-      name: 'iptv-org',
-      url: 'https://iptv-org.github.io/iptv/index.m3u',
+    final addition = IptvPlaylist(
+      id: 'new-provider-id',
+      name: 'New provider',
+      url: 'https://iptv.invalid/new.m3u',
       addedAt: DateTime.utc(2026, 8, 14),
     );
     final canonical = await StorageService.setIptvPlaylistsAndReload(
-      <IptvPlaylist>[starter, ...migrated],
+      <IptvPlaylist>[addition, ...migrated],
       forSettings: false,
     );
 
@@ -635,6 +847,92 @@ void main() {
     expect(await StorageService.getWebDavServers(), isEmpty);
     expect(await StorageService.getSelectedWebDavServerId(), isNull);
   });
+
+  test(
+    'WebDAV migration reads use backupRestore independently of cloud',
+    () async {
+      final saved = await StorageService.upsertWebDavServer(
+        const WebDavConfig(
+          id: 'migration-dav',
+          name: 'Migration DAV',
+          baseUrl: 'https://dav.invalid/files',
+          username: 'migration-user',
+          password: 'migration-password',
+        ),
+      );
+      final member = (await registry.getProfile(memberId))!;
+      final actor = await ProfileAuthorizationContext.capture(registry);
+      await registry.updateProfile(
+        id: memberId,
+        policy: ProfilePolicy(
+          enabled: member.policy.enabled.toSet()..remove(ProfileFeature.cloud),
+        ),
+        actingProfileId: actor.profileId,
+        actingAuthorizationRevision: actor.authorizationRevision,
+        actingSessionEpoch: actor.sessionEpoch,
+      );
+      await ConnectionResourceService(registry: registry, cipher: cipher).grant(
+        actor: await ProfileAuthorizationContext.capture(registry),
+        targetProfileId: memberId,
+        resourceId: saved.connectionResourceId!,
+        permissions: const <ResourcePermission>{ResourcePermission.use},
+      );
+      await registry.setActiveProfile(memberId);
+      ProfileRuntime.publish(
+        ProfileScope(profileId: memberId, dataGeneration: 1, sessionEpoch: 2),
+      );
+
+      await expectLater(
+        StorageService.getWebDavServers(forSettings: false),
+        throwsA(isA<ResourceAuthorizationException>()),
+      );
+      final migrationServers = await StorageService.getWebDavServers(
+        forSettings: false,
+        feature: ProfileFeature.backupRestore,
+      );
+      expect(migrationServers, hasLength(1));
+      expect(migrationServers.single.password, 'migration-password');
+      expect(
+        (await StorageService.getSelectedWebDavServer(
+          forSettings: false,
+          feature: ProfileFeature.backupRestore,
+        ))?.connectionResourceId,
+        saved.connectionResourceId,
+      );
+
+      final createdForMigration = await StorageService.upsertWebDavServer(
+        const WebDavConfig(
+          id: 'new-migration-dav',
+          name: 'New migration destination',
+          baseUrl: 'https://new-dav.invalid/files',
+          username: 'new-user',
+          password: 'new-password',
+        ),
+        feature: ProfileFeature.backupRestore,
+      );
+      expect(createdForMigration.connectionResourceId, isNotNull);
+      expect(createdForMigration.password, 'new-password');
+      expect(
+        await StorageService.getWebDavServers(
+          forSettings: false,
+          feature: ProfileFeature.backupRestore,
+        ),
+        hasLength(2),
+      );
+
+      await StorageService.deleteWebDavServer(
+        createdForMigration.id,
+        feature: ProfileFeature.backupRestore,
+      );
+      expect(
+        await StorageService.getWebDavServers(
+          forSettings: false,
+          feature: ProfileFeature.backupRestore,
+        ),
+        hasLength(1),
+      );
+    },
+  );
 
   test(
     'a shared WebDAV connection does not block unrelated mutations',
@@ -780,10 +1078,7 @@ void main() {
     // The reader casts url non-null, so ONE such resource threw for the whole
     // collection and the IPTV page never left its spinner. Migration is a
     // one-way door, so these devices are only reachable from the read side.
-    await ConnectionResourceService(
-      registry: registry,
-      cipher: cipher,
-    ).create(
+    await ConnectionResourceService(registry: registry, cipher: cipher).create(
       context: await ProfileAuthorizationContext.capture(registry),
       type: ConnectionResourceType.iptvXtream,
       label: 'Panel',
@@ -797,9 +1092,7 @@ void main() {
       },
     );
 
-    final playlists = await StorageService.getIptvPlaylists(
-      forSettings: false,
-    );
+    final playlists = await StorageService.getIptvPlaylists(forSettings: false);
     final panel = playlists.singleWhere((p) => p.name == 'Panel');
     expect(panel.url, '');
     expect(panel.serverUrl, 'https://panel.invalid:8080');
@@ -810,10 +1103,7 @@ void main() {
     // The other kind that stores `url: ''` on purpose: an M3U imported from a
     // file keeps its body in `content` (see the IPTV settings page). It hits
     // the same strip as Xtream, so the repair must recognise it too.
-    await ConnectionResourceService(
-      registry: registry,
-      cipher: cipher,
-    ).create(
+    await ConnectionResourceService(registry: registry, cipher: cipher).create(
       context: await ProfileAuthorizationContext.capture(registry),
       type: ConnectionResourceType.iptvM3u,
       label: 'From file',
@@ -825,9 +1115,7 @@ void main() {
       },
     );
 
-    final playlists = await StorageService.getIptvPlaylists(
-      forSettings: false,
-    );
+    final playlists = await StorageService.getIptvPlaylists(forSettings: false);
     final imported = playlists.singleWhere((p) => p.name == 'From file');
     expect(imported.url, '');
     expect(imported.isLocalFile, isTrue);
@@ -836,10 +1124,7 @@ void main() {
   test('a row missing both url and serverUrl is not papered over', () async {
     // The repair is deliberately narrow: genuine corruption must still
     // surface rather than being silently turned into a blank provider.
-    await ConnectionResourceService(
-      registry: registry,
-      cipher: cipher,
-    ).create(
+    await ConnectionResourceService(registry: registry, cipher: cipher).create(
       context: await ProfileAuthorizationContext.capture(registry),
       type: ConnectionResourceType.iptvM3u,
       label: 'Broken',

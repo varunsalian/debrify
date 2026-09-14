@@ -1,5 +1,14 @@
+import '../local_validation_diagnostics.dart';
 import 'dart:convert';
+import 'dart:io';
+
+import 'local_backup/local_backup_archive.dart';
+import 'profile_package_service.dart';
+
+import 'package:crypto/crypto.dart' as crypto;
 import 'dart:math';
+
+import '../../models/home_collection_inventory.dart';
 
 import '../../models/profiles/connection_resource.dart';
 import '../../models/profiles/profile_avatar.dart';
@@ -22,6 +31,8 @@ import 'profile_lifecycle.dart';
 import 'profile_pin_service.dart';
 import 'profile_portable_files.dart';
 import 'profile_preference_portability.dart';
+import 'home_row_preference_ids.dart';
+import 'subtitle_appearance_preferences.dart';
 import 'profile_preferences.dart';
 import 'profile_registry.dart';
 import 'profile_runtime.dart';
@@ -54,6 +65,7 @@ class ProfileGraphRestoreReport {
   final int bindingsImported;
   final int pinResetsRequired;
   final List<String> importedProfileIds;
+  final Map<String, String> importedResourceIdsByBackupId;
 
   const ProfileGraphRestoreReport({
     required this.profilesImported,
@@ -62,6 +74,7 @@ class ProfileGraphRestoreReport {
     required this.bindingsImported,
     required this.pinResetsRequired,
     required this.importedProfileIds,
+    this.importedResourceIdsByBackupId = const <String, String>{},
   });
 }
 
@@ -80,7 +93,19 @@ class ProfileRestoreCoordinator {
   Future<ProfileGraphRestoreReport> restoreDeviceGraph({
     required PortableProfilePackage package,
     required ProfileAuthorizationContext authorization,
+    Set<String> excludedPreferenceKeys = const <String>{},
+    ProfileDatabaseFileResolver? databaseFileResolver,
+    Future<void> Function(
+      Map<String, String>,
+      Map<String, String>,
+      Map<String, int>,
+    )?
+    beforePublish,
   }) async {
+    LocalValidationDiagnostics.event('profile_restore_started', {
+      'profiles': package.profiles.length,
+      'resources': package.resources.length,
+    });
     final actor = await authorization.validate(registry);
     if (actor.role != UserProfileRole.admin ||
         !actor.allows(ProfileFeature.manageProfiles) ||
@@ -113,7 +138,7 @@ class ProfileRestoreCoordinator {
           name.length > 80 ||
           roleName is! String ||
           policySource is! String ||
-          sectionId is! String) {
+          (sectionId != null && sectionId is! String)) {
         throw const FormatException('Invalid imported profile');
       }
       final matchingRole = UserProfileRole.values.where(
@@ -123,19 +148,10 @@ class ProfileRestoreCoordinator {
         throw FormatException('Unknown imported role $roleName');
       }
       final role = matchingRole.first;
-      final section = package.sections[sectionId];
-      if (section is! Map || section['values'] is! Map) {
+      final section = sectionId == null ? null : package.sections[sectionId];
+      if (sectionId != null && (section is! Map || section['values'] is! Map)) {
         throw const FormatException('Imported profile settings are missing');
       }
-      final values = _normalizePreferenceValues(
-        section['values'] as Map,
-        resourceIds: restoreResourceIds.bySourceId,
-        includeCredentialEngineSettings: true,
-        rejectDisallowedKeys:
-            package.sourceVersion >= PortableProfilePackage.version,
-      );
-      _validatePreferenceOverlay(values, includeCredentialEngineSettings: true);
-      StorageService.rearmGhostPurgeForImportedPlayback(values);
       final id = _newId('profile');
       if (profileIds.putIfAbsent(backupId, () => id) != id) {
         throw const FormatException('Duplicate imported profile ID');
@@ -152,7 +168,10 @@ class ProfileRestoreCoordinator {
           wasPinProtected: _optionalBool(record, 'wasPinProtected') ?? false,
           lockOnResume: _optionalBool(record, 'lockOnResume') ?? false,
           inactivityTimeoutMinutes: _optionalInactivityTimeout(record),
-          preferences: values,
+          createdAtMs: switch (record['createdAtMs']) {
+            final int value when value > 0 => value,
+            _ => null,
+          },
         ),
       );
     }
@@ -164,6 +183,7 @@ class ProfileRestoreCoordinator {
     var published = false;
     var publicationUncertain = false;
     var pinResetsRequired = 0;
+    Directory? secretStaging;
     final avatarStages = <ProfilePortableAvatarStage>[];
     final avatarMutationProfiles = <String>{};
     try {
@@ -174,6 +194,7 @@ class ProfileRestoreCoordinator {
           avatarKey: profile.avatarKey,
           role: profile.role,
           policy: profile.policy,
+          createdAtMs: profile.createdAtMs,
           setupComplete: profile.setupComplete,
           // Keep the hidden staging row enabled just long enough to install a
           // carried PIN through the registry's normal credential boundary.
@@ -194,17 +215,41 @@ class ProfileRestoreCoordinator {
           ),
           CapturedProfilePreferenceAccess.restore,
         );
-        for (final entry in profile.preferences.entries) {
-          if (!await _writePreference(preferences, entry.key, entry.value)) {
-            throw StateError('Could not stage imported profile settings');
-          }
-        }
         final sourceBackupId = profileIds.entries
             .singleWhere((entry) => entry.value == profile.id)
             .key;
         final sourceRecord = package.profiles.singleWhere(
           (record) => record['backupId'] == sourceBackupId,
         );
+        final sectionId = sourceRecord['preferencesSection'];
+        final values = _normalizePreferenceValues(
+          sectionId == null
+              ? const <String, Object?>{}
+              : await _preferencesWithCollections(
+                  package.sections[sectionId] as Map,
+                  fileResolver: databaseFileResolver,
+                ),
+          resourceIds: restoreResourceIds.bySourceId,
+          includeCredentialEngineSettings: true,
+          rejectDisallowedKeys:
+              package.sourceVersion >= PortableProfilePackage.version,
+        );
+        // Sync bootstrap can contain appearance values from an older client.
+        // Manual restore leaves this exclusion set empty.
+        values.removeWhere((key, _) => excludedPreferenceKeys.contains(key));
+        if (excludedPreferenceKeys.isNotEmpty) {
+          SubtitleAppearancePreferences.markSyncedElevation(values);
+        }
+        _validatePreferenceOverlay(
+          values,
+          includeCredentialEngineSettings: true,
+        );
+        StorageService.rearmGhostPurgeForImportedPlayback(values);
+        for (final entry in values.entries) {
+          if (!await _writePreference(preferences, entry.key, entry.value)) {
+            throw StateError('Could not stage imported profile settings');
+          }
+        }
         final stagingScope = ProfileScope(
           profileId: profile.id,
           dataGeneration: 1,
@@ -214,6 +259,7 @@ class ProfileRestoreCoordinator {
           package,
           sourceRecord,
           stagingScope,
+          fileResolver: databaseFileResolver,
         );
         if (databasesRestored > 0) {
           await ProfileDatabaseSnapshot.remapResourceReferences(
@@ -289,7 +335,13 @@ class ProfileRestoreCoordinator {
           throw const FormatException('Imported resource ID is missing');
         }
         final secret = _remapJsonMap(
-          _normalizeSecret(type, Map<String, dynamic>.from(secretRecord)),
+          _normalizeSecret(
+            type,
+            await _resolveSecretAttachments(
+              Map<String, dynamic>.from(secretRecord),
+              databaseFileResolver,
+            ),
+          ),
           restoreResourceIds.bySourceId,
         );
         if (_hasNoUsableSecret(secret)) {
@@ -415,6 +467,12 @@ class ProfileRestoreCoordinator {
         }
         grantCount += parsedGrants.length;
         bindingCount += parsedBindings.length;
+        File? sealedFile;
+        if (sealed.length > 64 * 1024) {
+          secretStaging ??= await LocalBackupScratch.create('restore-secrets');
+          sealedFile = File('${secretStaging.path}/$resourceId.enc');
+          await sealedFile.writeAsString(sealed, flush: true);
+        }
         stagedResources.add(
           StagedGraphResource(
             id: resourceId,
@@ -422,7 +480,8 @@ class ProfileRestoreCoordinator {
             label: (record['label'] as String? ?? type.name).trim(),
             ownerProfileId: ownerId,
             publicConfig: publicConfig,
-            sealedSecretPayload: sealed,
+            sealedSecretPayload: sealedFile == null ? sealed : '',
+            sealedSecretFile: sealedFile,
             secretPayloadVersion: 1,
             enabled: !disabled,
             grants: parsedGrants,
@@ -450,6 +509,10 @@ class ProfileRestoreCoordinator {
           profileId: profile.id,
         );
       }
+      await beforePublish?.call(profileIds, restoreResourceIds.byBackupId, {
+        for (final profile in parsedProfiles) profile.id: 1,
+      });
+      await authorization.validate(registry);
       await ProfileAvatarMutation.runExclusiveMany(
         parsedProfiles.map((profile) => profile.id),
         () async {
@@ -510,6 +573,12 @@ class ProfileRestoreCoordinator {
         // Publication is already authoritative. A retained `published` journal
         // is harmless and bootstrap removes it idempotently.
       }
+      LocalValidationDiagnostics.event('graph_restore_finished', {
+        'profiles': parsedProfiles.length,
+        'resources': stagedResources.length,
+        'grants': grantCount,
+        'bindings': bindingCount,
+      });
       return ProfileGraphRestoreReport(
         profilesImported: parsedProfiles.length,
         resourcesImported: stagedResources.length,
@@ -518,6 +587,9 @@ class ProfileRestoreCoordinator {
         pinResetsRequired: pinResetsRequired,
         importedProfileIds: List<String>.unmodifiable(
           parsedProfiles.map((profile) => profile.id),
+        ),
+        importedResourceIdsByBackupId: Map<String, String>.unmodifiable(
+          restoreResourceIds.byBackupId,
         ),
       );
     } catch (_) {
@@ -560,6 +632,8 @@ class ProfileRestoreCoordinator {
         }
       }
       rethrow;
+    } finally {
+      if (secretStaging != null) await LocalBackupScratch.delete(secretStaging);
     }
   }
 
@@ -567,13 +641,28 @@ class ProfileRestoreCoordinator {
   ///
   /// [completeOnboarding] is reserved for the first-run restore entry point;
   /// it makes setup completion part of the generation publication transaction.
+  /// [databaseFileResolver] is the local archive's additive staging hook: it
+  /// maps file-backed database attachment references to already-extracted,
+  /// verified files. Base64 packages ignore it. Authorization, ID remapping,
+  /// rollback, and publication are unchanged either way.
   Future<ProfileRestoreReport> restore({
     required PortableProfilePackage package,
     required String destinationProfileId,
     required ProfileAuthorizationContext authorization,
     bool replacePreferences = false,
     bool completeOnboarding = false,
+    ProfileDatabaseFileResolver? databaseFileResolver,
+    Future<void> Function(
+      Map<String, String>,
+      Map<String, String>,
+      Map<String, int>,
+    )?
+    beforePublish,
   }) async {
+    LocalValidationDiagnostics.event('profile_restore_started', {
+      'profiles': package.profiles.length,
+      'resources': package.resources.length,
+    });
     final actor = await authorization.validate(registry);
     if (actor.id != destinationProfileId) {
       throw StateError('Restore destination must match local authorization');
@@ -598,7 +687,10 @@ class ProfileRestoreCoordinator {
       throw const FormatException('Profile preference section is missing');
     }
     final values = _normalizePreferenceValues(
-      section['values'] as Map,
+      await _preferencesWithCollections(
+        section,
+        fileResolver: databaseFileResolver,
+      ),
       resourceIds: restoreResourceIds.bySourceId,
       includeCredentialEngineSettings: package.mode != 'sanitizedSettings',
       rejectDisallowedKeys:
@@ -650,6 +742,7 @@ class ProfileRestoreCoordinator {
         package,
         profileRecord,
         stagingScope,
+        fileResolver: databaseFileResolver,
       );
       if (databasesRestored > 0) {
         await ProfileDatabaseSnapshot.remapResourceReferences(
@@ -718,7 +811,10 @@ class ProfileRestoreCoordinator {
         final secret = _remapJsonMap(
           _normalizeSecret(
             type,
-            Map<String, dynamic>.from(record['secretConfig'] as Map),
+            await _resolveSecretAttachments(
+              Map<String, dynamic>.from(record['secretConfig'] as Map),
+              databaseFileResolver,
+            ),
           ),
           restoreResourceIds.bySourceId,
         );
@@ -795,6 +891,7 @@ class ProfileRestoreCoordinator {
                 iptvPlaylists: false,
                 iptvFavorites: true,
                 iptvLists: true,
+                streamBadges: true,
                 // Tracking prefs are profile-scoped plain prefs like the IPTV
                 // favorites above — they ride the legacy follow-up, not the
                 // staged-resource path, or a profile import silently resets
@@ -826,6 +923,11 @@ class ProfileRestoreCoordinator {
         );
       }
 
+      await beforePublish?.call(
+        {profileRecord['backupId'] as String: destinationProfileId},
+        restoreResourceIds.byBackupId,
+        {destinationProfileId: staged.generation},
+      );
       // Revalidate the captured role/policy/revision immediately before the
       // one visible-state transaction. The shared avatar queue stays held from
       // live-file installation through registry publication and pruning.
@@ -848,6 +950,10 @@ class ProfileRestoreCoordinator {
           try {
             publishedProfile = await registry.publishDataGeneration(
               profileId: destinationProfileId,
+              onAuthorityCommitted: () {
+                published = true;
+                if (restoringActive) ProfileRuntime.publish(candidate!);
+              },
               baseGeneration: staged.baseGeneration,
               stagedGeneration: staged.generation,
               operationId: operationId,
@@ -932,15 +1038,15 @@ class ProfileRestoreCoordinator {
         }
       });
       if (restoringActive) {
-        ProfileRuntime.publish(candidate!);
         // Global caches/controllers may only warm after registry and runtime
         // publish the candidate. A post-commit failure rolls forward below.
+        final activeCandidate = candidate!;
         for (final participant in lifecycleParticipants) {
-          await participant.initializeCandidate(candidate);
+          await participant.initializeCandidate(activeCandidate);
         }
-        await NativeProfileProjection.publish(candidate);
+        await NativeProfileProjection.publish(activeCandidate);
         for (final participant in lifecycleParticipants) {
-          await participant.didActivate(candidate);
+          await participant.didActivate(activeCandidate);
         }
       }
 
@@ -979,6 +1085,7 @@ class ProfileRestoreCoordinator {
                 iptvPlaylists: false,
                 iptvFavorites: false,
                 iptvLists: false,
+                streamBadges: false,
               ),
               refreshEngineRuntime: restoringActive,
             ),
@@ -1001,6 +1108,11 @@ class ProfileRestoreCoordinator {
           if (expected > 0) omissions['searchEngines'] = expected;
         }
       }
+      LocalValidationDiagnostics.event('profile_restore_finished', {
+        'preferences': values.length,
+        'resources': imported,
+        'omissions': omissions.length,
+      });
       return ProfileRestoreReport(
         destinationProfileId: destinationProfileId,
         publishedGeneration: publishedProfile.visibleDataGeneration,
@@ -1110,8 +1222,9 @@ class ProfileRestoreCoordinator {
   static Future<int> _restoreDatabaseSection(
     PortableProfilePackage package,
     Map<String, dynamic> profileRecord,
-    ProfileScope destination,
-  ) async {
+    ProfileScope destination, {
+    ProfileDatabaseFileResolver? fileResolver,
+  }) async {
     final sectionId = profileRecord['databasesSection'];
     if (sectionId == null) return 0;
     if (sectionId is! String) {
@@ -1124,6 +1237,7 @@ class ProfileRestoreCoordinator {
     return ProfileDatabaseSnapshot.restore(
       destination,
       Map<Object?, Object?>.from(section['values'] as Map),
+      fileResolver: fileResolver,
     );
   }
 
@@ -1145,6 +1259,97 @@ class ProfileRestoreCoordinator {
       destination,
       Map<Object?, Object?>.from(section['values'] as Map),
     );
+  }
+
+  static Future<Map<String, dynamic>> _resolveSecretAttachments(
+    Map<String, dynamic> secret,
+    ProfileDatabaseFileResolver? resolver,
+  ) async {
+    final reference = secret[ProfilePackageFileSinks.contentAttachmentKey];
+    if (reference == null) return secret;
+    if (reference is! Map ||
+        reference['entry'] is! String ||
+        resolver == null ||
+        !(reference['entry'] as String).startsWith('attachments/')) {
+      throw const FormatException('Playlist attachment is unavailable');
+    }
+    final file = resolver(reference['entry'] as String);
+    if (file == null ||
+        await file.length() != reference['bytes'] ||
+        await file.length() > PortableProfilePackage.maxResourceContentBytes) {
+      throw const FormatException('Playlist attachment is missing or changed');
+    }
+    final hash = await crypto.sha256.bind(file.openRead()).first;
+    if (base64UrlEncode(hash.bytes).replaceAll('=', '') !=
+        reference['sha256']) {
+      throw const FormatException('Playlist attachment integrity mismatch');
+    }
+    return {...secret}
+      ..remove(ProfilePackageFileSinks.contentAttachmentKey)
+      ..['content'] = await file.readAsString();
+  }
+
+  static Future<Map> _preferencesWithCollections(
+    Map section, {
+    ProfileDatabaseFileResolver? fileResolver,
+  }) async {
+    final pages = section['preferencePages'];
+    if (pages != null) {
+      if (fileResolver == null || pages is! Map || pages['parts'] is! List) {
+        throw const FormatException('Preference pages are unavailable');
+      }
+      Stream<List<int>> chunks() async* {
+        var total = 0;
+        for (final part in pages['parts'] as List) {
+          if (part is! Map ||
+              part['entry'] is! String ||
+              !(part['entry'] as String).startsWith('metadata/')) {
+            throw const FormatException('Invalid preference page');
+          }
+          final file = fileResolver(part['entry'] as String);
+          if (file == null ||
+              await file.length() != part['bytes'] ||
+              await file.length() > 128 * 1024) {
+            throw const FormatException(
+              'Preference page is missing or changed',
+            );
+          }
+          final bytes = await file.readAsBytes();
+          total += bytes.length;
+          if (total > PortableProfilePackage.maxEnvelopeBytes) {
+            throw const FormatException(
+              'Profile preferences exceed their size limit',
+            );
+          }
+          final hash = crypto.sha256.convert(bytes);
+          if (base64UrlEncode(hash.bytes).replaceAll('=', '') !=
+              part['sha256']) {
+            throw const FormatException('Preference page integrity mismatch');
+          }
+          yield bytes;
+        }
+      }
+
+      final decoded = await chunks()
+          .transform(utf8.decoder)
+          .transform(json.decoder)
+          .single;
+      if (decoded is! Map || decoded.length != pages['recordCount']) {
+        throw const FormatException('Preference page record count mismatch');
+      }
+      PortableProfilePackage.validateFileBackedPreferences(decoded);
+      return decoded;
+    }
+    final extension = section['collectionInventory'];
+    if (extension != null &&
+        (extension is! List || extension.any((part) => part is! String))) {
+      throw const FormatException('Invalid backup collection inventory');
+    }
+    return {
+      ...section['values'] as Map,
+      if (extension != null)
+        HomeCollectionInventory.legacyPrefsKey: (extension as List).join(),
+    };
   }
 
   static Map<String, Object?> _normalizePreferenceValues(
@@ -1173,6 +1378,16 @@ class ProfileRestoreCoordinator {
         continue;
       }
       Object? value = entry.value;
+      if (key == HomeCollectionInventory.legacyPrefsKey) {
+        // Backups expose plain v2 JSON to legacy readers. New builds restore
+        // it directly into their compressed store, avoiding a large duplicate
+        // preference that would exhaust the tvOS defaults budget.
+        if (!source.containsKey(HomeCollectionInventory.prefsKey)) {
+          result[HomeCollectionInventory.prefsKey] =
+              HomeCollectionInventory.recover(value).encode();
+        }
+        continue;
+      }
       if (value is List) {
         if (value.any((item) => item is! String)) {
           throw FormatException('Invalid string list preference $key');
@@ -1185,7 +1400,10 @@ class ProfileRestoreCoordinator {
         includeCredentialEngineSettings: includeCredentialEngineSettings,
       );
       if (!prepared.include) continue;
-      result[key] = _remapPreferenceValue(prepared.value, resourceIds);
+      result[key] = _remapPreferenceValue(
+        HomeRowPreferenceIds.remap(key, prepared.value, resourceIds),
+        resourceIds,
+      );
     }
     return result;
   }
@@ -1674,7 +1892,7 @@ class _ImportedProfile {
   final bool wasPinProtected;
   final bool lockOnResume;
   final int? inactivityTimeoutMinutes;
-  final Map<String, Object?> preferences;
+  final int? createdAtMs;
 
   const _ImportedProfile({
     required this.id,
@@ -1687,6 +1905,6 @@ class _ImportedProfile {
     required this.wasPinProtected,
     required this.lockOnResume,
     required this.inactivityTimeoutMinutes,
-    required this.preferences,
+    this.createdAtMs,
   });
 }

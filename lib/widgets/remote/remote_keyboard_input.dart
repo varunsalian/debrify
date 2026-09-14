@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../theme/app_theme_scope.dart';
 import 'package:flutter/services.dart';
 
 import '../../services/remote_control/remote_control_state.dart';
@@ -75,9 +76,11 @@ class _RemoteKeyboardInputState extends State<RemoteKeyboardInput> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: const Color(0xFF1E293B),
+        color: AppThemeScope.of(context).settings.panel2,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+        border: Border.all(
+          color: AppThemeScope.of(context).core.tx.withValues(alpha: 0.1),
+        ),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -90,16 +93,21 @@ class _RemoteKeyboardInputState extends State<RemoteKeyboardInput> {
                 width: 40,
                 height: 40,
                 decoration: BoxDecoration(
-                  gradient: const LinearGradient(
+                  gradient: LinearGradient(
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
-                    colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
+                    colors: [
+                      AppThemeScope.of(context).core.tx,
+                      AppThemeScope.of(context).core.tx,
+                    ],
                   ),
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: const Icon(
+                child: Icon(
                   Icons.keyboard,
-                  color: Colors.white,
+                  color: AppThemeScope.of(
+                    context,
+                  ).inkOn(AppThemeScope.of(context).core.tx),
                   size: 20,
                 ),
               ),
@@ -114,7 +122,9 @@ class _RemoteKeyboardInputState extends State<RemoteKeyboardInput> {
                 IconButton(
                   icon: Icon(
                     Icons.close,
-                    color: Colors.white.withValues(alpha: 0.6),
+                    color: AppThemeScope.of(
+                      context,
+                    ).core.tx.withValues(alpha: 0.6),
                     size: 20,
                   ),
                   onPressed: widget.onClose,
@@ -132,7 +142,7 @@ class _RemoteKeyboardInputState extends State<RemoteKeyboardInput> {
           Text(
             'Type here to send text to TV',
             style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.5),
+              color: AppThemeScope.of(context).core.tx.withValues(alpha: 0.5),
               fontSize: 12,
             ),
           ),
@@ -147,9 +157,11 @@ class _RemoteKeyboardInputState extends State<RemoteKeyboardInput> {
             style: const TextStyle(fontSize: 16),
             decoration: InputDecoration(
               hintText: 'Start typing...',
-              hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.3)),
+              hintStyle: TextStyle(
+                color: AppThemeScope.of(context).core.tx.withValues(alpha: 0.3),
+              ),
               filled: true,
-              fillColor: const Color(0xFF0F172A),
+              fillColor: AppThemeScope.of(context).core.ground,
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
                 borderSide: BorderSide.none,
@@ -162,7 +174,9 @@ class _RemoteKeyboardInputState extends State<RemoteKeyboardInput> {
                   ? IconButton(
                       icon: Icon(
                         Icons.clear,
-                        color: Colors.white.withValues(alpha: 0.5),
+                        color: AppThemeScope.of(
+                          context,
+                        ).core.tx.withValues(alpha: 0.5),
                         size: 20,
                       ),
                       onPressed: _clearField,
@@ -185,9 +199,13 @@ class _RemoteKeyboardInputState extends State<RemoteKeyboardInput> {
                   icon: const Icon(Icons.backspace_outlined, size: 18),
                   label: const Text('Clear'),
                   style: OutlinedButton.styleFrom(
-                    foregroundColor: Colors.white.withValues(alpha: 0.7),
+                    foregroundColor: AppThemeScope.of(
+                      context,
+                    ).core.tx.withValues(alpha: 0.7),
                     side: BorderSide(
-                      color: Colors.white.withValues(alpha: 0.2),
+                      color: AppThemeScope.of(
+                        context,
+                      ).core.tx.withValues(alpha: 0.2),
                     ),
                     padding: const EdgeInsets.symmetric(vertical: 12),
                     shape: RoundedRectangleBorder(
@@ -206,8 +224,10 @@ class _RemoteKeyboardInputState extends State<RemoteKeyboardInput> {
                   icon: const Icon(Icons.keyboard_return, size: 18),
                   label: const Text('Enter'),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF6366F1),
-                    foregroundColor: Colors.white,
+                    backgroundColor: AppThemeScope.of(context).core.tx,
+                    foregroundColor: AppThemeScope.of(
+                      context,
+                    ).inkOn(AppThemeScope.of(context).core.tx),
                     padding: const EdgeInsets.symmetric(vertical: 12),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(10),

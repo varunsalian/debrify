@@ -1401,7 +1401,10 @@ class VideoPlayerLauncher {
         ? await _launchWithDeoVR(context, args)
         : await _launchWithExternalPlayer(context, args);
 
-    if (!launched) return false;
+    if (!launched) {
+      MainPageBridge.notifyContentPlaybackStopped();
+      return false;
+    }
 
     // Control returns to Flutter without a route ever being pushed, so
     // RouteAware can't tell screens when playback ended — same signal the
@@ -2069,7 +2072,10 @@ class VideoPlayerLauncher {
     _armedReturnObserver = observer;
     binding.addObserver(observer);
     Timer(_externalReturnArmTimeout, () {
-      if (!observer.wasCovered) finish(notify: false);
+      if (!observer.wasCovered) {
+        finish(notify: false);
+        MainPageBridge.notifyContentPlaybackStopped();
+      }
     });
   }
 
@@ -2467,7 +2473,9 @@ class VideoPlayerLauncher {
               // positional index alone — the safety net the initial payload has.
               'resumeId': '${entry.title}_$i',
               'title': episode?.displayTitle ?? entry.title,
+              'sourceTitle': entry.title,
               'url': entry.url,
+              'httpHeaders': entry.httpHeaders ?? const <String, String>{},
               if (entry.hdVideoUrl != null) 'hdVideoUrl': entry.hdVideoUrl,
               if (entry.audioUrl != null) 'audioUrl': entry.audioUrl,
               'index': i,
@@ -2847,6 +2855,20 @@ class VideoPlayerLauncher {
             };
           }
 
+          final pinned = seriesFetcher.pinnedDirectCandidates;
+          if (pinned != null) {
+            await for (final candidate in pinned(season, episode)) {
+              if (stale()) return null;
+              if (!await candidateHasTarget(candidate)) continue;
+              if (stale()) return null;
+              final index = currentStremioSources.length;
+              currentStremioSources = [...currentStremioSources, candidate];
+              final result = await winWith(index);
+              if (result != null) return result;
+              if (stale()) return null;
+            }
+          }
+
           Future<Map<String, dynamic>?> tryRange(
             int from,
             int cap, {
@@ -3045,8 +3067,33 @@ class VideoPlayerLauncher {
 
       final launched = await AndroidTvPlayerBridge.launchTorrentPlayback(
         payload: payloadMap,
-        onProgress: (progress) =>
-            _handleProgressUpdate(result.payload, progress),
+        onProgress: (progress) {
+          final season = (progress['season'] as num?)?.toInt();
+          final episode = (progress['episode'] as num?)?.toInt();
+          if (seriesFetcher != null &&
+              season != null &&
+              episode != null &&
+              progress['isPlaying'] == true &&
+              progress['isBuffering'] != true) {
+            // Native URLs may have been redirect-resolved; source identity
+            // must use the shared index, not equality with that final URL.
+            final sourceIndex = (progress['sourceIndex'] as num?)?.toInt();
+            if (sourceIndex != null &&
+                sourceIndex >= 0 &&
+                sourceIndex < currentStremioSources.length) {
+              unawaited(
+                seriesFetcher.prepareFromProgress(
+                  source: currentStremioSources[sourceIndex],
+                  season: season,
+                  episode: episode,
+                  positionMs: (progress['positionMs'] as num?)?.toInt() ?? 0,
+                  durationMs: (progress['durationMs'] as num?)?.toInt() ?? 0,
+                ),
+              );
+            }
+          }
+          return _handleProgressUpdate(result.payload, progress);
+        },
         onFinished: () async {
           await _handlePlaybackFinished(result.payload);
           resolver.dispose();
@@ -3311,7 +3358,7 @@ class VideoPlayerLauncher {
         'speed': (progress['speed'] as num?)?.toDouble() ?? 1.0,
         'aspect': (progress['aspect'] as String?) ?? 'contain',
         'updatedAt': DateTime.now().millisecondsSinceEpoch,
-      });
+      }, sourceId: progress['sourceId'] as String?);
     } catch (e) {
       debugPrint('VideoPlayerLauncher: IPTV progress save failed: $e');
     }
@@ -3876,16 +3923,18 @@ class VideoPlayerLauncher {
         if (!payload.localMovieRewatchStarted &&
             positionMs > 0 &&
             movieProgress < payload.movieCompletionThreshold) {
-          payload.localMovieRewatchStarted = true;
           await StorageService.unmarkMovieAsFinished(payload.imdbId!);
+          payload.localMovieRewatchStarted = true;
         }
-        if (localCompleted || completed) {
-          payload.localMovieCompletionRecorded = true;
+        if (localCompleted ||
+            completed ||
+            progress['localCompletionEligible'] == true) {
           await Future.wait([
             StorageService.markMovieAsFinished(payload.imdbId!),
             if (resumeId != null && resumeId.isNotEmpty)
               StorageService.removeVideoResume(resumeId),
           ]);
+          payload.localMovieCompletionRecorded = true;
           return;
         }
       }
@@ -4345,6 +4394,7 @@ class VideoPlayerLauncher {
       }
     } catch (e) {
       debugPrint('VideoPlayerLauncher: failed to persist progress: $e');
+      rethrow;
     }
   }
 
@@ -4414,6 +4464,11 @@ class VideoPlayerLauncher {
     VideoPlayerLaunchArgs args,
   ) async {
     if (entry.url.isNotEmpty) {
+      // Keep protected URLs attached to their declared headers and origin.
+      // The player handles redirects; the legacy URL-only resolver cannot.
+      if ((entry.httpHeaders ?? args.httpHeaders)?.isNotEmpty == true) {
+        return entry.url;
+      }
       // For direct stream URLs, resolve redirects to get final URL
       // (needed for HLS streams behind short URL redirects like USATV)
       return await _resolveRedirectUrl(entry.url);
@@ -4720,6 +4775,7 @@ class _AndroidTvPlaybackItem {
   final String id;
   final String title;
   final String url;
+  final Map<String, String>? httpHeaders;
   final String? hdVideoUrl;
   final String? audioUrl;
   final int index;
@@ -4743,6 +4799,7 @@ class _AndroidTvPlaybackItem {
     required this.id,
     required this.title,
     required this.url,
+    this.httpHeaders,
     this.hdVideoUrl,
     this.audioUrl,
     required this.index,
@@ -4765,6 +4822,7 @@ class _AndroidTvPlaybackItem {
       'id': id,
       'title': title,
       'url': url,
+      'httpHeaders': httpHeaders ?? const <String, String>{},
       if (hdVideoUrl != null) 'hdVideoUrl': hdVideoUrl,
       if (audioUrl != null) 'audioUrl': audioUrl,
       'index': index,
@@ -5163,6 +5221,7 @@ class _AndroidTvPlaybackPayloadBuilder {
           id: entry.url.isNotEmpty ? entry.url : '${entry.title}_$i',
           title: displayTitle,
           url: entry.url,
+          httpHeaders: entry.httpHeaders ?? args.httpHeaders,
           hdVideoUrl: entry.hdVideoUrl,
           audioUrl: entry.audioUrl,
           index: i,
@@ -5475,6 +5534,7 @@ class _AndroidTvPlaybackPayloadBuilder {
             PlaylistEntry(
               url: resolved,
               title: entry.title,
+              httpHeaders: entry.httpHeaders,
               hdVideoUrl: entry.hdVideoUrl,
               audioUrl: entry.audioUrl,
               relativePath: entry.relativePath,

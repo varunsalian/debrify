@@ -50,7 +50,10 @@ class _RemoteAddonExportState extends State<RemoteAddonExport> {
     }
   }
 
-  Future<void> _sendAddonToTv(StremioAddon addon) async {
+  Future<void> _sendAddonToTv(StremioAddon addon) =>
+      RemoteControlState().transferActivity.run(() => _sendAddonToTvNow(addon));
+
+  Future<void> _sendAddonToTvNow(StremioAddon addon) async {
     if (_sendingAddons.contains(addon.manifestUrl)) return;
 
     // Addon manifest URLs routinely embed debrid API keys (Torrentio-style
@@ -64,7 +67,8 @@ class _RemoteAddonExportState extends State<RemoteAddonExport> {
     setState(() => _sendingAddons.add(addon.manifestUrl));
     HapticFeedback.mediumImpact();
 
-    final supportsApplicationResult = target.supportsAddonTransferResult;
+    final supportsApplicationResult =
+        session.peerProtocolVersion >= kAddonResultProtocolVersion;
     final random = Random.secure();
     final requestId = base64UrlEncode(
       List<int>.generate(18, (_) => random.nextInt(256)),
@@ -118,7 +122,9 @@ class _RemoteAddonExportState extends State<RemoteAddonExport> {
       // the TV said "staged for profile import" and nothing ever imported.
       // The short delay mirrors the other export flows (let the addon packet
       // finish processing before the commit signal lands).
-      await Future<void>.delayed(const Duration(milliseconds: 300));
+      if (session.peerProtocolVersion < kReliableTransferProtocolVersion) {
+        await Future<void>.delayed(const Duration(milliseconds: 300));
+      }
       final committed = await state.sendConfigCommandToDevice(
         ConfigCommand.complete,
         target.ip,

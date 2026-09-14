@@ -12,6 +12,7 @@ import 'iptv_catalog_key.dart';
 import 'iptv_catalog_db.dart';
 import 'iptv_load_phase.dart';
 import 'profiles/profile_collection_resource_facade.dart';
+import 'profiles/profile_runtime.dart';
 
 /// A panel response crossed the buffering cap — the server's real answer,
 /// deliberately NOT one of the transient network failures the retry loop
@@ -222,7 +223,7 @@ class XtreamCodesService {
 
   /// The charset a response declared, or null when it declared none.
   /// Extracted here (a header, not a payload — costs nothing) so the isolate
-  /// can reproduce `Response.body`'s decoding without carrying the headers.
+  /// can apply the legacy fallback without carrying the headers.
   @visibleForTesting
   static String? charsetOf(http.Response response) {
     final contentType = response.headers['content-type'];
@@ -235,11 +236,16 @@ class XtreamCodesService {
     caseSensitive: false,
   );
 
-  /// Resolve a declared charset the way package:http does: unknown or absent
-  /// falls back to latin1.
-  static Encoding encodingForCharset(String? charset) {
-    if (charset == null) return latin1;
-    return Encoding.getByName(charset) ?? latin1;
+  /// Panels often omit or mislabel the charset of UTF-8 JSON. Prefer valid
+  /// UTF-8, then respect the declared encoding for legacy response bytes.
+  @visibleForTesting
+  static String decodeResponseBytes(List<int> bytes, String? charset) {
+    try {
+      return utf8.decode(bytes);
+    } on FormatException {
+      final encoding = Encoding.getByName(charset ?? '') ?? latin1;
+      return encoding.decode(bytes);
+    }
   }
 
   /// Decode a panel response as a JSON list, synchronously. Used inside the
@@ -300,7 +306,11 @@ class XtreamCodesService {
         );
       }
 
-      final data = json.decode(response.body) as Map<String, dynamic>;
+      final data =
+          json.decode(
+                decodeResponseBytes(response.bodyBytes, charsetOf(response)),
+              )
+              as Map<String, dynamic>;
       final userInfo = data['user_info'] as Map<String, dynamic>?;
 
       if (userInfo == null) {
@@ -354,6 +364,7 @@ class XtreamCodesService {
     IptvLoadPhase? onPhase,
     String? connectionResourceId,
     int? connectionResourceRevision,
+    bool Function()? isCurrent,
   }) {
     return _fetchStreams(
       serverUrl,
@@ -364,6 +375,7 @@ class XtreamCodesService {
       onPhase: onPhase,
       connectionResourceId: connectionResourceId,
       connectionResourceRevision: connectionResourceRevision,
+      isCurrent: isCurrent,
     );
   }
 
@@ -375,6 +387,7 @@ class XtreamCodesService {
     IptvLoadPhase? onPhase,
     String? connectionResourceId,
     int? connectionResourceRevision,
+    bool Function()? isCurrent,
   }) {
     return _fetchStreams(
       serverUrl,
@@ -384,6 +397,7 @@ class XtreamCodesService {
       onPhase: onPhase,
       connectionResourceId: connectionResourceId,
       connectionResourceRevision: connectionResourceRevision,
+      isCurrent: isCurrent,
     );
   }
 
@@ -398,6 +412,7 @@ class XtreamCodesService {
     IptvLoadPhase? onPhase,
     String? connectionResourceId,
     int? connectionResourceRevision,
+    bool Function()? isCurrent,
   }) {
     return _fetchStreams(
       serverUrl,
@@ -407,6 +422,7 @@ class XtreamCodesService {
       onPhase: onPhase,
       connectionResourceId: connectionResourceId,
       connectionResourceRevision: connectionResourceRevision,
+      isCurrent: isCurrent,
     );
   }
 
@@ -420,11 +436,26 @@ class XtreamCodesService {
     IptvLoadPhase? onPhase,
     String? connectionResourceId,
     int? connectionResourceRevision,
+    bool Function()? isCurrent,
   }) async {
-    Future<void> authorize() => _authorize(
-      resourceId: connectionResourceId,
-      resourceRevision: connectionResourceRevision,
-    );
+    final startingScope = ProfileRuntime.scope.value;
+    final ingestTarget = IptvCatalogDb.captureWriteTarget();
+    void assertCurrent() {
+      if (ProfileRuntime.scope.value != startingScope ||
+          isCurrent?.call() == false) {
+        throw StateError('IPTV request is no longer current');
+      }
+    }
+
+    Future<void> authorize() async {
+      assertCurrent();
+      await _authorize(
+        resourceId: connectionResourceId,
+        resourceRevision: connectionResourceRevision,
+      );
+      assertCurrent();
+    }
+
     await authorize();
     final result = await _fetchStreamsAuthorized(
       serverUrl,
@@ -433,6 +464,8 @@ class XtreamCodesService {
       contentType: contentType,
       numberingSourceKey: numberingSourceKey,
       onPhase: onPhase,
+      ingestTarget: ingestTarget,
+      beforeIngest: authorize,
     );
     await authorize();
     return result;
@@ -445,6 +478,8 @@ class XtreamCodesService {
     required String contentType,
     String? numberingSourceKey,
     IptvLoadPhase? onPhase,
+    required IptvCatalogWriteTarget? ingestTarget,
+    required Future<void> Function() beforeIngest,
   }) async {
     final isLive = contentType == 'live';
     final isSeries = contentType == 'series';
@@ -455,7 +490,7 @@ class XtreamCodesService {
     // the service's in-memory result cache is bypassed entirely — holding
     // three 55k-object catalogs on the heap is exactly what this mode
     // removes. Freshness policy moves to the caller (snapshot.ingestedAt).
-    final ingestToDb = IptvCatalogDb.isOpen;
+    final ingestToDb = ingestTarget != null;
 
     // Check cache
     if (!ingestToDb && _cache.containsKey(cacheKey)) {
@@ -563,6 +598,7 @@ class XtreamCodesService {
 
       // Decode AND build in one isolate hop (see [_buildXtreamStreams]).
       // Small panels skip the isolate: spawning one costs more than the work.
+      await beforeIngest();
       final job = _StreamsJob(
         // fromList copies once (a memcpy — cheap next to a UTF-8 decode) and
         // the transfer to the worker is then zero-copy. The source lists are
@@ -580,7 +616,7 @@ class XtreamCodesService {
         contentType: contentType,
         label: label,
         liveUrlForm: liveUrlForm,
-        ingestDbPath: ingestToDb ? IptvCatalogDb.path : null,
+        ingestDbPath: ingestTarget?.path,
         ingestCatalogKey: ingestToDb
             ? IptvCatalogKey.forXtream(serverUrl, username, contentType)
             : null,
@@ -608,11 +644,15 @@ class XtreamCodesService {
       // the gate across a slow panel fetch used to block settings deletions
       // and EPG work for up to the whole 90s timeout. Re-entrant: a caller
       // already inside the gate runs it inline.
-      Future<IptvParseResult> runBuild() async => useIsolate
-          ? await compute(_buildXtreamStreams, job)
-          : _buildXtreamStreams(job);
-      final built = job.ingestCatalogKey != null
-          ? await IptvCatalogDb.runExclusive(runBuild)
+      Future<IptvParseResult> runBuild() async {
+        await beforeIngest();
+        return useIsolate
+            ? await compute(_buildXtreamStreams, job)
+            : _buildXtreamStreams(job);
+      }
+
+      final built = ingestTarget != null
+          ? await IptvCatalogDb.runWithWriteTarget(ingestTarget, runBuild)
           : await runBuild();
 
       if (built.hasError) return built;
@@ -791,7 +831,7 @@ class XtreamCodesService {
       );
       if (response.statusCode != 200) return null;
 
-      final body = response.body;
+      final body = decodeResponseBytes(response.bodyBytes, charsetOf(response));
       dynamic decoded;
       try {
         decoded = body.length > computeDecodeThreshold
@@ -1136,12 +1176,8 @@ class _StreamsJob {
   final String label;
   final _LiveUrlForm liveUrlForm;
 
-  /// The charset each body declared, so the worker decodes byte-for-byte
-  /// identically to what `Response.body` would have produced on this thread.
-  /// Null means "not declared", which package:http resolves to latin1 — the
-  /// fallback is replicated rather than corrected, because silently switching
-  /// a panel's channel names to a different encoding is a separate change
-  /// from moving the decode off the UI thread.
+  /// Declared charsets for responses that are not valid UTF-8. Missing or
+  /// unsupported declarations fall back to Latin-1 for legacy panels.
   final String? streamsCharset;
   final String? categoriesCharset;
 
@@ -1192,9 +1228,10 @@ IptvParseResult _buildXtreamStreams(_StreamsJob job) {
     warning =
         'Could not load ${job.label} categories — showing channels ungrouped';
   } else {
-    final categoriesBody = XtreamCodesService.encodingForCharset(
+    final categoriesBody = XtreamCodesService.decodeResponseBytes(
+      categoriesBytes.materialize().asUint8List(),
       job.categoriesCharset,
-    ).decode(categoriesBytes.materialize().asUint8List());
+    );
     final (categoriesData, catError) = XtreamCodesService.decodeJsonListSync(
       categoriesBody,
       'categories',
@@ -1242,9 +1279,10 @@ IptvParseResult _buildXtreamStreams(_StreamsJob job) {
   final isSeries = job.contentType == 'series';
 
   // The expensive UTF-8 pass now happens HERE, on the worker.
-  final streamsBody = XtreamCodesService.encodingForCharset(
+  final streamsBody = XtreamCodesService.decodeResponseBytes(
+    job.streamsBytes.materialize().asUint8List(),
     job.streamsCharset,
-  ).decode(job.streamsBytes.materialize().asUint8List());
+  );
   final (streamsData, streamsError) = XtreamCodesService.decodeJsonListSync(
     streamsBody,
     'streams',

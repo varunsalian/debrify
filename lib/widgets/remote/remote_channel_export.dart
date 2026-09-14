@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -9,6 +10,7 @@ import '../../services/community/magnet_yaml_service.dart';
 import '../../services/debrify_tv_repository.dart';
 import '../../services/remote_control/remote_chunked_send.dart';
 import '../../services/remote_control/remote_constants.dart';
+import '../../services/remote_control/remote_channel_file.dart';
 import '../../services/remote_control/remote_control_state.dart';
 import '../../services/profiles/profile_async_authorization.dart';
 import '../../models/profiles/profile_policy.dart';
@@ -17,16 +19,46 @@ import 'remote_pairing_dialog.dart';
 /// Widget for exporting Debrify TV channels to a TV via remote control
 class RemoteChannelExport extends StatefulWidget {
   final VoidCallback onBack;
+  final bool headless;
+  final VoidCallback? onInventoryChanged;
 
-  const RemoteChannelExport({super.key, required this.onBack});
+  const RemoteChannelExport({
+    super.key,
+    required this.onBack,
+    this.headless = false,
+    this.onInventoryChanged,
+  });
 
   @override
-  State<RemoteChannelExport> createState() => _RemoteChannelExportState();
+  RemoteChannelExportState createState() => RemoteChannelExportState();
 }
 
-class _RemoteChannelExportState extends State<RemoteChannelExport> {
+class RemoteChannelExportState extends State<RemoteChannelExport> {
+  bool get loading => _loading;
+  String? inventoryError;
+  List<DebrifyTvChannelRecord> get channels => List.unmodifiable(_channels);
+  Future<void> reload() => _loadChannels();
+  final Set<String> _succeeded = {};
+  Future<Set<String>> sendSelection(Set<String> ids) async {
+    if (_sending || _loading) return {};
+    final old = Set<String>.of(_selectedIds);
+    _selectedIds
+      ..clear()
+      ..addAll(ids);
+    _succeeded.clear();
+    try {
+      await _sendToTvNow();
+      return Set.of(_succeeded);
+    } finally {
+      _selectedIds
+        ..clear()
+        ..addAll(old);
+    }
+  }
+
   bool _loading = true;
   bool _sending = false;
+  String? _transferError;
   List<DebrifyTvChannelRecord> _channels = [];
   final Set<String> _selectedIds = {};
 
@@ -37,16 +69,21 @@ class _RemoteChannelExportState extends State<RemoteChannelExport> {
   }
 
   Future<void> _loadChannels() async {
+    inventoryError = null;
     setState(() => _loading = true);
     try {
       final channels = await DebrifyTvRepository.instance.fetchAllChannels();
+      if (!mounted) return;
       setState(() {
         _channels = channels;
         _loading = false;
       });
     } catch (_) {
+      inventoryError = 'Could not load channels';
       debugPrint('RemoteChannelExport: channel load failed');
       if (mounted) setState(() => _loading = false);
+    } finally {
+      if (mounted) widget.onInventoryChanged?.call();
     }
   }
 
@@ -75,7 +112,10 @@ class _RemoteChannelExportState extends State<RemoteChannelExport> {
     });
   }
 
-  Future<void> _sendToTv() async {
+  Future<void> _sendToTv() =>
+      RemoteControlState().transferActivity.run(() => _sendToTvNow());
+
+  Future<void> _sendToTvNow() async {
     if (_selectedIds.isEmpty) return;
 
     final connectedDevice = RemoteControlState().connectedDevice;
@@ -98,13 +138,14 @@ class _RemoteChannelExportState extends State<RemoteChannelExport> {
     );
     if (session == null || !mounted) return;
 
+    _transferError = null;
     setState(() => _sending = true);
     HapticFeedback.mediumImpact();
 
     final targetIp = connectedDevice.ip;
     final state = RemoteControlState();
     final supportsApplicationResult =
-        connectedDevice.supportsRemoteTransferResult;
+        session.peerProtocolVersion >= kRemoteTransferResultProtocolVersion;
     int successCount = 0;
     int failCount = 0;
 
@@ -125,6 +166,26 @@ class _RemoteChannelExportState extends State<RemoteChannelExport> {
             // authorized profile immediately before building cached torrent
             // data so a profile switch cannot send the previous profile's
             // channel under the new profile's transport capability.
+            if (session.peerProtocolVersion >=
+                kReliableTransferProtocolVersion) {
+              final staging = await Directory.systemTemp.createTemp(
+                'debrify-channel-send-',
+              );
+              try {
+                final file = File('${staging.path}/channel.gz');
+                await RemoteChannelFile.export(selectedChannel.channelId, file);
+                return await _sendChannelToTv(
+                  state,
+                  targetIp,
+                  'debrify://file',
+                  selectedChannel.name,
+                  waitForApplication: true,
+                  file: file,
+                );
+              } finally {
+                await staging.delete(recursive: true);
+              }
+            }
             final currentChannels = await DebrifyTvRepository.instance
                 .fetchAllChannels();
             DebrifyTvChannelRecord? currentChannel;
@@ -154,6 +215,7 @@ class _RemoteChannelExportState extends State<RemoteChannelExport> {
               : await authorization.runIfCurrentAsOutbound(sendCurrentChannel);
 
           if (success) {
+            _succeeded.add(selectedChannel.channelId);
             successCount++;
           } else {
             failCount++;
@@ -164,12 +226,13 @@ class _RemoteChannelExportState extends State<RemoteChannelExport> {
         }
 
         // Small delay between channels to avoid UDP packet loss
-        if (i < selectedChannels.length - 1) {
+        if (session.peerProtocolVersion < kReliableTransferProtocolVersion &&
+            i < selectedChannels.length - 1) {
           await Future.delayed(const Duration(milliseconds: 300));
         }
       }
 
-      if (mounted) {
+      if (mounted && !widget.headless) {
         if (failCount == 0 && successCount > 0) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -187,8 +250,8 @@ class _RemoteChannelExportState extends State<RemoteChannelExport> {
           );
         } else if (successCount == 0) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Failed to send channels'),
+            SnackBar(
+              content: Text(_transferError ?? 'Failed to send channels'),
               backgroundColor: Color(0xFFEF4444),
               behavior: SnackBarBehavior.floating,
             ),
@@ -209,7 +272,7 @@ class _RemoteChannelExportState extends State<RemoteChannelExport> {
       }
     } catch (_) {
       debugPrint('RemoteChannelExport: channel batch send failed');
-      if (mounted) {
+      if (mounted && !widget.headless) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Failed to send channels'),
@@ -234,6 +297,7 @@ class _RemoteChannelExportState extends State<RemoteChannelExport> {
     String debrifyUri,
     String channelName, {
     required bool waitForApplication,
+    File? file,
   }) async {
     final requestId = createRemoteTransferRequestId();
     final resultCompleter = Completer<bool>();
@@ -242,23 +306,34 @@ class _RemoteChannelExportState extends State<RemoteChannelExport> {
     if (waitForApplication) {
       resultSubscription = state.remoteTransferResults.stream.listen((result) {
         if (result.requestId == requestId && !resultCompleter.isCompleted) {
+          if (!result.ok) _transferError = result.message;
           resultCompleter.complete(result.ok);
         }
       });
     }
     try {
-      final delivered = await sendConfigPayloadToDevice(
-        state,
-        ConfigCommand.debrifyChannel,
-        targetIp,
-        waitForApplication
-            ? remoteChannelTransferBody(requestId: requestId, uri: debrifyUri)
-            : debrifyUri,
-        label: channelName,
-        resultRequestId: waitForApplication ? requestId : null,
-      );
+      final delivered = file != null
+          ? await state.sendProfileArchive(
+              targetIp,
+              file,
+              requestId,
+              channel: true,
+            )
+          : await sendConfigPayloadToDevice(
+              state,
+              ConfigCommand.debrifyChannel,
+              targetIp,
+              waitForApplication
+                  ? remoteChannelTransferBody(
+                      requestId: requestId,
+                      uri: debrifyUri,
+                    )
+                  : debrifyUri,
+              label: channelName,
+              resultRequestId: waitForApplication ? requestId : null,
+            );
       if (!delivered || !waitForApplication) return delivered;
-      return resultCompleter.future.timeout(
+      return await resultCompleter.future.timeout(
         const Duration(minutes: 2),
         onTimeout: () => false,
       );
@@ -269,6 +344,7 @@ class _RemoteChannelExportState extends State<RemoteChannelExport> {
 
   @override
   Widget build(BuildContext context) {
+    if (widget.headless) return const SizedBox.shrink();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [

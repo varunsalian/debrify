@@ -1,10 +1,12 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:debrify/models/home_collection.dart';
 import 'package:debrify/models/profiles/connection_resource.dart';
 import 'package:debrify/models/profiles/profile_policy.dart';
 import 'package:debrify/models/stremio_addon.dart';
 import 'package:debrify/services/backup_restore_service.dart';
+import 'package:debrify/services/home_collections_store.dart';
 import 'package:debrify/services/profiles/connection_resource_service.dart';
 import 'package:debrify/services/profiles/device_key_provider.dart';
 import 'package:debrify/services/profiles/profile_authorization.dart';
@@ -77,6 +79,65 @@ void main() {
   });
 
   test(
+    'management rejects executable resource denial; display fallback is uncached',
+    () async {
+      final resources = ConnectionResourceService(
+        registry: registry,
+        cipher: cipher,
+      );
+      const manifestUrl = 'https://addon.invalid/shared/manifest.json';
+      final shared = await resources.create(
+        context: await ProfileAuthorizationContext.capture(registry),
+        type: ConnectionResourceType.stremioAddon,
+        label: 'Shared addon',
+        publicConfig: const {'addonName': 'Shared addon'},
+        secretConfig: const {
+          'id': 'shared-addon',
+          'name': 'Shared addon',
+          'manifest_url': manifestUrl,
+          'base_url': 'https://addon.invalid/shared',
+          'types': ['movie'],
+          'resources': ['stream'],
+        },
+      );
+      // The default use grant gives the borrower a redacted Settings entry.
+      await registry.setActiveProfile(secondId);
+      ProfileRuntime.publish(
+        ProfileScope(profileId: secondId, dataGeneration: 1, sessionEpoch: 2),
+      );
+      final rejectingCipher = _RotatingReadCipher(cipher, () async {
+        // Rotate between decryption and the service's strict revalidation.
+        final sealed = (await registry.getSealedResourceSecret(shared.id))!;
+        await registry.updateResourceSecret(
+          resourceId: shared.id,
+          sealedSecretPayload: sealed.envelope,
+          secretPayloadVersion: sealed.payloadVersion,
+        );
+      });
+      DeviceKeyProvider.debugInstallCipher(rejectingCipher);
+      expect(
+        (await service.getAddons(
+          forSettings: true,
+        )).single.connectionResourceCredentialsRedacted,
+        isTrue,
+      );
+      await expectLater(
+        service.getAddonsForManagement(),
+        throwsA(isA<ResourceAuthorizationException>()),
+      );
+      expect(await service.getAddons(), isEmpty);
+      expect(await service.getAddons(), isEmpty);
+      expect(rejectingCipher.reads, 3);
+      rejectingCipher.reject = false;
+      expect((await service.getAddons()).single.manifestUrl, manifestUrl);
+      expect(
+        (await service.getAddonsForManagement()).single.manifestUrl,
+        manifestUrl,
+      );
+    },
+  );
+
+  test(
     'delayed manifest from profile A cannot publish into profile B',
     () async {
       final started = Completer<void>();
@@ -120,6 +181,9 @@ void main() {
       baseUrl: 'https://addon.invalid/configured',
       types: const <String>['movie'],
       resources: const <String>['stream'],
+      catalogs: const [
+        StremioAddonCatalog(id: 'netflix', type: 'movie', name: 'Netflix'),
+      ],
     );
 
     final added = await service.addAddon(
@@ -127,8 +191,24 @@ void main() {
     );
     expect(added.connectionResourceId, isNotNull);
     expect(added.connectionResourceRevision, isNotNull);
+    expect(added.id, added.connectionResourceId);
+    expect(added.manifestId, 'manifest-addon-id');
+    expect(added.storageKey, added.connectionResourceId);
 
     final cached = (await service.getAddons()).single;
+    expect(cached.id, added.connectionResourceId);
+    expect(cached.manifestId, 'manifest-addon-id');
+    expect(
+      HomeCollectionsStore.resolveAddon(
+        const CollectionCatalogSource(
+          addonId: 'manifest-addon-id',
+          catalogId: 'netflix',
+          type: 'movie',
+        ),
+        [cached],
+      ),
+      same(cached),
+    );
     expect(cached.connectionResourceId, added.connectionResourceId);
     expect(cached.connectionResourceRevision, added.connectionResourceRevision);
 
@@ -155,6 +235,8 @@ void main() {
       greaterThan(added.connectionResourceRevision!),
     );
     expect(reloaded.name, 'Rotated canonical addon');
+    expect(reloaded.id, added.connectionResourceId);
+    expect(reloaded.manifestId, 'manifest-addon-id');
 
     await service.setAddonEnabled(reloaded.storageKey, false);
     final settings = await service.getAddons(forSettings: true);
@@ -167,7 +249,74 @@ void main() {
     await service.setAddonEnabled(settings.single.storageKey, true);
     expect((await service.getAddons(forSettings: true)).single.enabled, isTrue);
     expect(await service.getAddons(), hasLength(1));
+    expect((await service.getAddons()).single.id, added.connectionResourceId);
+    expect((await service.getAddons()).single.manifestId, 'manifest-addon-id');
   });
+
+  test(
+    'collection provider identity preserves configuration keys and repairs on refresh',
+    () async {
+      service.debugManifestFetcher = (url) async => StremioAddon.fromManifest({
+        'id': 'aio-metadata',
+        'name': 'AIO',
+        'types': ['movie'],
+        'resources': ['catalog', 'meta'],
+        'catalogs': [
+          {'id': 'netflix', 'type': 'movie', 'name': 'Netflix'},
+        ],
+      }, url);
+      final first = await service.addAddon(
+        'https://addon.invalid/one/manifest.json',
+      );
+      final second = await service.addAddon(
+        'https://addon.invalid/two/manifest.json',
+      );
+      final addons = await service.getAddons();
+      expect(addons.map((a) => a.id).toSet(), {first.id, second.id});
+      expect(first.id, isNot(second.id));
+      expect(addons.map((a) => a.manifestId).toSet(), {'aio-metadata'});
+      expect(addons.map((a) => '${a.id}:movie:netflix').toSet(), hasLength(2));
+      const source = CollectionCatalogSource(
+        addonId: 'aio-metadata',
+        catalogId: 'netflix',
+        type: 'movie',
+      );
+      for (final addon in addons) {
+        expect(HomeCollectionsStore.resolveAddon(source, [addon]), same(addon));
+        final roundTrip = StremioAddon.fromJson(
+          addon.copyWith(enabled: false).toJson(),
+        );
+        expect(roundTrip.id, addon.id);
+        expect(roundTrip.manifestId, 'aio-metadata');
+      }
+      // An older save may have already replaced the provider id in the secret.
+      final oldSecret = first.toJson()..remove('manifest_id');
+      await ConnectionResourceService(
+        registry: registry,
+        cipher: cipher,
+      ).updateSecret(
+        context: await ProfileAuthorizationContext.capture(registry),
+        resourceId: first.connectionResourceId!,
+        secretConfig: oldSecret,
+      );
+      final before = (await service.getAddons()).firstWhere(
+        (a) => a.id == first.id,
+      );
+      expect(before.manifestId, isNull);
+      final refreshed = (await service.refreshAddon(first.manifestUrl))!;
+      expect(refreshed.id, first.id);
+      expect(refreshed.sourceBindingKey, first.sourceBindingKey);
+      expect(refreshed.manifestId, 'aio-metadata');
+      expect(
+        HomeCollectionsStore.resolveAddon(source, [refreshed]),
+        same(refreshed),
+      );
+      expect((await service.getAddons()).map((a) => a.id).toSet(), {
+        first.id,
+        second.id,
+      });
+    },
+  );
 
   test('toggling by manifest URL is refused instead of doing nothing', () async {
     // The Addon Hub passed a manifest URL here. Under profiles the storage key
@@ -451,4 +600,32 @@ void main() {
     );
     expect(await service.getAddons(forSettings: true), isEmpty);
   });
+}
+
+class _RotatingReadCipher implements DeviceSecretCipher {
+  _RotatingReadCipher(this.delegate, this.rotate);
+  final DeviceSecretCipher delegate;
+  final Future<void> Function() rotate;
+  bool reject = true;
+  int reads = 0;
+  @override
+  Future<void> initialize() => delegate.initialize();
+  @override
+  Future<String> seal(
+    List<int> plaintext, {
+    required List<int> associatedData,
+  }) => delegate.seal(plaintext, associatedData: associatedData);
+  @override
+  Future<List<int>> open(
+    String envelope, {
+    required List<int> associatedData,
+  }) async {
+    reads++;
+    final plaintext = await delegate.open(
+      envelope,
+      associatedData: associatedData,
+    );
+    if (reject) await rotate();
+    return plaintext;
+  }
 }

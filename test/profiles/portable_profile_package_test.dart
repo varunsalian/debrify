@@ -125,6 +125,28 @@ void main() {
     );
   });
 
+  test(
+    'malformed authenticated package structures are format errors',
+    () async {
+      final source = await package();
+      final body = Map<String, dynamic>.from(source.toJson())
+        ..['profiles'] = <Object?>['not-a-profile-map'];
+      final digest = await Sha256().hash(utf8.encode(jsonEncode(body)));
+      final envelope = <String, dynamic>{
+        ...body,
+        'integrity': <String, dynamic>{
+          'algorithm': 'sha256',
+          'digest': base64UrlEncode(digest.bytes).replaceAll('=', ''),
+        },
+      };
+
+      await expectLater(
+        PortableProfilePackage.decodeAuthenticatedMap(envelope),
+        throwsA(isA<FormatException>()),
+      );
+    },
+  );
+
   test('legacy v3 plain and encrypted packages remain readable', () async {
     final sanitized = await package(mode: 'sanitizedSettings');
     final plainRestored = await PortableProfilePackage.decodeMap(
@@ -295,6 +317,32 @@ void main() {
       throwsA(isA<FormatException>()),
     );
   });
+
+  test(
+    'missing preferences are accepted only for explicit sync graphs',
+    () async {
+      final source = PortableProfilePackage(
+        mode: 'deviceGraph',
+        createdAt: DateTime.utc(2026, 8, 13),
+        profiles: const <Map<String, dynamic>>[
+          <String, dynamic>{'backupId': 'profile-0', 'name': 'Admin'},
+        ],
+        resources: const <Map<String, dynamic>>[],
+        sections: const <String, dynamic>{},
+      );
+      final encoded = await PortableProfilePackage.withIntegrity(source);
+
+      await expectLater(
+        PortableProfilePackage.decodeAuthenticatedMap(encoded),
+        throwsA(isA<FormatException>()),
+      );
+      final decoded = await PortableProfilePackage.decodeAuthenticatedMap(
+        encoded,
+        allowMissingPreferences: true,
+      );
+      expect(decoded.profiles.single, isNot(contains('preferencesSection')));
+    },
+  );
 
   test('bounded compressed transport round-trips with correlation', () async {
     final source = await package(
@@ -555,6 +603,16 @@ void main() {
       PortableProfilePackage.decrypt(hostile, 'correct horse'),
       throwsA(isA<FormatException>()),
     );
+
+    final fractional = Map<String, dynamic>.from(encrypted);
+    fractional['kdf'] = <String, dynamic>{
+      ...Map<String, dynamic>.from(encrypted['kdf'] as Map),
+      'iterations': 1.5,
+    };
+    await expectLater(
+      PortableProfilePackage.decrypt(fractional, 'correct horse'),
+      throwsA(isA<FormatException>()),
+    );
   });
 
   test('ciphertext tampering is rejected', () async {
@@ -702,6 +760,30 @@ void main() {
       );
     },
   );
+
+  test('attachment byte counts must be exact integers', () async {
+    final source = await package(
+      files: <String, Object?>{
+        'engines/example.json': <String, Object?>{
+          'encoding': 'base64',
+          'bytes': 2.5,
+          'sha256': 'irrelevant-until-count-is-accepted',
+          'data': base64Encode(utf8.encode('{}')),
+        },
+      },
+    );
+    final encrypted = await PortableProfilePackage.encrypt(
+      source,
+      'correct horse',
+      memory: 8,
+      iterations: 1,
+    );
+
+    await expectLater(
+      PortableProfilePackage.decrypt(encrypted, 'correct horse'),
+      throwsA(isA<FormatException>()),
+    );
+  });
 
   test('missing per-section digest is rejected', () async {
     final source = await package(mode: 'sanitizedSettings');

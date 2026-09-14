@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../models/stremio_addon.dart';
 import '../../services/analytics_service.dart';
@@ -11,6 +12,7 @@ import '../../services/mdblist/mdblist_discover_models.dart';
 import '../../services/mdblist/mdblist_discover_source.dart';
 import '../../services/mdblist/mdblist_list_source.dart';
 import '../../services/mdblist/mdblist_models.dart';
+import '../../services/watched_filter.dart';
 import '../../theme/app_theme_scope.dart';
 import '../../widgets/see_all/mdblist_save_button.dart';
 import '../../widgets/see_all/see_all_filter_bar.dart';
@@ -39,6 +41,9 @@ class MdblistSeeAllScreen extends StatefulWidget {
   final FocusNode? leadingNode;
   final MdblistListChoice? initialList;
 
+  /// Preserve the source directory when opening a Home list directly.
+  final bool? initialListIsPublic;
+
   /// Injection seams used by contract/widget tests. Production callers leave
   /// both null and use the account-bound singletons.
   final MdblistDiscoverSource? source;
@@ -55,6 +60,7 @@ class MdblistSeeAllScreen extends StatefulWidget {
     this.leading,
     this.leadingNode,
     this.initialList,
+    this.initialListIsPublic,
     this.source,
     this.isAuthenticated,
   });
@@ -77,6 +83,7 @@ class _MdblistSeeAllScreenState extends State<MdblistSeeAllScreen> {
   List<MdblistDiscoverChoice> _choices = const [];
   MdblistDiscoverChoice? _selected;
   MdblistDiscoverChoice? _searchResult;
+  bool _searchResultIsPublic = false;
   bool _selectedLiked = false;
 
   MdblistDiscoverPage _page = const MdblistDiscoverPage();
@@ -210,6 +217,9 @@ class _MdblistSeeAllScreenState extends State<MdblistSeeAllScreen> {
         _group = MdblistDiscoverGroup.lists;
         _directory = MdblistListDirectory.searchResult;
         _searchResult = choice;
+        _searchResultIsPublic =
+            widget.initialListIsPublic ??
+            (initial.ownerName != null && !initial.liked);
         _choices = [choice];
         _selected = choice;
         _selectedLiked = choice.liked;
@@ -244,9 +254,18 @@ class _MdblistSeeAllScreenState extends State<MdblistSeeAllScreen> {
     super.dispose();
   }
 
+  bool get _canContinueEmpty =>
+      !_isCatalog &&
+      _group != MdblistDiscoverGroup.library &&
+      _selected != null &&
+      _visible.isEmpty &&
+      !_page.exhausted;
+
   void _focusEntry() {
     if (!mounted) return;
-    if (_visible.isEmpty) {
+    if (_canContinueEmpty) {
+      _moreNode.requestFocus();
+    } else if (_visible.isEmpty) {
       _backNode.requestFocus();
     } else {
       _gridKey.currentState?.focusFirst();
@@ -431,6 +450,7 @@ class _MdblistSeeAllScreenState extends State<MdblistSeeAllScreen> {
     final cursor = _page.nextCursor;
     if (choice == null || cursor == null || _loadingMore) return;
     final token = _fetchToken;
+    final restoreFocus = _moreNode.hasFocus;
     setState(() => _loadingMore = true);
     final next = await _source.loadChoice(choice, cursor: cursor);
     if (!mounted || choice != _selected || token != _fetchToken) return;
@@ -452,6 +472,18 @@ class _MdblistSeeAllScreenState extends State<MdblistSeeAllScreen> {
       );
       _recompute();
     });
+    if (restoreFocus && widget.isTelevision) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || token != _fetchToken) return;
+        if (_visible.isNotEmpty) {
+          _gridKey.currentState?.focusFirst();
+        } else if (_canContinueEmpty) {
+          _moreNode.requestFocus();
+        } else {
+          _gridExitNode.requestFocus();
+        }
+      });
+    }
   }
 
   void _acceptPage(MdblistDiscoverPage page) {
@@ -461,11 +493,27 @@ class _MdblistSeeAllScreenState extends State<MdblistSeeAllScreen> {
       _errorKind = page.isUsable ? null : page.kind;
       _recompute();
     });
-    if (widget.isTelevision && _visible.isEmpty) _gridExitNode.requestFocus();
+    if (widget.isTelevision && _visible.isEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        (_canContinueEmpty ? _moreNode : _gridExitNode).requestFocus();
+      });
+    }
+  }
+
+  bool get _hidesWatched {
+    if (_isCatalog || _group == MdblistDiscoverGroup.forYou) return true;
+    if (_group == MdblistDiscoverGroup.library || _selectedLiked) return false;
+    return switch (_directory) {
+      MdblistListDirectory.mine || MdblistListDirectory.liked => false,
+      MdblistListDirectory.searchResult => _searchResultIsPublic,
+      _ => true,
+    };
   }
 
   void _recompute() {
     Iterable<StremioMeta> items = _page.items;
+    if (_hidesWatched) items = items.where((m) => !WatchedFilter.hides(m));
     if (!_isCatalog) {
       if (_show == 'movie') {
         items = items.where((item) => item.type != 'series');
@@ -904,7 +952,9 @@ class _MdblistSeeAllScreenState extends State<MdblistSeeAllScreen> {
     return handleSeeAllFilterArrows(
       event,
       _filterNodes,
-      onDown: () => _gridKey.currentState?.focusFirst(),
+      onDown: () => _canContinueEmpty
+          ? _moreNode.requestFocus()
+          : _gridKey.currentState?.focusFirst(),
       onUp: () {
         if (!widget.embedded) _backNode.requestFocus();
       },
@@ -1255,11 +1305,30 @@ class _MdblistSeeAllScreenState extends State<MdblistSeeAllScreen> {
         if (_page.kind == MdblistResultKind.partial)
           'Showing retained or partial MDBList results',
       ];
-      if (status.isEmpty) return _buildEmpty();
+      if (status.isEmpty && !_canContinueEmpty) return _buildEmpty();
       return Column(
         children: [
           for (final message in status) _statusStrip(message),
           Expanded(child: _buildEmpty()),
+          if (_canContinueEmpty)
+            SafeArea(
+              top: false,
+              child: Focus(
+                onKeyEvent: (_, event) {
+                  if (event is KeyDownEvent &&
+                      event.logicalKey == LogicalKeyboardKey.arrowUp) {
+                    _gridExitNode.requestFocus();
+                    return KeyEventResult.handled;
+                  }
+                  return KeyEventResult.ignored;
+                },
+                child: TextButton(
+                  focusNode: _moreNode,
+                  onPressed: _loadingMore ? null : _loadMoreChoice,
+                  child: Text(_loadingMore ? 'Loading…' : 'Continue loading'),
+                ),
+              ),
+            ),
         ],
       );
     }

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'package:debrify/services/profiles/profile_preferences.dart';
 
 import 'package:debrify/models/profiles/connection_resource.dart';
 import 'package:debrify/models/profiles/profile_policy.dart';
@@ -75,6 +76,130 @@ void main() {
     await registry.close();
     await temporaryDirectory.delete(recursive: true);
   });
+
+  test(
+    'identical credential saves preserve revisions and do not notify sync',
+    () async {
+      final resource = await resources.create(
+        context: await ProfileAuthorizationContext.capture(registry),
+        type: ConnectionResourceType.realDebrid,
+        label: 'RD',
+        publicConfig: const {},
+        secretConfig: const {
+          'apiKey': 'original',
+          'nested': {
+            'a': 1,
+            'b': ['x'],
+          },
+        },
+      );
+      final before = (await registry.getResource(resource.id))!;
+      final intents = <String>[];
+      ProfilePreferences.webDavSyncLocalChangeSink = (_, key) =>
+          intents.add(key);
+      try {
+        await resources.updateSecret(
+          context: await ProfileAuthorizationContext.capture(registry),
+          resourceId: resource.id,
+          secretConfig: const {
+            'nested': {
+              'b': ['x'],
+              'a': 1,
+            },
+            'apiKey': 'original',
+          },
+        );
+        expect(
+          (await registry.getResource(resource.id))!.authorizationRevision,
+          before.authorizationRevision,
+        );
+        expect(intents, isEmpty);
+        await resources.updateSecret(
+          context: await ProfileAuthorizationContext.capture(registry),
+          resourceId: resource.id,
+          secretConfig: const {'apiKey': 'changed'},
+        );
+        expect(
+          (await registry.getResource(resource.id))!.authorizationRevision,
+          greaterThan(before.authorizationRevision),
+        );
+        expect(intents, [ProfilePreferences.webDavSyncRegistryLogicalKey]);
+        expect(
+          await resources.revealSecret(
+            context: await ProfileAuthorizationContext.capture(registry),
+            resourceId: resource.id,
+          ),
+          {'apiKey': 'changed'},
+        );
+      } finally {
+        ProfilePreferences.webDavSyncLocalChangeSink = null;
+      }
+    },
+  );
+
+  test(
+    'identical save still rejects a profile switch during comparison',
+    () async {
+      final resource = await resources.create(
+        context: await ProfileAuthorizationContext.capture(registry),
+        type: ConnectionResourceType.realDebrid,
+        label: 'RD',
+        publicConfig: const {},
+        secretConfig: const {'apiKey': 'same'},
+      );
+      final cipher = _BlockingDeviceSecretCipher(
+        MemoryDeviceSecretCipher(List<int>.generate(32, (i) => i)),
+        blockOpen: true,
+      );
+      await cipher.initialize();
+      final delayed = ConnectionResourceService(
+        registry: registry,
+        cipher: cipher,
+      );
+      final write = delayed.updateSecret(
+        context: await ProfileAuthorizationContext.capture(registry),
+        resourceId: resource.id,
+        secretConfig: const {'apiKey': 'same'},
+      );
+      await cipher.operationStarted.future;
+      await activate(memberId, 2);
+      cipher.release();
+      await expectLater(write, throwsA(isA<ResourceAuthorizationException>()));
+    },
+  );
+
+  test(
+    'credential replacement can repair an unreadable prior envelope',
+    () async {
+      final resource = await resources.create(
+        context: await ProfileAuthorizationContext.capture(registry),
+        type: ConnectionResourceType.realDebrid,
+        label: 'RD',
+        publicConfig: const {},
+        secretConfig: const {'apiKey': 'old'},
+      );
+      final cipher = _BlockingDeviceSecretCipher(
+        MemoryDeviceSecretCipher(List<int>.generate(32, (i) => i)),
+        failOpen: true,
+      );
+      await cipher.initialize();
+      await ConnectionResourceService(
+        registry: registry,
+        cipher: cipher,
+      ).updateSecret(
+        context: await ProfileAuthorizationContext.capture(registry),
+        resourceId: resource.id,
+        secretConfig: const {'apiKey': 'replacement'},
+      );
+      expect(
+        await resources.revealSecret(
+          context: await ProfileAuthorizationContext.capture(registry),
+          resourceId: resource.id,
+        ),
+        {'apiKey': 'replacement'},
+      );
+    },
+  );
 
   test('seals secrets and requires explicit grant and binding', () async {
     final owner = await ProfileAuthorizationContext.capture(registry);
@@ -665,6 +790,7 @@ class _BlockingDeviceSecretCipher implements DeviceSecretCipher {
   final DeviceSecretCipher delegate;
   final bool blockOpen;
   final bool blockSeal;
+  final bool failOpen;
   final Completer<void> operationStarted = Completer<void>();
   final Completer<void> _release = Completer<void>();
 
@@ -672,6 +798,7 @@ class _BlockingDeviceSecretCipher implements DeviceSecretCipher {
     this.delegate, {
     this.blockOpen = false,
     this.blockSeal = false,
+    this.failOpen = false,
   });
 
   @override
@@ -682,6 +809,7 @@ class _BlockingDeviceSecretCipher implements DeviceSecretCipher {
     String envelope, {
     required List<int> associatedData,
   }) async {
+    if (failOpen) throw const FormatException('Unreadable prior envelope');
     if (blockOpen) await _block();
     return delegate.open(envelope, associatedData: associatedData);
   }

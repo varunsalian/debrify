@@ -1,12 +1,19 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:synchronized/synchronized.dart';
 
 import 'profile_preference_budget.dart';
+import 'profile_preference_portability.dart';
+import 'profile_appearance_preferences.dart';
 import 'profile_runtime.dart';
 import 'profile_scope.dart';
 import 'profile_credential_facade.dart';
 import 'tvos_profile_recovery_store.dart';
+
+typedef WebDavSyncLocalChangeSink =
+    void Function(String localProfileId, String logicalKey);
 
 /// SharedPreferences-compatible facade that applies the captured profile
 /// generation in committed mode and is byte-for-byte legacy-compatible before
@@ -17,6 +24,7 @@ enum CapturedProfilePreferenceAccess {
   profileCreation,
   restore,
   connectionGrant,
+  syncApply,
 
   /// The dev audit export, which inventories every profile's keys. Read-only
   /// like [nativeProjectionReadOnly] — a diagnostic that can write is a
@@ -24,8 +32,48 @@ enum CapturedProfilePreferenceAccess {
   diagnosticsReadOnly,
 }
 
+/// Opaque proof that no scoped profile preference changed after a coordinated
+/// read. Callers may carry this across network work, but only
+/// [ProfilePreferences.runIfMutationSnapshotCurrent] can validate it.
+final class ProfilePreferenceMutationToken {
+  const ProfilePreferenceMutationToken._(this._revision);
+
+  final int _revision;
+}
+
+/// A routine optimistic-concurrency miss: local profile state changed while a
+/// sync target or complete seed was being prepared.
+final class ProfilePreferenceMutationConflict implements Exception {
+  const ProfilePreferenceMutationConflict();
+
+  @override
+  String toString() =>
+      'Local profile data changed while WebDAV sync was preparing; try again';
+}
+
 class ProfilePreferences implements SharedPreferences {
+  static const String webDavSyncRegistryLogicalKey =
+      'remote_webdav_sync_registry_records_v1';
+
+  /// Notification-only key: playback writes still sync without save UI.
+  static const String webDavSyncPlaybackLibraryLogicalKey =
+      'remote_webdav_sync_playback_library_v1';
+
+  static const String webDavSyncLibraryLogicalKey =
+      'remote_webdav_sync_library_records_v1';
   static final Lock _atomicStringListMutationLock = Lock();
+  static final Object _exclusiveMutationZoneKey = Object();
+  static int _mutationRevision = 0;
+  static int _activeMutations = 0;
+  static Completer<void>? _activeMutationsDrained;
+  static Completer<void>? _exclusiveMutationReleased;
+
+  /// Read-only counters for local diagnostics; no values or lock acquisition.
+  static Map<String, Object> get diagnosticMutationState => {
+    'activePreferenceWrites': _activeMutations,
+    'preferenceBarrierHeld': _exclusiveMutationReleased != null,
+    'preferenceRevision': _mutationRevision,
+  };
 
   ProfilePreferences._(
     this._delegate,
@@ -39,6 +87,114 @@ class ProfilePreferences implements SharedPreferences {
   final ProfileScope? _scope;
   final bool _enforceCurrentSession;
   final CapturedProfilePreferenceAccess? _capturedAccess;
+
+  /// Runs a coherent profile-preference read and captures its mutation token.
+  /// Ordinary writers are excluded only for the duration of [read].
+  static Future<T> captureMutationSnapshot<T>(
+    Future<T> Function(ProfilePreferenceMutationToken token) read,
+  ) => _runExclusiveMutation(
+    () => read(ProfilePreferenceMutationToken._(_mutationRevision)),
+  );
+
+  /// Captures a revision without holding the preference barrier across later
+  /// asynchronous work. The caller must validate it at its commit edge.
+  static Future<ProfilePreferenceMutationToken> captureMutationToken() =>
+      captureMutationSnapshot((token) async => token);
+
+  /// Runs [operation] only when [token] still describes current local profile
+  /// preferences. The lock stays held through the operation's commit edge so a
+  /// writer cannot slip between the comparison and a local/server commit.
+  static Future<T> runIfMutationSnapshotCurrent<T>(
+    ProfilePreferenceMutationToken token,
+    Future<T> Function() operation,
+  ) => _runExclusiveMutation(operation, expectedToken: token);
+
+  /// Coordinates an external mutation that belongs to profile hot state, such
+  /// as the tombstone journal written immediately before a preference removal.
+  static Future<T> synchronizeExternalMutation<T>(
+    Future<T> Function() operation, {
+    required bool marksMutation,
+  }) => _runOrdinaryMutation((markMutated) async {
+    final result = await operation();
+    if (marksMutation) markMutated();
+    return result;
+  });
+
+  /// Runs an ordinary preference mutation. Unlike a process-wide async mutex,
+  /// this permits unrelated writes to make progress together; it only waits
+  /// while WebDAV owns the short snapshot/commit barrier. State changes before
+  /// the first await are atomic on Dart's isolate, so an exclusive acquirer
+  /// cannot slip between the barrier check and active-writer registration.
+  static Future<T> _runOrdinaryMutation<T>(
+    Future<T> Function(void Function() markMutated) operation,
+  ) async {
+    _assertMutationOutsideExclusive();
+    while (true) {
+      final released = _exclusiveMutationReleased;
+      if (released == null) break;
+      await released.future;
+    }
+    _activeMutations++;
+    _activeMutationsDrained ??= Completer<void>();
+    var mutated = false;
+    try {
+      return await operation(() => mutated = true);
+    } finally {
+      if (mutated) _mutationRevision++;
+      _activeMutations--;
+      if (_activeMutations == 0) {
+        _activeMutationsDrained?.complete();
+        _activeMutationsDrained = null;
+      }
+    }
+  }
+
+  static void _assertMutationOutsideExclusive() {
+    if (Zone.current[_exclusiveMutationZoneKey] != true) return;
+    throw StateError(
+      'A profile preference mutation cannot run inside a WebDAV snapshot',
+    );
+  }
+
+  /// Serializes WebDAV snapshot/commit edges and waits for already-started
+  /// ordinary mutations to settle. Nested read-only guards are allowed, but a
+  /// mutation attempted from inside one fails immediately instead of creating
+  /// a lock inversion.
+  static Future<T> _runExclusiveMutation<T>(
+    Future<T> Function() operation, {
+    ProfilePreferenceMutationToken? expectedToken,
+  }) async {
+    if (Zone.current[_exclusiveMutationZoneKey] == true) {
+      if (expectedToken != null &&
+          expectedToken._revision != _mutationRevision) {
+        throw const ProfilePreferenceMutationConflict();
+      }
+      return operation();
+    }
+
+    while (true) {
+      final released = _exclusiveMutationReleased;
+      if (released == null) break;
+      await released.future;
+    }
+    final released = Completer<void>();
+    _exclusiveMutationReleased = released;
+    try {
+      final drained = _activeMutationsDrained;
+      if (drained != null) await drained.future;
+      if (expectedToken != null &&
+          expectedToken._revision != _mutationRevision) {
+        throw const ProfilePreferenceMutationConflict();
+      }
+      return await runZoned(
+        operation,
+        zoneValues: <Object, Object>{_exclusiveMutationZoneKey: true},
+      );
+    } finally {
+      _exclusiveMutationReleased = null;
+      released.complete();
+    }
+  }
 
   /// Scalar preferences consumed directly by native Android components.
   /// Successful runtime mutations of these keys must refresh the atomic
@@ -58,6 +214,7 @@ class ProfilePreferences implements SharedPreferences {
     'skip_segments_enabled',
     'skip_segment_provider',
     'player_default_subtitle_language',
+    'subtitle_source_priority_v1',
     'player_default_audio_language',
     'subtitle_size_index',
     'subtitle_style_index',
@@ -67,12 +224,28 @@ class ProfilePreferences implements SharedPreferences {
     'subtitle_elevation_index',
     'subtitle_bold',
     'subtitle_selected_font_id',
+    'subtitle_extreme_bottom_default_adopted_v1',
   };
 
   /// Installed by the native authority bridge after bootstrap. Keeping the
   /// callback here avoids coupling this preference facade back to the
   /// projection implementation that already depends on it.
   static Future<void> Function(ProfileScope scope)? nativeProjectionPublisher;
+
+  /// Armed only while recurring WebDAV sync has an active scheduler. The
+  /// callback is deliberately synchronous; preference writes never await sync.
+  static WebDavSyncLocalChangeSink? webDavSyncLocalChangeSink;
+
+  static void notifyWebDavSyncLocalChange(
+    String localProfileId,
+    String logicalKey,
+  ) {
+    try {
+      webDavSyncLocalChangeSink?.call(localProfileId, logicalKey);
+    } catch (_) {
+      // Sync scheduling must never turn a successful local write into failure.
+    }
+  }
 
   static Future<ProfilePreferences> instance() async {
     if (!ProfileRuntime.isInitialized) {
@@ -224,6 +397,56 @@ class ProfilePreferences implements SharedPreferences {
     budgetValue: value,
   );
 
+  /// Atomically recompute a JSON/string value after entering the ordinary
+  /// mutation barrier, so a WebDAV apply cannot invalidate the read before
+  /// its write. The callback is synchronous and must not mutate preferences.
+  Future<bool> mutateStringAtomically(
+    String key,
+    String Function(String? current) update,
+  ) {
+    _assertMutationOutsideExclusive();
+    return _atomicStringListMutationLock.synchronized(() {
+      late String next;
+      return _write(
+        () => _delegate.setString(_physical(key), next),
+        logicalKey: key,
+        budgetKey: _physical(key),
+        prepareValue: () => next = update(_delegate.getString(_physical(key))),
+      );
+    });
+  }
+
+  /// Prepare expensive JSON outside the global write barrier, then compare
+  /// the captured value at commit. A racing sync apply causes a fresh draft.
+  Future<bool> mutateStringAsyncAtomically(
+    String key,
+    Future<String> Function(String? current) update,
+  ) {
+    _assertMutationOutsideExclusive();
+    return _atomicStringListMutationLock.synchronized(() async {
+      for (var attempt = 0; ; attempt++) {
+        _assertWritable();
+        final old = _delegate.getString(_physical(key));
+        final next = await update(old);
+        try {
+          return await _write(
+            () => _delegate.setString(_physical(key), next),
+            logicalKey: key,
+            budgetKey: _physical(key),
+            prepareValue: () {
+              if (_delegate.getString(_physical(key)) != old) {
+                throw const ProfilePreferenceMutationConflict();
+              }
+              return next;
+            },
+          );
+        } on ProfilePreferenceMutationConflict {
+          if (attempt >= 3) rethrow;
+        }
+      }
+    });
+  }
+
   /// Serializes a string-list read/modify/write against every scoped instance.
   /// The lock covers the physical profile key, so callers can safely update an
   /// inactive captured profile without racing an active-session mutation.
@@ -231,28 +454,35 @@ class ProfilePreferences implements SharedPreferences {
   Future<bool> mutateStringListAtomically(
     String key,
     List<String>? Function(List<String>? current) update,
-  ) => _atomicStringListMutationLock.synchronized(() async {
-    _assertWritable();
-    final physical = _physical(key);
-    final current = _delegate.getStringList(physical);
-    final next = update(
-      current == null ? null : List<String>.unmodifiable(current),
-    );
-    if (next == null) return true;
-    final frozen = List<String>.unmodifiable(next);
-    return _write(
-      () => _delegate.setStringList(physical, frozen),
-      logicalKey: key,
-      budgetKey: physical,
-      budgetValue: frozen,
-    );
-  });
+  ) {
+    // Check before taking the list-specific lock. Otherwise a guarded WebDAV
+    // callback could wait on a writer that is itself waiting for the WebDAV
+    // barrier, recreating the lock inversion this guard is meant to prevent.
+    _assertMutationOutsideExclusive();
+    return _atomicStringListMutationLock.synchronized(() async {
+      _assertWritable();
+      final physical = _physical(key);
+      final current = _delegate.getStringList(physical);
+      final next = update(
+        current == null ? null : List<String>.unmodifiable(current),
+      );
+      if (next == null) return true;
+      final frozen = List<String>.unmodifiable(next);
+      return _write(
+        () => _delegate.setStringList(physical, frozen),
+        logicalKey: key,
+        budgetKey: physical,
+        budgetValue: frozen,
+      );
+    });
+  }
 
   /// Persist a coherent group of native-consumed scalar settings and publish
   /// their projection once. Used by native UI surfaces that return a complete
   /// settings snapshot after one interaction.
   Future<bool> setNativeProjectionBatch(Map<String, Object> values) async {
     _assertWritable();
+    final changedKeys = <String>{};
     for (final entry in values.entries) {
       if (!nativeProjectionKeys.contains(entry.key)) {
         throw ArgumentError.value(
@@ -277,19 +507,30 @@ class ProfilePreferences implements SharedPreferences {
       }
     }
 
-    var success = true;
-    for (final entry in values.entries) {
-      _assertWritable();
-      final physical = _physical(entry.key);
-      success =
-          switch (entry.value) {
+    final success = await _runOrdinaryMutation((markMutated) async {
+      var success = true;
+      var mutated = false;
+      try {
+        for (final entry in values.entries) {
+          _assertWritable();
+          final physical = _physical(entry.key);
+          if (!_sameSyncValue(_delegate.get(physical), entry.value)) {
+            changedKeys.add(entry.key);
+          }
+          final wrote = switch (entry.value) {
             bool value => await _delegate.setBool(physical, value),
             int value => await _delegate.setInt(physical, value),
             String value => await _delegate.setString(physical, value),
             _ => false,
-          } &&
-          success;
-    }
+          };
+          mutated = wrote || mutated;
+          success = wrote && success;
+        }
+        return success;
+      } finally {
+        if (mutated) markMutated();
+      }
+    });
     final scope = _scope;
     final publisher = nativeProjectionPublisher;
     _assertWritable();
@@ -306,7 +547,187 @@ class ProfilePreferences implements SharedPreferences {
         ProfileRuntime.isProfileCommitted) {
       await TvOsProfileRecoveryStore.checkpointPreferenceMutation();
     }
+    if (success && _capturedAccess == null && scope != null) {
+      for (final key in changedKeys) {
+        if (ProfileAppearancePreferences.keys.contains(key) ||
+            !ProfilePreferencePortability.allowsKey(key) ||
+            !ProfilePreferencePortability.prepareValue(
+              key,
+              values[key],
+            ).include) {
+          continue;
+        }
+        notifyWebDavSyncLocalChange(scope.profileId, key);
+      }
+    }
     return success;
+  }
+
+  /// Applies a recurring-sync target verbatim to one captured profile scope.
+  ///
+  /// Null is intentionally unsupported: omission and null never delete local
+  /// state in hot sync; deletions travel through authenticated tombstones.
+  /// A persisted engine-side pending target makes this redo-safe if one of the
+  /// underlying SharedPreferences writes fails part-way through.
+  Future<bool> applySyncBatch(
+    Map<String, Object> values, {
+    required void Function() authorizationBarrier,
+    ProfilePreferenceMutationToken? expectedMutationToken,
+    Future<void> Function()? beforeWrite,
+    bool replayCommittedTarget = false,
+    Future<void> Function(ProfileScope scope, Set<String> changedKeys)?
+    afterApply,
+  }) async {
+    _assertWritable();
+    authorizationBarrier();
+    if (_capturedAccess != CapturedProfilePreferenceAccess.syncApply ||
+        _scope == null) {
+      throw StateError('Sync batch apply requires a captured profile scope');
+    }
+    for (final entry in values.entries) {
+      _validateSyncEntry(entry.key, entry.value);
+    }
+
+    final writes =
+        <({String logical, String physical, Object value, int delta})>[];
+    final success = await _runExclusiveMutation(() async {
+      _assertWritable();
+
+      for (final entry in values.entries) {
+        final physical = _physical(entry.key);
+        final existed = _delegate.containsKey(physical);
+        final current = existed ? _delegate.get(physical) : null;
+        if (existed && _sameSyncValue(current, entry.value)) continue;
+        writes.add((
+          logical: entry.key,
+          physical: physical,
+          value: entry.value,
+          delta:
+              ProfilePreferenceBudget.entryFootprint(physical, entry.value) -
+              (existed
+                  ? ProfilePreferenceBudget.entryFootprint(physical, current)
+                  : 0),
+        ));
+      }
+      writes.sort((left, right) {
+        final byGrowth = left.delta.compareTo(right.delta);
+        return byGrowth != 0 ? byGrowth : left.logical.compareTo(right.logical);
+      });
+      if (ProfilePreferenceBudget.enforced) {
+        var projectedBytes = ProfilePreferenceBudget.measure(_delegate);
+        for (final write in writes) {
+          if (!ProfilePreferenceBudget.admitsProjectedDelta(
+            currentBytes: projectedBytes,
+            deltaBytes: write.delta,
+          )) {
+            return false;
+          }
+          projectedBytes += write.delta;
+        }
+      }
+
+      // Persist the crash-replay target only after the optimistic revision
+      // check, while every ordinary writer is excluded from the gap before the
+      // first local write.
+      authorizationBarrier();
+      if (beforeWrite != null) {
+        await beforeWrite();
+        authorizationBarrier();
+      }
+      if (writes.isEmpty && !replayCommittedTarget) return true;
+
+      var success = true;
+      var mutated = false;
+      try {
+        for (final write in writes) {
+          _assertWritable();
+          // Recheck against the live database as well as the all-or-nothing
+          // preflight. A non-profile raw writer can still consume tvOS
+          // headroom while this async batch is in flight.
+          if (ProfilePreferenceBudget.enforced &&
+              !ProfilePreferenceBudget.admits(
+                _delegate,
+                write.physical,
+                write.value,
+              )) {
+            return false;
+          }
+          final wrote = switch (write.value) {
+            bool value => await _delegate.setBool(write.physical, value),
+            int value => await _delegate.setInt(write.physical, value),
+            double value => await _delegate.setDouble(write.physical, value),
+            String value => await _delegate.setString(write.physical, value),
+            List<String> value => await _delegate.setStringList(
+              write.physical,
+              value,
+            ),
+            _ => false,
+          };
+          mutated = wrote || mutated;
+          authorizationBarrier();
+          success = wrote && success;
+          if (!wrote) break;
+        }
+        return success;
+      } finally {
+        if (mutated) _mutationRevision++;
+      }
+    }, expectedToken: expectedMutationToken);
+    if (!success) return false;
+    if (writes.isEmpty && !replayCommittedTarget) return true;
+
+    _assertWritable();
+    authorizationBarrier();
+    final scope = _scope;
+    final changedKeys = Set<String>.unmodifiable(
+      writes.isEmpty ? values.keys : writes.map((write) => write.logical),
+    );
+    if (ProfileRuntime.isInitialized &&
+        ProfileRuntime.isProfileCommitted &&
+        ProfileRuntime.scope.value == scope &&
+        changedKeys.any(nativeProjectionKeys.contains)) {
+      await nativeProjectionPublisher?.call(scope);
+      authorizationBarrier();
+    }
+    if (TvOsProfileRecoveryStore.supported &&
+        ProfileRuntime.isInitialized &&
+        ProfileRuntime.isProfileCommitted) {
+      await TvOsProfileRecoveryStore.checkpointPreferenceMutation();
+      authorizationBarrier();
+    }
+    if (afterApply != null) {
+      authorizationBarrier();
+      await afterApply(scope, changedKeys);
+      authorizationBarrier();
+    }
+    return true;
+  }
+
+  static bool _sameSyncValue(Object? current, Object next) {
+    if (current is List && next is List<String>) {
+      return current.length == next.length &&
+          Iterable<int>.generate(
+            next.length,
+          ).every((index) => current[index] == next[index]);
+    }
+    // SharedPreferences preserves int and double as distinct storage types.
+    // Dart's numeric equality considers `1 == 1.0`, but skipping that write
+    // would leave getDouble/getInt observing the wrong type after sync.
+    return current.runtimeType == next.runtimeType && current == next;
+  }
+
+  static void _validateSyncEntry(String key, Object value) {
+    if (key.isEmpty || key.length > 256 || key.contains('\u0000')) {
+      throw ArgumentError.value(key, 'key', 'Invalid sync preference key');
+    }
+    if (value is double && !value.isFinite) {
+      throw ArgumentError.value(value, key, 'Sync value must be finite');
+    }
+    if (value is bool || value is int || value is double || value is String) {
+      return;
+    }
+    if (value is List<String>) return;
+    throw ArgumentError.value(value, key, 'Unsupported sync preference value');
   }
 
   @override
@@ -326,22 +747,44 @@ class ProfilePreferences implements SharedPreferences {
     String? logicalKey,
     String? budgetKey,
     Object? budgetValue,
+    Object? Function()? prepareValue,
   }) async {
     _assertWritable();
-    // Only ordinary runtime writes are gated. Every captured-scope caller
-    // (migration, restore, profile creation) treats a `false` result as fatal
-    // and throws, and during bootstrap an uncaught throw prevents the app from
-    // starting — trading the platform kill for a Dart one. Those paths are
-    // bounded elsewhere: migration by its preflight, restore by the recovery
-    // envelope caps, creation by its fixed 24-key scalar list. Ordinary writes
-    // are both the sole source of unbounded growth and the only ones whose
-    // result is never inspected, so refusing them can only skip a save.
-    if (budgetKey != null &&
-        _capturedAccess == null &&
-        !ProfilePreferenceBudget.admits(_delegate, budgetKey, budgetValue)) {
-      return false;
-    }
-    final success = await operation();
+    var unchanged = false;
+    Object? mutationValue = budgetValue;
+    final success = await _runOrdinaryMutation((markMutated) async {
+      _assertWritable();
+      final proposedValue = prepareValue != null ? prepareValue() : budgetValue;
+      mutationValue = proposedValue;
+      if (_capturedAccess == null && budgetKey != null) {
+        final previous = _delegate.get(budgetKey);
+        unchanged =
+            previous == proposedValue ||
+            (previous is List<String> &&
+                proposedValue is List<String> &&
+                listEquals(previous, proposedValue));
+      }
+      // Only ordinary runtime writes are gated. Every captured-scope caller
+      // (migration, restore, profile creation) treats a `false` result as fatal
+      // and throws, and during bootstrap an uncaught throw prevents the app from
+      // starting — trading the platform kill for a Dart one. Those paths are
+      // bounded elsewhere: migration by its preflight, restore by the recovery
+      // envelope caps, creation by its fixed 24-key scalar list. Ordinary writes
+      // are both the sole source of unbounded growth and the only ones whose
+      // result is never inspected, so refusing them can only skip a save.
+      if (budgetKey != null &&
+          _capturedAccess == null &&
+          !ProfilePreferenceBudget.admits(
+            _delegate,
+            budgetKey,
+            proposedValue,
+          )) {
+        return false;
+      }
+      final success = await operation();
+      if (success && !unchanged) markMutated();
+      return success;
+    });
     final scope = _scope;
     final publisher = nativeProjectionPublisher;
     if (success &&
@@ -358,6 +801,25 @@ class ProfilePreferences implements SharedPreferences {
         ProfileRuntime.isInitialized &&
         ProfileRuntime.isProfileCommitted) {
       await TvOsProfileRecoveryStore.checkpointPreferenceMutation();
+    }
+    if (success &&
+        _capturedAccess == null &&
+        scope != null &&
+        logicalKey != null &&
+        !unchanged) {
+      // Keep key admission (including special library keys) in the scheduler,
+      // but omit values that the portable payload deliberately excludes. Use
+      // this mutation's value, not a later read that could race another save.
+      // A remove has a null value and remains eligible for synchronization.
+      final excludedValue =
+          ProfilePreferencePortability.allowsKey(logicalKey) &&
+          !ProfilePreferencePortability.prepareValue(
+            logicalKey,
+            mutationValue,
+          ).include;
+      if (!excludedValue) {
+        notifyWebDavSyncLocalChange(scope.profileId, logicalKey);
+      }
     }
     return success;
   }
@@ -382,6 +844,9 @@ class ProfilePreferences implements SharedPreferences {
 
   @visibleForTesting
   ProfileScope? get debugScope => _scope;
+
+  @visibleForTesting
+  static void debugResetMutationTracking() => _mutationRevision = 0;
 }
 
 /// Explicit unscoped store. Device keys must be registered, keeping accidental
@@ -432,6 +897,11 @@ class DevicePreferences {
     'tvos_multi_profile_top_shelf_enabled',
     'profile_gate_style_v1',
     'profile_gate_always_ask_v1',
+    'webdav_sync_state_v1',
+    'webdav_sync_local_device_name_v1',
+    'webdav_sync_device_removed_v1',
+    'webdav_sync_backup_restore_v1',
+    'webdav_sync_db_adoption_gate_v1',
   };
 
   static Future<DevicePreferences> instance() async =>
@@ -465,6 +935,15 @@ class DevicePreferences {
 
   Future<bool> setString(String key, String value) {
     _assertAllowed(key);
+    return _delegate.setString(key, value);
+  }
+
+  /// Device-owned collections that can grow must still participate in the
+  /// database-wide tvOS budget. Small fixed device flags keep the ordinary
+  /// setters; bounded stores such as WebDAV sync use this guarded variant.
+  Future<bool> setBudgetedString(String key, String value) async {
+    _assertAllowed(key);
+    if (!ProfilePreferenceBudget.admits(_delegate, key, value)) return false;
     return _delegate.setString(key, value);
   }
 

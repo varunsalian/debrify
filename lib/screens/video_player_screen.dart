@@ -1,4 +1,7 @@
+import '../models/subtitle_source_priority.dart';
+import 'video_player/utils/subtitle_priority_selection.dart';
 import 'dart:async';
+import '../services/player_visibility.dart';
 import '../utils/media_kit_init.dart';
 import 'dart:io';
 import 'dart:math' as math;
@@ -9,10 +12,10 @@ import 'package:path_provider/path_provider.dart';
 import '../utils/app_storage.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:flutter/services.dart';
-import 'package:screen_brightness/screen_brightness.dart';
+import '../services/player_display_controls.dart';
+import 'package:synchronized/synchronized.dart';
 
 // Removed volume_controller; using media_kit player volume instead
-import 'package:wakelock_plus/wakelock_plus.dart';
 import '../services/storage_service.dart';
 import '../services/local_playback_resume_resolver.dart';
 import '../services/startup_stream_policy.dart';
@@ -27,6 +30,7 @@ import '../services/tvos_decode_remedy.dart';
 import '../services/android_native_downloader.dart';
 import '../services/desktop_recording_service.dart';
 import '../services/live_recording_service.dart';
+import '../services/main_page_bridge.dart';
 import '../services/profiles/profile_lock_controller.dart';
 import '../services/tracking_source_policy.dart';
 import '../services/profiles/profile_runtime.dart';
@@ -1163,6 +1167,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   bool _userManuallySelectedSubtitle =
       false; // Track if user manually selected a subtitle
   bool _trackPreferencesReadyForAddonSubtitles = false;
+  final _subtitlePrioritySelectionQueue = SubtitlePrioritySelectionQueue();
   int _addonSubtitleFetchToken =
       0; // Guard against stale async fetches on content switch
   // Paths of temp SRT/VTT files we've written for addon subtitles. We hand
@@ -1201,6 +1206,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   // Blocks the autosave from filing a near-zero position over a deep resume
   // point while a requested resume seek has not landed. See ResumeWriteGuard.
   final ResumeWriteGuard _resumeWriteGuard = ResumeWriteGuard();
+  // The 6s tick and explicit UI checkpoints can land together. Serialize the
+  // read/modify/write saves so an older autosave cannot finish after, and
+  // overwrite, a newer pause or settled-seek checkpoint.
+  final Lock _resumeSaveLock = Lock();
   // Bumped whenever the media the landing verifier is watching stops being
   // current (item change, source switch). Aborts the verifier WITHOUT
   // releasing the guard — the guard must survive through the outgoing
@@ -1399,9 +1408,13 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   @override
   void initState() {
     super.initState();
+    _activeHttpHeaders = widget.httpHeaders;
+    PlayerVisibility.opened(this);
     AnalyticsService.screenView('video_player');
     _startAnalyticsHeartbeat();
-    _activePlaylist = widget.playlist;
+    _activePlaylist = widget.playlist
+        ?.map((entry) => entry.withDefaultHttpHeaders(widget.httpHeaders))
+        .toList();
     _seriesImdbKnownAtLaunch = widget.contentImdbId?.trim().isNotEmpty == true;
     // The dock and the zap banner share the bottom strip, and the dock is
     // raised from several places that never go through _toggleControls
@@ -1517,11 +1530,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // Held for the LOADING phase only — a slow debrid resolve must not let
     // the screen sleep before the first frame. From the first playing event
     // onward the lock follows play/pause (see _syncWakelock).
-    try {
-      WakelockPlus.enable();
-    } catch (_) {
-      // Wakelock not supported on this platform (e.g., Linux)
-    }
+    unawaited(PlayerDisplayControls.instance.setWakelock(true));
     if (Platform.isWindows || Platform.isLinux) {
       windowManager.setFullScreen(true);
     }
@@ -3187,6 +3196,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     await _attachAudioEffectSession();
 
     _currentStreamUrl = initialUrl.isNotEmpty ? initialUrl : null;
+    if (_activePlaylist != null &&
+        _currentIndex >= 0 &&
+        _currentIndex < _activePlaylist!.length) {
+      _activeHttpHeaders =
+          _activePlaylist![_currentIndex].httpHeaders ?? widget.httpHeaders;
+    }
 
     // IPTV launch: the first tune starts here, before either open branch
     // below (IPTV is never PikPak). Zaps re-arm this in _switchToIptvChannel.
@@ -3295,7 +3310,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           final opened = plainOpen
               ? await (() async {
                   await _openMedia(
-                    mk.Media(initialUrl, httpHeaders: widget.httpHeaders),
+                    mk.Media(initialUrl, httpHeaders: _activeHttpHeaders),
                     play: !hasExternalAudio,
                     desiredPlay: true,
                     liveStream: launchIsLiveIptv,
@@ -3304,7 +3319,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                 })()
               : await _openInitialVodWithFailover(
                   initialUrl,
-                  httpHeaders: widget.httpHeaders,
+                  httpHeaders: _activeHttpHeaders,
                   initialAttemptAlreadyFailed: initialRankedAttemptFailed,
                 );
           if (!opened) {
@@ -3463,6 +3478,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         _iptvLiveRecovery.onProgress(d, wantsPlayback: _isPlaying);
       }
       _position = d;
+      _prepareNextDirectEpisode();
       _updateMdblistPosition();
       _playbackUiClock.updatePosition(d);
       _syncSkipSegmentsForCurrentContent();
@@ -5409,7 +5425,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
             // Cancel any ongoing PikPak retry when switching to non-PikPak video
             _pikPakRetryId++;
             await _openMedia(
-              mk.Media(url, httpHeaders: widget.httpHeaders),
+              mk.Media(url, httpHeaders: _activeHttpHeaders),
               play: true,
             );
           }
@@ -7766,14 +7782,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       // stream that is visibly playing. Duration almost always arrives
       // first, so this fallback does not delay the common case.
       _player.stream.width.listen((width) {
-        if ((width ?? 0) > 0 &&
-            _player.state.position > Duration.zero) {
+        if ((width ?? 0) > 0 && _player.state.position > Duration.zero) {
           finish(true, 'decoded_video');
         }
       }),
       _player.stream.position.listen((value) {
-        if (value > Duration.zero &&
-            (_player.state.width ?? 0) > 0) {
+        if (value > Duration.zero && (_player.state.width ?? 0) > 0) {
           finish(true, 'decoded_video');
         }
       }),
@@ -8219,11 +8233,16 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       // PikPak sessions — cold-storage opens are the slowest in the app and
       // have their own readiness needs.
       final isDebridResolved =
-          !pikPakResolver && source?.streamType == StreamType.torrent;
+          !pikPakResolver && source.streamType == StreamType.torrent;
+      final candidateHeaders = isResolvedLaunchUrl
+          ? httpHeaders
+          : resolvedPlaylist != null
+          ? resolvedPlaylist[resolvedPlaylistIndex].httpHeaders
+          : source.httpHeaders;
       final ok = isDebridResolved
           ? await _openStartupDebridDirect(
               url,
-              httpHeaders: httpHeaders,
+              httpHeaders: candidateHeaders,
               source: source,
               sourceIndex: sourceIndex,
               attempt: attempts,
@@ -8231,7 +8250,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
             )
           : await _tryOpenStartupVod(
               url,
-              httpHeaders: httpHeaders,
+              httpHeaders: candidateHeaders,
               source: source,
               sourceIndex: sourceIndex,
               attempt: attempts,
@@ -8239,6 +8258,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
             );
       if (!mounted) return false;
       if (!ok) continue;
+
+      _activeHttpHeaders = candidateHeaders;
 
       _currentSourceIndex = sourceIndex;
       _currentStreamUrl = url;
@@ -8442,6 +8463,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         ? Duration(milliseconds: outgoingHeldMs)
         : _position;
     final outgoingDirectUrl = _currentStreamUrl;
+    final outgoingHeaders = _activeHttpHeaders;
     final selectedSource =
         (_effectiveSources != null &&
             sourceIndex >= 0 &&
@@ -8626,8 +8648,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
             _currentIndex = outgoingIndex;
           });
           try {
+            _activeHttpHeaders = outgoingHeaders;
             await _openMedia(
-              mk.Media(outgoingDirectUrl, httpHeaders: widget.httpHeaders),
+              mk.Media(outgoingDirectUrl, httpHeaders: _activeHttpHeaders),
               play: true,
             );
             await _waitForVideoReady();
@@ -8677,6 +8700,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     });
   }
 
+  Map<String, String>? _activeHttpHeaders;
+
   Future<void> _switchToStremioSource(int index, String url) async {
     _hideSourceSheet();
 
@@ -8692,6 +8717,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         ? Duration(milliseconds: heldSwitchMs)
         : _position;
     final previousUrl = _currentStreamUrl;
+    final previousHeaders = _activeHttpHeaders;
     final previousSourceIndex = _currentSourceIndex;
     final source =
         (_effectiveSources != null &&
@@ -8745,7 +8771,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
             })()
           : await _tryOpenStartupVod(
               url,
-              httpHeaders: widget.httpHeaders,
+              httpHeaders: source?.httpHeaders,
               source: source,
               sourceIndex: index,
             );
@@ -8783,6 +8809,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       }
       _currentSourceIndex = index;
       _currentStreamUrl = url;
+      _activeHttpHeaders = source?.httpHeaders;
       committed = true;
       unawaited(_commitValidatedStremioSource(source));
     } catch (e) {
@@ -8792,8 +8819,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       // row: this was an explicit user selection.
       if (previousUrl != null && previousUrl.isNotEmpty) {
         try {
+          _activeHttpHeaders = previousHeaders;
           await _openMedia(
-            mk.Media(previousUrl, httpHeaders: widget.httpHeaders),
+            mk.Media(previousUrl, httpHeaders: _activeHttpHeaders),
             play: true,
           );
           await _waitForVideoReady();
@@ -9190,7 +9218,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     try {
       _pikPakRetryId++;
       await _openMedia(
-        mk.Media(nextUrl, httpHeaders: widget.httpHeaders),
+        mk.Media(nextUrl, httpHeaders: _activeHttpHeaders),
         play: true,
       );
       _currentStreamUrl = nextUrl;
@@ -9319,7 +9347,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       // Cancel any ongoing PikPak retry when switching channels
       _pikPakRetryId++;
       await _openMedia(
-        mk.Media(nextUrl, httpHeaders: widget.httpHeaders),
+        mk.Media(nextUrl, httpHeaders: _activeHttpHeaders),
         play: true,
       );
       _currentStreamUrl = nextUrl;
@@ -9458,7 +9486,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     try {
       await Future.wait([
         StorageService.markMovieAsFinished(imdbId),
-        StorageService.removeVideoResume(_resumeKey),
+        StorageService.removeVideoResume(_resumeKey, playbackCheckpoint: true),
       ]);
     } catch (_) {
       // Playback remains usable if local storage is temporarily unavailable.
@@ -9663,6 +9691,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
     // Check if this is a PikPak video
     final currentEntry = _activePlaylist?[index];
+    _activeHttpHeaders = currentEntry?.httpHeaders;
     final isPikPak =
         currentEntry?.provider?.toLowerCase() == 'pikpak' ||
         currentEntry?.pikpakFileId != null;
@@ -9690,7 +9719,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       if (manualValidationSourceIndex != null) {
         final valid = await _tryOpenStartupVod(
           videoUrl,
-          httpHeaders: widget.httpHeaders,
+          httpHeaders: _activeHttpHeaders,
           source: manualValidationSource,
           sourceIndex: manualValidationSourceIndex,
         );
@@ -9698,7 +9727,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         if (!autoplay) await _player.pause();
       } else {
         await _openMedia(
-          mk.Media(videoUrl, httpHeaders: widget.httpHeaders),
+          mk.Media(videoUrl, httpHeaders: _activeHttpHeaders),
           play: autoplay,
         );
       }
@@ -10037,7 +10066,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     if (!isPikPak) {
       // Not a PikPak video, play normally
       await _openMedia(
-        mk.Media(videoUrl, httpHeaders: widget.httpHeaders),
+        mk.Media(videoUrl, httpHeaders: _activeHttpHeaders),
         play: true,
       );
       return true;
@@ -10067,7 +10096,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     print('PikPak: Initial playback attempt - opening media...');
     try {
       await _openMedia(
-        mk.Media(videoUrl, httpHeaders: widget.httpHeaders),
+        mk.Media(videoUrl, httpHeaders: _activeHttpHeaders),
         play: true,
       );
     } catch (e) {
@@ -10215,7 +10244,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         // Try reopening the player (might help reactivate cold storage file)
         try {
           await _openMedia(
-            mk.Media(videoUrl, httpHeaders: widget.httpHeaders),
+            mk.Media(videoUrl, httpHeaders: _activeHttpHeaders),
             play: true,
           );
         } catch (e) {
@@ -10316,7 +10345,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         // Try reopening the player for next attempt
         try {
           await _openMedia(
-            mk.Media(videoUrl, httpHeaders: widget.httpHeaders),
+            mk.Media(videoUrl, httpHeaders: _activeHttpHeaders),
             play: true,
           );
         } catch (reopenError) {
@@ -10679,19 +10708,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   /// takes the lock up front so the screen can't sleep through a slow
   /// resolve/open before the first playing event arrives.
   void _syncWakelock(bool playing) {
-    try {
-      if (playing) {
-        WakelockPlus.enable();
-      } else {
-        WakelockPlus.disable();
-      }
-    } catch (_) {
-      // Wakelock not supported on this platform (e.g., Linux).
-    }
+    unawaited(PlayerDisplayControls.instance.setWakelock(playing));
   }
 
   @override
   void dispose() {
+    PlayerVisibility.closed(this);
     ProfileLockController.instance.setPlaybackActive(false);
     _iptvDiag.onSessionEnd();
     _iptvLiveRecovery.cancel();
@@ -10774,6 +10796,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
     // Save the current state before disposing
     _saveResume();
+    // Every in-app player route converges here, including callers that push
+    // VideoPlayerScreen directly. The sync trigger is debounced, so the async
+    // resume write above settles before its hot-state snapshot is built.
+    MainPageBridge.notifyContentPlaybackStopped();
 
     // Cancel any ongoing PikPak retry operations
     _pikPakRetryId++;
@@ -10846,17 +10872,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     }
     _transitionStopTimer?.cancel();
     _rainbowController.dispose();
-    // Restore system brightness when exiting the player
-    try {
-      ScreenBrightness().resetScreenBrightness();
-    } catch (_) {
-      // Screen brightness not supported on this platform (e.g., Linux)
-    }
-    try {
-      WakelockPlus.disable();
-    } catch (_) {
-      // Wakelock not supported on this platform (e.g., Linux)
-    }
+    // Each helper awaits native failures before completing, including disposal.
+    unawaited(PlayerDisplayControls.instance.resetBrightness());
+    unawaited(PlayerDisplayControls.instance.setWakelock(false));
     if (Platform.isWindows || Platform.isLinux) {
       windowManager.setFullScreen(false);
     }
@@ -11415,11 +11433,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     return null;
   }
 
-  Future<void> _saveResume({bool debounced = false}) async {
-    if (_validationGateActive || !_isReady) {
-      return;
-    }
-
+  bool _resumeSaveBlocked(bool debounced) {
+    if (_validationGateActive || !_isReady) return true;
     // An IPTV zap flips _currentIptvIndex — and therefore _resumeKey — before
     // the incoming stream opens, while _position/_duration still describe the
     // OUTGOING one (_isReady is never cleared for the gap). A tick landing in
@@ -11427,16 +11442,44 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // key, which the Continue-watching shelf would then show as real progress.
     // Nothing is lost by skipping: the next tick saves once the switch lands.
     if (_effectiveIptvChannels != null && _isTransitioning) {
-      return;
+      return true;
     }
 
     // If this is a manual episode selection and it's been less than 30 seconds, skip saving
     // This gives the user time to seek to where they want
     if (_isManualEpisodeSelection && debounced) {
-      return;
+      return true;
     }
+    return false;
+  }
 
-    var pos = _position;
+  Future<void> _saveResume({
+    bool debounced = false,
+    Duration? positionOverride,
+  }) {
+    // Check both when requested and after queueing. A save requested inside a
+    // transition/validation guard must not become valid merely because an
+    // older write kept it queued until the guard ended; conversely, a newly
+    // started transition must suppress work which was waiting on the lock.
+    if (_resumeSaveBlocked(debounced)) return Future<void>.value();
+    // A periodic tick carries no unique intent. If any newer/older save owns
+    // the lock, drop this tick instead of building an unbounded timer backlog.
+    if (debounced && _resumeSaveLock.locked) return Future<void>.value();
+    return _resumeSaveLock.synchronized(
+      () => _saveResumeLocked(
+        debounced: debounced,
+        positionOverride: positionOverride,
+      ),
+    );
+  }
+
+  Future<void> _saveResumeLocked({
+    required bool debounced,
+    Duration? positionOverride,
+  }) async {
+    if (_resumeSaveBlocked(debounced)) return;
+
+    var pos = positionOverride ?? _position;
     final dur = _duration;
     if (dur <= Duration.zero) {
       return;
@@ -11602,13 +11645,29 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     } catch (e) {}
 
     // Also save to legacy system for backward compatibility
-    await StorageService.upsertVideoResume(_resumeKey, {
-      'positionMs': pos.inMilliseconds,
-      'speed': persistedSpeed,
-      'aspect': aspectStr,
-      'durationMs': dur.inMilliseconds,
-      'updatedAt': DateTime.now().millisecondsSinceEpoch,
-    });
+    await StorageService.upsertVideoResume(
+      _resumeKey,
+      {
+        'positionMs': pos.inMilliseconds,
+        'speed': persistedSpeed,
+        'aspect': aspectStr,
+        'durationMs': dur.inMilliseconds,
+        'updatedAt': DateTime.now().millisecondsSinceEpoch,
+      },
+      sourceId:
+          _currentIptvChannel?.attributes['series_playlist_id'] ??
+          _currentIptvChannel?.attributes['source_playlist_id'] ??
+          _iptvGuideContextOverride?.sourceId ??
+          widget.iptvSourceId,
+    );
+
+    // Explicit checkpoints (pause, settled seek, exit-adjacent saves) are the
+    // handoff moments another device would resume from — let sync flush now
+    // instead of waiting out the playback coalescing window. The 6s autosave
+    // tick stays on the throttled path.
+    if (!debounced) {
+      MainPageBridge.notifyPlaybackCheckpoint();
+    }
   }
 
   /// True while the auto-hide poll is being held off by a scrub, a pause, a
@@ -12312,11 +12371,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _gestureStartPosition = details.localPosition;
     _gestureStartVideoPosition = _position;
     _gestureStartVolume = (_player.state.volume / 100.0).clamp(0.0, 1.0);
-    try {
-      _gestureStartBrightness = await ScreenBrightness().current;
-    } catch (_) {
-      _gestureStartBrightness = 0.5;
-    }
+    _gestureStartBrightness = await PlayerDisplayControls.instance.brightness();
+    if (!mounted) return;
     _mode = GestureMode.none;
     _verticalHud.value = null;
     _seekHud.value = null;
@@ -12336,6 +12392,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         _mode = GestureMode.seek;
       } else if (absDy > 12) {
         final isLeftHalf = _gestureStartPosition.dx < size.width / 2;
+        if (isLeftHalf && !PlayerDisplayControls.supportsBrightness) return;
         _mode = isLeftHalf ? GestureMode.brightness : GestureMode.volume;
       }
     }
@@ -12367,11 +12424,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         0.0,
         1.0,
       );
-      try {
-        ScreenBrightness().setScreenBrightness(newBright);
-      } catch (_) {
-        // Screen brightness not supported on this platform (e.g., Linux)
-      }
+      unawaited(PlayerDisplayControls.instance.setBrightness(newBright));
       _verticalHud.value = VerticalHudState(
         kind: VerticalKind.brightness,
         value: newBright,
@@ -12405,6 +12458,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       _activeMediaUserPaused = true;
       _activeMediaShouldPlay = false;
       _player.pause();
+      unawaited(_saveResume(positionOverride: _position));
     } else {
       // An explicit press is the one thing that clears a sleep stop.
       _sleepStopLatched = false;
@@ -13020,6 +13074,26 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     try {
       final token = _playlistIdentityToken;
 
+      final pinned = fetcher.pinnedDirectCandidates;
+      if (pinned != null) {
+        await for (final candidate in pinned(season, episode)) {
+          if (!mounted || token != _playlistIdentityToken) return;
+          final sources = List<Torrent>.of(_effectiveSources ?? const []);
+          final index = sources.length;
+          sources.add(candidate);
+          setState(() => _augmentedSources = sources);
+          if (await _tryEpisodeCandidate(
+            index,
+            candidate,
+            season,
+            episode,
+            token,
+          ))
+            return;
+          if (!mounted || token != _playlistIdentityToken) return;
+        }
+      }
+
       // 1. Try what's already in the source list: exact-episode singles and
       // packs covering the season (often already unlocked on the account).
       final existing = List<Torrent>.of(_effectiveSources ?? const <Torrent>[]);
@@ -13183,6 +13257,30 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     final target = idx + direction;
     if (target < 0 || target >= eps.length) return null;
     return eps[target];
+  }
+
+  void _prepareNextDirectEpisode() {
+    final fetcher = widget.seriesSourceFetcher;
+    final sources = _effectiveSources;
+    if (fetcher == null ||
+        _validationGateActive ||
+        !_isPlaying ||
+        _isTransitioning ||
+        sources == null ||
+        _currentSourceIndex < 0 ||
+        _currentSourceIndex >= sources.length)
+      return;
+    final current = _currentSeasonEpisodeForIdentity();
+    if (current == null) return;
+    unawaited(
+      fetcher.prepareFromProgress(
+        source: sources[_currentSourceIndex],
+        season: current.season,
+        episode: current.episode,
+        positionMs: _position.inMilliseconds,
+        durationMs: _duration.inMilliseconds,
+      ),
+    );
   }
 
   Future<void> _showPlaylistSheet(BuildContext context) async {
@@ -14058,10 +14156,19 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                                     _isSeekingWithSlider = false;
                                     _scheduleAutoHide();
                                     if (_lastSliderSeekPos != null) {
-                                      _traktScrobbleSeek(_lastSliderSeekPos!);
-                                      _simklScrobbleSeek(_lastSliderSeekPos!);
-                                      _mdblistScrobbleSeek(_lastSliderSeekPos!);
+                                      final settledPosition =
+                                          _lastSliderSeekPos!;
+                                      _traktScrobbleSeek(settledPosition);
+                                      _simklScrobbleSeek(settledPosition);
+                                      _mdblistScrobbleSeek(settledPosition);
                                       _lastSliderSeekPos = null;
+                                      // A settled seek is a handoff moment:
+                                      // persist and let sync flush promptly.
+                                      unawaited(
+                                        _saveResume(
+                                          positionOverride: settledPosition,
+                                        ),
+                                      );
                                     }
                                   },
                                   // IPTV episode list (series/VOD) gets Next/Previous
@@ -14816,10 +14923,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                               suffixIcon: IconButton(
                                 icon: const Icon(Icons.arrow_forward_rounded),
                                 color: Colors.white70,
-                                onPressed: () => runSearch(
-                                  controller.text,
-                                  setSheetState,
-                                ),
+                                onPressed: () =>
+                                    runSearch(controller.text, setSheetState),
                               ),
                               filled: true,
                               fillColor: Colors.white.withValues(alpha: 0.08),
@@ -15915,13 +16020,48 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
   /// Apply default subtitle language from settings (when no stored preference exists)
   /// Returns true if an embedded subtitle was found and applied, false otherwise.
-  Future<bool> _applyDefaultSubtitleLanguage() async {
+  Future<bool> _applyDefaultSubtitleLanguage({
+    bool ignoreSourcePriority = false,
+  }) async {
+    final token = _addonSubtitleFetchToken;
     try {
       final defaultLang = await StorageService.getDefaultSubtitleLanguage();
       debugPrint('SubAuto: defaultSubtitleLanguage setting = $defaultLang');
-      if (defaultLang == null) {
-        // No preference set - do nothing, let player use its default
+      if (token != _addonSubtitleFetchToken || _userManuallySelectedSubtitle) {
         return false;
+      }
+      if (!ignoreSourcePriority && defaultLang != 'off') {
+        final order = await StorageService.getSubtitleSourcePriority();
+        if (token != _addonSubtitleFetchToken ||
+            _userManuallySelectedSubtitle) {
+          return false;
+        }
+        if (order.first != SubtitleSourcePriority.embedded) return false;
+      }
+      if (defaultLang == null) {
+        var selectedId = _player.state.track.subtitle.id;
+        final platform = _player.platform;
+        if (platform is mk.NativePlayer) {
+          try {
+            // Dart may still report "auto" while mpv has selected a real sid.
+            selectedId = await platform.getProperty('sid');
+          } catch (_) {
+            // Fall back to media_kit's reported selection.
+          }
+        }
+        if (token != _addonSubtitleFetchToken ||
+            _userManuallySelectedSubtitle) {
+          return false;
+        }
+        final track = subtitleWithoutLanguagePreference(
+          _player.state.tracks.subtitle,
+          selectedId: selectedId,
+        );
+        if (track == null) return false;
+        return _setSubtitleTrackWithDiagnostics(
+          track,
+          source: 'no-preference-embedded',
+        );
       }
 
       final tracks = _player.state.tracks;
@@ -16156,7 +16296,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
       // Need IMDB ID to fetch Stremio subtitles
       if (imdbId == null || imdbId.isEmpty) {
-        debugPrint('SubAuto: ABORT — no IMDB ID for addon subtitle fetch');
+        await _applySubtitleSourcePriority(
+          const [],
+          fetchToken,
+          discoveryReady: false,
+        );
         return;
       }
       debugPrint(
@@ -16184,6 +16328,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           imdbId: imdbId,
           season: season,
           episode: episode,
+          onUpdate: (slots) {
+            if (!mounted || fetchToken != _addonSubtitleFetchToken) return;
+            unawaited(_applySubtitleSourcePriority(slots, fetchToken));
+          },
         );
         subtitles = AddonSubtitleSlot.flatten(slots);
 
@@ -16204,102 +16352,76 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         );
       }
 
-      // Only auto-select if no embedded subtitle was applied and user hasn't manually selected
-      if (_embeddedSubtitleApplied) {
-        debugPrint(
-          'SubAuto: SKIP — embedded subtitle already applied (_embeddedSubtitleApplied=true)',
-        );
-        return;
-      }
-
-      if (_userManuallySelectedSubtitle) {
-        debugPrint(
-          'SubAuto: SKIP — user manually selected a subtitle this session',
-        );
-        return;
-      }
-
-      if (subtitles.isEmpty) {
-        debugPrint('SubAuto: SKIP — zero addon subtitles fetched');
-        return;
-      }
-
-      // Get user's default subtitle language preference
-      final defaultLang = await StorageService.getDefaultSubtitleLanguage();
-
-      // If subtitles are explicitly disabled, don't auto-select
-      if (defaultLang == 'off') {
-        debugPrint('SubAuto: SKIP — subtitles set to off');
-        return;
-      }
-
-      // If no preference set, default to English
-      final targetLang = defaultLang ?? 'en';
-      final availableLangs = subtitles.map((s) => s.lang).toSet();
-      debugPrint(
-        'SubAuto: matching targetLang=$targetLang (setting=$defaultLang) '
-        'against ${subtitles.length} addon subs, langs=$availableLangs',
-      );
-
-      // Find matching subtitle by language
-      StremioSubtitle? matchingSub;
-      for (final sub in subtitles) {
-        if (LanguageMapper.matchesLanguage(targetLang, sub.lang)) {
-          matchingSub = sub;
-          break;
-        }
-      }
-
-      if (matchingSub == null) {
-        debugPrint('SubAuto: NO MATCH — no $targetLang among $availableLangs');
-        return;
-      }
-
-      debugPrint(
-        'VideoPlayer: Auto-selecting addon subtitle: ${matchingSub.displayName} (${matchingSub.lang})',
-      );
-
-      // Download to a temp file so libmpv can detect the encoding itself.
-      final filePath = await _downloadStremioSubtitleToTempFile(matchingSub);
-
-      // Check if content changed or user manually selected during download
-      if (fetchToken != _addonSubtitleFetchToken) {
-        debugPrint(
-          'VideoPlayer: Content changed during addon subtitle download, discarding',
-        );
-        return;
-      }
-      if (_userManuallySelectedSubtitle) {
-        debugPrint(
-          'VideoPlayer: User manually selected subtitle during addon download, discarding',
-        );
-        return;
-      }
-      if (filePath == null) {
-        debugPrint(
-          'SubAuto: FAILED to download addon subtitle ${matchingSub.url}',
-        );
-        _showSubtitleFailureMessage(
-          'Couldn’t load the preferred subtitles. Choose another subtitle track.',
-        );
-        return;
-      }
-
-      final track = mk.SubtitleTrack.uri(
-        filePath,
-        title: matchingSub.displayName,
-        language: matchingSub.lang,
-      );
-      final applied = await _applyExternalSubtitleTrack(track);
-      if (!applied) return;
-      _selectedStremioSubtitleId = matchingSub.id;
-      _setActiveExternalSubtitlePath(filePath);
-
-      debugPrint(
-        'SubAuto: APPLIED addon subtitle "${matchingSub.displayName}" lang=${matchingSub.lang} source=${matchingSub.source}',
+      await _applySubtitleSourcePriority(
+        _cachedAddonSlots ?? const [],
+        fetchToken,
       );
     } catch (e) {
       debugPrint('SubAuto: auto-select FAILED with exception: $e');
+    }
+  }
+
+  Future<void> _applySubtitleSourcePriority(
+    List<AddonSubtitleSlot> slots,
+    int token, {
+    bool discoveryReady = true,
+  }) async {
+    if (!mounted || token != _addonSubtitleFetchToken) return;
+    await _subtitlePrioritySelectionQueue.submit(
+      SubtitlePriorityUpdate(token, slots, discoveryReady: discoveryReady),
+      _applySubtitlePriorityUpdate,
+    );
+  }
+
+  Future<void> _applySubtitlePriorityUpdate(
+    SubtitlePriorityUpdate update,
+  ) async {
+    bool valid() =>
+        mounted &&
+        update.token == _addonSubtitleFetchToken &&
+        _trackPreferencesReadyForAddonSubtitles &&
+        !_embeddedSubtitleApplied &&
+        !_userManuallySelectedSubtitle &&
+        _selectedStremioSubtitleId == null;
+    if (!valid()) return;
+    try {
+      final language = await StorageService.getDefaultSubtitleLanguage();
+      final saved = await StorageService.getSubtitleSourcePriority();
+      String? selectedPath;
+      final result = await selectSubtitleBySourcePriority(
+        saved: saved,
+        language: language,
+        slots: update.slots,
+        discoveryReady: update.discoveryReady,
+        isCurrent: valid,
+        tryEmbedded: () async {
+          // A manual title search explicitly asks for online subtitles.
+          if (_manualContentImdbId?.isNotEmpty == true) return false;
+          return _applyDefaultSubtitleLanguage(ignoreSourcePriority: true);
+        },
+        tryAddon: (sub) async {
+          final path = await _downloadStremioSubtitleToTempFile(sub);
+          if (!valid() || path == null) return false;
+          final applied = await _applyExternalSubtitleTrack(
+            mk.SubtitleTrack.uri(
+              path,
+              title: sub.displayName,
+              language: sub.lang,
+            ),
+          );
+          if (applied) selectedPath = path;
+          return applied;
+        },
+      );
+      if (!valid() || result == null) return;
+      if (result.addon case final sub?) {
+        _selectedStremioSubtitleId = sub.id;
+        _setActiveExternalSubtitlePath(selectedPath!);
+      } else if (!result.provisional) {
+        _embeddedSubtitleApplied = true;
+      }
+    } catch (e) {
+      debugPrint('SubAuto: source priority apply failed: $e');
     }
   }
 

@@ -1,7 +1,7 @@
 import 'dart:async' show unawaited;
 import 'dart:io' show Platform;
 
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show kIsWeb, visibleForTesting;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:file_picker/file_picker.dart';
@@ -24,6 +24,7 @@ import '../../services/profiles/profile_async_authorization.dart';
 import '../../services/profiles/profile_authorization.dart';
 import '../../services/profiles/profile_bootstrap.dart';
 import '../../services/profiles/profile_collection_resource_facade.dart';
+import '../../services/webdav_sync/webdav_sync_library_models.dart';
 import '../../widgets/iptv/iptv_list_name_dialog.dart';
 import 'iptv_category_order_page.dart';
 import 'iptv_hidden_categories_page.dart';
@@ -36,6 +37,7 @@ import '../../widgets/iptv/iptv_startup_channel_picker.dart';
 import '../../widgets/tv_text_field.dart';
 import 'iptv_settings_two_pane.dart';
 import 'widgets/settings_widgets.dart';
+import '../../theme/app_looks.dart';
 import '../../theme/app_theme_scope.dart';
 
 /// The narrow (phone / small-window) layout's destinations. The wide layout
@@ -57,6 +59,12 @@ enum _PhoneSection {
 
 class IptvSettingsPage extends StatefulWidget {
   const IptvSettingsPage({super.key, this.openAddSource = false});
+
+  @visibleForTesting
+  static bool showsAppearance({
+    required bool isTelevision,
+    required bool isDesktop,
+  }) => isTelevision || isDesktop;
 
   /// Opened by an "Add playlist" affordance rather than from the settings
   /// list: land on the add form itself instead of making the user find it.
@@ -202,9 +210,9 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
   }
 
   // Cockpit appearance (`iptv_style`). Shown only where the cockpit exists —
-  // Android TV and desktop; a phone or touch tablet would be picking a look
-  // it can never see.
-  String _iptvStyle = 'command';
+  // television and desktop; a phone or touch tablet would be picking a look it
+  // can never see.
+  String _iptvStyle = StorageService.kIptvStyleDefault;
 
   // In-player guide look (`iptv_player_guide_style`). Ungated: every
   // platform has a player — phones/desktop the Dart one, Android TV the
@@ -212,8 +220,10 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
   String _playerGuideStyle = 'classic';
   static final bool _isDesktopPlatform =
       !kIsWeb && (Platform.isMacOS || Platform.isWindows || Platform.isLinux);
-  bool get _appearanceVisible =>
-      PlatformUtil.isAndroidTvCached || _isDesktopPlatform;
+  bool get _appearanceVisible => IptvSettingsPage.showsAppearance(
+    isTelevision: PlatformUtil.isTelevision,
+    isDesktop: _isDesktopPlatform,
+  );
 
   bool _loading = true;
   bool _isAdding = false;
@@ -415,6 +425,43 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
     return key == null ? const [] : [key];
   }
 
+  Map<String, WebDavSyncCatalogOwnerReference> _catalogOwnerReferencesFor(
+    IptvPlaylist playlist,
+  ) {
+    final resourceId = playlist.connectionResourceId;
+    if (resourceId == null) {
+      return const <String, WebDavSyncCatalogOwnerReference>{};
+    }
+    if (playlist.isLocalFile) {
+      final key = IptvCatalogKey.forLocalCategoryOrder(playlist.id);
+      return <String, WebDavSyncCatalogOwnerReference>{
+        key: WebDavSyncCatalogOwnerReference(
+          localResourceId: resourceId,
+          variant: 'local',
+        ),
+      };
+    }
+    if (playlist.isXtreamCodes) {
+      return <String, WebDavSyncCatalogOwnerReference>{
+        for (final type in IptvCatalogKey.xtreamContentTypes)
+          if (IptvCatalogKey.forPlaylist(playlist, type) case final key?)
+            key: WebDavSyncCatalogOwnerReference(
+              localResourceId: resourceId,
+              variant: 'xc-$type',
+            ),
+      };
+    }
+    final key = IptvCatalogKey.forPlaylist(playlist, 'live');
+    return key == null
+        ? const <String, WebDavSyncCatalogOwnerReference>{}
+        : <String, WebDavSyncCatalogOwnerReference>{
+            key: WebDavSyncCatalogOwnerReference(
+              localResourceId: resourceId,
+              variant: 'm3u',
+            ),
+          };
+  }
+
   /// Open the per-source hidden-categories manager, then re-read the counts
   /// the section badges rows with — the page is where they change.
   Future<void> _openHiddenCategories(IptvPlaylist playlist) async {
@@ -545,6 +592,9 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
   Future<void> _setIptvStyleForProfile(String style) async {
     // Persist BEFORE reflecting the choice: the IPTV page re-reads the pref
     // the moment this route pops, and an unawaited write could lose that race.
+    // A direct pick here has the same priority as the standalone picker over
+    // any Look bundle that is still being applied.
+    LookApplier.noteExternalWrite('iptv_style');
     await StorageService.setIptvStyle(style);
     if (mounted) setState(() => _iptvStyle = style);
   }
@@ -1125,22 +1175,29 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
           playlist.username ?? '',
         ),
         forgetChannelOrders: true,
+        ownerReferences: _catalogOwnerReferencesFor(playlist),
       );
     } else if (!playlist.isLocalFile && playlist.url.isNotEmpty) {
       IptvService.instance.clearCache(playlist.url);
-      await IptvCatalogDb.removeCatalogsByKeys([
-        IptvCatalogKey.forUrl(playlist.url),
-      ], forgetChannelOrders: true);
+      await IptvCatalogDb.removeCatalogsByKeys(
+        [IptvCatalogKey.forUrl(playlist.url)],
+        forgetChannelOrders: true,
+        ownerReferences: _catalogOwnerReferencesFor(playlist),
+      );
     }
     // The source's hidden categories go with it. Deliberately here and not
     // inside the catalog delete: a manual REFRESH also drops and re-ingests
     // the catalog under the same keys, and user rules must survive that.
-    IptvCatalogDb.forgetHiddenGroups(_catalogKeysFor(playlist));
+    IptvCatalogDb.forgetHiddenGroups(
+      _catalogKeysFor(playlist),
+      origin: WebDavSyncMutationOrigin.user,
+      ownerReferences: _catalogOwnerReferencesFor(playlist),
+    );
     if (playlist.isLocalFile) {
       try {
         await IptvCatalogDb.forgetCategoryOrders([
           IptvCatalogKey.forLocalCategoryOrder(playlist.id),
-        ]);
+        ], ownerReferences: _catalogOwnerReferencesFor(playlist));
       } catch (error) {
         // Category order is optional catalog metadata. Failure to open a
         // damaged cache must not prevent the source itself being removed.
@@ -1692,13 +1749,16 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
             playlist.username ?? '',
           ),
           forgetChannelOrders: unreachableKeys.isNotEmpty,
+          ownerReferences: _catalogOwnerReferencesFor(playlist),
         );
       }
     } else if (!playlist.isLocalFile && playlist.url != updated.url) {
       IptvService.instance.clearCache(playlist.url);
-      await IptvCatalogDb.removeCatalogsByKeys([
-        IptvCatalogKey.forUrl(playlist.url),
-      ], forgetChannelOrders: true);
+      await IptvCatalogDb.removeCatalogsByKeys(
+        [IptvCatalogKey.forUrl(playlist.url)],
+        forgetChannelOrders: true,
+        ownerReferences: _catalogOwnerReferencesFor(playlist),
+      );
     }
 
     // Hidden-category rules follow the source's IDENTITY, not its catalogs:
@@ -1709,7 +1769,11 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
     // deletes and re-ingests the catalogs above, but the key is
     // server+username+type, so its keys are unchanged and its rules must
     // survive. Same for a rename.
-    IptvCatalogDb.forgetHiddenGroups(unreachableKeys);
+    IptvCatalogDb.forgetHiddenGroups(
+      unreachableKeys,
+      origin: WebDavSyncMutationOrigin.user,
+      ownerReferences: _catalogOwnerReferencesFor(playlist),
+    );
 
     final newPlaylists = [
       for (final p in _playlists)

@@ -1,5 +1,10 @@
 import java.util.Properties
 import java.io.FileInputStream
+import com.android.build.api.artifact.SingleArtifact
+import javax.xml.parsers.DocumentBuilderFactory
+import javax.xml.transform.TransformerFactory
+import javax.xml.transform.dom.DOMSource
+import javax.xml.transform.stream.StreamResult
 
 plugins {
     id("com.android.application")
@@ -40,6 +45,10 @@ android {
 
     kotlinOptions {
         jvmTarget = JavaVersion.VERSION_11.toString()
+    }
+
+    testOptions {
+        unitTests.isIncludeAndroidResources = true
     }
 
     defaultConfig {
@@ -83,14 +92,55 @@ flutter {
     source = "../.."
 }
 
+// Keep Flutter's build type in release mode: setting isDebuggable above makes
+// Flutter select its debug engine. Only transform the packaged manifest for
+// an explicitly opted-in local build, allowing adb run-as with release AOT.
+abstract class LocalDiagnosticsManifest : DefaultTask() {
+    @get:InputFile
+    @get:PathSensitive(PathSensitivity.NONE)
+    abstract val inputManifest: RegularFileProperty
+
+    @get:OutputFile
+    abstract val outputManifest: RegularFileProperty
+
+    @TaskAction
+    fun enableUsbDiagnostics() {
+        val factory = DocumentBuilderFactory.newInstance()
+        factory.isNamespaceAware = true
+        val document = factory.newDocumentBuilder().parse(inputManifest.get().asFile)
+        val application = document.getElementsByTagName("application").item(0) as org.w3c.dom.Element
+        application.setAttributeNS("http://schemas.android.com/apk/res/android", "android:debuggable", "true")
+        val output = outputManifest.get().asFile
+        output.parentFile.mkdirs()
+        TransformerFactory.newInstance().newTransformer().transform(DOMSource(document), StreamResult(output))
+    }
+}
+
+androidComponents {
+    onVariants(selector().withBuildType("release")) { variant ->
+        if (providers.gradleProperty("debrifyLocalDiagnostics").orNull == "true") {
+            val localManifest = tasks.register<LocalDiagnosticsManifest>("${variant.name}LocalDiagnosticsManifest")
+            variant.artifacts.use(localManifest)
+                .wiredWithFiles(LocalDiagnosticsManifest::inputManifest, LocalDiagnosticsManifest::outputManifest)
+                .toTransform(SingleArtifact.MERGED_MANIFEST)
+        }
+    }
+}
+
 dependencies {
     // JVM unit tests (subtitle auto-sync aligner) — run via :app:testDebugUnitTest
     testImplementation("junit:junit:4.13.2")
+    testImplementation("org.json:json:20180813")
+    testImplementation("org.robolectric:robolectric:4.15.1")
+    testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
+    testImplementation("com.squareup.okhttp3:okhttp-tls:4.12.0")
     implementation("androidx.core:core-ktx:1.13.1")
     implementation("androidx.appcompat:appcompat:1.7.0")
     implementation("com.google.android.material:material:1.11.0")
     implementation("androidx.constraintlayout:constraintlayout:2.1.4")
     implementation("androidx.media3:media3-exoplayer:1.8.0")
+    implementation("androidx.media3:media3-datasource-okhttp:1.8.0")
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("androidx.media3:media3-exoplayer-dash:1.8.0")
     // HLS for IPTV (.m3u8) — DefaultMediaSourceFactory finds it by reflection.
     // Was only present transitively via the video_player plugin; pin it so the
@@ -102,6 +152,7 @@ dependencies {
 
     // Glide for image loading
     implementation("com.github.bumptech.glide:glide:4.16.0")
+    implementation("com.caverock:androidsvg-aar:1.4")
 
     // SAF tree handling for the custom download-folder feature
     implementation("androidx.documentfile:documentfile:1.0.1")

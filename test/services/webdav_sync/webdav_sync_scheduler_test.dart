@@ -1,0 +1,2980 @@
+import 'dart:async';
+import 'dart:io';
+import 'dart:typed_data';
+
+import 'package:debrify/services/profiles/profile_runtime.dart';
+import 'package:debrify/services/profiles/profile_scope.dart';
+import 'package:debrify/services/storage_service.dart';
+import 'package:debrify/services/webdav_protocol_client.dart';
+import 'package:debrify/services/profiles/profile_preferences.dart';
+import 'package:debrify/services/webdav_sync/webdav_sync_codec.dart';
+import 'package:debrify/services/webdav_sync/webdav_sync_engine.dart';
+import 'package:debrify/services/webdav_sync/webdav_sync_hot_merge.dart';
+import 'package:debrify/services/webdav_sync/webdav_sync_hot_models.dart';
+import 'package:debrify/services/webdav_sync/webdav_sync_runtime.dart';
+import 'package:debrify/services/webdav_sync/webdav_sync_scheduler.dart';
+import 'package:debrify/services/webdav_sync/webdav_sync_save_feedback.dart';
+import 'package:debrify/services/webdav_sync/webdav_sync_transport.dart';
+// Flutter's test SDK supplies fake_async transitively for deterministic timers.
+// ignore: depend_on_referenced_packages
+import 'package:fake_async/fake_async.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+
+void main() {
+  late Uint8List marker;
+  late OpenedWebDavSyncRoot root;
+
+  setUp(() async {
+    final codec = WebDavSyncCodec(
+      randomBytes: (length) =>
+          Uint8List.fromList(List<int>.generate(length, (index) => index)),
+    );
+    marker = await codec.sealRoot(
+      passphrase: 'circle-secret',
+      circleId: 'circle-1',
+      createdAt: DateTime.utc(2026, 9, 1),
+      memoryKiB: 8,
+      iterations: 1,
+    );
+    root = await codec.openRoot(marker, 'circle-secret');
+  });
+
+  WebDavSyncCycleContext context() => WebDavSyncCycleContext(
+    namespaceId: 'circle:circle-1',
+    deviceId: 'device-a',
+    markerPin: marker,
+    root: root,
+    circleToLocalProfiles: const <String, String>{
+      'profile-circle': 'local-profile',
+    },
+    circleToLocalResources: const <String, String>{},
+    active: true,
+  );
+
+  test('automatic status stays active without peers and during sync', () {
+    fakeAsync((async) {
+      final runner = _Runner()..blocker = Completer<void>();
+      final gate = _Gate();
+      final scheduler = WebDavSyncScheduler(runner: runner, gate: gate);
+      expect(scheduler.automaticSyncActive, isFalse);
+      scheduler.arm(() async => context());
+      expect(scheduler.automaticSyncActive, isTrue);
+      unawaited(scheduler.signal(WebDavSyncTrigger.manual));
+      async.flushMicrotasks();
+      expect(runner.runs, 1);
+      expect(scheduler.pollState, WebDavSyncPollState.gated);
+      expect(scheduler.automaticSyncActive, isTrue);
+      runner.blocker!.complete();
+      async.flushMicrotasks();
+      expect(scheduler.automaticSyncActive, isTrue);
+      gate.televisionPlayback = true;
+      expect(scheduler.automaticSyncActive, isFalse);
+      gate.televisionPlayback = false;
+      gate.lowMemory = true;
+      expect(scheduler.automaticSyncActive, isFalse);
+      gate.lowMemory = false;
+      scheduler.pauseRemotePolling();
+      expect(scheduler.automaticSyncActive, isFalse);
+      scheduler.resumeRemotePolling();
+      expect(scheduler.automaticSyncActive, isTrue);
+      scheduler.dispose();
+      expect(scheduler.automaticSyncActive, isFalse);
+    });
+  });
+
+  test('logout clears old save intent before a new account is armed', () {
+    fakeAsync((async) {
+      final runner = _Runner();
+      final feedback = WebDavSyncSaveFeedback();
+      final gate = _Gate();
+      final scheduler = WebDavSyncScheduler(
+        runner: runner,
+        gate: gate,
+        saveFeedback: feedback,
+      );
+      scheduler.arm(() async => context());
+      scheduler.notifyLocalChange('theme');
+      expect(feedback.hasPending, isTrue);
+      scheduler.forgetAccount();
+      expect(feedback.hasPending, isFalse);
+      scheduler.arm(() async => context());
+      async.elapse(const Duration(seconds: 10));
+      async.flushMicrotasks();
+      expect(runner.runs, 0);
+      scheduler.notifyLocalChange('theme');
+      async.elapse(const Duration(seconds: 10));
+      async.flushMicrotasks();
+      expect(runner.runs, 1);
+      scheduler.dispose();
+    });
+  });
+
+  test('manual sync waits for a snapshot covering saves at request time', () {
+    fakeAsync((async) {
+      final older = Completer<void>();
+      final newer = Completer<void>();
+      final runner = _Runner()..blocker = older;
+      final scheduler = WebDavSyncScheduler(runner: runner, gate: _Gate());
+      scheduler.arm(() async => context());
+      scheduler.signal(WebDavSyncTrigger.foreground);
+      async.flushMicrotasks();
+      scheduler.notifyLocalChange('theme');
+      WebDavSyncCycleReport? manual;
+      WebDavSyncCycleReport? otherManual;
+      scheduler.signal(WebDavSyncTrigger.manual).then((r) => manual = r);
+      scheduler.signal(WebDavSyncTrigger.manual).then((r) => otherManual = r);
+      async.flushMicrotasks();
+      expect(manual, isNull);
+      runner.blocker = newer;
+      older.complete();
+      async.flushMicrotasks();
+      expect(runner.runs, 2);
+      expect(runner.triggers.last, WebDavSyncTrigger.manual);
+      expect(manual, isNull);
+      expect(otherManual, isNull);
+      // New writes after the manual request remain ordinary pending work.
+      scheduler.notifyLocalChange('language');
+      newer.complete();
+      async.flushMicrotasks();
+      expect(manual?.disposition, WebDavSyncCycleDisposition.completed);
+      expect(otherManual, same(manual));
+      expect(runner.runs, 2);
+      async.elapse(const Duration(seconds: 2));
+      expect(runner.runs, 3);
+      scheduler.dispose();
+    });
+  });
+
+  test('queued manual follow-up cannot cross a reconfiguration', () {
+    fakeAsync((async) {
+      final older = Completer<void>();
+      final runner = _Runner()..blocker = older;
+      final scheduler = WebDavSyncScheduler(runner: runner, gate: _Gate());
+      scheduler.arm(() async => context());
+      scheduler.signal(WebDavSyncTrigger.foreground);
+      async.flushMicrotasks();
+      scheduler.notifyLocalChange('theme');
+      WebDavSyncCycleReport? manual;
+      scheduler.signal(WebDavSyncTrigger.manual).then((r) => manual = r);
+      scheduler.disarm();
+      scheduler.arm(() async => context());
+      older.complete();
+      async.flushMicrotasks();
+      expect(manual?.disposition, WebDavSyncCycleDisposition.inactive);
+      expect(runner.runs, 1);
+      scheduler.dispose();
+    });
+  });
+
+  for (final key in [
+    'app_last_version',
+    'app_last_build_number',
+    StorageService.localSeriesCompletionStateKey,
+    StorageService.localSeriesCalendarAttemptedAtKey,
+    StorageService.localSeriesCalendarCheckedAtKey,
+  ]) {
+    test('startup bookkeeping $key syncs without creating save feedback', () {
+      fakeAsync((async) {
+        final feedback = WebDavSyncSaveFeedback();
+        final runner = _Runner();
+        final scheduler = WebDavSyncScheduler(
+          runner: runner,
+          gate: _Gate(),
+          saveFeedback: feedback,
+        );
+        scheduler.arm(() async => context());
+        scheduler.notifyLocalChange(key);
+        expect(feedback.phase, WebDavSavePhase.inactive);
+        expect(feedback.revision, 0);
+        async.elapse(const Duration(seconds: 2));
+        expect(runner.runs, 1);
+        expect(feedback.phase, WebDavSavePhase.inactive);
+        expect(feedback.hasPending, isFalse);
+        scheduler.notifyLocalChange('tracking_scrobble_targets');
+        expect(feedback.phase, WebDavSavePhase.syncing);
+        expect(feedback.hasPending, isTrue);
+        scheduler.dispose();
+        feedback.dispose();
+      });
+    });
+  }
+
+  test('calendar writes during launch keep the follow-up sync silent', () {
+    fakeAsync((async) {
+      final feedback = WebDavSyncSaveFeedback();
+      final runner = _Runner()..blocker = Completer<void>();
+      final scheduler = WebDavSyncScheduler(
+        runner: runner,
+        gate: _Gate(),
+        saveFeedback: feedback,
+      );
+      scheduler.arm(() async => context());
+      final phases = <WebDavSavePhase>[];
+      feedback.addListener(() => phases.add(feedback.phase));
+      unawaited(scheduler.signal(WebDavSyncTrigger.launch));
+      async.flushMicrotasks();
+      for (final key in [
+        StorageService.localSeriesCalendarAttemptedAtKey,
+        StorageService.localSeriesCompletionStateKey,
+        StorageService.localSeriesCalendarCheckedAtKey,
+      ]) {
+        scheduler.notifyLocalChange(key);
+      }
+      runner.blocker!.complete();
+      async.flushMicrotasks();
+      async.elapse(const Duration(seconds: 2));
+      expect(runner.triggers, [
+        WebDavSyncTrigger.launch,
+        WebDavSyncTrigger.localChange,
+      ]);
+      expect(feedback.hasPending, isFalse);
+      expect(feedback.phase, WebDavSavePhase.inactive);
+      expect(phases, everyElement(WebDavSavePhase.inactive));
+      scheduler.dispose();
+      feedback.dispose();
+    });
+  });
+
+  test('calendar maintenance preserves a gated settings receipt', () {
+    fakeAsync((async) {
+      final feedback = WebDavSyncSaveFeedback();
+      final runner = _Runner();
+      final gate = _Gate()..televisionPlayback = true;
+      final scheduler = WebDavSyncScheduler(
+        runner: runner,
+        gate: gate,
+        saveFeedback: feedback,
+      );
+      scheduler.arm(() async => context());
+      scheduler.notifyLocalChange('tracking_scrobble_targets');
+      final savedRevision = feedback.revision;
+      for (final key in [
+        StorageService.localSeriesCalendarAttemptedAtKey,
+        StorageService.localSeriesCompletionStateKey,
+        StorageService.localSeriesCalendarCheckedAtKey,
+      ]) {
+        scheduler.notifyLocalChange(key);
+      }
+      async.elapse(const Duration(seconds: 2));
+      expect(runner.runs, 0);
+      expect(feedback.hasPending, isTrue);
+      expect(feedback.revision, savedRevision);
+      expect(feedback.phase, WebDavSavePhase.pending);
+      gate.televisionPlayback = false;
+      unawaited(scheduler.signal(WebDavSyncTrigger.manual));
+      async.flushMicrotasks();
+      expect(runner.runs, 1);
+      expect(feedback.hasPending, isFalse);
+      expect(feedback.phase, WebDavSavePhase.synced);
+      scheduler.dispose();
+      feedback.dispose();
+    });
+  });
+
+  test('remembered navigation syncs silently while defaults show feedback', () {
+    fakeAsync((async) {
+      final feedback = WebDavSyncSaveFeedback();
+      final runner = _Runner();
+      final scheduler = WebDavSyncScheduler(
+        runner: runner,
+        gate: _Gate(),
+        saveFeedback: feedback,
+      );
+      scheduler.arm(() async => context());
+      for (final key in [
+        'discover_last_source',
+        'reddit_last_subreddit',
+        'iptv_last_live_channel',
+        'defaults_generation',
+      ]) {
+        scheduler.notifyLocalChange(key);
+      }
+      expect(feedback.revision, 0);
+      async.elapse(const Duration(seconds: 2));
+      expect(runner.runs, 1);
+      scheduler.notifyLocalChange('discover_default_source');
+      expect(feedback.hasPending, isTrue);
+      scheduler.dispose();
+      feedback.dispose();
+    });
+  });
+
+  for (final fails in <bool>[false, true]) {
+    test(
+      'manual sync waits for the active cycle and shares its outcome ($fails)',
+      () {
+        fakeAsync((async) {
+          final blocker = Completer<void>();
+          final runner = _Runner()
+            ..blocker = blocker
+            ..failuresRemaining = fails ? 1 : 0;
+          final scheduler = WebDavSyncScheduler(runner: runner, gate: _Gate());
+          scheduler.arm(() async => context());
+          Object? automatic;
+          Object? first;
+          Object? second;
+          scheduler
+              .signal(WebDavSyncTrigger.foreground)
+              .then<void>(
+                (report) => automatic = report,
+                onError: (Object e) {
+                  automatic = e;
+                },
+              );
+          async.flushMicrotasks();
+          scheduler
+              .signal(WebDavSyncTrigger.manual)
+              .then<void>(
+                (report) => first = report,
+                onError: (Object e) {
+                  first = e;
+                },
+              );
+          scheduler
+              .signal(WebDavSyncTrigger.manual)
+              .then<void>(
+                (report) => second = report,
+                onError: (Object e) {
+                  second = e;
+                },
+              );
+          async.flushMicrotasks();
+          expect(runner.runs, 1);
+          expect(first, isNull);
+          expect(second, isNull);
+          blocker.complete();
+          async.flushMicrotasks();
+          expect(first, same(automatic));
+          expect(second, same(automatic));
+          if (fails) {
+            expect(first, isA<StateError>());
+          } else {
+            expect(
+              (first as WebDavSyncCycleReport).disposition,
+              WebDavSyncCycleDisposition.completed,
+            );
+          }
+          expect(runner.runs, 1);
+          // Subsequent manual attempts still run normally after cleanup.
+          scheduler.signal(WebDavSyncTrigger.manual);
+          async.flushMicrotasks();
+          expect(runner.runs, 2);
+          scheduler.dispose();
+        });
+      },
+    );
+  }
+
+  test('scheduler starts unarmed and performs no cycle', () async {
+    final runner = _Runner();
+    final scheduler = WebDavSyncScheduler(runner: runner, gate: _Gate());
+    addTearDown(scheduler.dispose);
+
+    final report = await scheduler.signal(WebDavSyncTrigger.launch);
+
+    expect(report.disposition, WebDavSyncCycleDisposition.inactive);
+    expect(runner.runs, 0);
+  });
+
+  test('scheduler disarm closes retained cycle transports', () {
+    final runner = _Runner();
+    final scheduler = WebDavSyncScheduler(runner: runner, gate: _Gate());
+    scheduler.arm(() async => context());
+
+    scheduler.disarm();
+
+    expect(runner.transportCloses, 1);
+  });
+
+  test('disarm during an in-flight poll cannot touch the rearmed client', () {
+    fakeAsync((async) {
+      final clients = <_PollClient>[];
+      final owner = WebDavSyncBindingHttpClientOwner(
+        clientFactory: () {
+          final client = _PollClient();
+          clients.add(client);
+          return client;
+        },
+      );
+      final staleBorrow = owner.borrow('binding-a');
+      final runner = _Runner()..onTransportClose = owner.close;
+      final staleTransport = _PollTransport(
+        clock: () => DateTime.utc(2026, 9, 1).add(async.elapsed),
+        probes: <String, WebDavSyncManifestProbe>{
+          'device-b': const WebDavSyncManifestProbe(
+            exists: true,
+            validator: WebDavSyncManifestValidator.etag('"v1"'),
+          ),
+        },
+      );
+      final pendingContext = Completer<WebDavSyncRemotePollContext?>();
+      final scheduler = WebDavSyncScheduler(
+        runner: runner,
+        gate: _Gate(),
+        clock: () => DateTime.utc(2026, 9, 1).add(async.elapsed),
+      );
+      scheduler.arm(
+        () async => context(),
+        remotePollContextProvider: () => pendingContext.future,
+      );
+      async.elapse(idlePollPeriod);
+      async.flushMicrotasks();
+
+      scheduler.disarm();
+      final rearmedBorrow = owner.borrow('binding-a');
+      scheduler.arm(
+        () async => context(),
+        remotePollContextProvider: () async => null,
+      );
+      pendingContext.complete(
+        WebDavSyncRemotePollContext(
+          transport: staleTransport,
+          peerDeviceIds: const <String>['device-b'],
+          validators: const <String, WebDavSyncManifestValidator>{
+            'device-b': WebDavSyncManifestValidator.etag('"v1"'),
+          },
+          clientGeneration: staleBorrow.generation,
+          isClientGenerationCurrent: owner.isGenerationCurrent,
+        ),
+      );
+      async.flushMicrotasks();
+
+      expect(staleTransport.probedDeviceIds, isEmpty);
+      expect(clients, hasLength(2));
+      expect(clients.first.closeCalls, 1);
+      expect(clients.last.closeCalls, 0);
+      expect(owner.isGenerationCurrent(rearmedBorrow.generation), isTrue);
+
+      scheduler.disarm();
+      expect(clients.last.closeCalls, 1);
+      scheduler.dispose();
+      expect(clients.last.closeCalls, 1);
+    });
+  });
+
+  test('scheduler admits the dedicated registry and library keys', () {
+    expect(
+      WebDavSyncScheduler.admitsLocalChangeKey(
+        ProfilePreferences.webDavSyncRegistryLogicalKey,
+      ),
+      isTrue,
+    );
+    expect(
+      WebDavSyncScheduler.admitsLocalChangeKey(
+        ProfilePreferences.webDavSyncLibraryLogicalKey,
+      ),
+      isTrue,
+    );
+    expect(
+      WebDavSyncScheduler.admitsLocalChangeKey(
+        'remote_webdav_sync_registry_other',
+      ),
+      isFalse,
+    );
+  });
+
+  test('hot-local-only checkpoint writes are not admitted or scheduled', () {
+    fakeAsync((async) {
+      final observedKeys = <String>[];
+      final runner = _Runner();
+      final scheduler = WebDavSyncScheduler(
+        runner: runner,
+        gate: _Gate(),
+        localChangeObserver: observedKeys.add,
+      );
+      scheduler.arm(() async => context());
+
+      expect(
+        WebDavSyncScheduler.admitsLocalChangeKey(
+          WebDavSyncHotMerge.mdblistSyncCheckpointPreference,
+        ),
+        isFalse,
+      );
+      scheduler.notifyLocalChange(
+        WebDavSyncHotMerge.mdblistSyncCheckpointPreference,
+      );
+      async.elapse(const Duration(minutes: 1));
+      async.flushMicrotasks();
+
+      expect(runner.runs, 0);
+      expect(observedKeys, isEmpty);
+      scheduler.dispose();
+    });
+  });
+
+  test(
+    'armed scheduler debounces automatic triggers but manual bypasses',
+    () async {
+      final runner = _Runner();
+      final scheduler = WebDavSyncScheduler(
+        runner: runner,
+        gate: _Gate(),
+        clock: () => DateTime.utc(2026, 9, 1),
+      );
+      addTearDown(scheduler.dispose);
+      scheduler.arm(() async => context());
+
+      await scheduler.signal(WebDavSyncTrigger.foreground);
+      await scheduler.signal(WebDavSyncTrigger.playbackStopped);
+      await scheduler.signal(WebDavSyncTrigger.manual);
+
+      expect(runner.runs, 2);
+    },
+  );
+
+  test('TV playback and tvOS low-memory gates suppress work', () async {
+    final runner = _Runner();
+    final gate = _Gate()..televisionPlayback = true;
+    final scheduler = WebDavSyncScheduler(runner: runner, gate: gate);
+    addTearDown(scheduler.dispose);
+    scheduler.arm(() async => context());
+
+    await scheduler.signal(WebDavSyncTrigger.manual);
+    gate
+      ..televisionPlayback = false
+      ..lowMemory = true;
+    await scheduler.signal(WebDavSyncTrigger.manual);
+
+    expect(runner.runs, 0);
+  });
+
+  test(
+    'a backward local clock does not suppress automatic sync forever',
+    () async {
+      var now = DateTime.utc(2026, 9, 2);
+      final runner = _Runner();
+      final scheduler = WebDavSyncScheduler(
+        runner: runner,
+        gate: _Gate(),
+        clock: () => now,
+      );
+      addTearDown(scheduler.dispose);
+      scheduler.arm(() async => context());
+
+      await scheduler.signal(WebDavSyncTrigger.foreground);
+      now = DateTime.utc(2026, 9, 1);
+      await scheduler.signal(WebDavSyncTrigger.foreground);
+
+      expect(runner.runs, 2);
+    },
+  );
+
+  test('concurrent signals cannot race while context is loading', () async {
+    final runner = _Runner();
+    final gate = Completer<WebDavSyncCycleContext?>();
+    final scheduler = WebDavSyncScheduler(runner: runner, gate: _Gate());
+    addTearDown(scheduler.dispose);
+    scheduler.arm(() => gate.future);
+
+    final first = scheduler.signal(WebDavSyncTrigger.manual);
+    final second = scheduler.signal(WebDavSyncTrigger.manual);
+    gate.complete(context());
+    final firstReport = await first;
+
+    expect(await second, same(firstReport));
+    expect(firstReport.disposition, WebDavSyncCycleDisposition.completed);
+    expect(runner.runs, 1);
+  });
+
+  test('burst of ten local changes runs once two seconds after first', () {
+    fakeAsync((async) {
+      final start = DateTime.utc(2026, 9, 1);
+      final runner = _Runner();
+      final scheduler = WebDavSyncScheduler(
+        runner: runner,
+        gate: _Gate(),
+        clock: () => start.add(async.elapsed),
+      );
+      scheduler.arm(() async => context());
+
+      for (var index = 0; index < 10; index++) {
+        scheduler.notifyLocalChange('theme');
+        async.elapse(const Duration(milliseconds: 100));
+      }
+      // The window opens at the FIRST write of the burst, so it fires 2s
+      // after t=0 (not after the last write).
+      async.elapse(const Duration(milliseconds: 850));
+      expect(runner.runs, 0);
+
+      async.elapse(const Duration(milliseconds: 250));
+      async.flushMicrotasks();
+      expect(runner.runs, 1);
+      expect(runner.triggers, <WebDavSyncTrigger?>[
+        WebDavSyncTrigger.localChange,
+      ]);
+      scheduler.dispose();
+    });
+  });
+
+  test('lifecycle flush runs immediately only with a pending intent', () {
+    fakeAsync((async) {
+      final runner = _Runner();
+      final scheduler = WebDavSyncScheduler(runner: runner, gate: _Gate());
+      scheduler.arm(() async => context());
+
+      // Nothing pending: a focus flip or shade pull spends no cycle.
+      scheduler.flushPendingLocalChangeForLifecycle();
+      async.elapse(Duration.zero);
+      async.flushMicrotasks();
+      expect(runner.runs, 0);
+
+      scheduler.notifyLocalChange('theme');
+      scheduler.flushPendingLocalChangeForLifecycle();
+      async.elapse(Duration.zero);
+      async.flushMicrotasks();
+      expect(runner.runs, 1, reason: 'the flush bypasses the 2s window');
+      expect(runner.triggers, <WebDavSyncTrigger?>[
+        WebDavSyncTrigger.localChange,
+      ]);
+
+      // The completed cycle cleared the intent; the next flip is free again.
+      scheduler.flushPendingLocalChangeForLifecycle();
+      async.elapse(Duration.zero);
+      async.flushMicrotasks();
+      expect(runner.runs, 1);
+      scheduler.dispose();
+    });
+  });
+
+  test('lifecycle flush is not blocked by an in-flight poll probe', () {
+    fakeAsync((async) {
+      final start = DateTime.utc(2026, 9, 1);
+      final transport = _PollTransport(
+        clock: () => start.add(async.elapsed),
+        probes: const <String, WebDavSyncManifestProbe>{
+          'device-b': WebDavSyncManifestProbe(
+            exists: true,
+            validator: WebDavSyncManifestValidator.etag('"v1"'),
+          ),
+        },
+      )..probeBlocker = Completer<void>();
+      final runner = _Runner();
+      final scheduler = WebDavSyncScheduler(
+        runner: runner,
+        gate: _Gate(),
+        clock: () => start.add(async.elapsed),
+      );
+      scheduler.arm(
+        () async => context(),
+        remotePollContextProvider: () async => WebDavSyncRemotePollContext(
+          transport: transport,
+          peerDeviceIds: const <String>['device-b'],
+          validators: const <String, WebDavSyncManifestValidator>{
+            'device-b': WebDavSyncManifestValidator.etag('"v1"'),
+          },
+        ),
+      );
+
+      // Reach the first idle probe and leave its request hanging, the way a
+      // slow server holds a poll open across a lifecycle handoff.
+      async.elapse(const Duration(seconds: 60));
+      async.flushMicrotasks();
+      expect(transport.probedDeviceIds, isNotEmpty);
+
+      scheduler.notifyLocalChange('theme');
+      scheduler.flushPendingLocalChangeForLifecycle();
+      async.elapse(Duration.zero);
+      async.flushMicrotasks();
+      expect(
+        runner.runs,
+        1,
+        reason: 'the flush cycle must start while the probe still hangs',
+      );
+
+      transport.probeBlocker!.complete();
+      async.flushMicrotasks();
+      scheduler.dispose();
+    });
+  });
+
+  for (final lateFailure in ['none', 'http', 'connectivity', 'failedCycle']) {
+    test(
+      'manual sync discards obsolete connectivity failures but retains current failures ($lateFailure)',
+      () {
+        fakeAsync((async) {
+          final start = DateTime.utc(2026, 9, 1);
+          final probe = Completer<void>();
+          final transport = _PollTransport(
+            clock: () => start.add(async.elapsed),
+            probes: const {
+              'device-b': WebDavSyncManifestProbe(
+                exists: true,
+                validator: WebDavSyncManifestValidator.etag('"changed"'),
+              ),
+            },
+          )..probeBlocker = probe;
+          final runner = _Runner()
+            ..failuresRemaining = lateFailure == 'failedCycle' ? 1 : 0;
+          final scheduler = WebDavSyncScheduler(
+            runner: runner,
+            gate: _Gate(),
+            clock: () => start.add(async.elapsed),
+          );
+          scheduler.arm(
+            () async => context(),
+            remotePollContextProvider: () async => WebDavSyncRemotePollContext(
+              transport: transport,
+              peerDeviceIds: const ['device-b'],
+              validators: const {
+                'device-b': WebDavSyncManifestValidator.etag('"old"'),
+              },
+            ),
+          );
+          async.elapse(const Duration(seconds: 15));
+          expect(transport.probedDeviceIds, ['device-b']);
+          WebDavSyncCycleReport? manual;
+          Object? manualError;
+          scheduler
+              .signal(WebDavSyncTrigger.manual)
+              .then<void>(
+                (r) => manual = r,
+                onError: (Object error) => manualError = error,
+              );
+          async.flushMicrotasks();
+          if (lateFailure == 'failedCycle') {
+            expect(manualError, isStateError);
+          } else {
+            expect(manual?.disposition, WebDavSyncCycleDisposition.completed);
+          }
+          expect(runner.runs, 1);
+          if (lateFailure != 'none') {
+            transport.failuresRemaining = 1;
+            transport.failWithoutStatus = lateFailure != 'http';
+          }
+          probe.complete();
+          async.flushMicrotasks();
+          expect(
+            runner.runs,
+            1,
+            reason: 'an obsolete changed hint must be discarded',
+          );
+          expect(
+            scheduler.pollState,
+            lateFailure == 'http' || lateFailure == 'failedCycle'
+                ? WebDavSyncPollState.pausedBackoff
+                : WebDavSyncPollState.active,
+          );
+          // A fresh probe still detects subsequent changes normally.
+          async.elapse(const Duration(seconds: 5));
+          if (lateFailure == 'http' || lateFailure == 'failedCycle') {
+            expect(runner.runs, 1);
+            async.elapse(const Duration(seconds: 55));
+          }
+          expect(runner.runs, 2);
+          scheduler.dispose();
+        });
+      },
+    );
+  }
+
+  test('flush during a covering cycle adds no redundant follow-up', () {
+    fakeAsync((async) {
+      final firstRun = Completer<void>();
+      final runner = _Runner()..blocker = firstRun;
+      final scheduler = WebDavSyncScheduler(runner: runner, gate: _Gate());
+      scheduler.arm(() async => context());
+
+      scheduler.notifyLocalChange('theme');
+      async.elapse(const Duration(seconds: 2));
+      async.flushMicrotasks();
+      expect(runner.runs, 1);
+
+      // The running cycle started at the pending sequence: it covers the
+      // intent, so the lifecycle flush must not order another cycle.
+      scheduler.flushPendingLocalChangeForLifecycle();
+      runner.blocker = null;
+      firstRun.complete();
+      async.flushMicrotasks();
+      async.elapse(const Duration(seconds: 10));
+      async.flushMicrotasks();
+      expect(runner.runs, 1);
+      scheduler.dispose();
+    });
+  });
+
+  test('a foreground cycle re-warms remote polling', () {
+    fakeAsync((async) {
+      final start = DateTime.utc(2026, 9, 1);
+      final transport = _PollTransport(
+        clock: () => start.add(async.elapsed),
+        probes: const <String, WebDavSyncManifestProbe>{
+          'device-b': WebDavSyncManifestProbe(
+            exists: true,
+            validator: WebDavSyncManifestValidator.etag('"v1"'),
+          ),
+        },
+      );
+      final runner = _Runner();
+      final scheduler = WebDavSyncScheduler(
+        runner: runner,
+        gate: _Gate(),
+        clock: () => start.add(async.elapsed),
+      );
+      scheduler.arm(
+        () async => context(),
+        remotePollContextProvider: () async => WebDavSyncRemotePollContext(
+          transport: transport,
+          peerDeviceIds: const <String>['device-b'],
+          validators: const <String, WebDavSyncManifestValidator>{
+            'device-b': WebDavSyncManifestValidator.etag('"v1"'),
+          },
+        ),
+      );
+
+      // Freshly armed, the scheduler is idle: nothing probes within one warm
+      // period.
+      async.elapse(warmPollPeriod);
+      async.flushMicrotasks();
+      expect(transport.probedDeviceIds, isEmpty);
+
+      // Focusing the app runs a foreground cycle. On desktop that is the only
+      // attention signal (polling never paused, so resume never re-warms), so
+      // it must re-warm on its own: the next probe lands one warm period
+      // later instead of waiting out the idle period.
+      scheduler.signal(WebDavSyncTrigger.foreground);
+      async.flushMicrotasks();
+      expect(runner.triggers, contains(WebDavSyncTrigger.foreground));
+      async.elapse(warmPollPeriod);
+      async.flushMicrotasks();
+      expect(transport.probedDeviceIds, hasLength(1));
+    });
+  });
+
+  test(
+    'a foreground cycle never probes ahead of a server-answered backoff',
+    () {
+      fakeAsync((async) {
+        final start = DateTime.utc(2026, 9, 1);
+        final transport = _PollTransport(
+          clock: () => start.add(async.elapsed),
+          probes: const <String, WebDavSyncManifestProbe>{
+            'device-b': WebDavSyncManifestProbe(
+              exists: true,
+              validator: WebDavSyncManifestValidator.etag('"v1"'),
+            ),
+          },
+        )..failuresRemaining = 1;
+        final runner = _Runner();
+        final scheduler = WebDavSyncScheduler(
+          runner: runner,
+          gate: _Gate(),
+          clock: () => start.add(async.elapsed),
+        );
+        scheduler.arm(
+          () async => context(),
+          remotePollContextProvider: () async => WebDavSyncRemotePollContext(
+            transport: transport,
+            peerDeviceIds: const <String>['device-b'],
+            validators: const <String, WebDavSyncManifestValidator>{
+              'device-b': WebDavSyncManifestValidator.etag('"v1"'),
+            },
+          ),
+        );
+
+        // The first idle probe is answered with 429: a server-requested backoff
+        // of sixty seconds that deliberately survives completed cycles.
+        async.elapse(idlePollPeriod);
+        async.flushMicrotasks();
+        expect(transport.probedDeviceIds, hasLength(1));
+
+        // Foreground re-warms, but the backoff deadline still owns the timer:
+        // no probe within a warm period...
+        scheduler.signal(WebDavSyncTrigger.foreground);
+        async.flushMicrotasks();
+        async.elapse(warmPollPeriod);
+        async.flushMicrotasks();
+        expect(transport.probedDeviceIds, hasLength(1));
+
+        // ...and exactly one at the deadline the server asked for.
+        async.elapse(remotePollFailureFloor - warmPollPeriod);
+        async.flushMicrotasks();
+        expect(transport.probedDeviceIds, hasLength(2));
+      });
+    },
+  );
+
+  test('a completed cycle releases remote-poll backoff jail', () {
+    fakeAsync((async) {
+      final start = DateTime.utc(2026, 9, 1);
+      final transport =
+          _PollTransport(
+              clock: () => start.add(async.elapsed),
+              probes: const <String, WebDavSyncManifestProbe>{
+                'device-b': WebDavSyncManifestProbe(
+                  exists: true,
+                  validator: WebDavSyncManifestValidator.etag('"v1"'),
+                ),
+              },
+            )
+            ..failuresRemaining = 3
+            ..failWithoutStatus = true;
+      final runner = _Runner();
+      final scheduler = WebDavSyncScheduler(
+        runner: runner,
+        gate: _Gate(),
+        clock: () => start.add(async.elapsed),
+      );
+      scheduler.arm(
+        () async => context(),
+        remotePollContextProvider: () async => WebDavSyncRemotePollContext(
+          transport: transport,
+          peerDeviceIds: const <String>['device-b'],
+          validators: const <String, WebDavSyncManifestValidator>{
+            'device-b': WebDavSyncManifestValidator.etag('"v1"'),
+          },
+        ),
+      );
+
+      // Three connectivity failures (no HTTP status) escalate to a 240s jail.
+      async.elapse(const Duration(seconds: 60));
+      async.flushMicrotasks();
+      async.elapse(const Duration(seconds: 60));
+      async.flushMicrotasks();
+      async.elapse(const Duration(seconds: 120));
+      async.flushMicrotasks();
+      expect(transport.probedDeviceIds, hasLength(3));
+
+      // A completed local-change cycle proves the server reachable.
+      scheduler.notifyLocalChange('theme');
+      async.elapse(const Duration(seconds: 2));
+      async.flushMicrotasks();
+      expect(runner.runs, 1);
+
+      // The next probe runs at the warm cadence, not 240 seconds later.
+      async.elapse(const Duration(seconds: 6));
+      async.flushMicrotasks();
+      expect(
+        transport.probedDeviceIds.length,
+        greaterThan(3),
+        reason: 'poll backoff must not outlive a proven-reachable server',
+      );
+      scheduler.dispose();
+    });
+  });
+
+  test('local-change visibility reports only the most recent key', () {
+    fakeAsync((async) {
+      final observedKeys = <String>[];
+      final runner = _Runner();
+      final scheduler = WebDavSyncScheduler(
+        runner: runner,
+        gate: _Gate(),
+        localChangeObserver: observedKeys.add,
+      );
+      scheduler.arm(() async => context());
+
+      scheduler.notifyLocalChange('theme');
+      scheduler.notifyLocalChange('subtitle_language');
+      async.elapse(const Duration(seconds: 2));
+      async.flushMicrotasks();
+
+      expect(runner.runs, 1);
+      expect(observedKeys, <String>['subtitle_language']);
+      scheduler.dispose();
+    });
+  });
+
+  test('a sustained write stream cannot starve the local-change push', () {
+    fakeAsync((async) {
+      final start = DateTime.utc(2026, 9, 1);
+      final runner = _Runner();
+      final scheduler = WebDavSyncScheduler(
+        runner: runner,
+        gate: _Gate(),
+        clock: () => start.add(async.elapsed),
+      );
+      scheduler.arm(() async => context());
+
+      // Writes every second forever; the 2s window must still fire on schedule.
+      for (var index = 0; index < 6; index++) {
+        scheduler.notifyLocalChange('theme');
+        async.elapse(const Duration(seconds: 1));
+        async.flushMicrotasks();
+      }
+      expect(runner.runs, greaterThanOrEqualTo(2));
+      scheduler.dispose();
+    });
+  });
+
+  test('playback uses sixty-second local-change coalescing', () {
+    fakeAsync((async) {
+      final start = DateTime.utc(2026, 9, 1);
+      final runner = _Runner();
+      final gate = _Gate()..playback = true;
+      final scheduler = WebDavSyncScheduler(
+        runner: runner,
+        gate: gate,
+        clock: () => start.add(async.elapsed),
+      );
+      scheduler.arm(() async => context());
+
+      scheduler.notifyLocalChange('theme');
+      async.elapse(const Duration(seconds: 59));
+      async.flushMicrotasks();
+      expect(runner.runs, 0);
+
+      async.elapse(const Duration(seconds: 1));
+      async.flushMicrotasks();
+      expect(runner.runs, 1);
+      scheduler.dispose();
+    });
+  });
+
+  test('local change during a run schedules exactly one delayed follow-up', () {
+    fakeAsync((async) {
+      final start = DateTime.utc(2026, 9, 1);
+      final firstRun = Completer<void>();
+      final runner = _Runner()..blocker = firstRun;
+      final scheduler = WebDavSyncScheduler(
+        runner: runner,
+        gate: _Gate(),
+        clock: () => start.add(async.elapsed),
+      );
+      scheduler.arm(() async => context());
+
+      scheduler.notifyLocalChange('theme');
+      async.elapse(const Duration(seconds: 2));
+      async.flushMicrotasks();
+      expect(runner.runs, 1);
+
+      for (var index = 0; index < 10; index++) {
+        scheduler.notifyLocalChange('theme');
+      }
+      runner.blocker = null;
+      firstRun.complete();
+      async.flushMicrotasks();
+      async.elapse(const Duration(seconds: 1));
+      async.flushMicrotasks();
+      expect(runner.runs, 1);
+
+      async.elapse(const Duration(seconds: 1));
+      async.flushMicrotasks();
+      expect(runner.runs, 2);
+      async.elapse(const Duration(minutes: 1));
+      async.flushMicrotasks();
+      expect(runner.runs, 2);
+      scheduler.dispose();
+    });
+  });
+
+  test('capacity block suppresses retries until the next local write', () {
+    fakeAsync((async) {
+      final runner = _Runner()
+        ..nextDisposition = WebDavSyncCycleDisposition.capacityBlocked;
+      final scheduler = WebDavSyncScheduler(
+        runner: runner,
+        gate: _Gate(),
+        remotePollingEnabled: false,
+      );
+      scheduler.arm(() async => context());
+
+      scheduler.notifyLocalChange('theme');
+      async.elapse(const Duration(seconds: 2));
+      async.flushMicrotasks();
+      expect(runner.runs, 1);
+
+      async.elapse(const Duration(minutes: 31));
+      async.flushMicrotasks();
+      unawaited(scheduler.signal(WebDavSyncTrigger.foreground));
+      unawaited(scheduler.signal(WebDavSyncTrigger.remoteChange));
+      async.flushMicrotasks();
+      expect(runner.runs, 1, reason: 'the over-cap revision stays latched');
+
+      runner.nextDisposition = WebDavSyncCycleDisposition.completed;
+      scheduler.notifyLocalChange('theme');
+      async.elapse(const Duration(seconds: 2));
+      async.flushMicrotasks();
+      expect(runner.runs, 2, reason: 'a new local revision re-arms sync');
+      scheduler.dispose();
+    });
+  });
+
+  test('registry conflict overrides a pending debounce with one follow-up', () {
+    fakeAsync((async) {
+      final runner = _Runner()..requestFollowUpOnNextRun = true;
+      final scheduler = WebDavSyncScheduler(
+        runner: runner,
+        gate: _Gate(),
+        clock: () => DateTime.utc(2026, 9, 1).add(async.elapsed),
+      );
+      scheduler.arm(() async => context());
+
+      // An ordinary write already has the two-second coalescing timer armed
+      // when the manual cycle discovers the fenced conflict.
+      scheduler.notifyLocalChange('theme');
+      unawaited(scheduler.signal(WebDavSyncTrigger.manual));
+      async.flushMicrotasks();
+      expect(runner.runs, 1);
+
+      async.elapse(Duration.zero);
+      async.flushMicrotasks();
+      expect(runner.runs, 2);
+      expect(runner.triggers, <WebDavSyncTrigger?>[
+        WebDavSyncTrigger.manual,
+        WebDavSyncTrigger.localChange,
+      ]);
+      async.elapse(const Duration(seconds: 2));
+      async.flushMicrotasks();
+      expect(runner.runs, 2);
+      scheduler.dispose();
+    });
+  });
+
+  test('local-change cycles respect television and low-memory gates', () {
+    fakeAsync((async) {
+      final start = DateTime.utc(2026, 9, 1);
+      final runner = _Runner();
+      final gate = _Gate()..televisionPlayback = true;
+      final scheduler = WebDavSyncScheduler(
+        runner: runner,
+        gate: gate,
+        clock: () => start.add(async.elapsed),
+      );
+      scheduler.arm(() async => context());
+
+      scheduler.notifyLocalChange('theme');
+      async.elapse(const Duration(seconds: 60));
+      async.flushMicrotasks();
+      expect(runner.runs, 0);
+
+      gate
+        ..televisionPlayback = false
+        ..lowMemory = true;
+      scheduler.notifyLocalChange('theme');
+      async.elapse(const Duration(seconds: 2));
+      async.flushMicrotasks();
+      expect(runner.runs, 0);
+      scheduler.dispose();
+    });
+  });
+
+  test('disarm cancels a pending local-change cycle', () {
+    fakeAsync((async) {
+      final start = DateTime.utc(2026, 9, 1);
+      final runner = _Runner();
+      final scheduler = WebDavSyncScheduler(
+        runner: runner,
+        gate: _Gate(),
+        clock: () => start.add(async.elapsed),
+      );
+      scheduler.arm(() async => context());
+
+      scheduler.notifyLocalChange('theme');
+      scheduler.disarm();
+      async.elapse(const Duration(minutes: 1));
+      async.flushMicrotasks();
+
+      expect(runner.runs, 0);
+      expect(scheduler.isArmed, isFalse);
+      scheduler.dispose();
+    });
+  });
+
+  test('local-change completion warms polling then decays to idle', () {
+    fakeAsync((async) {
+      final start = DateTime.utc(2026, 9, 1);
+      final runner = _Runner();
+      final transport = _PollTransport(
+        clock: () => start.add(async.elapsed),
+        probes: <String, WebDavSyncManifestProbe>{
+          'device-b': const WebDavSyncManifestProbe(
+            exists: true,
+            validator: WebDavSyncManifestValidator.etag('"v1"'),
+          ),
+        },
+      );
+      final scheduler = WebDavSyncScheduler(
+        runner: runner,
+        gate: _Gate(),
+        clock: () => start.add(async.elapsed),
+      );
+      scheduler.arm(
+        () async => context(),
+        remotePollContextProvider: () async => WebDavSyncRemotePollContext(
+          transport: transport,
+          peerDeviceIds: const <String>['device-b'],
+          validators: const <String, WebDavSyncManifestValidator>{
+            'device-b': WebDavSyncManifestValidator.etag('"v1"'),
+          },
+        ),
+      );
+
+      scheduler.notifyLocalChange('theme');
+      async.elapse(const Duration(milliseconds: 1999));
+      async.flushMicrotasks();
+      expect(runner.runs, 0);
+
+      async.elapse(const Duration(milliseconds: 1));
+      async.flushMicrotasks();
+      expect(runner.runs, 1);
+      expect(transport.probedDeviceIds, isEmpty);
+
+      async.elapse(const Duration(seconds: 4));
+      async.flushMicrotasks();
+      expect(transport.probedDeviceIds, isEmpty);
+      async.elapse(const Duration(seconds: 1));
+      async.flushMicrotasks();
+      expect(transport.probeSeconds, <int>[7]);
+
+      async.elapse(const Duration(minutes: 2, seconds: 50));
+      async.flushMicrotasks();
+      expect(transport.probeSeconds.take(3), <int>[7, 17, 32]);
+      expect(transport.probeSeconds.last, 167);
+      // Expiring warmth must not reset a timer and push detection past 15s.
+      async.elapse(const Duration(seconds: 5));
+      async.flushMicrotasks();
+      expect(transport.probeSeconds.last, 182);
+      async.elapse(const Duration(seconds: 15));
+      async.flushMicrotasks();
+      expect(transport.probeSeconds.last, 197);
+      // Fresh activity immediately restores the 5-second interval.
+      scheduler.extendWarmSession();
+      async.elapse(const Duration(seconds: 5));
+      async.flushMicrotasks();
+      expect(transport.probeSeconds.last, 202);
+      scheduler.dispose();
+    });
+  });
+
+  test('manual sync warms remote polling', () {
+    fakeAsync((async) {
+      final start = DateTime.utc(2026, 9, 1);
+      final runner = _Runner();
+      final transport = _PollTransport(
+        clock: () => start.add(async.elapsed),
+        probes: <String, WebDavSyncManifestProbe>{
+          'device-b': const WebDavSyncManifestProbe(
+            exists: true,
+            validator: WebDavSyncManifestValidator.etag('"v1"'),
+          ),
+        },
+      );
+      final scheduler = WebDavSyncScheduler(
+        runner: runner,
+        gate: _Gate(),
+        clock: () => start.add(async.elapsed),
+      );
+      scheduler.arm(
+        () async => context(),
+        remotePollContextProvider: () async => WebDavSyncRemotePollContext(
+          transport: transport,
+          peerDeviceIds: const <String>['device-b'],
+          validators: const <String, WebDavSyncManifestValidator>{
+            'device-b': WebDavSyncManifestValidator.etag('"v1"'),
+          },
+        ),
+      );
+
+      unawaited(scheduler.signal(WebDavSyncTrigger.manual));
+      async.flushMicrotasks();
+      expect(runner.runs, 1);
+
+      async.elapse(const Duration(seconds: 5));
+      async.flushMicrotasks();
+      expect(transport.probeSeconds, <int>[5]);
+      scheduler.dispose();
+    });
+  });
+
+  test('changed validator starts one cycle and warms remote polling', () {
+    fakeAsync((async) {
+      final start = DateTime.utc(2026, 9, 1);
+      var storedValidator = const WebDavSyncManifestValidator.etag('"v1"');
+      final runner = _Runner()
+        ..onRun = (trigger) {
+          if (trigger == WebDavSyncTrigger.remoteChange) {
+            storedValidator = const WebDavSyncManifestValidator.etag('"v2"');
+          }
+        };
+      final transport = _PollTransport(
+        clock: () => start.add(async.elapsed),
+        probes: <String, WebDavSyncManifestProbe>{
+          'device-b': const WebDavSyncManifestProbe(
+            exists: true,
+            validator: WebDavSyncManifestValidator.etag('"v2"'),
+          ),
+        },
+      );
+      final scheduler = WebDavSyncScheduler(
+        runner: runner,
+        gate: _Gate(),
+        clock: () => start.add(async.elapsed),
+      );
+      scheduler.arm(
+        () async => context(),
+        remotePollContextProvider: () async => WebDavSyncRemotePollContext(
+          transport: transport,
+          peerDeviceIds: const <String>['device-b'],
+          validators: <String, WebDavSyncManifestValidator>{
+            'device-b': storedValidator,
+          },
+        ),
+      );
+
+      async.elapse(const Duration(seconds: 65));
+      async.flushMicrotasks();
+
+      expect(runner.runs, 1);
+      expect(runner.triggers, <WebDavSyncTrigger?>[
+        WebDavSyncTrigger.remoteChange,
+      ]);
+      expect(transport.probeSeconds, <int>[15, 20, 30, 45, 60]);
+      scheduler.dispose();
+    });
+  });
+
+  test('unchanged validators start no polling cycles', () {
+    fakeAsync((async) {
+      final start = DateTime.utc(2026, 9, 1);
+      final runner = _Runner();
+      final transport = _PollTransport(
+        clock: () => start.add(async.elapsed),
+        probes: <String, WebDavSyncManifestProbe>{
+          'device-b': const WebDavSyncManifestProbe(
+            exists: true,
+            validator: WebDavSyncManifestValidator.etag('"v1"'),
+          ),
+        },
+      );
+      final scheduler = WebDavSyncScheduler(
+        runner: runner,
+        gate: _Gate(),
+        clock: () => start.add(async.elapsed),
+      );
+      scheduler.arm(
+        () async => context(),
+        remotePollContextProvider: () async => WebDavSyncRemotePollContext(
+          transport: transport,
+          peerDeviceIds: const <String>['device-b'],
+          validators: const <String, WebDavSyncManifestValidator>{
+            'device-b': WebDavSyncManifestValidator.etag('"v1"'),
+          },
+        ),
+      );
+
+      async.elapse(const Duration(minutes: 5));
+      async.flushMicrotasks();
+
+      expect(transport.probedDeviceIds, hasLength(20));
+      expect(runner.runs, 0);
+      scheduler.dispose();
+    });
+  });
+
+  test('no-validator server disables poll but periodic sync continues', () {
+    fakeAsync((async) {
+      final start = DateTime.utc(2026, 9, 1);
+      final runner = _Runner();
+      final transport = _PollTransport(
+        clock: () => start.add(async.elapsed),
+        probes: <String, WebDavSyncManifestProbe>{
+          'device-b': const WebDavSyncManifestProbe(
+            exists: true,
+            validator: null,
+          ),
+        },
+      );
+      final scheduler = WebDavSyncScheduler(
+        runner: runner,
+        gate: _Gate(),
+        clock: () => start.add(async.elapsed),
+      );
+      scheduler.arm(
+        () async => context(),
+        remotePollContextProvider: () async => WebDavSyncRemotePollContext(
+          transport: transport,
+          peerDeviceIds: const <String>['device-b'],
+          validators: const <String, WebDavSyncManifestValidator>{},
+        ),
+      );
+
+      async.elapse(const Duration(seconds: 60));
+      async.flushMicrotasks();
+      expect(scheduler.pollState, WebDavSyncPollState.disabledNoValidators);
+      expect(runner.runs, 0);
+
+      async.elapse(const Duration(minutes: 14));
+      async.flushMicrotasks();
+      expect(runner.triggers, <WebDavSyncTrigger?>[WebDavSyncTrigger.periodic]);
+      expect(transport.probedDeviceIds, <String>['device-b']);
+      scheduler.dispose();
+    });
+  });
+
+  test('429 poll failures back off to fifteen minutes and success resets', () {
+    fakeAsync((async) {
+      final start = DateTime.utc(2026, 9, 1);
+      final runner = _Runner();
+      final transport = _PollTransport(
+        clock: () => start.add(async.elapsed),
+        probes: <String, WebDavSyncManifestProbe>{
+          'device-b': const WebDavSyncManifestProbe(
+            exists: true,
+            validator: WebDavSyncManifestValidator.etag('"v1"'),
+          ),
+        },
+      )..failuresRemaining = 5;
+      final scheduler = WebDavSyncScheduler(
+        runner: runner,
+        gate: _Gate(),
+        clock: () => start.add(async.elapsed),
+      );
+      scheduler.arm(
+        () async => context(),
+        remotePollContextProvider: () async => WebDavSyncRemotePollContext(
+          transport: transport,
+          peerDeviceIds: const <String>['device-b'],
+          validators: const <String, WebDavSyncManifestValidator>{
+            'device-b': WebDavSyncManifestValidator.etag('"v1"'),
+          },
+        ),
+      );
+
+      void advanceTo(int seconds) {
+        async.elapse(Duration(seconds: seconds) - async.elapsed);
+        async.flushMicrotasks();
+      }
+
+      advanceTo(15);
+      expect(scheduler.pollState, WebDavSyncPollState.pausedBackoff);
+      expect(scheduler.automaticSyncActive, isFalse);
+      advanceTo(74);
+      expect(transport.probeSeconds, <int>[15]);
+      advanceTo(75);
+      advanceTo(195);
+      advanceTo(435);
+      advanceTo(915);
+      advanceTo(1815);
+      expect(transport.probeSeconds, <int>[15, 75, 195, 435, 915, 1815]);
+      expect(scheduler.pollState, WebDavSyncPollState.active);
+
+      advanceTo(1830);
+      expect(transport.probeSeconds.last, 1830);
+      expect(
+        runner.triggers.where(
+          (trigger) => trigger == WebDavSyncTrigger.remoteChange,
+        ),
+        isEmpty,
+      );
+      scheduler.dispose();
+    });
+  });
+
+  test('failure backoff overrides warm cadence and resets on success', () {
+    fakeAsync((async) {
+      final start = DateTime.utc(2026, 9, 1);
+      final transport = _PollTransport(
+        clock: () => start.add(async.elapsed),
+        probes: <String, WebDavSyncManifestProbe>{
+          'device-b': const WebDavSyncManifestProbe(
+            exists: true,
+            validator: WebDavSyncManifestValidator.etag('"v1"'),
+          ),
+        },
+      )..failuresRemaining = 1;
+      final scheduler = WebDavSyncScheduler(
+        runner: _Runner(),
+        gate: _Gate(),
+        clock: () => start.add(async.elapsed),
+      );
+      scheduler.arm(
+        () async => context(),
+        remotePollContextProvider: () async => WebDavSyncRemotePollContext(
+          transport: transport,
+          peerDeviceIds: const <String>['device-b'],
+          validators: const <String, WebDavSyncManifestValidator>{
+            'device-b': WebDavSyncManifestValidator.etag('"v1"'),
+          },
+        ),
+      );
+
+      scheduler.pauseRemotePolling();
+      scheduler.resumeRemotePolling();
+      async.elapse(const Duration(seconds: 5));
+      async.flushMicrotasks();
+      expect(transport.probeSeconds, <int>[5]);
+      expect(scheduler.pollState, WebDavSyncPollState.pausedBackoff);
+      expect(scheduler.automaticSyncActive, isFalse);
+
+      async.elapse(const Duration(seconds: 59));
+      async.flushMicrotasks();
+      expect(transport.probeSeconds, <int>[5]);
+      async.elapse(const Duration(seconds: 1));
+      async.flushMicrotasks();
+      expect(transport.probeSeconds, <int>[5, 65]);
+      expect(scheduler.pollState, WebDavSyncPollState.active);
+
+      async.elapse(const Duration(seconds: 10));
+      async.flushMicrotasks();
+      expect(transport.probeSeconds, <int>[5, 65, 75]);
+      scheduler.dispose();
+    });
+  });
+
+  test('foreground resume warms polling and background pauses it', () {
+    fakeAsync((async) {
+      final start = DateTime.utc(2026, 9, 1);
+      final transport = _PollTransport(
+        clock: () => start.add(async.elapsed),
+        probes: <String, WebDavSyncManifestProbe>{
+          'device-b': const WebDavSyncManifestProbe(
+            exists: true,
+            validator: WebDavSyncManifestValidator.etag('"v1"'),
+          ),
+        },
+      );
+      final scheduler = WebDavSyncScheduler(
+        runner: _Runner(),
+        gate: _Gate(),
+        clock: () => start.add(async.elapsed),
+      );
+      scheduler.arm(
+        () async => context(),
+        remotePollContextProvider: () async => WebDavSyncRemotePollContext(
+          transport: transport,
+          peerDeviceIds: const <String>['device-b'],
+          validators: const <String, WebDavSyncManifestValidator>{
+            'device-b': WebDavSyncManifestValidator.etag('"v1"'),
+          },
+        ),
+      );
+
+      scheduler.pauseRemotePolling();
+      async.elapse(const Duration(minutes: 5));
+      async.flushMicrotasks();
+      expect(transport.probedDeviceIds, isEmpty);
+      expect(scheduler.pollState, WebDavSyncPollState.gated);
+
+      scheduler.resumeRemotePolling();
+      async.elapse(const Duration(seconds: 4));
+      async.flushMicrotasks();
+      expect(transport.probedDeviceIds, isEmpty);
+      async.elapse(const Duration(seconds: 1));
+      async.flushMicrotasks();
+      expect(transport.probedDeviceIds, <String>['device-b']);
+
+      scheduler.pauseRemotePolling();
+      async.elapse(const Duration(minutes: 1));
+      async.flushMicrotasks();
+      expect(transport.probedDeviceIds, <String>['device-b']);
+      expect(scheduler.pollState, WebDavSyncPollState.gated);
+      scheduler.dispose();
+    });
+  });
+
+  test(
+    'quick resume before first warm probe restores polling without duplicates',
+    () {
+      fakeAsync((async) {
+        final start = DateTime.utc(2026, 9, 1);
+        final transport = _PollTransport(
+          clock: () => start.add(async.elapsed),
+          probes: <String, WebDavSyncManifestProbe>{
+            'device-b': const WebDavSyncManifestProbe(
+              exists: true,
+              validator: WebDavSyncManifestValidator.etag('"v1"'),
+            ),
+          },
+        );
+        final scheduler = WebDavSyncScheduler(
+          runner: _Runner(),
+          gate: _Gate(),
+          clock: () => start.add(async.elapsed),
+        );
+        scheduler.arm(
+          () async => context(),
+          remotePollContextProvider: () async => WebDavSyncRemotePollContext(
+            transport: transport,
+            peerDeviceIds: const <String>['device-b'],
+            validators: const <String, WebDavSyncManifestValidator>{
+              'device-b': WebDavSyncManifestValidator.etag('"v1"'),
+            },
+          ),
+        );
+
+        scheduler.extendWarmSession();
+        async.elapse(const Duration(seconds: 1));
+        scheduler.pauseRemotePolling();
+        async.elapse(const Duration(seconds: 1));
+        scheduler.resumeRemotePolling();
+        async.elapse(const Duration(seconds: 4));
+        async.flushMicrotasks();
+        expect(transport.probeSeconds, isEmpty);
+        async.elapse(const Duration(seconds: 1));
+        async.flushMicrotasks();
+        expect(transport.probeSeconds, <int>[7]);
+        async.elapse(const Duration(seconds: 25));
+        async.flushMicrotasks();
+        expect(transport.probeSeconds, <int>[7, 17, 32]);
+        // Polling must continue beyond warmth expiry at t=182.
+        async.elapse(const Duration(seconds: 165));
+        async.flushMicrotasks();
+        expect(transport.probeSeconds.last, 197);
+        expect(
+          transport.probeSeconds.toSet().length,
+          transport.probeSeconds.length,
+        );
+        scheduler.dispose();
+      });
+    },
+  );
+
+  test('disabled poll define gate wins over every warm trigger', () {
+    fakeAsync((async) {
+      final start = DateTime.utc(2026, 9, 1);
+      final transport = _PollTransport(
+        clock: () => start.add(async.elapsed),
+        probes: <String, WebDavSyncManifestProbe>{
+          'device-b': const WebDavSyncManifestProbe(
+            exists: true,
+            validator: WebDavSyncManifestValidator.etag('"v1"'),
+          ),
+        },
+      );
+      final scheduler = WebDavSyncScheduler(
+        runner: _Runner(),
+        gate: _Gate(),
+        remotePollingEnabled: false,
+        clock: () => start.add(async.elapsed),
+      );
+      scheduler.arm(
+        () async => context(),
+        remotePollContextProvider: () async => WebDavSyncRemotePollContext(
+          transport: transport,
+          peerDeviceIds: const <String>['device-b'],
+          validators: const <String, WebDavSyncManifestValidator>{
+            'device-b': WebDavSyncManifestValidator.etag('"v1"'),
+          },
+        ),
+      );
+
+      unawaited(scheduler.signal(WebDavSyncTrigger.manual));
+      async.flushMicrotasks();
+      scheduler.notifyLocalChange('theme');
+      async.elapse(const Duration(seconds: 2));
+      async.flushMicrotasks();
+      scheduler.pauseRemotePolling();
+      scheduler.resumeRemotePolling();
+      async.elapse(const Duration(minutes: 5));
+      async.flushMicrotasks();
+
+      expect(transport.probedDeviceIds, isEmpty);
+      expect(scheduler.pollState, WebDavSyncPollState.gated);
+      scheduler.dispose();
+    });
+  });
+
+  test('poll skips a running cycle and never probes unknown device IDs', () {
+    fakeAsync((async) {
+      final start = DateTime.utc(2026, 9, 1);
+      final blocked = Completer<void>();
+      final runner = _Runner()..blocker = blocked;
+      final transport = _PollTransport(
+        clock: () => start.add(async.elapsed),
+        probes: <String, WebDavSyncManifestProbe>{
+          'device-b': const WebDavSyncManifestProbe(
+            exists: true,
+            validator: WebDavSyncManifestValidator.etag('"v1"'),
+          ),
+          'unknown-device': const WebDavSyncManifestProbe(
+            exists: true,
+            validator: WebDavSyncManifestValidator.etag('"new"'),
+          ),
+        },
+      );
+      final scheduler = WebDavSyncScheduler(
+        runner: runner,
+        gate: _Gate(),
+        clock: () => start.add(async.elapsed),
+      );
+      scheduler.arm(
+        () async => context(),
+        remotePollContextProvider: () async => WebDavSyncRemotePollContext(
+          transport: transport,
+          peerDeviceIds: const <String>['device-b'],
+          validators: const <String, WebDavSyncManifestValidator>{
+            'device-b': WebDavSyncManifestValidator.etag('"v1"'),
+          },
+        ),
+      );
+
+      unawaited(scheduler.signal(WebDavSyncTrigger.manual));
+      async.flushMicrotasks();
+      async.elapse(const Duration(seconds: 60));
+      async.flushMicrotasks();
+      expect(transport.probedDeviceIds, isEmpty);
+
+      runner.blocker = null;
+      blocked.complete();
+      async.flushMicrotasks();
+      async.elapse(const Duration(seconds: 4));
+      async.flushMicrotasks();
+      expect(transport.probedDeviceIds, isEmpty);
+      async.elapse(const Duration(seconds: 1));
+      async.flushMicrotasks();
+      expect(transport.probedDeviceIds, <String>['device-b']);
+      expect(transport.probedDeviceIds, isNot(contains('unknown-device')));
+      scheduler.dispose();
+    });
+  });
+
+  test('every raw preference key consumed by the hot builder is admitted', () {
+    final source = File(
+      'lib/services/webdav_sync/webdav_sync_hot_merge.dart',
+    ).readAsStringSync();
+    final block = source.substring(
+      source.indexOf('abstract final class WebDavSyncHotMerge'),
+      source.indexOf('/// Per-device cursor used by MDBList'),
+    );
+    final declarations = RegExp(
+      r"static const String (\w+)\s*=\s*'([^']*)';",
+      multiLine: true,
+    ).allMatches(block);
+    final consumedKeys = <String>[
+      for (final match in declarations)
+        match.group(1)!.endsWith('Prefix')
+            ? '${match.group(2)!}drift-probe'
+            : match.group(2)!,
+    ];
+
+    expect(consumedKeys, hasLength(7));
+    expect(
+      consumedKeys,
+      everyElement(predicate<String>(WebDavSyncScheduler.admitsLocalChangeKey)),
+    );
+  });
+
+  test('every hot-local-only scalar key is excluded from admission', () {
+    expect(WebDavSyncHotMerge.hotLocalOnlyScalarKeys, isNotEmpty);
+    expect(
+      WebDavSyncHotMerge.hotLocalOnlyScalarKeys,
+      everyElement(
+        predicate<String>(
+          (key) => !WebDavSyncScheduler.admitsLocalChangeKey(key),
+        ),
+      ),
+    );
+  });
+
+  group('durable local-change intent', () {
+    for (final periodic in [false, true]) {
+      test(
+        'automatic seed repair releases pending saves (periodic=$periodic)',
+        () {
+          fakeAsync((async) {
+            final feedback = WebDavSyncSaveFeedback();
+            final runner = _Runner()
+              ..nextDisposition = WebDavSyncCycleDisposition.seedRepairRequired;
+            var repairs = 0;
+            var contextReads = 0;
+            late WebDavSyncScheduler scheduler;
+            scheduler = WebDavSyncScheduler(
+              runner: runner,
+              gate: _Gate(),
+              saveFeedback: feedback,
+              localChangeDebounce: periodic
+                  ? const Duration(hours: 1)
+                  : const Duration(seconds: 2),
+              repairSeed: () async {
+                expect(scheduler.hasPendingWork, isTrue);
+                expect(feedback.hasPending, isTrue);
+                repairs++;
+                runner.nextDisposition = WebDavSyncCycleDisposition.completed;
+                return true;
+              },
+            );
+            scheduler.arm(() async {
+              contextReads++;
+              return context();
+            });
+            scheduler.notifyLocalChange('theme');
+            async.elapse(
+              periodic
+                  ? const Duration(minutes: 15)
+                  : const Duration(seconds: 2),
+            );
+            expect(repairs, 1);
+            expect(
+              contextReads,
+              2,
+              reason: 'refresh the context after seed publication',
+            );
+            expect(runner.runs, 2);
+            expect(
+              runner.triggers,
+              everyElement(
+                periodic
+                    ? WebDavSyncTrigger.periodic
+                    : WebDavSyncTrigger.localChange,
+              ),
+            );
+            expect(feedback.hasPending, isFalse);
+            expect(feedback.phase, WebDavSavePhase.synced);
+            expect(scheduler.hasPendingWork, isFalse);
+            async.elapse(const Duration(minutes: 3));
+            expect(repairs, 1);
+            scheduler.dispose();
+            feedback.dispose();
+          });
+        },
+      );
+    }
+
+    for (final outcome in ['blocked', 'failed', 'stillMissing']) {
+      test(
+        'unsuccessful seed repair retains and retries the save ($outcome)',
+        () {
+          fakeAsync((async) {
+            final feedback = WebDavSyncSaveFeedback();
+            final runner = _Runner()
+              ..nextDisposition = WebDavSyncCycleDisposition.seedRepairRequired;
+            var repairs = 0;
+            var allowRepair = false;
+            final scheduler = WebDavSyncScheduler(
+              runner: runner,
+              gate: _Gate(),
+              saveFeedback: feedback,
+              repairSeed: () async {
+                repairs++;
+                if (allowRepair) {
+                  runner.nextDisposition = WebDavSyncCycleDisposition.completed;
+                  return true;
+                }
+                if (outcome == 'failed') throw StateError('upload failed');
+                return outcome == 'stillMissing';
+              },
+            );
+            scheduler.arm(() async => context());
+            scheduler.notifyLocalChange('theme');
+            async.elapse(const Duration(seconds: 2));
+            expect(
+              repairs,
+              1,
+              reason: 'at most one repair per scheduler attempt',
+            );
+            expect(runner.runs, outcome == 'stillMissing' ? 2 : 1);
+            expect(feedback.hasPending, isTrue);
+            expect(scheduler.hasPendingWork, isTrue);
+            allowRepair = true;
+            async.elapse(const Duration(seconds: 3));
+            expect(repairs, 2);
+            expect(feedback.hasPending, isFalse);
+            expect(scheduler.hasPendingWork, isFalse);
+            scheduler.dispose();
+            feedback.dispose();
+          });
+        },
+      );
+    }
+
+    for (final hold in ['playback', 'memory', 'reconfiguration']) {
+      test('seed repair continuation respects $hold', () {
+        fakeAsync((async) {
+          final feedback = WebDavSyncSaveFeedback();
+          final runner = _Runner()
+            ..nextDisposition = WebDavSyncCycleDisposition.seedRepairRequired;
+          final gate = _Gate();
+          final repaired = Completer<bool>();
+          var repairs = 0;
+          final scheduler = WebDavSyncScheduler(
+            runner: runner,
+            gate: gate,
+            saveFeedback: feedback,
+            repairSeed: () {
+              repairs++;
+              return repaired.future;
+            },
+          );
+          scheduler.arm(() async => context());
+          scheduler.notifyLocalChange('theme');
+          async.elapse(const Duration(seconds: 2));
+          expect(repairs, 1);
+          gate.televisionPlayback = hold == 'playback';
+          gate.lowMemory = hold == 'memory';
+          if (hold == 'reconfiguration') scheduler.disarm();
+          runner.nextDisposition = WebDavSyncCycleDisposition.completed;
+          repaired.complete(true);
+          async.flushMicrotasks();
+          expect(runner.runs, 1, reason: 'no follow-up cycle through a hold');
+          expect(feedback.hasPending, isTrue);
+          gate.televisionPlayback = false;
+          gate.lowMemory = false;
+          if (hold == 'reconfiguration') scheduler.arm(() async => context());
+          async.elapse(
+            hold == 'playback'
+                ? scheduler.playbackDebounce
+                : const Duration(seconds: 3),
+          );
+          expect(feedback.hasPending, isFalse);
+          scheduler.dispose();
+          feedback.dispose();
+        });
+      });
+    }
+
+    test(
+      'manual sync joins an automatic seed repair through verified follow-up',
+      () {
+        fakeAsync((async) {
+          final feedback = WebDavSyncSaveFeedback();
+          final runner = _Runner()
+            ..nextDisposition = WebDavSyncCycleDisposition.seedRepairRequired;
+          final repaired = Completer<bool>();
+          var repairs = 0;
+          final scheduler = WebDavSyncScheduler(
+            runner: runner,
+            gate: _Gate(),
+            saveFeedback: feedback,
+            repairSeed: () {
+              repairs++;
+              return repaired.future;
+            },
+          );
+          scheduler.arm(() async => context());
+          scheduler.notifyLocalChange('theme');
+          async.elapse(const Duration(seconds: 2));
+          WebDavSyncCycleReport? manual;
+          scheduler.signal(WebDavSyncTrigger.manual).then((r) => manual = r);
+          async.flushMicrotasks();
+          expect(repairs, 1);
+          expect(manual, isNull);
+          expect(feedback.hasPending, isTrue);
+          runner.nextDisposition = WebDavSyncCycleDisposition.completed;
+          repaired.complete(true);
+          async.flushMicrotasks();
+          expect(manual?.disposition, WebDavSyncCycleDisposition.completed);
+          expect(runner.runs, 2);
+          expect(repairs, 1);
+          expect(feedback.hasPending, isFalse);
+          scheduler.dispose();
+          feedback.dispose();
+        });
+      },
+    );
+
+    test(
+      'TV playback starting during the detecting cycle defers seed repair',
+      () {
+        fakeAsync((async) {
+          final feedback = WebDavSyncSaveFeedback();
+          final gate = _Gate();
+          var repairs = 0;
+          final runner = _Runner()
+            ..nextDisposition = WebDavSyncCycleDisposition.seedRepairRequired
+            ..onRun = (_) => gate.televisionPlayback = true;
+          final scheduler = WebDavSyncScheduler(
+            runner: runner,
+            gate: gate,
+            saveFeedback: feedback,
+            repairSeed: () async {
+              repairs++;
+              runner.nextDisposition = WebDavSyncCycleDisposition.completed;
+              return true;
+            },
+          );
+          scheduler.arm(() async => context());
+          scheduler.notifyLocalChange('theme');
+          async.elapse(const Duration(seconds: 2));
+          expect(repairs, 0);
+          expect(feedback.hasPending, isTrue);
+          runner.onRun = null;
+          gate.televisionPlayback = false;
+          async.elapse(scheduler.playbackDebounce);
+          expect(repairs, 1);
+          expect(feedback.hasPending, isFalse);
+          scheduler.dispose();
+          feedback.dispose();
+        });
+      },
+    );
+
+    for (final television in [true, false]) {
+      for (final heldAtSave in [true, false]) {
+        test(
+          'feedback waits for platform gate TV=$television heldAtSave=$heldAtSave',
+          () {
+            fakeAsync((async) {
+              final feedback = WebDavSyncSaveFeedback();
+              final runner = _Runner();
+              final gate = _Gate();
+              void hold(bool value) {
+                if (television) {
+                  gate.televisionPlayback = value;
+                } else {
+                  gate.lowMemory = value;
+                }
+              }
+
+              hold(heldAtSave);
+              final scheduler = WebDavSyncScheduler(
+                runner: runner,
+                gate: gate,
+                saveFeedback: feedback,
+              );
+              scheduler.arm(() async => context());
+              scheduler.notifyLocalChange('theme');
+              expect(
+                feedback.phase,
+                heldAtSave ? WebDavSavePhase.pending : WebDavSavePhase.syncing,
+              );
+              hold(true);
+              async.elapse(const Duration(minutes: 2));
+              expect(runner.runs, 0);
+              expect(feedback.phase, WebDavSavePhase.pending);
+              expect(feedback.hasPending, isTrue);
+              feedback.retryAction = () async {
+                await scheduler.signal(WebDavSyncTrigger.manual);
+              };
+              unawaited(feedback.retry());
+              async.flushMicrotasks();
+              expect(runner.runs, 0);
+              expect(feedback.phase, WebDavSavePhase.pending);
+              hold(false);
+              unawaited(feedback.retry());
+              async.flushMicrotasks();
+              expect(runner.runs, 1);
+              expect(feedback.phase, WebDavSavePhase.synced);
+              expect(feedback.hasPending, isFalse);
+              async.elapse(const Duration(minutes: 3));
+              expect(runner.runs, 1);
+              scheduler.dispose();
+              feedback.dispose();
+            });
+          },
+        );
+      }
+    }
+
+    test(
+      'TV playback library checkpoints sync later without creating save receipts',
+      () {
+        fakeAsync((async) {
+          final feedback = WebDavSyncSaveFeedback();
+          final runner = _Runner();
+          final gate = _Gate()..televisionPlayback = true;
+          final scheduler = WebDavSyncScheduler(
+            runner: runner,
+            gate: gate,
+            saveFeedback: feedback,
+          );
+          scheduler.arm(() async => context());
+          for (var i = 0; i < 5; i++) {
+            scheduler.notifyLocalChange(
+              ProfilePreferences.webDavSyncPlaybackLibraryLogicalKey,
+            );
+            async.elapse(const Duration(seconds: 30));
+            expect(feedback.phase, WebDavSavePhase.inactive);
+            expect(feedback.hasPending, isFalse);
+          }
+          expect(runner.runs, 0);
+          gate.televisionPlayback = false;
+          async.elapse(const Duration(minutes: 2));
+          expect(runner.runs, 1);
+          expect(feedback.phase, WebDavSavePhase.inactive);
+          scheduler.notifyLocalChange(
+            ProfilePreferences.webDavSyncLibraryLogicalKey,
+          );
+          expect(feedback.phase, WebDavSavePhase.syncing);
+          scheduler.dispose();
+          feedback.dispose();
+        });
+      },
+    );
+
+    for (final published in [true, false]) {
+      test(
+        'informational hints do not replace publication proof ($published)',
+        () {
+          fakeAsync((async) {
+            final feedback = WebDavSyncSaveFeedback();
+            final runner = _Runner()
+              ..statusHint = 'sync kept Local as Admin on this device'
+              ..publicationConfirmed = published;
+            final scheduler = WebDavSyncScheduler(
+              runner: runner,
+              gate: _Gate(),
+              saveFeedback: feedback,
+            );
+            scheduler.arm(() async => context());
+            scheduler.notifyLocalChange('theme');
+            async.elapse(const Duration(seconds: 2));
+            expect(feedback.hasPending, !published);
+            expect(
+              feedback.phase,
+              published ? WebDavSavePhase.synced : WebDavSavePhase.pending,
+            );
+            scheduler.dispose();
+            feedback.dispose();
+          });
+        },
+      );
+    }
+
+    for (final saveKind in <String>['settings', 'profile', 'restored']) {
+      test('suppressed profiles only block profile receipts ($saveKind)', () {
+        fakeAsync((async) {
+          final profileSave = saveKind != 'settings';
+          final feedback = WebDavSyncSaveFeedback();
+          if (saveKind == 'restored') feedback.saved(1);
+          final runner = _Runner()..profilesSuppressed = true;
+          final scheduler = WebDavSyncScheduler(
+            runner: runner,
+            gate: _Gate(),
+            saveFeedback: feedback,
+          );
+          scheduler.arm(() async => context());
+          scheduler.notifyLocalChange(
+            saveKind == 'profile'
+                ? ProfilePreferences.webDavSyncRegistryLogicalKey
+                : 'theme',
+          );
+          async.elapse(const Duration(seconds: 2));
+          expect(feedback.hasPending, profileSave);
+          expect(
+            feedback.phase,
+            profileSave ? WebDavSavePhase.pending : WebDavSavePhase.synced,
+          );
+          if (profileSave) {
+            // A later settings save must not acknowledge the withheld profile.
+            scheduler.notifyLocalChange('theme');
+            async.elapse(const Duration(seconds: 2));
+            expect(feedback.hasPending, isTrue);
+            runner.profilesSuppressed = false;
+            scheduler.notifyLocalChange('theme');
+            async.elapse(const Duration(seconds: 2));
+            expect(feedback.hasPending, isFalse);
+            expect(feedback.phase, WebDavSavePhase.synced);
+          }
+          scheduler.dispose();
+          feedback.dispose();
+        });
+      });
+    }
+
+    test(
+      'feedback does not confirm a save that arrived during an older cycle',
+      () {
+        fakeAsync((async) {
+          final feedback = WebDavSyncSaveFeedback();
+          final runner = _Runner();
+          late WebDavSyncScheduler scheduler;
+          runner.onRun = (_) {
+            if (runner.runs == 1) scheduler.notifyLocalChange('theme');
+          };
+          scheduler = WebDavSyncScheduler(
+            runner: runner,
+            gate: _Gate(),
+            saveFeedback: feedback,
+          );
+          scheduler.arm(() async => context());
+          expect(feedback.phase, WebDavSavePhase.inactive);
+          scheduler.notifyLocalChange('home_tick_sources');
+          async.elapse(const Duration(seconds: 2));
+          expect(feedback.revision, 2);
+          expect(feedback.confirmedRevision, 1);
+          expect(feedback.hasPending, isTrue);
+          async.elapse(const Duration(seconds: 2));
+          expect(feedback.phase, WebDavSavePhase.synced);
+          scheduler.dispose();
+          feedback.dispose();
+        });
+      },
+    );
+
+    test(
+      'sender feedback ignores local-only writes and does not confirm capacity blocks',
+      () {
+        fakeAsync((async) {
+          final feedback = WebDavSyncSaveFeedback();
+          final runner = _Runner()
+            ..nextDisposition = WebDavSyncCycleDisposition.capacityBlocked;
+          final scheduler = WebDavSyncScheduler(
+            runner: runner,
+            gate: _Gate(),
+            saveFeedback: feedback,
+          );
+          scheduler.arm(() async => context());
+          scheduler.notifyLocalChange('remote_device_settings');
+          expect(feedback.revision, 0);
+          scheduler.notifyLocalChange('home_tick_sources');
+          expect(feedback.phase, WebDavSavePhase.syncing);
+          async.elapse(const Duration(seconds: 2));
+          expect(feedback.phase, WebDavSavePhase.pending);
+          expect(feedback.confirmedRevision, 0);
+          scheduler.dispose();
+          feedback.dispose();
+        });
+      },
+    );
+
+    for (final networkFailure in [false, true]) {
+      test(
+        'profile switch preserves intent and handles network=$networkFailure backoff',
+        () {
+          ProfileRuntime.debugReset();
+          ProfileRuntime.initializeCommitted(
+            ProfileScope(profileId: 'a', dataGeneration: 1, sessionEpoch: 1),
+          );
+          try {
+            fakeAsync((async) {
+              final delays = <Duration>[];
+              final runner = _Runner()..failuresRemaining = 3;
+              runner.onRun = (_) {
+                if (runner.runs == 3) {
+                  ProfileRuntime.publish(
+                    ProfileScope(
+                      profileId: 'b',
+                      dataGeneration: 1,
+                      sessionEpoch: 2,
+                    ),
+                  );
+                  if (networkFailure) {
+                    throw const WebDavException(
+                      kind: WebDavErrorKind.network,
+                      message: 'offline',
+                    );
+                  }
+                }
+              };
+              final scheduler = WebDavSyncScheduler(
+                runner: runner,
+                gate: _Gate(),
+                localChangeDeferredObserver: (_, __, delay) =>
+                    delays.add(delay),
+              );
+              scheduler.arm(() async => context());
+              scheduler.notifyLocalChange('home_tick_sources');
+              async.elapse(const Duration(seconds: 8));
+              expect(runner.runs, 3);
+              expect(delays, [
+                const Duration(seconds: 2),
+                const Duration(seconds: 4),
+                Duration(seconds: networkFailure ? 8 : 2),
+              ]);
+              runner.failuresRemaining = 0;
+              async.elapse(Duration(seconds: networkFailure ? 8 : 2));
+              expect(runner.runs, 4);
+              async.elapse(const Duration(minutes: 2));
+              expect(runner.runs, 4);
+              scheduler.dispose();
+            });
+          } finally {
+            ProfileRuntime.debugReset();
+          }
+        },
+      );
+    }
+
+    test('a failed cycle re-arms the intent and the retry pushes', () {
+      fakeAsync((async) {
+        final start = DateTime.utc(2026, 9, 3);
+        final runner = _Runner()..failuresRemaining = 1;
+        final deferred = <String>[];
+        final scheduler = WebDavSyncScheduler(
+          runner: runner,
+          gate: _Gate(),
+          clock: () => start.add(async.elapsed),
+          localChangeDeferredObserver: (reason, attempt, delay) =>
+              deferred.add('$reason#$attempt/${delay.inSeconds}'),
+        );
+        scheduler.arm(() async => context());
+        scheduler.notifyLocalChange('home_tick_sources');
+        async.elapse(const Duration(seconds: 3));
+        async.flushMicrotasks();
+        expect(runner.runs, 1); // attempt failed
+        expect(deferred, isNotEmpty);
+        async.elapse(const Duration(seconds: 5));
+        async.flushMicrotasks();
+        expect(runner.runs, 2); // bounded retry flushed the intent
+        async.elapse(const Duration(minutes: 3));
+        expect(runner.runs, 2); // cleared: no storm afterwards
+        scheduler.dispose();
+      });
+    });
+
+    test('a gated attempt re-arms instead of dropping', () {
+      fakeAsync((async) {
+        final start = DateTime.utc(2026, 9, 3);
+        final runner = _Runner();
+        final gate = _Gate()..lowMemory = true;
+        final scheduler = WebDavSyncScheduler(
+          runner: runner,
+          gate: gate,
+          clock: () => start.add(async.elapsed),
+        );
+        scheduler.arm(() async => context());
+        scheduler.notifyLocalChange('home_tick_sources');
+        async.elapse(const Duration(seconds: 3));
+        async.flushMicrotasks();
+        expect(runner.runs, 0);
+        gate.lowMemory = false;
+        async.elapse(const Duration(seconds: 6));
+        async.flushMicrotasks();
+        expect(runner.runs, 1);
+        scheduler.dispose();
+      });
+    });
+
+    test('an inactive context re-arms instead of dropping', () {
+      fakeAsync((async) {
+        final start = DateTime.utc(2026, 9, 3);
+        final runner = _Runner();
+        var provideContext = false;
+        final scheduler = WebDavSyncScheduler(
+          runner: runner,
+          gate: _Gate(),
+          clock: () => start.add(async.elapsed),
+        );
+        scheduler.arm(() async => provideContext ? context() : null);
+        scheduler.notifyLocalChange('home_tick_sources');
+        async.elapse(const Duration(seconds: 3));
+        async.flushMicrotasks();
+        expect(runner.runs, 0); // context refused; intent must survive
+        provideContext = true;
+        async.elapse(const Duration(seconds: 6));
+        async.flushMicrotasks();
+        expect(runner.runs, 1);
+        scheduler.dispose();
+      });
+    });
+
+    test('a non-completed disposition re-arms', () {
+      fakeAsync((async) {
+        final start = DateTime.utc(2026, 9, 3);
+        final runner = _Runner()
+          ..nextDisposition = WebDavSyncCycleDisposition.adoptionBlocked;
+        final scheduler = WebDavSyncScheduler(
+          runner: runner,
+          gate: _Gate(),
+          clock: () => start.add(async.elapsed),
+        );
+        scheduler.arm(() async => context());
+        scheduler.notifyLocalChange('home_tick_sources');
+        async.elapse(const Duration(seconds: 3));
+        async.flushMicrotasks();
+        expect(runner.runs, 1);
+        runner.nextDisposition = WebDavSyncCycleDisposition.completed;
+        async.elapse(const Duration(seconds: 6));
+        async.flushMicrotasks();
+        expect(runner.runs, 2);
+        async.elapse(const Duration(minutes: 3));
+        expect(runner.runs, 2);
+        scheduler.dispose();
+      });
+    });
+
+    test('a same-tick write survives the older cycle and a timer disarm', () {
+      fakeAsync((async) {
+        final start = DateTime.utc(2026, 9, 3);
+        final runner = _Runner();
+        final scheduler = WebDavSyncScheduler(
+          runner: runner,
+          gate: _Gate(),
+          clock: () => start.add(async.elapsed),
+        );
+        runner.blocker = Completer<void>();
+        scheduler.arm(() async => context());
+        // This is the cycle a warm poll starts after observing a changed peer.
+        unawaited(scheduler.signal(WebDavSyncTrigger.remoteChange));
+        async.flushMicrotasks();
+        expect(runner.runs, 1);
+        // Lands mid-cycle, without advancing the injected wall clock.
+        scheduler.notifyLocalChange('home_tick_sources');
+        runner.blocker!.complete();
+        runner.blocker = null;
+        async.flushMicrotasks();
+        // The fake clock has not advanced since the cycle started. A wall-time
+        // comparison therefore cannot distinguish this write from the older
+        // snapshot. Cancel the dirty follow-up to prove the durable marker,
+        // rather than that incidental timer, retains the intent.
+        scheduler.disarm();
+        scheduler.arm(() async => context());
+        async.elapse(const Duration(seconds: 2));
+        async.flushMicrotasks();
+        expect(runner.runs, 2); // follow-up flushed the mid-cycle write
+        async.elapse(const Duration(minutes: 3));
+        expect(runner.runs, 2);
+        scheduler.dispose();
+      });
+    });
+
+    test('arm during the initial window replaces it with one fresh kick', () {
+      fakeAsync((async) {
+        final runner = _Runner();
+        final scheduler = WebDavSyncScheduler(runner: runner, gate: _Gate());
+        scheduler.arm(() async => context());
+        scheduler.notifyLocalChange('home_tick_sources');
+
+        async.elapse(const Duration(seconds: 1));
+        scheduler.arm(() async => context());
+        async.elapse(const Duration(seconds: 1));
+        async.flushMicrotasks();
+        expect(runner.runs, 0); // the old window was cancelled
+        async.elapse(const Duration(seconds: 1));
+        async.flushMicrotasks();
+        expect(runner.runs, 1);
+        async.elapse(const Duration(minutes: 3));
+        async.flushMicrotasks();
+        expect(runner.runs, 1);
+        scheduler.dispose();
+      });
+    });
+
+    test('a throwing context provider re-arms instead of dropping', () {
+      fakeAsync((async) {
+        final runner = _Runner();
+        var contextAttempts = 0;
+        final deferred = <String>[];
+        final scheduler = WebDavSyncScheduler(
+          runner: runner,
+          gate: _Gate(),
+          localChangeDeferredObserver: (reason, attempt, delay) =>
+              deferred.add('$reason#$attempt/${delay.inSeconds}'),
+        );
+        scheduler.arm(() async {
+          contextAttempts++;
+          if (contextAttempts == 1) throw StateError('context unavailable');
+          return context();
+        });
+
+        scheduler.notifyLocalChange('home_tick_sources');
+        async.elapse(const Duration(seconds: 2));
+        async.flushMicrotasks();
+        expect(runner.runs, 0);
+        expect(deferred, <String>['cycle did not start#1/2']);
+
+        async.elapse(const Duration(seconds: 2));
+        async.flushMicrotasks();
+        expect(runner.runs, 1);
+        scheduler.dispose();
+      });
+    });
+
+    test('a conflict follow-up remains durable across disarm', () {
+      fakeAsync((async) {
+        final firstRun = Completer<void>();
+        final runner = _Runner()
+          ..blocker = firstRun
+          ..requestFollowUpOnNextRun = true;
+        final scheduler = WebDavSyncScheduler(runner: runner, gate: _Gate());
+        scheduler.arm(() async => context());
+        scheduler.notifyLocalChange('home_tick_sources');
+
+        async.elapse(const Duration(seconds: 2));
+        async.flushMicrotasks();
+        expect(runner.runs, 1);
+        runner.blocker = null;
+        firstRun.complete();
+        async.flushMicrotasks();
+
+        // Cancel the requested immediate retry before its zero-delay timer can
+        // run. The unsatisfied intent must make arm() kick a replacement.
+        scheduler.disarm();
+        scheduler.arm(() async => context());
+        async.elapse(const Duration(seconds: 2));
+        async.flushMicrotasks();
+        expect(runner.runs, 2);
+        scheduler.dispose();
+      });
+    });
+
+    test('the intent survives a disarm/rearm bounce', () {
+      fakeAsync((async) {
+        final start = DateTime.utc(2026, 9, 3);
+        final runner = _Runner();
+        final scheduler = WebDavSyncScheduler(
+          runner: runner,
+          gate: _Gate(),
+          clock: () => start.add(async.elapsed),
+        );
+        scheduler.arm(() async => context());
+        scheduler.notifyLocalChange('home_tick_sources');
+        scheduler.disarm(); // timer cancelled before the window fired
+        async.elapse(const Duration(seconds: 10));
+        expect(runner.runs, 0);
+        scheduler.arm(() async => context());
+        async.elapse(const Duration(seconds: 3));
+        async.flushMicrotasks();
+        expect(runner.runs, 1);
+        scheduler.dispose();
+      });
+    });
+
+    test('the intent survives disarm while a retry is armed', () {
+      fakeAsync((async) {
+        final runner = _Runner()..failuresRemaining = 1;
+        final scheduler = WebDavSyncScheduler(runner: runner, gate: _Gate());
+        scheduler.arm(() async => context());
+        scheduler.notifyLocalChange('home_tick_sources');
+        async.elapse(const Duration(seconds: 2));
+        async.flushMicrotasks();
+        expect(runner.runs, 1);
+
+        scheduler.disarm();
+        async.elapse(const Duration(seconds: 10));
+        expect(runner.runs, 1);
+        scheduler.arm(() async => context());
+        async.elapse(const Duration(seconds: 2));
+        async.flushMicrotasks();
+        expect(runner.runs, 2);
+        scheduler.dispose();
+      });
+    });
+
+    test('playback debounce is the retry backoff base', () {
+      fakeAsync((async) {
+        final gate = _Gate()..playback = true;
+        final runner = _Runner()..failuresRemaining = 1;
+        final delays = <Duration>[];
+        final scheduler = WebDavSyncScheduler(
+          runner: runner,
+          gate: gate,
+          localChangeDeferredObserver: (_, _, delay) => delays.add(delay),
+        );
+        scheduler.arm(() async => context());
+        scheduler.notifyLocalChange('home_tick_sources');
+
+        async.elapse(const Duration(seconds: 60));
+        async.flushMicrotasks();
+        expect(runner.runs, 1);
+        expect(delays, <Duration>[const Duration(seconds: 60)]);
+        async.elapse(const Duration(seconds: 59));
+        async.flushMicrotasks();
+        expect(runner.runs, 1);
+        async.elapse(const Duration(seconds: 1));
+        async.flushMicrotasks();
+        expect(runner.runs, 2);
+        scheduler.dispose();
+      });
+    });
+
+    test('retry delay has a positive floor and saturating cap', () {
+      fakeAsync((async) {
+        final gate = _Gate();
+        final runner = _Runner()..failuresRemaining = 2;
+        final delays = <Duration>[];
+        final scheduler = WebDavSyncScheduler(
+          runner: runner,
+          gate: gate,
+          localChangeDebounce: Duration.zero,
+          playbackDebounce: const Duration(days: 1000000),
+          localChangeDeferredObserver: (_, _, delay) => delays.add(delay),
+        );
+        runner.onRun = (_) {
+          gate.playback = runner.runs > 1;
+        };
+        scheduler.arm(() async => context());
+        scheduler.notifyLocalChange('home_tick_sources');
+
+        async.elapse(Duration.zero);
+        async.flushMicrotasks();
+        expect(runner.runs, 1);
+        expect(delays, <Duration>[WebDavSyncScheduler.localChangeRetryFloor]);
+
+        async.elapse(WebDavSyncScheduler.localChangeRetryFloor);
+        async.flushMicrotasks();
+        expect(runner.runs, 2);
+        expect(delays.last, WebDavSyncScheduler.localChangeRetryCap);
+
+        async.elapse(WebDavSyncScheduler.localChangeRetryCap);
+        async.flushMicrotasks();
+        expect(runner.runs, 3);
+        scheduler.dispose();
+      });
+    });
+
+    test('deferred observer cannot orphan or duplicate a retry', () {
+      fakeAsync((async) {
+        final firstRun = Completer<void>();
+        final runner = _Runner()
+          ..blocker = firstRun
+          ..failuresRemaining = 1;
+        late final WebDavSyncScheduler scheduler;
+        var deferredCalls = 0;
+        scheduler = WebDavSyncScheduler(
+          runner: runner,
+          gate: _Gate(),
+          localChangeDeferredObserver: (_, _, _) {
+            deferredCalls++;
+            scheduler.notifyConflictFollowUp();
+          },
+        );
+        scheduler.arm(() async => context());
+        scheduler.notifyLocalChange('home_tick_sources');
+
+        async.elapse(const Duration(seconds: 2));
+        async.flushMicrotasks();
+        expect(runner.runs, 1);
+        runner.blocker = null;
+        firstRun.complete();
+        async.flushMicrotasks();
+        expect(deferredCalls, 1);
+        async.elapse(Duration.zero);
+        async.flushMicrotasks();
+        expect(runner.runs, 2);
+        async.elapse(const Duration(minutes: 3));
+        async.flushMicrotasks();
+        expect(runner.runs, 2);
+        expect(deferredCalls, 1);
+        scheduler.dispose();
+      });
+    });
+
+    test('persistent failure backs off bounded with no storm', () {
+      fakeAsync((async) {
+        final start = DateTime.utc(2026, 9, 3);
+        final runner = _Runner()..failuresRemaining = 1 << 30;
+        final scheduler = WebDavSyncScheduler(
+          runner: runner,
+          gate: _Gate(),
+          clock: () => start.add(async.elapsed),
+        );
+        scheduler.arm(() async => context());
+        scheduler.notifyLocalChange('home_tick_sources');
+        async.elapse(const Duration(minutes: 10));
+        async.flushMicrotasks();
+        // 2s window + retries 2,4,8,16,32s then capped repeats; well under
+        // one attempt per ten seconds over ten minutes.
+        expect(runner.runs, lessThan(12));
+        expect(runner.runs, greaterThan(3));
+        scheduler.dispose();
+      });
+    });
+  });
+
+  group('playback checkpoint and session warmth', () {
+    test('a checkpoint flushes the playback window immediately', () {
+      fakeAsync((async) {
+        final start = DateTime.utc(2026, 9, 3);
+        final runner = _Runner();
+        final gate = _Gate()..playback = true;
+        final scheduler = WebDavSyncScheduler(
+          runner: runner,
+          gate: gate,
+          clock: () => start.add(async.elapsed),
+        );
+        scheduler.arm(() async => context());
+        scheduler.notifyLocalChange('playback_state_v1');
+        async.elapse(const Duration(seconds: 5));
+        async.flushMicrotasks();
+        expect(runner.runs, 0); // still inside the 60s playback window
+        for (var index = 0; index < 20; index++) {
+          scheduler.notifyPlaybackCheckpoint(); // pause/seek burst
+        }
+        async.flushMicrotasks();
+        async.elapse(Duration.zero);
+        async.flushMicrotasks();
+        expect(runner.runs, 1);
+        async.elapse(const Duration(seconds: 60));
+        async.flushMicrotasks();
+        expect(runner.runs, 1); // replaced playback timer never fires later
+        scheduler.dispose();
+      });
+    });
+
+    test('an immediate checkpoint preserves durable retry accounting', () {
+      fakeAsync((async) {
+        final runner = _Runner()..failuresRemaining = 2;
+        final delays = <Duration>[];
+        final scheduler = WebDavSyncScheduler(
+          runner: runner,
+          gate: _Gate(),
+          localChangeDeferredObserver: (_, _, delay) => delays.add(delay),
+        );
+        scheduler.arm(() async => context());
+        scheduler.notifyLocalChange('playback_state_v1');
+
+        async.elapse(const Duration(seconds: 2));
+        async.flushMicrotasks();
+        expect(runner.runs, 1);
+        expect(delays, <Duration>[const Duration(seconds: 2)]);
+
+        async.elapse(const Duration(seconds: 1));
+        scheduler.notifyPlaybackCheckpoint();
+        async.elapse(Duration.zero);
+        async.flushMicrotasks();
+        expect(runner.runs, 2);
+        expect(delays, <Duration>[
+          const Duration(seconds: 2),
+          const Duration(seconds: 4),
+        ]);
+
+        async.elapse(const Duration(seconds: 3));
+        async.flushMicrotasks();
+        expect(runner.runs, 2);
+        async.elapse(const Duration(seconds: 1));
+        async.flushMicrotasks();
+        expect(runner.runs, 3);
+        scheduler.dispose();
+      });
+    });
+
+    test('television checkpoints leave the gated retry timer untouched', () {
+      fakeAsync((async) {
+        final gate = _Gate()..televisionPlayback = true;
+        final runner = _Runner();
+        final scheduler = WebDavSyncScheduler(runner: runner, gate: gate);
+        scheduler.arm(() async => context());
+        scheduler.notifyLocalChange('playback_state_v1');
+
+        async.elapse(const Duration(seconds: 30));
+        for (var index = 0; index < 20; index++) {
+          scheduler.notifyPlaybackCheckpoint();
+        }
+        async.elapse(Duration.zero);
+        async.flushMicrotasks();
+        expect(runner.runs, 0);
+
+        gate.televisionPlayback = false;
+        async.elapse(const Duration(seconds: 30));
+        async.flushMicrotasks();
+        expect(runner.runs, 1);
+        scheduler.dispose();
+      });
+    });
+
+    test(
+      'a checkpoint during a running cycle produces one immediate follow-up',
+      () {
+        fakeAsync((async) {
+          final start = DateTime.utc(2026, 9, 3);
+          final runner = _Runner();
+          final scheduler = WebDavSyncScheduler(
+            runner: runner,
+            gate: _Gate(),
+            clock: () => start.add(async.elapsed),
+          );
+          runner.blocker = Completer<void>();
+          scheduler.arm(() async => context());
+          scheduler.notifyLocalChange('playback_state_v1');
+          async.elapse(const Duration(seconds: 3));
+          async.flushMicrotasks();
+          expect(runner.runs, 1);
+          scheduler.notifyPlaybackCheckpoint();
+          scheduler.notifyPlaybackCheckpoint(); // burst coalesces
+          runner.blocker!.complete();
+          runner.blocker = null;
+          async.flushMicrotasks();
+          async.elapse(Duration.zero);
+          async.flushMicrotasks();
+          expect(runner.runs, 2);
+          async.elapse(const Duration(seconds: 30));
+          expect(runner.runs, 2);
+          scheduler.dispose();
+        });
+      },
+    );
+
+    test('extendWarmSession keeps the fast poll cadence alive', () {
+      fakeAsync((async) {
+        final start = DateTime.utc(2026, 9, 3);
+        final runner = _Runner();
+        var probes = 0;
+        final scheduler = WebDavSyncScheduler(
+          runner: runner,
+          gate: _Gate(),
+          clock: () => start.add(async.elapsed),
+        );
+        scheduler.arm(
+          () async => context(),
+          remotePollContextProvider: () async {
+            probes++;
+            return null; // counted, then treated as inactive
+          },
+        );
+        // Idle past the initial warm window so cadence decays.
+        async.elapse(const Duration(minutes: 4));
+        final decayed = probes;
+        // Remote watch activity arrives: cadence must return to warm.
+        scheduler.extendWarmSession();
+        async.elapse(const Duration(seconds: 30));
+        final warmed = probes - decayed;
+        expect(warmed, greaterThanOrEqualTo(5)); // ~6 probes at 5s cadence
+        scheduler.dispose();
+      });
+    });
+
+    test('warm polling decays after real watch activity stops', () {
+      fakeAsync((async) {
+        final start = DateTime.utc(2026, 9, 3);
+        var probes = 0;
+        final scheduler = WebDavSyncScheduler(
+          runner: _Runner(),
+          gate: _Gate(),
+          clock: () => start.add(async.elapsed),
+        );
+        scheduler.arm(
+          () async => context(),
+          remotePollContextProvider: () async {
+            probes++;
+            return null;
+          },
+        );
+        scheduler.extendWarmSession();
+
+        async.elapse(warmDuration);
+        async.flushMicrotasks();
+        final atExpiry = probes;
+        expect(atExpiry, greaterThanOrEqualTo(35));
+        async.elapse(const Duration(seconds: 14));
+        async.flushMicrotasks();
+        expect(probes, atExpiry);
+        async.elapse(const Duration(seconds: 1));
+        async.flushMicrotasks();
+        expect(probes, atExpiry + 1);
+        scheduler.dispose();
+      });
+    });
+  });
+}
+
+final class _Runner
+    implements WebDavSyncCycleRunner, WebDavSyncCycleTransportOwner {
+  int runs = 0;
+  int transportCloses = 0;
+  void Function()? onTransportClose;
+  Completer<void>? blocker;
+  void Function(WebDavSyncTrigger? trigger)? onRun;
+  bool requestFollowUpOnNextRun = false;
+  final List<WebDavSyncTrigger?> triggers = <WebDavSyncTrigger?>[];
+
+  @override
+  void closeCycleTransports() {
+    transportCloses++;
+    onTransportClose?.call();
+  }
+
+  @override
+  Future<WebDavSyncCycleReport> runCycle(
+    WebDavSyncCycleContext? context, {
+    bool allowPreActivation = false,
+    WebDavSyncTrigger? trigger,
+  }) async {
+    runs++;
+    triggers.add(trigger);
+    onRun?.call(trigger);
+    await blocker?.future;
+    if (failuresRemaining > 0) {
+      failuresRemaining--;
+      throw StateError('cycle failed for the fixture');
+    }
+    final followUp = requestFollowUpOnNextRun;
+    requestFollowUpOnNextRun = false;
+    return WebDavSyncCycleReport(
+      disposition: nextDisposition,
+      localPublicationConfirmed: publicationConfirmed,
+      localProfilesSuppressed: profilesSuppressed,
+      statusHint: statusHint,
+      localChangeFollowUp: followUp,
+    );
+  }
+
+  bool publicationConfirmed = true;
+  bool profilesSuppressed = false;
+  String? statusHint;
+  int failuresRemaining = 0;
+  WebDavSyncCycleDisposition nextDisposition =
+      WebDavSyncCycleDisposition.completed;
+}
+
+final class _PollClient extends http.BaseClient {
+  int closeCalls = 0;
+
+  @override
+  Future<http.StreamedResponse> send(http.BaseRequest request) =>
+      throw UnimplementedError();
+
+  @override
+  void close() {
+    closeCalls++;
+    super.close();
+  }
+}
+
+final class _Gate implements WebDavSyncRuntimeGate {
+  bool playback = false;
+  bool televisionPlayback = false;
+  bool lowMemory = false;
+
+  @override
+  bool get playbackActive => playback || televisionPlayback;
+
+  @override
+  bool get playbackActiveOnTelevision => televisionPlayback;
+
+  @override
+  bool get tvOsLowMemory => lowMemory;
+}
+
+final class _PollTransport implements WebDavSyncTransport {
+  _PollTransport({required this.clock, required this.probes});
+
+  final DateTime Function() clock;
+  final Map<String, WebDavSyncManifestProbe> probes;
+  final List<String> probedDeviceIds = <String>[];
+  final List<int> probeSeconds = <int>[];
+  int failuresRemaining = 0;
+
+  Completer<void>? probeBlocker;
+  bool failWithoutStatus = false;
+
+  @override
+  Future<WebDavSyncManifestProbe> probeManifest(String deviceId) async {
+    probedDeviceIds.add(deviceId);
+    probeSeconds.add(clock().difference(DateTime.utc(2026, 9, 1)).inSeconds);
+    if (probeBlocker != null) await probeBlocker!.future;
+    if (failuresRemaining > 0) {
+      failuresRemaining--;
+      if (failWithoutStatus) {
+        throw const WebDavException(
+          kind: WebDavErrorKind.transient,
+          message: 'offline',
+        );
+      }
+      throw const WebDavException(
+        kind: WebDavErrorKind.transient,
+        message: 'rate limited',
+        statusCode: HttpStatus.tooManyRequests,
+      );
+    }
+    return probes[deviceId]!;
+  }
+
+  @override
+  Future<void> ensureOwnLayout(String deviceId) => throw UnimplementedError();
+
+  @override
+  Future<WebDavSyncPeerListing> listDeviceIds() => throw UnimplementedError();
+
+  @override
+  Future<WebDavBytesResult> readManifest(String deviceId) =>
+      throw UnimplementedError();
+
+  @override
+  Future<WebDavBytesResult> readRootMarker() => throw UnimplementedError();
+
+  @override
+  Future<WebDavBytesResult> readSection(
+    String deviceId,
+    WebDavSyncSectionReference reference, {
+    required int maxBytes,
+  }) => throw UnimplementedError();
+
+  @override
+  Future<WebDavResponseMetadata> writeManifest(
+    String deviceId,
+    Uint8List bytes,
+  ) => throw UnimplementedError();
+
+  @override
+  Future<WebDavResponseMetadata> writeSection(
+    String deviceId,
+    String contentHash,
+    Uint8List bytes, {
+    required int maxBytes,
+  }) => throw UnimplementedError();
+
+  @override
+  void close() {}
+}

@@ -72,6 +72,12 @@ extension TraktSeeAllListX on TraktSeeAllList {
       this == TraktSeeAllList.popular ||
       this == TraktSeeAllList.anticipated;
 
+  /// Discovery lists, where the "Hide watched titles" switch applies. The
+  /// rest (Continue Watching, Watchlist, History, Collection, Ratings) are the
+  /// user's own lists and stay complete.
+  bool get hidesWatched =>
+      isPublic || this == TraktSeeAllList.recommendations;
+
   /// Lists whose natural order is a genuine cross-type timeline (watched_at /
   /// rated_at / collected_at recency), so merging movies + shows must sort by
   /// that timestamp rather than interleave. Excludes Watchlist (user-curated
@@ -161,17 +167,18 @@ class TraktListSource {
   /// The user's own custom lists + liked lists, ready to append to a list
   /// dropdown. A self-liked list (owned and liked) is deduped to one entry.
   /// Returns [] when Trakt isn't connected or on error.
-  Future<List<TraktListChoice>> loadUserLists() async {
+  Future<List<TraktListChoice>> loadUserLists({bool strict = false}) async {
     List<Map<String, dynamic>> custom;
     List<Map<String, dynamic>> liked;
     try {
       final results = await Future.wait([
-        TraktService.instance.fetchCustomLists(),
-        TraktService.instance.fetchLikedLists(),
+        TraktService.instance.fetchCustomLists(strict: strict),
+        TraktService.instance.fetchLikedLists(strict: strict),
       ]);
       custom = results[0];
       liked = results[1];
     } catch (_) {
+      if (strict) rethrow;
       return const [];
     }
     final ownChoices = [
@@ -200,6 +207,7 @@ class TraktListSource {
   Future<({List<StremioMeta> items, bool failed})> loadList(
     TraktListChoice choice, {
     List<StremioMeta> cwItems = const [],
+    bool preview = false,
   }) async {
     if (choice.isContinueWatching) {
       return (items: cwItems, failed: false);
@@ -223,9 +231,9 @@ class TraktListSource {
     try {
       raw = choice.liked
           ? await TraktService.instance
-              .fetchLikedListItemsOrderedOrNull(choice.userList!)
+              .fetchLikedListItemsOrderedOrNull(choice.userList!, preview: preview)
           : await TraktService.instance
-              .fetchCustomListItemsOrderedOrNull(choice.customListRef);
+              .fetchCustomListItemsOrderedOrNull(choice.customListRef, preview: preview);
     } catch (_) {
       raw = null;
     }

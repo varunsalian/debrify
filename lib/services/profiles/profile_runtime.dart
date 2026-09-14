@@ -78,6 +78,11 @@ class ProfileRuntime {
     Future<T> Function() body,
   ) => runZoned(body, zoneValues: <Object, Object>{_zoneScopeKey: captured});
 
+  /// Long-lived infrastructure must not inherit the profile that started it.
+  /// Keep other zone behavior (including error handling) intact.
+  static Future<T> withoutCapturedScope<T>(Future<T> Function() body) =>
+      runZoned(body, zoneValues: <Object, Object>{_zoneScopeKey: Object()});
+
   @visibleForTesting
   static void debugReset() {
     _mode = null;

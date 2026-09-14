@@ -1,6 +1,8 @@
+import '../models/metadata_preferences.dart';
+import 'metadata_presentation_mixin.dart';
 import 'dart:async';
 
-import 'package:cached_network_image/cached_network_image.dart';
+import 'recoverable_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -87,7 +89,10 @@ class CatalogItemTile extends StatefulWidget {
   State<CatalogItemTile> createState() => _CatalogItemTileState();
 }
 
-class _CatalogItemTileState extends State<CatalogItemTile> {
+class _CatalogItemTileState extends State<CatalogItemTile>
+    with MetadataPresentationMixin<CatalogItemTile> {
+  @override
+  StremioMeta get originalMetadata => widget.item;
   bool _focused = false;
   bool _hovered = false;
   Timer? _longPressTimer;
@@ -105,8 +110,8 @@ class _CatalogItemTileState extends State<CatalogItemTile> {
   @override
   Widget build(BuildContext context) {
     final app = AppThemeScope.of(context);
-    final item = widget.item;
-    final poster = item.poster;
+    final item = presentedMetadata!;
+    final poster = metadataArtworkPending(MetadataCategory.posters) ? null : item.poster;
     final rating = item.imdbRating;
     final typeLabel = item.type == 'series' ? 'SERIES' : 'MOVIE';
     final isMovie = item.type.toLowerCase() == 'movie';
@@ -132,7 +137,7 @@ class _CatalogItemTileState extends State<CatalogItemTile> {
     // where a filter layer per poster would not be.
     List<Widget> artwork((Color, BlendMode)? blend) => <Widget>[
       if (poster != null && poster.isNotEmpty)
-        CachedNetworkImage(
+        RecoverableNetworkImage(
           imageUrl: poster,
           fit: BoxFit.cover,
           color: blend?.$1,
@@ -370,10 +375,8 @@ class _CatalogItemTileState extends State<CatalogItemTile> {
             role: ArtRole.poster,
             radius: 14,
             inList: true,
-            builder: (context, blend) => Stack(
-              fit: StackFit.expand,
-              children: artwork(blend),
-            ),
+            builder: (context, blend) =>
+                Stack(fit: StackFit.expand, children: artwork(blend)),
             // Chrome and the focus ring together: badges, the inline title,
             // the progress bar and the cursor are all things painted ON the
             // poster, so none of them may be dissolved by a `faded` look or
@@ -387,10 +390,7 @@ class _CatalogItemTileState extends State<CatalogItemTile> {
                     child: Container(
                       decoration: BoxDecoration(
                         borderRadius: app.shape.br(14),
-                        border: Border.all(
-                          color: app.home.focus,
-                          width: 2.5,
-                        ),
+                        border: Border.all(color: app.home.focus, width: 2.5),
                       ),
                     ),
                   ),
@@ -432,8 +432,8 @@ class _CatalogItemTileState extends State<CatalogItemTile> {
               // keeps the glide.
               duration: widget.isTelevision
                   ? (board && !PlatformUtil.isAndroidTvCached
-                      ? const Duration(milliseconds: 140)
-                      : Duration.zero)
+                        ? const Duration(milliseconds: 140)
+                        : Duration.zero)
                   : const Duration(milliseconds: 280),
               curve: Curves.easeOutCubic,
             );

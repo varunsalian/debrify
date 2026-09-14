@@ -31,6 +31,11 @@ const List<IptvStyleChoice> kIptvStyleChoices = [
     'Master Control',
     'Broadcast console — pure black, mono numerals, amber playhead',
   ),
+  IptvStyleChoice(
+    'spotlight',
+    'Spotlight Guide',
+    'Apple TV style — cinematic hero, source rail, and timeline guide',
+  ),
 ];
 
 /// Row caption for the current choice (Appearance row subtitle).
@@ -38,7 +43,9 @@ String iptvStyleLabel(String style) {
   for (final c in kIptvStyleChoices) {
     if (c.value == style) return c.label;
   }
-  return 'Command Center';
+  return kIptvStyleChoices
+      .firstWhere((choice) => choice.value == StorageService.kIptvStyleDefault)
+      .label;
 }
 
 /// IPTV page appearance picker (`iptv_style`).
@@ -57,7 +64,7 @@ class IptvStylePage extends StatefulWidget {
 
 class _IptvStylePageState extends State<IptvStylePage> {
   bool _loading = true;
-  String _style = 'command';
+  String _style = StorageService.kIptvStyleDefault;
 
   /// Non-focusable marker around the options card; used on TV to hand entry
   /// focus to its first focusable descendant (the first option row).
@@ -87,7 +94,7 @@ class _IptvStylePageState extends State<IptvStylePage> {
       _style = style;
       _loading = false;
     });
-    if (PlatformUtil.isAndroidTvCached) {
+    if (PlatformUtil.isTelevision) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
         // Don't yank focus if it already landed on a real node (only the
@@ -150,11 +157,7 @@ class _IptvStylePageState extends State<IptvStylePage> {
                 Text(
                   'Applies the next time the IPTV page opens. Phones keep '
                   'the classic list either way.',
-                  style: TextStyle(
-                    fontSize: 12.5,
-                    height: 1.45,
-                    color: t.dim,
-                  ),
+                  style: TextStyle(fontSize: 12.5, height: 1.45, color: t.dim),
                 ),
               ],
             ),

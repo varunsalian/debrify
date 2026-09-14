@@ -8,7 +8,11 @@ import 'profile_runtime.dart';
 import 'profile_registry.dart';
 
 typedef ProfileCredentialRead = ({bool handled, String? value});
-typedef ProfileCredentialPresence = ({bool handled, bool configured});
+typedef ProfileCredentialPresence = ({
+  bool handled,
+  bool configured,
+  bool pending,
+});
 typedef ProfileCredentialResourceAuthority = ({
   String resourceId,
   int resourceAuthorizationRevision,
@@ -202,6 +206,7 @@ class ProfileCredentialFacade {
       permission: ResourcePermission.use,
       feature: field.feature,
     );
+    if (resource.secretPending) return null;
     return (
       resourceId: resource.id,
       resourceAuthorizationRevision: resource.authorizationRevision,
@@ -222,6 +227,10 @@ class ProfileCredentialFacade {
       field.slot,
     );
     if (resourceId == null) return (handled: true, value: null);
+    final resource = await registry.getResource(resourceId);
+    if (resource?.secretPending == true) {
+      return (handled: true, value: null);
+    }
     final secret = await _service(registry).resolveSecretForUse(
       context: context,
       resourceId: resourceId,
@@ -238,7 +247,7 @@ class ProfileCredentialFacade {
     if (field == null ||
         !ProfileRuntime.isInitialized ||
         ProfileRuntime.mode != ProfileRuntimeMode.profileCommitted) {
-      return (handled: false, configured: false);
+      return (handled: false, configured: false, pending: false);
     }
     final registry = ProfileBootstrap.registry;
     final context = await ProfileAuthorizationContext.capture(registry);
@@ -246,17 +255,22 @@ class ProfileCredentialFacade {
       context.profileId,
       field.slot,
     );
-    if (resourceId == null) return (handled: true, configured: false);
+    if (resourceId == null) {
+      return (handled: true, configured: false, pending: false);
+    }
     try {
-      await _service(registry).authorize(
+      final resource = await _service(registry).authorize(
         context: context,
         resourceId: resourceId,
         permission: ResourcePermission.use,
         feature: field.feature,
       );
-      return (handled: true, configured: true);
+      if (resource.secretPending) {
+        return (handled: true, configured: false, pending: true);
+      }
+      return (handled: true, configured: true, pending: false);
     } on ResourceAuthorizationException {
-      return (handled: true, configured: false);
+      return (handled: true, configured: false, pending: false);
     }
   }
 
@@ -278,6 +292,10 @@ class ProfileCredentialFacade {
       field.slot,
     );
     if (resourceId == null) return (handled: true, value: null);
+    final resource = await registry.getResource(resourceId);
+    if (resource?.secretPending == true) {
+      return (handled: true, value: null);
+    }
     try {
       final secret = await _service(registry).resolveSecretForUse(
         context: context,
@@ -292,6 +310,118 @@ class ProfileCredentialFacade {
       // can resolve it for execution.
       return (handled: true, value: null);
     }
+  }
+
+  static Future<bool?> refreshTraktSession(
+    Future<({String accessToken, String refreshToken, int expiryMs})?> Function(
+      String refreshToken,
+    )
+    exchange,
+  ) async {
+    if (!ProfileRuntime.isInitialized || !ProfileRuntime.isProfileCommitted) {
+      return null;
+    }
+    final registry = ProfileBootstrap.registry;
+    final context = await ProfileAuthorizationContext.capture(registry);
+    final id = await registry.getBoundResourceId(
+      context.profileId,
+      'tracker.trakt',
+    );
+    if (id == null) return false;
+    return _service(
+      registry,
+    ).refreshTraktSession(context: context, resourceId: id, exchange: exchange);
+  }
+
+  /// Sign-in and session imports retain the manage-connection boundary.
+  static Future<bool> storeTraktSession({
+    required String accessToken,
+    required String refreshToken,
+    required int? expiryMs,
+  }) async {
+    if (!ProfileRuntime.isInitialized || !ProfileRuntime.isProfileCommitted) {
+      return false;
+    }
+    final registry = ProfileBootstrap.registry;
+    final context = await ProfileAuthorizationContext.capture(registry);
+    final id = await registry.getBoundResourceId(
+      context.profileId,
+      'tracker.trakt',
+    );
+    final service = _service(registry);
+    final tokens = <String, dynamic>{
+      'accessToken': accessToken,
+      'refreshToken': refreshToken,
+      // Explicit null prevents falling back to a previous session's preference.
+      'expiryMs': expiryMs,
+    };
+    if (id == null) {
+      await service.create(
+        context: context,
+        type: ConnectionResourceType.trakt,
+        label: 'Trakt',
+        publicConfig: const {'accountLabel': 'Trakt'},
+        secretConfig: tokens,
+        bindingSlot: 'tracker.trakt',
+      );
+    } else {
+      await service.updateSecret(
+        context: context,
+        resourceId: id,
+        secretConfig: tokens,
+      );
+    }
+    return true;
+  }
+
+  static Future<({bool handled, int? value})> traktSessionExpiry() async {
+    if (!ProfileRuntime.isInitialized || !ProfileRuntime.isProfileCommitted) {
+      return (handled: false, value: null);
+    }
+    final registry = ProfileBootstrap.registry;
+    final context = await ProfileAuthorizationContext.capture(registry);
+    final id = await registry.getBoundResourceId(
+      context.profileId,
+      'tracker.trakt',
+    );
+    if (id == null) return (handled: false, value: null);
+    final resource = await registry.getResource(id);
+    if (resource?.secretPending == true) return (handled: false, value: null);
+    final secret = await _service(registry).resolveSecretForUse(
+      context: context,
+      resourceId: id,
+      feature: ProfileFeature.trackersAndDiscovery,
+    );
+    return (
+      handled: secret.containsKey('expiryMs'),
+      value: secret['expiryMs'] as int?,
+    );
+  }
+
+  static Future<bool> setTraktSessionExpiry(int expiryMs) async {
+    if (!ProfileRuntime.isInitialized || !ProfileRuntime.isProfileCommitted) {
+      return false;
+    }
+    final registry = ProfileBootstrap.registry;
+    final context = await ProfileAuthorizationContext.capture(registry);
+    final id = await registry.getBoundResourceId(
+      context.profileId,
+      'tracker.trakt',
+    );
+    if (id == null) return false;
+    final service = _service(registry);
+    final current = await service.resolveSecretForUse(
+      context: context,
+      resourceId: id,
+      feature: ProfileFeature.manageConnections,
+      permission: ResourcePermission.manage,
+    );
+    await service.updateSecret(
+      context: context,
+      resourceId: id,
+      secretConfig: {...current, 'expiryMs': expiryMs},
+    );
+    return true;
   }
 
   static Future<bool> write(String key, String value) async {
@@ -320,6 +450,15 @@ class ProfileCredentialFacade {
       return true;
     }
     context = await ProfileAuthorizationContext.capture(registry);
+    final resource = await registry.getResource(resourceId);
+    if (resource?.secretPending == true) {
+      await service.updateSecret(
+        context: context,
+        resourceId: resourceId,
+        secretConfig: <String, dynamic>{field.field: value},
+      );
+      return true;
+    }
     final current = await service.resolveSecretForUse(
       context: context,
       resourceId: resourceId,
@@ -356,34 +495,21 @@ class ProfileCredentialFacade {
       permission: ResourcePermission.manage,
       feature: ProfileFeature.manageConnections,
     );
-    final current = await service.resolveSecretForUse(
-      context: context,
-      resourceId: resourceId,
-      feature: ProfileFeature.manageConnections,
-      permission: ResourcePermission.manage,
-    );
+    final current = authorized.secretPending
+        ? <String, dynamic>{}
+        : await service.resolveSecretForUse(
+            context: context,
+            resourceId: resourceId,
+            feature: ProfileFeature.manageConnections,
+            permission: ResourcePermission.manage,
+          );
     current.remove(field.field);
-    if (current.isEmpty) {
-      try {
-        await registry.deleteOwnedResource(
-          resourceId: resourceId,
-          ownerProfileId: context.profileId,
-          revokeBorrowers: false,
-          actingProfileId: context.profileId,
-          actingAuthorizationRevision: context.authorizationRevision,
-          expectedResourceAuthorizationRevision:
-              authorized.authorizationRevision,
-        );
-      } on StateError catch (error) {
-        throw ResourceImpactRequiredException(error.message);
-      }
-      return true;
-    }
     context = await ProfileAuthorizationContext.capture(registry);
     await service.updateSecret(
       context: context,
       resourceId: resourceId,
       secretConfig: current,
+      allowEmpty: true,
     );
     return true;
   }

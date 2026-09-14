@@ -124,6 +124,7 @@ class ProfileMigrationService {
     ).open(mode: FileMode.append);
     await lock.lock(FileLock.exclusive);
     try {
+      await DeviceKeyProvider.removeScopedLinuxVaultCopies();
       if (await registry.isMigrationCommitted()) {
         return (await registry.getProfile(adminProfileId))!;
       }
@@ -856,6 +857,7 @@ class ProfileMigrationService {
 
   static const Set<String> _deviceKeys = <String>{
     ...DevicePreferences.nativeLaunchSnapshotKeys,
+    DeviceKeyProvider.linuxStateKey,
     'initial_setup_complete_v1',
     'vault_key_source_v1',
     'remote_static_keypair_v1',

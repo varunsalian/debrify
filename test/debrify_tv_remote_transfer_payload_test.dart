@@ -18,7 +18,12 @@ void main() {
         createdAt: now,
         updatedAt: now,
       );
-      const hashes = <String>['hash-one', 'hash-two'];
+      const hashes = <String>[
+        'hash-one',
+        'hash-two',
+        'hash-orphan',
+        'hash-legacy',
+      ];
       final entry = DebrifyTvChannelCacheEntry(
         version: 1,
         channelId: channel.channelId,
@@ -39,7 +44,11 @@ void main() {
               completed: 20 + index,
               scrapedDate: 200 + index,
               sources: const <String>['remote-source'],
-              keywords: const <String>['science fiction'],
+              keywords: index == 2
+                  ? const ['old keyword']
+                  : index == 3
+                  ? const []
+                  : const [' Science Fiction '],
             ),
         ],
         keywordStats: const <String, KeywordStat>{

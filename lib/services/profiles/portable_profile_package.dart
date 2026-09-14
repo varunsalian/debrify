@@ -54,6 +54,8 @@ class PortableProfilePackage {
     'devicePathsAndOsGrants',
     'devicePathsAndGrants',
     'remoteIdentityAndPeers',
+    // Compatibility notice for older readers; current readers restore this data.
+    'collectionsRequireNewerBuild',
     'remotePairings',
     'destinationNameAvatarRolePolicyPinAndEnabledState',
     'pinAttemptCountersAndLockout',
@@ -280,14 +282,39 @@ class PortableProfilePackage {
 
   static Future<PortableProfilePackage> decodeMap(
     Map<String, dynamic> decoded,
-  ) => _decodeMap(decoded, authenticatedEncryption: false);
+  ) => _decodeMap(
+    decoded,
+    authenticatedEncryption: false,
+    allowMissingPreferences: false,
+  );
+
+  /// Decode for the local archive format, whose database attachments are
+  /// `{encoding: file, entry, bytes, sha256}` references to archive entries
+  /// the caller has already extracted and verified. Every other structural
+  /// check and the integrity digest still run; base64 attachments remain
+  /// accepted. Local archives are unencrypted by product decision (the
+  /// creation dialog discloses it), so the passphrase requirement that
+  /// guards plain JSON packages does not apply here.
+  static Future<PortableProfilePackage> decodeFileBackedMap(
+    Map<String, dynamic> decoded,
+  ) => _decodeMap(
+    decoded,
+    authenticatedEncryption: true,
+    allowMissingPreferences: false,
+    allowFileBackedDatabases: true,
+  );
 
   /// Decode for transports that already provide authenticated encryption —
   /// the paired remote session's AEAD stands in for the passphrase layer.
   /// Every structural validation and the integrity digest still run.
   static Future<PortableProfilePackage> decodeAuthenticatedMap(
-    Map<String, dynamic> decoded,
-  ) => _decodeMap(decoded, authenticatedEncryption: true);
+    Map<String, dynamic> decoded, {
+    bool allowMissingPreferences = false,
+  }) => _decodeMap(
+    decoded,
+    authenticatedEncryption: true,
+    allowMissingPreferences: allowMissingPreferences,
+  );
 
   /// Off-main integrity-stamp + compact encode for session-authenticated
   /// transports (remote transfer). No passphrase layer: the wire seals it.
@@ -372,6 +399,7 @@ class PortableProfilePackage {
   static Future<PortableProfilePackage> decodeAuthenticatedJson(
     String json, {
     int maxExpandedPayloadBytes = maxEnvelopeBytes,
+    bool allowMissingPreferences = false,
   }) {
     if (maxExpandedPayloadBytes < 1 ||
         maxExpandedPayloadBytes > maxEnvelopeBytes) {
@@ -428,7 +456,11 @@ class PortableProfilePackage {
       } else if (utf8.encode(json).length > maxExpandedPayloadBytes) {
         throw const FormatException('Profile graph exceeds expanded limit');
       }
-      return decodeAuthenticatedMap(decoded);
+      return _decodeMap(
+        decoded,
+        authenticatedEncryption: true,
+        allowMissingPreferences: allowMissingPreferences,
+      );
     });
   }
 
@@ -459,6 +491,8 @@ class PortableProfilePackage {
   static Future<PortableProfilePackage> _decodeMap(
     Map<String, dynamic> decoded, {
     required bool authenticatedEncryption,
+    required bool allowMissingPreferences,
+    bool allowFileBackedDatabases = false,
   }) async {
     if (decoded['encrypted'] == true) {
       throw const FormatException('Encrypted package must be unlocked first');
@@ -470,7 +504,10 @@ class PortableProfilePackage {
     final integrity = decoded['integrity'];
     if (integrity is! Map ||
         integrity['algorithm'] != 'sha256' ||
-        integrity['digest'] is! String) {
+        integrity['digest'] is! String ||
+        !RegExp(
+          r'^[A-Za-z0-9_-]{43}$',
+        ).hasMatch(integrity['digest'] as String)) {
       throw const FormatException('Backup integrity record is missing');
     }
     final body = Map<String, dynamic>.from(decoded)..remove('integrity');
@@ -499,11 +536,21 @@ class PortableProfilePackage {
     final profiles = body['profiles'];
     final resources = body['resources'];
     final sections = body['sections'];
+    final mode = body['mode'];
+    final createdAtSource = body['createdAt'];
+    final createdAt = createdAtSource is String
+        ? DateTime.tryParse(createdAtSource)
+        : null;
     if (profiles is! List ||
         resources is! List ||
         sections is! Map<String, dynamic> ||
         profiles.length > maxProfiles ||
-        resources.length > maxResources) {
+        resources.length > maxResources ||
+        profiles.any((value) => value is! Map) ||
+        resources.any((value) => value is! Map) ||
+        mode != null && mode is! String ||
+        createdAt == null ||
+        omissions != null && omissions is! Map) {
       throw const FormatException('Backup collection limits exceeded');
     }
     final profileMaps = profiles
@@ -517,16 +564,21 @@ class PortableProfilePackage {
     if (body['mode'] == 'sanitizedSettings') {
       _validateSanitizedPackage(profileMaps, resourceMaps, sections);
     }
-    await _verifySections(profileMaps, sections);
+    await _verifySections(
+      profileMaps,
+      sections,
+      allowMissingPreferences: allowMissingPreferences,
+      allowFileBackedDatabases: allowFileBackedDatabases,
+    );
     return PortableProfilePackage(
       sourceVersion: body['version']! as int,
-      mode: body['mode'] as String? ?? 'singleProfile',
-      createdAt: DateTime.parse(body['createdAt']! as String).toUtc(),
+      mode: mode as String? ?? 'singleProfile',
+      createdAt: createdAt.toUtc(),
       profiles: profileMaps,
       resources: resourceMaps,
       sections: Map<String, dynamic>.from(sections),
-      omissions: body['omissions'] is Map
-          ? Map<String, dynamic>.from(body['omissions'] as Map)
+      omissions: omissions is Map
+          ? Map<String, dynamic>.from(omissions)
           : const <String, dynamic>{},
     );
   }
@@ -657,12 +709,11 @@ class PortableProfilePackage {
       throw const FormatException('Unsupported encrypted profile backup');
     }
     int bounded(Object? value, int min, int max) {
-      if (value is! num) throw const FormatException('Invalid KDF parameters');
-      final number = value.toInt();
-      if (number < min || number > max) {
+      if (value is! int) throw const FormatException('Invalid KDF parameters');
+      if (value < min || value > max) {
         throw const FormatException('Unsafe KDF parameters');
       }
-      return number;
+      return value;
     }
 
     try {
@@ -701,9 +752,42 @@ class PortableProfilePackage {
       if (decoded['version'] != envelopeVersion) {
         throw const FormatException('Encrypted backup version mismatch');
       }
-      return _decodeMap(decoded, authenticatedEncryption: true);
+      return _decodeMap(
+        decoded,
+        authenticatedEncryption: true,
+        allowMissingPreferences: false,
+      );
     } on SecretBoxAuthenticationError {
       throw const FormatException('Wrong passphrase or tampered backup');
+    }
+  }
+
+  /// File-backed preferences bypass the package's inline tree, so validate
+  /// each decoded value at the same boundary before any preference writes.
+  static void validateFileBackedPreferences(Map values) {
+    final counter = _Counter();
+    for (final entry in values.entries) {
+      if (entry.key is! String) {
+        throw const FormatException('Non-string preference key');
+      }
+      _validateTree(entry.key, 1, counter, path: 'preferences.<key>');
+      // Collections already have their own compressed-inventory format and
+      // size limits. Ordinary values retain the portable package limits.
+      if (entry.key == 'remote_home_collections_v2') {
+        if (entry.value is! String ||
+            (entry.value as String).length > maxEnvelopeBytes) {
+          throw const FormatException(
+            'Invalid file-backed collection inventory',
+          );
+        }
+      } else {
+        _validateTree(
+          entry.value,
+          1,
+          counter,
+          path: 'preferences.${entry.key}',
+        );
+      }
     }
   }
 
@@ -805,6 +889,11 @@ class PortableProfilePackage {
     if (section is! Map || section['values'] is! Map) {
       throw const FormatException('Sanitized preferences are missing');
     }
+    if (section.containsKey('collectionInventory')) {
+      throw const FormatException(
+        'Sanitized backup contains private collections',
+      );
+    }
     for (final entry in (section['values'] as Map).entries) {
       if (!SanitizedProfilePreferences.allowsEntry(entry.key, entry.value)) {
         throw const FormatException('Sanitized backup contains private data');
@@ -814,35 +903,58 @@ class PortableProfilePackage {
 
   static Future<void> _verifySections(
     List<Map<String, dynamic>> profiles,
-    Map<String, dynamic> sections,
-  ) async {
+    Map<String, dynamic> sections, {
+    required bool allowMissingPreferences,
+    bool allowFileBackedDatabases = false,
+  }) async {
     final referenced = <String>{};
     for (final profile in profiles) {
       final id = profile['preferencesSection'];
-      if (id is! String || id.isEmpty || !referenced.add(id)) {
+      if (id == null && allowMissingPreferences) {
+        // Structure-only sync graphs deliberately exclude preference payloads;
+        // the adoption flow carries local preferences forward before pruning.
+      } else if (id is! String || id.isEmpty || !referenced.add(id)) {
         throw const FormatException('Invalid profile preference section');
-      }
-      final section = sections[id];
-      if (section is! Map ||
-          section['schemaVersion'] != 1 ||
-          section['values'] is! Map ||
-          section['recordCount'] is! int) {
-        throw const FormatException('Invalid profile preference section');
-      }
-      final values = Map<String, Object?>.from(section['values'] as Map);
-      if (section['recordCount'] != values.length) {
-        throw const FormatException('Profile section count mismatch');
-      }
-      final claimed = section['sha256'];
-      if (claimed is! String) {
-        throw const FormatException('Profile section digest is missing');
-      }
-      final digest = await Sha256().hash(utf8.encode(jsonEncode(values)));
-      if (!_constantTimeEquals(
-        base64UrlEncode(digest.bytes).replaceAll('=', ''),
-        claimed,
-      )) {
-        throw const FormatException('Profile section digest mismatch');
+      } else {
+        final section = sections[id];
+        if (section is! Map ||
+            section['schemaVersion'] != 1 ||
+            section['values'] is! Map ||
+            section['recordCount'] is! int) {
+          throw const FormatException('Invalid profile preference section');
+        }
+        final pages = section['preferencePages'];
+        if (pages != null &&
+            (!allowFileBackedDatabases ||
+                pages is! Map ||
+                pages['recordCount'] is! int ||
+                pages['parts'] is! List ||
+                (pages['parts'] as List).isEmpty ||
+                (pages['parts'] as List).length > 2048 ||
+                (section['values'] as Map).isNotEmpty)) {
+          throw const FormatException('Invalid file-backed preferences');
+        }
+        final collections = section['collectionInventory'];
+        if (collections != null &&
+            (collections is! List ||
+                collections.any((part) => part is! String))) {
+          throw const FormatException('Invalid backup collection inventory');
+        }
+        final values = Map<String, Object?>.from(section['values'] as Map);
+        if (section['recordCount'] != values.length) {
+          throw const FormatException('Profile section count mismatch');
+        }
+        final claimed = section['sha256'];
+        if (claimed is! String) {
+          throw const FormatException('Profile section digest is missing');
+        }
+        final digest = await Sha256().hash(utf8.encode(jsonEncode(values)));
+        if (!_constantTimeEquals(
+          base64UrlEncode(digest.bytes).replaceAll('=', ''),
+          claimed,
+        )) {
+          throw const FormatException('Profile section digest mismatch');
+        }
       }
 
       final filesSectionId = profile['filesSection'];
@@ -899,12 +1011,12 @@ class PortableProfilePackage {
           }
           final attachment = entry.value! as Map;
           if (attachment['encoding'] != 'base64' ||
-              attachment['bytes'] is! num ||
+              attachment['bytes'] is! int ||
               attachment['sha256'] is! String ||
               attachment['data'] is! String) {
             throw const FormatException('Invalid portable file attachment');
           }
-          final claimedBytes = (attachment['bytes'] as num).toInt();
+          final claimedBytes = attachment['bytes'] as int;
           if (claimedBytes < 0 || claimedBytes > maxStringBytes) {
             throw const FormatException('Portable file exceeds limit');
           }
@@ -937,12 +1049,12 @@ class PortableProfilePackage {
             avatarFile is! Map ||
             avatarFile['path'] != avatar!.id ||
             avatarFile['encoding'] != 'base64' ||
-            avatarFile['bytes'] is! num ||
+            avatarFile['bytes'] is! int ||
             avatarFile['sha256'] is! String ||
             avatarFile['data'] is! String) {
           throw const FormatException('Invalid portable avatar attachment');
         }
-        final claimed = (avatarFile['bytes'] as num).toInt();
+        final claimed = avatarFile['bytes'] as int;
         final encoded = avatarFile['data'] as String;
         if (claimed < 0 ||
             claimed > ProfileAvatarIngest.maxBytes ||
@@ -1007,13 +1119,33 @@ class PortableProfilePackage {
           throw const FormatException('Unknown database attachment');
         }
         final attachment = entry.value! as Map;
+        if (allowFileBackedDatabases && attachment['encoding'] == 'file') {
+          // The staged file's size and digest are verified by the archive
+          // reader before decode and again by the snapshot restore; here
+          // only the record shape and its disk-oriented bound are checked.
+          final reference = attachment['entry'];
+          final fileBytes = attachment['bytes'];
+          if (reference is! String ||
+              reference.isEmpty ||
+              reference.length > 240 ||
+              reference.contains('\u0000') ||
+              fileBytes is! int ||
+              fileBytes < 0 ||
+              fileBytes >
+                  ProfileDatabaseSnapshot.maxFileBackedAttachmentBytes ||
+              attachment['sha256'] is! String ||
+              attachment.containsKey('data')) {
+            throw const FormatException('Invalid database attachment');
+          }
+          continue;
+        }
         if (attachment['encoding'] != 'base64' ||
-            attachment['bytes'] is! num ||
+            attachment['bytes'] is! int ||
             attachment['sha256'] is! String ||
             attachment['data'] is! String) {
           throw const FormatException('Invalid database attachment');
         }
-        final claimedBytes = (attachment['bytes'] as num).toInt();
+        final claimedBytes = attachment['bytes'] as int;
         if (claimedBytes < 0 || claimedBytes > maxAttachmentBytes) {
           throw const FormatException('Database attachment exceeds limit');
         }

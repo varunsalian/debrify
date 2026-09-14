@@ -1,4 +1,5 @@
 import 'package:media_kit/media_kit.dart' as mk;
+import '../utils/language_mapping.dart';
 
 const _addonSubtitleFilenamePrefix = 'stremio_sub_';
 
@@ -32,6 +33,27 @@ List<mk.SubtitleTrack> embeddedSubtitleTracks(
           track.id.toLowerCase() != 'no',
     )
     .toList(growable: false);
+
+/// Keep mpv's actual selection (including local sidecars), then prefer English
+/// or the first real track when the user has no language preference.
+mk.SubtitleTrack? subtitleWithoutLanguagePreference(
+  Iterable<mk.SubtitleTrack> tracks, {
+  required String selectedId,
+}) {
+  final available = embeddedSubtitleTracks(
+    tracks,
+  ).where((track) => track.id.isNotEmpty).toList(growable: false);
+  for (final track in available) {
+    if (track.id == selectedId) return track;
+  }
+  for (final track in available) {
+    if (LanguageMapper.matchesLanguage('en', track.language) ||
+        LanguageMapper.matchesLanguage('en', track.title)) {
+      return track;
+    }
+  }
+  return available.isEmpty ? null : available.first;
+}
 
 /// Whether mpv must composite [track] into the video output itself.
 ///

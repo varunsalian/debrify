@@ -56,6 +56,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.AppCompatButton
 import androidx.media3.common.C
 import androidx.media3.common.Format
+import androidx.media3.exoplayer.hls.HlsManifest
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.MimeTypes
@@ -788,6 +789,10 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     // State
     private var payload: PlaybackPayload? = null
     private var currentIndex = 0
+    @Volatile private var activeVodHeaders: Pair<Set<String>, Map<String, String>> = emptySet<String>() to emptyMap()
+    private var protectedStreamClient = ProtectedStreamHttp.client(15_000)
+    private val mediaPreparationScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
+    private var mediaPreparationGeneration = 0
     private var pendingSeekMs: Long = 0
     private var percentSeekApplied = false
     // Per-item Trakt resume (0-100) for the item currently loading, applied on
@@ -1069,6 +1074,13 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private var startupRecoveryAvailable = false
     private var startupSourcesExhausted = false
     private var sourcePersistenceSessionId = 0
+    private var recoveryProfileId: String? = null
+    private var recoveryDataGeneration = 0
+    private var recoveryTitle: String? = null
+    private var recoverySeriesTitle: String? = null
+    private var recoveryImdbId: String? = null
+    private val recoveryStartedAtMs = System.currentTimeMillis()
+    private var recoverySequence = 0L
     private var startupPikPakTorrentAcquisitionAttempted = false
     // An explicit in-player source pick is a one-candidate transaction. It
     // shares the startup decoder/slate checks, but never advances to another
@@ -1168,8 +1180,9 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private val addonFetchTokens = mutableMapOf<String, Int>()  // per-addon retry generation
     private val failedSubtitleUrls = mutableSetOf<String>()  // external subs that parsed to zero cues — don't re-auto-select
     private var currentStremioSubtitleIndex: Int = -1  // -1 means no Stremio subtitle selected
+    private var subtitleAddonDiscoveryReady = false
     private var isLoadingStremioSubtitles = false  // Loading state for UI indicator
-    private var embeddedSubtitleSelected = false  // Track if embedded subtitle was auto-selected
+    private val subtitleTrackReadiness = SubtitleTrackReadiness()
     private var userManuallySelectedSubtitle = false  // Track if user manually selected a subtitle
     private var addonSubtitleFetchToken = 0  // Guard against stale async fetches on content switch
     private var manualSubtitleImdbId: String? = null  // Subtitle-only identity override from Search Subtitle
@@ -1386,6 +1399,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     // its index is always 0. Deduplicate completion by episode identity rather
     // than index or only the first direct episode could cross the threshold.
     private val locallyCompletedItemKeys = mutableSetOf<String>()
+    private val recoveryCompletedItemKeys = mutableSetOf<String>()
     private val bufferingHandler = Handler(Looper.getMainLooper())
     private var bufferingDebounceRunnable: Runnable? = null
 
@@ -1438,6 +1452,17 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     }
 
     private val playbackListener = object : Player.Listener {
+        override fun onEvents(player: Player, events: Player.Events) {
+            if (isFinishing || isDestroyed) return
+            if (events.contains(Player.EVENT_TRACKS_CHANGED) ||
+                events.contains(Player.EVENT_PLAYBACK_STATE_CHANGED)) {
+                if (player.playbackState == Player.STATE_READY) {
+                    subtitleTrackReadiness.onReady()
+                    tryAutoSelectAddonSubtitle()
+                }
+            }
+        }
+
         override fun onPlaybackStateChanged(playbackState: Int) {
             when (playbackState) {
                 Player.STATE_READY -> {
@@ -1624,6 +1649,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                         )
                         return
                     }
+                    recordPlaybackLifecycle("playback_completed")
                     sendProgress(completed = true)
 
                     // "Stop at the end of this episode". Playback has already
@@ -1904,10 +1930,13 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         DiagnosticFileLog.initialize(this)
-        DiagnosticFileLog.record(
+        sourcePersistenceSessionId = intent.getIntExtra("playbackSessionId", 0)
+        DiagnosticFileLog.recordCritical(
             source = "android_tv_player",
             event = "activity_create",
-            message = "hasPayloadFile=${intent.hasExtra("payloadPath")}",
+            message = "hasPayloadFile=${intent.hasExtra("payloadPath")} " +
+                "pid=${android.os.Process.myPid()} activity=${System.identityHashCode(this)} " +
+                "savedState=${savedInstanceState != null}",
         )
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_android_tv_torrent_player)
@@ -1964,7 +1993,13 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             // finish event must still identify the bridge launch that owns
             // the callbacks it is about to clear.
             sourcePersistenceSessionId =
-                payloadCheck.optInt("sourcePersistenceSessionId", 0)
+                payloadCheck.optInt("sourcePersistenceSessionId", sourcePersistenceSessionId)
+            recoveryProfileId = payloadCheck.nullableString("playbackOwnerProfileId")
+            recoveryDataGeneration =
+                payloadCheck.optInt("playbackOwnerDataGeneration", 0)
+            recoveryTitle = payloadCheck.nullableString("title")
+            recoverySeriesTitle = payloadCheck.nullableString("seriesTitle")
+            recoveryImdbId = payloadCheck.nullableString("imdbId")
             if (payloadCheck.optString("mode") == "iptv") {
                 initIptvMode(payloadCheck)
                 return
@@ -2193,6 +2228,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                             rebuildPlaylistContent()
                             seriesPlaylistAdapter?.setActiveIndex(currentIndex)
                             updateCatalogEpisodeControls()
+                            model.items.getOrNull(currentIndex)?.let { updateTitle(it) }
                         }
                     }
                 }
@@ -2445,7 +2481,25 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                             seeders = source.seeders,
                             direct = source.isDirectStream,
                             seasonPack = source.isSeasonPack,
+                            badgeName = source.name,
+                            badgeDescription = source.badgeDescription,
                         )
+                    }
+
+                    override fun requestBadges(entry: TvSourceBrowserEntry, complete: (TvSourceBadgeResult?) -> Unit) {
+                        val channel = MainActivity.getAndroidTvPlayerChannel()
+                        if (channel == null) { complete(null); return }
+                        channel.invokeMethod("requestStreamBadges", mapOf(
+                            "sourcePersistenceSessionId" to sourcePersistenceSessionId,
+                            "name" to entry.badgeName,
+                            "description" to entry.badgeDescription,
+                        ), object : io.flutter.plugin.common.MethodChannel.Result {
+                            override fun success(result: Any?) {
+                                complete(if (isFinishing || isDestroyed) null else TvSourceBadgeResult.parse(result))
+                            }
+                            override fun error(code: String, message: String?, details: Any?) { complete(null) }
+                            override fun notImplemented() { complete(null) }
+                        })
                     }
 
                     override fun currentIndex(): Int = currentStremioSourceIndex
@@ -2602,8 +2656,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         // Apply subtitle language preference
         when {
             defaultSubtitleLang == "off" -> {
-                // Disable subtitle auto-selection by setting empty preferred language
                 paramsBuilder?.setPreferredTextLanguage("")
+                paramsBuilder?.setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
             }
             defaultSubtitleLang != null -> {
                 // Get all language variants (ISO 639-1, ISO 639-2, etc.) for robust matching
@@ -2680,18 +2734,17 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             )
 
         // Wrap with DefaultDataSource.Factory for local file/content URI support
-        val upstreamDataSourceFactory = DefaultDataSource.Factory(this, httpDataSourceFactory)
-        val playbackHeaders = payload?.httpHeaders.orEmpty()
-        val protectedMediaOrigins = buildProtectedMediaOrigins(payload?.items.orEmpty())
-        val dataSourceFactory = if (playbackHeaders.isNotEmpty() && protectedMediaOrigins.isNotEmpty()) {
-            android.util.Log.d(
-                "AndroidTvPlayer",
-                "setupPlayer - scoped ${playbackHeaders.size} HTTP header(s) to ${protectedMediaOrigins.size} media origin(s)"
-            )
+        protectedStreamClient = ProtectedStreamHttp.client(networkTimeoutMs)
+        val vodHttpFactory = ProtectedStreamHttp.dataSourceFactory(protectedStreamClient)
+        val upstreamDataSourceFactory = DefaultDataSource.Factory(
+            this, if (isIptvMode) httpDataSourceFactory else vodHttpFactory,
+        )
+        val dataSourceFactory = run {
             ResolvingDataSource.Factory(
                 upstreamDataSourceFactory,
                 object : ResolvingDataSource.Resolver {
                     override fun resolveDataSpec(dataSpec: DataSpec): DataSpec {
+                        val (protectedMediaOrigins, playbackHeaders) = activeVodHeaders
                         val origin = originKey(dataSpec.uri)
                         return if (origin != null && protectedMediaOrigins.contains(origin)) {
                             dataSpec.withAdditionalHeaders(playbackHeaders)
@@ -2703,8 +2756,6 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                     override fun resolveReportedUri(uri: Uri): Uri = uri
                 }
             )
-        } else {
-            upstreamDataSourceFactory
         }
 
         // IPTV: inject the CURRENT channel's declared headers into every
@@ -4357,6 +4408,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         suppressTrakt: Boolean = false,
         suppressResume: Boolean = false,
     ) {
+        mediaPreparationGeneration++
         // A sleep stop wins over anything already queued: the auto-advance
         // arms a 1.5s postDelayed before starting the next item, and a
         // countdown expiring inside that window would otherwise be undone by
@@ -4398,6 +4450,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         currentIndex = index
         updateCatalogEpisodeControls()
         val item = model.items[index]
+        activeVodHeaders = buildProtectedMediaOrigins(listOf(item)) to item.httpHeaders
         android.util.Log.d("AndroidTvPlayer", "playItem - item found: title=${item.title}, season=${item.season}, episode=${item.episode}, url=${item.url}, resumeId=${item.resumeId}")
         // Keep BOTH the local position and the remote tracker percent (the
         // payload field is the furthest of Trakt + Simkl + MDBList); STATE_READY resumes
@@ -4509,7 +4562,33 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         }
     }
 
-    private fun startPlayback(item: PlaybackItem) {
+    private fun discoverProtectedMime(url: String, headers: Map<String, String>, ready: (String?) -> Unit) {
+        val generation = ++mediaPreparationGeneration
+        val sourceToken = stremioResolutionToken
+        mediaPreparationScope.launch {
+            val mimeType = withContext(Dispatchers.IO) {
+                ProtectedStreamHttp.discoverMimeType(protectedStreamClient, url, headers)
+            }
+            if (generation == mediaPreparationGeneration && sourceToken == stremioResolutionToken &&
+                !isFinishing && !isDestroyed && !sleepStopLatched) {
+                ready(mimeType)
+            }
+        }
+    }
+
+    private fun startPlayback(item: PlaybackItem, mimeDiscovered: Boolean = false) {
+        if (!isIptvMode && !mimeDiscovered && item.mimeType == null &&
+            ProtectedStreamHttp.needsDiscovery(item.url, item.httpHeaders)) {
+            discoverProtectedMime(item.url, item.httpHeaders) { mimeType ->
+                val current = payload?.items?.getOrNull(currentIndex)
+                if (current == null || current.url != item.url) return@discoverProtectedMime
+                val prepared = current.copy(mimeType = mimeType)
+                payload?.items?.set(currentIndex, prepared)
+                startPlayback(prepared, mimeDiscovered = true)
+            }
+            return
+        }
+        activeVodHeaders = buildProtectedMediaOrigins(listOf(item)) to item.httpHeaders
         // Last gate before ExoPlayer actually starts. playItem's check happens
         // before URL resolution, and that round trip can outlast the countdown
         // — without rechecking here, a resolve that was already in flight would
@@ -4545,7 +4624,17 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         pendingSeriesResult = null
         currentStremioSubtitleIndex = -1
         isLoadingStremioSubtitles = false
-        embeddedSubtitleSelected = false
+        subtitleAddonDiscoveryReady = false
+        subtitleTrackReadiness.onMediaReplacement()
+        trackSelector?.let { selector ->
+            selector.parameters = selector.parameters.buildUpon()
+                .clearOverridesOfType(C.TRACK_TYPE_TEXT)
+                .setTrackTypeDisabled(
+                    C.TRACK_TYPE_TEXT,
+                    SubtitleSettings.getDefaultSubtitleLanguage(this) == "off",
+                )
+                .build()
+        }
         userManuallySelectedSubtitle = false
         // Re-established by seedInjectedSubtitles() when the next item has
         // launch-supplied captions; cleared here so a non-injected item never
@@ -4578,6 +4667,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
         val mediaItem = MediaItem.Builder()
             .setUri(item.url)
+            .setMimeType(item.mimeType)
             .setMediaMetadata(metadata)
             .build()
 
@@ -4589,30 +4679,16 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
         player?.apply {
             if (mergedSource != null) {
+                subtitleTrackReadiness.onMediaReplacement()
                 setMediaSource(mergedSource)
             } else {
+                subtitleTrackReadiness.onMediaReplacement()
                 setMediaItem(mediaItem)
             }
             prepare()
             playWhenReady = true
             play()
         }
-
-        // Detect if ExoPlayer auto-selects an embedded subtitle via TrackSelector preferences
-        player?.addListener(object : Player.Listener {
-            override fun onTracksChanged(tracks: Tracks) {
-                player?.removeListener(this)
-                if (isFinishing || isDestroyed) return
-                val defaultSubtitleLang = SubtitleSettings.getDefaultSubtitleLanguage(this@AndroidTvTorrentPlayerActivity)
-                if (defaultSubtitleLang == "off") return
-                // Language-aware: an auto-selected embedded track (e.g. a forced
-                // English one in a MULTi rip) only blocks addon auto-select when
-                // it actually matches the user's preferred language.
-                if (selectedEmbeddedTrackSatisfiesPreference(tracks)) {
-                    embeddedSubtitleSelected = true
-                }
-            }
-        })
 
         updateTitle(item)
         playlistAdapter?.setActiveIndex(currentIndex)
@@ -4841,6 +4917,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         //    when that addon is retried.
         val contentToken = addonSubtitleFetchToken
         val addons = stremioSubtitleService?.getSubtitleAddons() ?: emptyList()
+        subtitleAddonDiscoveryReady = true
         addonSubtitleResults.clear()
         addons.forEach { addonSubtitleResults.add(AddonSubtitleResult(it, AddonSubtitleStatus.LOADING)) }
         isLoadingStremioSubtitles = addons.isNotEmpty()
@@ -4848,6 +4925,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         refreshSubtitleUiForLoading()
 
         addons.forEach { launchAddonSubtitleFetch(it, type, imdbId, item, contentToken) }
+        tryAutoSelectAddonSubtitle()
     }
 
     private fun launchAddonSubtitleFetch(
@@ -4954,6 +5032,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
      */
     private fun clearStremioLoadingState() {
         isLoadingStremioSubtitles = false
+        subtitleAddonDiscoveryReady = true
+        tryAutoSelectAddonSubtitle()
         if (subtitleSettingsVisible) {
             refreshSubtitlePanelForLoading()
         }
@@ -5143,6 +5223,13 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         return shuffleBag.removeAt(shuffleBag.lastIndex)
     }
 
+    private fun guideTitleFor(item: PlaybackItem): String? {
+        if (item.season == null || item.episode == null) return null
+        return payload?.guideEpisodes?.firstOrNull {
+            it.season == item.season && it.episode == item.episode
+        }?.title?.takeIf { it.isNotBlank() }
+    }
+
     private fun updateTitle(item: PlaybackItem) {
         // Prefer the episode label / show title when the item title is blank, so
         // a series episode never renders as just the red badge with no text (the
@@ -5150,7 +5237,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         // showControlsMenu guard keeps the header hidden rather than showing empty.
         val model = payload
         val fallbackTitle = item.seasonEpisodeLabel().ifEmpty { model?.title.orEmpty() }
-        titleView.text = item.title.ifBlank { fallbackTitle }
+        val displayTitle = guideTitleFor(item) ?: item.title
+        titleView.text = displayTitle.ifBlank { fallbackTitle }
 
         // Pre-populate OTT fields for when controls menu is shown
         if (model?.contentType?.lowercase(java.util.Locale.US) == "series") {
@@ -5163,7 +5251,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 ottEpisodeBadge.visibility = View.GONE
             }
             // Fall back to "Episode N" so the badge never sits next to a blank line.
-            ottEpisodeTitle.text = item.title.ifBlank {
+            ottEpisodeTitle.text = displayTitle.ifBlank {
                 item.episode?.let { "Episode $it" } ?: fallbackTitle
             }
 
@@ -5194,7 +5282,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         val overline = ottIdentityOverline
         val badge = ottIdentityBadge
         if (isSeries && item != null && item.season != null && item.episode != null) {
-            val episodeTitle = item.title.ifBlank { "Episode ${item.episode}" }
+            val episodeTitle = guideTitleFor(item)
+                ?: item.title.ifBlank { "Episode ${item.episode}" }
             // The FETCHED show/episode names only (TVMaze via the metadata
             // pushes); never the payload title, which on torrent launches is
             // the release filename the legacy header deliberately hid. Each
@@ -6085,7 +6174,6 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
         stremioSubtitles.clear()
         currentStremioSubtitleIndex = -1
-        embeddedSubtitleSelected = false
         userManuallySelectedSubtitle = false
         isLoadingStremioSubtitles = true
 
@@ -6234,6 +6322,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             .build()
 
         player?.apply {
+            subtitleTrackReadiness.onMediaReplacement()
             setMediaItem(mediaItem)
             prepare()
             play()
@@ -6382,7 +6471,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                     checkHandler.removeCallbacks(this)
 
                     // Ensure subtitles are selected after successful load
-                    ensureDefaultSubtitleSelected()
+                    tryAutoSelectAddonSubtitle()
 
                     onComplete(true)
                     return
@@ -6426,7 +6515,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
     private fun hidePikPakRetryOverlay() {
         runOnUiThread {
-            if (isFinishing || isDestroyed) return@runOnUiThread
+            if (isFinishing || isDestroyed || !::pikPakReactivationIndicator.isInitialized) return@runOnUiThread
             pikPakReactivationIndicator.animate().cancel()
             pikPakReactivationIndicator.alpha = 0f
             pikPakReactivationIndicator.visibility = View.GONE
@@ -6446,159 +6535,79 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         hidePikPakRetryOverlay()
     }
 
-    private fun ensureDefaultSubtitleSelected() {
-        player?.let { currentPlayer ->
-            currentPlayer.addListener(object : Player.Listener {
-                override fun onTracksChanged(tracks: Tracks) {
-                    currentPlayer.removeListener(this)
-
-                    // Skip if user already manually selected a subtitle
-                    if (userManuallySelectedSubtitle) return
-
-                    val trackSelector = trackSelector ?: return
-
-                    // Get user's default subtitle language preference
-                    val defaultSubtitleLang = SubtitleSettings.getDefaultSubtitleLanguage(this@AndroidTvTorrentPlayerActivity)
-
-                    // If subtitles are explicitly disabled, don't auto-select
-                    if (defaultSubtitleLang == "off") {
-                        android.util.Log.d("AndroidTvPlayer", "PikPak: Subtitles disabled by user preference")
-                        embeddedSubtitleSelected = false
-                        return
-                    }
-
-                    // If no preference set, default to English
-                    val targetLang = defaultSubtitleLang ?: "en"
-
-                    // Search for subtitle track matching the preferred language
-                    for (trackGroup in tracks.groups) {
-                        if (trackGroup.type == C.TRACK_TYPE_TEXT) {
-                            for (i in 0 until trackGroup.length) {
-                                val format = trackGroup.getTrackFormat(i)
-                                val language = format.language
-                                val label = format.label
-                                val id = format.id
-
-                                // Check if track matches the preferred language using robust matching
-                                if (LanguageMapper.matchesLanguage(targetLang, language) ||
-                                    LanguageMapper.matchesLanguage(targetLang, label) ||
-                                    LanguageMapper.matchesLanguage(targetLang, id)) {
-
-                                    val override = TrackSelectionOverride(
-                                        trackGroup.mediaTrackGroup,
-                                        listOf(i)
-                                    )
-                                    trackSelector.parameters = trackSelector.parameters.buildUpon()
-                                        .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
-                                        .addOverride(override)
-                                        .build()
-                                    android.util.Log.d("AndroidTvPlayer", "PikPak: Auto-enabled $targetLang subtitles: label=$label lang=$language")
-                                    embeddedSubtitleSelected = true
-                                    return
-                                }
-                            }
-                        }
-                    }
-
-                    // No embedded subtitle found - mark for addon subtitle selection
-                    android.util.Log.d("AndroidTvPlayer", "PikPak: No $targetLang embedded subtitle found")
-                    embeddedSubtitleSelected = false
-
-                    // Try addon subtitles if already loaded
-                    if (stremioSubtitles.isNotEmpty()) {
-                        tryAutoSelectAddonSubtitle()
-                    }
-                }
-            })
-        }
-    }
-
-    /**
-     * Whether the embedded text track ExoPlayer selected satisfies the user's
-     * default-subtitle-language preference. With no preference set, any
-     * selection satisfies (respect the file's own choice). With a preference,
-     * only a matching-language track does — a forced/default English track
-     * must NOT block addon auto-select of e.g. Spanish.
-     */
-    private fun selectedEmbeddedTrackSatisfiesPreference(tracks: Tracks): Boolean {
-        val pref = SubtitleSettings.getDefaultSubtitleLanguage(this)
+    /** Apply source priority once tracks and any higher-priority addons are ready. */
+    private fun tryAutoSelectAddonSubtitle() {
+        val currentPlayer = player ?: return
+        val defaultSubtitleLang = SubtitleSettings.getDefaultSubtitleLanguage(this)
+        val targetLanguage = defaultSubtitleLang ?: "en"
+        val tracks = currentPlayer.currentTracks
+        val positions = mutableListOf<Pair<Tracks.Group, Int>>()
+        val candidates = mutableListOf<EmbeddedSubtitleCandidate>()
         for (group in tracks.groups) {
+            // A manual subtitle identity search explicitly asks for addon results.
+            if (!manualSubtitleImdbId.isNullOrEmpty()) break
             if (group.type != C.TRACK_TYPE_TEXT) continue
             for (i in 0 until group.length) {
-                if (!group.isTrackSelected(i)) continue
-                if (pref == null) return true
-                val f = group.getTrackFormat(i)
-                if (LanguageMapper.matchesLanguage(pref, f.language) ||
-                    LanguageMapper.matchesLanguage(pref, f.label) ||
-                    LanguageMapper.matchesLanguage(pref, f.id)
-                ) return true
+                val format = group.getTrackFormat(i)
+                positions.add(group to i)
+                candidates.add(EmbeddedSubtitleCandidate(
+                    supported = group.isTrackSupported(i),
+                    selected = group.isTrackSelected(i),
+                    matchesLanguage = LanguageMapper.matchesLanguage(targetLanguage, format.language) ||
+                        LanguageMapper.matchesLanguage(targetLanguage, format.label) ||
+                        LanguageMapper.matchesLanguage(targetLanguage, format.id),
+                    defaultTrack = format.selectionFlags and C.SELECTION_FLAG_DEFAULT != 0,
+                    undeclaredHlsCaption = isUndeclaredHlsCaption(
+                        isHls = currentPlayer.currentManifest is HlsManifest,
+                        mimeType = format.sampleMimeType,
+                        accessibilityChannel = format.accessibilityChannel,
+                        language = format.language,
+                    ),
+                ))
             }
         }
-        return false
-    }
-
-    /**
-     * Try to auto-select a Stremio addon subtitle matching user's preferred language.
-     * Called after Stremio subtitles are fetched, if no embedded subtitle was selected.
-     */
-    private fun tryAutoSelectAddonSubtitle() {
-        // Skip when the offered subtitles are launch-supplied captions (YouTube):
-        // they stay off until the user picks one, so we never force them on.
-        if (suppressSubtitleAutoSelect) {
-            return
-        }
-
-        // Skip if embedded subtitle was already selected
-        if (embeddedSubtitleSelected) {
-            return
-        }
-
-        // Skip if user manually selected a subtitle
-        if (userManuallySelectedSubtitle) {
-            return
-        }
-
-        // Check if ExoPlayer auto-selected an embedded subtitle via TrackSelector
-        // preferences (covers non-PikPak content where ensureDefaultSubtitleSelected()
-        // isn't called). Language-aware: a selected track only blocks addon
-        // auto-select when it actually matches the user's preference.
-        val tracksNow = player?.currentTracks
-        if (tracksNow != null &&
-            currentStremioSubtitleIndex == -1 &&
-            selectedEmbeddedTrackSatisfiesPreference(tracksNow)
-        ) {
-            embeddedSubtitleSelected = true
-            return
-        }
-
-        // Skip if addon subtitle is already selected
-        if (currentStremioSubtitleIndex >= 0) {
-            return
-        }
-
-        // Get user's default subtitle language preference
-        val defaultSubtitleLang = SubtitleSettings.getDefaultSubtitleLanguage(this)
-
-        // If subtitles are explicitly disabled, don't auto-select
-        if (defaultSubtitleLang == "off") {
-            return
-        }
-
-        // If no preference set, default to English
-        val targetLang = defaultSubtitleLang ?: "en"
-
-        // Search for addon subtitle matching the preferred language
-        for ((index, sub) in stremioSubtitles.withIndex()) {
-            if (sub.url in failedSubtitleUrls) continue   // skip subs that parsed to zero cues
-            if (LanguageMapper.matchesLanguage(targetLang, sub.lang)) {
-                android.util.Log.d("AndroidTvPlayer", "PikPak: Auto-selecting addon subtitle: ${sub.displayName} (${sub.lang})")
-                loadStremioSubtitle(sub)
-                currentStremioSubtitleIndex = index
+        when (val choice = chooseAutomaticSubtitle(
+            tracksReady = subtitleTrackReadiness.canSelect(currentPlayer.playbackState == Player.STATE_READY),
+            preference = defaultSubtitleLang,
+            manualSelection = userManuallySelectedSubtitle,
+            suppressed = suppressSubtitleAutoSelect,
+            addonSelected = currentStremioSubtitleIndex >= 0,
+            candidates = candidates,
+            sourcePriority = SubtitleSettings.getSubtitleSourcePriority(this),
+            addonDiscoveryReady = subtitleAddonDiscoveryReady,
+            addons = addonSubtitleResults.map { slot ->
+                val eligible = slot.subtitles.indices.filter { slot.subtitles[it].url !in failedSubtitleUrls }
+                val matching = eligible.filter { LanguageMapper.matchesLanguage(targetLanguage, slot.subtitles[it].lang) }
+                AddonSubtitleCandidate(
+                    addonId = slot.addon.priorityId,
+                    loading = slot.status == AddonSubtitleStatus.LOADING,
+                    matchingIndices = matching + if (defaultSubtitleLang == null) eligible.filter { it !in matching } else emptyList(),
+                )
+            },
+        )) {
+            SubtitleAutoSelection.Wait, SubtitleAutoSelection.Keep -> return
+            is SubtitleAutoSelection.Embedded -> {
+                val (group, index) = positions[choice.index]
+                if (!group.isTrackSelected(index)) {
+                    trackSelector?.let { selector ->
+                        selector.parameters = selector.parameters.buildUpon()
+                            .clearOverridesOfType(C.TRACK_TYPE_TEXT)
+                            .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
+                            .setOverrideForType(TrackSelectionOverride(group.mediaTrackGroup, listOf(index)))
+                            .build()
+                    }
+                }
                 return
             }
+            is SubtitleAutoSelection.AddonTrack -> {
+                val sub = addonSubtitleResults.firstOrNull { it.addon.priorityId == choice.addonId }
+                    ?.subtitles?.getOrNull(choice.index) ?: return
+                currentStremioSubtitleIndex = stremioSubtitles.indexOfFirst { it.url == sub.url }
+                loadStremioSubtitle(sub)
+            }
+            SubtitleAutoSelection.Addon -> return
         }
 
-        android.util.Log.d("AndroidTvPlayer", "PikPak: No $targetLang addon subtitle found")
     }
 
     // D-pad navigation
@@ -13752,8 +13761,10 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         val startAt = if (entry.isLive) 0L else entry.resumePositionMs
         player?.apply {
             if (startAt > 0L) {
+                subtitleTrackReadiness.onMediaReplacement()
                 setMediaItem(mediaItem, startAt)
             } else {
+                subtitleTrackReadiness.onMediaReplacement()
                 setMediaItem(mediaItem)
             }
             prepare()
@@ -13981,6 +13992,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         if (entry != null) {
             setIptvMediaItem(entry, url)
         } else {
+            subtitleTrackReadiness.onMediaReplacement()
             player?.setMediaItem(MediaItem.fromUri(url))
             player?.prepare()
             player?.play()
@@ -15387,6 +15399,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 }
             }
             if (subtitleSettingsVisible) refreshSubtitlePanelForLoading()
+            tryAutoSelectAddonSubtitle()
             return
         }
 
@@ -16015,6 +16028,151 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         progressHandler.postDelayed(progressRunnable, PROGRESS_INTERVAL_MS)
     }
 
+    private var progressSentCount = 0
+    private var progressAckCount = 0
+    private var lastProgressLogAt = 0L
+    private var lastProgressAckAt = 0L
+    private var lastProgressBridgeAvailable: Boolean? = null
+    private var finalProgressSnapshot = false
+    private var finishProgressAttempted = false
+
+    private fun recordPlaybackLifecycle(event: String, details: String = "") {
+        DiagnosticFileLog.recordCritical(
+            source = "android_tv_player", event = event,
+            message = "pid=${android.os.Process.myPid()} activity=${System.identityHashCode(this)} " +
+                "session=$sourcePersistenceSessionId finishing=$isFinishing " +
+                "changingConfigurations=$isChangingConfigurations " +
+                "sent=$progressSentCount acknowledged=$progressAckCount $details",
+        )
+    }
+
+    override fun finish() {
+        // Write the exact exit position before Android uncovers/recreates the
+        // Flutter host. The normal five-second writer is asynchronous; relying
+        // on it here recreates the stale Continue Watching race seen on Bravia.
+        if (!finishProgressAttempted) {
+            finalProgressSnapshot = true
+            try {
+                sendProgress(completed = false)
+            } finally {
+                finalProgressSnapshot = false
+            }
+            finishProgressAttempted = true
+        }
+        PlaybackReturnHandoff.markReturning(sourcePersistenceSessionId)
+        recordPlaybackLifecycle("finish_requested")
+        super.finish()
+    }
+
+    /** Observe delivery, including a missing/detached Flutter engine. No media
+     * identity or URL is logged. A callback confirms the Dart handler finished. */
+    private fun deliverProgress(map: HashMap<String, Any?>) {
+        map["sourcePersistenceSessionId"] = sourcePersistenceSessionId
+        val recoverySequenceForMap = ++recoverySequence
+        stageRecoveryCheckpoint(
+            map,
+            recoverySequenceForMap,
+            synchronous = finalProgressSnapshot,
+        )
+        val channel = MainActivity.getAndroidTvPlayerChannel()
+        val now = SystemClock.elapsedRealtime()
+        val forceLog = finalProgressSnapshot || map["completed"] == true
+        val logSample = forceLog || lastProgressLogAt == 0L ||
+            now - lastProgressLogAt >= 60_000L ||
+            lastProgressBridgeAvailable != (channel != null)
+        if (logSample) {
+            lastProgressLogAt = now
+            recordPlaybackLifecycle(
+                "progress_checkpoint",
+                "bridgeAvailable=${channel != null} positionMs=${map["positionMs"]} " +
+                    "durationMs=${map["durationMs"]} completed=${map["completed"]} " +
+                    "lastAckAgeMs=${if (lastProgressAckAt == 0L) -1 else now - lastProgressAckAt}",
+            )
+        }
+        lastProgressBridgeAvailable = channel != null
+        if (channel == null) return
+        progressSentCount++
+        try {
+            channel.invokeMethod("torrentPlaybackProgress", map, object : io.flutter.plugin.common.MethodChannel.Result {
+                override fun success(result: Any?) {
+                    if (result == true) {
+                        progressAckCount++
+                        lastProgressAckAt = SystemClock.elapsedRealtime()
+                        acknowledgeRecoveryCheckpoint(recoverySequenceForMap)
+                    }
+                    if (logSample) recordPlaybackLifecycle("progress_ack", "accepted=${result == true}")
+                }
+                override fun error(code: String, message: String?, details: Any?) {
+                    if (logSample) recordPlaybackLifecycle("progress_ack_error")
+                }
+                override fun notImplemented() {
+                    if (logSample) recordPlaybackLifecycle("progress_handler_missing")
+                }
+            })
+        } catch (error: RuntimeException) {
+            if (logSample) DiagnosticFileLog.recordError(
+                source = "android_tv_player", event = "progress_delivery_failed", throwable = error,
+            )
+        }
+    }
+
+    private fun stageRecoveryCheckpoint(
+        progress: Map<String, Any?>,
+        sequence: Long,
+        synchronous: Boolean,
+    ) {
+        // IPTV VOD has a separate Dart store; never disguise it as a movie.
+        if (isIptvMode || progress["mode"] == "iptv") return
+        val ownerProfileId = recoveryProfileId ?: return
+        if (recoveryDataGeneration <= 0 || sourcePersistenceSessionId <= 0) return
+        val positionMs = (progress["positionMs"] as? Number)?.toLong() ?: 0L
+        val durationMs = (progress["durationMs"] as? Number)?.toLong() ?: 0L
+        if (positionMs <= 0L || durationMs <= 0L) return
+
+        val snapshot = JSONObject()
+            .put("version", 1)
+            .put("sessionId", sourcePersistenceSessionId)
+            .put("sequence", sequence)
+            .put("profileId", ownerProfileId)
+            .put("dataGeneration", recoveryDataGeneration)
+            .put("startedAtMs", recoveryStartedAtMs)
+            .put("updatedAtMs", System.currentTimeMillis())
+            .put("contentType", progress["contentType"] ?: "single")
+            .put("title", recoveryTitle)
+            .put("seriesTitle", recoverySeriesTitle)
+            .put("imdbId", recoveryImdbId)
+            .put("resumeId", progress["resumeId"])
+            .put("url", progress["url"])
+            .put("itemIndex", progress["itemIndex"] ?: 0)
+            .put("season", progress["season"])
+            .put("episode", progress["episode"])
+            .put("positionMs", positionMs)
+            .put("durationMs", durationMs)
+            .put("speed", progress["speed"] ?: 1.0)
+            .put("aspect", progress["aspect"] ?: "contain")
+            .put("completed", progress["completed"] == true)
+            .put("completionReached", progress["completionReached"] == true)
+            .put("localCompleted", progress["localCompleted"] == true)
+            .put("localCompletionEligible", progress["localCompletionEligible"] == true)
+            // localCompleted is edge-triggered and eligibility can become
+            // false after a seek. This per-item cumulative bit preserves the
+            // completion decision across every later checkpoint.
+            .put("localCompletionReached", progress["localCompletionReached"] == true)
+            .put("localCompletionTracking", progress["localCompletionTracking"] == true)
+            .put("completionThreshold", progress["completionThreshold"] ?: 80)
+            .toString()
+
+        if (synchronous || progress["completed"] == true || progress["localCompleted"] == true) {
+            TvPlaybackRecoveryStore.stage(filesDir, snapshot)
+            return
+        }
+        TvPlaybackRecoveryStore.stageAsync(filesDir, snapshot)
+    }
+
+    private fun acknowledgeRecoveryCheckpoint(sequence: Long) {
+        TvPlaybackRecoveryStore.acknowledgeAsync(filesDir, sourcePersistenceSessionId, sequence)
+    }
+
     private fun sendProgress(completed: Boolean) {
         // IPTV mode builds no payload (initIptvMode returns before it is
         // parsed), so it reports against the current channel instead.
@@ -16030,7 +16188,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             manualSourceRestoreInProgress
         ) return
         val model = payload ?: return
-        val item = model.items[currentIndex]
+        val item = model.items.getOrNull(currentIndex) ?: return
         // Use the largest stable duration seen — ExoPlayer can briefly report a
         // short duration right after a source re-prepare, which would otherwise
         // inflate progress% and scrobble a false watch on Trakt.
@@ -16056,12 +16214,15 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         } else {
             "index:$currentIndex"
         }
-        val localCompleted =
+        val localCompletionEligible =
             model.localCompletionTracking &&
             duration > 0L &&
             rawPosition > 0L &&
-            rawPosition.toDouble() * 100.0 / duration.toDouble() >= completionThreshold &&
-            locallyCompletedItemKeys.add(completionKey)
+            rawPosition.toDouble() * 100.0 / duration.toDouble() >= completionThreshold
+        val localCompleted = localCompletionEligible && locallyCompletedItemKeys.add(completionKey)
+        val localCompletionReached = locallyCompletedItemKeys.contains(completionKey)
+        if (completed) recoveryCompletedItemKeys.add(completionKey)
+        val completionReached = recoveryCompletedItemKeys.contains(completionKey)
 
         // Update the item's progress in the payload for live UI updates
         val updatedItem = item.copy(
@@ -16079,6 +16240,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             "contentType" to model.contentType,
             "itemIndex" to currentIndex,
             "resumeId" to item.resumeId,
+            "sourceIndex" to currentStremioSourceIndex,
             "positionMs" to position.toInt().coerceAtLeast(0),
             "durationMs" to duration.toInt().coerceAtLeast(0),
             "season" to item.season,
@@ -16086,13 +16248,18 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             "speed" to playbackSpeeds[playbackSpeedIndex].toDouble(),
             "aspect" to resizeModeLabels[resizeModeIndex].lowercase(),
             "completed" to completed,
+            "completionReached" to completionReached,
             "localCompleted" to localCompleted,
+            "localCompletionEligible" to localCompletionEligible,
+            "localCompletionReached" to localCompletionReached,
+            "localCompletionTracking" to model.localCompletionTracking,
+            "completionThreshold" to completionThreshold,
             "url" to item.url,
             "isPlaying" to (player?.isPlaying ?: false),
             "isBuffering" to (player?.playbackState == Player.STATE_BUFFERING)
         )
 
-        MainActivity.getAndroidTvPlayerChannel()?.invokeMethod("torrentPlaybackProgress", map)
+        deliverProgress(map)
     }
 
     /**
@@ -16126,7 +16293,20 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             "isPlaying" to (player?.isPlaying ?: false),
         )
 
-        MainActivity.getAndroidTvPlayerChannel()?.invokeMethod("torrentPlaybackProgress", map)
+        deliverProgress(map)
+    }
+
+    private fun sendPlaybackActivityState(active: Boolean) {
+        try {
+            MainActivity.getAndroidTvPlayerChannel()?.invokeMethod(
+                "torrentPlaybackActivityState",
+                mapOf("sourcePersistenceSessionId" to sourcePersistenceSessionId, "active" to active),
+            )
+        } catch (error: RuntimeException) {
+            DiagnosticFileLog.recordError(
+                source = "android_tv_player", event = "activity_state_delivery_failed", throwable = error,
+            )
+        }
     }
 
     private fun sendFinished() {
@@ -16136,10 +16316,15 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         if (startupSourcesExhausted) {
             result["startupSourcesExhausted"] = true
         }
-        MainActivity.getAndroidTvPlayerChannel()?.invokeMethod(
-            "torrentPlaybackFinished",
-            result,
-        )
+        val channel = MainActivity.getAndroidTvPlayerChannel()
+        recordPlaybackLifecycle("finish_sent", "bridgeAvailable=${channel != null}")
+        try {
+            channel?.invokeMethod("torrentPlaybackFinished", result)
+        } catch (error: RuntimeException) {
+            DiagnosticFileLog.recordError(
+                source = "android_tv_player", event = "finish_delivery_failed", throwable = error,
+            )
+        }
     }
 
     /** The guide episode adjacent to the current item (specials excluded). */
@@ -17473,14 +17658,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         val newItems = mutableListOf<PlaybackItem>()
         for (map in itemMaps) {
             try {
-                // Convert Map<*, *> to JSONObject safely
-                val obj = JSONObject()
-                for ((key, value) in map) {
-                    if (key is String) {
-                        obj.put(key, value ?: JSONObject.NULL)
-                    }
-                }
-                newItems.add(PlaybackItem.fromJson(obj))
+                newItems.add(PlaybackItem.fromMap(map))
             } catch (e: Exception) {
                 android.util.Log.w("AndroidTvPlayer", "switchToSourcePlaylist - failed to parse item: ${e.message}")
             }
@@ -17549,15 +17727,24 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         for (i in newItems.indices) {
             val ni = newItems[i]
             if (ni.season == null || ni.episode == null) continue
-            val old = oldBySeasonEpisode[ni.season to ni.episode] ?: continue
-            val oldFetchedTitle = old.title.takeIf {
+            val old = oldBySeasonEpisode[ni.season to ni.episode]
+            val oldFetchedTitle = old?.title?.takeIf {
                 it.isNotBlank() && old.sourceTitle != null && it != old.sourceTitle
             }
+            val guide = model.guideEpisodes.firstOrNull {
+                it.season == ni.season && it.episode == ni.episode
+            }
             newItems[i] = ni.copy(
-                title = oldFetchedTitle ?: ni.title,
-                artwork = ni.artwork ?: old.artwork,
-                description = ni.description ?: old.description,
-                rating = ni.rating ?: old.rating,
+                title = resolveSwitchedEpisodeTitle(
+                    episode = ni.episode,
+                    incomingTitle = ni.title,
+                    sourceTitle = ni.sourceTitle,
+                    guideTitle = guide?.title,
+                    previousEpisodeTitle = oldFetchedTitle,
+                ),
+                artwork = ni.artwork ?: guide?.artwork ?: old?.artwork,
+                description = ni.description ?: guide?.description ?: old?.description,
+                rating = ni.rating ?: guide?.rating ?: old?.rating,
             )
         }
 
@@ -17750,7 +17937,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         android.util.Log.d("AndroidTvPlayer", "rebuildNavigationMaps - contentType=$contentType, isSeries=$isSeries, nextMap=${nextMap.size}, prevMap=${prevMap.size}")
     }
 
-    private fun switchToStremioSource(url: String, sourceIndex: Int) {
+    private fun switchToStremioSource(url: String, sourceIndex: Int, mimeType: String? = null, mimeDiscovered: Boolean = false) {
         // Live Stremio IPTV channel: the movie path below seeks to the
         // previous position and runs PikPak/YouTube bookkeeping — all wrong
         // for a live stream. Route to the dedicated live switch.
@@ -17758,6 +17945,14 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             switchToIptvStremioSource(url, sourceIndex)
             return
         }
+        val sourceHeaders = stremioSources.getOrNull(sourceIndex)?.httpHeaders.orEmpty()
+        if (!mimeDiscovered && ProtectedStreamHttp.needsDiscovery(url, sourceHeaders)) {
+            discoverProtectedMime(url, sourceHeaders) { discovered ->
+                switchToStremioSource(url, sourceIndex, discovered, mimeDiscovered = true)
+            }
+            return
+        }
+        mediaPreparationGeneration++
         android.util.Log.d("AndroidTvPlayer", "switchToStremioSource: index=$sourceIndex, url=${url.take(60)}...")
 
         // Capture current position for resume. If a resume hold is active the
@@ -17771,6 +17966,11 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             resumeHoldArmedAtMs = android.os.SystemClock.elapsedRealtime()
         }
         val currentPos = heldPos ?: livePos
+        val headers = stremioSources.getOrNull(sourceIndex)?.httpHeaders.orEmpty()
+        activeVodHeaders = setOfNotNull(originKey(Uri.parse(url))) to headers
+        payload?.items?.getOrNull(currentIndex)?.let { item ->
+            payload?.items?.set(currentIndex, item.copy(url = url, httpHeaders = headers, mimeType = mimeType))
+        }
 
         // Update state
         currentStremioSourceIndex = sourceIndex
@@ -17796,9 +17996,11 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             manualSourceCandidateUrl = url
         }
         if (mergedSource != null) {
+            subtitleTrackReadiness.onMediaReplacement()
             player?.setMediaSource(mergedSource)
         } else {
-            player?.setMediaItem(MediaItem.fromUri(url))
+            subtitleTrackReadiness.onMediaReplacement()
+            player?.setMediaItem(MediaItem.Builder().setUri(url).setMimeType(mimeType).build())
         }
         player?.prepare()
         if (currentPos > 0) {
@@ -17902,6 +18104,11 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             val items = mutableListOf<PlaybackItem>()
             for (i in 0 until itemsJson.length()) {
                 val itemObj = itemsJson.getJSONObject(i)
+                // Legacy session headers apply only while parsing original
+                // launch items. Replacement items never inherit them.
+                if (!itemObj.has("httpHeaders")) {
+                    itemObj.put("httpHeaders", obj.optJSONObject("httpHeaders") ?: JSONObject())
+                }
                 items.add(PlaybackItem.fromJson(itemObj))
             }
 
@@ -17936,7 +18143,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             } else null
 
             // Parse IMDB ID for external subtitles
-            val imdbId = obj.optString("imdbId").takeIf { it.isNotEmpty() }
+            val imdbId = obj.nullableString("imdbId")
 
             val httpHeaders = mutableMapOf<String, String>()
             obj.optJSONObject("httpHeaders")?.let { headersObj ->
@@ -17982,7 +18189,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             startupResolverProvider = obj.optString("startupResolverProvider")
                 .takeIf { it.isNotEmpty() }
             startupRecoveryAvailable = obj.optBoolean("startupRecoveryAvailable", false)
-            sourcePersistenceSessionId = obj.optInt("sourcePersistenceSessionId", 0)
+            sourcePersistenceSessionId = obj.optInt("sourcePersistenceSessionId", sourcePersistenceSessionId)
             startupLog(
                 "event=payload_parsed sourceCount=${stremioSources.size} " +
                     "selectedIndex=$currentStremioSourceIndex " +
@@ -18023,6 +18230,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             addonFetchState.clear()
             addonPackProbing.clear()
             locallyCompletedItemKeys.clear()
+            recoveryCompletedItemKeys.clear()
 
             android.util.Log.d("AndroidTvPlayer", "parsePayload - startIndex: $startIndex, items: ${items.size}, nextMap: ${nextEpisodeMap.size}, prevMap: ${prevEpisodeMap.size}, collectionGroups: ${collectionGroups?.size ?: 0}, imdbId: $imdbId, startAtPercent: $startAtPercent")
 
@@ -18032,7 +18240,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 contentType = obj.optString("contentType", "single"),
                 items = items,
                 startIndex = startIndex,
-                seriesTitle = obj.optString("seriesTitle"),
+                seriesTitle = obj.nullableString("seriesTitle"),
                 nextEpisodeMap = nextEpisodeMap,
                 prevEpisodeMap = prevEpisodeMap,
                 collectionGroups = collectionGroups,
@@ -18052,6 +18260,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
     override fun onStart() {
         super.onStart()
+        recordPlaybackLifecycle("activity_start")
+        sendPlaybackActivityState(true)
         // Never undo a sleep-timer stop — this runs every time the activity
         // comes back, including after the screen has slept.
         if (!sleepStopLatched) {
@@ -18087,6 +18297,13 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     }
 
     override fun onStop() {
+        recordPlaybackLifecycle("activity_stop")
+        sendPlaybackActivityState(false)
+        // Checkpoint before teardown or background process eviction. Keep the
+        // startup/source-switch guards intact when taking this snapshot.
+        finalProgressSnapshot = true
+        sendProgress(completed = false)
+        finalProgressSnapshot = false
         super.onStop()
         // Publish the recording HERE, not just in onDestroy: Home / app-switch
         // runs onStop and Android may kill the process afterwards without ever
@@ -18133,6 +18350,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 val currentTime = System.currentTimeMillis()
                 if (currentTime - lastBackPressTime < BACK_PRESS_INTERVAL_MS) {
                     // Second back press within time window - exit
+                    recordPlaybackLifecycle("back_exit")
                     isEnabled = false
                     onBackPressedDispatcher.onBackPressed()
                 } else {
@@ -18165,6 +18383,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        recordPlaybackLifecycle("activity_resume")
         ActivityTracker.currentActivity = this
         // A recording finished while storage was misbehaving stays written but
         // invisible; coming back to the player is a good moment to retry.
@@ -18180,6 +18399,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     }
 
     override fun onPause() {
+        recordPlaybackLifecycle("activity_pause")
         super.onPause()
         if (ActivityTracker.currentActivity == this) {
             ActivityTracker.currentActivity = null
@@ -18212,6 +18432,19 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        mediaPreparationScope.cancel()
+        mediaPreparationGeneration++
+        sourceBrowser?.destroy()
+        sourceBrowser = null
+        recordPlaybackLifecycle("activity_destroy_begin")
+        // finish/onStop may have been blocked by an uncommitted source switch.
+        // Retry before tearing down the player, keeping sendProgress's guards.
+        finalProgressSnapshot = true
+        try {
+            sendProgress(completed = false)
+        } finally {
+            finalProgressSnapshot = false
+        }
         if (::subtitleControlsLift.isInitialized) subtitleControlsLift.cancel()
         iptvTuneDiagnostics.onSessionEnd()
         startupFailoverTimeout?.let { progressHandler.removeCallbacks(it) }
@@ -18267,9 +18500,11 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         pikPakRetryHandler.removeCallbacksAndMessages(null)
 
         // Clean up indicators
-        pikPakReactivationIndicator.animate().cancel()
-        pikPakReactivationIndicator.visibility = View.GONE
-        bufferingIndicator.animate().cancel()
+        if (::pikPakReactivationIndicator.isInitialized) {
+            pikPakReactivationIndicator.animate().cancel()
+            pikPakReactivationIndicator.visibility = View.GONE
+        }
+        if (::bufferingIndicator.isInitialized) bufferingIndicator.animate().cancel()
         bufferingHandler.removeCallbacksAndMessages(null)
 
         // Clean up Up Next card
@@ -18312,10 +18547,17 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
         // Clear player and listeners
         player?.let {
-            sendProgress(completed = false)
-            it.removeListener(playbackListener)
-            subtitleListener?.let { listener -> it.removeListener(listener) }
-            it.release()
+            recordPlaybackLifecycle("player_release_begin")
+            try {
+                it.removeListener(playbackListener)
+                subtitleListener?.let { listener -> it.removeListener(listener) }
+                it.release()
+                recordPlaybackLifecycle("player_release_complete")
+            } catch (error: RuntimeException) {
+                DiagnosticFileLog.recordError(
+                    source = "android_tv_player", event = "player_release_failed", throwable = error,
+                )
+            }
         }
         player = null
         subtitleListener = null
@@ -18333,7 +18575,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         SubtitleSettings.clearActiveSubtitleIdentityProvider(this)
 
         // Clear adapters to release lambda references
-        playlistView.adapter = null
+        if (::playlistView.isInitialized) playlistView.adapter = null
         playlistAdapter = null
         seriesPlaylistAdapter = null
         moviePlaylistAdapter = null
@@ -18349,10 +18591,11 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         movieTabs.clear()
 
         // Clear view listeners
-        seekbarOverlay.setOnKeyListener(null)
+        if (::seekbarOverlay.isInitialized) seekbarOverlay.setOnKeyListener(null)
 
         sendFinished()
         super.onDestroy()
+        recordPlaybackLifecycle("activity_destroy_complete")
     }
 
 
@@ -18827,6 +19070,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             .build()
 
         player?.apply {
+            subtitleTrackReadiness.onMediaReplacement()
             setMediaItem(mediaItem)
             prepare()
             playWhenReady = true
@@ -19149,6 +19393,7 @@ private data class StremioSource(
     val name: String,
     val infohash: String,
     val directUrl: String?,
+    val httpHeaders: Map<String, String> = emptyMap(),
     val streamType: String,  // "torrent", "directUrl"
     val sizeBytes: Long,
     val seeders: Int,
@@ -19158,6 +19403,7 @@ private data class StremioSource(
     // Coverage stamped by the Dart search engines: 'completeSeries',
     // 'multiSeasonPack', 'seasonPack', 'singleEpisode', or null (unknown).
     val coverageType: String? = null,
+    val badgeDescription: String? = null,
 ) {
     val isDirectStream: Boolean get() = streamType == "directUrl"
 
@@ -19191,6 +19437,7 @@ private data class StremioSource(
                 name = name,
                 infohash = obj.optString("infohash", ""),
                 directUrl = obj.optString("direct_url").takeIf { it.isNotEmpty() },
+                httpHeaders = ProtectedStreamHttp.headers(obj.opt("http_headers")),
                 streamType = obj.optString("stream_type", "torrent"),
                 sizeBytes = obj.optLong("size_bytes", 0),
                 seeders = obj.optInt("seeders", 0),
@@ -19198,6 +19445,7 @@ private data class StremioSource(
                 addonId = obj.optString("stremio_addon_id").takeIf { it.isNotEmpty() },
                 quality = parseQuality(name),
                 coverageType = obj.optString("coverage_type").takeIf { it.isNotEmpty() },
+                badgeDescription = sourceBadgeDescription(obj.optString("stream_label"), obj.optString("stream_description")),
             )
         }
 
@@ -19208,6 +19456,7 @@ private data class StremioSource(
                 name = name,
                 infohash = (map["infohash"] as? String) ?: "",
                 directUrl = (map["direct_url"] as? String)?.takeIf { it.isNotEmpty() },
+                httpHeaders = ProtectedStreamHttp.headers(map["http_headers"]),
                 streamType = (map["stream_type"] as? String) ?: "torrent",
                 sizeBytes = (map["size_bytes"] as? Number)?.toLong() ?: 0,
                 seeders = (map["seeders"] as? Number)?.toInt() ?: 0,
@@ -19215,6 +19464,7 @@ private data class StremioSource(
                 addonId = (map["stremio_addon_id"] as? String)?.takeIf { it.isNotEmpty() },
                 quality = parseQuality(name),
                 coverageType = (map["coverage_type"] as? String)?.takeIf { it.isNotEmpty() },
+                badgeDescription = sourceBadgeDescription(map["stream_label"] as? String, map["stream_description"] as? String),
             )
         }
 
@@ -19296,10 +19546,12 @@ private data class GuideEpisode(
     val watched: Boolean,
 )
 
-private data class PlaybackItem(
+internal data class PlaybackItem(
     val id: String,
     val title: String,
     val url: String,
+    val httpHeaders: Map<String, String> = emptyMap(),
+    val mimeType: String? = null,
     // Optional adaptive pair for high-res YouTube: video-only track + separate
     // audio track, merged at playback. When absent, [url] (a muxed stream that
     // already has audio) is played as-is.
@@ -19368,6 +19620,7 @@ private data class PlaybackItem(
                 id = obj.optString("id"),
                 title = obj.optString("title"),
                 url = obj.optString("url"),
+                httpHeaders = ProtectedStreamHttp.headers(obj.opt("httpHeaders")),
                 hdVideoUrl = if (obj.has("hdVideoUrl")) obj.optString("hdVideoUrl").takeIf { it.isNotEmpty() } else null,
                 audioUrl = if (obj.has("audioUrl")) obj.optString("audioUrl").takeIf { it.isNotEmpty() } else null,
                 index = obj.optInt("index", 0),
@@ -19384,8 +19637,17 @@ private data class PlaybackItem(
                 provider = if (obj.has("provider")) obj.optString("provider") else null,
                 traktProgressPercent = if (obj.has("traktProgressPercent")) obj.optDouble("traktProgressPercent") else null,
                 watched = obj.optBoolean("watched", false),
-                sourceTitle = obj.optString("title").takeIf { it.isNotEmpty() },
+                sourceTitle = obj.nullableString("sourceTitle")
+                    ?: obj.optString("title").takeIf { it.isNotEmpty() },
             )
+        }
+
+        fun fromMap(map: Map<*, *>): PlaybackItem {
+            val obj = JSONObject()
+            for ((key, value) in map) {
+                if (key is String) obj.put(key, value ?: JSONObject.NULL)
+            }
+            return fromJson(obj)
         }
     }
 }

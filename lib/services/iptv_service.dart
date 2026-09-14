@@ -11,6 +11,7 @@ import 'iptv_catalog_key.dart';
 import 'iptv_catalog_db.dart';
 import 'iptv_load_phase.dart';
 import 'profiles/profile_collection_resource_facade.dart';
+import 'profiles/profile_runtime.dart';
 
 /// Service for fetching and managing IPTV M3U playlists
 class IptvService {
@@ -46,23 +47,39 @@ class IptvService {
     String? connectionResourceId,
     int? connectionResourceRevision,
     bool allowUnbound = false,
+    bool Function()? isCurrent,
   }) async {
-    Future<void> authorize() =>
-        ProfileCollectionResourceFacade.authorizeExecution(
-          resourceId: connectionResourceId,
-          resourceRevision: connectionResourceRevision,
-          acceptedTypes: const <ConnectionResourceType>{
-            ConnectionResourceType.iptvM3u,
-          },
-          feature: ProfileFeature.iptv,
-          allowUnbound: allowUnbound,
-        );
+    final startingScope = ProfileRuntime.scope.value;
+    final ingestTarget = IptvCatalogDb.captureWriteTarget();
+    void assertCurrent() {
+      if (ProfileRuntime.scope.value != startingScope ||
+          isCurrent?.call() == false) {
+        throw StateError('IPTV request is no longer current');
+      }
+    }
+
+    Future<void> authorize() async {
+      assertCurrent();
+      await ProfileCollectionResourceFacade.authorizeExecution(
+        resourceId: connectionResourceId,
+        resourceRevision: connectionResourceRevision,
+        acceptedTypes: const <ConnectionResourceType>{
+          ConnectionResourceType.iptvM3u,
+        },
+        feature: ProfileFeature.iptv,
+        allowUnbound: allowUnbound,
+      );
+      assertCurrent();
+    }
+
     await authorize();
     final result = await _fetchPlaylistAuthorized(
       url,
       forceRefresh: forceRefresh,
       numberingSourceKey: numberingSourceKey,
       onPhase: onPhase,
+      ingestTarget: ingestTarget,
+      beforeIngest: authorize,
     );
     await authorize();
     return result;
@@ -73,11 +90,13 @@ class IptvService {
     bool forceRefresh = false,
     String? numberingSourceKey,
     IptvLoadPhase? onPhase,
+    required IptvCatalogWriteTarget? ingestTarget,
+    required Future<void> Function() beforeIngest,
   }) async {
     // With the catalog database open, the parse worker ingests straight
     // into it and this service's in-memory cache is bypassed — freshness
     // policy moves to the caller (snapshot.ingestedAt).
-    final ingestToDb = IptvCatalogDb.isOpen;
+    final ingestToDb = ingestTarget != null;
 
     // Check cache
     if (!ingestToDb && !forceRefresh && _cache.containsKey(url)) {
@@ -160,9 +179,12 @@ class IptvService {
       final bytes = builder.takeBytes();
       onPhase?.call(IptvLoadPhases.processing, bytes: bytes.length);
 
+      await beforeIngest();
       final result = await _parseBytes(
         bytes,
         ingestCatalogKey: ingestToDb ? IptvCatalogKey.forUrl(url) : null,
+        ingestTarget: ingestTarget,
+        beforeIngest: beforeIngest,
         numberingSourceKey: numberingSourceKey,
       );
 
@@ -284,19 +306,23 @@ class IptvService {
   Future<IptvParseResult> _parseBytes(
     Uint8List bytes, {
     String? ingestCatalogKey,
+    IptvCatalogWriteTarget? ingestTarget,
+    Future<void> Function()? beforeIngest,
     String? numberingSourceKey,
   }) async {
     if (bytes.length <= _inlineParseBytes) {
       return _parse(
         M3uParser.decodeBytes(bytes),
         ingestCatalogKey: ingestCatalogKey,
+        ingestTarget: ingestTarget,
+        beforeIngest: beforeIngest,
         numberingSourceKey: numberingSourceKey,
       );
     }
     if (ingestCatalogKey != null) {
       final job = _M3uIngestJob(
         bytes: TransferableTypedData.fromList([bytes]),
-        dbPath: IptvCatalogDb.path,
+        dbPath: ingestTarget!.path,
         catalogKey: ingestCatalogKey,
         numberingSourceKey: numberingSourceKey,
       );
@@ -305,7 +331,10 @@ class IptvService {
       // fetch (up to the 2-minute deadline) used to block settings
       // deletions, EPG scans and migrations behind a slow server.
       // Re-entrant: a caller already inside the gate runs this inline.
-      return IptvCatalogDb.runExclusive(() => compute(_parseAndIngestM3u, job));
+      return IptvCatalogDb.runWithWriteTarget(ingestTarget, () async {
+        await beforeIngest?.call();
+        return compute(_parseAndIngestM3u, job);
+      });
     }
     // No-DB path (catalog DB unavailable): decode + parse in the worker. The
     // parsed channels still copy back — unavoidable while this source stays
@@ -325,21 +354,24 @@ class IptvService {
   Future<IptvParseResult> _parse(
     String content, {
     String? ingestCatalogKey,
+    IptvCatalogWriteTarget? ingestTarget,
+    Future<void> Function()? beforeIngest,
     String? numberingSourceKey,
   }) async {
     if (ingestCatalogKey != null) {
       final job = _M3uIngestJob(
         content: content,
-        dbPath: IptvCatalogDb.path,
+        dbPath: ingestTarget!.path,
         catalogKey: ingestCatalogKey,
         numberingSourceKey: numberingSourceKey,
       );
       // Gated for the same reason as the bytes path above.
-      return IptvCatalogDb.runExclusive(
-        () async => content.length > _inlineParseBytes
+      return IptvCatalogDb.runWithWriteTarget(ingestTarget, () async {
+        await beforeIngest?.call();
+        return content.length > _inlineParseBytes
             ? await compute(_parseAndIngestM3u, job)
-            : _parseAndIngestM3u(job),
-      );
+            : _parseAndIngestM3u(job);
+      });
     }
     return content.length > _inlineParseBytes
         ? await compute(M3uParser.parse, content)

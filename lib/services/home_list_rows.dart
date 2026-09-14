@@ -3,6 +3,7 @@ import 'dart:async';
 import '../models/stremio_addon.dart';
 import 'storage_service.dart';
 import 'trakt/trakt_list_source.dart';
+import 'watched_filter.dart';
 import 'simkl/simkl_list_source.dart';
 import 'mdblist/mdblist_list_source.dart';
 
@@ -150,15 +151,23 @@ class HomeListRowsService {
     Future<List<MdblistListChoice>> Function()? mdblistMine,
     Future<List<MdblistListChoice>> Function()? mdblistLiked,
     Future<List<MdblistListChoice>> Function()? mdblistTop,
-  }) : _traktLoad = traktLoad ?? ((c) => TraktListSource.instance.loadList(c)),
+  }) : _traktLoad =
+           traktLoad ??
+           ((c) => TraktListSource.instance.loadList(c, preview: true)),
        _traktUserLists =
-           traktUserLists ?? TraktListSource.instance.loadUserLists,
+           traktUserLists ??
+           (() => TraktListSource.instance.loadUserLists(strict: true)),
        _simklLoad = simklLoad ?? SimklListSource.instance.loadList,
-       _mdblistLoad = mdblistLoad ?? MdblistListSource.instance.loadListItems,
-       _mdblistMine = mdblistMine ?? MdblistListSource.instance.loadUserLists,
+       _mdblistLoad = mdblistLoad ?? MdblistListSource.instance.loadHomePreview,
+       _mdblistMine =
+           mdblistMine ??
+           (() => MdblistListSource.instance.loadUserLists(strict: true)),
        _mdblistLiked =
-           mdblistLiked ?? MdblistListSource.instance.loadLikedLists,
-       _mdblistTop = mdblistTop ?? MdblistListSource.instance.loadTopLists;
+           mdblistLiked ??
+           (() => MdblistListSource.instance.loadLikedLists(strict: true)),
+       _mdblistTop =
+           mdblistTop ??
+           (() => MdblistListSource.instance.loadTopLists(strict: true));
 
   static final HomeListRowsService instance = HomeListRowsService();
 
@@ -194,9 +203,14 @@ class HomeListRowsService {
   /// drops only the stragglers (their in-flight requests aren't cancelled;
   /// the results are discarded). Returns immediately when no tracker ids are
   /// enabled, so the default config costs nothing.
+  /// Home uses [onUpdate] without a deadline so slow previews remain eligible.
+  /// [previous] rows survive failed refreshes, but never disabled/empty rows.
   Future<List<HomeListSection>> resolve(
     List<HomeExtraRow> enabled, {
     Duration? deadline,
+    List<HomeListSection> previous = const [],
+    void Function(List<HomeListSection>)? onUpdate,
+    bool Function()? isCurrent,
   }) async {
     final byId = <String, HomeExtraRow>{
       for (final r in enabled)
@@ -205,9 +219,68 @@ class HomeListRowsService {
     if (byId.isEmpty) return const [];
 
     final slots = <_Slot>[];
-    final traktPool = _CappedPool(_perProviderCap);
-    final simklPool = _CappedPool(_perProviderCap);
-    final mdblistPool = _CappedPool(_perProviderCap);
+    final completed = <String>{};
+    var closed = false;
+    List<HomeListSection>? published;
+    List<HomeListSection> snapshot() {
+      final fresh =
+          [
+            for (final s in slots)
+              if (s.section != null) s,
+          ]..sort((a, b) {
+            final group = a.rank.compareTo(b.rank);
+            return group != 0 ? group : a.withinRank.compareTo(b.withinRank);
+          });
+      final rows = {for (final s in fresh) s.section!.rowId: s.section!};
+      // Partial results are useful on first load, but must not replace an
+      // existing row when only some media types refreshed successfully.
+      for (final row in previous) {
+        if (byId.containsKey(row.rowId) && !completed.contains(row.rowId)) {
+          rows[row.rowId] = row;
+        }
+      }
+      // Retain the previous order while refreshing; remove disabled and
+      // successfully emptied rows. A failed request is not an empty list.
+      return [
+        for (final row in previous)
+          if (byId.containsKey(row.rowId) &&
+              (!completed.contains(row.rowId) || rows.containsKey(row.rowId)))
+            rows.remove(row.rowId) ?? row,
+        ...rows.values,
+      ];
+    }
+
+    void publish() {
+      if (closed || isCurrent?.call() == false) return;
+      final rows = snapshot();
+      final last = published;
+      if (last != null &&
+          last.length == rows.length &&
+          List.generate(
+            rows.length,
+            (i) => identical(last[i], rows[i]),
+          ).every((v) => v)) {
+        return;
+      }
+      published = rows;
+      onUpdate?.call(rows);
+    }
+
+    final traktPool = _CappedPool(
+      _perProviderCap,
+      onDone: publish,
+      isCurrent: isCurrent,
+    );
+    final simklPool = _CappedPool(
+      _perProviderCap,
+      onDone: publish,
+      isCurrent: isCurrent,
+    );
+    final mdblistPool = _CappedPool(
+      _perProviderCap,
+      onDone: publish,
+      isCurrent: isCurrent,
+    );
 
     // Trakt built-ins, enum order.
     var rank = 0;
@@ -220,11 +293,15 @@ class HomeListRowsService {
       traktPool.add(() async {
         final choice = TraktListChoice.builtin(list);
         final r = await _traktLoad(choice);
-        if (r.items.isEmpty) return;
+        if (!r.failed) completed.add(id);
+        final items = list.hidesWatched
+            ? WatchedFilter.apply(List.of(r.items))
+            : List.of(r.items);
+        if (items.isEmpty) return;
         slot.section = HomeListSection(
           rowId: id,
           title: list.label,
-          items: List.of(r.items),
+          items: items,
           traktChoice: choice,
         );
       });
@@ -259,6 +336,8 @@ class HomeListRowsService {
         } catch (_) {
           return;
         }
+        final present = lists.map(HomeExtraRowIds.traktUserList).toSet();
+        completed.addAll(userListIds.difference(present));
         var order = 0;
         for (final choice in lists) {
           if (choice.userListId == null) continue;
@@ -269,6 +348,7 @@ class HomeListRowsService {
           slot.withinRank = within;
           traktPool.add(() async {
             final r = await _traktLoad(choice);
+            if (!r.failed) completed.add(id);
             if (r.items.isEmpty) return;
             slot.section = HomeListSection(
               rowId: id,
@@ -293,6 +373,7 @@ class HomeListRowsService {
       slots.add(slot);
       simklPool.add(() async {
         final r = await _simklLoad(list);
+        if (!r.failed) completed.add(id);
         if (r.items.isEmpty) return;
         slot.section = HomeListSection(
           rowId: id,
@@ -311,6 +392,26 @@ class HomeListRowsService {
       };
       slots.addAll(mdblistSlots.values);
       mdblistPool.add(() async {
+        Future<Map<String, MdblistListChoice>> directory(
+          Future<List<MdblistListChoice>> Function() load,
+          String prefix,
+        ) async {
+          try {
+            final choices = await load();
+            final found = {for (final c in choices) '$prefix${c.id}': c};
+            completed.addAll(
+              mdblistIds.where(
+                (id) => id.startsWith(prefix) && !found.containsKey(id),
+              ),
+            );
+            return found;
+          } catch (_) {
+            // One failed directory must neither erase its rows nor prevent
+            // successful sibling directories from refreshing theirs.
+            return {};
+          }
+        }
+
         // Only refresh directories represented by enabled rows. Previously a
         // single saved MDBList row fetched My, Liked, and Top on every Home
         // load even though two responses could not possibly resolve its id.
@@ -318,30 +419,15 @@ class HomeListRowsService {
           if (mdblistIds.any(
             (id) => id.startsWith(HomeExtraRowIds.mdblistMinePrefix),
           ))
-            _mdblistMine().then(
-              (choices) => {
-                for (final choice in choices)
-                  HomeExtraRowIds.mdblistMine(choice): choice,
-              },
-            ),
+            directory(_mdblistMine, HomeExtraRowIds.mdblistMinePrefix),
           if (mdblistIds.any(
             (id) => id.startsWith(HomeExtraRowIds.mdblistLikedPrefix),
           ))
-            _mdblistLiked().then(
-              (choices) => {
-                for (final choice in choices)
-                  HomeExtraRowIds.mdblistLiked(choice): choice,
-              },
-            ),
+            directory(_mdblistLiked, HomeExtraRowIds.mdblistLikedPrefix),
           if (mdblistIds.any(
             (id) => id.startsWith(HomeExtraRowIds.mdblistTopPrefix),
           ))
-            _mdblistTop().then(
-              (choices) => {
-                for (final choice in choices)
-                  HomeExtraRowIds.mdblistTop(choice): choice,
-              },
-            ),
+            directory(_mdblistTop, HomeExtraRowIds.mdblistTopPrefix),
         ];
         final choicesById = <String, MdblistListChoice>{};
         for (final group in await Future.wait(requestedGroups)) {
@@ -354,13 +440,22 @@ class HomeListRowsService {
           slot.withinRank = order++;
           mdblistPool.add(() async {
             final result = await _mdblistLoad(entry.value);
-            if (!result.complete || result.items.isEmpty) return;
+            if (!result.complete) return;
+            completed.add(entry.key);
+            // Public "top" lists hide watched titles; the user's own and
+            // liked lists never do.
+            final items =
+                entry.key.startsWith(HomeExtraRowIds.mdblistTopPrefix) &&
+                    !entry.value.liked
+                ? WatchedFilter.apply(List.of(result.items))
+                : List.of(result.items);
+            if (items.isEmpty) return;
             slot.section = HomeListSection(
               rowId: entry.key,
               title: byId[entry.key]!.title.isNotEmpty
                   ? byId[entry.key]!.title
                   : entry.value.label,
-              items: List.of(result.items),
+              items: items,
               mdblistList: entry.value,
             );
           });
@@ -377,15 +472,9 @@ class HomeListRowsService {
       await Future.any<void>([all, Future<void>.delayed(deadline)]);
     }
 
-    final done =
-        [
-          for (final s in slots)
-            if (s.section != null) s,
-        ]..sort((a, b) {
-          final byGroup = a.rank.compareTo(b.rank);
-          return byGroup != 0 ? byGroup : a.withinRank.compareTo(b.withinRank);
-        });
-    return [for (final s in done) s.section!];
+    publish();
+    closed = true;
+    return snapshot();
   }
 }
 
@@ -403,8 +492,10 @@ class _Slot {
 /// queue is empty AND nothing is in flight. Job errors are swallowed — a
 /// failed fetch just leaves its slot unfilled.
 class _CappedPool {
-  _CappedPool(this.cap);
+  _CappedPool(this.cap, {this.onDone, this.isCurrent});
   final int cap;
+  final void Function()? onDone;
+  final bool Function()? isCurrent;
 
   final List<Future<void> Function()> _queue = [];
   int _active = 0;
@@ -424,7 +515,10 @@ class _CappedPool {
     while (_active < cap && _queue.isNotEmpty) {
       final job = _queue.removeAt(0);
       _active++;
-      Future<void>(job).catchError((_) {}).whenComplete(() {
+      Future<void>(() async {
+        if (isCurrent?.call() != false) await job();
+      }).catchError((_) {}).whenComplete(() {
+        onDone?.call();
         _active--;
         if (_active == 0 && _queue.isEmpty) {
           _idle?.complete();

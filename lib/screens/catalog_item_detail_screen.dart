@@ -1,3 +1,11 @@
+import '../services/metadata_provider_service.dart';
+import '../widgets/metadata_franchise_rail.dart';
+import '../widgets/metadata_title_navigation.dart';
+import '../services/metadata_preferences_service.dart';
+import '../services/profiles/profile_runtime.dart';
+import 'metadata_explore_page.dart';
+import '../services/metadata_details_service.dart';
+import '../widgets/metadata_presentation_mixin.dart';
 import 'dart:async';
 
 import 'package:cached_network_image/cached_network_image.dart';
@@ -132,7 +140,10 @@ class CatalogItemDetailScreen extends StatefulWidget {
 }
 
 class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
-    with SingleTickerProviderStateMixin, RouteAware {
+    with
+        SingleTickerProviderStateMixin,
+        RouteAware,
+        MetadataPresentationMixin<CatalogItemDetailScreen> {
   final FocusNode _playFocus = FocusNode(debugLabel: 'detail-play');
   final FocusNode _browseFocus = FocusNode(debugLabel: 'detail-browse');
   final FocusNode _watchlistFocus = FocusNode(debugLabel: 'detail-watchlist');
@@ -146,7 +157,13 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
 
   /// "Watch Next" recommendations. null = not yet loaded / still loading;
   /// empty = loaded but nothing to show (rail stays hidden either way).
+  void _openMetadataRecommendation(StremioMeta item) {
+    final onOpen = widget.onRecommendationTap;
+    if (onOpen != null) unawaited(openMetadataTitle(context, _recommendationOriginals[item] ?? item, onOpen));
+  }
+
   List<StremioMeta>? _recommendations;
+  final _recommendationOriginals = Map<StremioMeta, StremioMeta>.identity();
 
   /// Catalog-quality metadata fetched after first paint for a sparse item
   /// (a tapped recommendation). null until/unless enrichment succeeds.
@@ -165,7 +182,9 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
 
   /// The item the screen renders — the enriched copy once available,
   /// otherwise whatever the host handed us.
-  StremioMeta get _item => _enriched ?? widget.item;
+  @override
+  StremioMeta get originalMetadata => _enriched ?? widget.item;
+  StremioMeta get _item => presentedMetadata!;
   bool get _supportsMyWatchlist =>
       StorageService.supportsMyWatchlistItem(_item);
 
@@ -452,6 +471,7 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
           logo: full.logo ?? item.logo,
         );
       });
+      refreshMetadataPresentation();
       _emitLoaderArt();
     } catch (_) {
       // Non-critical enrichment — swallow and keep the original item.
@@ -470,15 +490,30 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
     if (!art.isEmpty) sink(art);
   }
 
+  int _detailsMetadataGeneration = 0;
+  @override
+  void onMetadataPolicyChanged() {
+    _detailsMetadataGeneration++;
+    if (!mounted) return;
+    setState(() { _imdbExtra = null; _recommendations = []; });
+    unawaited(_loadImdbEnrichment());
+    unawaited(_loadRecommendations());
+  }
+
   Future<void> _loadImdbEnrichment() async {
+    final generation = _detailsMetadataGeneration;
+    final scope = ProfileRuntime.scope.value;
+    final revision = MetadataPreferencesService.revision.value;
+    bool valid() => mounted && generation == _detailsMetadataGeneration && scope == ProfileRuntime.scope.value && revision == MetadataPreferencesService.revision.value;
     final imdbId = _item.effectiveImdbId;
-    if (imdbId == null) {
-      if (mounted) setState(() => _imdbLoaded = true);
-      return;
-    }
     try {
-      final extra = await ImdbEnrichmentService.fetch(imdbId);
-      if (mounted) {
+      final extra = await MetadataDetailsService.instance.enrich(
+        _item,
+        loadExisting: () async => imdbId == null
+            ? null
+            : ImdbEnrichmentService.fetch(imdbId),
+      );
+      if (mounted && valid()) {
         setState(() {
           _imdbExtra = extra;
           _imdbLoaded = true;
@@ -487,7 +522,7 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
         _emitLoaderArt();
       }
     } catch (_) {
-      if (mounted) setState(() => _imdbLoaded = true);
+      if (mounted && valid()) setState(() => _imdbLoaded = true);
     }
   }
 
@@ -513,14 +548,18 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
   /// Loads recommendations after first paint so the rail never blocks the
   /// detail screen's appearance. Fail-soft: any error leaves the rail hidden.
   Future<void> _loadRecommendations() async {
+    final generation = _detailsMetadataGeneration;
+    final scope = ProfileRuntime.scope.value;
+    final revision = MetadataPreferencesService.revision.value;
+    bool valid() => mounted && generation == _detailsMetadataGeneration && scope == ProfileRuntime.scope.value && revision == MetadataPreferencesService.revision.value;
     final loader = widget.recommendationsLoader;
-    if (loader == null) {
-      if (mounted) setState(() => _recommendationsLoaded = true);
-      return;
-    }
     try {
-      final recs = await loader();
-      if (mounted) {
+      final recs = await MetadataDetailsService.instance.recommendations(
+        _item,
+        loader,
+      );
+      if (mounted && valid()) {
+        _recommendationOriginals.clear();
         setState(() {
           _recommendations = recs;
           _recommendationsLoaded = true;
@@ -533,8 +572,16 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
           if (id != null) enrich(id, rec.type);
         }
       }
+      if (!valid()) return;
+      await for (final batch in MetadataProviderService.instance.presentBatches(recs, isRelevant: valid)) {
+        if (!valid()) return;
+        for (var index = 0; index < batch.length; index++) {
+          _recommendationOriginals[batch[index]] = recs[index];
+        }
+        setState(() => _recommendations = batch);
+      }
     } catch (_) {
-      if (mounted) setState(() => _recommendationsLoaded = true);
+      if (mounted && valid()) setState(() => _recommendationsLoaded = true);
     }
   }
 
@@ -584,7 +631,9 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
     // The detail backdrop is a display-sized hero, not a shelf card. Upgrade
     // MetaHub's catalog-sized art here without changing the item's shared
     // poster URL (recommendation shelves continue to use their medium source).
-    final backdropUrl = highQualityArtworkUrl(_item.background ?? _item.poster);
+    final backdropUrl = highQualityArtworkUrl(
+      MetadataDetailsService.backdrop(_item, metadataPreferences),
+    );
 
     return ArtworkAccentScope(
       accent: _artworkAccent,
@@ -599,6 +648,8 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
     String? backdropUrl,
   ) {
     return Scaffold(
+      floatingActionButton: MetadataExploreButton(item: _item,
+        onOpen: widget.onRecommendationTap, isTelevision: widget.isTelevision),
       backgroundColor: const Color(0xFF050507),
       body: Stack(
         fit: StackFit.expand,
@@ -778,6 +829,8 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
         ..add(SizedBox(height: t ? 12 : 22))
         ..add(pg);
     }
+    children.add(MetadataFranchiseRail(item: _item,
+      onOpen: widget.onRecommendationTap == null ? null : _openMetadataRecommendation, isTelevision: widget.isTelevision));
     final r = _secRecommendations(0.66);
     if (r != null) {
       children
@@ -885,6 +938,8 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
         );
     }
 
+    children.add(MetadataFranchiseRail(item: _item,
+      onOpen: widget.onRecommendationTap == null ? null : _openMetadataRecommendation, isTelevision: widget.isTelevision));
     final r = _secRecommendations(0.66);
     if (r != null) {
       children
@@ -967,7 +1022,11 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
     final year = item.year ?? extra?.year;
     final hasYear = year != null && year.isNotEmpty;
     final cert = extra?.certificate;
-    final runtime = extra?.runtime;
+    final runtime = MetadataDetailsService.informationRuntime(
+      item,
+      extra,
+      metadataPreferences,
+    );
     final voteCount = extra?.voteCountFormatted;
     final hasVotes = voteCount != null && voteCount.isNotEmpty;
     final showMetaShimmer = !_imdbLoaded && extra == null;
@@ -1050,8 +1109,11 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
   }
 
   Widget? _secGenres(double start) {
-    var genres = _item.genres ?? const <String>[];
-    if (genres.isEmpty) genres = _imdbExtra?.genres ?? const [];
+    final genres = MetadataDetailsService.informationGenres(
+      _item,
+      _imdbExtra,
+      metadataPreferences,
+    );
     if (genres.isEmpty) {
       if (_imdbLoaded) return null;
       return _Reveal(
@@ -1505,7 +1567,7 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
 
   Widget? _secRecommendations(double start) {
     final recs = _recommendations;
-    final onTap = widget.onRecommendationTap;
+    final onTap = widget.onRecommendationTap == null ? null : _openMetadataRecommendation;
     final tight = _tight;
     final cardW = _wide ? (tight ? 104.0 : 120.0) : 112.0;
     final posterH = cardW * 1.5;
@@ -1707,8 +1769,7 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
 
   bool get _canBrowsePrimarySources =>
       widget.enablePrimarySourcesHold &&
-      (_item.type != 'series' ||
-          widget.onBrowsePrimaryEpisodeSources != null);
+      (_item.type != 'series' || widget.onBrowsePrimaryEpisodeSources != null);
 
   void _browsePrimarySources() {
     unawaited(_browsePrimarySourcesAsync());

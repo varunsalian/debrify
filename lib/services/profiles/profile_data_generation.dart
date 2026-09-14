@@ -7,6 +7,8 @@ import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../utils/app_storage.dart';
+import '../../models/home_collection_inventory.dart';
+import 'profile_preference_budget.dart';
 import 'profile_registry.dart';
 import 'profile_scope.dart';
 
@@ -408,11 +410,21 @@ class ProfileDataGenerationManager {
     String key,
     Object? value,
   ) async {
+    if (!ProfilePreferenceBudget.admits(prefs, key, value)) {
+      throw StateError(
+        "The restored profile exceeds this device's preference storage capacity.",
+      );
+    }
+    final collectionKey = key.endsWith('.${HomeCollectionInventory.prefsKey}');
     final success = switch (value) {
       bool value => await prefs.setBool(key, value),
       int value => await prefs.setInt(key, value),
       double value => await prefs.setDouble(key, value),
-      String value when value.length <= 4 * 1024 * 1024 =>
+      String value
+          when value.length <=
+              (collectionKey
+                  ? HomeCollectionInventory.maxChunkedEncodedBytes
+                  : 4 * 1024 * 1024) =>
         await prefs.setString(key, value),
       List<String> value => await prefs.setStringList(key, value),
       null => await prefs.remove(key),

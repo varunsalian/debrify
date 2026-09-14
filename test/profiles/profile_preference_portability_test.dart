@@ -19,6 +19,17 @@ void main() {
     }
   });
 
+  test('MDBList checkpoint remains portable for explicit backup restore', () {
+    const key = 'mdblist_sync_checkpoint_v1';
+    const value = '{"server_time":20}';
+
+    expect(ProfilePreferencePortability.allowsKey(key), isTrue);
+    expect(ProfilePreferencePortability.prepareValue(key, value), (
+      include: true,
+      value: value,
+    ));
+  });
+
   test('credentials, device grants, and executable templates are rejected', () {
     for (final key in const <String>{
       'provider_api_key',
@@ -119,6 +130,15 @@ void main() {
         ),
         (include: true, value: 'notosans'),
       );
+      for (final invalid in <Object>['custom', 'unknown-font', '', 3]) {
+        expect(
+          ProfilePreferencePortability.prepareValue(
+            'subtitle_selected_font_id',
+            invalid,
+          ).include,
+          isFalse,
+        );
+      }
     },
   );
 
@@ -183,6 +203,7 @@ void main() {
             'url': 'https://signed.example/video?token=secret',
             'positionMs': 12000,
             'durationMs': 90000,
+            'recoveryCheckpointId': 'source-device-checkpoint',
             'httpHeaders': <String, String>{'Authorization': 'Bearer secret'},
             'nested': <String, Object?>{
               'localPath': '/Users/source/movie.mkv',
@@ -200,6 +221,7 @@ void main() {
       expect(movie['durationMs'], 90000);
       expect(movie, isNot(contains('url')));
       expect(movie, isNot(contains('httpHeaders')));
+      expect(movie, isNot(contains('recoveryCheckpointId')));
       expect(movie['nested'], <String, Object?>{'speed': 1.25});
       expect(jsonEncode(restored), isNot(contains('secret')));
       expect(jsonEncode(restored), isNot(contains('/Users/source')));

@@ -3,6 +3,8 @@ import 'package:crypto/crypto.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'profiles/profile_preferences.dart';
+import 'webdav_sync/webdav_sync_hot_merge.dart';
+import 'webdav_sync/webdav_sync_tombstones.dart';
 
 /// Represents a bound torrent source for a series.
 /// When set, episode playback skips torrent search and uses this source directly.
@@ -33,6 +35,7 @@ class SeriesSource {
   final String? addonId;
   final String? addonKey;
   final String? streamKey;
+  final String? bingeGroup;
   final int? streamIndex;
 
   const SeriesSource({
@@ -50,6 +53,7 @@ class SeriesSource {
     this.addonId,
     this.addonKey,
     this.streamKey,
+    this.bingeGroup,
     this.streamIndex,
   });
 
@@ -76,6 +80,9 @@ class SeriesSource {
       return 'local:$path';
     }
     if (isAddonDirect) {
+      if (bingeGroup != null && bingeGroup!.isNotEmpty) {
+        return 'direct:${addonKey!.trim()}:group:${sha256.convert(utf8.encode(bingeGroup!))}';
+      }
       // [streamIndex] is deliberately NOT part of the identity. It is the
       // stream's position in the addon's response, which moves between searches
       // as cache state and seeders change — so including it made a replay of the
@@ -89,16 +96,18 @@ class SeriesSource {
     return 'cloud:$debridService:${cloudSourceKind ?? ''}:${debridTorrentId.trim()}';
   }
 
-  /// Kept in lock-step with [bindingKey] — it too ignores the response
-  /// position, or the two could disagree about whether a stream is already
-  /// pinned. Takes no stream index for that reason.
+  /// Group identity wins when available on both sides; older pins can still
+  /// match their original profile during migration. Position is not identity.
   bool matchesAddonDirect({
     required String? candidateAddonKey,
     required String? candidateStreamKey,
+    String? candidateBingeGroup,
   }) =>
       isAddonDirect &&
       addonKey == candidateAddonKey &&
-      streamKey == candidateStreamKey;
+      (bingeGroup != null && candidateBingeGroup != null
+          ? bingeGroup == candidateBingeGroup
+          : streamKey == candidateStreamKey);
 
   bool get isLocalMovieFile =>
       isLocal && (localKind == null || localKind == localKindMovieFile);
@@ -130,6 +139,7 @@ class SeriesSource {
     if (addonId != null) 'addonId': addonId,
     if (addonKey != null) 'addonKey': addonKey,
     if (streamKey != null) 'streamKey': streamKey,
+    if (bingeGroup != null) 'bingeGroup': bingeGroup,
     if (streamIndex != null) 'streamIndex': streamIndex,
   };
 
@@ -148,6 +158,7 @@ class SeriesSource {
     addonId: json['addonId'] as String?,
     addonKey: json['addonKey'] as String?,
     streamKey: json['streamKey'] as String?,
+    bingeGroup: json['bingeGroup'] as String?,
     streamIndex: json['streamIndex'] as int?,
   );
 }
@@ -216,7 +227,17 @@ class SeriesSourceService {
   ) async {
     final prefs = await ProfilePreferences.instance();
     final sources = await getSources(imdbId);
-    sources.removeWhere((s) => s.torrentHash == torrentHash);
+    final removed = sources
+        .where((source) => source.torrentHash == torrentHash)
+        .toList(growable: false);
+    await WebDavSyncTombstoneRecorder.recordForCurrentProfile(
+      removed
+          .where((source) => !source.isLocal)
+          .map(
+            (source) => WebDavSyncRecordKey.source(imdbId, source.bindingKey),
+          ),
+    );
+    sources.removeWhere((source) => source.torrentHash == torrentHash);
     if (sources.isEmpty) {
       await prefs.remove('$_prefix$imdbId');
     } else {
@@ -231,6 +252,17 @@ class SeriesSourceService {
   ) async {
     final prefs = await ProfilePreferences.instance();
     final sources = await getSources(imdbId);
+    final removed = sources.where(
+      (candidate) => candidate.bindingKey == source.bindingKey,
+    );
+    await WebDavSyncTombstoneRecorder.recordForCurrentProfile(
+      removed
+          .where((source) => !source.isLocal)
+          .map(
+            (candidate) =>
+                WebDavSyncRecordKey.source(imdbId, candidate.bindingKey),
+          ),
+    );
     sources.removeWhere((s) => s.bindingKey == source.bindingKey);
     if (sources.isEmpty) {
       await prefs.remove('$_prefix$imdbId');
@@ -242,6 +274,14 @@ class SeriesSourceService {
   /// Remove all sources for a series.
   static Future<void> removeAllSources(String imdbId) async {
     final prefs = await ProfilePreferences.instance();
+    final sources = await getSources(imdbId);
+    await WebDavSyncTombstoneRecorder.recordForCurrentProfile(
+      sources
+          .where((source) => !source.isLocal)
+          .map(
+            (source) => WebDavSyncRecordKey.source(imdbId, source.bindingKey),
+          ),
+    );
     await prefs.remove('$_prefix$imdbId');
   }
 
@@ -251,6 +291,18 @@ class SeriesSourceService {
     List<SeriesSource> sources,
   ) async {
     final prefs = await ProfilePreferences.instance();
+    final existing = await getSources(imdbId);
+    final retained = sources.map((source) => source.bindingKey).toSet();
+    await WebDavSyncTombstoneRecorder.recordForCurrentProfile(
+      existing
+          .where(
+            (source) =>
+                !source.isLocal && !retained.contains(source.bindingKey),
+          )
+          .map(
+            (source) => WebDavSyncRecordKey.source(imdbId, source.bindingKey),
+          ),
+    );
     if (sources.isEmpty) {
       await prefs.remove('$_prefix$imdbId');
     } else {
