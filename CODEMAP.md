@@ -45,6 +45,7 @@ right code instead of re-discovering it. Flutter app; code under `lib/{screens,s
   AllDebrid is the newest = the template for adding a provider.
 - File-tree browse (per provider, post-add): `debrid_service.getTorrentFolderTree`,
   `utils/{rd,torbox}_folder_tree_builder.dart`, `screens/playlist_content_view_screen.dart`.
+  Real-Debrid/TorBox folder ordering: `services/cloud/cloud_folder_sort.dart` (`CloudFolderSort`).
 - Cloud/downloads screens: `screens/{debrid_downloads,torbox/torbox_downloads,pikpak/pikpak_files,`
   `premiumize/premiumize_files,alldebrid/alldebrid_files}_screen.dart`, `screens/cloud_screen.dart`.
 - WebDAV: `services/webdav_service.dart` (read/browse only — no upload yet).
