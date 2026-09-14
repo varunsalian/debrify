@@ -7,6 +7,7 @@ import '../../services/storage_service.dart';
 import '../../services/torrent_service.dart';
 import '../../services/analytics_service.dart';
 import '../../utils/platform_util.dart';
+import '../../utils/tv_reveal.dart';
 import '../../widgets/tv_text_field.dart';
 import 'widgets/settings_widgets.dart';
 import '../../theme/app_theme_scope.dart';
@@ -428,7 +429,7 @@ class _IndexerManagersSettingsPageState
       ],
     );
 
-    return Card(
+    final card = Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: LayoutBuilder(
@@ -462,6 +463,25 @@ class _IndexerManagersSettingsPageState
             );
           },
         ),
+      ),
+    );
+    var rowFocused = false;
+    return Builder(
+      builder: (rowContext) => Focus(
+        canRequestFocus: false,
+        skipTraversal: true,
+        onFocusChange: (focused) {
+          rowFocused = focused;
+          if (!focused) return;
+          // A programmatic focus handoff skips traversal's implicit reveal.
+          // Reveal the whole manager, including its label and all controls.
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (rowContext.mounted && rowFocused) {
+              tvRevealMinimal(rowContext);
+            }
+          });
+        },
+        child: card,
       ),
     );
   }
