@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart' show CupertinoPageTransitionsBuilder;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -8,36 +9,35 @@ import '../widgets/detail/theme/detail_theme.dart';
 import 'app_theme.dart';
 import 'app_type.dart';
 
-/// TV-aware page transition: on Android TV every push/pop animates a
-/// full-screen layer, and the default Material zoom transition (scale + fade +
-/// snapshotting) is visibly janky on weak TV GPUs — it's a big part of why the
-/// app doesn't feel native there. TV gets a plain fast fade instead: the
-/// route uses a short fade in both directions, with no trailing invisible
-/// animation delaying Back. It costs one opacity layer and no snapshots or
-/// blur. Phones keep the stock zoom transition untouched.
-///
-/// The TV check reads [PlatformUtil.isTelevision] per transition build —
-/// warmed in main() before runApp — so the ThemeData stays const/synchronous.
-///
-/// (Moved verbatim from `main.dart` when the ThemeData construction moved into
-/// this adapter; every built theme shares it.)
+/// Shared route motion: a restrained fade and lift, with a cheaper fade on TV.
+/// iOS retains Cupertino's interactive edge-swipe transition.
 class TvAwarePageTransitionsBuilder extends PageTransitionsBuilder {
-  const TvAwarePageTransitionsBuilder();
+  const TvAwarePageTransitionsBuilder({this.preserveSwipeBack = false});
 
-  static const PageTransitionsBuilder _phoneDefault =
-      ZoomPageTransitionsBuilder();
+  final bool preserveSwipeBack;
+  static const _cupertino = CupertinoPageTransitionsBuilder();
 
   @override
   Duration get transitionDuration => PlatformUtil.isTelevision
       ? const Duration(milliseconds: 180)
-      : _phoneDefault.transitionDuration;
+      : preserveSwipeBack
+      ? _cupertino.transitionDuration
+      : const Duration(milliseconds: 240);
 
   @override
   Duration get reverseTransitionDuration => PlatformUtil.isTelevision
       ? const Duration(milliseconds: 140)
-      : _phoneDefault.reverseTransitionDuration;
+      : preserveSwipeBack
+      ? _cupertino.reverseTransitionDuration
+      : const Duration(milliseconds: 180);
 
-  static final Animatable<double> _tvFade = CurveTween(curve: Curves.easeOut);
+  static final Animatable<double> _fade = CurveTween(
+    curve: Curves.easeOutCubic,
+  );
+  static final Animatable<Offset> _lift = Tween<Offset>(
+    begin: const Offset(0, .015),
+    end: Offset.zero,
+  ).chain(CurveTween(curve: Curves.easeOutCubic));
 
   @override
   Widget buildTransitions<T>(
@@ -47,21 +47,27 @@ class TvAwarePageTransitionsBuilder extends PageTransitionsBuilder {
     Animation<double> secondaryAnimation,
     Widget child,
   ) {
-    if (PlatformUtil.isTelevision) {
-      if (MediaQuery.maybeOf(context)?.disableAnimations ?? false) return child;
-      return FadeTransition(
-        // Unlike a new CurvedAnimation on every build, drive() does not leave
-        // an undisposed status listener attached to the route controller.
-        opacity: animation.drive(_tvFade),
-        child: child,
+    final reducedMotion =
+        MediaQuery.maybeOf(context)?.disableAnimations ?? false;
+    if (preserveSwipeBack && !PlatformUtil.isTelevision) {
+      return _cupertino.buildTransitions(
+        route,
+        context,
+        // Keep Cupertino's gesture detector, but hold the visual transition
+        // at rest. The back gesture still controls the actual route controller.
+        reducedMotion ? const AlwaysStoppedAnimation<double>(1) : animation,
+        reducedMotion
+            ? const AlwaysStoppedAnimation<double>(0)
+            : secondaryAnimation,
+        child,
       );
     }
-    return _phoneDefault.buildTransitions(
-      route,
-      context,
-      animation,
-      secondaryAnimation,
-      child,
+    if (reducedMotion) return child;
+    return FadeTransition(
+      opacity: animation.drive(_fade),
+      child: PlatformUtil.isTelevision
+          ? child
+          : SlideTransition(position: animation.drive(_lift), child: child),
     );
   }
 }
@@ -78,9 +84,18 @@ class TvAwarePageTransitionsBuilder extends PageTransitionsBuilder {
 ///   never by `copyWith` over the legacy one, which has already been through
 ///   the text-brightness pass and would double-apply the preset.
 abstract final class AppThemeAdapter {
-  /// Shared by both paths — TV gets the fast fade, phones the stock zoom.
+  /// Shared by both theme paths and every target platform.
   static const PageTransitionsTheme pageTransitions = PageTransitionsTheme(
-    builders: {TargetPlatform.android: TvAwarePageTransitionsBuilder()},
+    builders: {
+      TargetPlatform.android: TvAwarePageTransitionsBuilder(),
+      TargetPlatform.iOS: TvAwarePageTransitionsBuilder(
+        preserveSwipeBack: true,
+      ),
+      TargetPlatform.macOS: TvAwarePageTransitionsBuilder(),
+      TargetPlatform.windows: TvAwarePageTransitionsBuilder(),
+      TargetPlatform.linux: TvAwarePageTransitionsBuilder(),
+      TargetPlatform.fuchsia: TvAwarePageTransitionsBuilder(),
+    },
   );
 
   /// TEST-ONLY: skip the GoogleFonts wrapper and use the raw type skeleton.
@@ -154,7 +169,7 @@ abstract final class AppThemeAdapter {
     useMaterial3: true,
     brightness: Brightness.dark,
     // TV: fast fade instead of the Material zoom push/pop (see
-    // TvAwarePageTransitionsBuilder). Phones/desktop keep their defaults.
+    // TvAwarePageTransitionsBuilder). Phones and desktop use the shared route motion.
     pageTransitionsTheme: pageTransitions,
     colorScheme: const ColorScheme.dark(
       primary: Color(0xFF818CF8), // Indigo 400 (brighter for contrast on dark)
