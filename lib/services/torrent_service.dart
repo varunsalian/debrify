@@ -487,11 +487,15 @@ class TorrentService {
           contentType: contentType,
           timeout: stremioTimeout,
           preserveOrder: preserveSourceOrder,
+          onBatch: onBatch,
         ).then((result) {
-          // The addon side reports as one batch when it completes (it never
-          // throws — errors come back as an empty result).
+          // Whole-series smart pack probing remains an aggregate batch.
+          // Episode/movie requests already emitted their per-addon batches.
           final streams = result['torrents'] as List<Torrent>? ?? const [];
-          if (streams.isNotEmpty) {
+          if (streams.isNotEmpty &&
+              season == null &&
+              episode == null &&
+              (contentType ?? (isMovie ? 'movie' : 'series')) == 'series') {
             try {
               onBatch?.call('stremio', streams);
             } catch (_) {
@@ -602,6 +606,7 @@ class TorrentService {
     String? contentType,
     Duration? timeout,
     bool preserveOrder = false,
+    SearchBatchCallback? onBatch,
   }) async {
     final capability = await ProfileAsyncAuthorization.capture(
       ProfileFeature.torrentSearch,
@@ -615,6 +620,7 @@ class TorrentService {
       contentType: contentType,
       timeout: timeout,
       preserveOrder: preserveOrder,
+      onBatch: onBatch,
     );
     await capability?.runIfCurrent(() async {});
     return result;
@@ -630,6 +636,7 @@ class TorrentService {
     contentType, // Optional explicit content type (for TV channels, etc.)
     Duration? timeout,
     bool preserveOrder = false,
+    SearchBatchCallback? onBatch,
   }) async {
     try {
       final stremioService = StremioService.instance;
@@ -653,6 +660,7 @@ class TorrentService {
         availableSeasons: availableSeasons,
         timeout: timeout,
         preserveOrder: preserveOrder,
+        onBatch: onBatch,
       );
 
       return {

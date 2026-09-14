@@ -3067,8 +3067,33 @@ class VideoPlayerLauncher {
 
       final launched = await AndroidTvPlayerBridge.launchTorrentPlayback(
         payload: payloadMap,
-        onProgress: (progress) =>
-            _handleProgressUpdate(result.payload, progress),
+        onProgress: (progress) {
+          final season = (progress['season'] as num?)?.toInt();
+          final episode = (progress['episode'] as num?)?.toInt();
+          if (seriesFetcher != null &&
+              season != null &&
+              episode != null &&
+              progress['isPlaying'] == true &&
+              progress['isBuffering'] != true) {
+            // Native URLs may have been redirect-resolved; source identity
+            // must use the shared index, not equality with that final URL.
+            final sourceIndex = (progress['sourceIndex'] as num?)?.toInt();
+            if (sourceIndex != null &&
+                sourceIndex >= 0 &&
+                sourceIndex < currentStremioSources.length) {
+              unawaited(
+                seriesFetcher.prepareFromProgress(
+                  source: currentStremioSources[sourceIndex],
+                  season: season,
+                  episode: episode,
+                  positionMs: (progress['positionMs'] as num?)?.toInt() ?? 0,
+                  durationMs: (progress['durationMs'] as num?)?.toInt() ?? 0,
+                ),
+              );
+            }
+          }
+          return _handleProgressUpdate(result.payload, progress);
+        },
         onFinished: () async {
           await _handlePlaybackFinished(result.payload);
           resolver.dispose();

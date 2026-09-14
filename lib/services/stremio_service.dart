@@ -1,4 +1,5 @@
 import 'metadata_preferences_service.dart';
+import 'prepared_stream_requests.dart';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
@@ -171,6 +172,12 @@ class StremioService {
 
   @visibleForTesting
   http.Client Function()? debugStreamHttpClientFactory;
+
+  final _streamRequests = PreparedStreamRequests<List<StremioStream>>(
+    onEvent: (event) => debugPrint('[DirectSeries] event=$event'),
+  );
+  final _idleStreamClients = <http.Client>[];
+  Object? _streamClientScope;
 
   /// Add a listener to be notified when addons change
   void addAddonsChangedListener(VoidCallback listener) {
@@ -1109,7 +1116,18 @@ class StremioService {
     List<int>? availableSeasons,
     Duration? timeout,
     bool preserveOrder = false,
+    void Function(String source, List<Torrent> torrents)? onBatch,
   }) async {
+    final scope = ProfileRuntime.scope.value;
+    void report(String source, List<Torrent> torrents) {
+      if (ProfileRuntime.scope.value != scope) return;
+      try {
+        onBatch?.call(source, torrents);
+      } catch (_) {
+        // UI observers must not turn a successful addon into a failed search.
+      }
+    }
+
     final capability = await ProfileAsyncAuthorization.capture(
       ProfileFeature.torrentSearch,
     );
@@ -1122,6 +1140,7 @@ class StremioService {
             availableSeasons: availableSeasons,
             timeout: timeout,
             preserveOrder: preserveOrder,
+            onBatch: onBatch == null ? null : report,
           )
         : await capability.runIfCurrent(
             () => _searchStreams(
@@ -1132,6 +1151,7 @@ class StremioService {
               availableSeasons: availableSeasons,
               timeout: timeout,
               preserveOrder: preserveOrder,
+              onBatch: onBatch == null ? null : report,
             ),
           );
     await capability?.runIfCurrent(() async {});
@@ -1146,6 +1166,7 @@ class StremioService {
     List<int>? availableSeasons,
     Duration? timeout,
     bool preserveOrder = false,
+    void Function(String source, List<Torrent> torrents)? onBatch,
   }) async {
     final Map<String, int> addonCounts = {};
     final Map<String, String> addonErrors = {};
@@ -1217,6 +1238,12 @@ class StremioService {
       return _fetchStreamsFromAddon(addon, type, streamId, timeout: timeout)
           .then((streams) {
             addonCounts[sourceKey] = streams.length;
+            if (streams.isNotEmpty && onBatch != null) {
+              onBatch(
+                sourceKey,
+                _convertToTorrents(streams, preserveOrder: preserveOrder),
+              );
+            }
             debugPrint(
               'StremioService: ${addon.name} returned ${streams.length} streams',
             );
@@ -1402,6 +1429,7 @@ class StremioService {
     int? episode,
     Duration? timeout,
     String? bingeGroup,
+    bool prepare = false,
   }) async {
     // Include disabled/non-stream addons while resolving identity so an exact
     // pinned configuration cannot silently fall through to a different
@@ -1431,6 +1459,7 @@ class StremioService {
       type,
       _buildStreamId(contentId, season, episode),
       timeout: timeout,
+      prepare: prepare,
     );
     final direct = _convertToTorrents(
       streams,
@@ -1784,6 +1813,64 @@ class StremioService {
     String type,
     String streamId, {
     Duration? timeout,
+    bool prepare = false,
+  }) {
+    // Only episode requests participate; torrent-pack, movie and live-TV
+    // searches retain their existing request behavior.
+    if (type != 'series' || !RegExp(r':\d+:\d+$').hasMatch(streamId)) {
+      return _requestStreamsFromAddon(addon, type, streamId, timeout: timeout);
+    }
+    final key = (
+      ProfileRuntime.scope.value,
+      addon.sourceBindingKey,
+      addon.name,
+      type,
+      streamId,
+      timeout ?? _requestTimeout,
+    );
+    return _streamRequests.get(
+      key,
+      () => _requestStreamsFromAddon(addon, type, streamId, timeout: timeout),
+      prepare: prepare,
+      expiresAt: (streams) {
+        if (streams.isEmpty) return DateTime.fromMillisecondsSinceEpoch(0);
+        DateTime? earliest;
+        for (final stream in streams) {
+          final uri = Uri.tryParse(stream.url ?? '');
+          for (final parameter
+              in uri?.queryParameters.entries ??
+                  const <MapEntry<String, String>>[]) {
+            if (!const {
+              'exp',
+              'expires',
+              'expiry',
+            }.contains(parameter.key.toLowerCase()))
+              continue;
+            final seconds = int.tryParse(parameter.value);
+            if (seconds == null) {
+              final expiry = DateTime.tryParse(parameter.value);
+              if (expiry != null &&
+                  (earliest == null || expiry.isBefore(earliest)))
+                earliest = expiry;
+              continue;
+            }
+            final millis = seconds > 100000000000 ? seconds : seconds * 1000;
+            if (millis.abs() > 8640000000000000) continue;
+            final expiry = DateTime.fromMillisecondsSinceEpoch(millis);
+            if (earliest == null || expiry.isBefore(earliest))
+              earliest = expiry;
+          }
+        }
+        return earliest;
+      },
+    );
+  }
+
+  Future<List<StremioStream>> _requestStreamsFromAddon(
+    StremioAddon addon,
+    String type,
+    String streamId, {
+    Duration? timeout,
   }) async {
     // Decode first (in case already encoded), then encode properly
     // This handles IDs like "vavoo_SKY%20ATLANTIC|group:it" that are partially encoded
@@ -1798,12 +1885,45 @@ class StremioService {
     try {
       final uri = Uri.parse(url);
       final effectiveTimeout = timeout ?? _requestTimeout;
-      final client = debugStreamHttpClientFactory?.call() ?? http.Client();
+      final stopwatch = Stopwatch()..start();
+      final factory = debugStreamHttpClientFactory;
+      final reuseClient =
+          type == 'series' && RegExp(r':\d+:\d+$').hasMatch(streamId);
+      final scope = ProfileRuntime.scope.value;
+      if (_streamClientScope != scope) {
+        for (final idle in _idleStreamClients) {
+          idle.close();
+        }
+        _idleStreamClients.clear();
+        _streamClientScope = scope;
+      }
+      // Lease one client per active request. On timeout we can close THAT
+      // request without aborting the other addons sharing the connection pool.
+      final client =
+          factory?.call() ??
+          (reuseClient && _idleStreamClients.isNotEmpty
+              ? _idleStreamClients.removeLast()
+              : http.Client());
       late final http.Response response;
+      var responseReceived = false;
       try {
         response = await client.get(uri).timeout(effectiveTimeout);
+        responseReceived = true;
+        if (reuseClient) {
+          debugPrint(
+            '[DirectSeries] stage=addon_response elapsedMs=${stopwatch.elapsedMilliseconds}',
+          );
+        }
       } finally {
-        client.close();
+        if (factory != null ||
+            !reuseClient ||
+            !responseReceived ||
+            scope != ProfileRuntime.scope.value ||
+            _idleStreamClients.length >= 8) {
+          client.close();
+        } else {
+          _idleStreamClients.add(client);
+        }
       }
 
       if (response.statusCode != 200) {
@@ -3136,5 +3256,10 @@ class StremioService {
   void invalidateCache() {
     _addonsCache = null;
     _catalogCache.clear();
+    _streamRequests.clear();
+    for (final idle in _idleStreamClients) {
+      idle.close();
+    }
+    _idleStreamClients.clear();
   }
 }

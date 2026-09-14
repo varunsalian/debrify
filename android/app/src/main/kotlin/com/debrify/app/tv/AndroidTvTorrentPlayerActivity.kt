@@ -16240,6 +16240,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             "contentType" to model.contentType,
             "itemIndex" to currentIndex,
             "resumeId" to item.resumeId,
+            "sourceIndex" to currentStremioSourceIndex,
             "positionMs" to position.toInt().coerceAtLeast(0),
             "durationMs" to duration.toInt().coerceAtLeast(0),
             "season" to item.season,

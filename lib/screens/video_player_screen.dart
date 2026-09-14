@@ -3478,6 +3478,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         _iptvLiveRecovery.onProgress(d, wantsPlayback: _isPlaying);
       }
       _position = d;
+      _prepareNextDirectEpisode();
       _updateMdblistPosition();
       _playbackUiClock.updatePosition(d);
       _syncSkipSegmentsForCurrentContent();
@@ -13256,6 +13257,30 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     final target = idx + direction;
     if (target < 0 || target >= eps.length) return null;
     return eps[target];
+  }
+
+  void _prepareNextDirectEpisode() {
+    final fetcher = widget.seriesSourceFetcher;
+    final sources = _effectiveSources;
+    if (fetcher == null ||
+        _validationGateActive ||
+        !_isPlaying ||
+        _isTransitioning ||
+        sources == null ||
+        _currentSourceIndex < 0 ||
+        _currentSourceIndex >= sources.length)
+      return;
+    final current = _currentSeasonEpisodeForIdentity();
+    if (current == null) return;
+    unawaited(
+      fetcher.prepareFromProgress(
+        source: sources[_currentSourceIndex],
+        season: current.season,
+        episode: current.episode,
+        positionMs: _position.inMilliseconds,
+        durationMs: _duration.inMilliseconds,
+      ),
+    );
   }
 
   Future<void> _showPlaylistSheet(BuildContext context) async {

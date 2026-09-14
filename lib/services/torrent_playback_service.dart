@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'next_episode_service.dart';
+import 'profiles/profile_runtime.dart';
 
 import 'package:android_intent_plus/android_intent.dart';
 import 'package:flutter/material.dart';
@@ -2252,6 +2254,7 @@ class TorrentPlaybackService {
     String? provider,
     bool packsFetched = false,
     bool episodesFetched = false,
+    Future<List<Torrent>>? initialEpisodeSearch,
   }) {
     final imdbId = meta?.imdbId;
     final season = meta?.season;
@@ -2267,6 +2270,9 @@ class TorrentPlaybackService {
     final label = meta.title ?? '';
     Future<String?> effectiveProvider() => _effectiveFetchProvider(provider);
     final directValidationCache = <String, bool>{};
+    final initialSearchTime = DateTime.now();
+    final initialSearchScope = ProfileRuntime.scope.value;
+    var initialSearchConsumed = false;
 
     return SeriesSourceFetcher(
       season: season,
@@ -2299,6 +2305,35 @@ class TorrentPlaybackService {
             /* Try the next saved source. */
           }
         }
+      },
+      prepareNextDirectEpisode: (s, e, source) async {
+        final scope = ProfileRuntime.scope.value;
+        if (scope != initialSearchScope) return;
+        final pins = await SeriesSourceService.getSources(imdbId);
+        // Preserve primary torrent-pack precedence and prepare only the active
+        // preferred direct identity, never a speculative replacement pin.
+        if (pins.isEmpty ||
+            !pins.first.matchesAddonDirect(
+              candidateAddonKey: source.stremioAddonKey,
+              candidateStreamKey: source.stremioStreamKey,
+              candidateBingeGroup: source.stremioBingeGroup,
+            ))
+          return;
+        final next = await NextEpisodeService.findNextEpisode(imdbId, s, e);
+        if (next == null || ProfileRuntime.scope.value != scope) return;
+        final pin = pins.first;
+        await StremioService.instance.resolvePinnedDirectStream(
+          addonId: pin.addonId!,
+          addonKey: pin.addonKey!,
+          streamKey: pin.streamKey ?? '',
+          streamIndex: pin.streamIndex ?? 0,
+          bingeGroup: pin.bingeGroup,
+          type: 'series',
+          contentId: imdbId,
+          season: next.season,
+          episode: next.episode,
+          prepare: true,
+        );
       },
       packsFetched: packsFetched,
       episodesFetched: episodesFetched,
@@ -2346,6 +2381,18 @@ class TorrentPlaybackService {
         );
       },
       searchEpisodes: (s, e) async {
+        if (!initialSearchConsumed &&
+            initialEpisodeSearch != null &&
+            s == season &&
+            e == episode &&
+            DateTime.now().difference(initialSearchTime) <
+                const Duration(minutes: 2)) {
+          initialSearchConsumed = true;
+          final results = await initialEpisodeSearch;
+          return ProfileRuntime.scope.value == initialSearchScope
+              ? results
+              : null;
+        }
         final rules = await StorageService.getQuickPlayRules(isMovie: false);
         if (rules.sourcePriority.isNotEmpty) await warmSourceAliases();
         final ladder = await loadLadder(includeSize: false, rules: rules);
@@ -2697,10 +2744,48 @@ class TorrentPlaybackService {
     return out;
   }
 
-  /// Play non-IMDb catalog content (IPTV / TV channels) straight from the
-  /// addon's own stream endpoint — no torrent engine, no debrid provider. Shows
-  /// the same cinematic overlay as [playFromSelection] and hands the resolved
-  /// streams to [playBest], which plays a direct stream instantly.
+  /// Select within a completed highest-priority addon batch only. Callers
+  /// must establish that no pending provider can outrank this batch.
+  @visibleForTesting
+  static Torrent? earlyDirectCandidate(
+    List<Torrent> batch, {
+    required QuickPlayRules rules,
+    FilterLadder? ladder,
+  }) {
+    if (!rules.allowDirectLinks ||
+        !rules.tryNextOnFailure ||
+        rules.maxAttempts < 2 ||
+        rules.ranking != QuickPlayRanking.exactOrder ||
+        prefersTorrentCandidates(rules)) {
+      return null;
+    }
+    final candidates = orderCandidatesForRules(
+      batch,
+      rules: rules,
+      ladder: ladder,
+    ).where(isAutoPlayableCandidate);
+    if (candidates.isEmpty ||
+        candidates.first.streamType != StreamType.directUrl) {
+      return null;
+    }
+    return candidates.first;
+  }
+
+  /// A failed early direct launch consumes no debrid acquisition attempt.
+  /// Leave candidate skipping and acquisition limits to [playBest]; slicing
+  /// this list can hide a working direct link behind unusable torrent rows.
+  @visibleForTesting
+  static ({List<Torrent> sources, QuickPlayRules rules}) earlyDirectRecovery(
+    List<Torrent> sources, {
+    required Torrent failed,
+    required QuickPlayRules rules,
+  }) => (
+    sources: sources
+        .where((t) => _directValidationKey(t) != _directValidationKey(failed))
+        .toList(),
+    rules: rules,
+  );
+
   static Future<bool> _playAddonStream(
     BuildContext context,
     String id, {
@@ -2740,6 +2825,65 @@ class TorrentPlaybackService {
         ? null
         : Duration(seconds: rules.searchTimeoutSeconds);
     final exactAddonOrder = rules.ranking == QuickPlayRanking.exactOrder;
+    final earlyScope = ProfileRuntime.scope.value;
+    final early = Completer<Map<String, dynamic>>();
+    final earlyLadder = await loadLadder(includeSize: isMovie, rules: rules);
+    String? leadingAddon;
+    // An exact-order addon-only pass can decide as soon as its FIRST provider
+    // answers. Global-quality and torrent-preferred searches need all results.
+    if (!isMovie &&
+        id.startsWith('tt') &&
+        season != null &&
+        episode != null &&
+        rules.allowDirectLinks &&
+        rules.tryNextOnFailure &&
+        exactAddonOrder &&
+        !prefersTorrentCandidates(rules) &&
+        (noProvider ||
+            forceAddonOnly ||
+            rules.sourceMode == QuickPlaySourceMode.addonsOnly)) {
+      try {
+        final addons = await StremioService.instance.applicableStreamingAddons(
+          type: 'series',
+          contentId: id,
+        );
+        final ordered = SourcePriority.orderBy(
+          addons,
+          (addon) => 'stremio:${addon.name}'.toLowerCase(),
+          rules.sourcePriority,
+        );
+        if (ordered.isNotEmpty) {
+          final key = 'stremio:${ordered.first.name}'.toLowerCase();
+          if (ordered
+                  .where((a) => 'stremio:${a.name}'.toLowerCase() == key)
+                  .length ==
+              1) {
+            leadingAddon = key;
+          }
+        }
+      } catch (_) {
+        // Optional fast path: ordinary search still owns errors/retries.
+      }
+    }
+    if (cancel.cancelled || !context.mounted) {
+      closeLoading();
+      return true;
+    }
+    void onDirectBatch(String source, List<Torrent> batch) {
+      if (source != leadingAddon || early.isCompleted || cancel.cancelled)
+        return;
+      if (ProfileRuntime.scope.value != earlyScope) return;
+      final selected = earlyDirectCandidate(
+        batch,
+        rules: rules,
+        ladder: earlyLadder,
+      );
+      if (selected == null) return;
+      early.complete({
+        'torrents': [selected],
+        'earlyDirect': true,
+      });
+    }
 
     Future<Map<String, dynamic>> query(QuickPlaySourceMode stage) {
       switch (stage) {
@@ -2752,6 +2896,7 @@ class TorrentPlaybackService {
             contentType: meta.contentType,
             timeout: addonTimeout,
             preserveOrder: exactAddonOrder,
+            onBatch: leadingAddon == null ? null : onDirectBatch,
           );
         case QuickPlaySourceMode.torrentsOnly:
           return TorrentService.searchByImdb(
@@ -2816,14 +2961,96 @@ class TorrentPlaybackService {
     }
 
     Map<String, dynamic> res;
+    final fullSearch = search();
     try {
-      res = await search();
+      res = await Future.any([fullSearch, early.future]);
     } catch (e) {
       if (cancel.cancelled) return true;
       closeLoading();
       if (fallbackWhenEmpty) return false;
       if (context.mounted) _snack(context, 'Search failed: $e');
       return true;
+    }
+    if (res['earlyDirect'] == true) {
+      final selected = (res['torrents'] as List<Torrent>).single;
+      final alive =
+          !rules.validateDirectLinks ||
+          directValidationBudgetForRules(rules) <= 0 ||
+          !shouldPreflightDirectStream(selected) ||
+          await StreamUrlValidator.isPlayableVideoUrl(
+            selected.directUrl!,
+            minBytes: 10 * 1024 * 1024,
+            lenient: true,
+            headers: selected.httpHeaders,
+          );
+      if (cancel.cancelled ||
+          !context.mounted ||
+          ProfileRuntime.scope.value != earlyScope) {
+        closeLoading();
+        return true;
+      }
+      if (alive) {
+        final remaining = fullSearch.then(
+          (result) => orderCandidatesForRules(
+            (result['torrents'] as List).cast<Torrent>(),
+            rules: rules,
+            ladder: earlyLadder,
+          ),
+          onError: (Object _, StackTrace __) => <Torrent>[],
+        );
+        final fetcher = seriesFetcherFor(
+          meta: meta,
+          initialEpisodeSearch: remaining,
+        );
+        await _launch(
+          context,
+          _Resolved(
+            title: selected.displayTitle,
+            playUrl: selected.directUrl,
+            httpHeaders: selected.httpHeaders,
+          ),
+          selected.displayTitle,
+          provider: SeriesSource.addonDirectService,
+          meta: meta,
+          sources: [selected],
+          seriesFetcher: fetcher,
+          overlay: overlay,
+          startupFailoverEnabled: true,
+          onStartupSourcesExhausted: () async {
+            final recovery = earlyDirectRecovery(
+              await remaining,
+              failed: selected,
+              rules: rules,
+            );
+            if (!context.mounted ||
+                cancel.cancelled ||
+                ProfileRuntime.scope.value != earlyScope)
+              return;
+            await playBest(
+              context,
+              recovery.sources,
+              title: label,
+              meta: meta,
+              rules: recovery.rules,
+              ladder: earlyLadder,
+              seriesFetcher: fetcher,
+            );
+          },
+        );
+        return true;
+      }
+      // The early candidate failed preflight. Keep the normal complete-search
+      // failure/retry path rather than discarding slower addon results.
+      res = await fullSearch;
+      res = {
+        ...res,
+        'torrents': (res['torrents'] as List)
+            .cast<Torrent>()
+            .where(
+              (t) => _directValidationKey(t) != _directValidationKey(selected),
+            )
+            .toList(),
+      };
     }
     if (cancel.cancelled) return true;
     if (!context.mounted) {
@@ -2890,9 +3117,8 @@ class TorrentPlaybackService {
       }
       return true;
     }
-    // Same filter ladder as the torrent path — addon streams rank by how
-    // well their labels match the saved filters. Size is movie-only.
-    final ladder = await loadLadder(includeSize: isMovie, rules: rules);
+    // Reuse the same preference snapshot used for the early candidate.
+    final ladder = earlyLadder;
     if (cancel.cancelled) return true; // Cancel during the prefs read
     if (!context.mounted) {
       closeLoading();

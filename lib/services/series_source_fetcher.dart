@@ -85,6 +85,7 @@ class SeriesSourceFetcher {
     this.fetchEngine,
     this.validateCandidate,
     this.pinnedDirectCandidates,
+    this.prepareNextDirectEpisode,
   }) : _searchPacks = searchPacks,
        _searchEpisodes = searchEpisodes,
        _searchMovie = null,
@@ -104,6 +105,7 @@ class SeriesSourceFetcher {
        _searchEpisodes = null,
        fetchAddonPacks = null,
        pinnedDirectCandidates = null,
+       prepareNextDirectEpisode = null,
        season = 0,
        episode = 0,
        packsFetched = true,
@@ -126,6 +128,42 @@ class SeriesSourceFetcher {
   final SeriesSourceCandidateValidator? validateCandidate;
   final Stream<Torrent> Function(int season, int episode)?
   pinnedDirectCandidates;
+
+  final Future<void> Function(int season, int episode, Torrent source)?
+  prepareNextDirectEpisode;
+  Object? _preparationKey;
+
+  /// Link-only speculation late in playback. A source/episode change gets a
+  /// different key; repeated position events never create duplicate jobs.
+  Future<void> prepareFromProgress({
+    required Torrent source,
+    required int season,
+    required int episode,
+    required int positionMs,
+    required int durationMs,
+  }) async {
+    if (prepareNextDirectEpisode == null ||
+        source.streamType != StreamType.directUrl ||
+        positionMs < 30000 ||
+        durationMs <= positionMs ||
+        durationMs - positionMs > 90000)
+      return;
+    final key = (
+      season,
+      episode,
+      source.directUrl,
+      source.stremioAddonKey,
+      source.stremioBingeGroup,
+      source.stremioStreamKey,
+    );
+    if (_preparationKey == key) return;
+    _preparationKey = key;
+    try {
+      await prepareNextDirectEpisode!(season, episode, source);
+    } catch (_) {
+      // Speculation must never interrupt playback. Next still resolves normally.
+    }
+  }
 
   static const String modePacks = 'packs';
   static const String modeEpisodes = 'episodes';

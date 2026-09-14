@@ -3,26 +3,69 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:debrify/models/torrent.dart';
 import 'package:debrify/services/series_source_fetcher.dart';
 
-Torrent t(
-  String name, {
-  String infohash = '',
-  String? directUrl,
-}) =>
-    Torrent(
-      rowid: 0,
-      infohash: infohash,
-      name: name,
-      sizeBytes: 0,
-      createdUnix: 0,
-      seeders: 0,
-      leechers: 0,
-      completed: 0,
-      scrapedDate: 0,
-      streamType: directUrl != null ? StreamType.directUrl : StreamType.torrent,
-      directUrl: directUrl,
-    );
+Torrent t(String name, {String infohash = '', String? directUrl}) => Torrent(
+  rowid: 0,
+  infohash: infohash,
+  name: name,
+  sizeBytes: 0,
+  createdUnix: 0,
+  seeders: 0,
+  leechers: 0,
+  completed: 0,
+  scrapedDate: 0,
+  streamType: directUrl != null ? StreamType.directUrl : StreamType.torrent,
+  directUrl: directUrl,
+);
 
 void main() {
+  test('preparation is direct-only, late, once per episode/source', () async {
+    final calls = <(int, int, String?)>[];
+    final fetcher = SeriesSourceFetcher(
+      season: 1,
+      episode: 1,
+      searchPacks: (_, _) async => [],
+      searchEpisodes: (_, _) async => [],
+      prepareNextDirectEpisode: (s, e, source) async {
+        calls.add((s, e, source.directUrl));
+      },
+    );
+    Future<void> progress(Torrent source, int position, {int episode = 1}) =>
+        fetcher.prepareFromProgress(
+          source: source,
+          season: 1,
+          episode: episode,
+          positionMs: position,
+          durationMs: 600000,
+        );
+    final direct = t('direct', directUrl: 'https://cdn/1');
+    await progress(direct, 100000);
+    await progress(t('pack', infohash: 'abc'), 550000);
+    expect(calls, isEmpty);
+    await progress(direct, 550000);
+    await progress(direct, 560000);
+    expect(calls.length, 1);
+    await progress(t('other', directUrl: 'https://other/1'), 560000);
+    await progress(direct, 560000, episode: 2);
+    expect(calls.length, 3);
+  });
+
+  test('preparation errors never escape into playback', () async {
+    final fetcher = SeriesSourceFetcher(
+      season: 1,
+      episode: 1,
+      searchPacks: (_, _) async => [],
+      searchEpisodes: (_, _) async => [],
+      prepareNextDirectEpisode: (_, _, _) async => throw StateError('offline'),
+    );
+    await fetcher.prepareFromProgress(
+      source: t('direct', directUrl: 'https://cdn/1'),
+      season: 1,
+      episode: 1,
+      positionMs: 550000,
+      durationMs: 600000,
+    );
+  });
+
   group('SeriesSourceFetcher.mergeSources', () {
     test('append-only: existing entries keep their positions', () {
       final existing = [t('a', infohash: 'AAA'), t('b', infohash: 'BBB')];
@@ -49,15 +92,18 @@ void main() {
         t('fresh', directUrl: 'https://x/2.mp4'),
       ];
       final merged = SeriesSourceFetcher.mergeSources(existing, fetched);
-      expect(merged.map((x) => x.name).toList(),
-          ['stream', 'no-id-at-all', 'fresh']);
+      expect(merged.map((x) => x.name).toList(), [
+        'stream',
+        'no-id-at-all',
+        'fresh',
+      ]);
     });
 
     test('duplicates WITHIN the fetched batch collapse to one', () {
-      final merged = SeriesSourceFetcher.mergeSources(
-        [],
-        [t('a', infohash: 'A1'), t('a-dupe', infohash: 'a1')],
-      );
+      final merged = SeriesSourceFetcher.mergeSources([], [
+        t('a', infohash: 'A1'),
+        t('a-dupe', infohash: 'a1'),
+      ]);
       expect(merged.length, 1);
     });
   });
@@ -83,40 +129,47 @@ void main() {
       expect(fetcher.episodesFetched, isTrue);
     });
 
-    test('targets the caller\'s current position, launch episode as fallback',
-        () async {
-      final seen = <String>[];
-      final fetcher = SeriesSourceFetcher(
-        season: 1,
-        episode: 1,
-        searchPacks: (s, e) async {
-          seen.add('packs S${s}E$e');
-          return <Torrent>[];
-        },
-        searchEpisodes: (s, e) async {
-          seen.add('eps S${s}E$e');
-          return <Torrent>[];
-        },
-      );
-      // Auto-advanced mid-pack: player says we're on S1E3 now.
-      await fetcher.fetch(SeriesSourceFetcher.modeEpisodes,
-          season: 1, episode: 3);
-      // No position given → launch episode.
-      await fetcher.fetch(SeriesSourceFetcher.modePacks);
-      expect(seen, ['eps S1E3', 'packs S1E1']);
-    });
+    test(
+      'targets the caller\'s current position, launch episode as fallback',
+      () async {
+        final seen = <String>[];
+        final fetcher = SeriesSourceFetcher(
+          season: 1,
+          episode: 1,
+          searchPacks: (s, e) async {
+            seen.add('packs S${s}E$e');
+            return <Torrent>[];
+          },
+          searchEpisodes: (s, e) async {
+            seen.add('eps S${s}E$e');
+            return <Torrent>[];
+          },
+        );
+        // Auto-advanced mid-pack: player says we're on S1E3 now.
+        await fetcher.fetch(
+          SeriesSourceFetcher.modeEpisodes,
+          season: 1,
+          episode: 3,
+        );
+        // No position given → launch episode.
+        await fetcher.fetch(SeriesSourceFetcher.modePacks);
+        expect(seen, ['eps S1E3', 'packs S1E1']);
+      },
+    );
 
-    test('failure (null) leaves the flag down so the button can retry',
-        () async {
-      final fetcher = SeriesSourceFetcher(
-        season: 1,
-        episode: 1,
-        searchPacks: (s, e) async => null,
-        searchEpisodes: (s, e) async => null,
-      );
-      expect(await fetcher.fetch(SeriesSourceFetcher.modePacks), isNull);
-      expect(fetcher.packsFetched, isFalse);
-    });
+    test(
+      'failure (null) leaves the flag down so the button can retry',
+      () async {
+        final fetcher = SeriesSourceFetcher(
+          season: 1,
+          episode: 1,
+          searchPacks: (s, e) async => null,
+          searchEpisodes: (s, e) async => null,
+        );
+        expect(await fetcher.fetch(SeriesSourceFetcher.modePacks), isNull);
+        expect(fetcher.packsFetched, isFalse);
+      },
+    );
 
     test('unknown mode is a no-op', () async {
       final fetcher = SeriesSourceFetcher(
@@ -159,8 +212,7 @@ void main() {
       expect(await movie.fetch(SeriesSourceFetcher.modeMovie), isNull);
       expect(movie.movieFetched, isFalse); // failed → button stays
       fail = false;
-      expect(
-          await movie.fetch(SeriesSourceFetcher.modeMovie), hasLength(1));
+      expect(await movie.fetch(SeriesSourceFetcher.modeMovie), hasLength(1));
       expect(movie.movieFetched, isTrue);
     });
   });
