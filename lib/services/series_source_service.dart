@@ -35,6 +35,7 @@ class SeriesSource {
   final String? addonId;
   final String? addonKey;
   final String? streamKey;
+  final String? bingeGroup;
   final int? streamIndex;
 
   const SeriesSource({
@@ -52,6 +53,7 @@ class SeriesSource {
     this.addonId,
     this.addonKey,
     this.streamKey,
+    this.bingeGroup,
     this.streamIndex,
   });
 
@@ -78,6 +80,9 @@ class SeriesSource {
       return 'local:$path';
     }
     if (isAddonDirect) {
+      if (bingeGroup != null && bingeGroup!.isNotEmpty) {
+        return 'direct:${addonKey!.trim()}:group:${sha256.convert(utf8.encode(bingeGroup!))}';
+      }
       // [streamIndex] is deliberately NOT part of the identity. It is the
       // stream's position in the addon's response, which moves between searches
       // as cache state and seeders change — so including it made a replay of the
@@ -91,16 +96,18 @@ class SeriesSource {
     return 'cloud:$debridService:${cloudSourceKind ?? ''}:${debridTorrentId.trim()}';
   }
 
-  /// Kept in lock-step with [bindingKey] — it too ignores the response
-  /// position, or the two could disagree about whether a stream is already
-  /// pinned. Takes no stream index for that reason.
+  /// Group identity wins when available on both sides; older pins can still
+  /// match their original profile during migration. Position is not identity.
   bool matchesAddonDirect({
     required String? candidateAddonKey,
     required String? candidateStreamKey,
+    String? candidateBingeGroup,
   }) =>
       isAddonDirect &&
       addonKey == candidateAddonKey &&
-      streamKey == candidateStreamKey;
+      (bingeGroup != null && candidateBingeGroup != null
+          ? bingeGroup == candidateBingeGroup
+          : streamKey == candidateStreamKey);
 
   bool get isLocalMovieFile =>
       isLocal && (localKind == null || localKind == localKindMovieFile);
@@ -132,6 +139,7 @@ class SeriesSource {
     if (addonId != null) 'addonId': addonId,
     if (addonKey != null) 'addonKey': addonKey,
     if (streamKey != null) 'streamKey': streamKey,
+    if (bingeGroup != null) 'bingeGroup': bingeGroup,
     if (streamIndex != null) 'streamIndex': streamIndex,
   };
 
@@ -150,6 +158,7 @@ class SeriesSource {
     addonId: json['addonId'] as String?,
     addonKey: json['addonKey'] as String?,
     streamKey: json['streamKey'] as String?,
+    bingeGroup: json['bingeGroup'] as String?,
     streamIndex: json['streamIndex'] as int?,
   );
 }

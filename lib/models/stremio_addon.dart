@@ -965,6 +965,7 @@ class StremioStream {
   /// contains the addon's configured URL or credentials.
   final String? addonId;
   final String? addonKey;
+  final String? videoId;
 
   /// Stable-ish stream profile plus its original response position. The
   /// profile deliberately excludes the URL (often signed/expiring) and
@@ -984,6 +985,7 @@ class StremioStream {
     required this.source,
     this.addonId,
     this.addonKey,
+    this.videoId,
     this.streamKey,
     this.streamIndex = 0,
   });
@@ -1065,6 +1067,7 @@ class StremioStream {
     String? addonId,
     String? addonKey,
     int streamIndex = 0,
+    String? videoId,
   }) {
     String? infoHash = json['infoHash'] as String?;
     final behaviorHints = json['behaviorHints'] as Map<String, dynamic>?;
@@ -1104,6 +1107,7 @@ class StremioStream {
       source: source,
       addonId: addonId,
       addonKey: addonKey,
+      videoId: videoId,
       streamKey: _directStreamProfileKey(json),
       streamIndex: streamIndex,
     );

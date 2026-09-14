@@ -66,6 +66,7 @@ class StreamUrlValidator {
     String url, {
     int minBytes = minContentBytes,
     bool lenient = false,
+    Map<String, String>? headers,
   }) async {
     // Tracks the hop actually in flight so a timeout can name the host that
     // stalled rather than the URL the chain started from.
@@ -74,9 +75,18 @@ class StreamUrlValidator {
       final client = clientFactory();
       try {
         var currentUrl = url;
+        final original = Uri.parse(url);
         for (int i = 0; i < _maxRedirects; i++) {
           lastUrl = currentUrl;
           final request = http.Request('HEAD', Uri.parse(currentUrl));
+          // Addon headers may contain arbitrary credentials. Keep all custom
+          // headers on their original origin only, including across downgrades.
+          final target = request.url;
+          if (target.scheme == original.scheme &&
+              target.host == original.host &&
+              target.port == original.port) {
+            request.headers.addAll(headers ?? const {});
+          }
           // LOAD-BEARING even though MockClient tests can't exercise it: the
           // real IOClient auto-follows redirects, which would hide the hop
           // cap, the no-location check, and the final-url .m3u8 judgment.

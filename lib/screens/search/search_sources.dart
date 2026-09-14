@@ -182,6 +182,7 @@ class _SourcesScreenState extends State<_SourcesScreen> {
           source.matchesAddonDirect(
             candidateAddonKey: torrent.stremioAddonKey,
             candidateStreamKey: torrent.stremioStreamKey,
+            candidateBingeGroup: torrent.stremioBingeGroup,
           )) {
         return source;
       }

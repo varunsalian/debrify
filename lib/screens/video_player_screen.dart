@@ -1408,10 +1408,13 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   @override
   void initState() {
     super.initState();
+    _activeHttpHeaders = widget.httpHeaders;
     PlayerVisibility.opened(this);
     AnalyticsService.screenView('video_player');
     _startAnalyticsHeartbeat();
-    _activePlaylist = widget.playlist;
+    _activePlaylist = widget.playlist
+        ?.map((entry) => entry.withDefaultHttpHeaders(widget.httpHeaders))
+        .toList();
     _seriesImdbKnownAtLaunch = widget.contentImdbId?.trim().isNotEmpty == true;
     // The dock and the zap banner share the bottom strip, and the dock is
     // raised from several places that never go through _toggleControls
@@ -3193,6 +3196,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     await _attachAudioEffectSession();
 
     _currentStreamUrl = initialUrl.isNotEmpty ? initialUrl : null;
+    if (_activePlaylist != null &&
+        _currentIndex >= 0 &&
+        _currentIndex < _activePlaylist!.length) {
+      _activeHttpHeaders =
+          _activePlaylist![_currentIndex].httpHeaders ?? widget.httpHeaders;
+    }
 
     // IPTV launch: the first tune starts here, before either open branch
     // below (IPTV is never PikPak). Zaps re-arm this in _switchToIptvChannel.
@@ -3301,7 +3310,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           final opened = plainOpen
               ? await (() async {
                   await _openMedia(
-                    mk.Media(initialUrl, httpHeaders: widget.httpHeaders),
+                    mk.Media(initialUrl, httpHeaders: _activeHttpHeaders),
                     play: !hasExternalAudio,
                     desiredPlay: true,
                     liveStream: launchIsLiveIptv,
@@ -3310,7 +3319,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                 })()
               : await _openInitialVodWithFailover(
                   initialUrl,
-                  httpHeaders: widget.httpHeaders,
+                  httpHeaders: _activeHttpHeaders,
                   initialAttemptAlreadyFailed: initialRankedAttemptFailed,
                 );
           if (!opened) {
@@ -5415,7 +5424,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
             // Cancel any ongoing PikPak retry when switching to non-PikPak video
             _pikPakRetryId++;
             await _openMedia(
-              mk.Media(url, httpHeaders: widget.httpHeaders),
+              mk.Media(url, httpHeaders: _activeHttpHeaders),
               play: true,
             );
           }
@@ -7772,14 +7781,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       // stream that is visibly playing. Duration almost always arrives
       // first, so this fallback does not delay the common case.
       _player.stream.width.listen((width) {
-        if ((width ?? 0) > 0 &&
-            _player.state.position > Duration.zero) {
+        if ((width ?? 0) > 0 && _player.state.position > Duration.zero) {
           finish(true, 'decoded_video');
         }
       }),
       _player.stream.position.listen((value) {
-        if (value > Duration.zero &&
-            (_player.state.width ?? 0) > 0) {
+        if (value > Duration.zero && (_player.state.width ?? 0) > 0) {
           finish(true, 'decoded_video');
         }
       }),
@@ -8225,11 +8232,16 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       // PikPak sessions — cold-storage opens are the slowest in the app and
       // have their own readiness needs.
       final isDebridResolved =
-          !pikPakResolver && source?.streamType == StreamType.torrent;
+          !pikPakResolver && source.streamType == StreamType.torrent;
+      final candidateHeaders = isResolvedLaunchUrl
+          ? httpHeaders
+          : resolvedPlaylist != null
+          ? resolvedPlaylist[resolvedPlaylistIndex].httpHeaders
+          : source.httpHeaders;
       final ok = isDebridResolved
           ? await _openStartupDebridDirect(
               url,
-              httpHeaders: httpHeaders,
+              httpHeaders: candidateHeaders,
               source: source,
               sourceIndex: sourceIndex,
               attempt: attempts,
@@ -8237,7 +8249,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
             )
           : await _tryOpenStartupVod(
               url,
-              httpHeaders: httpHeaders,
+              httpHeaders: candidateHeaders,
               source: source,
               sourceIndex: sourceIndex,
               attempt: attempts,
@@ -8245,6 +8257,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
             );
       if (!mounted) return false;
       if (!ok) continue;
+
+      _activeHttpHeaders = candidateHeaders;
 
       _currentSourceIndex = sourceIndex;
       _currentStreamUrl = url;
@@ -8448,6 +8462,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         ? Duration(milliseconds: outgoingHeldMs)
         : _position;
     final outgoingDirectUrl = _currentStreamUrl;
+    final outgoingHeaders = _activeHttpHeaders;
     final selectedSource =
         (_effectiveSources != null &&
             sourceIndex >= 0 &&
@@ -8632,8 +8647,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
             _currentIndex = outgoingIndex;
           });
           try {
+            _activeHttpHeaders = outgoingHeaders;
             await _openMedia(
-              mk.Media(outgoingDirectUrl, httpHeaders: widget.httpHeaders),
+              mk.Media(outgoingDirectUrl, httpHeaders: _activeHttpHeaders),
               play: true,
             );
             await _waitForVideoReady();
@@ -8683,6 +8699,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     });
   }
 
+  Map<String, String>? _activeHttpHeaders;
+
   Future<void> _switchToStremioSource(int index, String url) async {
     _hideSourceSheet();
 
@@ -8698,6 +8716,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         ? Duration(milliseconds: heldSwitchMs)
         : _position;
     final previousUrl = _currentStreamUrl;
+    final previousHeaders = _activeHttpHeaders;
     final previousSourceIndex = _currentSourceIndex;
     final source =
         (_effectiveSources != null &&
@@ -8751,7 +8770,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
             })()
           : await _tryOpenStartupVod(
               url,
-              httpHeaders: widget.httpHeaders,
+              httpHeaders: source?.httpHeaders,
               source: source,
               sourceIndex: index,
             );
@@ -8789,6 +8808,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       }
       _currentSourceIndex = index;
       _currentStreamUrl = url;
+      _activeHttpHeaders = source?.httpHeaders;
       committed = true;
       unawaited(_commitValidatedStremioSource(source));
     } catch (e) {
@@ -8798,8 +8818,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       // row: this was an explicit user selection.
       if (previousUrl != null && previousUrl.isNotEmpty) {
         try {
+          _activeHttpHeaders = previousHeaders;
           await _openMedia(
-            mk.Media(previousUrl, httpHeaders: widget.httpHeaders),
+            mk.Media(previousUrl, httpHeaders: _activeHttpHeaders),
             play: true,
           );
           await _waitForVideoReady();
@@ -9196,7 +9217,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     try {
       _pikPakRetryId++;
       await _openMedia(
-        mk.Media(nextUrl, httpHeaders: widget.httpHeaders),
+        mk.Media(nextUrl, httpHeaders: _activeHttpHeaders),
         play: true,
       );
       _currentStreamUrl = nextUrl;
@@ -9325,7 +9346,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       // Cancel any ongoing PikPak retry when switching channels
       _pikPakRetryId++;
       await _openMedia(
-        mk.Media(nextUrl, httpHeaders: widget.httpHeaders),
+        mk.Media(nextUrl, httpHeaders: _activeHttpHeaders),
         play: true,
       );
       _currentStreamUrl = nextUrl;
@@ -9669,6 +9690,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
     // Check if this is a PikPak video
     final currentEntry = _activePlaylist?[index];
+    _activeHttpHeaders = currentEntry?.httpHeaders;
     final isPikPak =
         currentEntry?.provider?.toLowerCase() == 'pikpak' ||
         currentEntry?.pikpakFileId != null;
@@ -9696,7 +9718,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       if (manualValidationSourceIndex != null) {
         final valid = await _tryOpenStartupVod(
           videoUrl,
-          httpHeaders: widget.httpHeaders,
+          httpHeaders: _activeHttpHeaders,
           source: manualValidationSource,
           sourceIndex: manualValidationSourceIndex,
         );
@@ -9704,7 +9726,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         if (!autoplay) await _player.pause();
       } else {
         await _openMedia(
-          mk.Media(videoUrl, httpHeaders: widget.httpHeaders),
+          mk.Media(videoUrl, httpHeaders: _activeHttpHeaders),
           play: autoplay,
         );
       }
@@ -10043,7 +10065,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     if (!isPikPak) {
       // Not a PikPak video, play normally
       await _openMedia(
-        mk.Media(videoUrl, httpHeaders: widget.httpHeaders),
+        mk.Media(videoUrl, httpHeaders: _activeHttpHeaders),
         play: true,
       );
       return true;
@@ -10073,7 +10095,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     print('PikPak: Initial playback attempt - opening media...');
     try {
       await _openMedia(
-        mk.Media(videoUrl, httpHeaders: widget.httpHeaders),
+        mk.Media(videoUrl, httpHeaders: _activeHttpHeaders),
         play: true,
       );
     } catch (e) {
@@ -10221,7 +10243,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         // Try reopening the player (might help reactivate cold storage file)
         try {
           await _openMedia(
-            mk.Media(videoUrl, httpHeaders: widget.httpHeaders),
+            mk.Media(videoUrl, httpHeaders: _activeHttpHeaders),
             play: true,
           );
         } catch (e) {
@@ -10322,7 +10344,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         // Try reopening the player for next attempt
         try {
           await _openMedia(
-            mk.Media(videoUrl, httpHeaders: widget.httpHeaders),
+            mk.Media(videoUrl, httpHeaders: _activeHttpHeaders),
             play: true,
           );
         } catch (reopenError) {
@@ -13051,6 +13073,26 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     try {
       final token = _playlistIdentityToken;
 
+      final pinned = fetcher.pinnedDirectCandidates;
+      if (pinned != null) {
+        await for (final candidate in pinned(season, episode)) {
+          if (!mounted || token != _playlistIdentityToken) return;
+          final sources = List<Torrent>.of(_effectiveSources ?? const []);
+          final index = sources.length;
+          sources.add(candidate);
+          setState(() => _augmentedSources = sources);
+          if (await _tryEpisodeCandidate(
+            index,
+            candidate,
+            season,
+            episode,
+            token,
+          ))
+            return;
+          if (!mounted || token != _playlistIdentityToken) return;
+        }
+      }
+
       // 1. Try what's already in the source list: exact-episode singles and
       // packs covering the season (often already unlocked on the account).
       final existing = List<Torrent>.of(_effectiveSources ?? const <Torrent>[]);
@@ -14856,10 +14898,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                               suffixIcon: IconButton(
                                 icon: const Icon(Icons.arrow_forward_rounded),
                                 color: Colors.white70,
-                                onPressed: () => runSearch(
-                                  controller.text,
-                                  setSheetState,
-                                ),
+                                onPressed: () =>
+                                    runSearch(controller.text, setSheetState),
                               ),
                               filled: true,
                               fillColor: Colors.white.withValues(alpha: 0.08),
@@ -15967,7 +16007,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       }
       if (!ignoreSourcePriority && defaultLang != 'off') {
         final order = await StorageService.getSubtitleSourcePriority();
-        if (token != _addonSubtitleFetchToken || _userManuallySelectedSubtitle) {
+        if (token != _addonSubtitleFetchToken ||
+            _userManuallySelectedSubtitle) {
           return false;
         }
         if (order.first != SubtitleSourcePriority.embedded) return false;
@@ -16307,7 +16348,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     );
   }
 
-  Future<void> _applySubtitlePriorityUpdate(SubtitlePriorityUpdate update) async {
+  Future<void> _applySubtitlePriorityUpdate(
+    SubtitlePriorityUpdate update,
+  ) async {
     bool valid() =>
         mounted &&
         update.token == _addonSubtitleFetchToken &&
@@ -16335,7 +16378,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           final path = await _downloadStremioSubtitleToTempFile(sub);
           if (!valid() || path == null) return false;
           final applied = await _applyExternalSubtitleTrack(
-            mk.SubtitleTrack.uri(path, title: sub.displayName, language: sub.lang),
+            mk.SubtitleTrack.uri(
+              path,
+              title: sub.displayName,
+              language: sub.lang,
+            ),
           );
           if (applied) selectedPath = path;
           return applied;

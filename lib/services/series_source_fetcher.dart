@@ -84,6 +84,7 @@ class SeriesSourceFetcher {
     this.fetchAddonPacks,
     this.fetchEngine,
     this.validateCandidate,
+    this.pinnedDirectCandidates,
   }) : _searchPacks = searchPacks,
        _searchEpisodes = searchEpisodes,
        _searchMovie = null,
@@ -102,6 +103,7 @@ class SeriesSourceFetcher {
        _searchPacks = null,
        _searchEpisodes = null,
        fetchAddonPacks = null,
+       pinnedDirectCandidates = null,
        season = 0,
        episode = 0,
        packsFetched = true,
@@ -122,6 +124,8 @@ class SeriesSourceFetcher {
   /// behavior of older/custom fetchers; callers should use [allowsCandidate]
   /// rather than reading this directly.
   final SeriesSourceCandidateValidator? validateCandidate;
+  final Stream<Torrent> Function(int season, int episode)?
+  pinnedDirectCandidates;
 
   static const String modePacks = 'packs';
   static const String modeEpisodes = 'episodes';

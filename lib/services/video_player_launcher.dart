@@ -2475,6 +2475,7 @@ class VideoPlayerLauncher {
               'title': episode?.displayTitle ?? entry.title,
               'sourceTitle': entry.title,
               'url': entry.url,
+              'httpHeaders': entry.httpHeaders ?? const <String, String>{},
               if (entry.hdVideoUrl != null) 'hdVideoUrl': entry.hdVideoUrl,
               if (entry.audioUrl != null) 'audioUrl': entry.audioUrl,
               'index': i,
@@ -2852,6 +2853,20 @@ class VideoPlayerLauncher {
                   .map((t) => t.toJson())
                   .toList(),
             };
+          }
+
+          final pinned = seriesFetcher.pinnedDirectCandidates;
+          if (pinned != null) {
+            await for (final candidate in pinned(season, episode)) {
+              if (stale()) return null;
+              if (!await candidateHasTarget(candidate)) continue;
+              if (stale()) return null;
+              final index = currentStremioSources.length;
+              currentStremioSources = [...currentStremioSources, candidate];
+              final result = await winWith(index);
+              if (result != null) return result;
+              if (stale()) return null;
+            }
           }
 
           Future<Map<String, dynamic>?> tryRange(
@@ -4424,6 +4439,11 @@ class VideoPlayerLauncher {
     VideoPlayerLaunchArgs args,
   ) async {
     if (entry.url.isNotEmpty) {
+      // Keep protected URLs attached to their declared headers and origin.
+      // The player handles redirects; the legacy URL-only resolver cannot.
+      if ((entry.httpHeaders ?? args.httpHeaders)?.isNotEmpty == true) {
+        return entry.url;
+      }
       // For direct stream URLs, resolve redirects to get final URL
       // (needed for HLS streams behind short URL redirects like USATV)
       return await _resolveRedirectUrl(entry.url);
@@ -4730,6 +4750,7 @@ class _AndroidTvPlaybackItem {
   final String id;
   final String title;
   final String url;
+  final Map<String, String>? httpHeaders;
   final String? hdVideoUrl;
   final String? audioUrl;
   final int index;
@@ -4753,6 +4774,7 @@ class _AndroidTvPlaybackItem {
     required this.id,
     required this.title,
     required this.url,
+    this.httpHeaders,
     this.hdVideoUrl,
     this.audioUrl,
     required this.index,
@@ -4775,6 +4797,7 @@ class _AndroidTvPlaybackItem {
       'id': id,
       'title': title,
       'url': url,
+      'httpHeaders': httpHeaders ?? const <String, String>{},
       if (hdVideoUrl != null) 'hdVideoUrl': hdVideoUrl,
       if (audioUrl != null) 'audioUrl': audioUrl,
       'index': index,
@@ -5173,6 +5196,7 @@ class _AndroidTvPlaybackPayloadBuilder {
           id: entry.url.isNotEmpty ? entry.url : '${entry.title}_$i',
           title: displayTitle,
           url: entry.url,
+          httpHeaders: entry.httpHeaders ?? args.httpHeaders,
           hdVideoUrl: entry.hdVideoUrl,
           audioUrl: entry.audioUrl,
           index: i,
@@ -5485,6 +5509,7 @@ class _AndroidTvPlaybackPayloadBuilder {
             PlaylistEntry(
               url: resolved,
               title: entry.title,
+              httpHeaders: entry.httpHeaders,
               hdVideoUrl: entry.hdVideoUrl,
               audioUrl: entry.audioUrl,
               relativePath: entry.relativePath,

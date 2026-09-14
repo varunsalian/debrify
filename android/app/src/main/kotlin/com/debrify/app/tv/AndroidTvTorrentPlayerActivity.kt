@@ -789,6 +789,10 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     // State
     private var payload: PlaybackPayload? = null
     private var currentIndex = 0
+    @Volatile private var activeVodHeaders: Pair<Set<String>, Map<String, String>> = emptySet<String>() to emptyMap()
+    private var protectedStreamClient = ProtectedStreamHttp.client(15_000)
+    private val mediaPreparationScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
+    private var mediaPreparationGeneration = 0
     private var pendingSeekMs: Long = 0
     private var percentSeekApplied = false
     // Per-item Trakt resume (0-100) for the item currently loading, applied on
@@ -2730,18 +2734,17 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             )
 
         // Wrap with DefaultDataSource.Factory for local file/content URI support
-        val upstreamDataSourceFactory = DefaultDataSource.Factory(this, httpDataSourceFactory)
-        val playbackHeaders = payload?.httpHeaders.orEmpty()
-        val protectedMediaOrigins = buildProtectedMediaOrigins(payload?.items.orEmpty())
-        val dataSourceFactory = if (playbackHeaders.isNotEmpty() && protectedMediaOrigins.isNotEmpty()) {
-            android.util.Log.d(
-                "AndroidTvPlayer",
-                "setupPlayer - scoped ${playbackHeaders.size} HTTP header(s) to ${protectedMediaOrigins.size} media origin(s)"
-            )
+        protectedStreamClient = ProtectedStreamHttp.client(networkTimeoutMs)
+        val vodHttpFactory = ProtectedStreamHttp.dataSourceFactory(protectedStreamClient)
+        val upstreamDataSourceFactory = DefaultDataSource.Factory(
+            this, if (isIptvMode) httpDataSourceFactory else vodHttpFactory,
+        )
+        val dataSourceFactory = run {
             ResolvingDataSource.Factory(
                 upstreamDataSourceFactory,
                 object : ResolvingDataSource.Resolver {
                     override fun resolveDataSpec(dataSpec: DataSpec): DataSpec {
+                        val (protectedMediaOrigins, playbackHeaders) = activeVodHeaders
                         val origin = originKey(dataSpec.uri)
                         return if (origin != null && protectedMediaOrigins.contains(origin)) {
                             dataSpec.withAdditionalHeaders(playbackHeaders)
@@ -2753,8 +2756,6 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                     override fun resolveReportedUri(uri: Uri): Uri = uri
                 }
             )
-        } else {
-            upstreamDataSourceFactory
         }
 
         // IPTV: inject the CURRENT channel's declared headers into every
@@ -4407,6 +4408,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         suppressTrakt: Boolean = false,
         suppressResume: Boolean = false,
     ) {
+        mediaPreparationGeneration++
         // A sleep stop wins over anything already queued: the auto-advance
         // arms a 1.5s postDelayed before starting the next item, and a
         // countdown expiring inside that window would otherwise be undone by
@@ -4448,6 +4450,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         currentIndex = index
         updateCatalogEpisodeControls()
         val item = model.items[index]
+        activeVodHeaders = buildProtectedMediaOrigins(listOf(item)) to item.httpHeaders
         android.util.Log.d("AndroidTvPlayer", "playItem - item found: title=${item.title}, season=${item.season}, episode=${item.episode}, url=${item.url}, resumeId=${item.resumeId}")
         // Keep BOTH the local position and the remote tracker percent (the
         // payload field is the furthest of Trakt + Simkl + MDBList); STATE_READY resumes
@@ -4559,7 +4562,33 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         }
     }
 
-    private fun startPlayback(item: PlaybackItem) {
+    private fun discoverProtectedMime(url: String, headers: Map<String, String>, ready: (String?) -> Unit) {
+        val generation = ++mediaPreparationGeneration
+        val sourceToken = stremioResolutionToken
+        mediaPreparationScope.launch {
+            val mimeType = withContext(Dispatchers.IO) {
+                ProtectedStreamHttp.discoverMimeType(protectedStreamClient, url, headers)
+            }
+            if (generation == mediaPreparationGeneration && sourceToken == stremioResolutionToken &&
+                !isFinishing && !isDestroyed && !sleepStopLatched) {
+                ready(mimeType)
+            }
+        }
+    }
+
+    private fun startPlayback(item: PlaybackItem, mimeDiscovered: Boolean = false) {
+        if (!isIptvMode && !mimeDiscovered && item.mimeType == null &&
+            ProtectedStreamHttp.needsDiscovery(item.url, item.httpHeaders)) {
+            discoverProtectedMime(item.url, item.httpHeaders) { mimeType ->
+                val current = payload?.items?.getOrNull(currentIndex)
+                if (current == null || current.url != item.url) return@discoverProtectedMime
+                val prepared = current.copy(mimeType = mimeType)
+                payload?.items?.set(currentIndex, prepared)
+                startPlayback(prepared, mimeDiscovered = true)
+            }
+            return
+        }
+        activeVodHeaders = buildProtectedMediaOrigins(listOf(item)) to item.httpHeaders
         // Last gate before ExoPlayer actually starts. playItem's check happens
         // before URL resolution, and that round trip can outlast the countdown
         // — without rechecking here, a resolve that was already in flight would
@@ -4638,6 +4667,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
         val mediaItem = MediaItem.Builder()
             .setUri(item.url)
+            .setMimeType(item.mimeType)
             .setMediaMetadata(metadata)
             .build()
 
@@ -17627,14 +17657,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         val newItems = mutableListOf<PlaybackItem>()
         for (map in itemMaps) {
             try {
-                // Convert Map<*, *> to JSONObject safely
-                val obj = JSONObject()
-                for ((key, value) in map) {
-                    if (key is String) {
-                        obj.put(key, value ?: JSONObject.NULL)
-                    }
-                }
-                newItems.add(PlaybackItem.fromJson(obj))
+                newItems.add(PlaybackItem.fromMap(map))
             } catch (e: Exception) {
                 android.util.Log.w("AndroidTvPlayer", "switchToSourcePlaylist - failed to parse item: ${e.message}")
             }
@@ -17913,7 +17936,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         android.util.Log.d("AndroidTvPlayer", "rebuildNavigationMaps - contentType=$contentType, isSeries=$isSeries, nextMap=${nextMap.size}, prevMap=${prevMap.size}")
     }
 
-    private fun switchToStremioSource(url: String, sourceIndex: Int) {
+    private fun switchToStremioSource(url: String, sourceIndex: Int, mimeType: String? = null, mimeDiscovered: Boolean = false) {
         // Live Stremio IPTV channel: the movie path below seeks to the
         // previous position and runs PikPak/YouTube bookkeeping — all wrong
         // for a live stream. Route to the dedicated live switch.
@@ -17921,6 +17944,14 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             switchToIptvStremioSource(url, sourceIndex)
             return
         }
+        val sourceHeaders = stremioSources.getOrNull(sourceIndex)?.httpHeaders.orEmpty()
+        if (!mimeDiscovered && ProtectedStreamHttp.needsDiscovery(url, sourceHeaders)) {
+            discoverProtectedMime(url, sourceHeaders) { discovered ->
+                switchToStremioSource(url, sourceIndex, discovered, mimeDiscovered = true)
+            }
+            return
+        }
+        mediaPreparationGeneration++
         android.util.Log.d("AndroidTvPlayer", "switchToStremioSource: index=$sourceIndex, url=${url.take(60)}...")
 
         // Capture current position for resume. If a resume hold is active the
@@ -17934,6 +17965,11 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             resumeHoldArmedAtMs = android.os.SystemClock.elapsedRealtime()
         }
         val currentPos = heldPos ?: livePos
+        val headers = stremioSources.getOrNull(sourceIndex)?.httpHeaders.orEmpty()
+        activeVodHeaders = setOfNotNull(originKey(Uri.parse(url))) to headers
+        payload?.items?.getOrNull(currentIndex)?.let { item ->
+            payload?.items?.set(currentIndex, item.copy(url = url, httpHeaders = headers, mimeType = mimeType))
+        }
 
         // Update state
         currentStremioSourceIndex = sourceIndex
@@ -17963,7 +17999,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             player?.setMediaSource(mergedSource)
         } else {
             subtitleTrackReadiness.onMediaReplacement()
-            player?.setMediaItem(MediaItem.fromUri(url))
+            player?.setMediaItem(MediaItem.Builder().setUri(url).setMimeType(mimeType).build())
         }
         player?.prepare()
         if (currentPos > 0) {
@@ -18067,6 +18103,11 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             val items = mutableListOf<PlaybackItem>()
             for (i in 0 until itemsJson.length()) {
                 val itemObj = itemsJson.getJSONObject(i)
+                // Legacy session headers apply only while parsing original
+                // launch items. Replacement items never inherit them.
+                if (!itemObj.has("httpHeaders")) {
+                    itemObj.put("httpHeaders", obj.optJSONObject("httpHeaders") ?: JSONObject())
+                }
                 items.add(PlaybackItem.fromJson(itemObj))
             }
 
@@ -18390,6 +18431,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        mediaPreparationScope.cancel()
+        mediaPreparationGeneration++
         sourceBrowser?.destroy()
         sourceBrowser = null
         recordPlaybackLifecycle("activity_destroy_begin")
@@ -19349,6 +19392,7 @@ private data class StremioSource(
     val name: String,
     val infohash: String,
     val directUrl: String?,
+    val httpHeaders: Map<String, String> = emptyMap(),
     val streamType: String,  // "torrent", "directUrl"
     val sizeBytes: Long,
     val seeders: Int,
@@ -19392,6 +19436,7 @@ private data class StremioSource(
                 name = name,
                 infohash = obj.optString("infohash", ""),
                 directUrl = obj.optString("direct_url").takeIf { it.isNotEmpty() },
+                httpHeaders = ProtectedStreamHttp.headers(obj.opt("http_headers")),
                 streamType = obj.optString("stream_type", "torrent"),
                 sizeBytes = obj.optLong("size_bytes", 0),
                 seeders = obj.optInt("seeders", 0),
@@ -19410,6 +19455,7 @@ private data class StremioSource(
                 name = name,
                 infohash = (map["infohash"] as? String) ?: "",
                 directUrl = (map["direct_url"] as? String)?.takeIf { it.isNotEmpty() },
+                httpHeaders = ProtectedStreamHttp.headers(map["http_headers"]),
                 streamType = (map["stream_type"] as? String) ?: "torrent",
                 sizeBytes = (map["size_bytes"] as? Number)?.toLong() ?: 0,
                 seeders = (map["seeders"] as? Number)?.toInt() ?: 0,
@@ -19499,10 +19545,12 @@ private data class GuideEpisode(
     val watched: Boolean,
 )
 
-private data class PlaybackItem(
+internal data class PlaybackItem(
     val id: String,
     val title: String,
     val url: String,
+    val httpHeaders: Map<String, String> = emptyMap(),
+    val mimeType: String? = null,
     // Optional adaptive pair for high-res YouTube: video-only track + separate
     // audio track, merged at playback. When absent, [url] (a muxed stream that
     // already has audio) is played as-is.
@@ -19571,6 +19619,7 @@ private data class PlaybackItem(
                 id = obj.optString("id"),
                 title = obj.optString("title"),
                 url = obj.optString("url"),
+                httpHeaders = ProtectedStreamHttp.headers(obj.opt("httpHeaders")),
                 hdVideoUrl = if (obj.has("hdVideoUrl")) obj.optString("hdVideoUrl").takeIf { it.isNotEmpty() } else null,
                 audioUrl = if (obj.has("audioUrl")) obj.optString("audioUrl").takeIf { it.isNotEmpty() } else null,
                 index = obj.optInt("index", 0),
@@ -19590,6 +19639,14 @@ private data class PlaybackItem(
                 sourceTitle = obj.nullableString("sourceTitle")
                     ?: obj.optString("title").takeIf { it.isNotEmpty() },
             )
+        }
+
+        fun fromMap(map: Map<*, *>): PlaybackItem {
+            val obj = JSONObject()
+            for ((key, value) in map) {
+                if (key is String) obj.put(key, value ?: JSONObject.NULL)
+            }
+            return fromJson(obj)
         }
     }
 }

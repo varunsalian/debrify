@@ -23,6 +23,9 @@ class Torrent {
 
   // Direct URL for non-torrent streams (directUrl or externalUrl types)
   final String? directUrl;
+  final Map<String, String>? httpHeaders;
+  final String? stremioBingeGroup;
+  final String? stremioVideoId;
 
   // Full torrent acquisition URLs from indexers. Prefer magnetUrl when present;
   // torrentUrl is usually a protected .torrent download URL.
@@ -67,6 +70,9 @@ class Torrent {
     String? source,
     this.streamType = StreamType.torrent,
     this.directUrl,
+    this.httpHeaders,
+    this.stremioBingeGroup,
+    this.stremioVideoId,
     this.magnetUrl,
     this.torrentUrl,
     this.hasRealInfoHash = true,
@@ -162,6 +168,9 @@ class Torrent {
       source: rawSource?.toString(),
       streamType: streamType,
       directUrl: json['direct_url'] as String?,
+      httpHeaders: (json['http_headers'] as Map?)?.cast<String, String>(),
+      stremioBingeGroup: json['stremio_binge_group'] as String?,
+      stremioVideoId: json['stremio_video_id'] as String?,
       magnetUrl: (json['magnet_url'] ?? json['magnet'])?.toString(),
       torrentUrl: (json['torrent_url'] ?? json['download_url'])?.toString(),
       hasRealInfoHash: json['has_real_infohash'] as bool? ?? true,
@@ -195,6 +204,9 @@ class Torrent {
       if (source.isNotEmpty) 'source': source,
       if (streamType != StreamType.torrent) 'stream_type': streamType.name,
       if (directUrl != null) 'direct_url': directUrl,
+      if (httpHeaders != null) 'http_headers': httpHeaders,
+      if (stremioBingeGroup != null) 'stremio_binge_group': stremioBingeGroup,
+      if (stremioVideoId != null) 'stremio_video_id': stremioVideoId,
       if (magnetUrl != null) 'magnet_url': magnetUrl,
       if (torrentUrl != null) 'torrent_url': torrentUrl,
       if (!hasRealInfoHash) 'has_real_infohash': hasRealInfoHash,

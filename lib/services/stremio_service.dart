@@ -1401,6 +1401,7 @@ class StremioService {
     int? season,
     int? episode,
     Duration? timeout,
+    String? bingeGroup,
   }) async {
     // Include disabled/non-stream addons while resolving identity so an exact
     // pinned configuration cannot silently fall through to a different
@@ -1439,20 +1440,32 @@ class StremioService {
       direct,
       streamKey: streamKey,
       streamIndex: streamIndex,
+      bingeGroup: bingeGroup,
     );
   }
 
   /// Pure matching half of [resolvePinnedDirectStream], exposed for regression
   /// tests. Profile identity survives episode-number/URL changes; response
-  /// position disambiguates addons that emit multiple identically-labelled
-  /// links and is the fallback when an episode-specific filename changes more
-  /// substantially than the normalizer can account for.
+  /// position only disambiguates equal profiles. A missing explicit binge
+  /// group, or an unmatched profile without a group, is a miss.
   @visibleForTesting
   static Torrent? selectPinnedDirectStream(
     List<Torrent> direct, {
     required String streamKey,
     required int streamIndex,
+    String? bingeGroup,
   }) {
+    if (bingeGroup != null && bingeGroup.isNotEmpty) {
+      final matches = direct
+          .where((t) => t.stremioBingeGroup == bingeGroup)
+          .toList();
+      // An explicit group disappearing is a miss, not permission to change groups.
+      if (matches.isEmpty) return null;
+      return matches.firstWhere(
+        (t) => t.stremioStreamKey == streamKey,
+        orElse: () => matches.first,
+      );
+    }
     final profileMatches = direct
         .where((torrent) => torrent.stremioStreamKey == streamKey)
         .toList(growable: false);
@@ -1463,10 +1476,7 @@ class StremioService {
       }
       return profileMatches.first;
     }
-    for (final torrent in direct) {
-      if (torrent.stremioStreamIndex == streamIndex) return torrent;
-    }
-    return direct.length == 1 ? direct.single : null;
+    return null;
   }
 
   /// Smart fallback for series search without specific season/episode
@@ -1817,6 +1827,7 @@ class StremioService {
               addonId: addon.id,
               addonKey: addon.sourceBindingKey,
               streamIndex: entry.key,
+              videoId: streamId,
             ),
           )
           .where(
@@ -1959,7 +1970,9 @@ class StremioService {
     required String type,
     String? providerOverride,
   }) async {
-    if ((providerOverride == null && !imdbId.startsWith('tt')) || imdbId.isEmpty || (type != 'movie' && type != 'series')) {
+    if ((providerOverride == null && !imdbId.startsWith('tt')) ||
+        imdbId.isEmpty ||
+        (type != 'movie' && type != 'series')) {
       return null;
     }
     try {
@@ -2013,8 +2026,9 @@ class StremioService {
           final streamed = await client
               .send(request)
               .timeout(const Duration(seconds: 8));
-          final response = await http.Response.fromStream(streamed)
-              .timeout(const Duration(seconds: 8));
+          final response = await http.Response.fromStream(
+            streamed,
+          ).timeout(const Duration(seconds: 8));
           if (response.statusCode != 200) return null;
           final data =
               await decodeJsonAsync(response.body) as Map<String, dynamic>?;
@@ -2223,6 +2237,14 @@ class StremioService {
           source: 'stremio:${stream.source}',
           streamType: variant.streamType,
           directUrl: variant.directUrl,
+          httpHeaders:
+              ((stream.behaviorHints?['proxyHeaders'] as Map?)?['request']
+                      as Map?)
+                  ?.map(
+                    (key, value) => MapEntry(key.toString(), value.toString()),
+                  ),
+          stremioBingeGroup: stream.behaviorHints?['bingeGroup'] as String?,
+          stremioVideoId: stream.videoId,
           hasRealInfoHash: variant.hasRealInfoHash,
           stremioAddonId: stream.addonId,
           stremioAddonKey: stream.addonKey,
@@ -2523,8 +2545,9 @@ class StremioService {
         final streamedResponse = await client
             .send(request)
             .timeout(_requestTimeout);
-        final response = await http.Response.fromStream(streamedResponse)
-            .timeout(_requestTimeout);
+        final response = await http.Response.fromStream(
+          streamedResponse,
+        ).timeout(_requestTimeout);
 
         if (response.statusCode != 200) {
           debugPrint(

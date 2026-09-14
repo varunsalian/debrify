@@ -18,6 +18,7 @@ abstract final class ProfilePreferencePortability {
   }) {
     if (key == 'remote_home_collections_v2') return true;
     if (key.isEmpty || key.length > 256) return false;
+    if (key == 'resolved_playback_links_v1') return false;
     final credentialShaped = _credentialPattern.hasMatch(key);
     final portableEngineCredential =
         includeCredentialEngineSettings && key.startsWith('engine_');
