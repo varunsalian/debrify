@@ -1089,6 +1089,7 @@ final class WebDavSyncRuntime
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    recordWebDavSyncScheduling('sync_lifecycle', state.name);
     final scheduler = _scheduler;
     if (scheduler == null) return;
     if (state == AppLifecycleState.resumed) {
@@ -1441,10 +1442,12 @@ final class WebDavSyncRuntime
 
   void _onPlaybackStarted() {
     _playbackActive = true;
+    recordWebDavSyncScheduling('sync_playback', 'started');
   }
 
   void _onPlaybackStopped() {
     _playbackActive = false;
+    recordWebDavSyncScheduling('sync_playback', 'stopped');
     final scheduler = _scheduler;
     if (scheduler != null) {
       unawaited(_signalAutomatically(WebDavSyncTrigger.playbackStopped));
@@ -2220,11 +2223,13 @@ final class _ProductionCycleRunner
   }) async {
     final clientGeneration = _httpClientOwner.generation;
     if (context == null || context.namespaceId == null) {
+      recordWebDavSyncScheduling('cycle_not_started', 'context_missing');
       return const WebDavSyncCycleReport(
         disposition: WebDavSyncCycleDisposition.inactive,
       );
     }
     if (!context.active && !allowPreActivation) {
+      recordWebDavSyncScheduling('cycle_not_started', 'context_inactive');
       return const WebDavSyncCycleReport(
         disposition: WebDavSyncCycleDisposition.inactive,
       );
@@ -2244,6 +2249,7 @@ final class _ProductionCycleRunner
           context.markerPin,
           context.authorityContentHash,
         )) {
+      recordWebDavSyncScheduling('cycle_not_started', 'binding_or_authority_mismatch');
       return const WebDavSyncCycleReport(
         disposition: WebDavSyncCycleDisposition.inactive,
       );
@@ -2254,6 +2260,7 @@ final class _ProductionCycleRunner
       clientGeneration,
     );
     if (borrow == null) {
+      recordWebDavSyncScheduling('cycle_not_started', 'http_client_generation_changed');
       return const WebDavSyncCycleReport(
         disposition: WebDavSyncCycleDisposition.inactive,
       );

@@ -5,6 +5,7 @@ import '../webdav_protocol_client.dart' show WebDavException;
 import '../profiles/profile_preferences.dart';
 import '../profiles/profile_runtime.dart';
 import 'webdav_sync_engine.dart';
+import 'webdav_sync_diagnostics.dart';
 import 'webdav_sync_save_feedback.dart';
 import 'webdav_sync_hot_merge.dart';
 import 'webdav_sync_transport.dart';
@@ -180,6 +181,22 @@ final class WebDavSyncScheduler {
   bool get _gateHolds =>
       _gate.playbackActiveOnTelevision || _gate.tvOsLowMemory;
 
+  void _trace(String reason, [Map<String, Object?> fields = const {}]) {
+    recordWebDavSyncScheduling('scheduler_state', reason, {
+      'armed': _contextProvider != null,
+      'running': _running,
+      'foreground': _remotePollingForeground,
+      'playbackActive': _gate.playbackActive,
+      'tvPlayback': _gate.playbackActiveOnTelevision,
+      'lowMemory': _gate.tvOsLowMemory,
+      'pendingSequence': _pendingLocalChangeSequence,
+      'sequence': _localChangeSequence,
+      'retryAttempt': _localChangeRetries,
+      'pollDisabled': _pollDisabledNoValidators,
+      ...fields,
+    });
+  }
+
   void arm(
     WebDavSyncContextProvider contextProvider, {
     WebDavSyncRemotePollContextProvider? remotePollContextProvider,
@@ -210,6 +227,7 @@ final class WebDavSyncScheduler {
 
   void pauseRemotePolling() {
     _remotePollingForeground = false;
+    _trace('polling_paused');
     _cancelRemotePollTimer();
     _pollGeneration++;
   }
@@ -217,6 +235,7 @@ final class WebDavSyncScheduler {
   void resumeRemotePolling() {
     if (_remotePollingForeground) return;
     _remotePollingForeground = true;
+    _trace('polling_resumed');
     _pollGeneration++;
     _rearmWarmPolling();
   }
@@ -389,6 +408,7 @@ final class WebDavSyncScheduler {
         : immediate
         ? Duration.zero
         : _localChangeRetryDelay(_localChangeRetries);
+    _trace(reason, {'delayMs': delay.inMilliseconds});
     _armLocalChangeTimer(delay);
     try {
       localChangeDeferredObserver?.call(reason, _localChangeRetries, delay);
@@ -607,6 +627,7 @@ final class WebDavSyncScheduler {
             validator != pollContext.validators[outcome.deviceId];
       });
       if (changed) {
+        _trace('remote_change_detected');
         _rearmWarmPolling();
         await signal(WebDavSyncTrigger.remoteChange);
         return;
@@ -616,6 +637,7 @@ final class WebDavSyncScheduler {
         (outcome) => outcome.probe!.exists && outcome.probe!.validator == null,
       )) {
         _pollDisabledNoValidators = true;
+        _trace('polling_disabled_no_validators');
         _remotePollTimer?.cancel();
         _remotePollTimer = null;
       }
@@ -647,6 +669,10 @@ final class WebDavSyncScheduler {
     _pollBackoffHoldsThroughCycles =
         error is WebDavException && error.statusCode != null;
     _consecutivePollFailures++;
+    _trace('remote_poll_failure', {
+      'failureCount': _consecutivePollFailures,
+      'statusCode': error is WebDavException ? error.statusCode : null,
+    });
     var delayMs = remotePollFailureFloor.inMilliseconds;
     for (var index = 1; index < _consecutivePollFailures; index++) {
       delayMs *= 2;
@@ -725,6 +751,7 @@ final class WebDavSyncScheduler {
         ? null
         : _pollCompletion;
     if (pollCompletion != null) await pollCompletion.future;
+    _trace('signal_${trigger.name}');
     final provider = _contextProvider;
     if (provider == null ||
         (trigger == WebDavSyncTrigger.manual && requestedEpoch != _armEpoch)) {
@@ -802,6 +829,7 @@ final class WebDavSyncScheduler {
     try {
       final context = await provider();
       if (context == null || !context.active || !context.isComplete) {
+        _trace('context_unavailable');
         const report = WebDavSyncCycleReport(
           disposition: WebDavSyncCycleDisposition.inactive,
         );
@@ -822,7 +850,15 @@ final class WebDavSyncScheduler {
           }
         }
       }
+      _trace('cycle_start_${trigger.name}');
+      final diagnosticWatch = Stopwatch()..start();
       var report = await _runner.runCycle(context, trigger: trigger);
+      _trace('cycle_return_${report.disposition.name}', {
+        'elapsedMs': diagnosticWatch.elapsedMilliseconds,
+        'followUp': report.localChangeFollowUp,
+        'publicationConfirmed': report.localPublicationConfirmed,
+        'profilesSuppressed': report.localProfilesSuppressed,
+      });
       final repair = repairSeed;
       if (report.disposition == WebDavSyncCycleDisposition.seedRepairRequired &&
           repair != null &&
@@ -906,6 +942,7 @@ final class WebDavSyncScheduler {
       cycleResult.complete((report: report, sequence: intentSequenceAtStart));
       return report;
     } catch (error, stack) {
+      _trace('cycle_exception');
       cycleResult.completeError(error, stack);
       // Require both a local-state failure and an observed scope change.
       // Network/server failures retain their backoff even across a switch.
