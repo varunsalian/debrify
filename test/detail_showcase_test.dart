@@ -585,7 +585,7 @@ void main() {
     expect(find.byType(ShowcaseSources, skipOffstage: false), findsOneWidget);
   });
 
-  testWidgets('the Sources band always exists, with the Find tile alone when '
+  testWidgets('the Sources band keeps its count card and Pin source when '
       'nothing is bound', (tester) async {
     _surface(tester, const Size(960, 2000));
     await tester.pumpWidget(_host(_model(), tall: true));
@@ -597,6 +597,7 @@ void main() {
     // An empty Sources band is not an empty state to hide — "Pin source" is
     // exactly what someone with no bound sources needs to see.
     expect(find.text('＋  Pin source', skipOffstage: false), findsOneWidget);
+    expect(find.text('Pinned sources (0)', skipOffstage: false), findsOneWidget);
   });
 
   testWidgets('trackers are READOUT in the meta line, never focusable', (

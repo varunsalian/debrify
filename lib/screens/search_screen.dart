@@ -1,3 +1,4 @@
+import '../widgets/clear_pinned_sources_button.dart';
 import '../widgets/recoverable_network_image.dart';
 import '../models/metadata_card_artwork.dart';
 import '../models/hero_metadata_presentation.dart';
@@ -13880,6 +13881,7 @@ class _SearchScreenState extends State<SearchScreen>
                         children: [
                           Expanded(
                             child: FilledButton.icon(
+                              autofocus: true,
                               onPressed: () {
                                 Navigator.of(dialogContext).pop();
                                 _showAddSourcePicker(item);
@@ -13901,74 +13903,20 @@ class _SearchScreenState extends State<SearchScreen>
                               ),
                             ),
                           ),
-                          if (!isMovie && sources.length > 1) ...[
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: OutlinedButton.icon(
-                                onPressed: () async {
-                                  await SeriesSourceService.removeAllSources(
-                                    imdbId,
-                                  );
-                                  await _refreshBoundSources();
-                                  if (dialogContext.mounted) {
-                                    Navigator.of(dialogContext).pop();
-                                  }
-                                },
-                                icon: Icon(
-                                  Icons.delete_sweep_outlined,
-                                  size: 18,
-                                  color: app.home.danger,
-                                ),
-                                label: Text(
-                                  'Remove All',
-                                  style: TextStyle(color: app.home.danger),
-                                ),
-                                style: OutlinedButton.styleFrom(
-                                  side: BorderSide(
-                                    color: app.home.danger,
-                                    width: 1,
-                                  ),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: app.shape.br(10),
-                                  ),
-                                ),
-                              ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: ClearPinnedSourcesButton(
+                              onClear: () async {
+                                await SeriesSourceService.removeAllSources(
+                                  imdbId,
+                                );
+                                await _refreshBoundSources();
+                                if (dialogContext.mounted) {
+                                  Navigator.of(dialogContext).pop();
+                                }
+                              },
                             ),
-                          ],
-                          if (isMovie) ...[
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: OutlinedButton.icon(
-                                onPressed: () async {
-                                  await SeriesSourceService.removeAllSources(
-                                    imdbId,
-                                  );
-                                  await _refreshBoundSources();
-                                  if (dialogContext.mounted) {
-                                    Navigator.of(dialogContext).pop();
-                                  }
-                                },
-                                icon: Icon(
-                                  Icons.delete_outline_rounded,
-                                  size: 18,
-                                  color: app.home.danger,
-                                ),
-                                label: Text(
-                                  'Remove',
-                                  style: TextStyle(color: app.home.danger),
-                                ),
-                                style: OutlinedButton.styleFrom(
-                                  side: BorderSide(
-                                    color: app.home.danger,
-                                    width: 1,
-                                  ),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: app.shape.br(10),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
+                          ),
                         ],
                       ),
                       const SizedBox(height: 8),

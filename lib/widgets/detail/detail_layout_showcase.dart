@@ -1056,11 +1056,11 @@ class _DetailShowcaseState extends State<DetailShowcase> {
         'sources',
         _grow(
           _sourceNodes,
-          // Bound cards + "Pin source" + the browse entry (movies: "Browse
+          // Pinned-source summary + "Pin source" + the browse entry (movies: "Browse
           // all"; series: "Season packs"). The count mirrors ShowcaseSources'
           // itemCount exactly — a node the rendering doesn't mount is a place
           // arrow keys can strand focus.
-          m.boundSources.length + 1 + (m.onBrowse != null ? 1 : 0),
+          2 + (m.onBrowse != null ? 1 : 0),
           'showcase-source',
         ),
         _sourcesKey,
@@ -1332,9 +1332,7 @@ class _DetailShowcaseState extends State<DetailShowcase> {
                       sources: m.boundSources,
                       nodes: _grow(
                         _sourceNodes,
-                        m.boundSources.length +
-                            1 +
-                            (m.onBrowse != null ? 1 : 0),
+                        2 + (m.onBrowse != null ? 1 : 0),
                         'showcase-source',
                       ),
                       onOpen: m.onManageSources ?? m.onSelectSource,

@@ -2130,14 +2130,14 @@ class ShowcaseSources extends StatelessWidget {
       padding: EdgeInsets.symmetric(
         horizontal: ShowcaseMetrics.of(context).gutter,
       ),
-      itemCount: sources.length + 1 + (onBrowseAll != null ? 1 : 0),
+      itemCount: 2 + (onBrowseAll != null ? 1 : 0),
       separatorBuilder: (_, __) =>
           SizedBox(width: ShowcaseMetrics.of(context).srcGap),
       itemBuilder: (context, i) {
-        if (i == sources.length) {
+        if (i == 1) {
           return _SourceCard(node: nodes[i], onTap: onOpen, add: true);
         }
-        if (i == sources.length + 1) {
+        if (i == 2) {
           return _SourceCard(
             node: nodes[i],
             onTap: onBrowseAll,
@@ -2145,7 +2145,11 @@ class ShowcaseSources extends StatelessWidget {
             addLabel: browseAllLabel,
           );
         }
-        return _SourceCard(node: nodes[i], onTap: onOpen, source: sources[i]);
+        return _SourceCard(
+          node: nodes[i],
+          onTap: onOpen,
+          sourceCount: sources.length,
+        );
       },
     ),
   );
@@ -2153,7 +2157,7 @@ class ShowcaseSources extends StatelessWidget {
 
 class _SourceCard extends StatefulWidget {
   final FocusNode node;
-  final SeriesSource? source;
+  final int sourceCount;
   final bool add;
 
   /// The add-style card's label. Defaults to the binding manager's wording —
@@ -2165,7 +2169,7 @@ class _SourceCard extends StatefulWidget {
   const _SourceCard({
     required this.node,
     required this.onTap,
-    this.source,
+    this.sourceCount = 0,
     this.add = false,
     this.addLabel = '＋  Pin source',
   });
@@ -2179,7 +2183,6 @@ class _SourceCardState extends State<_SourceCard> {
 
   @override
   Widget build(BuildContext context) {
-    final s = widget.source;
     final mm = ShowcaseMetrics.of(context);
     return Focus(
       focusNode: widget.node,
@@ -2236,14 +2239,16 @@ class _SourceCardState extends State<_SourceCard> {
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
                                 Text(
-                                  s?.torrentName ?? '',
+                                  'Pinned sources (${widget.sourceCount})',
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                   style: _t(10.5 * mm.k, w: FontWeight.w600),
                                 ),
                                 const SizedBox(height: 4),
                                 Text(
-                                  s?.debridService ?? '',
+                                  widget.sourceCount == 0
+                                      ? 'Pin a source to get started'
+                                      : 'View and manage sources',
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                   style: _t(9.5 * mm.k, a: 0.58),
