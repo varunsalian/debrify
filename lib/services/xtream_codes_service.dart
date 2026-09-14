@@ -223,7 +223,7 @@ class XtreamCodesService {
 
   /// The charset a response declared, or null when it declared none.
   /// Extracted here (a header, not a payload — costs nothing) so the isolate
-  /// can reproduce `Response.body`'s decoding without carrying the headers.
+  /// can apply the legacy fallback without carrying the headers.
   @visibleForTesting
   static String? charsetOf(http.Response response) {
     final contentType = response.headers['content-type'];
@@ -236,11 +236,16 @@ class XtreamCodesService {
     caseSensitive: false,
   );
 
-  /// Resolve a declared charset the way package:http does: unknown or absent
-  /// falls back to latin1.
-  static Encoding encodingForCharset(String? charset) {
-    if (charset == null) return latin1;
-    return Encoding.getByName(charset) ?? latin1;
+  /// Panels often omit or mislabel the charset of UTF-8 JSON. Prefer valid
+  /// UTF-8, then respect the declared encoding for legacy response bytes.
+  @visibleForTesting
+  static String decodeResponseBytes(List<int> bytes, String? charset) {
+    try {
+      return utf8.decode(bytes);
+    } on FormatException {
+      final encoding = Encoding.getByName(charset ?? '') ?? latin1;
+      return encoding.decode(bytes);
+    }
   }
 
   /// Decode a panel response as a JSON list, synchronously. Used inside the
@@ -301,7 +306,11 @@ class XtreamCodesService {
         );
       }
 
-      final data = json.decode(response.body) as Map<String, dynamic>;
+      final data =
+          json.decode(
+                decodeResponseBytes(response.bodyBytes, charsetOf(response)),
+              )
+              as Map<String, dynamic>;
       final userInfo = data['user_info'] as Map<String, dynamic>?;
 
       if (userInfo == null) {
@@ -822,7 +831,7 @@ class XtreamCodesService {
       );
       if (response.statusCode != 200) return null;
 
-      final body = response.body;
+      final body = decodeResponseBytes(response.bodyBytes, charsetOf(response));
       dynamic decoded;
       try {
         decoded = body.length > computeDecodeThreshold
@@ -1167,12 +1176,8 @@ class _StreamsJob {
   final String label;
   final _LiveUrlForm liveUrlForm;
 
-  /// The charset each body declared, so the worker decodes byte-for-byte
-  /// identically to what `Response.body` would have produced on this thread.
-  /// Null means "not declared", which package:http resolves to latin1 — the
-  /// fallback is replicated rather than corrected, because silently switching
-  /// a panel's channel names to a different encoding is a separate change
-  /// from moving the decode off the UI thread.
+  /// Declared charsets for responses that are not valid UTF-8. Missing or
+  /// unsupported declarations fall back to Latin-1 for legacy panels.
   final String? streamsCharset;
   final String? categoriesCharset;
 
@@ -1223,9 +1228,10 @@ IptvParseResult _buildXtreamStreams(_StreamsJob job) {
     warning =
         'Could not load ${job.label} categories — showing channels ungrouped';
   } else {
-    final categoriesBody = XtreamCodesService.encodingForCharset(
+    final categoriesBody = XtreamCodesService.decodeResponseBytes(
+      categoriesBytes.materialize().asUint8List(),
       job.categoriesCharset,
-    ).decode(categoriesBytes.materialize().asUint8List());
+    );
     final (categoriesData, catError) = XtreamCodesService.decodeJsonListSync(
       categoriesBody,
       'categories',
@@ -1273,9 +1279,10 @@ IptvParseResult _buildXtreamStreams(_StreamsJob job) {
   final isSeries = job.contentType == 'series';
 
   // The expensive UTF-8 pass now happens HERE, on the worker.
-  final streamsBody = XtreamCodesService.encodingForCharset(
+  final streamsBody = XtreamCodesService.decodeResponseBytes(
+    job.streamsBytes.materialize().asUint8List(),
     job.streamsCharset,
-  ).decode(job.streamsBytes.materialize().asUint8List());
+  );
   final (streamsData, streamsError) = XtreamCodesService.decodeJsonListSync(
     streamsBody,
     'streams',
