@@ -6351,6 +6351,26 @@ class StorageService {
     await prefs.setBool(_homeHideCatalogAddonNamesKey, value);
   }
 
+  static Future<bool> getShowAddonLogos() async {
+    final prefs = await ProfilePreferences.instance();
+    return prefs.getBool('sources_show_addon_logos') ?? false;
+  }
+
+  static Future<void> setShowAddonLogos(bool value) async {
+    final prefs = await ProfilePreferences.instance();
+    await prefs.setBool('sources_show_addon_logos', value);
+  }
+
+  static Future<bool> getUseAddonTextFormatting() async {
+    final prefs = await ProfilePreferences.instance();
+    return prefs.getBool('sources_use_addon_text') ?? false;
+  }
+
+  static Future<void> setUseAddonTextFormatting(bool value) async {
+    final prefs = await ProfilePreferences.instance();
+    await prefs.setBool('sources_use_addon_text', value);
+  }
+
   /// Suppresses collection row headings on Home without changing catalog
   /// titles or their add-on provenance labels.
   static Future<bool> getHomeHideCollectionNames() async {

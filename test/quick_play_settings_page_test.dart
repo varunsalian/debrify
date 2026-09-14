@@ -28,6 +28,16 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  testWidgets('add-on formatting defaults off and saves its toggle', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await pumpPage(tester);
+    expect(await StorageService.getUseAddonTextFormatting(), isFalse);
+    await tester.ensureVisible(find.text('Use add-on text formatting'));
+    await tester.tap(find.text('Use add-on text formatting'));
+    await tester.pumpAndSettle();
+    expect(await StorageService.getUseAddonTextFormatting(), isTrue);
+  });
+
   testWidgets('shows tabs, the torrent switch, and the priority section', (
     tester,
   ) async {
@@ -65,6 +75,7 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     await pumpPage(tester);
 
+    await tester.ensureVisible(find.text('Prefer torrents'));
     await tester.tap(find.text('Prefer torrents'));
     await tester.pumpAndSettle();
 
@@ -75,6 +86,7 @@ void main() {
     expect(show.sourceMode, QuickPlaySourceMode.torrentsThenAddons);
 
     // Toggling back restores the exact shipped default (not a custom copy).
+    await tester.ensureVisible(find.text('Prefer torrents'));
     await tester.tap(find.text('Prefer torrents'));
     await tester.pumpAndSettle();
     final restored = await StorageService.getQuickPlayRules(isMovie: true);
@@ -98,6 +110,7 @@ void main() {
 
     await tester.tap(find.text('Series'));
     await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Prefer season packs'));
     await tester.tap(find.text('Prefer season packs'));
     await tester.pumpAndSettle();
 
@@ -129,6 +142,7 @@ void main() {
     expect(find.textContaining('Try up to'), findsNothing);
 
     // The stored customization survives an unrelated edit untouched.
+    await tester.ensureVisible(find.text('Prefer torrents'));
     await tester.tap(find.text('Prefer torrents'));
     await tester.pumpAndSettle();
     final rules = await StorageService.getQuickPlayRules(isMovie: true);

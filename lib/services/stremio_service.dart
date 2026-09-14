@@ -1945,6 +1945,7 @@ class StremioService {
             (entry) => StremioStream.fromJson(
               entry.value as Map<String, dynamic>,
               addon.name,
+              addonLogo: addon.logo,
               addonId: addon.id,
               addonKey: addon.sourceBindingKey,
               streamIndex: entry.key,
@@ -2372,7 +2373,10 @@ class StremioService {
           stremioStreamKey: stream.streamKey,
           stremioStreamIndex: stream.streamIndex,
           streamLabel: stream.name,
-          streamDescription: stream.title,
+          addonDisplayName: stream.source,
+          addonLogo: stream.addonLogo,
+          streamDescription: stream.rawDescription ?? stream.rawTitle ?? stream.title,
+          streamOriginalTitle: stream.rawTitle,
         );
 
         // Exact addon mode preserves every returned playable entry, including

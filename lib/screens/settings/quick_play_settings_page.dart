@@ -7,6 +7,7 @@ import '../../models/quick_play_rules.dart';
 import '../../services/analytics_service.dart';
 import '../../services/source_priority.dart';
 import '../../services/storage_service.dart';
+import '../../services/main_page_bridge.dart';
 import '../../theme/app_theme_scope.dart';
 import '../../utils/platform_util.dart';
 import '../../utils/tv_keys.dart';
@@ -28,6 +29,8 @@ class QuickPlaySettingsPage extends StatefulWidget {
 
 class _QuickPlaySettingsPageState extends State<QuickPlaySettingsPage> {
   bool _loading = true;
+  bool _addonText = false;
+  bool _addonLogos = false;
   bool _series = false;
   bool _pikPak = false;
 
@@ -95,12 +98,16 @@ class _QuickPlaySettingsPageState extends State<QuickPlaySettingsPage> {
     final show = await StorageService.getQuickPlayRules(isMovie: false);
     final provider = await StorageService.getDefaultTorrentProvider();
     final playMode = await StorageService.getPlayButtonMode();
+    final addonText = await StorageService.getUseAddonTextFormatting();
+    final addonLogos = await StorageService.getShowAddonLogos();
     if (!mounted) return;
     setState(() {
       _movie = movie;
       _show = show;
       _pikPak = provider == 'pikpak';
       _playMode = playMode;
+      _addonText = addonText;
+      _addonLogos = addonLogos;
       _loading = false;
     });
     if (PlatformUtil.isTelevision) {
@@ -330,6 +337,31 @@ class _QuickPlaySettingsPageState extends State<QuickPlaySettingsPage> {
                 ),
                 const SizedBox(height: 10),
                 _playModeSelect(),
+                const SizedBox(height: 24),
+                SettingsSection(title: 'Sources', children: [
+                  SettingsToggleTile(
+                    icon: Icons.image_outlined,
+                    title: 'Show add-on logos',
+                    subtitle: 'Show the provider logo and name beside each source',
+                    value: _addonLogos,
+                    onChanged: (value) async {
+                      await StorageService.setShowAddonLogos(value);
+                      MainPageBridge.notifyHomeSettingsChanged();
+                      if (mounted) setState(() => _addonLogos = value);
+                    },
+                  ),
+                  SettingsToggleTile(
+                    icon: Icons.notes_rounded,
+                    title: 'Use add-on text formatting',
+                    subtitle: 'Show original stream names, line breaks and emojis from add-ons such as AIOStreams',
+                    value: _addonText,
+                    onChanged: (value) async {
+                      await StorageService.setUseAddonTextFormatting(value);
+                      MainPageBridge.notifyHomeSettingsChanged();
+                      if (mounted) setState(() => _addonText = value);
+                    },
+                  ),
+                ]),
                 const SizedBox(height: 24),
                 _tabs(),
                 const SizedBox(height: 20),

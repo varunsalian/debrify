@@ -1812,6 +1812,7 @@ class _SearchScreenState extends State<SearchScreen>
   @override
   void initState() {
     super.initState();
+    unawaited(_loadSourceTextFormatting());
     _titleSearch.addListener(_publishTitleSuggestions);
     _searchController.addListener(_onTitleSearchEditingChanged);
     ProfileRuntime.scope.addListener(_cancelTitleSuggestions);
@@ -2689,6 +2690,7 @@ class _SearchScreenState extends State<SearchScreen>
   /// broadcast is shared), so the equality guards skip reloads for unrelated
   /// settings.
   Future<void> _reloadForHomeSettings() async {
+    await _loadSourceTextFormatting();
     if (!mounted) return;
     final reloadGen = ++_homeSettingsReloadGen;
     final reloadSession = HomeCollectionsStore.captureSession();
@@ -6804,6 +6806,15 @@ class _SearchScreenState extends State<SearchScreen>
   HomeCardOrientation _homeCardOrientation = HomeCardOrientation.landscape;
   bool _hideHomeCardTitlesAndRatings = false;
   bool _hideHomeCatalogAddonNames = false;
+  bool _useAddonSourceText = false;
+  bool _showAddonSourceLogos = false;
+
+  Future<void> _loadSourceTextFormatting() async {
+    final value = await StorageService.getUseAddonTextFormatting();
+    final logos = await StorageService.getShowAddonLogos();
+    if (mounted) setState(() { _useAddonSourceText = value; _showAddonSourceLogos = logos; });
+  }
+
   bool _hideHomeCollectionNames = false;
 
   bool get _homeLandscapeCards =>
@@ -16734,6 +16745,9 @@ class _SearchScreenState extends State<SearchScreen>
                                 '${t.infohash}_${_kwSelectionMode}_${_kwSelected.contains(t.infohash)}',
                               ),
                               title: t.displayTitle,
+                              addonText: _useAddonSourceText ? t.addonPresentation : null,
+                              addonName: _showAddonSourceLogos ? t.addonDisplayName : null,
+                              addonLogo: t.addonLogo,
                               titleMaxLines: 6,
                               subtitle: _kwRowSubtitle(t),
                               focusNode: _kwNodes[i],

@@ -77,6 +77,8 @@ class _SourcesScreenState extends State<_SourcesScreen> {
   bool _sortAsc = false;
   String? _sourceFilter; // null = all sources; else a normalized provider key
 
+  bool _useAddonText = false;
+  bool _showAddonLogos = false;
   final _cinemaKey = GlobalKey<CinemaSourcesLayoutState>();
   int _lastCinemaSource = 0;
 
@@ -214,9 +216,15 @@ class _SourcesScreenState extends State<_SourcesScreen> {
     // beside the search and rebuilding afterwards used the toolbar's
     // user-interaction path, which froze streaming and parked every later
     // batch behind the "+N new sources" pill.
-    await Future.wait([_loadSourcePriority(), _reloadBound()]);
+    await Future.wait([_loadSourcePriority(), _reloadBound(), _loadAddonText()]);
     if (!mounted) return;
     await _runSearch();
+  }
+
+  Future<void> _loadAddonText() async {
+    final value = await StorageService.getUseAddonTextFormatting();
+    final logos = await StorageService.getShowAddonLogos();
+    if (mounted) setState(() { _useAddonText = value; _showAddonLogos = logos; });
   }
 
   Future<void> _loadSourcePriority() async {
@@ -2069,6 +2077,9 @@ class _SourcesScreenState extends State<_SourcesScreen> {
       listIndex: i,
       cinemaLayout: cinema,
       title: t.displayTitle,
+      addonText: _useAddonText ? t.addonPresentation : null,
+      addonName: _showAddonLogos ? t.addonDisplayName : null,
+      addonLogo: t.addonLogo,
       titleMaxLines: 6,
       subtitle: _rowSubtitle(t),
       focusNode: _nodes[i],

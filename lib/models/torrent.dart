@@ -54,7 +54,10 @@ class Torrent {
   /// imported stream badge rules match on this text too. Null for non-addon
   /// sources.
   final String? streamLabel;
+  final String? addonDisplayName;
+  final String? addonLogo;
   final String? streamDescription;
+  final String? streamOriginalTitle;
 
   Torrent({
     required this.rowid,
@@ -87,7 +90,10 @@ class Torrent {
     this.transformedTitle,
     this.episodeIdentifier,
     this.streamLabel,
+    this.addonDisplayName,
+    this.addonLogo,
     this.streamDescription,
+    this.streamOriginalTitle,
   }) : source = (source ?? '').trim().toLowerCase();
 
   /// The *description* half of the stream badge matcher's input ([name] is
@@ -100,6 +106,19 @@ class Torrent {
         streamDescription!,
     ];
     return parts.isEmpty ? null : parts.join('\n');
+  }
+
+  /// Separate labels for original-text mode; old saved sources retain their
+  /// legacy description fallback. No filenames are substituted for add-on text.
+  ({String name, String? description})? get addonPresentation {
+    String? nonBlank(String? value) => value == null || value.trim().isEmpty ? null : value;
+    final label = nonBlank(streamLabel);
+    final originalTitle = nonBlank(streamOriginalTitle);
+    final description = nonBlank(streamDescription);
+    final heading = label ?? originalTitle ?? description;
+    if (heading == null) return null;
+    final detail = description ?? originalTitle;
+    return (name: heading, description: detail == heading ? null : detail);
   }
 
   /// Whether this is a direct playable stream (not torrent)
@@ -185,7 +204,10 @@ class Torrent {
       transformedTitle: json['transformed_title']?.toString(),
       episodeIdentifier: json['episode_identifier']?.toString(),
       streamLabel: json['stream_label']?.toString(),
+      addonDisplayName: json['addon_display_name']?.toString(),
+      addonLogo: json['addon_logo']?.toString(),
       streamDescription: json['stream_description']?.toString(),
+      streamOriginalTitle: json['stream_original_title']?.toString(),
     );
   }
 
@@ -222,7 +244,10 @@ class Torrent {
       if (transformedTitle != null) 'transformed_title': transformedTitle,
       if (episodeIdentifier != null) 'episode_identifier': episodeIdentifier,
       if (streamLabel != null) 'stream_label': streamLabel,
+      if (addonDisplayName != null) 'addon_display_name': addonDisplayName,
+      if (addonLogo != null) 'addon_logo': addonLogo,
       if (streamDescription != null) 'stream_description': streamDescription,
+      if (streamOriginalTitle != null) 'stream_original_title': streamOriginalTitle,
     };
   }
 

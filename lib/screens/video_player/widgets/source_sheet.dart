@@ -5,12 +5,14 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 
 import '../../../models/torrent.dart';
+import '../../../services/storage_service.dart';
 import '../../../services/series_source_fetcher.dart';
 import '../../../services/stream_badges_service.dart';
 import '../../../utils/platform_util.dart';
 import '../../../utils/source_quality.dart';
 import '../../../utils/tv_keys.dart';
 import '../../../widgets/stream_badge_strip.dart';
+import '../../../widgets/addon_identity.dart';
 
 /// Full-screen source browser.  It deliberately keeps the source list in its
 /// supplied order: grouping is only a view over the list, never a re-rank.
@@ -58,6 +60,14 @@ class _AddonGroup {
 }
 
 class _SourceSheetState extends State<SourceSheet> {
+  bool _addonText = false;
+  bool _addonLogos = false;
+
+  Future<void> _loadTextMode() async {
+    final value = await StorageService.getUseAddonTextFormatting();
+    final logos = await StorageService.getShowAddonLogos();
+    if (mounted) setState(() { _addonText = value; _addonLogos = logos; });
+  }
   static const _glass = Color(0xFF101012);
 
   final FocusNode _keyboardFocusNode = FocusNode(debugLabel: 'source-browser');
@@ -102,6 +112,7 @@ class _SourceSheetState extends State<SourceSheet> {
     super.initState();
     _rebuildGroups(landOnCurrent: true);
     _loadAddonListing();
+    _loadTextMode();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         _keyboardFocusNode.requestFocus();
@@ -793,6 +804,8 @@ class _SourceSheetState extends State<SourceSheet> {
                           onChanged: (delta) =>
                               _sourceHeightChanged(index, delta),
                           child: _SourceRow(
+                            useAddonText: _addonText,
+                            showAddonLogos: _addonLogos,
                             entry: entry,
                             current:
                                 entry.originalIndex ==
@@ -916,6 +929,7 @@ class _AddonRailRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final inverse = focused;
+
     return GestureDetector(
       onTap: onTap,
       child: AnimatedContainer(
@@ -1035,12 +1049,16 @@ class _ProviderFetchRow extends StatelessWidget {
 }
 
 class _SourceRow extends StatelessWidget {
+  final bool useAddonText;
+  final bool showAddonLogos;
   final _SourceEntry entry;
   final bool current;
   final bool focused;
   final bool resolving;
   final VoidCallback onTap;
   const _SourceRow({
+    this.useAddonText = false,
+    this.showAddonLogos = false,
     required this.entry,
     required this.current,
     required this.focused,
@@ -1056,6 +1074,7 @@ class _SourceRow extends StatelessWidget {
   Widget _buildRow(bool customBadgesConfigured) {
     final torrent = entry.torrent;
     final inverse = focused;
+    final original = useAddonText ? torrent.addonPresentation : null;
     final tags = <String>[
       if (torrent.streamType == StreamType.directUrl) 'DIRECT',
       if (torrent.sizeBytes > 0) _formatSize(torrent.sizeBytes),
@@ -1064,7 +1083,7 @@ class _SourceRow extends StatelessWidget {
     ];
     final quality = _quality(torrent.displayTitle);
     final title = Text(
-      torrent.displayTitle,
+      original?.name ?? torrent.displayTitle,
       style: TextStyle(
         color: inverse ? Colors.black : Colors.white.withValues(alpha: .86),
         fontSize: 14,
@@ -1072,9 +1091,18 @@ class _SourceRow extends StatelessWidget {
       ),
     );
     final badges = <Widget>[
-      if (!customBadgesConfigured && quality != null)
+      if (original != null)
+        _Pill(
+          label: switch (torrent.streamType) {
+            StreamType.directUrl => 'DIRECT',
+            StreamType.torrent => 'TORRENT',
+            StreamType.externalUrl => 'EXTERNAL',
+          },
+          inverse: inverse,
+        ),
+      if (original == null && !customBadgesConfigured && quality != null)
         _Pill(label: quality, inverse: inverse, emphasis: true),
-      for (final tag in tags) _Pill(label: tag, inverse: inverse),
+      if (original == null) for (final tag in tags) _Pill(label: tag, inverse: inverse),
       StreamBadgeStripFor(
         name: torrent.name,
         description: torrent.badgeDescription,
@@ -1124,21 +1152,36 @@ class _SourceRow extends StatelessWidget {
                 ]
               : null,
         ),
-        child: Column(
+        child: Row(children: [
+          Expanded(child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
                 Expanded(child: title),
+
                 if (activity != null) ...[const SizedBox(width: 14), activity],
               ],
             ),
+            if (original?.description != null) ...[
+              const SizedBox(height: 3),
+              Text(original!.description!, style: TextStyle(
+                color: inverse ? Colors.black54 : Colors.white60,
+                fontSize: 12, height: 1.5)),
+            ],
             if (badges.isNotEmpty) ...[
               const SizedBox(height: 9),
               Wrap(spacing: 6, runSpacing: 6, children: badges),
             ],
           ],
-        ),
+        )),
+          if (showAddonLogos && torrent.addonDisplayName != null) ...[
+            const SizedBox(width: 12),
+            AddonIdentity(name: torrent.addonDisplayName!, logo: torrent.addonLogo,
+              large: PlatformUtil.isTelevision,
+              color: inverse ? Colors.black : Colors.white),
+          ],
+        ]),
       ),
     );
   }

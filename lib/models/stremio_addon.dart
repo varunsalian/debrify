@@ -534,6 +534,7 @@ class StremioAddon {
 
   /// Human-readable name from manifest
   final String name;
+  final String? logo;
 
   /// The full manifest URL (includes any configuration)
   final String manifestUrl;
@@ -580,6 +581,7 @@ class StremioAddon {
     required this.id,
     this.manifestId,
     required this.name,
+    this.logo,
     required this.manifestUrl,
     required this.baseUrl,
     this.connectionResourceId,
@@ -779,6 +781,7 @@ class StremioAddon {
       id: id,
       manifestId: id,
       name: name,
+      logo: manifest['logo'] is String ? manifest['logo'] as String : null,
       manifestUrl: manifestUrl,
       baseUrl: baseUrl,
       description: description,
@@ -808,6 +811,7 @@ class StremioAddon {
       id: json['id'] as String,
       manifestId: json['manifest_id'] as String?,
       name: json['name'] as String,
+      logo: json['logo'] as String?,
       manifestUrl: json['manifest_url'] as String,
       baseUrl: json['base_url'] as String,
       connectionResourceId: json['_connectionResourceId'] as String?,
@@ -838,6 +842,7 @@ class StremioAddon {
       'id': id,
       if (manifestId != null) 'manifest_id': manifestId,
       'name': name,
+      if (logo != null) 'logo': logo,
       'manifest_url': manifestUrl,
       'subtitle_priority_id': portableConfigurationKey,
       'base_url': baseUrl,
@@ -889,6 +894,7 @@ class StremioAddon {
       id: id ?? this.id,
       manifestId: manifestId ?? this.manifestId,
       name: name ?? this.name,
+      logo: logo,
       manifestUrl: manifestUrl ?? this.manifestUrl,
       baseUrl: baseUrl ?? this.baseUrl,
       connectionResourceId: connectionResourceId ?? this.connectionResourceId,
@@ -945,6 +951,8 @@ class StremioStream {
 
   /// Stream title/name
   final String? title;
+  final String? rawTitle;
+  final String? rawDescription;
 
   /// The addon's raw short `name` label (kept distinct from [title], which
   /// prefers the longer `description`). Used as the display title for
@@ -959,6 +967,7 @@ class StremioStream {
 
   /// Source addon name
   final String source;
+  final String? addonLogo;
 
   /// Provenance needed to re-fetch a fresh URL for an addon-backed pin. The
   /// key is an opaque digest of the installed addon configuration; it never
@@ -979,10 +988,13 @@ class StremioStream {
     this.url,
     this.externalUrl,
     this.title,
+    this.rawTitle,
+    this.rawDescription,
     this.name,
     this.fileIdx,
     this.behaviorHints,
     required this.source,
+    this.addonLogo,
     this.addonId,
     this.addonKey,
     this.videoId,
@@ -1064,6 +1076,7 @@ class StremioStream {
   factory StremioStream.fromJson(
     Map<String, dynamic> json,
     String source, {
+    String? addonLogo,
     String? addonId,
     String? addonKey,
     int streamIndex = 0,
@@ -1101,10 +1114,13 @@ class StremioStream {
       url: json['url'] as String?,
       externalUrl: json['externalUrl'] as String?,
       title: title,
+      rawTitle: json['title'] as String?,
+      rawDescription: json['description'] as String?,
       name: json['name'] as String?,
       fileIdx: json['fileIdx'] as int?,
       behaviorHints: behaviorHints,
       source: source,
+      addonLogo: addonLogo,
       addonId: addonId,
       addonKey: addonKey,
       videoId: videoId,

@@ -40,6 +40,43 @@ void main() {
     return (row, sibling);
   }
 
+  testWidgets('identical add-on labels retain distinct transport indicators', (tester) async {
+    final nodes = List.generate(3, (_) => FocusNode());
+    addTearDown(() { for (final node in nodes) { node.dispose(); } });
+    await pump(tester, ListView(children: [
+      for (var i = 0; i < 3; i++)
+        SourceRow(title: 'Parsed', subtitle: '', focusNode: nodes[i],
+          addonText: (name: 'AIOStreams', description: 'Same release'),
+          streamBadge: [null, 'Direct', 'External'][i], onTap: () {}),
+    ]));
+    expect(find.text('AIOStreams'), findsNWidgets(3));
+    for (final label in ['Torrent', 'Direct', 'External']) {
+      expect(find.text(label), findsOneWidget);
+    }
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('original add-on text preserves lines and TV activation', (tester) async {
+    final node = FocusNode();
+    addTearDown(node.dispose);
+    var taps = 0;
+    const original = '⚡ AIOStreams 4K\nMovie name\n💾 12 GB\nEnglish';
+    await pump(tester, ListView(children: [SourceRow(
+      title: 'Parsed filename', subtitle: 'Derived metadata',
+      addonText: (name: original, description: null), focusNode: node, isTelevision: true,
+      onTap: () => taps++,
+    )]));
+    expect(find.text(original), findsOneWidget);
+    expect(find.text('Parsed filename'), findsNothing);
+    expect(find.text('Derived metadata'), findsNothing);
+    node.requestFocus();
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    await tester.pump();
+    expect(taps, 1);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('an opening OK key-up without a matching down does not play', (
     tester,
   ) async {
