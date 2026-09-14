@@ -728,48 +728,9 @@ class _SyncAndMigratePageState extends State<SyncAndMigratePage>
       if (!mounted) return;
       final target = await showSettingsDialog<String>(
         context: context,
-        builder: (dialogContext) => AlertDialog(
-          title: const Text('Connected devices'),
-          content: SizedBox(
-            width: 520,
-            child: devices.isEmpty
-                ? const Text(
-                    'No devices to show yet. Run Sync now and try again.',
-                  )
-                : ListView.separated(
-                    shrinkWrap: true,
-                    itemCount: devices.length,
-                    separatorBuilder: (_, _) => const Divider(height: 1),
-                    itemBuilder: (_, index) {
-                      final device = devices[index];
-                      return SyncDeviceTile(
-                        name:
-                            device.displayName ??
-                            (device.isThisDevice
-                                ? 'This device'
-                                : 'Device · ${_shortDeviceId(device.deviceId)}'),
-                        status:
-                            '${device.isThisDevice ? 'This device · ' : ''}${device.isRegistered ? 'Last seen ${_formatSyncTime(device.lastSeenMs)}' : 'Signed out · saved data retained. Remove to free a device slot.'}',
-                        onRename:
-                            device.isThisDevice &&
-                                management is WebDavSyncDeviceNamingController
-                            ? () => Navigator.of(dialogContext).pop('@rename')
-                            : null,
-                        onRemove: device.isThisDevice
-                            ? null
-                            : () => Navigator.of(
-                                dialogContext,
-                              ).pop(device.deviceId),
-                      );
-                    },
-                  ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(),
-              child: const Text('Close'),
-            ),
-          ],
+        builder: (_) => SyncDevicesDialog(
+          devices: devices,
+          canRename: management is WebDavSyncDeviceNamingController,
         ),
       );
       if (!mounted || target == null) return;
@@ -1197,9 +1158,6 @@ class _SyncAndMigratePageState extends State<SyncAndMigratePage>
         ? 'This device clock differs substantially from the WebDAV server; sync timestamps use server time.'
         : null;
   }
-
-  static String _shortDeviceId(String value) =>
-      value.length <= 16 ? value : '${value.substring(0, 12)}…';
 
   @override
   Widget build(BuildContext context) {
