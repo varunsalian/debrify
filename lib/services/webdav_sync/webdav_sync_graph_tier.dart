@@ -449,7 +449,14 @@ final class WebDavSyncGraphTier {
       if (!await _isManagingAdmin(authorization)) {
         throw StateError('Removing a sync device requires an Admin');
       }
-      await transport.deleteDeviceDirectory(deviceId);
+      try {
+        await transport.deleteDeviceDirectory(deviceId);
+      } on WebDavException catch (error) {
+        // The authenticated retirement record is already durable. The peer
+        // may remove its own directory as soon as it observes that record, so
+        // a missing directory is also a completed removal.
+        if (error.kind != WebDavErrorKind.notFound) rethrow;
+      }
       await _stateRepository.update(scan.namespace.id, (current) {
         final currentDeviceIds = Set<String>.from(current.currentDeviceIds)
           ..remove(deviceId);
@@ -493,7 +500,7 @@ final class WebDavSyncGraphTier {
       try {
         await transport.deleteDeviceDirectory(deviceId);
       } on WebDavException catch (error) {
-        if (error.statusCode != 404) rethrow;
+        if (error.kind != WebDavErrorKind.notFound) rethrow;
       }
       await _stateRepository.update(
         scan.namespace.id,

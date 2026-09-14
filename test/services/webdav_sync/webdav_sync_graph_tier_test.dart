@@ -545,7 +545,10 @@ void main() {
       },
       schemaRatchet: 1,
     );
-    states.state = states.state.copyWith(ownManifest: ownManifest);
+    states.state = states.state.copyWith(
+      ownManifest: ownManifest,
+      currentDeviceIds: <String>{snapshot.namespace.deviceId, 'peer-device'},
+    );
     final targetBytes = await codec.sealDocument(
       key: snapshot.root.key,
       circleId: snapshot.root.document.circleId,
@@ -605,7 +608,15 @@ void main() {
     transport.failDelete = true;
     await expectLater(remove(), throwsStateError);
     expect(transport.removals, contains('peer-device'));
+    expect(states.state.currentDeviceIds, contains('peer-device'));
     transport.failDelete = false;
+    transport.missingOnDelete = true;
+    events.clear();
+    await remove();
+    expect(events, contains('delete-missing:peer-device'));
+    expect(transport.removals, contains('peer-device'));
+    expect(states.state.currentDeviceIds, isNot(contains('peer-device')));
+    transport.missingOnDelete = false;
     // Exercise a clean attempt next, then the missing-manifest retry.
     transport.removals.clear();
     events.clear();
@@ -806,6 +817,7 @@ final class _ForgetTransport
 
   bool dropRemoval = false;
   bool failDelete = false;
+  bool missingOnDelete = false;
   final removals = <String, Uint8List>{};
   @override
   Future<WebDavBytesResult?> readDeviceRemoval(String deviceId) async {
@@ -893,6 +905,14 @@ final class _ForgetTransport
   @override
   Future<void> deleteDeviceDirectory(String deviceId) async {
     if (failDelete) throw StateError('delete failed');
+    if (missingOnDelete) {
+      events.add('delete-missing:$deviceId');
+      throw const WebDavException(
+        kind: WebDavErrorKind.notFound,
+        message: 'WebDAV file or folder was not found',
+        statusCode: 404,
+      );
+    }
     events.add('delete:$deviceId');
   }
 
