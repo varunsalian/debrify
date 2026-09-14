@@ -196,6 +196,10 @@ final class WebDavSyncBindingStore {
         namespaces: namespaces,
       ),
     );
+    await (await DevicePreferences.instance()).setBool(
+      deviceRemovedNoticeKey,
+      false,
+    );
     return binding;
   });
 
@@ -652,6 +656,47 @@ final class WebDavSyncBindingStore {
   });
 
   static const logoutPendingKey = 'logoutPending';
+  static const deviceRemovedNoticeKey = 'webdav_sync_device_removed_v1';
+
+  /// Guard against late responses from an old session deleting a new login.
+  /// Only sync state is discarded; profile data and provider accounts remain.
+  Future<bool> removeDeviceSession(
+    String bindingId,
+    String deviceId, {
+    required Future<void> Function(WebDavSyncNamespace) forgetState,
+  }) async {
+    final retired = await _writeLock.synchronized(() async {
+      final snapshot = await _load(writeLocked: true);
+      final binding = snapshot.bindings[bindingId];
+      final namespace = binding == null ? null : snapshot.namespaceFor(binding);
+      if (namespace == null || namespace.deviceId != deviceId) return null;
+      final device = await DevicePreferences.instance();
+      await device.setBool(deviceRemovedNoticeKey, true);
+      final bindings = Map<String, WebDavSyncBinding>.from(snapshot.bindings)
+        ..removeWhere((_, value) => value.namespaceId == namespace.id);
+      final namespaces = Map<String, WebDavSyncNamespace>.from(
+        snapshot.namespaces,
+      )..remove(namespace.id);
+      await _save(
+        WebDavSyncStoreSnapshot(
+          bindings: bindings,
+          namespaces: namespaces,
+          activeBindingId: bindings.containsKey(snapshot.activeBindingId)
+              ? snapshot.activeBindingId
+              : null,
+          stagedBindingId: bindings.containsKey(snapshot.stagedBindingId)
+              ? snapshot.stagedBindingId
+              : null,
+        ),
+      );
+      return namespace;
+    });
+    if (retired == null) return false;
+    // Remove credentials first; do not acquire the state file lock while
+    // holding the binding lock (state migration takes them in reverse order).
+    await forgetState(retired);
+    return true;
+  }
 
   static bool logoutPending(WebDavSyncStoreSnapshot snapshot) => snapshot
       .namespaces

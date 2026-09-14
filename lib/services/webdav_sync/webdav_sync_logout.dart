@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import '../webdav_protocol_client.dart';
 import 'webdav_sync_binding_store.dart';
 import 'webdav_sync_codec.dart';
+import 'webdav_sync_device_removal.dart';
 import 'webdav_sync_hot_models.dart';
 import 'webdav_sync_models.dart';
 import 'webdav_sync_transport.dart';
@@ -97,6 +98,12 @@ final class WebDavSyncLogout {
           secrets.syncPassphrase,
           runInBackground: true,
         );
+        await WebDavSyncDeviceRemoval.guard(
+          transport: transport,
+          codec: codec,
+          root: root,
+          deviceId: namespace.deviceId,
+        );
         // A setup that never published a manifest has no device to unregister.
         try {
           final manifestBytes = await transport.readManifest(
@@ -135,6 +142,10 @@ final class WebDavSyncLogout {
         if (verified == null || !listEquals(verified.bytes, encoded)) {
           throw StateError('Could not confirm logout with the WebDAV server');
         }
+      } on WebDavSyncDeviceRemovedException {
+        // Remote retirement already unregisters this identity. Complete the
+        // explicit local logout without publishing inside its deleted folder.
+        continue;
       } catch (_) {
         await store.updateNamespaceValues(
           namespace!.id,

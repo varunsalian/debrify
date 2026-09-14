@@ -8,6 +8,7 @@ import 'webdav_sync_binding_store.dart';
 import 'webdav_sync_codec.dart';
 import 'webdav_sync_discovery.dart';
 import 'webdav_sync_device_names.dart';
+import 'webdav_sync_device_removal.dart';
 import 'webdav_sync_engine.dart';
 import 'webdav_sync_engine_state.dart';
 import 'webdav_sync_graph.dart';
@@ -385,7 +386,8 @@ final class WebDavSyncGraphTier {
     var target = scan.manifests[deviceId];
     var own = scan.manifests[scan.namespace.deviceId];
     if (target == null) {
-      throw StateError('The selected sync device no longer exists');
+      await _finishRemovedDevice(active, scan, deviceId, authorization);
+      return;
     }
     var bootstrap = own?.section(WebDavSyncGraphKind.bootstrap.logicalName);
     if (bootstrap == null) {
@@ -436,6 +438,17 @@ final class WebDavSyncGraphTier {
       if (!await _isManagingAdmin(authorization)) {
         throw StateError('Forgetting a sync device requires an Admin');
       }
+      // Retire the identity first. If deletion fails, the persistent record
+      // still prevents that client repairing/recreating its directory.
+      await WebDavSyncDeviceRemoval.publish(
+        transport: transport,
+        codec: _codec,
+        root: scan.root,
+        deviceId: deviceId,
+      );
+      if (!await _isManagingAdmin(authorization)) {
+        throw StateError('Removing a sync device requires an Admin');
+      }
       await transport.deleteDeviceDirectory(deviceId);
       await _stateRepository.update(scan.namespace.id, (current) {
         final currentDeviceIds = Set<String>.from(current.currentDeviceIds)
@@ -444,6 +457,52 @@ final class WebDavSyncGraphTier {
           currentDeviceIds: Set<String>.unmodifiable(currentDeviceIds),
         );
       });
+    } finally {
+      transport.close();
+    }
+  }
+
+  // A previous DELETE may have succeeded even when its response was lost.
+  // Only the authenticated retirement record permits this idempotent retry.
+  Future<void> _finishRemovedDevice(
+    WebDavSyncBinding binding,
+    WebDavSyncActiveRootSnapshot scan,
+    String deviceId,
+    ProfileAuthorizationContext authorization,
+  ) async {
+    final transport = _transportFactory(
+      binding: binding,
+      secrets: await _bindingStore.readSecrets(binding),
+    );
+    try {
+      final marker = await transport.readRootMarker();
+      if (!_bytesEqual(scan.markerBytes, marker.bytes)) {
+        throw const WebDavSyncRootChangedException();
+      }
+      if (!await WebDavSyncDeviceRemoval.isRemoved(
+        transport: transport,
+        codec: _codec,
+        root: scan.root,
+        deviceId: deviceId,
+      )) {
+        throw StateError('The selected sync device no longer exists');
+      }
+      if (!await _isManagingAdmin(authorization)) {
+        throw StateError('Removing a sync device requires an Admin');
+      }
+      try {
+        await transport.deleteDeviceDirectory(deviceId);
+      } on WebDavException catch (error) {
+        if (error.statusCode != 404) rethrow;
+      }
+      await _stateRepository.update(
+        scan.namespace.id,
+        (current) => current.copyWith(
+          currentDeviceIds: Set<String>.unmodifiable(
+            current.currentDeviceIds.where((id) => id != deviceId),
+          ),
+        ),
+      );
     } finally {
       transport.close();
     }

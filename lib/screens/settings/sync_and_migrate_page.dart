@@ -1,5 +1,7 @@
 import '../../services/webdav_sync/webdav_log_upload.dart';
 import '../../services/webdav_sync/webdav_sync_binding_store.dart';
+import '../../services/profiles/profile_preferences.dart';
+import '../../services/webdav_sync/webdav_sync_device_removal.dart';
 import 'widgets/sync_device_tile.dart';
 import 'dart:async';
 
@@ -62,6 +64,7 @@ class _SyncAndMigratePageState extends State<SyncAndMigratePage>
   String? _logBindingId;
   int _logSettingRevision = 0;
   bool _logoutPending = false;
+  bool _deviceRemoved = false;
   Timer? _statusTimer;
   Future<void>? _statusLoading;
   bool _statusReadFailed = false;
@@ -183,10 +186,16 @@ class _SyncAndMigratePageState extends State<SyncAndMigratePage>
   Future<void> _loadSyncState() async {
     try {
       final snapshot = await _syncService.store.load();
+      final removed =
+          (await DevicePreferences.instance()).getBool(
+            WebDavSyncBindingStore.deviceRemovedNoticeKey,
+          ) ==
+          true;
       if (!mounted) return;
       setState(() {
         _syncBinding = snapshot.stagedBinding ?? snapshot.activeBinding;
         _logoutPending = WebDavSyncBindingStore.logoutPending(snapshot);
+        _deviceRemoved = removed && _syncBinding == null;
       });
       unawaited(_loadActiveSyncState());
     } catch (error) {
@@ -225,6 +234,11 @@ class _SyncAndMigratePageState extends State<SyncAndMigratePage>
           await _tvManualController?.tvManualAvailability() ??
           WebDavSyncTvManualAvailability.inactive;
       final snapshot = await _syncService.store.load();
+      final removed =
+          (await DevicePreferences.instance()).getBool(
+            WebDavSyncBindingStore.deviceRemovedNoticeKey,
+          ) ==
+          true;
       if (status.localStateMissing) {
         if (!mounted) return;
         setState(() {
@@ -252,6 +266,7 @@ class _SyncAndMigratePageState extends State<SyncAndMigratePage>
           unawaited(_loadLogUploadSetting());
         }
         _tvManualAvailability = tvAvailability;
+        _deviceRemoved = removed && _syncBinding == null;
         _syncStateMessage = status.adminPruneBlocked
             ? 'Profile cleanup is pending for ${status.pruneBlockingProfiles.join(', ')}; activity sync continues'
             : status.statusHint;
@@ -783,9 +798,10 @@ class _SyncAndMigratePageState extends State<SyncAndMigratePage>
           scrollable: true,
           title: const Text('Remove this device?'),
           content: const Text(
-            'Remove this device from the list while keeping the data needed '
-            'by your other devices. A device that still has your WebDAV '
-            'password can connect again. Log out on that device to stop its sync.',
+            'Delete this device’s sync files and remove its registration. '
+            'Its local data stays intact. When the device next connects, it '
+            'will be signed out and must sign in again to rejoin. '
+            'Update all devices first: older app versions cannot enforce remote removal.',
           ),
           actions: [
             TextButton(
@@ -807,9 +823,11 @@ class _SyncAndMigratePageState extends State<SyncAndMigratePage>
         operation: (_) => management.forgetDevice(target),
       );
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Sync device forgotten.')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Device removed. It must sign in again to rejoin.'),
+        ),
+      );
       await _loadActiveSyncState();
     } catch (error) {
       if (mounted) _showError(error);
@@ -995,7 +1013,9 @@ class _SyncAndMigratePageState extends State<SyncAndMigratePage>
                           ? 'Waiting for the first completed sync'
                           : 'Last synced ${_formatSyncTime(lastSync)}'
                     : _syncBinding == null
-                    ? 'Connect the same WebDAV account on each device.'
+                    ? _deviceRemoved
+                          ? WebDavSyncDeviceRemovedException.message
+                          : 'Connect the same WebDAV account on each device.'
                     : _syncStatus(),
               ),
             ),

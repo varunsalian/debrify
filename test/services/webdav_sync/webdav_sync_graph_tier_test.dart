@@ -593,6 +593,21 @@ void main() {
     expect(devices.first.isRegistered, isTrue);
     expect(devices.last.deviceId, 'peer-device');
     expect(devices.last.isRegistered, isFalse);
+    Future<void> remove() => tier(
+      contextProvider: () async => context,
+      transportFactory: ({required binding, required secrets}) => transport,
+      codec: codec,
+    ).forgetDevice(deviceId: 'peer-device', authorization: authorization);
+    transport.dropRemoval = true;
+    await expectLater(remove(), throwsStateError);
+    expect(events, isNot(contains('delete:peer-device')));
+    transport.dropRemoval = false;
+    transport.failDelete = true;
+    await expectLater(remove(), throwsStateError);
+    expect(transport.removals, contains('peer-device'));
+    transport.failDelete = false;
+    // Exercise a clean attempt next, then the missing-manifest retry.
+    transport.removals.clear();
     events.clear();
     await tier(
       contextProvider: () async => context,
@@ -605,6 +620,24 @@ void main() {
     expect(events, contains('read:bootstrap'));
     expect(events, isNot(contains('read:graph')));
     expect(events, contains('delete:peer-device'));
+    expect(
+      events.indexOf('retire:peer-device'),
+      lessThan(events.indexOf('delete:peer-device')),
+    );
+    expect(transport.removals, contains('peer-device'));
+    snapshot = WebDavSyncActiveRootSnapshot(
+      binding: snapshot.binding,
+      namespace: snapshot.namespace,
+      root: snapshot.root,
+      markerBytes: snapshot.markerBytes,
+      serverNowMs: snapshot.serverNowMs,
+      manifests: {snapshot.namespace.deviceId: ownManifest},
+      schemaRatchet: 1,
+    );
+    events.clear();
+    await remove();
+    expect(events, contains('delete:peer-device'));
+    expect(events, isNot(contains('retire:peer-device')));
   });
 }
 
@@ -760,8 +793,9 @@ final class _ForgetTransport
     implements
         WebDavSyncActivationTransport,
         WebDavSyncRegistrationTransport,
-        WebDavSyncSharedObjectTransport {
-  const _ForgetTransport({
+        WebDavSyncSharedObjectTransport,
+        WebDavSyncDeviceRemovalTransport {
+  _ForgetTransport({
     required this.marker,
     required this.bootstrap,
     required this.sharedObject,
@@ -769,6 +803,26 @@ final class _ForgetTransport
     required this.events,
     this.registration,
   });
+
+  bool dropRemoval = false;
+  bool failDelete = false;
+  final removals = <String, Uint8List>{};
+  @override
+  Future<WebDavBytesResult?> readDeviceRemoval(String deviceId) async {
+    final bytes = removals[deviceId];
+    return bytes == null
+        ? null
+        : WebDavBytesResult(bytes: bytes, metadata: _metadata);
+  }
+
+  @override
+  Future<void> writeDeviceRemoval(String deviceId, Uint8List bytes) async {
+    events.add('retire:$deviceId');
+    if (!dropRemoval) removals[deviceId] = bytes;
+  }
+
+  @override
+  void setDeviceWriteGuard(String deviceId, Future<void> Function() guard) {}
 
   final File sharedObject;
   @override
@@ -838,6 +892,7 @@ final class _ForgetTransport
 
   @override
   Future<void> deleteDeviceDirectory(String deviceId) async {
+    if (failDelete) throw StateError('delete failed');
     events.add('delete:$deviceId');
   }
 

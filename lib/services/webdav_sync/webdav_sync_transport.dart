@@ -195,6 +195,12 @@ abstract interface class WebDavSyncDeviceNameTransport {
   Future<void> writeDeviceName(String deviceId, Uint8List bytes);
 }
 
+abstract interface class WebDavSyncDeviceRemovalTransport {
+  Future<WebDavBytesResult?> readDeviceRemoval(String deviceId);
+  Future<void> writeDeviceRemoval(String deviceId, Uint8List bytes);
+  void setDeviceWriteGuard(String deviceId, Future<void> Function() guard);
+}
+
 abstract interface class WebDavSyncTransport {
   Future<WebDavBytesResult> readRootMarker();
 
@@ -314,6 +320,7 @@ final class ProtocolWebDavSyncTransport
         WebDavSyncActivationTransport,
         WebDavSyncRegistrationTransport,
         WebDavSyncDeviceNameTransport,
+        WebDavSyncDeviceRemovalTransport,
         WebDavSyncFileTransport,
         WebDavSyncSharedObjectTransport,
         WebDavSyncSectionGcTransport,
@@ -535,7 +542,42 @@ final class ProtocolWebDavSyncTransport
   @override
   Future<void> ensureOwnLayout(String deviceId) async {
     _validateDeviceId(deviceId);
-    await _client.ensureCollection(_join(_devices, '$deviceId/sections'));
+    await _client.ensureCollection(
+      _join(_devices, '$deviceId/sections'),
+      beforeSend: _deviceWriteGuards[deviceId],
+    );
+  }
+
+  final _deviceWriteGuards = <String, Future<void> Function()>{};
+
+  @override
+  void setDeviceWriteGuard(String deviceId, Future<void> Function() guard) {
+    _validateDeviceId(deviceId);
+    _deviceWriteGuards[deviceId] = guard;
+  }
+
+  @override
+  Future<WebDavBytesResult?> readDeviceRemoval(String deviceId) async {
+    _validateDeviceId(deviceId);
+    try {
+      return await _client.getBytes(
+        path: _join(_syncRoot, 'removed/$deviceId.enc'),
+        maxBytes: 4096,
+      );
+    } on WebDavException catch (error) {
+      if (error.kind == WebDavErrorKind.notFound) return null;
+      rethrow;
+    }
+  }
+
+  @override
+  Future<void> writeDeviceRemoval(String deviceId, Uint8List bytes) async {
+    _validateDeviceId(deviceId);
+    await _client.putBytes(
+      path: _join(_syncRoot, 'removed/$deviceId.enc'),
+      bytes: bytes,
+      maxBytes: 4096,
+    );
   }
 
   @override
@@ -573,6 +615,7 @@ final class ProtocolWebDavSyncTransport
     return _client.putBytes(
       path: _join(_devices, '$deviceId/sections/$contentHash.enc'),
       bytes: bytes,
+      beforeSend: _deviceWriteGuards[deviceId],
       maxBytes: maxBytes,
       ifNoneMatch: '*',
     );
@@ -590,6 +633,7 @@ final class ProtocolWebDavSyncTransport
     return _client.uploadFile(
       path: _join(_devices, '$deviceId/sections/$contentHash.enc'),
       file: file,
+      beforeSend: _deviceWriteGuards[deviceId],
       maxBytes: maxBytes,
       ifNoneMatch: '*',
     );
@@ -604,6 +648,7 @@ final class ProtocolWebDavSyncTransport
     return _client.putBytes(
       path: _join(_devices, '$deviceId/manifest.enc'),
       bytes: bytes,
+      beforeSend: _deviceWriteGuards[deviceId],
       maxBytes: WebDavSyncLimits.maxManifestBytes,
     );
   }
@@ -653,6 +698,7 @@ final class ProtocolWebDavSyncTransport
     await _client.putBytes(
       path: _join(_devices, '$deviceId/name.enc'),
       bytes: bytes,
+      beforeSend: _deviceWriteGuards[deviceId],
       maxBytes: 4096,
       // Optional metadata must never recreate a removed device directory;
       // activation and seed repair own its manifest/section lifecycle.
@@ -666,6 +712,7 @@ final class ProtocolWebDavSyncTransport
     await _client.putBytes(
       path: _join(_devices, '$deviceId/registration.enc'),
       bytes: bytes,
+      beforeSend: _deviceWriteGuards[deviceId],
       maxBytes: 4096,
     );
   }

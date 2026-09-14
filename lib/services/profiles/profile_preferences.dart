@@ -899,6 +899,7 @@ class DevicePreferences {
     'profile_gate_always_ask_v1',
     'webdav_sync_state_v1',
     'webdav_sync_local_device_name_v1',
+    'webdav_sync_device_removed_v1',
     'webdav_sync_backup_restore_v1',
     'webdav_sync_db_adoption_gate_v1',
   };

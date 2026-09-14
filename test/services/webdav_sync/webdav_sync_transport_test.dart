@@ -13,6 +13,75 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
 void main() {
+  test('device PUT retry cannot recreate parents after retirement', () async {
+    var removed = false;
+    final methods = <String>[];
+    final transport = ProtocolWebDavSyncTransport(
+      location: WebDavSyncFolderLocation(
+        endpoint: 'https://example.test/dav',
+        folderPath: 'Family',
+        serverName: 'Test',
+      ),
+      credentials: const WebDavCredentials(
+        username: 'alice',
+        password: 'secret',
+      ),
+      client: MockClient((request) async {
+        methods.add(request.method);
+        removed = true;
+        return http.Response('', 409);
+      }),
+    );
+    addTearDown(transport.close);
+    transport.setDeviceWriteGuard('one', () async {
+      if (removed) throw StateError('removed');
+    });
+    await expectLater(
+      transport.writeManifest('one', Uint8List.fromList([1])),
+      throwsStateError,
+    );
+    expect(methods, ['PUT']);
+  });
+
+  test('removal records live outside the deleted device directory', () async {
+    Uint8List? record;
+    final paths = <String>[];
+    final transport = ProtocolWebDavSyncTransport(
+      location: WebDavSyncFolderLocation(
+        endpoint: 'https://example.test/dav',
+        folderPath: 'Family',
+        serverName: 'Test',
+      ),
+      credentials: const WebDavCredentials(
+        username: 'alice',
+        password: 'secret',
+      ),
+      client: MockClient((request) async {
+        paths.add(request.url.path);
+        if (request.method == 'PUT') record = request.bodyBytes;
+        if (request.method == 'GET') {
+          return record == null
+              ? http.Response('', 404)
+              : http.Response.bytes(record!, 200);
+        }
+        return http.Response('', 204);
+      }),
+    );
+    addTearDown(transport.close);
+    expect(await transport.readDeviceRemoval('one'), isNull);
+    await transport.writeDeviceRemoval('one', Uint8List.fromList([1, 2]));
+    await transport.deleteDeviceDirectory('one');
+    expect((await transport.readDeviceRemoval('one'))!.bytes, [1, 2]);
+    expect(
+      paths.where((path) => path.endsWith('/removed/one.enc')),
+      hasLength(3),
+    );
+    await expectLater(
+      transport.readDeviceRemoval('../outside'),
+      throwsArgumentError,
+    );
+  });
+
   test(
     'optional name writes never recreate a removed device directory',
     () async {

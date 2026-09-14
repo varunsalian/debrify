@@ -18,6 +18,7 @@ import 'webdav_sync_circle_merge.dart';
 import 'webdav_sync_circle_models.dart';
 import 'webdav_sync_codec.dart';
 import 'webdav_sync_device_names.dart';
+import 'webdav_sync_device_removal.dart';
 import 'webdav_sync_diagnostics.dart';
 import 'webdav_sync_engine_state.dart';
 import 'webdav_sync_graph.dart';
@@ -371,6 +372,7 @@ final class WebDavSyncEngine
     WebDavSyncDiagnostic? diagnostic,
     WebDavSyncAppliedKeysCallback? appliedKeysCallback,
     this.readConcurrency = TransferIo.metadataConcurrency,
+    this.onDeviceRemoved,
   }) : _stateRepository = stateRepository,
        _localAdapter = localAdapter,
        _transportFactory = transportFactory,
@@ -401,22 +403,48 @@ final class WebDavSyncEngine
   final WebDavSyncAppliedKeysCallback _appliedKeysCallback;
   final int readConcurrency;
   final Lock _cycleLock = Lock();
+  final Future<void> Function(String deviceId)? onDeviceRemoved;
 
-  Future<void> _publishDeviceName(WebDavSyncTransport transport,
-      OpenedWebDavSyncRoot root, String deviceId) async {
+  Future<void> _guardDevice(
+    WebDavSyncTransport transport,
+    OpenedWebDavSyncRoot root,
+    String deviceId,
+  ) => WebDavSyncDeviceRemoval.guard(
+    transport: transport,
+    codec: _codec,
+    root: root,
+    deviceId: deviceId,
+    onRemoved: onDeviceRemoved == null
+        ? null
+        : () => onDeviceRemoved!(deviceId),
+  );
+
+  Future<void> _publishDeviceName(
+    WebDavSyncTransport transport,
+    OpenedWebDavSyncRoot root,
+    String deviceId,
+  ) async {
     if (transport is! WebDavSyncDeviceNameTransport) return;
     var current = true;
     try {
-      await WebDavSyncDeviceNames.publish(transport: transport, codec: _codec,
-        root: root, deviceId: deviceId, beforeWrite: () async {
+      await WebDavSyncDeviceNames.publish(
+        transport: transport,
+        codec: _codec,
+        root: root,
+        deviceId: deviceId,
+        beforeWrite: () async {
           if (!current) throw StateError('Device name publication expired');
-        }).timeout(const Duration(seconds: 2));
+        },
+      ).timeout(const Duration(seconds: 2));
+    } on WebDavSyncDeviceRemovedException {
+      rethrow;
     } catch (error) {
       _diagnostic('Could not publish optional device name', error);
     } finally {
       current = false;
     }
   }
+
   @visibleForTesting
   int get debugSectionCacheEntries => _sectionCache.entryCount;
 
@@ -509,6 +537,7 @@ final class WebDavSyncEngine
       if (!context.matchesAuthority(rootRead.bytes)) {
         throw const WebDavSyncRootChangedException();
       }
+      await _guardDevice(transport, root, deviceId);
       await _publishDeviceName(transport, root, deviceId);
       instrumentation.requestStarted();
       final listing = await transport.listDeviceIds();
@@ -1026,6 +1055,7 @@ final class WebDavSyncEngine
         throw const WebDavSyncRootChangedException();
       }
       final listing = (await listingFuture).unwrap();
+      await _guardDevice(transport, root, deviceId);
       await _publishDeviceName(transport, root, deviceId);
       instrumentation.peerCount = listing.deviceIds
           .where((listedDeviceId) => listedDeviceId != deviceId)

@@ -1,4 +1,5 @@
 import 'package:debrify/services/webdav_sync/webdav_sync_logout.dart';
+import 'package:debrify/services/webdav_sync/webdav_sync_device_removal.dart';
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -88,6 +89,36 @@ void main() {
         transportFactory: ({required binding, required secrets}) => transport,
         clock: () => now,
       );
+
+  for (final active in [false, true]) {
+    test(
+      'removed device is signed out before ${active ? "active scan" : "reconnect discovery"}',
+      () async {
+        final namespace = (await store.load()).namespaceFor(binding)!;
+        await WebDavSyncDeviceRemoval.publish(
+          transport: transport,
+          codec: codec,
+          root: root,
+          deviceId: namespace.deviceId,
+        );
+        if (active) {
+          binding = await store.setLifecycle(
+            binding.id,
+            WebDavSyncLifecycle.active,
+          );
+          await store.promoteStaged(binding.id);
+        }
+        await expectLater(
+          active
+              ? discovery().scanActive(bindingId: binding.id)
+              : discovery().discover(bindingId: binding.id),
+          throwsA(isA<WebDavSyncDeviceRemovedException>()),
+        );
+        expect((await store.load()).bindings, isEmpty);
+        expect(transport.sectionReads, isEmpty);
+      },
+    );
+  }
 
   test(
     'logout of the only device preserves the bootstrap for a fresh login',
@@ -473,7 +504,23 @@ final class _MemoryStateRepository implements WebDavSyncEngineStateRepository {
 }
 
 final class _FakeDiscoveryTransport
-    implements WebDavSyncTransport, WebDavSyncRegistrationTransport {
+    implements
+        WebDavSyncTransport,
+        WebDavSyncRegistrationTransport,
+        WebDavSyncDeviceRemovalTransport {
+  final removals = <String, Uint8List>{};
+  @override
+  Future<WebDavBytesResult?> readDeviceRemoval(String id) async =>
+      removals[id] == null
+      ? null
+      : WebDavBytesResult(bytes: removals[id]!, metadata: _metadata);
+  @override
+  Future<void> writeDeviceRemoval(String id, Uint8List bytes) async {
+    removals[id] = bytes;
+  }
+
+  @override
+  void setDeviceWriteGuard(String id, Future<void> Function() guard) {}
   final registrations = <String, Uint8List>{};
   @override
   Future<WebDavBytesResult?> readRegistration(String deviceId) async =>

@@ -5,6 +5,7 @@ import '../webdav_protocol_client.dart';
 import 'webdav_sync_binding_store.dart';
 import 'webdav_sync_clock.dart';
 import 'webdav_sync_codec.dart';
+import 'webdav_sync_device_removal.dart';
 import 'webdav_sync_engine_state.dart';
 import 'webdav_sync_graph.dart';
 import 'webdav_sync_hot_models.dart';
@@ -172,6 +173,19 @@ final class WebDavSyncExistingRootDiscovery
       if (root.document.circleId != binding.circleId) {
         throw const WebDavSyncRootChangedException();
       }
+
+      await WebDavSyncDeviceRemoval.guard(
+        transport: transport,
+        codec: _codec,
+        root: root,
+        deviceId: namespace.deviceId,
+        onRemoved: () => WebDavSyncDeviceRemoval.retireLocal(
+          store: _bindingStore,
+          states: _stateRepository,
+          bindingId: binding.id,
+          deviceId: namespace.deviceId,
+        ),
+      );
       final state = await _stateRepository.load(namespace.id);
       if (state.blocksAllPushes) {
         throw StateError(
@@ -278,6 +292,18 @@ final class WebDavSyncExistingRootDiscovery
         throw const WebDavSyncRootChangedException();
       }
 
+      await WebDavSyncDeviceRemoval.guard(
+        transport: transport,
+        codec: _codec,
+        root: root,
+        deviceId: namespace.deviceId,
+        onRemoved: () => WebDavSyncDeviceRemoval.retireLocal(
+          store: _bindingStore,
+          states: _stateRepository,
+          bindingId: binding.id,
+          deviceId: namespace.deviceId,
+        ),
+      );
       final state = await _stateRepository.load(namespace.id);
       if (state.blocksAllPushes) {
         throw StateError(

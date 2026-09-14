@@ -17,6 +17,7 @@ import 'package:debrify/services/profiles/profile_scope.dart';
 import 'package:debrify/services/profiles/profile_preferences.dart';
 import 'package:debrify/services/webdav_protocol_client.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_codec.dart';
+import 'package:debrify/services/webdav_sync/webdav_sync_device_removal.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_clock.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_circle_merge.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_circle_models.dart';
@@ -1595,6 +1596,54 @@ void main() {
     expect(report.disposition, WebDavSyncCycleDisposition.completed);
     expect(transport.events, contains('write:manifest'));
     expect(states.state.ownManifest!.section('graph'), isNull);
+  });
+
+  test('removed identity cannot enter missing-device seed repair', () async {
+    await runFixture(context());
+    final removed = _RemovedTransport(marker: marker, serverDate: now);
+    await WebDavSyncDeviceRemoval.publish(
+      transport: removed,
+      codec: codec,
+      root: root,
+      deviceId: 'device-a',
+    );
+    var retired = false;
+    final guarded = WebDavSyncEngine(
+      stateRepository: states,
+      localAdapter: _FakeTvLibraryLocalAdapter(
+        {},
+        document: const WebDavSyncLibraryDocument(
+          circleProfileId: 'profile-circle',
+          records: {},
+        ),
+        tvDocument: const WebDavSyncLibraryDocument(
+          circleProfileId: 'profile-circle',
+          records: {},
+        ),
+      ),
+      transportFactory: (_) => removed,
+      codec: codec,
+      clock: () => now,
+      onDeviceRemoved: (_) async {
+        retired = true;
+      },
+    );
+    await expectLater(
+      guarded.runCycle(context(active: true)),
+      throwsA(isA<WebDavSyncDeviceRemovedException>()),
+    );
+    expect(retired, isTrue);
+    expect(removed.writeCount, 0);
+    retired = false;
+    await expectLater(
+      guarded.runTvSync(
+        context(active: true),
+        cancellationToken: WebDavSyncTvCancellationToken(),
+      ),
+      throwsA(isA<WebDavSyncDeviceRemovedException>()),
+    );
+    expect(retired, isTrue);
+    expect(removed.writeCount, 0);
   });
 
   test(
@@ -6111,4 +6160,25 @@ final class _GcFakeTransport extends _FakeTransport
     events.add('delete:section:$contentHash');
     deleted.add(contentHash);
   }
+}
+
+class _RemovedTransport extends _FakeTransport
+    implements WebDavSyncDeviceRemovalTransport {
+  _RemovedTransport({required super.marker, required super.serverDate});
+  final records = <String, Uint8List>{};
+  @override
+  Future<WebDavBytesResult?> readDeviceRemoval(String deviceId) async {
+    final bytes = records[deviceId];
+    return bytes == null
+        ? null
+        : WebDavBytesResult(bytes: bytes, metadata: _metadata);
+  }
+
+  @override
+  Future<void> writeDeviceRemoval(String deviceId, Uint8List bytes) async {
+    records[deviceId] = bytes;
+  }
+
+  @override
+  void setDeviceWriteGuard(String deviceId, Future<void> Function() guard) {}
 }

@@ -33,6 +33,7 @@ import 'webdav_sync_binding_store.dart';
 import 'webdav_sync_clock.dart';
 import 'webdav_sync_circle_models.dart';
 import 'webdav_sync_codec.dart';
+import 'webdav_sync_device_removal.dart';
 import 'webdav_sync_discovery.dart';
 import 'webdav_sync_diagnostics.dart';
 import 'webdav_sync_engine.dart';
@@ -1537,7 +1538,8 @@ final class WebDavSyncRuntime
     }
     _scheduler!.arm(
       _activeContext,
-      remotePollContextProvider: _cycleRunner!.remotePollContext,
+      remotePollContextProvider: () async =>
+          _cycleRunner!.remotePollContext(await _activeContext()),
     );
     ProfilePreferences.webDavSyncLocalChangeSink = _onLocalProfileChange;
     webDavSyncRemoteWatchActivityHook = () => _scheduler?.extendWarmSession();
@@ -2004,6 +2006,22 @@ final class _ProductionCycleRunner
 
   void clearSectionCache() => _sectionCache.clear();
 
+  Future<void> _retireDevice(
+    String bindingId,
+    String deviceId,
+    int generation,
+  ) async {
+    await WebDavSyncDeviceRemoval.retireLocal(
+      store: bindingStore,
+      states: stateRepository,
+      bindingId: bindingId,
+      deviceId: deviceId,
+    );
+    if ((await bindingStore.load()).bindings.containsKey(bindingId)) return;
+    forgetAccount();
+    _httpClientOwner.close(ifGeneration: generation);
+  }
+
   void forgetAccount() {
     _authenticationFailures.reset();
     _sectionCache.clear();
@@ -2015,7 +2033,9 @@ final class _ProductionCycleRunner
   @override
   void closeCycleTransports() => _httpClientOwner.close();
 
-  Future<WebDavSyncRemotePollContext?> remotePollContext() async {
+  Future<WebDavSyncRemotePollContext?> remotePollContext(
+    WebDavSyncCycleContext? context,
+  ) async {
     final clientGeneration = _httpClientOwner.generation;
     final stored = await bindingStore.load();
     final binding = stored.activeBinding;
@@ -2023,7 +2043,16 @@ final class _ProductionCycleRunner
       return null;
     }
     final namespace = stored.namespaceFor(binding);
-    if (namespace == null) return null;
+    if (namespace == null ||
+        context?.root == null ||
+        context!.deviceId != namespace.deviceId ||
+        context.namespaceId != namespace.id ||
+        !namespace.matchesAuthorityPin(
+          context.markerPin,
+          context.authorityContentHash,
+        )) {
+      return null;
+    }
     final state = await stateRepository.load(namespace.id);
     if (state.blocksAllPushes) return null;
     final peerDeviceIds =
@@ -2038,15 +2067,34 @@ final class _ProductionCycleRunner
       clientGeneration,
     );
     if (borrow == null) return null;
-    return WebDavSyncRemotePollContext(
-      transport: ProtocolWebDavSyncTransport(
-        location: binding.location,
-        credentials: WebDavCredentials(
-          username: secrets.username,
-          password: secrets.password,
-        ),
-        client: borrow.client,
+    final transport = ProtocolWebDavSyncTransport(
+      location: binding.location,
+      credentials: WebDavCredentials(
+        username: secrets.username,
+        password: secrets.password,
       ),
+      client: borrow.client,
+    );
+    try {
+      final marker = await transport.readRootMarker();
+      if (!namespace.matchesAuthority(marker.bytes)) {
+        throw const WebDavSyncRootChangedException();
+      }
+      final root = context.root!;
+      await WebDavSyncDeviceRemoval.guard(
+        transport: transport,
+        codec: WebDavSyncCodec(),
+        root: root,
+        deviceId: namespace.deviceId,
+        onRemoved: () =>
+            _retireDevice(binding.id, namespace.deviceId, borrow.generation),
+      );
+    } catch (_) {
+      transport.close();
+      rethrow;
+    }
+    return WebDavSyncRemotePollContext(
+      transport: transport,
       peerDeviceIds: List<String>.unmodifiable(peerDeviceIds),
       validators: state.peerManifestValidators,
       clientGeneration: borrow.generation,
@@ -2136,6 +2184,8 @@ final class _ProductionCycleRunner
       ),
       diagnostic: recordWebDavSyncDiagnostic,
       appliedKeysCallback: dispatchWebDavSyncAppliedKeysForActiveProfile,
+      onDeviceRemoved: (deviceId) =>
+          _retireDevice(binding.id, deviceId, borrow.generation),
     );
     try {
       final report = await engine.runTvSync(
@@ -2222,6 +2272,8 @@ final class _ProductionCycleRunner
       ),
       diagnostic: recordWebDavSyncDiagnostic,
       appliedKeysCallback: dispatchWebDavSyncAppliedKeysForActiveProfile,
+      onDeviceRemoved: (deviceId) =>
+          _retireDevice(binding.id, deviceId, borrow.generation),
     );
     try {
       final report = await engine.runCycle(

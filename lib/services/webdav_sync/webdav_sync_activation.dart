@@ -11,6 +11,7 @@ import 'webdav_sync_binding_store.dart';
 import 'webdav_sync_clock.dart';
 import 'webdav_sync_circle_models.dart';
 import 'webdav_sync_codec.dart';
+import 'webdav_sync_device_removal.dart';
 import 'webdav_sync_diagnostics.dart';
 import 'webdav_sync_engine_state.dart';
 import 'webdav_sync_graph.dart';
@@ -753,14 +754,25 @@ final class WebDavSyncNewRootInitializer {
           markerBytes: markerBeforeWrite.bytes,
         );
       }
-      await transport.ensureOwnLayout(namespace.deviceId);
-
       final candidate = await _loadOrCreateCandidate(
         namespace: namespace,
         passphrase: secrets.syncPassphrase,
       );
       final markerBytes = candidate.authorityBytes;
       final root = candidate.root;
+      await WebDavSyncDeviceRemoval.guard(
+        transport: transport,
+        codec: _codec,
+        root: root,
+        deviceId: namespace.deviceId,
+        onRemoved: () => WebDavSyncDeviceRemoval.retireLocal(
+          store: _bindingStore,
+          states: _stateRepository,
+          bindingId: binding.id,
+          deviceId: namespace.deviceId,
+        ),
+      );
+      await transport.ensureOwnLayout(namespace.deviceId);
       final circleId = root.document.circleId;
       final listing = await transport.listDeviceIds();
       if (listing.deviceIds.length > WebDavSyncLimits.maxPeers) {

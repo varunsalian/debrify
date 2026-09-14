@@ -6,6 +6,7 @@ import 'webdav_sync_activation.dart';
 import 'webdav_sync_binding_store.dart';
 import 'webdav_sync_clock.dart';
 import 'webdav_sync_codec.dart';
+import 'webdav_sync_device_removal.dart';
 import 'webdav_sync_engine_state.dart';
 import 'webdav_sync_graph.dart';
 import 'webdav_sync_hot_models.dart';
@@ -109,6 +110,18 @@ final class WebDavSyncOwnManifestPublisher implements WebDavSyncSeedPublisher {
     try {
       final rootRead = await transport.readRootMarker();
       _requireMarker(namespace.pinnedAuthorityHash!, rootRead.bytes);
+      await WebDavSyncDeviceRemoval.guard(
+        transport: transport,
+        codec: _codec,
+        root: root,
+        deviceId: namespace.deviceId,
+        onRemoved: () => WebDavSyncDeviceRemoval.retireLocal(
+          store: _bindingStore,
+          states: _stateRepository,
+          bindingId: binding.id,
+          deviceId: namespace.deviceId,
+        ),
+      );
       final listing = await transport.listDeviceIds();
       if (listing.deviceIds.length > WebDavSyncLimits.maxPeers) {
         throw StateError('WebDAV sync peer limit exceeded');

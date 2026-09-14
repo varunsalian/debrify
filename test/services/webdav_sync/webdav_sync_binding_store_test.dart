@@ -40,6 +40,54 @@ void main() {
   });
 
   test(
+    'remote removal discards credentials and gives a fresh login identity',
+    () async {
+      final location = WebDavSyncFolderLocation.fromConfig(_config, 'Sync');
+      final old = await store.stageBinding(
+        location: location,
+        config: _config,
+        syncPassphrase: 'circle-secret',
+      );
+      final oldNamespace = (await store.load()).namespaceFor(old)!;
+      String? forgotten;
+      expect(
+        await store.removeDeviceSession(
+          old.id,
+          oldNamespace.deviceId,
+          forgetState: (namespace) async {
+            forgotten = namespace.deviceId;
+          },
+        ),
+        isTrue,
+      );
+      expect(forgotten, oldNamespace.deviceId);
+      expect((await store.load()).bindings, isEmpty);
+      expect((await store.load()).namespaces, isEmpty);
+      final fresh = await store.stageBinding(
+        location: location,
+        config: _config,
+        syncPassphrase: 'circle-secret',
+      );
+      final freshNamespace = (await store.load()).namespaceFor(fresh)!;
+      expect(freshNamespace.deviceId, isNot(oldNamespace.deviceId));
+      expect(
+        await store.removeDeviceSession(
+          old.id,
+          oldNamespace.deviceId,
+          forgetState: (_) async {
+            fail('Stale removal must not touch new state');
+          },
+        ),
+        isFalse,
+      );
+      expect(
+        (await store.load()).namespaceFor(fresh)!.deviceId,
+        freshNamespace.deviceId,
+      );
+    },
+  );
+
+  test(
     'load rewrites legacy assembled pins without retaining the secret',
     () async {
       final marker = Uint8List.fromList([1, 2, 3]);

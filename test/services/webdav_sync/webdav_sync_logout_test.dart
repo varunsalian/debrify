@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:debrify/services/webdav_sync/webdav_sync_device_removal.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_engine_state.dart';
 import 'dart:typed_data';
 
@@ -98,6 +99,46 @@ void main() {
     );
   });
   tearDown(DeviceKeyProvider.debugReset);
+
+  test(
+    'remote removal clears the real journal and keeps local files',
+    () async {
+      final directory = await Directory.systemTemp.createTemp(
+        'removed-device-test-',
+      );
+      addTearDown(() => directory.delete(recursive: true));
+      final localFile = File('${directory.path}/local-profile-data');
+      await localFile.writeAsString('keep me');
+      final states = WebDavSyncEngineStateStore(
+        bindingStore: store,
+        directoryProvider: () async => directory,
+      );
+      await states.update(
+        binding.namespaceId,
+        (state) => state.copyWith(lastSuccessfulSyncMs: 1000),
+      );
+      await WebDavSyncDeviceRemoval.retireLocal(
+        store: store,
+        states: states,
+        bindingId: binding.id,
+        deviceId: deviceId,
+      );
+      expect((await store.load()).bindings, isEmpty);
+      expect((await store.load()).namespaces, isEmpty);
+      expect(
+        await directory
+            .list(recursive: true)
+            .where((entry) => entry is File)
+            .length,
+        1,
+      );
+      expect(await localFile.readAsString(), 'keep me');
+      expect(
+        (await SharedPreferences.getInstance()).getString('local-data'),
+        'keep me',
+      );
+    },
+  );
 
   test(
     'logout unregisters, forgets credentials and identity, and preserves data',
@@ -459,11 +500,12 @@ class _Transport
         message: 'offline',
       );
     }
-    if (rootMissing)
+    if (rootMissing) {
       throw const WebDavException(
         kind: WebDavErrorKind.notFound,
         message: 'deleted',
       );
+    }
     return result(authority);
   }
 
