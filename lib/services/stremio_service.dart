@@ -542,7 +542,6 @@ class StremioService {
   /// addon selection. An explicit provider is strict: if it cannot resolve a
   /// title, callers retain the tracker metadata rather than silently switching
   /// languages. Automatic preserves the legacy enabled-addon order.
-  @visibleForTesting
   static List<StremioAddon> metadataCandidatesForPreference(
     List<StremioAddon> candidates,
     String? preference,

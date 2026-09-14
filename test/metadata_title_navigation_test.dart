@@ -13,8 +13,10 @@ void main() {
     WidgetTester tester,
     StremioMeta item,
     ValueChanged<StremioMeta> onOpen,
-    Future<StremioMeta> Function(StremioMeta) resolve,
-  ) async {
+    Future<StremioMeta> Function(StremioMeta) resolve, {
+    ValueChanged<StremioMeta>? onUnresolved,
+    bool Function()? isCurrent,
+  }) async {
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
@@ -22,7 +24,14 @@ void main() {
             builder: (context) => TextButton(
               onPressed: () {
                 unawaited(
-                  openMetadataTitle(context, item, onOpen, resolve: resolve),
+                  openMetadataTitle(
+                    context,
+                    item,
+                    onOpen,
+                    resolve: resolve,
+                    onUnresolved: onUnresolved,
+                    isCurrent: isCurrent,
+                  ),
                 );
               },
               child: const Text('Open'),
@@ -87,6 +96,45 @@ void main() {
     expect(opened, same(native));
     expect(tester.takeException(), isNull);
   });
+
+  for (final outcome in [
+    'missing',
+    'error',
+    'timeout',
+    'resolved',
+    'cancelled',
+  ]) {
+    testWidgets('IMDb-only navigation handles $outcome', (tester) async {
+      final pending = Completer<StremioMeta>();
+      var opens = 0;
+      final fallbacks = <StremioMeta>[];
+      var current = true;
+      await mount(
+        tester,
+        native,
+        (_) => opens++,
+        (_) => pending.future,
+        onUnresolved: fallbacks.add,
+        isCurrent: () => current,
+      );
+      if (outcome == 'cancelled') current = false;
+      if (outcome == 'timeout') {
+        await tester.pump(const Duration(seconds: 5));
+        pending.complete(resolved);
+      } else if (outcome == 'error') {
+        pending.completeError(StateError('offline'));
+      } else {
+        pending.complete(outcome == 'resolved' ? resolved : native);
+      }
+      await tester.pumpAndSettle();
+      expect(opens, outcome == 'resolved' ? 1 : 0);
+      expect(
+        fallbacks,
+        ['resolved', 'cancelled'].contains(outcome) ? isEmpty : [native],
+      );
+      expect(find.text('Retry'), findsNothing);
+    });
+  }
 
   for (final newerFinishesFirst in [false, true]) {
     testWidgets(

@@ -14,7 +14,10 @@ Future<void> openMetadataTitle(
   StremioMeta item,
   ValueChanged<StremioMeta> onOpen, {
   Future<StremioMeta> Function(StremioMeta)? resolve,
+  ValueChanged<StremioMeta>? onUnresolved,
+  bool Function()? isCurrent,
 }) async {
+  if (isCurrent?.call() == false) return;
   if (!item.id.startsWith('tmdb:') || item.effectiveImdbId != null) {
     onOpen(item);
     return;
@@ -58,7 +61,15 @@ Future<void> openMetadataTitle(
   }
   if (context.mounted &&
       scope == ProfileRuntime.scope.value &&
+      isCurrent?.call() != false &&
       (route == null || route.isCurrent)) {
+    // Search suggestions require IMDb identity for tracker actions/episodes.
+    // Other hosts retain their existing native-title navigation behavior.
+    final imdb = selected.effectiveImdbId ?? selected.id;
+    if (onUnresolved != null && !RegExp(r'^tt\d+$').hasMatch(imdb)) {
+      onUnresolved(item);
+      return;
+    }
     onOpen(selected);
   }
 }

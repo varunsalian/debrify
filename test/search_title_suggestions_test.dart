@@ -91,7 +91,13 @@ void main() {
             SearchScreen(
               searchMode: true,
               titleSearch: search,
-              suggestedTitleResolver: resolve,
+              suggestedTitleResolver:
+                  resolve ??
+                  (item) async => StremioMeta.fromJson({
+                    ...item.toJson(),
+                    'id': 'tt1160419',
+                    'imdb_id': 'tt1160419',
+                  }),
             ),
           ),
         ),
@@ -126,41 +132,45 @@ void main() {
     },
   );
 
-  testWidgets(
-    'Keyword never requests or displays TMDB title suggestions',
-    (tester) async {
-      final fixture = await mount(tester);
-      await drive(tester, () => tester.tap(find.text('Keyword')));
-      await tester.enterText(find.byType(TextField).first, 'Dune');
-      await tester.pump(const Duration(milliseconds: 350));
-      await tester.pump();
-      expect(find.text('Search for “Dune”'), findsNothing);
-      expect(find.text('Dune (2021)'), findsNothing);
-      expect(find.byType(TextFieldSuggestions), findsNothing);
-      expect(fixture.requests, isEmpty);
-      final field = tester.widget<TvTextField>(find.byType(TvTextField).first);
-      expect(field.suggestions, isNull);
-      await tester.enterText(
-        find.byType(TextField).first,
-        'https://example.com/private',
-      );
-      await tester.pump(const Duration(milliseconds: 400));
-      expect(fixture.search.value, isEmpty);
-      expect(fixture.requests, isEmpty);
-      await drive(tester, () => tester.pumpWidget(const SizedBox.shrink()));
-    },
-  );
-
-  testWidgets('Catalog pasted links bypass title lookup', (tester) async {
+  testWidgets('Keyword never requests or displays TMDB title suggestions', (
+    tester,
+  ) async {
     final fixture = await mount(tester);
-    await tester.enterText(find.byType(TextField).first, 'https://example.com/private');
+    await drive(tester, () => tester.tap(find.text('Keyword')));
+    await tester.enterText(find.byType(TextField).first, 'Dune');
+    await tester.pump(const Duration(milliseconds: 350));
+    await tester.pump();
+    expect(find.text('Search for “Dune”'), findsNothing);
+    expect(find.text('Dune (2021)'), findsNothing);
+    expect(find.byType(TextFieldSuggestions), findsNothing);
+    expect(fixture.requests, isEmpty);
+    final field = tester.widget<TvTextField>(find.byType(TvTextField).first);
+    expect(field.suggestions, isNull);
+    await tester.enterText(
+      find.byType(TextField).first,
+      'https://example.com/private',
+    );
     await tester.pump(const Duration(milliseconds: 400));
     expect(fixture.search.value, isEmpty);
     expect(fixture.requests, isEmpty);
     await drive(tester, () => tester.pumpWidget(const SizedBox.shrink()));
   });
 
-  testWidgets('switching to Keyword cancels pending Catalog suggestions', (tester) async {
+  testWidgets('Catalog pasted links bypass title lookup', (tester) async {
+    final fixture = await mount(tester);
+    await tester.enterText(
+      find.byType(TextField).first,
+      'https://example.com/private',
+    );
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(fixture.search.value, isEmpty);
+    expect(fixture.requests, isEmpty);
+    await drive(tester, () => tester.pumpWidget(const SizedBox.shrink()));
+  });
+
+  testWidgets('switching to Keyword cancels pending Catalog suggestions', (
+    tester,
+  ) async {
     final fixture = await mount(tester);
     await tester.enterText(find.byType(TextField).first, 'Dune');
     await drive(tester, () => tester.tap(find.text('Keyword')));
@@ -208,11 +218,41 @@ void main() {
     final detail = tester.widget<MergedDetailScreen>(
       find.byType(MergedDetailScreen),
     );
-    expect(detail.item.id, 'tmdb:438631');
+    expect(detail.item.id, 'tt1160419');
     expect(detail.item.year, '2021');
     expect(fixture.search.value, isEmpty);
     await drive(tester, () => tester.pumpWidget(const SizedBox.shrink()));
   });
+
+  for (final fails in [false, true]) {
+    testWidgets(
+      'unresolved suggestion submits Catalog title search (error: $fails)',
+      (tester) async {
+        await mount(
+          tester,
+          resolve: (item) async {
+            if (fails) throw StateError('offline');
+            return item;
+          },
+        );
+        await tester.enterText(find.byType(TextField).first, 'Dune');
+        await tester.pump(const Duration(milliseconds: 350));
+        await tester.pump();
+        await drive(tester, () => tester.tap(find.text('Dune (2021)')));
+        expect(find.byType(MergedDetailScreen), findsNothing);
+        expect(find.text('No catalog matches'), findsOneWidget);
+        expect(
+          tester
+              .widget<TvTextField>(find.byType(TvTextField).first)
+              .controller
+              .text,
+          'Dune',
+        );
+        expect(find.text('Retry'), findsNothing);
+        await drive(tester, () => tester.pumpWidget(const SizedBox.shrink()));
+      },
+    );
+  }
 
   testWidgets('Back cancels a title open without unlocking a newer selection', (
     tester,
@@ -258,11 +298,20 @@ void main() {
     newerChoice.onSelected();
     expect(resolved, hasLength(2));
 
-    await drive(tester, () async => newLookup.complete(resolved.last));
+    await drive(
+      tester,
+      () async => newLookup.complete(
+        StremioMeta.fromJson({
+          ...resolved.last.toJson(),
+          'id': 'tt1160419',
+          'imdb_id': 'tt1160419',
+        }),
+      ),
+    );
     final detail = tester.widget<MergedDetailScreen>(
       find.byType(MergedDetailScreen),
     );
-    expect(detail.item.id, 'tmdb:438631');
+    expect(detail.item.id, 'tt1160419');
     expect(find.byType(MergedDetailScreen), findsOneWidget);
     await drive(tester, () => tester.pumpWidget(const SizedBox.shrink()));
   });

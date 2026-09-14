@@ -122,6 +122,7 @@ import '../widgets/tv_text_field.dart';
 import '../widgets/text_field_suggestions.dart';
 import '../widgets/metadata_title_navigation.dart';
 import '../services/tmdb_title_search.dart';
+import '../services/metadata_title_service.dart';
 import 'collections/collection_folder_screen.dart';
 import 'iptv/xtream_series_detail.dart';
 import 'playlist_content_view_screen.dart';
@@ -11719,8 +11720,13 @@ class _SearchScreenState extends State<SearchScreen>
             MainPageBridge.activeTab.value != 'search') {
           return;
         }
-        _openItem(selected, selected.sourceAddon ?? _addonForContinue(null));
-      }, resolve: widget.suggestedTitleResolver);
+        _openItem(selected, selected.sourceAddon ?? StremioAddon(
+          id: 'metadata_title', name: 'Title metadata', manifestUrl: '', baseUrl: '',
+        ));
+      }, resolve: widget.suggestedTitleResolver ?? MetadataTitleService.instance.resolve,
+        onUnresolved: (unresolved) => _onQuerySubmitted(unresolved.name),
+        isCurrent: () => mounted && generation == _suggestedTitleOpenGeneration &&
+            _mode == _Mode.catalog && MainPageBridge.activeTab.value == 'search');
     } finally {
       // A cancelled lookup can finish while a newer selection is loading.
       if (generation == _suggestedTitleOpenGeneration) {
