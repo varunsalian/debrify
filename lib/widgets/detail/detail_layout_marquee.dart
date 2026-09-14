@@ -432,7 +432,19 @@ class _RecCardState extends State<_RecCard> {
               child: InkWell(
                 focusNode: widget.focusNode,
                 onTap: widget.onTap,
-                onFocusChange: (f) => setState(() => _focused = f),
+                onFocusChange: (focused) {
+                  setState(() => _focused = focused);
+                  if (!focused) return;
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    if (mounted && _focused) {
+                      Scrollable.ensureVisible(
+                        context,
+                        alignment: 0.5,
+                        duration: Duration.zero,
+                      );
+                    }
+                  });
+                },
                 child: AspectRatio(
                   aspectRatio: 2 / 3,
                   child: (poster != null && poster.isNotEmpty)
