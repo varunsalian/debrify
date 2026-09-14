@@ -200,6 +200,10 @@ abstract interface class WebDavSyncManagementController {
   Future<void> forgetDevice(String deviceId);
 }
 
+abstract interface class WebDavSyncDeviceNamingController {
+  Future<void> renameThisDevice(String name);
+}
+
 abstract interface class WebDavSyncLogoutController {
   Future<void> logout({bool localOnly = false});
 }
@@ -322,6 +326,7 @@ final class WebDavSyncRuntime
     implements
         WebDavSyncActivationController,
         WebDavSyncManagementController,
+        WebDavSyncDeviceNamingController,
         WebDavSyncLogoutController,
         WebDavSyncTvManualController,
         WebDavSyncReconfigurationController,
@@ -876,6 +881,22 @@ final class WebDavSyncRuntime
     return _operations.run(() async {
       await _captureManagingAdmin();
       return _graphTier().listDevices();
+    });
+  }
+
+  @override
+  Future<void> renameThisDevice(String name) async {
+    await initialize();
+    _requireInteractiveWorkAllowed();
+    _requireAvailable();
+    await _operations.run(() async {
+      final authorization = await _captureManagingAdmin();
+      await _graphTier().renameThisDevice(
+        name,
+        authorize: () async {
+          await authorization.validate(ProfileBootstrap.registry);
+        },
+      );
     });
   }
 

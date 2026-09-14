@@ -39,6 +39,33 @@ const _digest =
     '1111111111111111111111111111111111111111111111111111111111111111';
 final _now = DateTime.utc(2026, 9, 2);
 
+class _NamesTransport extends Fake
+    implements WebDavSyncActivationTransport, WebDavSyncDeviceNameTransport {
+  _NamesTransport(this.marker);
+  final Uint8List marker;
+  final names = <String, Uint8List>{};
+  WebDavBytesResult result(Uint8List bytes) => WebDavBytesResult(
+    bytes: bytes,
+    metadata: WebDavResponseMetadata(
+      statusCode: 200,
+      uri: Uri.parse('https://example.test'),
+      headers: const {},
+    ),
+  );
+  @override
+  Future<WebDavBytesResult> readRootMarker() async => result(marker);
+  @override
+  Future<WebDavBytesResult?> readDeviceName(String id) async =>
+      names[id] == null ? null : result(names[id]!);
+  @override
+  Future<void> writeDeviceName(String id, Uint8List bytes) async {
+    names[id] = bytes;
+  }
+
+  @override
+  void close() {}
+}
+
 void main() {
   late Directory temporaryDirectory;
   late ProfileRegistry registry;
@@ -206,6 +233,42 @@ void main() {
     transportFactory: transportFactory,
     codec: codec,
     clock: () => _now,
+  );
+
+  test(
+    'rename publishes only this device and requires authorization at commit',
+    () async {
+      final transport = _NamesTransport(snapshot.markerBytes);
+      var checks = 0;
+      await tier(
+        transportFactory: ({required binding, required secrets}) => transport,
+      ).renameThisDevice(
+        ' Bedroom TV ',
+        authorize: () async {
+          checks++;
+        },
+      );
+      expect(checks, 3);
+      expect(transport.names.keys, [snapshot.namespace.deviceId]);
+      final devices = await tier(
+        transportFactory: ({required binding, required secrets}) => transport,
+      ).listDevices();
+      expect(devices.first.displayName, 'Bedroom TV');
+      expect(devices.last.displayName, isNull);
+      final original = transport.names[snapshot.namespace.deviceId];
+      await expectLater(
+        tier(
+          transportFactory: ({required binding, required secrets}) => transport,
+        ).renameThisDevice(
+          'Wrong',
+          authorize: () async {
+            throw StateError('session changed');
+          },
+        ),
+        throwsStateError,
+      );
+      expect(transport.names[snapshot.namespace.deviceId], same(original));
+    },
   );
 
   test('maintain does not compare or prompt for remote graphs', () async {

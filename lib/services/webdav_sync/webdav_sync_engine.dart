@@ -17,6 +17,7 @@ import 'webdav_sync_clock.dart';
 import 'webdav_sync_circle_merge.dart';
 import 'webdav_sync_circle_models.dart';
 import 'webdav_sync_codec.dart';
+import 'webdav_sync_device_names.dart';
 import 'webdav_sync_diagnostics.dart';
 import 'webdav_sync_engine_state.dart';
 import 'webdav_sync_graph.dart';
@@ -400,6 +401,22 @@ final class WebDavSyncEngine
   final WebDavSyncAppliedKeysCallback _appliedKeysCallback;
   final int readConcurrency;
   final Lock _cycleLock = Lock();
+
+  Future<void> _publishDeviceName(WebDavSyncTransport transport,
+      OpenedWebDavSyncRoot root, String deviceId) async {
+    if (transport is! WebDavSyncDeviceNameTransport) return;
+    var current = true;
+    try {
+      await WebDavSyncDeviceNames.publish(transport: transport, codec: _codec,
+        root: root, deviceId: deviceId, beforeWrite: () async {
+          if (!current) throw StateError('Device name publication expired');
+        }).timeout(const Duration(seconds: 2));
+    } catch (error) {
+      _diagnostic('Could not publish optional device name', error);
+    } finally {
+      current = false;
+    }
+  }
   @visibleForTesting
   int get debugSectionCacheEntries => _sectionCache.entryCount;
 
@@ -492,6 +509,7 @@ final class WebDavSyncEngine
       if (!context.matchesAuthority(rootRead.bytes)) {
         throw const WebDavSyncRootChangedException();
       }
+      await _publishDeviceName(transport, root, deviceId);
       instrumentation.requestStarted();
       final listing = await transport.listDeviceIds();
       peerCount = listing.deviceIds
@@ -1008,6 +1026,7 @@ final class WebDavSyncEngine
         throw const WebDavSyncRootChangedException();
       }
       final listing = (await listingFuture).unwrap();
+      await _publishDeviceName(transport, root, deviceId);
       instrumentation.peerCount = listing.deviceIds
           .where((listedDeviceId) => listedDeviceId != deviceId)
           .length;

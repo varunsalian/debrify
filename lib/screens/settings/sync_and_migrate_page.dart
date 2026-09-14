@@ -1,5 +1,6 @@
 import '../../services/webdav_sync/webdav_log_upload.dart';
 import '../../services/webdav_sync/webdav_sync_binding_store.dart';
+import 'widgets/sync_device_tile.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -693,6 +694,11 @@ class _SyncAndMigratePageState extends State<SyncAndMigratePage>
     if (reloadAfterResume && mounted) await _loadActiveSyncState();
   }
 
+  Future<String?> _askDeviceName(String name) => showSettingsDialog<String>(
+    context: context,
+    builder: (_) => SyncDeviceNameDialog(initialName: name),
+  );
+
   Future<void> _manageDevices() async {
     final management = _management;
     if (management == null || _syncBusy) return;
@@ -721,25 +727,24 @@ class _SyncAndMigratePageState extends State<SyncAndMigratePage>
                     separatorBuilder: (_, _) => const Divider(height: 1),
                     itemBuilder: (_, index) {
                       final device = devices[index];
-                      return ListTile(
-                        title: Text(
-                          device.isThisDevice
-                              ? 'This device'
-                              : 'Other device · ${_shortDeviceId(device.deviceId)}',
-                        ),
-                        subtitle: Text(
-                          device.isRegistered
-                              ? 'Last seen ${_formatSyncTime(device.lastSeenMs)}'
-                              : 'Signed out · saved data retained. Remove to free a device slot.',
-                        ),
-                        trailing: device.isThisDevice
+                      return SyncDeviceTile(
+                        name:
+                            device.displayName ??
+                            (device.isThisDevice
+                                ? 'This device'
+                                : 'Device · ${_shortDeviceId(device.deviceId)}'),
+                        status:
+                            '${device.isThisDevice ? 'This device · ' : ''}${device.isRegistered ? 'Last seen ${_formatSyncTime(device.lastSeenMs)}' : 'Signed out · saved data retained. Remove to free a device slot.'}',
+                        onRename:
+                            device.isThisDevice &&
+                                management is WebDavSyncDeviceNamingController
+                            ? () => Navigator.of(dialogContext).pop('@rename')
+                            : null,
+                        onRemove: device.isThisDevice
                             ? null
-                            : TextButton(
-                                onPressed: () => Navigator.of(
-                                  dialogContext,
-                                ).pop(device.deviceId),
-                                child: const Text('Remove'),
-                              ),
+                            : () => Navigator.of(
+                                dialogContext,
+                              ).pop(device.deviceId),
                       );
                     },
                   ),
@@ -753,6 +758,24 @@ class _SyncAndMigratePageState extends State<SyncAndMigratePage>
         ),
       );
       if (!mounted || target == null) return;
+      if (target == '@rename' &&
+          management is WebDavSyncDeviceNamingController) {
+        final current = devices.where((device) => device.isThisDevice).first;
+        final name = await _askDeviceName(current.displayName ?? 'This device');
+        if (!mounted || name == null) return;
+        await runWebDavForegroundSync(
+          context,
+          title: 'Renaming device',
+          stage: 'Saving the name for your connected devices…',
+          operation: (_) => (management as WebDavSyncDeviceNamingController)
+              .renameThisDevice(name),
+        );
+        if (mounted) {
+          setState(() => _syncBusy = false);
+          await _manageDevices();
+        }
+        return;
+      }
       final confirmed = await showSettingsDialog<bool>(
         context: context,
         barrierDismissible: false,

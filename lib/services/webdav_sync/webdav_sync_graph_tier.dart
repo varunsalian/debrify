@@ -7,6 +7,7 @@ import 'webdav_sync_adoption.dart';
 import 'webdav_sync_binding_store.dart';
 import 'webdav_sync_codec.dart';
 import 'webdav_sync_discovery.dart';
+import 'webdav_sync_device_names.dart';
 import 'webdav_sync_engine.dart';
 import 'webdav_sync_engine_state.dart';
 import 'webdav_sync_graph.dart';
@@ -38,12 +39,14 @@ final class WebDavSyncDeviceSummary {
     required this.lastSeenMs,
     required this.isThisDevice,
     this.isRegistered = true,
+    this.displayName,
   });
 
   final String deviceId;
   final int lastSeenMs;
   final bool isThisDevice;
   final bool isRegistered;
+  final String? displayName;
 }
 
 typedef WebDavSyncGraphTransportFactory =
@@ -276,8 +279,17 @@ final class WebDavSyncGraphTier {
     final secrets = await _bindingStore.readSecrets(active);
     final transport = _transportFactory(binding: active, secrets: secrets);
     final registrations = <String, bool>{};
+    final names = <String, String?>{};
     try {
       for (final manifest in scan.manifests.values) {
+        names[manifest.deviceId] = manifest.deviceId == scan.namespace.deviceId
+            ? await WebDavSyncDeviceNames.localName()
+            : await WebDavSyncDeviceNames.read(
+                transport: transport,
+                codec: _codec,
+                root: scan.root,
+                deviceId: manifest.deviceId,
+              );
         registrations[manifest.deviceId] = await webDavSyncDeviceIsRegistered(
           transport: transport,
           codec: _codec,
@@ -293,6 +305,7 @@ final class WebDavSyncGraphTier {
           .map(
             (manifest) => WebDavSyncDeviceSummary(
               deviceId: manifest.deviceId,
+              displayName: names[manifest.deviceId],
               lastSeenMs: manifest.updatedAtMs,
               isRegistered: registrations[manifest.deviceId]!,
               isThisDevice: manifest.deviceId == scan.namespace.deviceId,
@@ -306,6 +319,43 @@ final class WebDavSyncGraphTier {
           return right.lastSeenMs.compareTo(left.lastSeenMs);
         }),
     );
+  }
+
+  Future<void> renameThisDevice(
+    String name, {
+    required Future<void> Function() authorize,
+  }) async {
+    final validated = WebDavSyncDeviceNames.validate(name);
+    final active = await _activeBinding();
+    final scan = await _discovery.scanActive(bindingId: active.id);
+    final secrets = await _bindingStore.readSecrets(active);
+    final transport = _transportFactory(binding: active, secrets: secrets);
+    try {
+      if (transport is! WebDavSyncDeviceNameTransport) {
+        throw StateError('This connection does not support device names');
+      }
+      await authorize();
+      await WebDavSyncDeviceNames.publish(
+        transport: transport,
+        codec: _codec,
+        root: scan.root,
+        deviceId: scan.namespace.deviceId,
+        name: validated,
+        beforeWrite: () async {
+          final marker = await transport.readRootMarker();
+          if (!_bytesEqual(scan.markerBytes, marker.bytes)) {
+            throw const WebDavSyncRootChangedException();
+          }
+          await authorize();
+        },
+      );
+      // Publication can wait for an earlier automatic update. Revalidate the
+      // session before committing its result to this installation too.
+      await authorize();
+      await WebDavSyncDeviceNames.saveLocal(validated);
+    } finally {
+      transport.close();
+    }
   }
 
   Future<void> forgetDevice({

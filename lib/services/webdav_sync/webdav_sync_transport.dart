@@ -190,6 +190,11 @@ String? _responseHeader(Map<String, String> headers, String name) {
   return null;
 }
 
+abstract interface class WebDavSyncDeviceNameTransport {
+  Future<WebDavBytesResult?> readDeviceName(String deviceId);
+  Future<void> writeDeviceName(String deviceId, Uint8List bytes);
+}
+
 abstract interface class WebDavSyncTransport {
   Future<WebDavBytesResult> readRootMarker();
 
@@ -308,6 +313,7 @@ final class ProtocolWebDavSyncTransport
     implements
         WebDavSyncActivationTransport,
         WebDavSyncRegistrationTransport,
+        WebDavSyncDeviceNameTransport,
         WebDavSyncFileTransport,
         WebDavSyncSharedObjectTransport,
         WebDavSyncSectionGcTransport,
@@ -625,6 +631,33 @@ final class ProtocolWebDavSyncTransport
       if (error.kind == WebDavErrorKind.notFound) return null;
       rethrow;
     }
+  }
+
+  @override
+  Future<WebDavBytesResult?> readDeviceName(String deviceId) async {
+    _validateDeviceId(deviceId);
+    try {
+      return await _client.getBytes(
+        path: _join(_devices, '$deviceId/name.enc'),
+        maxBytes: 4096,
+      );
+    } on WebDavException catch (error) {
+      if (error.kind == WebDavErrorKind.notFound) return null;
+      rethrow;
+    }
+  }
+
+  @override
+  Future<void> writeDeviceName(String deviceId, Uint8List bytes) async {
+    _validateDeviceId(deviceId);
+    await _client.putBytes(
+      path: _join(_devices, '$deviceId/name.enc'),
+      bytes: bytes,
+      maxBytes: 4096,
+      // Optional metadata must never recreate a removed device directory;
+      // activation and seed repair own its manifest/section lifecycle.
+      createParents: false,
+    );
   }
 
   @override

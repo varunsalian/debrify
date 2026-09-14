@@ -34,8 +34,11 @@ import 'package:debrify/services/webdav_sync/webdav_sync_runtime.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_setup_service.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_transport.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:debrify/services/webdav_sync/webdav_sync_device_names.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
   late WebDavSyncCodec codec;
   late Uint8List marker;
   late OpenedWebDavSyncRoot root;
@@ -98,6 +101,50 @@ void main() {
 
   Future<WebDavSyncCycleReport> runFixture(WebDavSyncCycleContext value) =>
       engine.runCycle(value, allowPreActivation: true);
+
+  test(
+    'expired name lookup cannot start a late PUT after sync returns',
+    () async {
+      SharedPreferences.setMockInitialValues({
+        WebDavSyncDeviceNames.preferenceKey: 'TV',
+      });
+      final named = _NamedTransport(marker: marker, serverDate: now)
+        ..nameReadGate = Completer<WebDavBytesResult?>();
+      transport = named;
+      final report = await runFixture(context());
+      expect(report.verifiedMaintenance, isNotNull);
+      named.nameReadGate!.complete(null);
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      expect(named.nameWrites, 0);
+    },
+  );
+
+  test(
+    'sync advertises its own name and optional metadata failure does not block data',
+    () async {
+      SharedPreferences.setMockInitialValues({
+        WebDavSyncDeviceNames.preferenceKey: 'Living room TV',
+      });
+      final named = _NamedTransport(marker: marker, serverDate: now);
+      transport = named;
+      final first = await runFixture(context());
+      expect(first.verifiedMaintenance, isNotNull);
+      expect(
+        await WebDavSyncDeviceNames.read(
+          transport: named,
+          codec: codec,
+          root: root,
+          deviceId: 'device-a',
+        ),
+        'Living room TV',
+      );
+      named.failNames = true;
+      local.preferences = {'theme': 'light'};
+      final second = await runFixture(context());
+      expect(second.verifiedMaintenance, isNotNull);
+      expect(second.sectionsPushed, greaterThan(0));
+    },
+  );
 
   Future<WebDavSyncManifest> openManifest(String deviceId) async {
     final payload = await codec.openDocument(
@@ -5661,6 +5708,37 @@ final class _FakeCircleLocalAdapter extends _FakeLocalAdapter
       return WebDavSyncCircleApplyResult.conflict;
     }
     return WebDavSyncCircleApplyResult.applied;
+  }
+}
+
+class _NamedTransport extends _FakeTransport
+    implements WebDavSyncDeviceNameTransport {
+  _NamedTransport({required super.marker, required super.serverDate});
+  bool failNames = false;
+  Completer<WebDavBytesResult?>? nameReadGate;
+  int nameWrites = 0;
+  Uint8List? name;
+  @override
+  Future<WebDavBytesResult?> readDeviceName(String deviceId) async {
+    if (nameReadGate != null) return nameReadGate!.future;
+    if (failNames) throw StateError('metadata unavailable');
+    return name == null
+        ? null
+        : WebDavBytesResult(
+            bytes: name!,
+            metadata: WebDavResponseMetadata(
+              statusCode: 200,
+              uri: Uri.parse('https://example.test'),
+              headers: const {},
+            ),
+          );
+  }
+
+  @override
+  Future<void> writeDeviceName(String deviceId, Uint8List bytes) async {
+    nameWrites++;
+    if (failNames) throw StateError('metadata unavailable');
+    name = bytes;
   }
 }
 

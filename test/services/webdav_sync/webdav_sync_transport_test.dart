@@ -13,6 +13,82 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
 void main() {
+  test(
+    'optional name writes never recreate a removed device directory',
+    () async {
+      final methods = <String>[];
+      var directoryExists = false;
+      final transport = ProtocolWebDavSyncTransport(
+        location: WebDavSyncFolderLocation(
+          endpoint: 'https://example.test/dav',
+          folderPath: 'Family',
+          serverName: 'Test',
+        ),
+        credentials: const WebDavCredentials(
+          username: 'alice',
+          password: 'secret',
+        ),
+        client: MockClient((request) async {
+          methods.add(request.method);
+          if (request.method == 'MKCOL') {
+            directoryExists = true;
+            return http.Response('', 201);
+          }
+          return http.Response('', directoryExists ? 201 : 409);
+        }),
+      );
+      addTearDown(transport.close);
+      await expectLater(
+        transport.writeDeviceName('removed-device', Uint8List.fromList([1])),
+        throwsA(isA<WebDavException>()),
+      );
+      expect(methods, ['PUT']);
+      expect(directoryExists, isFalse);
+    },
+  );
+
+  test('optional device names use a separate bounded device path', () async {
+    Uint8List? saved;
+    final paths = <String>[];
+    final transport = ProtocolWebDavSyncTransport(
+      location: WebDavSyncFolderLocation(
+        endpoint: 'https://example.test/dav',
+        folderPath: 'Family',
+        serverName: 'Test',
+      ),
+      credentials: const WebDavCredentials(
+        username: 'alice',
+        password: 'secret',
+      ),
+      client: MockClient((request) async {
+        paths.add(request.url.path);
+        if (request.method == 'GET') {
+          return saved == null
+              ? http.Response('', 404)
+              : http.Response.bytes(saved!, 200);
+        }
+        if (request.method == 'PUT') saved = request.bodyBytes;
+        return http.Response('', 201);
+      }),
+    );
+    addTearDown(transport.close);
+    expect(await transport.readDeviceName('device-one'), isNull);
+    await transport.writeDeviceName(
+      'device-one',
+      Uint8List.fromList([1, 2, 3]),
+    );
+    expect((await transport.readDeviceName('device-one'))!.bytes, [1, 2, 3]);
+    expect(
+      paths.any((p) => p.endsWith('/devices/device-one/name.enc')),
+      isTrue,
+    );
+    expect(paths.any((p) => p.endsWith('manifest.enc')), isFalse);
+    await expectLater(
+      transport.writeDeviceName('../outside', Uint8List(0)),
+      throwsArgumentError,
+    );
+  });
+
   WebDavSyncFolderLocation location() => WebDavSyncFolderLocation(
     endpoint: 'https://example.test/dav',
     folderPath: 'Family',
