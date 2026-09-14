@@ -573,10 +573,15 @@ final class ProtocolWebDavSyncTransport
   @override
   Future<void> writeDeviceRemoval(String deviceId, Uint8List bytes) async {
     _validateDeviceId(deviceId);
+    // Older roots predate device retirement metadata. Create its dedicated
+    // collection explicitly because some WebDAV providers (including Koofr)
+    // report a missing PUT parent as 404 instead of the RFC 4918 409.
+    await _client.ensureCollection(_join(_syncRoot, 'removed'));
     await _client.putBytes(
       path: _join(_syncRoot, 'removed/$deviceId.enc'),
       bytes: bytes,
       maxBytes: 4096,
+      createParents: false,
     );
   }
 

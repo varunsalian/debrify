@@ -82,6 +82,39 @@ void main() {
     );
   });
 
+  test('removal publication creates metadata collection before PUT', () async {
+    var removalCollectionExists = false;
+    final methods = <String>[];
+    final transport = ProtocolWebDavSyncTransport(
+      location: WebDavSyncFolderLocation(
+        endpoint: 'https://example.test/dav',
+        folderPath: 'Family',
+        serverName: 'Test',
+      ),
+      credentials: const WebDavCredentials(
+        username: 'alice',
+        password: 'secret',
+      ),
+      client: MockClient((request) async {
+        methods.add(request.method);
+        if (request.method == 'MKCOL') {
+          expect(request.url.path, endsWith('/debrify-sync/removed/'));
+          removalCollectionExists = true;
+          return http.Response('', 201);
+        }
+        if (request.method == 'PUT') {
+          return http.Response('', removalCollectionExists ? 201 : 404);
+        }
+        return http.Response('', 500);
+      }),
+    );
+    addTearDown(transport.close);
+
+    await transport.writeDeviceRemoval('one', Uint8List.fromList([1, 2]));
+
+    expect(methods, <String>['MKCOL', 'PUT']);
+  });
+
   test(
     'optional name writes never recreate a removed device directory',
     () async {
