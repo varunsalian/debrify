@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import '../models/advanced_search_selection.dart';
 import '../models/rd_torrent.dart';
 import '../models/torbox_torrent.dart';
+import 'home_return_cache.dart';
 
 typedef SyncedProfileOutcomeApply = Future<void> Function();
 typedef SyncedProfileRetirementHandoff =
@@ -380,6 +381,7 @@ class MainPageBridge {
   }
 
   static void notifyIntegrationChanged() {
+    HomeReturnCache.invalidate();
     for (final listener in List<VoidCallback>.from(_integrationListeners)) {
       listener();
     }
@@ -397,6 +399,7 @@ class MainPageBridge {
   }
 
   static void notifyHomeSettingsChanged() {
+    HomeReturnCache.invalidate();
     for (final listener in List<VoidCallback>.from(_homeSettingsListeners)) {
       listener();
     }

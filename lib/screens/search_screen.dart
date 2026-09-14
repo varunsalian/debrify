@@ -11,6 +11,7 @@ import '../widgets/collections/collection_focus_art.dart';
 import '../widgets/collections/collection_focus_glow.dart';
 import '../widgets/see_all/discover_browsing_input.dart';
 import '../services/home_catalog_refresh.dart';
+import '../services/home_return_cache.dart';
 import '../services/home_load_deadline.dart';
 import '../services/home_load_progress.dart';
 import '../widgets/home/home_row_focus.dart';
@@ -240,6 +241,26 @@ class SearchScreen extends StatefulWidget {
 }
 
 enum _Mode { catalog, keyword, lists }
+
+/// Completed Home data; interactive resources belong to each screen instance.
+typedef _HomePreservedState = ({
+  List<CatalogSection> sections,
+  HomeBoardSnapshot<(StremioAddon, StremioAddonCatalog), StremioAddon> board,
+  Set<String> disabled,
+  List<HomeExtraRow> extras,
+  List<String> order,
+  List<HomeCollection> collections,
+  String collectionsSignature,
+  HomeHeroSource heroSource,
+  CatalogSection? hero,
+  bool heroResolutionPending,
+  bool hideWatched,
+  HomeCardOrientation cardOrientation,
+  bool hideCardTitlesAndRatings,
+  bool hideCatalogAddonNames,
+  DateTime loadedAt,
+  double scrollOffset,
+});
 
 /// Snapshot of an in-progress keyword search, preserved across a tab switch so
 /// returning restores results + scroll instead of a blank prompt — the nav
@@ -703,6 +724,23 @@ class _SearchScreenState extends State<SearchScreen>
   static final ProfileSessionMemory<_KwPreservedState> _kwPreserved =
       ProfileSessionMemory<_KwPreservedState>();
 
+  static final _homePreserved = HomeReturnCache<_HomePreservedState>();
+  static bool _homeReturnListenersInstalled = false;
+  int _homeReturnRevision = -1;
+  DateTime? _homeLoadedAt;
+  double _homeLastScroll = 0;
+
+  static void _watchHomeReturnChanges() {
+    if (_homeReturnListenersInstalled) return;
+    _homeReturnListenersInstalled = true;
+    MetadataPreferencesService.revision.addListener(HomeReturnCache.invalidate);
+    // With filtering enabled, watched changes also change catalog membership.
+    // These process-lifetime listeners retain no screen, player or focus node.
+    WatchedStatusService.instance.addListener(() {
+      if (HideWatchedPrefs.enabled) HomeReturnCache.invalidate();
+    });
+  }
+
   /// Captured at mount, not dispose: an outgoing screen may be torn down after
   /// the next profile is published and must still tag its snapshot as outgoing.
   late final ProfileSessionOwner _profileSessionOwner;
@@ -884,7 +922,7 @@ class _SearchScreenState extends State<SearchScreen>
   HomeBoardSnapshot<(StremioAddon, StremioAddonCatalog), StremioAddon>?
       _committedBoard;
   bool _boardLoadingMore = false;
-  final ScrollController _boardScroll = ScrollController();
+  late final ScrollController _boardScroll;
 
   /// Whether more board rows remain to lazily load (board mode only — never
   /// during a catalog search, which streams and appends its own rows).
@@ -1779,6 +1817,15 @@ class _SearchScreenState extends State<SearchScreen>
     unawaited(_refreshMetadataFeaturePolicy());
     WidgetsBinding.instance.addObserver(this);
     _profileSessionOwner = ProfileSessionMemory.captureOwner();
+    if (!widget.searchMode && !widget.discoverMode) _watchHomeReturnChanges();
+    final homeSnapshot = !widget.searchMode && !widget.discoverMode
+        ? _homePreserved.take(_profileSessionOwner)
+        : null;
+    final restoredHome = homeSnapshot != null &&
+        homeSnapshot.hideWatched == HideWatchedPrefs.enabled;
+    _homeLastScroll = restoredHome && !widget.isTelevision
+        ? homeSnapshot.scrollOffset : 0;
+    _boardScroll = ScrollController(initialScrollOffset: _homeLastScroll);
     // This one widget backs three tabs (Home board / dedicated Search / Discover).
     AnalyticsService.screenView(
       widget.searchMode
@@ -1923,8 +1970,7 @@ class _SearchScreenState extends State<SearchScreen>
         ? false
         : _restoreKeywordState();
     // Home board only: live-refresh when the Home Rows manager changes which
-    // rows are hidden (on non-TV, Settings is a pushed route so the board isn't
-    // rebuilt on return; on TV a tab switch already reloads it fresh).
+    // rows are hidden. The bridge also invalidates a saved return snapshot.
     if (!widget.searchMode && !widget.discoverMode) {
       MainPageBridge.addHomeSettingsListener(_reloadForHomeSettings);
       HomeRowRefreshSignal.addListener(_queueHomeRows);
@@ -2027,7 +2073,10 @@ class _SearchScreenState extends State<SearchScreen>
       // re-anchoring latches off (see [_settleAutoFocusAfter]), so a later
       // background reload or a return from playback never yanks focus.
       _settleAutoFocusAfter([
-        _load(),
+        if (restoredHome && !restoredKeyword)
+          _restoreHomeSnapshot(homeSnapshot)
+        else
+          _load(),
         _loadContinueWatching(),
         _loadTraktContinueWatching(),
         // refreshBound:false — _load()'s bound-source scan (which now covers the
@@ -2273,8 +2322,102 @@ class _SearchScreenState extends State<SearchScreen>
     return true;
   }
 
+  Future<void> _restoreHomeSnapshot(_HomePreservedState snapshot) async {
+    _homeReturnRevision = HomeReturnCache.revision;
+    _homeLoadedAt = snapshot.loadedAt;
+    _homeDisabled = snapshot.disabled;
+    _homeExtras = snapshot.extras;
+    _homeRowOrder = snapshot.order;
+    _homeCollections = snapshot.collections;
+    _homeCollectionsSig = snapshot.collectionsSignature;
+    _heroSource = snapshot.heroSource;
+    _spotlightHeroOverride = snapshot.hero;
+    _hideWatched = snapshot.hideWatched;
+    _homeCardOrientation = snapshot.cardOrientation;
+    _hideHomeCardTitlesAndRatings = snapshot.hideCardTitlesAndRatings;
+    _hideHomeCatalogAddonNames = snapshot.hideCatalogAddonNames;
+    _homeSections = snapshot.sections;
+    _committedBoard = snapshot.board;
+    _boardCursor = snapshot.board.restore(_boardRefs, _addonsById);
+    _loading = false;
+    _spotlightEntryRevealed = true;
+    if (snapshot.heroResolutionPending) {
+      unawaited(_resolveSpotlightHeroSource(_addonsById.values.toList()));
+    }
+    _applySections(_homeSections);
+    MainPageBridge.homeBoardReady.value = true;
+    _maybeAutoFocusBoard();
+    _maybeAutoFillBoard();
+    unawaited(_refreshPikpakOnly());
+    if (_trackerExtrasEnabled) {
+      final generation = _boardLoadGen;
+      final owner = _profileSessionOwner;
+      unawaited(HomeListRowsService.instance.resolve(
+        _homeExtras,
+        previous: _homeSections.whereType<HomeListSection>().toList(),
+        isCurrent: () => mounted && generation == _boardLoadGen &&
+            owner == ProfileSessionMemory.captureOwner(),
+        onUpdate: (rows) {
+          if (!mounted || generation != _boardLoadGen ||
+              owner != ProfileSessionMemory.captureOwner()) {
+            return;
+          }
+          _publishHomeProgress(replaceHomeListRows(_homeSections, rows),
+            false, generation, ProfileRuntime.scope.value);
+        },
+      ).catchError((_) => <HomeListSection>[]));
+    }
+    // Re-read local configuration too, including imports that bypass the UI
+    // bridge. Continue Watching and favourite loaders still run on each visit.
+    await _reloadForHomeSettings();
+  }
+
+  void _preserveHomeSnapshot() {
+    final board = _committedBoard;
+    final loadedAt = _homeLoadedAt;
+    if (widget.searchMode || widget.discoverMode || board == null ||
+        loadedAt == null || _loading || _error != null || _boardRefreshing ||
+        _boardLoadingMore || _pendingBoardReload) {
+      return;
+    }
+    // Detach mutable paging state. An outgoing horizontal request may finish
+    // after disposal; the next screen must not inherit its loading latch/list.
+    CatalogSection copy(CatalogSection row) {
+      if (row is HomeCollectionSection) {
+        return HomeCollectionSection(collection: row.collection);
+      }
+      if (row is HomeListSection) {
+        return HomeListSection(rowId: row.rowId, title: row.title,
+          items: List.of(row.items), traktChoice: row.traktChoice,
+          simklList: row.simklList, mdblistList: row.mdblistList);
+      }
+      return CatalogSection(title: row.title, addon: row.addon,
+        catalog: row.catalog, items: List.of(row.items), nextSkip: row.nextSkip,
+        exhausted: row.exhausted, pagingPaused: row.pagingPaused, query: row.query);
+    }
+    _homePreserved.store(_profileSessionOwner, (
+      sections: _homeSections.map(copy).toList(),
+      board: board,
+      disabled: Set.of(_homeDisabled),
+      extras: List.of(_homeExtras),
+      order: List.of(_homeRowOrder),
+      collections: List.of(_homeCollections),
+      collectionsSignature: _homeCollectionsSig,
+      heroSource: _heroSource,
+      hero: _spotlightHeroOverride == null ? null : copy(_spotlightHeroOverride!),
+      heroResolutionPending: _heroSourceResolutionPending,
+      hideWatched: _hideWatched,
+      cardOrientation: _homeCardOrientation,
+      hideCardTitlesAndRatings: _hideHomeCardTitlesAndRatings,
+      hideCatalogAddonNames: _hideHomeCatalogAddonNames,
+      loadedAt: loadedAt,
+      scrollOffset: _homeLastScroll,
+    ), revision: _homeReturnRevision, loadedAt: loadedAt);
+  }
+
   @override
   void dispose() {
+    _preserveHomeSnapshot();
     MetadataPreferencesService.revision.removeListener(_metadataSettingsChanged);
     _catalogContinueNode.dispose();
     _catalogMoreNode.dispose();
@@ -2748,6 +2891,8 @@ class _SearchScreenState extends State<SearchScreen>
   }
 
   Future<void> _load({bool preserveVisibleRows = false}) async {
+    _homeReturnRevision = HomeReturnCache.revision;
+    _homeLoadedAt = null;
     final previousLists = _homeSections.whereType<HomeListSection>().toList();
     var listRows = <HomeListSection>[];
     var boardFinished = false;
@@ -2951,6 +3096,7 @@ class _SearchScreenState extends State<SearchScreen>
             progress.lists(listRows);
             progress.flush(allowEmpty: true);
             _commitBoardSnapshot();
+            _homeLoadedAt = DateTime.now();
             return;
           }
           // List rows lead the sections — after the favourites rows, before every
@@ -2970,6 +3116,7 @@ class _SearchScreenState extends State<SearchScreen>
           ];
           _homeSections = sections;
           _commitBoardSnapshot();
+          _homeLoadedAt = DateTime.now();
           setState(() => _loading = false);
           MainPageBridge.homeBoardReady.value = true;
           // A catalog search may have STARTED while this load was in flight —
@@ -3126,6 +3273,7 @@ class _SearchScreenState extends State<SearchScreen>
 
   /// Fire off the next batch as the user nears the bottom of the board.
   void _onBoardScroll() {
+    if (_boardScroll.hasClients) _homeLastScroll = _boardScroll.offset;
     if (!_canPageHome || !_boardHasMore || _boardLoadingMore) return;
     if (!_boardScroll.hasClients) return;
     final pos = _boardScroll.position;
@@ -7344,6 +7492,9 @@ class _SearchScreenState extends State<SearchScreen>
   /// Rows save landing mid-load): only the newest run may commit.
   int _heroSourceResolveGen = 0;
   bool _heroSourceResolving = false;
+  // The presentation deadline can expire while the underlying request is
+  // still pending. A return snapshot must resume that request too.
+  bool _heroSourceResolutionPending = false;
   bool _spotlightEntryRevealed = false;
 
   /// Fetch the hero reel for the current [_heroSource] pref.
@@ -7358,10 +7509,15 @@ class _SearchScreenState extends State<SearchScreen>
   Future<void> _resolveSpotlightHeroSource(List<StremioAddon> addons) async {
     final gen = ++_heroSourceResolveGen;
     _heroSourceResolving = true;
+    _heroSourceResolutionPending = true;
     try {
       // The initial presentation must not wait forever on a dead hero source.
       // A late result may still populate the reel after the cards fallback.
-      await _fetchSpotlightHeroSource(addons, gen).timeout(
+      await _fetchSpotlightHeroSource(addons, gen).whenComplete(() {
+        if (mounted && gen == _heroSourceResolveGen) {
+          _heroSourceResolutionPending = false;
+        }
+      }).timeout(
         const Duration(seconds: 25),
         onTimeout: () {},
       );

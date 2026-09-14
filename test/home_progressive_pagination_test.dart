@@ -18,6 +18,7 @@ import 'package:debrify/utils/platform_util.dart';
 import 'package:debrify/widgets/detail/theme/detail_themes.dart';
 import 'package:debrify/widgets/home/spotlight_board.dart';
 import 'package:debrify/widgets/app_tab_switcher.dart';
+import 'package:debrify/widgets/skeleton_poster.dart';
 import 'package:debrify/widgets/tv_ambient_art_stage.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -45,6 +46,8 @@ class HomeFixture {
     this.tailCount = 0,
     this.horizontal = false,
     this.fastCount = 1,
+    this.television = true,
+    this.pendingHero = false,
   });
 
   final WidgetTester tester;
@@ -53,6 +56,9 @@ class HomeFixture {
   final int tailCount;
   final bool horizontal;
   final int fastCount;
+  final bool television;
+  final bool pendingHero;
+  final hero = Completer<http.Response>();
   final navigator = GlobalKey<NavigatorState>();
   final slow = Completer<http.Response>();
   final secondPage = Completer<http.Response>();
@@ -61,6 +67,7 @@ class HomeFixture {
     if (request.url.host != 'paging.invalid') return http.Response('', 404);
     final path = request.url.path;
     requests.add(path);
+    if (path.contains('/hero')) return hero.future;
     if (path.contains('/slow')) return slow.future;
     if (path.contains('/tail')) return page('Tail');
     if (path.contains('skip=100')) return secondPage.future;
@@ -98,6 +105,7 @@ class HomeFixture {
     addTearDown(() async {
       await tester.pumpWidget(const SizedBox());
       if (!slow.isCompleted) slow.complete(page('Cancelled', count: 0));
+      if (!hero.isCompleted) hero.complete(page('Cancelled', count: 0));
       if (!secondPage.isCompleted) {
         secondPage.complete(page('Cancelled', count: 0));
       }
@@ -109,7 +117,7 @@ class HomeFixture {
     addTearDown(tester.view.resetDevicePixelRatio);
     ProfileRuntime.debugReset();
     ProfileRuntime.initializeLegacy();
-    PlatformUtil.debugSetAndroidTvCached(true);
+    PlatformUtil.debugSetAndroidTvCached(television);
     AppThemeAdapter.debugUseTestTypography = true;
     addTearDown(() {
       PlatformUtil.debugSetAndroidTvCached(null);
@@ -124,6 +132,8 @@ class HomeFixture {
       manifestUrl: 'https://paging.invalid/manifest.json',
       resources: ['catalog'],
       catalogs: [
+        if (pendingHero)
+          const StremioAddonCatalog(id: 'hero', type: 'movie', name: 'Hero'),
         if (fastFirst) fast,
         for (var i = 0; i < 7; i++)
           StremioAddonCatalog(id: 'slow$i', type: 'movie', name: 'Slow $i'),
@@ -135,9 +145,11 @@ class HomeFixture {
     SharedPreferences.setMockInitialValues({
       'stremio_addons_v1': jsonEncode([addon.toJson()]),
       'tv_home_style': style,
+      if (pendingHero)
+        'home_disabled_sections_v1': jsonEncode(['paging:movie:hero']),
       'home_hero_source_v1': jsonEncode({
         'mode': 'custom',
-        'ids': ['paging:movie:fast'],
+        'ids': [pendingHero ? 'paging:movie:hero' : 'paging:movie:fast'],
       }),
     });
     StorageService.tvHomeStyleCached = style;
@@ -152,8 +164,8 @@ class HomeFixture {
           home: AppThemeScope(
             theme: theme,
             child:
-                wrap?.call(const SearchScreen(isTelevision: true)) ??
-                const SearchScreen(isTelevision: true),
+                wrap?.call(SearchScreen(isTelevision: television)) ??
+                SearchScreen(isTelevision: television),
           ),
         ),
       );
@@ -220,6 +232,189 @@ class HomeFixture {
 }
 
 void main() {
+  testWidgets('Home resumes a pending custom hero after a cached return', (
+    tester,
+  ) async {
+    final tab = ValueNotifier(15);
+    addTearDown(tab.dispose);
+    final home = HomeFixture(tester, style: 'spotlight', pendingHero: true);
+    home.slow.complete(page('Slow'));
+    await home.mount(
+      wrap: (child) => ValueListenableBuilder<int>(
+        valueListenable: tab,
+        child: child,
+        builder: (_, index, homePage) => AppTabSwitcher(
+          selectedIndex: index,
+          isTelevision: true,
+          entranceAnimation: const AlwaysStoppedAnimation(1),
+          child: index == 15 ? homePage! : const Text('Settings'),
+        ),
+      ),
+    );
+    await home.settle();
+    expect(home.requests.any((path) => path.contains('/hero')), isTrue);
+    final outgoing = tester.state(find.byType(SearchScreen));
+    tab.value = 8;
+    await home.pump(Duration.zero);
+    expect(outgoing.mounted, isFalse);
+    tab.value = 15;
+    await home.pump(Duration.zero);
+    expect(find.byType(BrandLoadingStage), findsNothing);
+    expect(find.text('Fast 0'), findsWidgets);
+    await home.drive(() => home.hero.complete(page('Selected hero', count: 8)));
+    await home.settle();
+    expect(
+      tester
+          .widget<SpotlightBoard>(find.byType(SpotlightBoard))
+          .hero
+          .first
+          .name,
+      'Selected hero 0',
+    );
+    await home.dispose();
+  });
+
+  testWidgets(
+    'desktop Home preserves scroll through repeated Settings visits',
+    (tester) async {
+      final tab = ValueNotifier(15);
+      addTearDown(tab.dispose);
+      final home = HomeFixture(tester, television: false);
+      home.slow.complete(page('Slow'));
+      await home.mount(
+        wrap: (child) => ValueListenableBuilder<int>(
+          valueListenable: tab,
+          child: child,
+          builder: (_, index, homePage) => AppTabSwitcher(
+            selectedIndex: index,
+            isTelevision: false,
+            entranceAnimation: const AlwaysStoppedAnimation(1),
+            child: index == 15 ? homePage! : const Text('Settings'),
+          ),
+        ),
+      );
+      await home.settle();
+      home.scroll(Axis.vertical).position.jumpTo(300);
+      await home.pump(Duration.zero);
+      for (var i = 0; i < 2; i++) {
+        tab.value = 8;
+        await home.pump(Duration.zero);
+        await home.pump(const Duration(milliseconds: 500));
+        expect(find.byType(SearchScreen), findsNothing);
+        tab.value = 15;
+        await home.pump(Duration.zero);
+        expect(find.byType(BrandLoadingStage), findsNothing);
+        expect(home.scroll(Axis.vertical).position.pixels, 300);
+        await home.settle();
+      }
+      await home.dispose();
+    },
+  );
+
+  testWidgets('restored Home can resume an interrupted horizontal page', (
+    tester,
+  ) async {
+    final tab = ValueNotifier(15);
+    addTearDown(tab.dispose);
+    final home = HomeFixture(tester, style: 'spotlight', horizontal: true);
+    await home.mount(
+      wrap: (child) => ValueListenableBuilder<int>(
+        valueListenable: tab,
+        child: child,
+        builder: (_, index, homePage) => AppTabSwitcher(
+          selectedIndex: index,
+          isTelevision: true,
+          entranceAnimation: const AlwaysStoppedAnimation(1),
+          child: index == 15 ? homePage! : const Text('Settings'),
+        ),
+      ),
+    );
+    await home.drive(() => home.slow.complete(page('Slow')));
+    await home.settle();
+    expect(home.fastShelf.items, hasLength(100));
+    await home.nextFastPage();
+    tab.value = 8;
+    await home.pump(Duration.zero);
+    tab.value = 15;
+    await home.pump(Duration.zero);
+    expect(find.byType(BrandLoadingStage), findsNothing);
+    expect(home.fastShelf.items, hasLength(100));
+    await home.nextFastPage();
+    await home.drive(
+      () => home.secondPage.complete(page('Next', start: 100, count: 20)),
+    );
+    await home.settle();
+    expect(home.fastShelf.items, hasLength(120));
+    expect(home.fastShelf.items.last.title, 'Next 119');
+    await home.dispose();
+  });
+
+  for (final style in ['classic', 'spotlight']) {
+    testWidgets(
+      '$style completed Home returns on the first frame after Settings',
+      (tester) async {
+        final tab = ValueNotifier(15);
+        addTearDown(tab.dispose);
+        final home = HomeFixture(tester, style: style);
+        await home.mount(
+          wrap: (child) => ValueListenableBuilder<int>(
+            valueListenable: tab,
+            child: child,
+            builder: (_, index, homePage) => AppTabSwitcher(
+              selectedIndex: index,
+              isTelevision: true,
+              entranceAnimation: const AlwaysStoppedAnimation(1),
+              child: index == 15 ? homePage! : const Text('Settings'),
+            ),
+          ),
+        );
+        await home.drive(() => home.slow.complete(page('Slow')));
+        await home.settle();
+        final outgoing = tester.state(find.byType(SearchScreen));
+        final requests = List.of(home.requests);
+        tab.value = 8;
+        await home.pump(Duration.zero);
+        expect(outgoing.mounted, isFalse);
+        expect(find.byType(SearchScreen), findsNothing);
+        tab.value = 15;
+        await home.pump(Duration.zero);
+        expect(tester.state(find.byType(SearchScreen)), isNot(same(outgoing)));
+        expect(
+          find.byType(BrandLoadingStage),
+          findsNothing,
+          reason: 'Returning Home must render saved content before async loads',
+        );
+        expect(find.text('Fast 0'), findsWidgets);
+        await home.settle();
+        expect(home.requests, requests);
+
+        // A settings edit made while Home is absent must defeat restoration.
+        tab.value = 8;
+        await home.pump(Duration.zero);
+        await home.drive(() async {
+          await StorageService.setHomeDisabledSections({'paging:movie:fast'});
+          MainPageBridge.notifyHomeSettingsChanged();
+        });
+        tab.value = 15;
+        await home.pump(Duration.zero);
+        expect(find.text('Fast 0'), findsNothing);
+        await home.settle();
+        if (style == 'spotlight') {
+          expect(
+            tester
+                .widget<SpotlightBoard>(find.byType(SpotlightBoard))
+                .sections
+                .any((s) => s.id?.endsWith('paging:movie:fast') == true),
+            isFalse,
+          );
+        } else {
+          expect(find.text('Fast 0'), findsNothing);
+        }
+        await home.dispose();
+      },
+    );
+  }
+
   testWidgets(
     'synced TV trailer volume refreshes live without reloading Home',
     (tester) async {

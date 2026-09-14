@@ -1,4 +1,5 @@
 import 'metadata_preferences_service.dart';
+import 'home_return_cache.dart';
 import 'prepared_stream_requests.dart';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
@@ -191,6 +192,7 @@ class StremioService {
 
   /// Notify all listeners that addons have changed
   void _notifyAddonsChanged() {
+    HomeReturnCache.invalidate();
     MetadataPreferencesService.revision.value++;
     for (final listener in _addonsChangedListeners) {
       listener();
@@ -3253,6 +3255,7 @@ class StremioService {
 
   /// Invalidate cache (call after external changes)
   void invalidateCache() {
+    HomeReturnCache.invalidate();
     _addonsCache = null;
     _catalogCache.clear();
     _streamRequests.clear();
