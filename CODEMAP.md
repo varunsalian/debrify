@@ -18,6 +18,8 @@ right code instead of re-discovering it. Flutter app; code under `lib/{screens,s
   favourites rows, the D-pad `_BoardCell` focus grid, poster sizing (`_railPosterW`), bind-sources entry.
 - **`services/storage_service.dart`** 🔴 — all SharedPreferences/persisted state (settings, continue
   watching (cap 50), playback state, favourites, provider toggles, home disabled-sections).
+  Quick Play policy and legacy mirrors: `services/storage/quick_play_policy_prefs.dart`;
+  StorageService retains its facade and ProfilePreferences retains profile authority.
 - **`services/torrent_playback_service.dart`** 🔴 — provider-agnostic play/add/bind pipeline;
   string-keyed switches per provider (`_add`, `_isConfigured`, `_pickProvider`, `bindSource`).
 - **`main.dart`** — app shell + nav branch (TV rail / desktop rail / `MobileFloatingNav`), tab indices.
