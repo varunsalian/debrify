@@ -28,6 +28,7 @@ abstract final class SanitizedProfilePreferences {
       case 'home_cw_merge_mdblist':
       case 'home_hide_card_titles_and_ratings':
       case 'home_hide_catalog_addon_names':
+      case 'home_hide_collection_names':
       case 'discover_show_type_tags':
       case 'discover_show_ratings':
       case 'detail_trailer_autoplay_enabled':

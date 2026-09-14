@@ -210,6 +210,10 @@ class SpotlightShelf {
   /// captions regardless — this flag is a non-TV presentation choice.
   final bool captions;
 
+  /// Whether the shelf heading, provenance pill and See-All affordance paint.
+  /// Collection rows may opt out while their cards remain fully interactive.
+  final bool showHeader;
+
   /// Stable identity for element reuse across board updates. Tracker rows
   /// stream in and FRONT-INSERT above the catalog rows; without identity the
   /// board's list reconciles shelves by position and remounts every shelf
@@ -225,6 +229,7 @@ class SpotlightShelf {
     this.onSeeAll,
     this.tag,
     this.captions = true,
+    this.showHeader = true,
     this.id,
   });
 }
@@ -2239,16 +2244,20 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
       painter.dispose();
       return height;
     }
-    var header = textHeight(section.title, _shelfTitleStyle(m));
-    final tag = section.tag;
-    if (tag != null && tag.isNotEmpty) {
-      final size = m.title * .72;
-      final tagHeight = textHeight(tag.toUpperCase(), RowTagPill.textStyle(size)) +
-          size * .56 + 2; // vertical padding and the two 1px borders
-      if (tagHeight > header) header = tagHeight;
+    var header = 0.0;
+    if (section.showHeader) {
+      header = textHeight(section.title, _shelfTitleStyle(m));
+      final tag = section.tag;
+      if (tag != null && tag.isNotEmpty) {
+        final size = m.title * .72;
+        final tagHeight = textHeight(tag.toUpperCase(), RowTagPill.textStyle(size)) +
+            size * .56 + 2; // vertical padding and the two 1px borders
+        if (tagHeight > header) header = tagHeight;
+      }
     }
     final cardHeight = _shelfCardHeight(section, m);
-    return 20 + header + m.liftUpFor(cardHeight) + cardHeight + m.liftDownFor(cardHeight);
+    return (section.showHeader ? 20 : 8) + header +
+        m.liftUpFor(cardHeight) + cardHeight + m.liftDownFor(cardHeight);
   }
 
   Widget _shelfTitle(SpotlightShelf section, _M m) {
@@ -2328,19 +2337,22 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        Padding(
-          // The gap under the title is `liftUp`, supplied by the row below —
-          // reserved space that is empty at rest and consumed by the lift.
-          // Off TV the rows breathe more — the reference's air is half of
-          // what makes its rows read as considered rather than stacked.
-          padding: EdgeInsets.fromLTRB(
-            m.gutter,
-            widget.dpad ? 20 : 34,
-            m.gutter,
-            0,
-          ),
-          child: _shelfTitle(section, m),
-        ),
+        if (section.showHeader)
+          Padding(
+            // The gap under the title is `liftUp`, supplied by the row below —
+            // reserved space that is empty at rest and consumed by the lift.
+            // Off TV the rows breathe more — the reference's air is half of
+            // what makes its rows read as considered rather than stacked.
+            padding: EdgeInsets.fromLTRB(
+              m.gutter,
+              widget.dpad ? 20 : 34,
+              m.gutter,
+              0,
+            ),
+            child: _shelfTitle(section, m),
+          )
+        else
+          SizedBox(height: widget.dpad ? 8 : 14),
         Padding(
           // The room the lift needs sits OUTSIDE the viewport, as padding.
           //

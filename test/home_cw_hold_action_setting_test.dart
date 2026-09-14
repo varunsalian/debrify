@@ -42,4 +42,14 @@ void main() {
     await StorageService.clearAllHomePageSettings();
     expect(await StorageService.getHomeHideCatalogAddonNames(), isFalse);
   });
+
+  test('Hide Home collection names defaults off and persists', () async {
+    expect(await StorageService.getHomeHideCollectionNames(), isFalse);
+
+    await StorageService.setHomeHideCollectionNames(true);
+    expect(await StorageService.getHomeHideCollectionNames(), isTrue);
+
+    await StorageService.clearAllHomePageSettings();
+    expect(await StorageService.getHomeHideCollectionNames(), isFalse);
+  });
 }

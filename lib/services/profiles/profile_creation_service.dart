@@ -26,6 +26,7 @@ class ProfileCreationService {
     'home_card_orientation',
     'home_hide_card_titles_and_ratings',
     'home_hide_catalog_addon_names',
+    'home_hide_collection_names',
     'home_cw_hold_to_quick_play',
     'home_cw_merge_local',
     'home_cw_merge_trakt',

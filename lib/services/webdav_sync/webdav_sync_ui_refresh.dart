@@ -54,6 +54,7 @@ abstract final class WebDavSyncUiRefresh {
       _WebDavSyncUiRefreshTarget.homeSettings,
     },
     'home_hide_catalog_addon_names': {_WebDavSyncUiRefreshTarget.homeSettings},
+    'home_hide_collection_names': {_WebDavSyncUiRefreshTarget.homeSettings},
     'home_disabled_sections_v1': {_WebDavSyncUiRefreshTarget.homeSettings},
     'home_extra_rows_v1': {_WebDavSyncUiRefreshTarget.homeSettings},
     'remote_home_collections_sync_deferred': {_WebDavSyncUiRefreshTarget.homeSettings},

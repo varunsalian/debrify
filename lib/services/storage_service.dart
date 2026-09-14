@@ -310,6 +310,8 @@ class StorageService {
       'home_hide_card_titles_and_ratings';
   static const String _homeHideCatalogAddonNamesKey =
       'home_hide_catalog_addon_names';
+  static const String _homeHideCollectionNamesKey =
+      'home_hide_collection_names';
   static const String _supportRemoteConfigCacheKey =
       'support_remote_config_cache_v1';
   static const String _dismissedDonationCampaignIdsKey =
@@ -6349,6 +6351,18 @@ class StorageService {
     await prefs.setBool(_homeHideCatalogAddonNamesKey, value);
   }
 
+  /// Suppresses collection row headings on Home without changing catalog
+  /// titles or their add-on provenance labels.
+  static Future<bool> getHomeHideCollectionNames() async {
+    final prefs = await ProfilePreferences.instance();
+    return prefs.getBool(_homeHideCollectionNamesKey) ?? false;
+  }
+
+  static Future<void> setHomeHideCollectionNames(bool value) async {
+    final prefs = await ProfilePreferences.instance();
+    await prefs.setBool(_homeHideCollectionNamesKey, value);
+  }
+
   static Future<void> clearAllHomePageSettings() async {
     final prefs = await ProfilePreferences.instance();
     await prefs.remove(_homeDefaultSourceTypeKey);
@@ -6365,6 +6379,7 @@ class StorageService {
     await prefs.remove(_homeCardOrientationKey);
     await prefs.remove(_homeHideCardTitlesAndRatingsKey);
     await prefs.remove(_homeHideCatalogAddonNamesKey);
+    await prefs.remove(_homeHideCollectionNamesKey);
   }
 
   // Reddit Settings

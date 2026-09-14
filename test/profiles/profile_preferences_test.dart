@@ -443,6 +443,30 @@ void main() {
     );
   });
 
+  test(
+    'Home collection-name visibility transfers as a reviewed preference',
+    () {
+      expect(
+        ProfileCreationService.copyablePreferenceKeys,
+        contains('home_hide_collection_names'),
+      );
+      expect(
+        SanitizedProfilePreferences.allowsEntry(
+          'home_hide_collection_names',
+          true,
+        ),
+        isTrue,
+      );
+      expect(
+        SanitizedProfilePreferences.allowsEntry(
+          'home_hide_collection_names',
+          'yes',
+        ),
+        isFalse,
+      );
+    },
+  );
+
   test('device preference allowlist rejects arbitrary state', () async {
     final prefs = await DevicePreferences.instance();
     expect(() => prefs.setString('profile_theme', 'dark'), throwsArgumentError);

@@ -7,6 +7,7 @@ import 'package:debrify/screens/settings/collections_settings_page.dart';
 import 'package:debrify/services/home_collections_store.dart';
 import 'package:debrify/services/main_page_bridge.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
+import 'package:debrify/services/storage_service.dart';
 import 'package:debrify/services/stremio_service.dart';
 import 'package:debrify/widgets/see_all/see_all_poster_grid.dart';
 import 'package:debrify/widgets/see_all/stremio_dropdown.dart';
@@ -248,6 +249,26 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text(collection.title), findsNothing);
     expect(find.text('No collections yet.'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('collection settings can hide only collection row names', (
+    tester,
+  ) async {
+    await seed(tester, 'rows');
+    await tester.pumpWidget(const MaterialApp(home: CollectionsSettingsPage()));
+    await tester.pumpAndSettle();
+
+    expect(await StorageService.getHomeHideCollectionNames(), isFalse);
+    await tester.ensureVisible(find.text('Hide collection names'));
+    await tester.tap(find.text('Hide collection names'));
+    await tester.pumpAndSettle();
+
+    expect(await StorageService.getHomeHideCollectionNames(), isTrue);
+    expect(
+      find.textContaining('catalog and add-on names are unchanged'),
+      findsOneWidget,
+    );
     expect(tester.takeException(), isNull);
   });
 

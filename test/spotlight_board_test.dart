@@ -1182,6 +1182,26 @@ void main() {
     expect(find.byKey(preview), findsNothing);
   });
 
+  testWidgets('a hidden shelf header keeps its collection cards visible', (
+    tester,
+  ) async {
+    await tester.pumpWidget(host([_meta('tt1', 'Hero')], [
+      SpotlightShelf(
+        title: 'Streaming',
+        tag: 'Collection',
+        showHeader: false,
+        nodes: rows[0],
+        items: [SpotlightCard(title: 'Netflix', onOpen: _noop)],
+      ),
+    ]));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Streaming'), findsNothing);
+    expect(find.text('Collection'), findsNothing);
+    expect(find.text('Netflix'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('an IPTV preview follows desktop hover, not keyboard focus', (
     tester,
   ) async {

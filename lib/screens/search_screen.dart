@@ -259,6 +259,7 @@ typedef _HomePreservedState = ({
   HomeCardOrientation cardOrientation,
   bool hideCardTitlesAndRatings,
   bool hideCatalogAddonNames,
+  bool hideCollectionNames,
   DateTime loadedAt,
   double scrollOffset,
 });
@@ -2337,6 +2338,7 @@ class _SearchScreenState extends State<SearchScreen>
     _homeCardOrientation = snapshot.cardOrientation;
     _hideHomeCardTitlesAndRatings = snapshot.hideCardTitlesAndRatings;
     _hideHomeCatalogAddonNames = snapshot.hideCatalogAddonNames;
+    _hideHomeCollectionNames = snapshot.hideCollectionNames;
     _homeSections = snapshot.sections;
     _committedBoard = snapshot.board;
     _boardCursor = snapshot.board.restore(_boardRefs, _addonsById);
@@ -2411,6 +2413,7 @@ class _SearchScreenState extends State<SearchScreen>
       cardOrientation: _homeCardOrientation,
       hideCardTitlesAndRatings: _hideHomeCardTitlesAndRatings,
       hideCatalogAddonNames: _hideHomeCatalogAddonNames,
+      hideCollectionNames: _hideHomeCollectionNames,
       loadedAt: loadedAt,
       scrollOffset: _homeLastScroll,
     ), revision: _homeReturnRevision, loadedAt: loadedAt);
@@ -2693,18 +2696,22 @@ class _SearchScreenState extends State<SearchScreen>
       StorageService.getHomeCardOrientation(),
       StorageService.getHomeHideCardTitlesAndRatings(),
       StorageService.getHomeHideCatalogAddonNames(),
+      StorageService.getHomeHideCollectionNames(),
     ]);
     if (!mounted) return;
     final orientation = cardSettings[0] as HomeCardOrientation;
     final hideTitlesAndRatings = cardSettings[1] as bool;
     final hideCatalogAddonNames = cardSettings[2] as bool;
+    final hideCollectionNames = cardSettings[3] as bool;
     if (orientation != _homeCardOrientation ||
         hideTitlesAndRatings != _hideHomeCardTitlesAndRatings ||
-        hideCatalogAddonNames != _hideHomeCatalogAddonNames) {
+        hideCatalogAddonNames != _hideHomeCatalogAddonNames ||
+        hideCollectionNames != _hideHomeCollectionNames) {
       setState(() {
         _homeCardOrientation = orientation;
         _hideHomeCardTitlesAndRatings = hideTitlesAndRatings;
         _hideHomeCatalogAddonNames = hideCatalogAddonNames;
+        _hideHomeCollectionNames = hideCollectionNames;
       });
     }
     // Merged-CW toggles: re-read, and on a change re-sync each provider's node
@@ -6083,7 +6090,12 @@ class _SearchScreenState extends State<SearchScreen>
           anchorHeight = homeRowHeight(focused.first.context,
             ValueKey('board-reveal-$_boardGen-$anchor'));
         }
-        anchorHeight ??= _classicCatalogRowExtent(focused.first.context ?? context);
+        anchorHeight ??= _classicCatalogRowExtent(
+          focused.first.context ?? context,
+          section: rail.sectionIndex == null
+              ? null
+              : _sections[rail.sectionIndex!],
+        );
         break;
       }
       previousOrder = rails.map(_canvasRailRowId).toList();
@@ -6792,6 +6804,7 @@ class _SearchScreenState extends State<SearchScreen>
   HomeCardOrientation _homeCardOrientation = HomeCardOrientation.landscape;
   bool _hideHomeCardTitlesAndRatings = false;
   bool _hideHomeCatalogAddonNames = false;
+  bool _hideHomeCollectionNames = false;
 
   bool get _homeLandscapeCards =>
       _homeCardOrientation == HomeCardOrientation.landscape;
@@ -7072,20 +7085,24 @@ class _SearchScreenState extends State<SearchScreen>
       StorageService.getHomeCardOrientation(),
       StorageService.getHomeHideCardTitlesAndRatings(),
       StorageService.getHomeHideCatalogAddonNames(),
+      StorageService.getHomeHideCollectionNames(),
     ]);
     if (!mounted) return;
     final orientation = values[0] as HomeCardOrientation;
     final hideTitlesAndRatings = values[1] as bool;
     final hideCatalogAddonNames = values[2] as bool;
+    final hideCollectionNames = values[3] as bool;
     if (orientation == _homeCardOrientation &&
         hideTitlesAndRatings == _hideHomeCardTitlesAndRatings &&
-        hideCatalogAddonNames == _hideHomeCatalogAddonNames) {
+        hideCatalogAddonNames == _hideHomeCatalogAddonNames &&
+        hideCollectionNames == _hideHomeCollectionNames) {
       return;
     }
     setState(() {
       _homeCardOrientation = orientation;
       _hideHomeCardTitlesAndRatings = hideTitlesAndRatings;
       _hideHomeCatalogAddonNames = hideCatalogAddonNames;
+      _hideHomeCollectionNames = hideCollectionNames;
     });
   }
 
@@ -7691,7 +7708,8 @@ class _SearchScreenState extends State<SearchScreen>
       return SpotlightShelf(
         id: railKey,
         title: section.title,
-        tag: _catalogSourceTag(section),
+        tag: _hideHomeCollectionNames ? null : _catalogSourceTag(section),
+        showHeader: !_hideHomeCollectionNames,
         nodes: i < _rowNodes.length ? _rowNodes[i] : const [],
         onSeeAll: () => _openCatalogSeeAll(section),
         // A brand-logo tile needs no caption; captions stay on only while
@@ -8283,7 +8301,11 @@ class _SearchScreenState extends State<SearchScreen>
   String _canvasRailTitle(_CanvasRail rail) {
     if (rail.cw != null) return rail.cw!.title;
     if (rail.favKind != null) return _canvasFavTitle(rail.favKind!);
-    return _sections[rail.sectionIndex!].title;
+    final section = _sections[rail.sectionIndex!];
+    if (_hideHomeCollectionNames && section is HomeCollectionSection) {
+      return '';
+    }
+    return section.title;
   }
 
   List<StremioMeta> _canvasRailItems(_CanvasRail rail) =>
@@ -10978,6 +11000,7 @@ class _SearchScreenState extends State<SearchScreen>
   /// the addon is exactly what tells those apart.
   String _canvasTabTitle(List<_CanvasRail> rails, int i) {
     final title = _canvasRailTitle(rails[i]);
+    if (title.isEmpty) return '';
     final rail = rails[i];
     if (rail.sectionIndex == null) return title;
     final duplicated = rails.any(
@@ -11055,6 +11078,7 @@ class _SearchScreenState extends State<SearchScreen>
               ),
             ),
             for (var i = start; i < end; i++)
+              if (_canvasTabTitle(rails, i).isNotEmpty)
               Flexible(
                 child: Padding(
                   padding: const EdgeInsets.only(right: 26),
@@ -19657,7 +19681,10 @@ class _SearchScreenState extends State<SearchScreen>
     color: AppThemeScope.of(context).fade(AppThemeScope.of(context).core.tx, 0.92),
   );
 
-  double _classicCatalogRowExtent(BuildContext context) {
+  double _classicCatalogRowExtent(
+    BuildContext context, {
+    CatalogSection? section,
+  }) {
     double lineHeight(TextStyle style) {
       final painter = TextPainter(
         text: TextSpan(text: 'Ag', style: DefaultTextStyle.of(context).style.merge(style)),
@@ -19667,6 +19694,9 @@ class _SearchScreenState extends State<SearchScreen>
       final height = painter.height;
       painter.dispose();
       return height;
+    }
+    if (_hideHomeCollectionNames && section is HomeCollectionSection) {
+      return 8 + _railTitleCardH(context) + 14;
     }
     var header = lineHeight(_railTitleStyle(fontSize: 15));
     if (!_hideHomeCatalogAddonNames) {
@@ -19756,11 +19786,14 @@ class _SearchScreenState extends State<SearchScreen>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _railHeader(
-          title: section.title,
-          tag: _catalogSourceTag(section),
-          onSeeAll: () => _openCatalogSeeAll(section),
-        ),
+        if (collection == null || !_hideHomeCollectionNames)
+          _railHeader(
+            title: section.title,
+            tag: _catalogSourceTag(section),
+            onSeeAll: () => _openCatalogSeeAll(section),
+          )
+        else
+          const SizedBox(height: 8),
         SizedBox(
           height: rowH,
           child: NotificationListener<ScrollNotification>(
