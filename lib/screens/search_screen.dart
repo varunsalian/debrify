@@ -200,7 +200,7 @@ String? _seLabel(int? season, int? episode) {
 ///   results per addon (same board layout).
 /// * KEYWORD mode — raw torrent search → tap a result to add/play.
 /// * LISTS mode — MDBList public-list search, isolated from title catalogs.
-/// Catalog and Keyword offer TMDB title suggestions while typing on the
+/// Catalog offers TMDB title suggestions while typing on the
 /// dedicated Search tab. Selecting a title opens its existing detail flow.
 ///
 /// All playback (catalog auto-best, sources list, keyword) runs in-tab through
@@ -11651,9 +11651,9 @@ class _SearchScreenState extends State<SearchScreen>
     _titleSearch.update(
       editing.text,
       language: preferences?.language ?? 'en-US',
-      // The existing TMDB discovery opt-out also covers title lookup. Lists
-      // and pasted links retain their own search semantics.
-      enabled: widget.searchMode && _mode != _Mode.lists &&
+      // Title lookup belongs only to Catalog. Keyword, Lists and pasted
+      // links retain their own search semantics.
+      enabled: widget.searchMode && _mode == _Mode.catalog &&
           MainPageBridge.activeTab.value == 'search' &&
           _titleSearchPolicyReady &&
           !_openingSuggestedTitle &&
@@ -11691,14 +11691,14 @@ class _SearchScreenState extends State<SearchScreen>
         TextFieldSuggestion(
           id: 'search-query',
           title: 'Search for “$query”',
-          subtitle: _mode == _Mode.keyword ? 'Search torrents' : 'Search catalogs',
+          subtitle: 'Search catalogs',
           onSelected: () => _onQuerySubmitted(query),
         ),
     ];
   }
 
   Future<void> _openSuggestedTitle(StremioMeta item) async {
-    if (_openingSuggestedTitle || !mounted ||
+    if (_openingSuggestedTitle || !mounted || _mode != _Mode.catalog ||
         MainPageBridge.activeTab.value != 'search' ||
         _titleSearchScope != ProfileRuntime.scope.value) {
       return;
@@ -15985,7 +15985,8 @@ class _SearchScreenState extends State<SearchScreen>
           // it renders the same plain TextField as before.
           final field = TvTextField(
             controller: _searchController,
-            suggestions: widget.searchMode ? _titleSuggestions : null,
+            suggestions: widget.searchMode && _mode == _Mode.catalog
+                ? _titleSuggestions : null,
             suggestionsLabel: 'Titles from TMDB',
             focusNode: _searchFocusNode,
             onChanged: _onQueryChanged,

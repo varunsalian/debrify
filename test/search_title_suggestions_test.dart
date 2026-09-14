@@ -127,25 +127,49 @@ void main() {
   );
 
   testWidgets(
-    'Keyword gets title suggestions while pasted links bypass lookup',
+    'Keyword never requests or displays TMDB title suggestions',
     (tester) async {
       final fixture = await mount(tester);
       await drive(tester, () => tester.tap(find.text('Keyword')));
       await tester.enterText(find.byType(TextField).first, 'Dune');
       await tester.pump(const Duration(milliseconds: 350));
       await tester.pump();
-      expect(find.text('Search for “Dune”'), findsOneWidget);
-      expect(find.text('Dune (2021)'), findsOneWidget);
+      expect(find.text('Search for “Dune”'), findsNothing);
+      expect(find.text('Dune (2021)'), findsNothing);
+      expect(find.byType(TextFieldSuggestions), findsNothing);
+      expect(fixture.requests, isEmpty);
+      final field = tester.widget<TvTextField>(find.byType(TvTextField).first);
+      expect(field.suggestions, isNull);
       await tester.enterText(
         find.byType(TextField).first,
         'https://example.com/private',
       );
       await tester.pump(const Duration(milliseconds: 400));
       expect(fixture.search.value, isEmpty);
-      expect(fixture.requests, hasLength(1));
+      expect(fixture.requests, isEmpty);
       await drive(tester, () => tester.pumpWidget(const SizedBox.shrink()));
     },
   );
+
+  testWidgets('Catalog pasted links bypass title lookup', (tester) async {
+    final fixture = await mount(tester);
+    await tester.enterText(find.byType(TextField).first, 'https://example.com/private');
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(fixture.search.value, isEmpty);
+    expect(fixture.requests, isEmpty);
+    await drive(tester, () => tester.pumpWidget(const SizedBox.shrink()));
+  });
+
+  testWidgets('switching to Keyword cancels pending Catalog suggestions', (tester) async {
+    final fixture = await mount(tester);
+    await tester.enterText(find.byType(TextField).first, 'Dune');
+    await drive(tester, () => tester.tap(find.text('Keyword')));
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(fixture.search.value, isEmpty);
+    expect(fixture.requests, isEmpty);
+    expect(find.byType(TextFieldSuggestions), findsNothing);
+    await drive(tester, () => tester.pumpWidget(const SizedBox.shrink()));
+  });
 
   testWidgets(
     'metadata preference changes cancel choices and apply the new language',
