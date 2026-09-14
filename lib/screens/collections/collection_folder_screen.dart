@@ -39,6 +39,7 @@ class CollectionFolderScreen extends StatefulWidget {
   final bool isTelevision;
   final CollectionNativeSourceService? nativeSources;
   final String? sourceKey;
+  final bool fromHome;
 
   const CollectionFolderScreen({
     super.key,
@@ -51,6 +52,7 @@ class CollectionFolderScreen extends StatefulWidget {
     this.isTelevision = false,
     this.nativeSources,
     this.sourceKey,
+    this.fromHome = false,
   });
 
   @override
@@ -435,7 +437,7 @@ class _CollectionFolderScreenState extends State<CollectionFolderScreen> {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted || token != _reqToken) return;
         if (widget.sourceKey == null) {
-          _folderNode.requestFocus();
+          (_homeGallery ? _backNode : _folderNode).requestFocus();
         } else {
           _sortNode.requestFocus();
           _focusLoadedGrid();
@@ -773,16 +775,29 @@ class _CollectionFolderScreenState extends State<CollectionFolderScreen> {
   _Rail? get _tabRail =>
       _tab >= 0 && _tab < _rails.length ? _rails[_tab] : null;
 
-  List<FocusNode> get _filterNodes => [
-    if (widget.sourceKey == null) _folderNode,
-    if (_tabs) ...[
-      if (_rails.isNotEmpty && widget.sourceKey == null) _listNode,
-      _sortNode,
-    ] else ...[
-      if (_offersAll) _viewNode,
-      if (_view == _View.all) _sortNode,
-    ],
-  ];
+  bool get _homeGallery =>
+      widget.fromHome && widget.sourceKey == null && !_tabs;
+
+  void _focusBelowHeader() {
+    if (_filterNodes.isEmpty) {
+      _enterContent();
+    } else {
+      _filterNodes.first.requestFocus();
+    }
+  }
+
+  List<FocusNode> get _filterNodes => _homeGallery
+      ? []
+      : [
+          if (widget.sourceKey == null) _folderNode,
+          if (_tabs) ...[
+            if (_rails.isNotEmpty && widget.sourceKey == null) _listNode,
+            _sortNode,
+          ] else ...[
+            if (_offersAll) _viewNode,
+            if (_view == _View.all) _sortNode,
+          ],
+        ];
 
   bool get _showingEmpty {
     if (!_booted) return false;
@@ -833,7 +848,9 @@ class _CollectionFolderScreenState extends State<CollectionFolderScreen> {
   }
 
   /// The chip the grid hands focus back to on DPAD-up.
-  FocusNode get _gridExitNode => widget.sourceKey != null
+  FocusNode get _gridExitNode => _homeGallery
+      ? _backNode
+      : widget.sourceKey != null
       ? _sortNode
       : _tabs && _rails.isNotEmpty
       ? _listNode
@@ -870,7 +887,7 @@ class _CollectionFolderScreenState extends State<CollectionFolderScreen> {
                           '${_collection.title} / ${_hasFolders ? _folder.title : ""}',
                       isTelevision: widget.isTelevision,
                       backNode: _backNode,
-                      onFilterDown: () => _filterNodes.first.requestFocus(),
+                      onFilterDown: _focusBelowHeader,
                     ),
                   ),
                   if (_hasHeaderIssue) _buildIssueAction(),
@@ -894,9 +911,9 @@ class _CollectionFolderScreenState extends State<CollectionFolderScreen> {
                 backNode: _backNode,
                 action: _hasHeaderIssue ? _buildIssueAction() : null,
                 onRight: _hasHeaderIssue ? _issuesNode.requestFocus : null,
-                onDown: () => _filterNodes.first.requestFocus(),
+                onDown: _focusBelowHeader,
               ),
-            _buildFilterBar(),
+            if (!_homeGallery) _buildFilterBar(),
             if (_openingTitle != null)
               Row(
                 children: [
@@ -971,7 +988,7 @@ class _CollectionFolderScreenState extends State<CollectionFolderScreen> {
           return KeyEventResult.handled;
         }
         if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
-          _filterNodes.first.requestFocus();
+          _focusBelowHeader();
           return KeyEventResult.handled;
         }
       }
@@ -1114,7 +1131,7 @@ class _CollectionFolderScreenState extends State<CollectionFolderScreen> {
           ),
       ],
       onOpen: (index) => _openList(rails[index], index),
-      onExitTop: () => _folderNode.requestFocus(),
+      onExitTop: () => (_homeGallery ? _backNode : _folderNode).requestFocus(),
     );
   }
 

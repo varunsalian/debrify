@@ -5046,6 +5046,7 @@ class _SearchScreenState extends State<SearchScreen>
               CollectionFolderScreen(
                 collection: collection,
                 initialFolderIndex: folderIndex,
+                fromHome: true,
                 isTelevision: widget.isTelevision,
                 onOpenItem: (item) =>
                     _openItem(item, item.sourceAddon ?? _addonForContinue(null)),

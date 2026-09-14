@@ -36,6 +36,7 @@ class TvCollectionTitles extends StatefulWidget {
 class TvCollectionTitlesState extends State<TvCollectionTitles> {
   final _nodes = <FocusNode>[];
   int _index = 0;
+  int? _hoverFocusIndex;
   int? _scrollLoadRequestedForLength;
   Timer? _holdTimer;
   int? _pressedIndex;
@@ -169,6 +170,7 @@ class TvCollectionTitlesState extends State<TvCollectionTitles> {
   }
 
   void _move(int index) {
+    _hoverFocusIndex = null;
     if (_scroll.hasClients) {
       final top = 5 + (index ~/ _columns) * _rowExtent;
       final position = _scroll.position;
@@ -190,10 +192,12 @@ class TvCollectionTitlesState extends State<TvCollectionTitles> {
   }
 
   void _focus(int index) {
+    final fromHover = _hoverFocusIndex == index;
+    _hoverFocusIndex = null;
     setState(() => _index = index);
     widget.onItemFocused?.call(widget.items[index]);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || index >= widget.items.length) return;
+      if (!mounted || fromHover || index >= widget.items.length) return;
       final target = _nodes[index].context;
       if (target != null) Scrollable.ensureVisible(target, alignment: .5);
     });
@@ -281,6 +285,7 @@ class TvCollectionTitlesState extends State<TvCollectionTitles> {
           canRequestFocus: false,
           onHover: (hovering) {
             if (hovering && !_nodes[index].hasFocus) {
+              _hoverFocusIndex = index;
               _nodes[index].requestFocus();
             }
           },

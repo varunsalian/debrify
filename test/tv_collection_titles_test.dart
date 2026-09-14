@@ -105,6 +105,53 @@ void main() {
     }
   });
 
+  testWidgets('wheel scrolling under the mouse is not recentered by hover', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1280, 720));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: TvCollectionTitles(
+            style: 'filmstrip',
+            items: List.generate(
+              30,
+              (i) =>
+                  StremioMeta(id: '$i', name: 'Wheel title $i', type: 'movie'),
+            ),
+            onOpen: (_) {},
+            onLoadMore: () {},
+            onExitTop: () {},
+            exhausted: true,
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final scroll = tester
+        .state<ScrollableState>(find.byType(Scrollable).first)
+        .position;
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    addTearDown(mouse.removePointer);
+    await mouse.addPointer(location: const Offset(1, 1));
+    final location = tester.getCenter(find.text('Wheel title 2'));
+    await mouse.moveTo(location);
+    await tester.pumpAndSettle();
+    expect(scroll.pixels, 0);
+    for (var i = 1; i <= 3; i++) {
+      await tester.sendEventToBinding(
+        PointerScrollEvent(
+          position: location,
+          scrollDelta: const Offset(0, 80),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(scroll.pixels, closeTo(i * 80, 0.1));
+    }
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('desktop hover updates the selected preview', (tester) async {
     final focused = <String>[];
     await tester.pumpWidget(

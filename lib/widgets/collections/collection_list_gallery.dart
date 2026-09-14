@@ -194,7 +194,7 @@ class _GalleryCardState extends State<_GalleryCard> {
         onExit: (_) => setState(() => _hovered = false),
         child: Semantics(
           button: true,
-          label: 'Open ${p.title}, ${p.source}',
+          label: 'Open ${p.title}',
           child: GestureDetector(
             onTap: widget.onOpen,
             behavior: HitTestBehavior.opaque,
@@ -278,21 +278,19 @@ class _GalleryCardState extends State<_GalleryCard> {
                                   fontWeight: FontWeight.w800,
                                 ),
                               ),
-                              const SizedBox(height: 8),
-                              Text(
-                                p.failed
-                                    ? '${p.source} · Tap to retry'
-                                    : p.loading
-                                    ? '${p.source} · Loading'
-                                    : p.source,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  color: app.core.tx.withValues(alpha: .65),
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
+                              if (p.failed || p.loading) ...[
+                                const SizedBox(height: 8),
+                                Text(
+                                  p.failed ? 'Tap to retry' : 'Loading',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    color: app.core.tx.withValues(alpha: .65),
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                  ),
                                 ),
-                              ),
+                              ],
                             ],
                           ),
                         ),

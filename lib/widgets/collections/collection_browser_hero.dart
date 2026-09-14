@@ -174,20 +174,6 @@ class CollectionBrowserHero extends StatelessWidget {
                     fontWeight: FontWeight.w800,
                   ),
                 ),
-                if (!compact) ...[
-                  const SizedBox(height: 6),
-                  Text(
-                    listTitle == null
-                        ? '$listCount lists · Choose a list to explore'
-                        : source ?? 'List',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: app.core.tx.withValues(alpha: .6),
-                      fontSize: 13,
-                    ),
-                  ),
-                ],
               ],
             ),
           ),
