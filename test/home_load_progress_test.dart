@@ -2,6 +2,8 @@ import 'package:debrify/models/home_collection.dart';
 import 'package:debrify/models/stremio_addon.dart';
 import 'package:debrify/services/home_collection_rows.dart';
 import 'package:debrify/services/home_load_progress.dart';
+import 'package:debrify/services/home_list_rows.dart';
+import 'package:debrify/services/trakt/trakt_list_source.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/profiles/profile_scope.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -23,6 +25,27 @@ HomeCollectionSection collection() => HomeCollectionSection(
 );
 
 void main() {
+  test('late list replacement preserves paged catalogs without duplicates', () {
+    final paged = catalog('paged')..nextSkip = 300;
+    const choice = TraktListChoice.builtin(TraktSeeAllList.watchlist);
+    final list = HomeListSection(
+      rowId: 'traktlist:watchlist',
+      title: 'Watchlist',
+      items: const [],
+      traktChoice: choice,
+    );
+    final next = HomeListSection(
+      rowId: 'traktlist:watchlist',
+      title: 'Watchlist',
+      items: const [],
+      traktChoice: choice,
+    );
+    final rows = replaceHomeListRows([list, paged], [next]);
+    expect(rows, [next, paged]);
+    expect(rows.last.nextSkip, 300);
+    expect(replaceHomeListRows(rows, [next]), [next, paged]);
+    expect(replaceHomeListRows(rows, []), [paged]);
+  });
   testWidgets(
     'a profile session change retires accepted and queued callbacks',
     (tester) async {

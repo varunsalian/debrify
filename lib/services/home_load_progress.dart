@@ -5,6 +5,22 @@ import 'home_collection_rows.dart';
 import 'home_list_rows.dart';
 import 'home_row_order.dart';
 
+/// Replace tracker rows without losing catalogs already paged on Home.
+List<CatalogSection> replaceHomeListRows(
+  List<CatalogSection> rows,
+  List<HomeListSection> lists,
+) => [
+  ...rows.whereType<HomeCollectionSection>().where(
+    (r) => r.collection.pinToTop,
+  ),
+  ...lists,
+  ...rows.where(
+    (r) =>
+        r is! HomeListSection &&
+        !(r is HomeCollectionSection && r.collection.pinToTop),
+  ),
+];
+
 /// A timed-out initial batch may have published only its later catalogs.
 /// Retrying from the safe cursor must fill earlier slots, not duplicate known
 /// rows or turn completion order into the user's catalog order.

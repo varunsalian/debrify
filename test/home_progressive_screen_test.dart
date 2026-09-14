@@ -33,6 +33,57 @@ void main() {
       await loader.load();
     }
   });
+  for (final android in [false, true]) {
+    testWidgets('tracker-only Home accepts list after five seconds (TV=$android)', (tester) async {
+      ProfileRuntime.debugReset();
+      ProfileRuntime.initializeLegacy();
+      PlatformUtil.debugSetAndroidTvCached(android);
+      PlatformUtil.debugSetTvOS(false);
+      addTearDown(() {
+        PlatformUtil.debugSetAndroidTvCached(null);
+        PlatformUtil.debugSetTvOS(null);
+      });
+      SharedPreferences.setMockInitialValues({
+        'stremio_addons_v1': '[]',
+        'trakt_access_token': 'test-token',
+        'home_extra_rows_v1': jsonEncode([{'id': 'traktlist:custom:7', 'title': 'Late personal list'}]),
+        'tv_home_style': 'classic',
+      });
+      StorageService.tvHomeStyleCached = 'classic';
+      StremioService.instance.invalidateCache();
+      final pending = Completer<http.Response>();
+      var itemRequests = 0;
+      final client = MockClient((request) async {
+        if (request.url.path == '/users/me/lists') {
+          return http.Response('[{"name":"Mine","ids":{"trakt":7,"slug":"mine"}}]', 200);
+        }
+        if (request.url.path.contains('/lists/mine/items/')) {
+          itemRequests++;
+          return pending.future;
+        }
+        return http.Response('[]', 200);
+      });
+      await tester.runAsync(() => http.runWithClient(() async {
+        await tester.pumpWidget(MaterialApp(home: SearchScreen(isTelevision: android)));
+        await Future<void>.delayed(const Duration(milliseconds: 5500));
+      }, () => client));
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(itemRequests, 1);
+      expect(find.text('Late personal list'), findsNothing);
+      await tester.runAsync(() async {
+        pending.complete(http.Response('[{"type":"movie","movie":{"title":"Late title","ids":{"imdb":"tt1234567"}}}]', 200,
+          headers: {'x-pagination-page-count': '50'}));
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+      });
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(find.text('Late personal list'), findsWidgets);
+      expect(itemRequests, 1);
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump(const Duration(seconds: 2));
+      expect(tester.takeException(), isNull);
+    });
+  }
+
   for (final (android, style, outcome) in [
     (true, 'classic', 'empty'),
     (false, 'classic', 'empty'),

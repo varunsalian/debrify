@@ -829,7 +829,10 @@ class _SearchScreenState extends State<SearchScreen>
     }
     _deferredHomeProgress = null;
     if (!first && _boardHasFocus()) _autoFocusSettled = true;
-    setState(() => _loading = false);
+    setState(() {
+      _loading = false;
+      if (rows.isNotEmpty) _error = null;
+    });
     _applySections(rows, preserveFocus: !first, incremental: !first);
     MainPageBridge.homeBoardReady.value = true;
     _maybeAutoFocusBoard();
@@ -2745,6 +2748,9 @@ class _SearchScreenState extends State<SearchScreen>
   }
 
   Future<void> _load({bool preserveVisibleRows = false}) async {
+    final previousLists = _homeSections.whereType<HomeListSection>().toList();
+    var listRows = <HomeListSection>[];
+    var boardFinished = false;
     final keepRows = preserveVisibleRows &&
         _homeSections.isNotEmpty &&
         _committedBoard != null;
@@ -2843,24 +2849,27 @@ class _SearchScreenState extends State<SearchScreen>
             _commitBoardSnapshot();
             progress.collections(_buildCollectionSections());
           }
-          // Opt-in Trakt/Simkl list rows, resolved IN PARALLEL with the first
-          // catalog batch below. Home board only — the Search tab runs _load just
-          // to warm the catalog refs for its search, and Discover never comes
-          // through here. The 5s deadline keeps the rows that finished and drops
-          // stragglers, bounding what an enabled config can add to first paint
-          // (nothing at all is fetched in the default, nothing-enabled config).
-          final listRowsFuture =
-              widget.searchMode || widget.discoverMode || !_trackerExtrasEnabled
-              ? Future.value(const <HomeListSection>[])
-              // catchError at creation, not at the await: a superseded load
-              // returns before awaiting this future, and an unawaited throw
-              // would surface as an unhandled async error. A resolve failure
-              // just means no list rows this load.
-              : HomeListRowsService.instance
-                    .resolve(_homeExtras, deadline: const Duration(seconds: 5))
-                    .catchError((_) => const <HomeListSection>[]);
-          if (progress != null) {
-            unawaited(listRowsFuture.then(progress.lists));
+          // Home previews publish independently of catalog loading. Never drop
+          // a valid list merely because another list/catalog took longer.
+          if (!widget.searchMode && !widget.discoverMode && _trackerExtrasEnabled) {
+            final enabledIds = _homeExtras.map((r) => r.id).toSet();
+            listRows = previousLists.where((r) => enabledIds.contains(r.rowId)).toList();
+            progress?.lists(listRows);
+            unawaited(HomeListRowsService.instance.resolve(
+              _homeExtras,
+              previous: listRows,
+              isCurrent: current,
+              onUpdate: (rows) {
+                if (!current()) return;
+                listRows = rows;
+                if (!boardFinished) {
+                  progress?.lists(rows);
+                  return;
+                }
+                _publishHomeProgress(
+                  replaceHomeListRows(_homeSections, rows), false, gen, scope);
+              },
+            ).catchError((_) => listRows));
           }
           // With hide-watched on, wait briefly for the local watched snapshot so
           // the first rows paint already filtered instead of losing titles a beat
@@ -2937,7 +2946,6 @@ class _SearchScreenState extends State<SearchScreen>
               _boardCursor < _boardRefs.length) {
             first.addAll(await _fetchBoardBatch(_kBoardBatchSize, gen, previousRows: previousRows));
           }
-          final listRows = await listRowsFuture;
           if (!current()) return;
           if (progress != null) {
             progress.lists(listRows);
@@ -3016,6 +3024,7 @@ class _SearchScreenState extends State<SearchScreen>
       MainPageBridge.homeBoardReady.value = true;
     } finally {
       progress?.dispose();
+      boardFinished = true;
       if (completionGen == _boardLoadGen && scope == ProfileRuntime.scope.value) {
         _boardRefreshing = false;
         _progressiveHomeLoadPending = false;

@@ -1129,7 +1129,8 @@ class TraktService {
   }
 
   /// Fetch the user's custom lists.
-  Future<List<Map<String, dynamic>>> fetchCustomLists() async {
+  Future<List<Map<String, dynamic>>> fetchCustomLists({bool strict = false}) async {
+    if (strict) return _fetchHomeListDirectory('/users/me/lists');
     final response = await _authenticatedGet('/users/me/lists');
     if (response == null || response.statusCode != 200) {
       debugPrint('Trakt: fetchCustomLists failed (${response?.statusCode})');
@@ -1146,7 +1147,8 @@ class TraktService {
   }
 
   /// Fetch lists the authenticated user has liked on Trakt.
-  Future<List<Map<String, dynamic>>> fetchLikedLists() async {
+  Future<List<Map<String, dynamic>>> fetchLikedLists({bool strict = false}) async {
+    if (strict) return _fetchHomeListDirectory('/users/me/likes/lists', liked: true);
     final response = await _authenticatedGet('/users/me/likes/lists?limit=100');
     if (response == null || response.statusCode != 200) {
       debugPrint('Trakt: fetchLikedLists failed (${response?.statusCode})');
@@ -1165,6 +1167,37 @@ class TraktService {
       debugPrint('Trakt: fetchLikedLists parse error (${error.runtimeType})');
       return [];
     }
+  }
+
+  /// Home needs an authoritative directory before removing retained rows.
+  /// Never turn a transport/parse failure or partial page walk into emptiness.
+  Future<List<Map<String, dynamic>>> _fetchHomeListDirectory(
+    String path, {bool liked = false}
+  ) async {
+    final lists = <Map<String, dynamic>>[];
+    var pages = 1;
+    for (var page = 1; page <= pages; page++) {
+      final response = await _authenticatedGet('$path?page=$page&limit=100');
+      if (response == null || response.statusCode != 200) {
+        throw StateError('Trakt list directory unavailable');
+      }
+      final decoded = jsonDecode(response.body) as List;
+      for (final entry in decoded) {
+        final value = liked ? (entry as Map)['list'] : entry;
+        final list = Map<String, dynamic>.from(value as Map);
+        final ids = list['ids'];
+        if (ids is! Map || (ids['trakt'] == null && ids['slug'] == null)) {
+          throw const FormatException('Trakt list identity missing');
+        }
+        lists.add(list);
+      }
+      final count = response.headers['x-pagination-page-count'];
+      pages = count == null ? 1 : int.parse(count);
+      if (pages < 0 || pages > 100 || (pages == 0 && decoded.isNotEmpty)) {
+        throw const FormatException('Invalid Trakt directory pagination');
+      }
+    }
+    return lists;
   }
 
   /// Fetch items from a liked list owned by another user.
@@ -1239,10 +1272,13 @@ class TraktService {
   /// [basePath] is the list segment without the trailing `/items` — e.g.
   /// `/users/me/lists/{slug}` (own) or `/lists/{traktId}` / `/users/{owner}/
   /// lists/{slug}` (liked).
+  /// Home requests [preview] to stop after page one; all other callers retain
+  /// the complete ordered list walk.
   Future<List<dynamic>?> _fetchListItemsOrderedOrNull(
     String basePath,
-    String logLabel,
-  ) async {
+    String logLabel, {
+    bool preview = false,
+  }) async {
     final items = <dynamic>[];
     var page = 1;
     var pageCount = 1;
@@ -1265,27 +1301,32 @@ class TraktService {
         return items.isEmpty ? null : items;
       }
       page += 1;
-    } while (page <= pageCount);
+    } while (!preview && page <= pageCount);
     return items;
   }
 
   /// Own custom list items (movies + shows) in list order, null on failure.
   /// [listRef] is the list's slug (preferred) or Trakt id.
-  Future<List<dynamic>?> fetchCustomListItemsOrderedOrNull(String listRef) {
+  Future<List<dynamic>?> fetchCustomListItemsOrderedOrNull(
+    String listRef, {
+    bool preview = false,
+  }) {
     return _fetchListItemsOrderedOrNull(
       '/users/me/lists/$listRef',
       'customList $listRef',
+      preview: preview,
     );
   }
 
   /// Liked list items (movies + shows) in list order, null on failure. Resolves
   /// the list's global-id path when possible, else the owner/slug path.
   Future<List<dynamic>?> fetchLikedListItemsOrderedOrNull(
-    Map<String, dynamic> list,
-  ) {
+    Map<String, dynamic> list, {
+    bool preview = false,
+  }) {
     final base = _likedListBasePath(list);
     if (base == null) return Future.value(null);
-    return _fetchListItemsOrderedOrNull(base, 'likedList $base');
+    return _fetchListItemsOrderedOrNull(base, 'likedList $base', preview: preview);
   }
 
   /// Search Trakt for movies or shows by query.

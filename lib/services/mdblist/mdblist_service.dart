@@ -695,6 +695,10 @@ class MdblistService {
   /// request. Returns null on a first-page failure so callers can tell error
   /// from an empty list; a *later*-page failure returns whatever loaded so far
   /// (and is not cached, so it retries).
+  /// Home preview only; never populates the full-list cache.
+  Future<MdblistResult<MdblistRawPage>> fetchHomeListPreview(int listId) =>
+      _fetchRawPage('/lists/$listId/items', query: {'limit': 100, 'unified': true});
+
   Future<MdblistResult<Map<String, dynamic>>> fetchListItemsResult(
     int listId, {
     bool forceRefresh = false,
