@@ -96,6 +96,8 @@ right code instead of re-discovering it. Flutter app; code under `lib/{screens,s
   `widgets/reddit/*`. Lemmy: `services/lemmy_service.dart`, `widgets/lemmy/*`.
 
 ## Settings · storage · misc infra
+- Default torrent filters: `services/storage/default_torrent_filter_prefs.dart` owns the five JSON
+  encodings; `StorageService` retains compatible APIs and the single-profile reset sequence.
 - Settings: `screens/settings/*` (+ `home_sections_filter_page.dart` = show/hide home rows,
   `home_page_settings_page.dart`). Metrics/format helpers: `utils/*`.
 - Hide watched (Settings › Tracking): `services/hide_watched_prefs.dart` (sync flag),
