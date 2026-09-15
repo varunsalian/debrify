@@ -2949,7 +2949,12 @@ class _CardState extends State<_Card> with MetadataPresentationMixin<_Card> {
 
   @override
   Widget build(BuildContext context) => TweenAnimationBuilder<double>(
-    tween: Tween(end: _canExpand && _f ? (_trailerPlaying ? 1.38 : 1.18) : 1.0),
+    // Focused title cards use the same landscape aspect and growth stages,
+    // regardless of the resting poster preference.
+    tween: Tween(end: _canExpand && _f
+        ? (SpotlightCardShape.wide.aspect / widget.card.shape.aspect) *
+            (_trailerPlaying ? 1.38 : 1.18)
+        : 1.0),
     duration: MediaQuery.disableAnimationsOf(context)
         ? Duration.zero
         : _trailerPlaying ? const Duration(milliseconds: 700)
@@ -2973,7 +2978,7 @@ class _CardState extends State<_Card> with MetadataPresentationMixin<_Card> {
     // headroom and makes each upload cheaper.
     // A stable decode size avoids creating a new cached image every animation
     // frame. Eligible cards reserve their expanded resolution once.
-    final decodeW = (widget.height * c.shape.aspect *
+    final decodeW = (widget.height * (expanded ? SpotlightCardShape.wide.aspect : c.shape.aspect) *
         (_canExpand && !PlatformUtil.isAndroidTvCached ? 1.18 : 1.0) * MediaQuery.devicePixelRatioOf(context) * 1.1)
         .round()
         .clamp(100, 1000);
@@ -2988,11 +2993,22 @@ class _CardState extends State<_Card> with MetadataPresentationMixin<_Card> {
             ? (_resolvedDescription ?? '') : '';
     final showDescription = description.isNotEmpty;
     final changed = meta != null && !identical(meta, originalMetadata);
-    final pending = !c.episodeArtwork && metadataArtworkPending(
-      c.shape == SpotlightCardShape.wide ? MetadataCategory.backgrounds : MetadataCategory.posters);
-    final url = pending ? null : c.imageForPresentation(meta, metadataPreferences);
+    final artwork = expanded && c.shape != SpotlightCardShape.wide
+        ? SpotlightCard(
+            metadata: c.metadata,
+            title: c.title,
+            onOpen: c.onOpen,
+            shape: SpotlightCardShape.wide,
+            episodeArtwork: c.episodeArtwork,
+            image: c.episodeArtwork ? c.image : c.metadata?.background,
+            fallbackImage: c.image,
+          )
+        : c;
+    final pending = !artwork.episodeArtwork && metadataArtworkPending(
+      artwork.shape == SpotlightCardShape.wide ? MetadataCategory.backgrounds : MetadataCategory.posters);
+    final url = pending ? null : artwork.imageForPresentation(meta, metadataPreferences);
     final displayedTitle = changed ? meta.name : c.title;
-    final fallbackUrl = c.imageErrorFallback(meta, metadataPreferences);
+    final fallbackUrl = artwork.imageErrorFallback(meta, metadataPreferences);
     Widget artPlaceholder() => Center(child: Padding(
       padding: const EdgeInsets.all(12),
       child: Text(displayedTitle, maxLines: 2, overflow: TextOverflow.ellipsis,

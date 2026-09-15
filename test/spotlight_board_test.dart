@@ -18,6 +18,7 @@ import 'package:debrify/widgets/detail/theme/detail_themes.dart';
 import 'package:debrify/widgets/hero_trailer_backdrop.dart';
 import 'package:debrify/widgets/home/spotlight_board.dart';
 import 'package:debrify/widgets/home/spotlight_card_trailer.dart';
+import 'package:debrify/widgets/recoverable_network_image.dart';
 import 'package:debrify/widgets/collections/collection_focus_glow.dart';
 
 /// Spotlight's hero, which is the piece that changes Home's focus topology
@@ -148,11 +149,12 @@ void main() {
     ),
   );
 
-  testWidgets('card trailers dwell, expand on frames, and cancel on focus or settings changes', (tester) async {
+  for (final shape in [SpotlightCardShape.poster, SpotlightCardShape.wide]) {
+  testWidgets('$shape card trailers dwell, expand on frames, and cancel on focus or settings changes', (tester) async {
     final shelves = [SpotlightShelf(title: 'Popular', nodes: rows[0], items: [
       for (final name in ['Alpha', 'Bravo']) SpotlightCard(
         metadata: _meta('tt$name', name), title: name,
-        shape: SpotlightCardShape.wide, onOpen: _noop,
+        shape: shape, onOpen: _noop,
       ),
     ])];
     var stoppedHero = 0;
@@ -172,7 +174,10 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 750));
     final after = (rows[0][0].context!.findRenderObject() as RenderBox).size.width;
-    expect(after, greaterThan(before));
+    expect(after / before, closeTo(1.38 / 1.18, 0.01));
+    final focusedSize = (rows[0][0].context!.findRenderObject() as RenderBox).size;
+    expect(focusedSize.width / focusedSize.height,
+        closeTo(SpotlightCardShape.wide.aspect * 1.38, 0.01));
     await tester.pump(const Duration(seconds: 2));
     expect(tester.widget<AnimatedOpacity>(find.byKey(
       const ValueKey('spotlight-trailer-text-ttAlpha'))).opacity, 0);
@@ -194,6 +199,40 @@ void main() {
       trailersEnabled: false));
     await tester.pump(const Duration(seconds: 5));
     expect(find.byType(SpotlightCardTrailer), findsNothing);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  }
+
+  testWidgets('enhanced portrait focus uses backdrop and restores poster on blur', (tester) async {
+    final shelves = [SpotlightShelf(title: 'Popular', nodes: rows[0], items: [
+      for (final name in ['Alpha', 'Bravo']) SpotlightCard(
+        metadata: StremioMeta(id: name, type: 'movie', name: name,
+          poster: 'https://example.invalid/$name-poster.jpg',
+          background: 'https://example.invalid/$name-wide.jpg'),
+        title: name, image: 'https://example.invalid/$name-poster.jpg', onOpen: _noop,
+      ),
+    ])];
+    Finder image(String suffix) => find.byWidgetPredicate((w) =>
+        w is RecoverableNetworkImage && w.imageUrl == 'https://example.invalid/Alpha-$suffix.jpg');
+    await tester.pumpWidget(host([], shelves, expandFocusedCard: true, trailersEnabled: false));
+    await tester.pumpAndSettle();
+    rows[0][0].requestFocus();
+    await tester.pumpAndSettle();
+    expect(image('wide'), findsOneWidget);
+    expect(image('poster'), findsNothing);
+    final focused = (rows[0][0].context!.findRenderObject() as RenderBox).size;
+    expect(focused.width / focused.height, closeTo(16 / 9 * 1.18, .01));
+    rows[0][1].requestFocus();
+    await tester.pumpAndSettle();
+    expect(image('poster'), findsOneWidget);
+    final resting = (rows[0][0].context!.findRenderObject() as RenderBox).size;
+    expect(resting.width / resting.height, closeTo(2 / 3, .01));
+    await tester.pumpWidget(host([], shelves, expandFocusedCard: false, trailersEnabled: false));
+    rows[0][0].requestFocus();
+    await tester.pumpAndSettle();
+    expect(image('poster'), findsOneWidget);
+    expect(image('wide'), findsNothing);
     await tester.pumpWidget(const SizedBox());
   });
 
