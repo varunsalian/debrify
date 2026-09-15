@@ -5,6 +5,11 @@ import '../../services/debrify_image_cache.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../models/stremio_addon.dart';
+import '../../services/storage_service.dart';
+import '../../services/main_page_bridge.dart';
+import '../../services/app_route_observer.dart';
+import '../../utils/platform_util.dart';
+import '../home/spotlight_card_trailer.dart';
 
 /// Large-screen presentations of a collection's titles. The parent owns
 /// paging, sorting and title actions; focus remains here while details push.
@@ -33,7 +38,78 @@ class TvCollectionTitles extends StatefulWidget {
   State<TvCollectionTitles> createState() => TvCollectionTitlesState();
 }
 
-class TvCollectionTitlesState extends State<TvCollectionTitles> {
+class TvCollectionTitlesState extends State<TvCollectionTitles>
+    with RouteAware, WidgetsBindingObserver {
+  Timer? _trailerDwell;
+  String? _previewIdentity;
+  bool _trailersEnabled = false;
+  double _trailerVolume = 0;
+  bool _covered = false;
+  bool _paused = false;
+  int _prefsRequest = 0;
+  PageRoute<dynamic>? _route;
+
+  String _identity(StremioMeta item) => '${item.type}:${item.id}';
+  bool get _previewEligible => !_covered && !_paused && _trailersEnabled &&
+      (widget.style == 'gallery' || widget.style == 'filmstrip' ||
+          widget.style == 'journal') &&
+      _index < widget.items.length && _index < _nodes.length &&
+      _nodes[_index].hasFocus &&
+      (widget.items[_index].type == 'movie' || widget.items[_index].type == 'series') &&
+      !MediaQuery.disableAnimationsOf(context);
+
+  Future<void> _loadTrailerSettings() async {
+    final request = ++_prefsRequest;
+    final surface = PlatformUtil.isTelevision
+        ? AmbientTrailerSurface.homeHero : AmbientTrailerSurface.detail;
+    final values = await Future.wait([
+      StorageService.getHomeHeroTrailerEnabled(),
+      StorageService.getAmbientTrailerAudioEnabled(surface),
+      StorageService.getAmbientTrailerVolume(surface),
+    ]);
+    if (!mounted || request != _prefsRequest) return;
+    final enabled = values[0] as bool;
+    final changed = enabled != _trailersEnabled;
+    setState(() {
+      _trailersEnabled = enabled;
+      _trailerVolume = (values[1] as bool) ? (values[2] as int).toDouble() : 0;
+    });
+    if (changed) _armPreview();
+  }
+
+  void _armPreview() {
+    _trailerDwell?.cancel();
+    if (_previewIdentity != null && mounted) setState(() => _previewIdentity = null);
+    if (!mounted || !_previewEligible) return;
+    final identity = _identity(widget.items[_index]);
+    _trailerDwell = Timer(const Duration(seconds: 4), () {
+      if (!mounted || !_previewEligible ||
+          ModalRoute.of(context)?.isCurrent == false ||
+          identity != _identity(widget.items[_index])) return;
+      setState(() => _previewIdentity = identity);
+    });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final route = ModalRoute.of(context);
+    if (route is PageRoute<dynamic> && route != _route) {
+      appRouteObserver.unsubscribe(this);
+      _route = route;
+      appRouteObserver.subscribe(this, route);
+    }
+  }
+
+  @override
+  void didPushNext() { _covered = true; _armPreview(); }
+  @override
+  void didPopNext() { _covered = false; _armPreview(); }
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    _paused = state != AppLifecycleState.resumed;
+    _armPreview();
+  }
   final _nodes = <FocusNode>[];
   int _index = 0;
   int? _hoverFocusIndex;
@@ -83,6 +159,9 @@ class TvCollectionTitlesState extends State<TvCollectionTitles> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    MainPageBridge.addHomeSettingsListener(_loadTrailerSettings);
+    unawaited(_loadTrailerSettings());
     _scroll.addListener(_maybeLoadMoreFromScroll);
     _resize();
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -150,6 +229,11 @@ class TvCollectionTitlesState extends State<TvCollectionTitles> {
         });
       }
     }
+    final selected = _index < widget.items.length ? widget.items[_index] : null;
+    if (oldWidget.style != widget.style || previous == null || selected == null ||
+        _identity(previous) != _identity(selected)) {
+      _armPreview();
+    }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _maybeLoadMoreFromScroll();
     });
@@ -157,6 +241,10 @@ class TvCollectionTitlesState extends State<TvCollectionTitles> {
 
   @override
   void dispose() {
+    _trailerDwell?.cancel();
+    MainPageBridge.removeHomeSettingsListener(_loadTrailerSettings);
+    WidgetsBinding.instance.removeObserver(this);
+    appRouteObserver.unsubscribe(this);
     _cancelPress();
     for (final node in _nodes) {
       node.dispose();
@@ -195,6 +283,7 @@ class TvCollectionTitlesState extends State<TvCollectionTitles> {
     final fromHover = _hoverFocusIndex == index;
     _hoverFocusIndex = null;
     setState(() => _index = index);
+    _armPreview();
     widget.onItemFocused?.call(widget.items[index]);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || fromHover || index >= widget.items.length) return;
@@ -271,6 +360,7 @@ class TvCollectionTitlesState extends State<TvCollectionTitles> {
         if (value) {
           _focus(index);
         } else {
+          if (_index == index) _armPreview();
           if (_pressedIndex == index) _cancelPress();
           if (mounted) setState(() {});
         }
@@ -427,12 +517,25 @@ class TvCollectionTitlesState extends State<TvCollectionTitles> {
         ),
       ],
     );
+    final artwork = Stack(
+      fit: StackFit.expand,
+      children: [
+        _art(item.background ?? item.poster),
+        if (_previewIdentity == _identity(item) && _previewEligible)
+          SpotlightCardTrailer(
+            key: ValueKey('collection-trailer:$_previewIdentity'),
+            item: item,
+            volume: _trailerVolume,
+            onPlayingChanged: (_) {},
+          ),
+      ],
+    );
     final preview = LayoutBuilder(
       builder: (context, constraints) => journal
           ? Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Expanded(child: _art(item.background ?? item.poster)),
+                Expanded(child: artwork),
                 const SizedBox(height: 16),
                 details,
               ],
@@ -440,7 +543,7 @@ class TvCollectionTitlesState extends State<TvCollectionTitles> {
           : Stack(
               fit: StackFit.expand,
               children: [
-                _art(item.background ?? item.poster),
+                artwork,
                 const DecoratedBox(
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
