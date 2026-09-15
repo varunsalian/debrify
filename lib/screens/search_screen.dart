@@ -7994,6 +7994,7 @@ class _SearchScreenState extends State<SearchScreen>
       dpad: widget.isTelevision,
       showCardTitlesAndRatings: !_hideHomeCardTitlesAndRatings,
       expandFocusedCard: _spotlightFocusDetails,
+      cardTrailerVolume: _heroTrailerVolume,
       onHeroOpen: _openItem,
       onLoadMoreRow: (row) {
         if (row < 0 || row >= rails.length) return;

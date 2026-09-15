@@ -17,6 +17,7 @@ import 'package:debrify/theme/widgets/parallax_focus.dart';
 import 'package:debrify/widgets/detail/theme/detail_themes.dart';
 import 'package:debrify/widgets/hero_trailer_backdrop.dart';
 import 'package:debrify/widgets/home/spotlight_board.dart';
+import 'package:debrify/widgets/home/spotlight_card_trailer.dart';
 import 'package:debrify/widgets/collections/collection_focus_glow.dart';
 
 /// Spotlight's hero, which is the piece that changes Home's focus topology
@@ -91,6 +92,7 @@ void main() {
     bool dpad = true,
     bool showCardTitlesAndRatings = true,
     bool expandFocusedCard = false,
+    bool trailersEnabled = true,
     void Function(StremioMeta item)? onDwell,
     VoidCallback? onTrailerStop,
   }) => MaterialApp(
@@ -108,10 +110,47 @@ void main() {
           dpad: dpad,
           showCardTitlesAndRatings: showCardTitlesAndRatings,
           expandFocusedCard: expandFocusedCard,
+          trailersEnabled: trailersEnabled,
         ),
       ),
     ),
   );
+
+  testWidgets('card trailers dwell, expand on frames, and cancel on focus or settings changes', (tester) async {
+    final shelves = [SpotlightShelf(title: 'Popular', nodes: rows[0], items: [
+      for (final name in ['Alpha', 'Bravo']) SpotlightCard(
+        metadata: _meta('tt$name', name), title: name,
+        shape: SpotlightCardShape.wide, onOpen: _noop,
+      ),
+    ])];
+    var stoppedHero = 0;
+    await tester.pumpWidget(host([], shelves, expandFocusedCard: true,
+      onTrailerStop: () => stoppedHero++));
+    await tester.pumpAndSettle();
+    rows[0][0].requestFocus();
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 3));
+    expect(find.byType(SpotlightCardTrailer), findsNothing);
+    await tester.pump(const Duration(seconds: 1));
+    expect(find.byType(SpotlightCardTrailer), findsOneWidget);
+    expect(stoppedHero, greaterThan(0));
+    final before = (rows[0][0].context!.findRenderObject() as RenderBox).size.width;
+    tester.widget<SpotlightCardTrailer>(find.byType(SpotlightCardTrailer))
+        .onPlayingChanged(true);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 750));
+    final after = (rows[0][0].context!.findRenderObject() as RenderBox).size.width;
+    expect(after, greaterThan(before));
+    rows[0][1].requestFocus();
+    await tester.pump();
+    await tester.pump();
+    expect(find.byType(SpotlightCardTrailer), findsNothing);
+    await tester.pumpWidget(host([], shelves, expandFocusedCard: true,
+      trailersEnabled: false));
+    await tester.pump(const Duration(seconds: 5));
+    expect(find.byType(SpotlightCardTrailer), findsNothing);
+    await tester.pumpWidget(const SizedBox());
+  });
 
   testWidgets('expanded cards remain visible when navigating back left and up', (tester) async {
     for (final row in rows) {

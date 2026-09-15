@@ -24,6 +24,7 @@ import '../../utils/dialog_tap_guard.dart';
 import '../../utils/tv_keys.dart';
 import 'row_tag_pill.dart';
 import 'home_row_focus.dart';
+import 'spotlight_card_trailer.dart';
 import '../collections/collection_focus_glow.dart';
 import '../collections/collection_focus_art.dart';
 import '../movie_watched_badge.dart';
@@ -340,6 +341,7 @@ class SpotlightBoard extends StatefulWidget {
   /// context metadata and playback state but omit title and rating text.
   final bool showCardTitlesAndRatings;
   final bool expandFocusedCard;
+  final double cardTrailerVolume;
 
   const SpotlightBoard({
     super.key,
@@ -359,6 +361,7 @@ class SpotlightBoard extends StatefulWidget {
     this.dpad = true,
     this.showCardTitlesAndRatings = true,
     this.expandFocusedCard = false,
+    this.cardTrailerVolume = 0,
   });
 
   /// The scrolled ground, taken from the THEME.
@@ -2405,6 +2408,9 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
                 showCaption: captions && section.items[c].showCaption,
                 showTitleAndRating: widget.showCardTitlesAndRatings,
                 expandOnFocus: widget.dpad && widget.expandFocusedCard,
+                trailerEnabled: widget.trailersEnabled,
+                trailerVolume: widget.cardTrailerVolume,
+                onTrailerStart: widget.onTrailerStop,
                 hoverable: !widget.dpad,
                 dpad: widget.dpad,
                 onDesktopPreviewActivityChanged:
@@ -2635,6 +2641,9 @@ class _Card extends StatefulWidget {
   /// context remain available when a shelf has useful card metadata.
   final bool showTitleAndRating;
   final bool expandOnFocus;
+  final bool trailerEnabled;
+  final double trailerVolume;
+  final VoidCallback? onTrailerStart;
 
   /// Pointer hover lifts the card — desktop only. OFF on TV: an Apple TV
   /// trackpad delivers pointer events (see main.dart), and a hover lift
@@ -2664,6 +2673,9 @@ class _Card extends StatefulWidget {
     this.showCaption = true,
     this.showTitleAndRating = true,
     this.expandOnFocus = false,
+    this.trailerEnabled = false,
+    this.trailerVolume = 0,
+    this.onTrailerStart,
     this.hoverable = false,
     this.dpad = true,
     this.onDesktopPreviewActivityChanged,
@@ -2677,6 +2689,25 @@ class _CardState extends State<_Card> with MetadataPresentationMixin<_Card> {
   @override
   StremioMeta? get originalMetadata => widget.card.metadata;
   bool _f = false;
+  Timer? _trailerDwell;
+  bool _trailerRequested = false;
+  bool _trailerPlaying = false;
+
+  void _armCardTrailer() {
+    _trailerDwell?.cancel();
+    _trailerRequested = false;
+    _trailerPlaying = false;
+    if (!_f || !_canExpand || !widget.trailerEnabled ||
+        MediaQuery.disableAnimationsOf(context)) return;
+    _trailerDwell = Timer(const Duration(seconds: 4), () {
+      if (!mounted || !_f || !widget.trailerEnabled || !_canExpand ||
+          ModalRoute.of(context)?.isCurrent == false || !TickerMode.of(context) ||
+          (WidgetsBinding.instance.lifecycleState != null &&
+           WidgetsBinding.instance.lifecycleState != AppLifecycleState.resumed)) return;
+      widget.onTrailerStart?.call();
+      setState(() => _trailerRequested = true);
+    });
+  }
   Timer? _descriptionTimer;
   String? _resolvedDescription;
   Object? _descriptionScope;
@@ -2758,6 +2789,11 @@ class _CardState extends State<_Card> with MetadataPresentationMixin<_Card> {
   void didUpdateWidget(_Card oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (!identical(oldWidget.card.metadata, widget.card.metadata) ||
+        oldWidget.expandOnFocus != widget.expandOnFocus ||
+        oldWidget.trailerEnabled != widget.trailerEnabled) {
+      _armCardTrailer();
+    }
+    if (!identical(oldWidget.card.metadata, widget.card.metadata) ||
         oldWidget.expandOnFocus != widget.expandOnFocus) {
       _resolvedDescription = null;
       _loadFocusedDescription();
@@ -2778,6 +2814,7 @@ class _CardState extends State<_Card> with MetadataPresentationMixin<_Card> {
 
   @override
   void dispose() {
+    _trailerDwell?.cancel();
     _descriptionTimer?.cancel();
     _descriptionRequest++;
     _hold.reset();
@@ -2794,9 +2831,10 @@ class _CardState extends State<_Card> with MetadataPresentationMixin<_Card> {
 
   @override
   Widget build(BuildContext context) => TweenAnimationBuilder<double>(
-    tween: Tween(end: _canExpand && _f ? 1.18 : 1.0),
+    tween: Tween(end: _canExpand && _f ? (_trailerPlaying ? 1.38 : 1.18) : 1.0),
     duration: MediaQuery.disableAnimationsOf(context)
         ? Duration.zero
+        : _trailerPlaying ? const Duration(milliseconds: 700)
         : Duration(milliseconds: PlatformUtil.isAndroidTvCached ? 160 : 220),
     curve: Curves.easeOutCubic,
     builder: (context, growth, _) => _buildCard(context, growth),
@@ -3043,6 +3081,17 @@ class _CardState extends State<_Card> with MetadataPresentationMixin<_Card> {
                 // so a channel card never flashes to an empty/black plate
                 // while a stream resolves or buffers.
                 IgnorePointer(child: preview(context)),
+              if (_trailerRequested && _f && _canExpand && widget.trailerEnabled)
+                SpotlightCardTrailer(
+                  key: ValueKey(c.metadata!.id),
+                  item: c.metadata!,
+                  volume: widget.trailerVolume,
+                  onPlayingChanged: (playing) {
+                    if (!mounted || !_f || !_trailerRequested ||
+                        _trailerPlaying == playing) return;
+                    setState(() => _trailerPlaying = playing);
+                  },
+                ),
               // Keep the gradient with the art: it must still grow to the
               // poster's full width and remain inside its rounded clip. The
               // text itself is the fixed-scale foreground above. No caption,
@@ -3211,6 +3260,7 @@ class _CardState extends State<_Card> with MetadataPresentationMixin<_Card> {
       skipTraversal: true,
       onFocusChange: (v) {
         setState(() => _f = v);
+        _armCardTrailer();
         _loadFocusedDescription();
         _reportDesktopPreviewActivity(_previewActive);
         if (!v) _hold.reset();
