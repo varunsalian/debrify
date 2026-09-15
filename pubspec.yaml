@@ -226,12 +226,16 @@ flutter:
   # the material Icons class.
   uses-material-design: true
 
+  shaders:
+    - assets/shaders/moonlit_ocean.frag
+
   assets:
     - assets/app_icon.png
     - assets/app_icon_foreground.png
     - assets/images/profile_gate_lighthouse.png
     - assets/images/home_snowy_mountain.jpg
     - assets/images/home_midnight_rain.jpg
+    - assets/images/home_moonlit_ocean.jpg
     - assets/images/tmdb-logo.png
     - assets/images/profile_avatars/
     - assets/splash_logo.png

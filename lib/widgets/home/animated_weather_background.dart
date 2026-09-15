@@ -2,14 +2,15 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 
-/// Shared, lifecycle-aware weather clock. Only the particle layer repaints;
-/// the decoded photograph and the browsing UI remain independently cached.
+/// Shared, lifecycle-aware weather clock. Animation repaints stay isolated
+/// from browsing UI; particle scenes also keep their photograph cached.
 class AnimatedWeatherBackground extends StatefulWidget {
   const AnimatedWeatherBackground({
     super.key,
     required this.assetPath,
     required this.assetSize,
-    required this.painterFactory,
+    this.painterFactory,
+    this.backgroundBuilder,
     this.lowPower = false,
     this.alignment = const Alignment(0.3, 0),
     this.bottomShade = const Color(0xD907111E),
@@ -17,7 +18,10 @@ class AnimatedWeatherBackground extends StatefulWidget {
 
   final String assetPath;
   final Size assetSize;
-  final WeatherPainter Function(ValueNotifier<double>) painterFactory;
+  final WeatherPainter Function(ValueNotifier<double>)? painterFactory;
+  /// Optional animated image surface, sharing the same clock and decode cap.
+  final Widget Function(int decodeWidth, ValueNotifier<double> time)?
+  backgroundBuilder;
   final bool lowPower;
   final Alignment alignment;
   final Color bottomShade;
@@ -38,7 +42,7 @@ class _AnimatedWeatherBackgroundState extends State<AnimatedWeatherBackground>
   late final Ticker _ticker;
   Duration _previous = Duration.zero;
   double _pendingSeconds = 0;
-  late WeatherPainter _painter;
+  WeatherPainter? _painter;
   bool _foreground = true;
 
   @override
@@ -48,7 +52,7 @@ class _AnimatedWeatherBackgroundState extends State<AnimatedWeatherBackground>
     _foreground =
         WidgetsBinding.instance.lifecycleState == null ||
         WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
-    _painter = widget.painterFactory(_time);
+    _painter = widget.painterFactory?.call(_time);
     _ticker = createTicker((elapsed) {
       final delta = elapsed - _previous;
       _previous = elapsed;
@@ -64,8 +68,8 @@ class _AnimatedWeatherBackgroundState extends State<AnimatedWeatherBackground>
   void didUpdateWidget(AnimatedWeatherBackground oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.assetPath != oldWidget.assetPath) {
-      _painter.dispose();
-      _painter = widget.painterFactory(_time);
+      _painter?.dispose();
+      _painter = widget.painterFactory?.call(_time);
     }
   }
 
@@ -100,7 +104,7 @@ class _AnimatedWeatherBackgroundState extends State<AnimatedWeatherBackground>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _ticker.dispose();
-    _painter.dispose();
+    _painter?.dispose();
     _time.dispose();
     super.dispose();
   }
@@ -127,15 +131,17 @@ class _AnimatedWeatherBackgroundState extends State<AnimatedWeatherBackground>
                 fit: StackFit.expand,
                 children: [
                   RepaintBoundary(
-                    child: Image.asset(
-                      widget.assetPath,
-                      cacheWidth: decodeWidth,
-                      fit: BoxFit.cover,
-                      alignment: widget.alignment,
-                      filterQuality: FilterQuality.medium,
-                      errorBuilder: (_, __, ___) =>
-                          const ColoredBox(color: Color(0xFF07111E)),
-                    ),
+                    child:
+                        widget.backgroundBuilder?.call(decodeWidth, _time) ??
+                        Image.asset(
+                          widget.assetPath,
+                          cacheWidth: decodeWidth,
+                          fit: BoxFit.cover,
+                          alignment: widget.alignment,
+                          filterQuality: FilterQuality.medium,
+                          errorBuilder: (_, __, ___) =>
+                              const ColoredBox(color: Color(0xFF07111E)),
+                        ),
                   ),
                   const DecoratedBox(
                     decoration: BoxDecoration(
@@ -154,7 +160,8 @@ class _AnimatedWeatherBackgroundState extends State<AnimatedWeatherBackground>
                       ),
                     ),
                   ),
-                  RepaintBoundary(child: CustomPaint(painter: _painter)),
+                  if (_painter != null)
+                    RepaintBoundary(child: CustomPaint(painter: _painter)),
                 ],
               ),
             );

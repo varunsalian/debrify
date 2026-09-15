@@ -27,6 +27,7 @@ import 'home_row_focus.dart';
 import 'spotlight_card_trailer.dart';
 import 'snowy_mountain_background.dart';
 import 'midnight_rain_background.dart';
+import 'moonlit_ocean_background.dart';
 import '../collections/collection_focus_glow.dart';
 import '../collections/collection_focus_art.dart';
 import '../movie_watched_badge.dart';
@@ -1694,9 +1695,13 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
               fit: StackFit.expand,
               children: [
                 if (widget.animationsEnabled)
-                  Positioned.fill(child: widget.animationStyle == 'midnight_rain'
-                      ? MidnightRainBackground(lowPower: widget.dpad)
-                      : SnowyMountainBackground(lowPower: widget.dpad)),
+                  Positioned.fill(
+                    child: switch (widget.animationStyle) {
+                      'moonlit_ocean' => MoonlitOceanBackground(lowPower: widget.dpad),
+                      'midnight_rain' => MidnightRainBackground(lowPower: widget.dpad),
+                      _ => SnowyMountainBackground(lowPower: widget.dpad),
+                    },
+                  ),
                 if (!m.compact && !widget.shelvesOnly)
                   // Its own layer: the backdrop is a full-screen image under
                   // two full-screen gradients — the most expensive paint on

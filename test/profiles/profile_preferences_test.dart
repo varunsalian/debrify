@@ -56,6 +56,9 @@ void main() {
 
   test('Midnight rain persists and validates as a portable animation choice', () async {
     ProfileRuntime.initializeLegacy();
+    await StorageService.setHomeAnimationStyle('moonlit_ocean');
+    expect(await StorageService.getHomeAnimationStyle(), 'moonlit_ocean');
+    expect(SanitizedProfilePreferences.allowsEntry('home_animation_style', 'moonlit_ocean'), isTrue);
     await StorageService.setHomeAnimationStyle('midnight_rain');
     expect(await StorageService.getHomeAnimationStyle(), 'midnight_rain');
     expect(SanitizedProfilePreferences.allowsEntry('home_animation_style', 'midnight_rain'), isTrue);

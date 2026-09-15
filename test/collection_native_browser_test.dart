@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:debrify/widgets/home/snowy_mountain_background.dart';
 import 'package:debrify/widgets/home/midnight_rain_background.dart';
+import 'package:debrify/widgets/home/moonlit_ocean_background.dart';
 import 'package:debrify/widgets/collections/collection_category_tabs.dart';
 import 'package:debrify/widgets/collections/tv_collection_titles.dart';
 import 'package:debrify/widgets/home/spotlight_board.dart';
@@ -27,7 +28,7 @@ import 'package:http/testing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
-  for (final style in ['snowy_mountain', 'midnight_rain']) {
+  for (final style in ['snowy_mountain', 'midnight_rain', 'moonlit_ocean']) {
   for (final tv in [false, true]) {
     testWidgets('Spotlight collection inherits $style preference (TV: $tv)', (tester) async {
       SharedPreferences.setMockInitialValues({
@@ -61,7 +62,9 @@ void main() {
       expect(board.animationsEnabled, isTrue);
       expect(board.shelvesOnly, isTrue);
       expect(board.animationStyle, style);
-      if (style == 'midnight_rain') {
+      if (style == 'moonlit_ocean') {
+        expect(tester.widget<MoonlitOceanBackground>(find.byType(MoonlitOceanBackground)).lowPower, tv);
+      } else if (style == 'midnight_rain') {
         expect(tester.widget<MidnightRainBackground>(find.byType(MidnightRainBackground)).lowPower, tv);
         expect(find.byType(SnowyMountainBackground), findsNothing);
       } else {

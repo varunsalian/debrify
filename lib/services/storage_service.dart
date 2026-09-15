@@ -6410,13 +6410,14 @@ class StorageService {
     final prefs = await ProfilePreferences.instance();
     return switch (prefs.getString('home_animation_style')) {
       'midnight_rain' => 'midnight_rain',
+      'moonlit_ocean' => 'moonlit_ocean',
       'snowy_mountain' => 'snowy_mountain',
       _ => 'snowy_mountain',
     };
   }
 
   static Future<void> setHomeAnimationStyle(String value) async {
-    if (!const {'snowy_mountain', 'midnight_rain'}.contains(value)) {
+    if (!const {'snowy_mountain', 'midnight_rain', 'moonlit_ocean'}.contains(value)) {
       throw ArgumentError.value(value);
     }
     final prefs = await ProfilePreferences.instance();

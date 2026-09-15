@@ -13,6 +13,7 @@ import 'package:debrify/widgets/detail/theme/detail_themes.dart';
 import 'package:debrify/widgets/home/spotlight_board.dart';
 import 'package:debrify/widgets/home/snowy_mountain_background.dart';
 import 'package:debrify/widgets/home/midnight_rain_background.dart';
+import 'package:debrify/widgets/home/moonlit_ocean_background.dart';
 
 /// The board's second life on phones, tablets and desktop.
 ///
@@ -118,7 +119,7 @@ void main() {
     return tester.getSize(clips.first);
   }
 
-  for (final style in ['snowy_mountain', 'midnight_rain']) {
+  for (final style in ['snowy_mountain', 'midnight_rain', 'moonlit_ocean']) {
   testWidgets('$style keeps hero artwork and reveals weather on desktop scroll', (tester) async {
     surface(tester, const Size(1200, 800));
     final sections = List.generate(8, (i) => _section('Shelf $i', [_meta('$i', 'Title $i')]));
@@ -139,11 +140,11 @@ void main() {
     final fade = find.ancestor(of: trailer, matching: find.byType(Opacity));
     expect(fade, findsOneWidget);
     expect(tester.widget<Opacity>(fade).opacity, 1);
-    final mountainRect = tester.getRect(find.byType(style == 'midnight_rain' ? MidnightRainBackground : SnowyMountainBackground));
+    final mountainRect = tester.getRect(find.byType(style == 'moonlit_ocean' ? MoonlitOceanBackground : style == 'midnight_rain' ? MidnightRainBackground : SnowyMountainBackground));
     await tester.drag(find.byType(ListView).first, const Offset(0, -700));
     await tester.pump(const Duration(milliseconds: 500));
     expect(tester.widget<Opacity>(fade).opacity, 0);
-    expect(tester.getRect(find.byType(style == 'midnight_rain' ? MidnightRainBackground : SnowyMountainBackground)), mountainRect);
+    expect(tester.getRect(find.byType(style == 'moonlit_ocean' ? MoonlitOceanBackground : style == 'midnight_rain' ? MidnightRainBackground : SnowyMountainBackground)), mountainRect);
     expect(trailer, findsOneWidget, reason: 'Keep the trailer lifecycle host mounted');
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
