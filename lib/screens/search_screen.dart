@@ -259,6 +259,7 @@ typedef _HomePreservedState = ({
   HomeCardOrientation cardOrientation,
   bool hideCardTitlesAndRatings,
   bool hideCatalogAddonNames,
+  bool hideCollectionNames,
   DateTime loadedAt,
   double scrollOffset,
 });
@@ -1641,6 +1642,7 @@ class _SearchScreenState extends State<SearchScreen>
   /// The item the last hero-trailer schedule was for — what the suppression
   /// lift above compares against.
   String? _heroTrailerScheduledItemId;
+  String? _heroPreviewAttemptedId;
 
   /// Settings → Home Page toggles, read once per screen life (on TV a tab
   /// switch rebuilds the screen, so Settings changes are picked up on return).
@@ -1811,6 +1813,7 @@ class _SearchScreenState extends State<SearchScreen>
   @override
   void initState() {
     super.initState();
+    unawaited(_loadSourceTextFormatting());
     _titleSearch.addListener(_publishTitleSuggestions);
     _searchController.addListener(_onTitleSearchEditingChanged);
     ProfileRuntime.scope.addListener(_cancelTitleSuggestions);
@@ -1960,6 +1963,10 @@ class _SearchScreenState extends State<SearchScreen>
     // trailer-suppression listener; this one is just the latch that tells the
     // post-playback refresh whether anything was actually played).
     MainPageBridge.addPlayerLaunchListener(_markPlaybackStarted);
+    if (widget.isTelevision && widget.searchMode) {
+      _reloadSearchCardPrefs();
+      MainPageBridge.addHomeSettingsListener(_reloadSearchCardPrefs);
+    }
     // Restore a keyword search preserved from a prior tab visit (results +
     // scroll) BEFORE the async default-view load below can start: restoration
     // sets keyword mode synchronously, and a later-resolving catalog default
@@ -2141,6 +2148,11 @@ class _SearchScreenState extends State<SearchScreen>
   /// settings page has always shown on these platforms, so a stored "sound
   /// off" keeps meaning what it meant. Writes go to both surfaces now, so
   /// the pairs converge on first change.
+  void _reloadSearchCardPrefs() {
+    unawaited(_loadHomeCardOrientation());
+    unawaited(_reloadHeroTrailerPrefs());
+  }
+
   Future<void> _reloadHeroTrailerPrefs() async {
     final surface = widget.isTelevision
         ? AmbientTrailerSurface.homeHero
@@ -2337,6 +2349,7 @@ class _SearchScreenState extends State<SearchScreen>
     _homeCardOrientation = snapshot.cardOrientation;
     _hideHomeCardTitlesAndRatings = snapshot.hideCardTitlesAndRatings;
     _hideHomeCatalogAddonNames = snapshot.hideCatalogAddonNames;
+    _hideHomeCollectionNames = snapshot.hideCollectionNames;
     _homeSections = snapshot.sections;
     _committedBoard = snapshot.board;
     _boardCursor = snapshot.board.restore(_boardRefs, _addonsById);
@@ -2411,6 +2424,7 @@ class _SearchScreenState extends State<SearchScreen>
       cardOrientation: _homeCardOrientation,
       hideCardTitlesAndRatings: _hideHomeCardTitlesAndRatings,
       hideCatalogAddonNames: _hideHomeCatalogAddonNames,
+      hideCollectionNames: _hideHomeCollectionNames,
       loadedAt: loadedAt,
       scrollOffset: _homeLastScroll,
     ), revision: _homeReturnRevision, loadedAt: loadedAt);
@@ -2498,6 +2512,7 @@ class _SearchScreenState extends State<SearchScreen>
     MainPageBridge.removePlaybackReturnListener(_onPlaybackReturned);
     MainPageBridge.removePlayerLaunchListener(_markPlaybackStarted);
     MainPageBridge.removeHomeSettingsListener(_reloadForHomeSettings);
+    MainPageBridge.removeHomeSettingsListener(_reloadSearchCardPrefs);
     HomeRowRefreshSignal.removeListener(_queueHomeRows);
     _stremio.removeAddonsChangedListener(_onHomeAddonsChanged);
     _homeRefreshTimer?.cancel();
@@ -2686,25 +2701,33 @@ class _SearchScreenState extends State<SearchScreen>
   /// broadcast is shared), so the equality guards skip reloads for unrelated
   /// settings.
   Future<void> _reloadForHomeSettings() async {
+    await _loadSourceTextFormatting();
     if (!mounted) return;
     final reloadGen = ++_homeSettingsReloadGen;
     final reloadSession = HomeCollectionsStore.captureSession();
+    final spotlightFocusDetails = await StorageService.getSpotlightFocusDetails();
     final cardSettings = await Future.wait<Object>([
       StorageService.getHomeCardOrientation(),
       StorageService.getHomeHideCardTitlesAndRatings(),
       StorageService.getHomeHideCatalogAddonNames(),
+      StorageService.getHomeHideCollectionNames(),
     ]);
     if (!mounted) return;
     final orientation = cardSettings[0] as HomeCardOrientation;
     final hideTitlesAndRatings = cardSettings[1] as bool;
     final hideCatalogAddonNames = cardSettings[2] as bool;
+    final hideCollectionNames = cardSettings[3] as bool;
     if (orientation != _homeCardOrientation ||
         hideTitlesAndRatings != _hideHomeCardTitlesAndRatings ||
-        hideCatalogAddonNames != _hideHomeCatalogAddonNames) {
+        hideCatalogAddonNames != _hideHomeCatalogAddonNames ||
+        hideCollectionNames != _hideHomeCollectionNames ||
+        spotlightFocusDetails != _spotlightFocusDetails) {
       setState(() {
         _homeCardOrientation = orientation;
         _hideHomeCardTitlesAndRatings = hideTitlesAndRatings;
         _hideHomeCatalogAddonNames = hideCatalogAddonNames;
+        _hideHomeCollectionNames = hideCollectionNames;
+        _spotlightFocusDetails = spotlightFocusDetails;
       });
     }
     // Merged-CW toggles: re-read, and on a change re-sync each provider's node
@@ -6083,7 +6106,12 @@ class _SearchScreenState extends State<SearchScreen>
           anchorHeight = homeRowHeight(focused.first.context,
             ValueKey('board-reveal-$_boardGen-$anchor'));
         }
-        anchorHeight ??= _classicCatalogRowExtent(focused.first.context ?? context);
+        anchorHeight ??= _classicCatalogRowExtent(
+          focused.first.context ?? context,
+          section: rail.sectionIndex == null
+              ? null
+              : _sections[rail.sectionIndex!],
+        );
         break;
       }
       previousOrder = rails.map(_canvasRailRowId).toList();
@@ -6550,6 +6578,7 @@ class _SearchScreenState extends State<SearchScreen>
   /// stay put. (This used to hand focus to the sidebar, but the sidebar policy
   /// is now LEFT-only: no other direction may open it.)
   void _leaveBoardTop() {
+    _heroPreviewAttemptedId = null;
     if (widget.searchMode) {
       _searchFocusNode.requestFocus();
     }
@@ -6589,7 +6618,11 @@ class _SearchScreenState extends State<SearchScreen>
       if (_catalogQuery.isNotEmpty &&
           _rowNodes.isNotEmpty &&
           _rowNodes.first.isNotEmpty) {
-        _rowNodes.first.first.requestFocus();
+        if (_spotlightKey.currentState != null) {
+          _spotlightKey.currentState!.focusShelf(0);
+        } else {
+          _rowNodes.first.first.requestFocus();
+        }
       } else {
         _searchFocusNode.requestFocus();
       }
@@ -6792,6 +6825,17 @@ class _SearchScreenState extends State<SearchScreen>
   HomeCardOrientation _homeCardOrientation = HomeCardOrientation.landscape;
   bool _hideHomeCardTitlesAndRatings = false;
   bool _hideHomeCatalogAddonNames = false;
+  bool _useAddonSourceText = false;
+  bool _showAddonSourceLogos = false;
+
+  Future<void> _loadSourceTextFormatting() async {
+    final value = await StorageService.getUseAddonTextFormatting();
+    final logos = await StorageService.getShowAddonLogos();
+    if (mounted) setState(() { _useAddonSourceText = value; _showAddonSourceLogos = logos; });
+  }
+
+  bool _hideHomeCollectionNames = false;
+  bool _spotlightFocusDetails = false;
 
   bool get _homeLandscapeCards =>
       _homeCardOrientation == HomeCardOrientation.landscape;
@@ -7068,24 +7112,31 @@ class _SearchScreenState extends State<SearchScreen>
   }
 
   Future<void> _loadHomeCardOrientation() async {
+    final spotlightFocusDetails = await StorageService.getSpotlightFocusDetails();
     final values = await Future.wait<Object>([
       StorageService.getHomeCardOrientation(),
       StorageService.getHomeHideCardTitlesAndRatings(),
       StorageService.getHomeHideCatalogAddonNames(),
+      StorageService.getHomeHideCollectionNames(),
     ]);
     if (!mounted) return;
     final orientation = values[0] as HomeCardOrientation;
     final hideTitlesAndRatings = values[1] as bool;
     final hideCatalogAddonNames = values[2] as bool;
+    final hideCollectionNames = values[3] as bool;
     if (orientation == _homeCardOrientation &&
         hideTitlesAndRatings == _hideHomeCardTitlesAndRatings &&
-        hideCatalogAddonNames == _hideHomeCatalogAddonNames) {
+        hideCatalogAddonNames == _hideHomeCatalogAddonNames &&
+        hideCollectionNames == _hideHomeCollectionNames &&
+        spotlightFocusDetails == _spotlightFocusDetails) {
       return;
     }
     setState(() {
       _homeCardOrientation = orientation;
       _hideHomeCardTitlesAndRatings = hideTitlesAndRatings;
       _hideHomeCatalogAddonNames = hideCatalogAddonNames;
+      _hideHomeCollectionNames = hideCollectionNames;
+      _spotlightFocusDetails = spotlightFocusDetails;
     });
   }
 
@@ -7691,7 +7742,8 @@ class _SearchScreenState extends State<SearchScreen>
       return SpotlightShelf(
         id: railKey,
         title: section.title,
-        tag: _catalogSourceTag(section),
+        tag: _hideHomeCollectionNames ? null : _catalogSourceTag(section),
+        showHeader: !_hideHomeCollectionNames,
         nodes: i < _rowNodes.length ? _rowNodes[i] : const [],
         onSeeAll: () => _openCatalogSeeAll(section),
         // A brand-logo tile needs no caption; captions stay on only while
@@ -7945,6 +7997,58 @@ class _SearchScreenState extends State<SearchScreen>
     return _firstNonEmpty(item.poster, item.background);
   }
 
+  Widget _buildSearchSpotlightBoard() {
+    final sections = List<CatalogSection>.of(_sections);
+    return Column(
+      children: [
+        // Reserve the status strip so completion never shifts focused cards.
+        if (_catalogSearching || _catalogSearchFailures > 0)
+          _buildSearchStatusStrip()
+        else
+          const SizedBox(height: 16),
+        Expanded(child: SpotlightBoard(
+          key: _spotlightKey,
+          hero: const [], heroNode: _spotlightHeroNode, heroAddon: null,
+          onHeroOpen: _openItem, shelvesOnly: true, dpad: true,
+          showCardTitlesAndRatings: !_hideHomeCardTitlesAndRatings,
+          forceCardParallax: true,
+          onExitTop: _leaveBoardTop,
+          expandFocusedCard: _spotlightFocusDetails,
+          trailersEnabled: _heroTrailerEnabled,
+          cardTrailerVolume: _heroTrailerVolume,
+          onTrailerStop: _clearHeroTrailer,
+          sections: [
+            for (var i = 0; i < sections.length; i++) SpotlightShelf(
+              id: 'search:$_catalogQuery:${sections[i].addon.id}:${sections[i].catalog.id}:$i',
+              title: sections[i].title,
+              tag: _catalogSourceTag(sections[i]),
+              onSeeAll: () => _openCatalogSeeAll(sections[i]),
+              nodes: i < _rowNodes.length ? _rowNodes[i] : const [],
+              items: [
+                for (final item in sections[i].items)
+                  SpotlightCard(
+                    metadata: item, title: item.name, rating: item.imdbRating,
+                    image: _homeLandscapeCards ? _wideArtUrl(item) : item.poster,
+                    fallbackImage: _homeLandscapeCards ? item.poster : null,
+                    shape: _homeLandscapeCards ? SpotlightCardShape.wide : SpotlightCardShape.poster,
+                    watchedImdbId: item.effectiveImdbId ?? item.id,
+                    watchedContentType: item.type,
+                    onOpen: () => _sectionOpenItem(sections[i], item),
+                    onOptions: _pikpakOnly ? null : () => _onCatalogPlay(item, sections[i].addon),
+                  ),
+              ],
+            ),
+          ],
+          onLoadMoreRow: (row) {
+            if (row < 0 || row >= sections.length) return;
+            final current = _sections.indexOf(sections[row]);
+            if (current >= 0) unawaited(_loadMoreRow(current));
+          },
+        )),
+      ],
+    );
+  }
+
   Widget _buildSpotlightBoard() {
     // Snapshot row descriptors with the shelf list: async inserts must not
     // make a callback page a different catalog than the shelf it came from.
@@ -7957,6 +8061,8 @@ class _SearchScreenState extends State<SearchScreen>
       heroAddon: _spotlightHeroSection?.addon,
       dpad: widget.isTelevision,
       showCardTitlesAndRatings: !_hideHomeCardTitlesAndRatings,
+      expandFocusedCard: _spotlightFocusDetails,
+      cardTrailerVolume: _heroTrailerVolume,
       onHeroOpen: _openItem,
       onLoadMoreRow: (row) {
         if (row < 0 || row >= rails.length) return;
@@ -8283,7 +8389,11 @@ class _SearchScreenState extends State<SearchScreen>
   String _canvasRailTitle(_CanvasRail rail) {
     if (rail.cw != null) return rail.cw!.title;
     if (rail.favKind != null) return _canvasFavTitle(rail.favKind!);
-    return _sections[rail.sectionIndex!].title;
+    final section = _sections[rail.sectionIndex!];
+    if (_hideHomeCollectionNames && section is HomeCollectionSection) {
+      return '';
+    }
+    return section.title;
   }
 
   List<StremioMeta> _canvasRailItems(_CanvasRail rail) =>
@@ -10978,6 +11088,7 @@ class _SearchScreenState extends State<SearchScreen>
   /// the addon is exactly what tells those apart.
   String _canvasTabTitle(List<_CanvasRail> rails, int i) {
     final title = _canvasRailTitle(rails[i]);
+    if (title.isEmpty) return '';
     final rail = rails[i];
     if (rail.sectionIndex == null) return title;
     final duplicated = rails.any(
@@ -11055,6 +11166,7 @@ class _SearchScreenState extends State<SearchScreen>
               ),
             ),
             for (var i = start; i < end; i++)
+              if (_canvasTabTitle(rails, i).isNotEmpty)
               Flexible(
                 child: Padding(
                   padding: const EdgeInsets.only(right: 26),
@@ -11113,15 +11225,16 @@ class _SearchScreenState extends State<SearchScreen>
 
   // ── Hero ─────────────────────────────────────────────────────────────────
 
-  /// Whether the hero spotlight is live for the current tab/state: TV-only, on
-  /// the board always and on the dedicated Search tab once there are results
-  /// (hidden on the blank "type to search" prompt). Single source of truth for
+  /// Whether the hero spotlight is live for the current tab/state: TV-only.
+  /// Dedicated Search uses in-card previews instead of a separate hero.
+  /// Single source of truth for
   /// seeding ([_applySections]), focus tracking ([_setHero]) and rendering
   /// ([_buildBoard]) so they can't drift.
   bool get _heroActive =>
-      widget.isTelevision && (!widget.searchMode || _catalogQuery.isNotEmpty);
+      widget.isTelevision && !widget.searchMode;
 
   void _setHero(StremioMeta item) {
+    if (_heroPreviewAttemptedId != item.id) _heroPreviewAttemptedId = null;
     // Off-TV / blank search prompt the hero isn't rendered, so don't track focus
     // or fire the per-item backdrop-enrichment /meta fetch behind it.
     if (!_heroActive) return;
@@ -11299,6 +11412,8 @@ class _SearchScreenState extends State<SearchScreen>
   }
 
   void _scheduleHeroTrailer(StremioMeta item, {bool fromSpotlight = false}) {
+    // Search previews belong to the focused result card, never a hidden hero.
+    if (widget.isTelevision && widget.searchMode) return;
     if (item.type == 'folder') return;
     // Off-TV nothing ever calls _applyHero (the TV paths that lift the
     // after-playback suppression), so a NEW title arriving through the
@@ -11337,6 +11452,7 @@ class _SearchScreenState extends State<SearchScreen>
     if (_canvasFavFocus.value != null || _heroLiveChannel.value != null) {
       return;
     }
+    if (!fromSpotlight && _heroPreviewAttemptedId == item.id) return;
     _heroTrailerTimer?.cancel();
     final req = ++_heroTrailerReq;
     final scope = ProfileRuntime.scope.value;
@@ -11352,9 +11468,10 @@ class _SearchScreenState extends State<SearchScreen>
     // shared 2.4s focus-rest debounce so flying across their rows stays cheap.
     final resolveDelay = fromSpotlight
         ? Duration.zero
-        : const Duration(milliseconds: 2400);
+        : const Duration(seconds: 2);
     _heroTrailerTimer = Timer(resolveDelay, () async {
       if (!current()) return;
+      _heroPreviewAttemptedId = item.id;
       // The layout may have changed during the dwell — a stage with nowhere
       // to put moving picture must not spin up an engine.
       if (_stageActive && !_stageWantsAmbient) return;
@@ -16018,14 +16135,16 @@ class _SearchScreenState extends State<SearchScreen>
       );
     }
 
-    // Wide/TV: a centered pill search (Stremio-style) with the mode toggle
-    // pinned to the right. A left spacer matching the toggle keeps the search
-    // truly centered (sized for the three-segment Catalog/Keyword/Lists bar).
+    // Dedicated TV Search uses a compact toolbar without the balancing spacer.
+    // Other wide surfaces retain their centered search field.
     return Padding(
-      padding: EdgeInsets.fromLTRB(20, tv ? 18 : 14, 20, 10),
+      padding: tv && widget.searchMode
+          ? const EdgeInsets.fromLTRB(24, 8, 24, 8)
+          : EdgeInsets.fromLTRB(20, tv ? 18 : 14, 20, 10),
       child: Row(
         children: [
-          SizedBox(width: compactModeMenu ? 156 : 252),
+          if (!tv || !widget.searchMode)
+            SizedBox(width: compactModeMenu ? 156 : 252),
           Expanded(
             child: Center(
               child: ConstrainedBox(
@@ -16046,7 +16165,8 @@ class _SearchScreenState extends State<SearchScreen>
   Widget _buildSearchField(bool tv) {
     final app = AppThemeScope.of(context);
     final scheme = Theme.of(context).colorScheme;
-    final radius = app.shape.br(26);
+    final compactSearch = tv && widget.searchMode;
+    final radius = app.shape.br(compactSearch ? 12 : 26);
     return Focus(
       canRequestFocus: false,
       skipTraversal: true,
@@ -16111,8 +16231,13 @@ class _SearchScreenState extends State<SearchScreen>
             focusNode: _searchFocusNode,
             onChanged: _onQueryChanged,
             onSubmitted: _onQuerySubmitted,
+            // Apple's fullscreen keyboard emits only an ambiguous end-editing
+            // signal for both Search and Back. On this dedicated search field,
+            // executing the typed query is preferable to silently revealing a
+            // suggestion strip and leaving Catalog search unsubmitted.
+            submitOnTvosEndEditing: widget.searchMode,
             textInputAction: TextInputAction.search,
-            textAlign: TextAlign.center,
+            textAlign: compactSearch ? TextAlign.start : TextAlign.center,
             style: TextStyle(color: scheme.onSurface, fontSize: tv ? 16 : 15),
             // Shell-mode LEFT: no caret exists at the shell, so left always
             // escapes to the sidebar (the LEFT-only sidebar policy). While
@@ -16174,7 +16299,7 @@ class _SearchScreenState extends State<SearchScreen>
               fillColor: app.fade(app.core.tx, 0.06),
               contentPadding: EdgeInsets.symmetric(
                 horizontal: 20,
-                vertical: tv ? 16 : 14,
+                vertical: compactSearch ? 10 : (tv ? 16 : 14),
               ),
             ),
           );
@@ -16710,6 +16835,9 @@ class _SearchScreenState extends State<SearchScreen>
                                 '${t.infohash}_${_kwSelectionMode}_${_kwSelected.contains(t.infohash)}',
                               ),
                               title: t.displayTitle,
+                              addonText: _useAddonSourceText ? t.addonPresentation : null,
+                              addonName: _showAddonSourceLogos ? t.addonDisplayName : null,
+                              addonLogo: t.addonLogo,
                               titleMaxLines: 6,
                               subtitle: _kwRowSubtitle(t),
                               focusNode: _kwNodes[i],
@@ -17719,7 +17847,8 @@ class _SearchScreenState extends State<SearchScreen>
   /// the next row's header) under the hero. So scale the poster with the screen
   /// height.
   double _railPosterW(BuildContext context) =>
-      homeRailPosterWidth(context, isTelevision: widget.isTelevision);
+      homeRailPosterWidth(context, isTelevision: widget.isTelevision,
+        searchResults: widget.searchMode);
 
   /// TITLE-card size for a classic board rail under the Home Cards
   /// orientation. Landscape keeps Spotlight's proportions — about 1.6× the
@@ -17745,7 +17874,7 @@ class _SearchScreenState extends State<SearchScreen>
     final catalogRowH = _railTitleCardH(context) + 14;
     return (boardH - _railHeaderH - catalogRowH - 24).clamp(
       150.0,
-      widget.searchMode ? 180.0 : 440.0,
+      widget.searchMode ? 150.0 : 440.0,
     );
   }
 
@@ -18660,6 +18789,10 @@ class _SearchScreenState extends State<SearchScreen>
         'Install a catalog add-on (e.g. Cinemeta) from Addons to browse '
             'movies and shows here.',
       );
+    }
+
+    if (widget.isTelevision && widget.searchMode) {
+      return _buildSearchSpotlightBoard();
     }
 
     // STAGE layouts: each owns the whole screen and has its own build path
@@ -19657,7 +19790,10 @@ class _SearchScreenState extends State<SearchScreen>
     color: AppThemeScope.of(context).fade(AppThemeScope.of(context).core.tx, 0.92),
   );
 
-  double _classicCatalogRowExtent(BuildContext context) {
+  double _classicCatalogRowExtent(
+    BuildContext context, {
+    CatalogSection? section,
+  }) {
     double lineHeight(TextStyle style) {
       final painter = TextPainter(
         text: TextSpan(text: 'Ag', style: DefaultTextStyle.of(context).style.merge(style)),
@@ -19667,6 +19803,9 @@ class _SearchScreenState extends State<SearchScreen>
       final height = painter.height;
       painter.dispose();
       return height;
+    }
+    if (_hideHomeCollectionNames && section is HomeCollectionSection) {
+      return 8 + _railTitleCardH(context) + 14;
     }
     var header = lineHeight(_railTitleStyle(fontSize: 15));
     if (!_hideHomeCatalogAddonNames) {
@@ -19756,11 +19895,14 @@ class _SearchScreenState extends State<SearchScreen>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _railHeader(
-          title: section.title,
-          tag: _catalogSourceTag(section),
-          onSeeAll: () => _openCatalogSeeAll(section),
-        ),
+        if (collection == null || !_hideHomeCollectionNames)
+          _railHeader(
+            title: section.title,
+            tag: _catalogSourceTag(section),
+            onSeeAll: () => _openCatalogSeeAll(section),
+          )
+        else
+          const SizedBox(height: 8),
         SizedBox(
           height: rowH,
           child: NotificationListener<ScrollNotification>(

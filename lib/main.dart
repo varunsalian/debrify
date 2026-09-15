@@ -68,6 +68,7 @@ import 'services/storage_service.dart';
 import 'services/tv_hero_artwork_quality_controller.dart';
 import 'services/tv_playback_recovery.dart';
 import 'services/tvos_top_shelf_service.dart';
+import 'services/tvos_remote_tuning.dart';
 import 'services/simkl/simkl_service.dart';
 import 'services/trakt/trakt_service.dart';
 import 'services/mdblist/mdblist_service.dart';
@@ -241,6 +242,9 @@ String _describeStartupFailure(Object error, StackTrace stackTrace) {
 
 Future<void> _mainUnchecked(List<String> launchArguments) async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Apply app-wide Siri Remote thresholds before any focusable UI is mounted.
+  // This is inert on Android, iOS, desktop, and web.
+  TvosRemoteTuning.install();
   // Reinstall an interrupted WebDAV adoption's process-wide database barrier
   // before any startup service has a chance to open profile-owned bytes.
   await ProfileDatabaseAdoptionGate.restorePersisted();

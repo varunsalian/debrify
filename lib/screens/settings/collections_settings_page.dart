@@ -11,6 +11,7 @@ import '../../services/analytics_service.dart';
 import '../../services/collection_gif_settings.dart';
 import '../../services/home_collections_store.dart';
 import '../../services/main_page_bridge.dart';
+import '../../services/storage_service.dart';
 import '../../services/stremio_service.dart';
 import '../../theme/app_theme_scope.dart';
 import '../../widgets/text_prompt_dialog.dart';
@@ -37,6 +38,7 @@ class _CollectionsSettingsPageState extends State<CollectionsSettingsPage> {
   );
 
   CollectionGifMode _gifMode = CollectionGifMode.focused;
+  bool _hideNamesOnHome = false;
   bool _loading = true;
   bool _busy = false;
   bool _refreshPending = false;
@@ -79,6 +81,7 @@ class _CollectionsSettingsPageState extends State<CollectionsSettingsPage> {
       final collections = inventory.collections;
       final layout = await _store.getFolderLayout();
       final gifMode = await CollectionGifSettings.read();
+      final hideNamesOnHome = await StorageService.getHomeHideCollectionNames();
       List<StremioAddon> addons = const [];
       try {
         addons = await StremioService.instance.getAddons();
@@ -90,6 +93,7 @@ class _CollectionsSettingsPageState extends State<CollectionsSettingsPage> {
       setState(() {
         _collections = collections;
         _gifMode = gifMode;
+        _hideNamesOnHome = hideNamesOnHome;
         _damagedInventory = inventory.hadCorruption;
         _syncDeferred = inventory.syncDeferred;
         _addons = addons;
@@ -288,6 +292,13 @@ class _CollectionsSettingsPageState extends State<CollectionsSettingsPage> {
     await _store.setFolderLayout(layout);
     if (!mounted) return;
     setState(() => _layout = layout);
+    MainPageBridge.notifyHomeSettingsChanged();
+  });
+
+  Future<void> _setHideNamesOnHome(bool value) => _guarded(() async {
+    await StorageService.setHomeHideCollectionNames(value);
+    if (!mounted) return;
+    setState(() => _hideNamesOnHome = value);
     MainPageBridge.notifyHomeSettingsChanged();
   });
 
@@ -641,6 +652,31 @@ class _CollectionsSettingsPageState extends State<CollectionsSettingsPage> {
                       subtitle: 'Paste the file contents directly',
                       enabled: !_busy,
                       onTap: _importFromPaste,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                SettingsSection(
+                  title: 'Home rows',
+                  blurb:
+                      'Choose how imported collections are labelled on Home.',
+                  children: [
+                    IgnorePointer(
+                      ignoring: _busy,
+                      child: ExcludeFocus(
+                        excluding: _busy,
+                        child: Opacity(
+                          opacity: _busy ? 0.5 : 1,
+                          child: SettingsToggleTile(
+                            icon: Icons.label_off_rounded,
+                            title: 'Hide collection names',
+                            subtitle:
+                                'Remove collection row headings; catalog and add-on names are unchanged',
+                            value: _hideNamesOnHome,
+                            onChanged: _setHideNamesOnHome,
+                          ),
+                        ),
+                      ),
                     ),
                   ],
                 ),

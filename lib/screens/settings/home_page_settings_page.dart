@@ -52,6 +52,7 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
   HomeCardOrientation _homeCardOrientation = HomeCardOrientation.landscape;
   bool _hideCardTitlesAndRatings = false;
   bool _hideCatalogAddonNames = false;
+  bool _spotlightFocusDetails = false;
   HomeHeroSource _heroSource = (mode: HomeHeroSourceMode.random, ids: []);
   List<StremioAddon> _addons = [];
 
@@ -247,6 +248,7 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
       final hideCatalogAddonNames =
           await StorageService.getHomeHideCatalogAddonNames();
       final heroSource = await StorageService.getHomeHeroSource();
+      final spotlightFocusDetails = await StorageService.getSpotlightFocusDetails();
 
       // Only the two views that the current Home screen can render are valid.
       // Migrate the former All, Addon, Trakt, and other retired choices to
@@ -287,6 +289,7 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
         _homeCardOrientation = spotlightCardOrientation;
         _hideCardTitlesAndRatings = hideCardTitlesAndRatings;
         _hideCatalogAddonNames = hideCatalogAddonNames;
+        _spotlightFocusDetails = spotlightFocusDetails;
         _heroSource = heroSource;
         _loading = false;
       });
@@ -373,6 +376,20 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('Failed to save setting: $e')));
+    }
+  }
+
+  Future<void> _setSpotlightFocusDetails(bool value) async {
+    try {
+      await StorageService.setSpotlightFocusDetails(value);
+      if (!mounted) return;
+      setState(() => _spotlightFocusDetails = value);
+      MainPageBridge.notifyHomeSettingsChanged();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to save setting: $e')),
+      );
     }
   }
 
@@ -563,6 +580,14 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
                 SettingsSection(
                   title: 'Home Cards',
                   children: [
+                    if (PlatformUtil.isTelevision && _spotlightLayoutActive)
+                      SettingsToggleTile(
+                        icon: Icons.description_outlined,
+                        title: 'Expand Focused Card',
+                        subtitle: 'Widen the focused card and show its description inside',
+                        value: _spotlightFocusDetails,
+                        onChanged: _setSpotlightFocusDetails,
+                      ),
                     SettingsToggleTile(
                       icon: Icons.view_carousel_rounded,
                       title: 'Landscape Cards',

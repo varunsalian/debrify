@@ -118,10 +118,20 @@ mixin MetadataPresentationMixin<T extends StatefulWidget> on State<T> {
     if (identical(_sourceSnapshot, originalMetadata)) return;
     _retry?.cancel();
     _attempt = 0;
-    _resolvedOnce = false;
-    // Recycled cards can change without changing their element key.
-    _metadataPresentation = null;
-    _presentationPreferences = null;
+    final sameTitle = _sourceSnapshot != null &&
+        originalMetadata != null &&
+        _sourceSnapshot!.id == originalMetadata!.id &&
+        _sourceSnapshot!.type == originalMetadata!.type;
+    if (sameTitle && _resolvedOnce) {
+      // Catalog refreshes can supply a new object for the same title. Keep
+      // its approved artwork mounted while resolving the updated metadata.
+      _metadataPresentation ??= _sourceSnapshot;
+    } else {
+      // A recycled tile must never show the previous title's artwork.
+      _resolvedOnce = false;
+      _metadataPresentation = null;
+      _presentationPreferences = null;
+    }
     unawaited(_resolveMetadata());
   }
 
@@ -259,7 +269,10 @@ mixin MetadataPresentationMixin<T extends StatefulWidget> on State<T> {
         });
       }
       if (identical(presentation.item, original) && prefs.isCurrent) {
-        _presentationPreferences = prefs;
+        setState(() {
+          _metadataPresentation = null;
+          _presentationPreferences = prefs;
+        });
         onMetadataPresentationChanged();
         return;
       }

@@ -3,6 +3,7 @@ import '../../widgets/collections/collection_category_tabs.dart';
 import '../../widgets/see_all/see_all_header.dart';
 import '../../services/storage_service.dart';
 import '../../widgets/collections/tv_collection_titles.dart';
+import '../../widgets/home/spotlight_board.dart';
 import 'dart:async';
 import 'dart:convert';
 
@@ -111,6 +112,7 @@ class _Rail {
   final StremioAddonCatalog? catalog;
   final List<StremioMeta> items = [];
   bool loadingInitial = true;
+  bool initialRequested = false;
   bool loadingMore = false;
   bool get exhausted => pager.exhausted;
   String? get error => pager.error;
@@ -192,6 +194,15 @@ class _CollectionFolderScreenState extends State<CollectionFolderScreen> {
   bool _booted = false;
   String _collectionListStyle = 'grid';
   GlobalKey<TvCollectionTitlesState> _tvTitlesKey = GlobalKey();
+  GlobalKey<SpotlightBoardState> _spotlightKey = GlobalKey();
+  final _spotlightHeroNode = FocusNode();
+  final _spotlightNodes = <String, FocusNode>{};
+  final _spotlightMetadata = <String, StremioMeta>{};
+  bool _spotlightDetails = false;
+  bool _spotlightTrailers = false;
+  double _spotlightVolume = 0;
+  bool get _spotlight =>
+      _styledCollectionList && _collectionListStyle == 'spotlight';
   bool get _supportsCollectionStyles {
     final size = MediaQuery.sizeOf(context);
     final desktop = switch (Theme.of(context).platform) {
@@ -259,7 +270,8 @@ class _CollectionFolderScreenState extends State<CollectionFolderScreen> {
   /// The folder's lists, narrowed to the selected source when opening a list.
   List<CollectionCatalogSource> get _enabledSources => [
     for (final s in _folder.sources)
-      if (widget.sourceKey == null || s.key == widget.sourceKey) s,
+      if (widget.sourceKey == null || s.key == widget.sourceKey || _spotlight)
+        s,
   ];
 
   Set<String> get _sourceIssues => {
@@ -296,6 +308,14 @@ class _CollectionFolderScreenState extends State<CollectionFolderScreen> {
     final session = HomeCollectionsStore.captureSession();
     try {
       final collectionStyle = await StorageService.getTvCollectionListStyle();
+      final details = await StorageService.getSpotlightFocusDetails();
+      final trailers = await StorageService.getHomeHeroTrailerEnabled();
+      final audio = await StorageService.getAmbientTrailerAudioEnabled(
+        AmbientTrailerSurface.homeHero,
+      );
+      final volume = await StorageService.getAmbientTrailerVolume(
+        AmbientTrailerSurface.homeHero,
+      );
       final addons = await _stremio.getAddons();
       final layout = await HomeCollectionsStore.instance.getFolderLayout();
       HomeCollection? updated;
@@ -344,6 +364,9 @@ class _CollectionFolderScreenState extends State<CollectionFolderScreen> {
         _folderIndex = index < 0 ? 0 : index;
       }
       _collectionListStyle = collectionStyle;
+      _spotlightDetails = details;
+      _spotlightTrailers = trailers;
+      _spotlightVolume = audio ? volume.toDouble() : 0;
       _configurationError = null;
       _booted = true;
       _rebuildFolder(
@@ -362,6 +385,10 @@ class _CollectionFolderScreenState extends State<CollectionFolderScreen> {
 
   @override
   void dispose() {
+    _spotlightHeroNode.dispose();
+    for (final node in _spotlightNodes.values) {
+      node.dispose();
+    }
     _native.identityChanges.removeListener(_identitiesChanged);
     MainPageBridge.removeHomeSettingsListener(_onConfigurationChanged);
     _stremio.removeAddonsChangedListener(_onConfigurationChanged);
@@ -434,12 +461,16 @@ class _CollectionFolderScreenState extends State<CollectionFolderScreen> {
       _allLoadingInitial = false;
       _allLoadingMore = false;
       _allExhausted = false;
-      final index = rails.indexWhere((r) => r.source.key == oldSource);
+      final index = rails.indexWhere(
+        (r) => r.source.key == (oldSource ?? widget.sourceKey),
+      );
       _tab = wasAll && _collection.showAllTab && rails.length > 1
           ? _kAllTab
           : (index < 0 ? 0 : index);
       _tabGridKey = GlobalKey();
       _tvTitlesKey = GlobalKey();
+      _spotlightKey = GlobalKey();
+      _initialGridFocus = false;
       _galleryKey = GlobalKey();
       _allGridKey = GlobalKey();
       if (!_collection.showAllTab || rails.length < 2) _view = _View.lists;
@@ -460,6 +491,19 @@ class _CollectionFolderScreenState extends State<CollectionFolderScreen> {
   }
 
   Future<void> _loadInitialRails(List<_Rail> rails, int token) async {
+    if (_spotlight && widget.isTelevision && _tabs && rails.isNotEmpty) {
+      final selected = _tab.clamp(0, rails.length - 1);
+      await _loadRail(rails[selected], token);
+      for (final index in [selected - 1, selected + 1]) {
+        if (index >= 0 &&
+            index < rails.length &&
+            mounted &&
+            token == _reqToken) {
+          await _loadRail(rails[index], token);
+        }
+      }
+      return;
+    }
     for (
       var start = 0;
       start < rails.length;
@@ -476,6 +520,8 @@ class _CollectionFolderScreenState extends State<CollectionFolderScreen> {
   }
 
   Future<void> _loadRail(_Rail r, int token) async {
+    if (r.initialRequested) return;
+    r.initialRequested = true;
     final page = await r.pager.nextPage();
     if (!mounted || token != _reqToken) return;
     setState(() {
@@ -486,13 +532,23 @@ class _CollectionFolderScreenState extends State<CollectionFolderScreen> {
   }
 
   void _focusLoadedGrid() {
-    if (widget.sourceKey == null || !widget.isTelevision || _initialGridFocus) {
+    if (widget.sourceKey == null ||
+        (!widget.isTelevision && !_spotlight) ||
+        _initialGridFocus) {
       return;
     }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted ||
           _initialGridFocus ||
           ModalRoute.of(context)?.isCurrent != true) {
+        return;
+      }
+      if (_styledCollectionList &&
+          _spotlight &&
+          _spotlightKey.currentState != null &&
+          (_sortNode.hasFocus || !widget.isTelevision)) {
+        _initialGridFocus = true;
+        _spotlightKey.currentState!.focusShelf(_tab < 0 ? 0 : _tab);
         return;
       }
       if (_styledCollectionList &&
@@ -743,6 +799,11 @@ class _CollectionFolderScreenState extends State<CollectionFolderScreen> {
       _tvTitlesKey = GlobalKey();
     });
     if (tab == _kAllTab) unawaited(_startAll(_reqToken));
+    if (_spotlight && tab >= 0) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _spotlightKey.currentState?.focusShelf(tab);
+      });
+    }
   }
 
   void _onSortChanged(String sort) {
@@ -814,12 +875,15 @@ class _CollectionFolderScreenState extends State<CollectionFolderScreen> {
 
   bool get _showingEmpty {
     if (!_booted) return false;
+    if (_configurationError != null) return true;
     if (_showingAll) {
       return !_allLoadingInitial &&
           !_allCanContinue &&
           _displayItems(_allItems).isEmpty;
     }
     if (_tabs) {
+      // Spotlight retains navigable loading/empty cards for resolved rows.
+      if (_spotlight) return _rails.isEmpty;
       final r = _tabRail;
       return r == null ||
           (!r.loadingInitial &&
@@ -834,6 +898,12 @@ class _CollectionFolderScreenState extends State<CollectionFolderScreen> {
   void _enterContent() {
     if (_showingEmpty) {
       (_hasEmptyLoadError ? _detailsNode : _retryNode).requestFocus();
+      return;
+    }
+    if (_spotlight && (_showingAll || _tabs)) {
+      _spotlightKey.currentState?.focusShelf(
+        _showingAll || _tab < 0 ? 0 : _tab,
+      );
       return;
     }
     if (_showingAll) {
@@ -1193,6 +1263,7 @@ class _CollectionFolderScreenState extends State<CollectionFolderScreen> {
 
   /// Tabs layout: the selected list as a full poster grid.
   Widget _buildTab() {
+    if (_spotlight && _rails.isNotEmpty) return _buildSpotlight();
     final r = _tabRail;
     if (r == null) return _buildEmpty();
     if (r.loadingInitial) {
@@ -1284,19 +1355,194 @@ class _CollectionFolderScreenState extends State<CollectionFolderScreen> {
     required bool loadingMore,
     required bool exhausted,
     required VoidCallback loadMore,
-  }) => TvCollectionTitles(
-    key: _tvTitlesKey,
-    style: _collectionListStyle,
-    items: _sorted(items),
-    loadingMore: loadingMore,
-    exhausted: exhausted,
-    onLoadMore: loadMore,
-    onOpen: _openItem,
-    onQuickPlay: widget.onQuickPlay == null ? null : _quickPlay,
-    onItemFocused: widget.onItemFocused,
-    isBound: widget.isBound,
-    onExitTop: () => _gridExitNode.requestFocus(),
-  );
+  }) => _spotlight
+      ? _buildSpotlight(merged: items)
+      : TvCollectionTitles(
+          key: _tvTitlesKey,
+          style: _collectionListStyle,
+          items: _sorted(items),
+          loadingMore: loadingMore,
+          exhausted: exhausted,
+          onLoadMore: loadMore,
+          onOpen: _openItem,
+          onQuickPlay: widget.onQuickPlay == null ? null : _quickPlay,
+          onItemFocused: widget.onItemFocused,
+          isBound: widget.isBound,
+          onExitTop: () => _gridExitNode.requestFocus(),
+        );
+
+  Widget _buildSpotlight({List<StremioMeta>? merged}) {
+    final shelves = <SpotlightShelf>[];
+    final count = merged == null ? _rails.length : 1;
+    for (var row = 0; row < count; row++) {
+      final rail = merged == null ? _rails[row] : null;
+      final id = rail?.source.key ?? 'all';
+      final items = _sorted(merged ?? _displayItems(rail!.items));
+      if (rail != null &&
+          !rail.loadingInitial &&
+          !rail.loadingMore &&
+          items.isEmpty &&
+          _railCanContinue(rail)) {
+        _continueEmptyPage(
+          rail,
+          () => _rails.contains(rail),
+          () => _loadMoreRail(rail),
+        );
+      }
+      final nodes = <FocusNode>[];
+      final cards = <SpotlightCard>[];
+      for (var column = 0; column < items.length; column++) {
+        final item = items[column];
+        final nodeId = column == 0
+            ? '$id:first'
+            : '$id:${item.type}:${item.id}';
+        _spotlightMetadata[nodeId] = item;
+        final node = _spotlightNodes.putIfAbsent(nodeId, () {
+          final node = FocusNode();
+          node.addListener(() {
+            if (node.hasFocus) {
+              final current = _spotlightMetadata[nodeId];
+              if (current != null) widget.onItemFocused?.call(current);
+              _loadSpotlightNeighbors(id);
+            }
+          });
+          return node;
+        });
+        nodes.add(node);
+        cards.add(
+          SpotlightCard(
+            metadata: item,
+            title: item.name,
+            image: item.background ?? item.poster,
+            fallbackImage: item.poster,
+            shape: SpotlightCardShape.wide,
+            rating: item.imdbRating,
+            subtitle: item.year,
+            watchedImdbId: item.effectiveImdbId,
+            watchedContentType: item.type,
+            onOpen: () => _openItem(item),
+            onOptions: widget.onQuickPlay == null
+                ? null
+                : () => _quickPlay(item),
+          ),
+        );
+      }
+      if (cards.isEmpty) {
+        _spotlightMetadata.remove('$id:first');
+        nodes.add(
+          _spotlightNodes.putIfAbsent('$id:first', () {
+            final node = FocusNode();
+            node.addListener(() {
+              if (node.hasFocus) {
+                final current = _spotlightMetadata['$id:first'];
+                if (current != null) widget.onItemFocused?.call(current);
+                _loadSpotlightNeighbors(id);
+              }
+            });
+            return node;
+          }),
+        );
+        cards.add(
+          SpotlightCard(
+            title: rail?.loadingInitial == true
+                ? 'Loading…'
+                : rail?.error != null
+                ? 'Could not load titles'
+                : 'No titles available',
+            subtitle: rail?.error != null ? 'Select to retry' : null,
+            shape: SpotlightCardShape.wide,
+            onOpen: () {
+              if (rail != null) {
+                _retryRail(rail);
+              } else {
+                _retryCurrent();
+              }
+            },
+          ),
+        );
+      }
+      // Keep paging and recovery actionable even when a short shelf cannot
+      // scroll, or a pointer user is browsing a row other than the selected tab.
+      final failed = rail != null
+          ? rail.error != null
+          : (_loader?.hasErrors ?? false);
+      final loading = rail?.loadingMore ?? _allLoadingMore;
+      final canContinue = rail != null
+          ? _railCanContinue(rail)
+          : _allCanContinue;
+      if (items.isNotEmpty &&
+          (failed || (!widget.isTelevision && (loading || canContinue)))) {
+        nodes.add(_spotlightNodes.putIfAbsent('$id:paging', () => FocusNode()));
+        cards.add(
+          SpotlightCard(
+            title: loading
+                ? 'Loading…'
+                : failed
+                ? 'Retry loading titles'
+                : 'Load more',
+            subtitle: rail?.title ?? 'All titles',
+            shape: SpotlightCardShape.wide,
+            onOpen: () {
+              if (loading) return;
+              if (rail != null) {
+                if (failed) {
+                  unawaited(_retryRail(rail));
+                } else {
+                  unawaited(_loadMoreRail(rail));
+                }
+              } else if (failed) {
+                _retryCurrent();
+              } else {
+                unawaited(_loadMoreAll());
+              }
+            },
+          ),
+        );
+      }
+      shelves.add(
+        SpotlightShelf(
+          id: id,
+          title: rail?.title ?? 'All titles',
+          items: cards,
+          nodes: nodes,
+        ),
+      );
+    }
+    return SpotlightBoard(
+      key: _spotlightKey,
+      hero: const [],
+      heroNode: _spotlightHeroNode,
+      heroAddon: null,
+      onHeroOpen: (_, __) {},
+      shelvesOnly: true,
+      sections: shelves,
+      dpad: widget.isTelevision,
+      expandFocusedCard: _spotlightDetails,
+      trailersEnabled: _spotlightTrailers,
+      cardTrailerVolume: _spotlightVolume,
+      onExitTop: () => _gridExitNode.requestFocus(),
+      onLoadMoreRow: (row) {
+        if (merged != null) {
+          _loadMoreAll();
+        } else if (_rails[row].loadingInitial) {
+          _loadRail(_rails[row], _reqToken);
+        } else {
+          _loadMoreRail(_rails[row]);
+        }
+      },
+    );
+  }
+
+  void _loadSpotlightNeighbors(String id) {
+    final row = _rails.indexWhere((rail) => rail.source.key == id);
+    if (row < 0) return;
+    if (!_showingAll && _tab != row) setState(() => _tab = row);
+    for (final index in [row, row - 1, row + 1]) {
+      if (index >= 0 && index < _rails.length) {
+        unawaited(_loadRail(_rails[index], _reqToken));
+      }
+    }
+  }
 
   bool get _hasEmptyLoadError {
     if (_configurationError != null) return true;

@@ -310,6 +310,8 @@ class StorageService {
       'home_hide_card_titles_and_ratings';
   static const String _homeHideCatalogAddonNamesKey =
       'home_hide_catalog_addon_names';
+  static const String _homeHideCollectionNamesKey =
+      'home_hide_collection_names';
   static const String _supportRemoteConfigCacheKey =
       'support_remote_config_cache_v1';
   static const String _dismissedDonationCampaignIdsKey =
@@ -1557,24 +1559,37 @@ class StorageService {
   }
 
   static const tvCollectionListStyles = {
+    'spotlight',
     'grid',
     'gallery',
     'filmstrip',
     'journal',
   };
-  static Future<String> getTvCollectionListStyle() async {
-    final prefs = await ProfilePreferences.instance();
-    final value = prefs.getString('tv_collection_list_style');
-    return tvCollectionListStyles.contains(value) ? value! : 'filmstrip';
-  }
+  // One-time alpha rollout, per profile. Later explicit choices must survive.
+  static const _collectionSpotlightMigrationKey =
+      'tv_collection_spotlight_alpha_migrated_v1';
+  static final Lock _collectionStyleLock = Lock();
 
-  static Future<void> setTvCollectionListStyle(String value) async {
-    final prefs = await ProfilePreferences.instance();
-    await prefs.setString(
-      'tv_collection_list_style',
-      tvCollectionListStyles.contains(value) ? value : 'filmstrip',
-    );
-  }
+  static Future<String> getTvCollectionListStyle() =>
+      _collectionStyleLock.synchronized(() async {
+        final prefs = await ProfilePreferences.instance();
+        if (prefs.getBool(_collectionSpotlightMigrationKey) != true) {
+          await prefs.setString('tv_collection_list_style', 'spotlight');
+          await prefs.setBool(_collectionSpotlightMigrationKey, true);
+        }
+        final value = prefs.getString('tv_collection_list_style');
+        return tvCollectionListStyles.contains(value) ? value! : 'spotlight';
+      });
+
+  static Future<void> setTvCollectionListStyle(String value) =>
+      _collectionStyleLock.synchronized(() async {
+        final prefs = await ProfilePreferences.instance();
+        await prefs.setString(
+          'tv_collection_list_style',
+          tvCollectionListStyles.contains(value) ? value : 'spotlight',
+        );
+        await prefs.setBool(_collectionSpotlightMigrationKey, true);
+      });
 
   static const String _tvPlayerControlsStyleKey = 'tv_player_controls_style';
   static const Set<String> _tvPlayerControlsStyles = {
@@ -6349,6 +6364,48 @@ class StorageService {
     await prefs.setBool(_homeHideCatalogAddonNamesKey, value);
   }
 
+  static Future<bool> getShowAddonLogos() async {
+    final prefs = await ProfilePreferences.instance();
+    return prefs.getBool('sources_show_addon_logos') ?? false;
+  }
+
+  static Future<void> setShowAddonLogos(bool value) async {
+    final prefs = await ProfilePreferences.instance();
+    await prefs.setBool('sources_show_addon_logos', value);
+  }
+
+  static Future<bool> getUseAddonTextFormatting() async {
+    final prefs = await ProfilePreferences.instance();
+    return prefs.getBool('sources_use_addon_text') ?? false;
+  }
+
+  static Future<void> setUseAddonTextFormatting(bool value) async {
+    final prefs = await ProfilePreferences.instance();
+    await prefs.setBool('sources_use_addon_text', value);
+  }
+
+  /// Suppresses collection row headings on Home without changing catalog
+  /// titles or their add-on provenance labels.
+  static Future<bool> getHomeHideCollectionNames() async {
+    final prefs = await ProfilePreferences.instance();
+    return prefs.getBool(_homeHideCollectionNamesKey) ?? false;
+  }
+
+  static Future<void> setHomeHideCollectionNames(bool value) async {
+    final prefs = await ProfilePreferences.instance();
+    await prefs.setBool(_homeHideCollectionNamesKey, value);
+  }
+
+  static Future<bool> getSpotlightFocusDetails() async {
+    final prefs = await ProfilePreferences.instance();
+    return prefs.getBool('spotlight_focus_details') ?? true;
+  }
+
+  static Future<void> setSpotlightFocusDetails(bool value) async {
+    final prefs = await ProfilePreferences.instance();
+    await prefs.setBool('spotlight_focus_details', value);
+  }
+
   static Future<void> clearAllHomePageSettings() async {
     final prefs = await ProfilePreferences.instance();
     await prefs.remove(_homeDefaultSourceTypeKey);
@@ -6365,6 +6422,8 @@ class StorageService {
     await prefs.remove(_homeCardOrientationKey);
     await prefs.remove(_homeHideCardTitlesAndRatingsKey);
     await prefs.remove(_homeHideCatalogAddonNamesKey);
+    await prefs.remove(_homeHideCollectionNamesKey);
+    await prefs.remove('spotlight_focus_details');
   }
 
   // Reddit Settings

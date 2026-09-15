@@ -1,4 +1,6 @@
 import 'package:debrify/models/torrent.dart';
+import 'package:debrify/services/storage_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:debrify/screens/video_player/widgets/source_sheet.dart';
 import 'package:debrify/services/series_source_fetcher.dart';
 import 'package:flutter/material.dart';
@@ -58,6 +60,52 @@ class _HostState extends State<_Host> {
 }
 
 void main() {
+  for (final type in StreamType.values) {
+  testWidgets('original format retains transport in player picker: ${type.name}', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final base = _source(name: 'Parsed filename', source: 'stremio:aiostreams', type: type);
+    final saved = base.toJson();
+    saved['stream_label'] = '⚡ AIOStreams';
+    saved['stream_original_title'] = 'Original title';
+    saved['stream_description'] = 'Movie name\n💾 12 GB\nEnglish';
+    final torrent = Torrent.fromJson(saved);
+    expect(Torrent.fromJson(torrent.toJson()).addonPresentation,
+        (name: '⚡ AIOStreams', description: 'Movie name\n💾 12 GB\nEnglish'));
+    await tester.runAsync(() => StorageService.setUseAddonTextFormatting(true));
+    try {
+      await tester.pumpWidget(MaterialApp(home: SourceSheet(
+        sources: [torrent], currentSourceIndex: 0,
+        resolveSource: (_) async => 'https://example.test/resolved',
+        onSourceSelected: (_, _) {}, onClose: () {},
+      )));
+      await tester.pumpAndSettle();
+      expect(find.text('⚡ AIOStreams'), findsOneWidget);
+      expect(find.text('Movie name\n💾 12 GB\nEnglish'), findsOneWidget);
+      expect(find.text('Parsed filename'), findsNothing);
+      expect(find.text(switch (type) {
+        StreamType.torrent => 'TORRENT',
+        StreamType.directUrl => 'DIRECT',
+        StreamType.externalUrl => 'EXTERNAL',
+      }), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    } finally {
+      await tester.runAsync(() => StorageService.setUseAddonTextFormatting(false));
+    }
+  });
+
+  }
+
+  test('original text falls back and avoids duplicate labels for old saves', () {
+    final saved = _source(name: 'Filename', source: 'addon').toJson();
+    expect(Torrent.fromJson(saved).addonPresentation, isNull);
+    saved['stream_label'] = 'Same';
+    saved['stream_description'] = 'Same';
+    expect(Torrent.fromJson(saved).addonPresentation, (name: 'Same', description: null));
+    saved.remove('stream_label');
+    saved['stream_original_title'] = 'Heading';
+    expect(Torrent.fromJson(saved).addonPresentation, (name: 'Heading', description: 'Same'));
+  });
+
   testWidgets('shows the complete source name across multiple lines', (
     tester,
   ) async {

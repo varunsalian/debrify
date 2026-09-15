@@ -2075,8 +2075,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
           SettingsRows.collectionListStyle,
           'Appearance',
           _openCollectionListStyle,
-          subtitle: 'Grid · Gallery · Filmstrip · Journal',
-          keywords: ['collection', 'list', 'gallery', 'filmstrip', 'journal'],
+          subtitle: 'Grid · Gallery · Filmstrip · Journal · Spotlight',
+          keywords: [
+            'collection', 'list', 'gallery', 'filmstrip', 'journal', 'spotlight',
+          ],
         ),
       if (_isAndroidTv)
         nav(

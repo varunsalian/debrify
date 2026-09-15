@@ -38,7 +38,11 @@ void main() {
     suggestions.dispose();
   });
 
-  Future<void> mount(WidgetTester tester, {bool tv = false}) async {
+  Future<void> mount(
+    WidgetTester tester, {
+    bool tv = false,
+    bool submitOnTvosEndEditing = false,
+  }) async {
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
@@ -52,6 +56,7 @@ void main() {
                 forceTvKeyboard: tv,
                 textInputAction: TextInputAction.search,
                 onSubmitted: submitted.add,
+                submitOnTvosEndEditing: submitOnTvosEndEditing,
               ),
               TextButton(onPressed: () {}, child: const Text('Elsewhere')),
             ],
@@ -120,6 +125,28 @@ void main() {
       await tester.pumpAndSettle();
       await endEditing();
       expect(submitted, ['Dune']);
+    },
+  );
+
+  testWidgets(
+    'Apple TV Search action submits even while title suggestions exist',
+    (tester) async {
+      PlatformUtil.debugSetTvOS(true);
+      StorageService.tvKeyboardEnabledCached = false;
+      await mount(tester, submitOnTvosEndEditing: true);
+
+      await tester.binding.defaultBinaryMessenger.handlePlatformMessage(
+        'debrify/tvkeyboard',
+        const StandardMethodCodec().encodeMethodCall(
+          const MethodCall('endEditing'),
+        ),
+        (_) {},
+      );
+      await tester.pumpAndSettle();
+
+      expect(submitted, ['Dune']);
+      expect(selected, isEmpty);
+      expect(find.byType(TextFieldSuggestions), findsNothing);
     },
   );
 

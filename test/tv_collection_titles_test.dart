@@ -1,6 +1,8 @@
 import 'package:debrify/screens/settings/tv_collection_list_style_page.dart';
 import 'package:debrify/models/stremio_addon.dart';
 import 'package:debrify/services/storage_service.dart';
+import 'package:debrify/services/main_page_bridge.dart';
+import 'package:debrify/widgets/home/spotlight_card_trailer.dart';
 import 'package:debrify/widgets/collections/tv_collection_titles.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
@@ -9,19 +11,65 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
+  for (final style in ['gallery', 'filmstrip', 'journal']) {
+    testWidgets('$style gates trailers by dwell, focus and Home setting', (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      await StorageService.setHomeHeroTrailerEnabled(true);
+      final key = GlobalKey<TvCollectionTitlesState>();
+      await tester.pumpWidget(MaterialApp(home: Scaffold(body: TvCollectionTitles(
+        key: key, style: style,
+        items: List.generate(6, (i) => StremioMeta(
+          id: 'tt$i', name: 'Title $i', type: 'movie',
+        )),
+        onOpen: (_) {}, onLoadMore: () {}, onExitTop: () {}, exhausted: true,
+      ))));
+      await tester.pumpAndSettle();
+      key.currentState!.focusFirst();
+      await tester.pumpAndSettle();
+      await tester.pump(const Duration(seconds: 1));
+      expect(find.byType(SpotlightCardTrailer), findsNothing);
+      await tester.pump(const Duration(seconds: 1));
+      expect(find.byType(SpotlightCardTrailer), findsOneWidget);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pumpAndSettle();
+      expect(find.byType(SpotlightCardTrailer), findsNothing);
+      await StorageService.setHomeHeroTrailerEnabled(false);
+      MainPageBridge.notifyHomeSettingsChanged();
+      await tester.pumpAndSettle();
+      await tester.pump(const Duration(seconds: 5));
+      expect(find.byType(SpotlightCardTrailer), findsNothing);
+      await tester.pumpWidget(const SizedBox());
+    });
+  }
   test(
-    'collection style defaults to Filmstrip and rejects unknown values',
+    'collection style defaults to Spotlight and preserves explicit selections',
     () async {
       SharedPreferences.setMockInitialValues({});
-      expect(await StorageService.getTvCollectionListStyle(), 'filmstrip');
-      for (final style in ['grid', 'gallery', 'filmstrip', 'journal']) {
+      expect(await StorageService.getTvCollectionListStyle(), 'spotlight');
+      for (final style in ['grid', 'gallery', 'filmstrip', 'journal', 'spotlight']) {
         await StorageService.setTvCollectionListStyle(style);
         expect(await StorageService.getTvCollectionListStyle(), style);
       }
       await StorageService.setTvCollectionListStyle('unknown');
-      expect(await StorageService.getTvCollectionListStyle(), 'filmstrip');
+      expect(await StorageService.getTvCollectionListStyle(), 'spotlight');
     },
   );
+  test('alpha migrates each existing collection layout only once', () async {
+    for (final style in ['grid', 'gallery', 'filmstrip', 'journal']) {
+      SharedPreferences.setMockInitialValues({'tv_collection_list_style': style});
+      expect(await StorageService.getTvCollectionListStyle(), 'spotlight');
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getString('tv_collection_list_style'), 'spotlight');
+      await StorageService.setTvCollectionListStyle(style);
+      expect(await StorageService.getTvCollectionListStyle(), style);
+      expect(await StorageService.getTvCollectionListStyle(), style);
+    }
+  });
+  test('explicit selection before first read is preserved', () async {
+    SharedPreferences.setMockInitialValues({});
+    await StorageService.setTvCollectionListStyle('journal');
+    expect(await StorageService.getTvCollectionListStyle(), 'journal');
+  });
   for (final layout in ['gallery', 'filmstrip', 'journal']) {
     for (final activate in [
       LogicalKeyboardKey.select,
@@ -91,6 +139,7 @@ void main() {
   testWidgets('picker saves style and keeps remote focus', (tester) async {
     SharedPreferences.setMockInitialValues({
       'tv_collection_list_style': 'grid',
+      'tv_collection_spotlight_alpha_migrated_v1': true,
     });
     await tester.pumpWidget(
       const MaterialApp(home: TvCollectionListStylePage()),

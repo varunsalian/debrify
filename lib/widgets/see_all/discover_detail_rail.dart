@@ -16,7 +16,6 @@ import '../../services/stremio_service.dart';
 import '../../services/imdb_trailer_service.dart';
 import '../../services/youtube_service.dart';
 import '../../theme/app_theme_scope.dart';
-import '../../utils/platform_util.dart';
 
 /// How the reactive detail block is drawn.
 enum DiscoverDetailLayout {
@@ -196,9 +195,7 @@ class _DiscoverDetailRailState extends State<DiscoverDetailRail>
   /// thread IS what "navigating Discover always feels laggy" was. 2.5s is a
   /// deliberate rest; a browse never reaches it, and a real rest still gets
   /// its trailer (the pill promises it in the meantime).
-  static Duration get _trailerDwellDelay => PlatformUtil.isAndroidTvCached
-      ? const Duration(milliseconds: 2500)
-      : const Duration(milliseconds: 900);
+  static const _trailerDwellDelay = Duration(seconds: 2);
 
   /// A shorter dwell that just surfaces the "Trailer" loading pill, so a rested
   /// card shows prompt feedback the moment the user settles — the pill is up for

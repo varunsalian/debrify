@@ -126,7 +126,7 @@ void recordWebDavSyncLocalChangeDeferred(
       event: 'local_change_deferred',
       level: DiagnosticLevel.warning,
       fields: <String, Object?>{
-        'reason': DiagnosticLabel(reason),
+        'reason': DiagnosticLabel(_webDavSyncMessageLabel(reason)),
         'attempt': attempt,
         'delayMs': delay.inMilliseconds,
       },
@@ -183,4 +183,22 @@ Map<String, Object> webDavConnectionFailureFields(WebDavException error) {
     if (cause is SocketException && cause.osError != null)
       'socketErrorCode': cause.osError!.errorCode,
   };
+}
+
+/// Callers supply fixed event/reason labels and numeric or boolean state only.
+/// Never pass preference values, device/profile identifiers, or exception text.
+void recordWebDavSyncScheduling(String event, String reason,
+    [Map<String, Object?> fields = const {}]) {
+  try {
+    DiagnosticLog.instance.recordEvent(
+      source: 'webdav_sync',
+      event: event,
+      fields: {
+        'reason': DiagnosticLabel(_webDavSyncMessageLabel(reason)),
+        ...fields,
+      },
+    );
+  } catch (_) {
+    // Diagnostics must not change scheduling.
+  }
 }

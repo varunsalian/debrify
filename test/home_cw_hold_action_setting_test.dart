@@ -5,6 +5,16 @@ import 'package:shared_preferences/shared_preferences.dart';
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
+  test('Spotlight focus details persist and reset with Home settings', () async {
+    expect(await StorageService.getSpotlightFocusDetails(), isTrue);
+    await StorageService.setSpotlightFocusDetails(true);
+    expect(await StorageService.getSpotlightFocusDetails(), isTrue);
+    await StorageService.setSpotlightFocusDetails(false);
+    expect(await StorageService.getSpotlightFocusDetails(), isFalse);
+    await StorageService.clearAllHomePageSettings();
+    expect(await StorageService.getSpotlightFocusDetails(), isTrue);
+  });
+
   test('Hold to Quick Play defaults off and persists changes', () async {
     expect(await StorageService.getHomeCwHoldToQuickPlay(), isFalse);
 
@@ -41,5 +51,15 @@ void main() {
 
     await StorageService.clearAllHomePageSettings();
     expect(await StorageService.getHomeHideCatalogAddonNames(), isFalse);
+  });
+
+  test('Hide Home collection names defaults off and persists', () async {
+    expect(await StorageService.getHomeHideCollectionNames(), isFalse);
+
+    await StorageService.setHomeHideCollectionNames(true);
+    expect(await StorageService.getHomeHideCollectionNames(), isTrue);
+
+    await StorageService.clearAllHomePageSettings();
+    expect(await StorageService.getHomeHideCollectionNames(), isFalse);
   });
 }

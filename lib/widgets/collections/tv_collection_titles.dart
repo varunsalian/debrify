@@ -5,6 +5,11 @@ import '../../services/debrify_image_cache.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../models/stremio_addon.dart';
+import '../../services/storage_service.dart';
+import '../../services/main_page_bridge.dart';
+import '../../services/app_route_observer.dart';
+import '../../utils/platform_util.dart';
+import '../home/spotlight_card_trailer.dart';
 
 /// Large-screen presentations of a collection's titles. The parent owns
 /// paging, sorting and title actions; focus remains here while details push.
@@ -33,7 +38,101 @@ class TvCollectionTitles extends StatefulWidget {
   State<TvCollectionTitles> createState() => TvCollectionTitlesState();
 }
 
-class TvCollectionTitlesState extends State<TvCollectionTitles> {
+class TvCollectionTitlesState extends State<TvCollectionTitles>
+    with RouteAware, WidgetsBindingObserver {
+  static const _red = Color(0xffe50914);
+  static const _ground = Color(0xff09090b);
+  static const _surface = Color(0xff17171b);
+  static const _muted = Color(0xffb3b3bd);
+  Timer? _trailerDwell;
+  String? _previewIdentity;
+  bool _trailersEnabled = false;
+  double _trailerVolume = 0;
+  bool _covered = false;
+  bool _paused = false;
+  int _prefsRequest = 0;
+  PageRoute<dynamic>? _route;
+
+  String _identity(StremioMeta item) => '${item.type}:${item.id}';
+  bool get _previewEligible =>
+      !_covered &&
+      !_paused &&
+      _trailersEnabled &&
+      (widget.style == 'gallery' ||
+          widget.style == 'filmstrip' ||
+          widget.style == 'journal') &&
+      _index < widget.items.length &&
+      _index < _nodes.length &&
+      _nodes[_index].hasFocus &&
+      (widget.items[_index].type == 'movie' ||
+          widget.items[_index].type == 'series') &&
+      !MediaQuery.disableAnimationsOf(context);
+
+  Future<void> _loadTrailerSettings() async {
+    final request = ++_prefsRequest;
+    final surface = PlatformUtil.isTelevision
+        ? AmbientTrailerSurface.homeHero
+        : AmbientTrailerSurface.detail;
+    final values = await Future.wait([
+      StorageService.getHomeHeroTrailerEnabled(),
+      StorageService.getAmbientTrailerAudioEnabled(surface),
+      StorageService.getAmbientTrailerVolume(surface),
+    ]);
+    if (!mounted || request != _prefsRequest) return;
+    final enabled = values[0] as bool;
+    final changed = enabled != _trailersEnabled;
+    setState(() {
+      _trailersEnabled = enabled;
+      _trailerVolume = (values[1] as bool) ? (values[2] as int).toDouble() : 0;
+    });
+    if (changed) _armPreview();
+  }
+
+  void _armPreview() {
+    _trailerDwell?.cancel();
+    if (_previewIdentity != null && mounted)
+      setState(() => _previewIdentity = null);
+    if (!mounted || !_previewEligible) return;
+    final identity = _identity(widget.items[_index]);
+    _trailerDwell = Timer(const Duration(seconds: 2), () {
+      if (!mounted ||
+          !_previewEligible ||
+          ModalRoute.of(context)?.isCurrent == false ||
+          identity != _identity(widget.items[_index]))
+        return;
+      setState(() => _previewIdentity = identity);
+    });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final route = ModalRoute.of(context);
+    if (route is PageRoute<dynamic> && route != _route) {
+      appRouteObserver.unsubscribe(this);
+      _route = route;
+      appRouteObserver.subscribe(this, route);
+    }
+  }
+
+  @override
+  void didPushNext() {
+    _covered = true;
+    _armPreview();
+  }
+
+  @override
+  void didPopNext() {
+    _covered = false;
+    _armPreview();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    _paused = state != AppLifecycleState.resumed;
+    _armPreview();
+  }
+
   final _nodes = <FocusNode>[];
   int _index = 0;
   int? _hoverFocusIndex;
@@ -83,6 +182,9 @@ class TvCollectionTitlesState extends State<TvCollectionTitles> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    MainPageBridge.addHomeSettingsListener(_loadTrailerSettings);
+    unawaited(_loadTrailerSettings());
     _scroll.addListener(_maybeLoadMoreFromScroll);
     _resize();
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -150,6 +252,13 @@ class TvCollectionTitlesState extends State<TvCollectionTitles> {
         });
       }
     }
+    final selected = _index < widget.items.length ? widget.items[_index] : null;
+    if (oldWidget.style != widget.style ||
+        previous == null ||
+        selected == null ||
+        _identity(previous) != _identity(selected)) {
+      _armPreview();
+    }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _maybeLoadMoreFromScroll();
     });
@@ -157,6 +266,10 @@ class TvCollectionTitlesState extends State<TvCollectionTitles> {
 
   @override
   void dispose() {
+    _trailerDwell?.cancel();
+    MainPageBridge.removeHomeSettingsListener(_loadTrailerSettings);
+    WidgetsBinding.instance.removeObserver(this);
+    appRouteObserver.unsubscribe(this);
     _cancelPress();
     for (final node in _nodes) {
       node.dispose();
@@ -195,6 +308,7 @@ class TvCollectionTitlesState extends State<TvCollectionTitles> {
     final fromHover = _hoverFocusIndex == index;
     _hoverFocusIndex = null;
     setState(() => _index = index);
+    _armPreview();
     widget.onItemFocused?.call(widget.items[index]);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || fromHover || index >= widget.items.length) return;
@@ -244,7 +358,7 @@ class TvCollectionTitlesState extends State<TvCollectionTitles> {
 
   Widget _art(String? url, {BoxFit fit = BoxFit.cover, int width = 1280}) {
     final fallback = Container(
-      color: const Color(0xff27332f),
+      color: _surface,
       child: const Center(
         child: Icon(Icons.movie_outlined, color: Colors.white38, size: 42),
       ),
@@ -271,16 +385,15 @@ class TvCollectionTitlesState extends State<TvCollectionTitles> {
         if (value) {
           _focus(index);
         } else {
+          if (_index == index) _armPreview();
           if (_pressedIndex == index) _cancelPress();
           if (mounted) setState(() {});
         }
       },
       onKeyEvent: (_, event) => _key(index, event),
       child: Material(
-        color: journal && focused
-            ? const Color(0xffd2ddbf)
-            : const Color(0xff18221e),
-        borderRadius: BorderRadius.circular(journal ? 0 : 8),
+        color: journal && focused ? const Color(0xff281114) : _surface,
+        borderRadius: BorderRadius.circular(10),
         child: InkWell(
           canRequestFocus: false,
           onHover: (hovering) {
@@ -296,43 +409,56 @@ class TvCollectionTitlesState extends State<TvCollectionTitles> {
           child: Container(
             decoration: BoxDecoration(
               border: Border.all(
-                color: focused ? const Color(0xffd2ddbf) : Colors.transparent,
+                color: focused ? _red : const Color(0xff27272e),
                 width: 3,
               ),
-              borderRadius: BorderRadius.circular(journal ? 0 : 8),
+              borderRadius: BorderRadius.circular(10),
             ),
             child: journal
                 ? Padding(
                     padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 10,
+                      horizontal: 10,
+                      vertical: 7,
                     ),
                     child: Row(
                       children: [
                         Text(
                           '${index + 1}'.padLeft(2, '0'),
                           style: TextStyle(
-                            color: focused ? Colors.black54 : Colors.white54,
+                            color: focused ? _red : const Color(0xff666670),
+                            fontSize: 22,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: -1,
                           ),
                         ),
-                        const SizedBox(width: 14),
+                        const SizedBox(width: 10),
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(4),
+                          child: SizedBox(
+                            width: 32,
+                            height: 44,
+                            child: _art(item.poster, width: 100),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
                         Expanded(
                           child: Text(
                             item.name,
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
-                              color: focused ? Colors.black87 : Colors.white,
-                              fontSize: 15,
+                              color: Colors.white,
+                              fontSize: 14,
+                              fontWeight: focused
+                                  ? FontWeight.w600
+                                  : FontWeight.w400,
                             ),
                           ),
                         ),
                         const SizedBox(width: 8),
                         Text(
                           item.year ?? '',
-                          style: TextStyle(
-                            color: focused ? Colors.black54 : Colors.white54,
-                          ),
+                          style: TextStyle(color: _muted, fontSize: 11),
                         ),
                       ],
                     ),
@@ -341,7 +467,7 @@ class TvCollectionTitlesState extends State<TvCollectionTitles> {
                     fit: StackFit.expand,
                     children: [
                       ClipRRect(
-                        borderRadius: BorderRadius.circular(5),
+                        borderRadius: BorderRadius.circular(7),
                         child: _art(
                           widget.style == 'filmstrip'
                               ? item.background ?? item.poster
@@ -353,8 +479,14 @@ class TvCollectionTitlesState extends State<TvCollectionTitles> {
                         left: 0,
                         right: 0,
                         child: Container(
-                          padding: const EdgeInsets.all(8),
-                          color: Colors.black87,
+                          padding: const EdgeInsets.fromLTRB(10, 28, 10, 10),
+                          decoration: const BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                              colors: [Colors.transparent, Color(0xf209090b)],
+                            ),
+                          ),
                           child: Text(
                             item.name,
                             maxLines: 2,
@@ -362,10 +494,26 @@ class TvCollectionTitlesState extends State<TvCollectionTitles> {
                             style: const TextStyle(
                               color: Colors.white,
                               fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              height: 1.2,
                             ),
                           ),
                         ),
                       ),
+                      if (focused)
+                        const Positioned(
+                          left: 10,
+                          top: 10,
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              color: _red,
+                              borderRadius: BorderRadius.all(
+                                Radius.circular(2),
+                              ),
+                            ),
+                            child: SizedBox(width: 20, height: 3),
+                          ),
+                        ),
                       if (widget.isBound?.call(item) == true)
                         const Positioned(
                           top: 6,
@@ -393,15 +541,32 @@ class TvCollectionTitlesState extends State<TvCollectionTitles> {
     final details = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        Row(
+          children: [
+            Container(width: 3, height: 11, color: _red),
+            const SizedBox(width: 8),
+            Text(
+              item.type == 'series' ? 'SERIES' : 'FILM',
+              style: const TextStyle(
+                color: Colors.white70,
+                fontSize: 10,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 2.2,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
         Text(
           item.name,
           maxLines: 2,
           overflow: TextOverflow.ellipsis,
           style: TextStyle(
-            color: const Color(0xffeeeade),
-            fontSize: journal ? 27 : 30,
-            fontFamily: journal ? 'serif' : null,
-            height: 1.1,
+            color: Colors.white,
+            fontSize: journal ? 30 : 34,
+            fontWeight: FontWeight.w700,
+            letterSpacing: -0.8,
+            height: 1.05,
           ),
         ),
         const SizedBox(height: 10),
@@ -410,21 +575,34 @@ class TvCollectionTitlesState extends State<TvCollectionTitles> {
             if (item.imdbRating != null)
               '★ ${item.imdbRating!.toStringAsFixed(1)}',
             if (item.year != null) item.year!,
-            item.type == 'series' ? 'Series' : 'Movie',
+            if (item.genres?.isNotEmpty == true) item.genres!.first,
           ].join('   ·   '),
-          style: const TextStyle(color: Color(0xffc1cbae), fontSize: 13),
+          style: const TextStyle(
+            color: Color(0xffd4d4da),
+            fontSize: 12,
+            fontWeight: FontWeight.w500,
+          ),
         ),
         const SizedBox(height: 10),
         Text(
           item.description ?? 'Select this title to view details.',
           maxLines: 3,
           overflow: TextOverflow.ellipsis,
-          style: const TextStyle(
-            color: Color(0xffb6beb1),
-            fontSize: 14,
-            height: 1.45,
-          ),
+          style: const TextStyle(color: _muted, fontSize: 13, height: 1.45),
         ),
+      ],
+    );
+    final artwork = Stack(
+      fit: StackFit.expand,
+      children: [
+        _art(item.background ?? item.poster),
+        if (_previewIdentity == _identity(item) && _previewEligible)
+          SpotlightCardTrailer(
+            key: ValueKey('collection-trailer:$_previewIdentity'),
+            item: item,
+            volume: _trailerVolume,
+            onPlayingChanged: (_) {},
+          ),
       ],
     );
     final preview = LayoutBuilder(
@@ -432,26 +610,42 @@ class TvCollectionTitlesState extends State<TvCollectionTitles> {
           ? Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Expanded(child: _art(item.background ?? item.poster)),
-                const SizedBox(height: 16),
-                details,
-              ],
-            )
-          : Stack(
-              fit: StackFit.expand,
-              children: [
-                _art(item.background ?? item.poster),
-                const DecoratedBox(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [Colors.transparent, Color(0xff111815)],
-                    ),
+                Expanded(
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(14),
+                    child: artwork,
                   ),
                 ),
-                Positioned(left: 24, right: 24, bottom: 24, child: details),
+                const SizedBox(height: 20),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  child: details,
+                ),
               ],
+            )
+          : ClipRRect(
+              borderRadius: BorderRadius.circular(16),
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  artwork,
+                  const DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        stops: [0.15, 0.55, 1],
+                        colors: [
+                          Colors.transparent,
+                          Color(0x5509090b),
+                          Color(0xff09090b),
+                        ],
+                      ),
+                    ),
+                  ),
+                  Positioned(left: 24, right: 24, bottom: 28, child: details),
+                ],
+              ),
             ),
     );
     final list = Column(
@@ -460,18 +654,25 @@ class TvCollectionTitlesState extends State<TvCollectionTitles> {
           padding: const EdgeInsets.fromLTRB(8, 0, 8, 12),
           child: Row(
             children: [
-              Text(
-                'Titles',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: journal ? 23 : 17,
-                  fontFamily: journal ? 'serif' : null,
+              Container(width: 3, height: 17, color: _red),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  journal ? 'The collection' : 'Browse titles',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: -0.3,
+                  ),
                 ),
               ),
-              const Spacer(),
+              const SizedBox(width: 8),
               Text(
                 '${_index + 1} / ${widget.items.length}${widget.exhausted ? '' : '+'}',
-                style: const TextStyle(color: Colors.white60),
+                style: const TextStyle(color: _muted, fontSize: 11),
               ),
               if (widget.loadingMore)
                 const Padding(
@@ -479,7 +680,10 @@ class TvCollectionTitlesState extends State<TvCollectionTitles> {
                   child: SizedBox(
                     width: 14,
                     height: 14,
-                    child: CircularProgressIndicator(strokeWidth: 2),
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: _red,
+                    ),
                   ),
                 ),
             ],
@@ -523,7 +727,7 @@ class TvCollectionTitlesState extends State<TvCollectionTitles> {
       ],
     );
     return ColoredBox(
-      color: const Color(0xff111815),
+      color: _ground,
       child: Padding(
         padding: const EdgeInsets.all(20),
         child: Row(

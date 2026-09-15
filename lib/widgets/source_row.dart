@@ -9,6 +9,7 @@ import '../theme/widgets/focus_expression.dart';
 import '../utils/format_tag_detector.dart';
 import '../utils/tv_keys.dart';
 import 'format_badge.dart';
+import 'addon_identity.dart';
 import 'stream_badge_strip.dart';
 import 'source_list_scroll_anchor.dart';
 
@@ -47,12 +48,20 @@ class SourceRow extends StatefulWidget {
     this.isSelected = false,
     this.onCopy,
     this.titleMaxLines,
+    this.addonText,
+    this.addonName,
+    this.addonLogo,
     this.onLongPress,
     this.onNavigateUp,
     this.onNavigateDown,
   });
 
   final String title;
+  final String? addonName;
+  final String? addonLogo;
+
+  /// Original add-on labels, rendered verbatim without derived metadata.
+  final ({String name, String? description})? addonText;
   final String subtitle;
   final FocusNode focusNode;
   final VoidCallback onTap;
@@ -300,6 +309,11 @@ class _SourceRowState extends State<SourceRow> {
                 ),
               ),
             Expanded(child: _body ??= _buildBody()),
+            if (widget.addonName != null) ...[
+              const SizedBox(width: 12),
+              AddonIdentity(name: widget.addonName!, logo: widget.addonLogo,
+                large: widget.isTelevision, color: _fg),
+            ],
             if (widget.showPlayPill && !widget.isSelectionMode) ...[
               const SizedBox(width: 8),
               // Keep exactly the same content width in both focus states.
@@ -387,7 +401,30 @@ class _SourceRowState extends State<SourceRow> {
         : row;
   }
 
-  Widget _buildBody() => ValueListenableBuilder(
+  Widget _buildBody() => widget.addonText != null
+      ? Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.only(bottom: 5),
+              child: _pill(widget.streamBadge ?? 'Torrent', _tagFg, _tagBg),
+            ),
+            Text(widget.addonText!.name, style: TextStyle(
+              color: _fg, fontSize: widget.isTelevision ? 17 : 14,
+              fontWeight: FontWeight.w700, height: 1.35)),
+            if (widget.addonText!.description != null) ...[
+              const SizedBox(height: 3),
+              Text(widget.addonText!.description!, style: TextStyle(
+                color: _dim, fontSize: widget.isTelevision ? 14 : 12, height: 1.5)),
+            ],
+            if (widget.badgeName != null)
+              StreamBadgeStripFor(name: widget.badgeName!,
+                description: widget.badgeDescription,
+                height: widget.isTelevision ? 26 : 24),
+          ],
+        )
+      : ValueListenableBuilder(
     valueListenable: StreamBadgesService.instance.matcher,
     builder: (_, matcher, __) => _buildBadgeBody(!matcher.isEmpty),
   );

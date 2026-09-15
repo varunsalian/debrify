@@ -17,6 +17,7 @@ import 'package:debrify/theme/widgets/parallax_focus.dart';
 import 'package:debrify/widgets/detail/theme/detail_themes.dart';
 import 'package:debrify/widgets/hero_trailer_backdrop.dart';
 import 'package:debrify/widgets/home/spotlight_board.dart';
+import 'package:debrify/widgets/home/spotlight_card_trailer.dart';
 import 'package:debrify/widgets/collections/collection_focus_glow.dart';
 
 /// Spotlight's hero, which is the piece that changes Home's focus topology
@@ -65,6 +66,38 @@ List<FocusNode> _rowNodes(int n) => [
 void _noop() {}
 
 void main() {
+  for (final width in [550.0, 900.0, 1400.0]) {
+    testWidgets('shelf entry uses actual non-TV geometry at width $width', (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      tester.view.physicalSize = Size(width, 800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final key = GlobalKey<SpotlightBoardState>();
+      final heroNode = FocusNode();
+      final nodes = List.generate(65, (_) => FocusNode());
+      await tester.pumpWidget(MaterialApp(home: AppThemeScope(
+        theme: AppTheme.fromDetail(DetailThemes.byId('signal')),
+        child: Scaffold(body: SpotlightBoard(
+          key: key, hero: const [], heroNode: heroNode, heroAddon: null,
+          onHeroOpen: (_, __) {}, dpad: false, shelvesOnly: true,
+          trailersEnabled: false,
+          sections: List.generate(nodes.length, (i) => SpotlightShelf(
+            id: '$i', title: 'Category $i', tag: 'Source', nodes: [nodes[i]],
+            items: [SpotlightCard(title: 'Title $i', subtitle: '2026', onOpen: () {})],
+          )),
+        )),
+      )));
+      await tester.pumpAndSettle();
+      key.currentState!.focusShelf(60);
+      await tester.pumpAndSettle();
+      expect(nodes[60].hasFocus, isTrue);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox());
+      heroNode.dispose();
+      for (final node in nodes) { node.dispose(); }
+    });
+  }
   late FocusNode hero;
   late List<List<FocusNode>> rows;
 
@@ -90,6 +123,8 @@ void main() {
     List<SpotlightShelf> sections, {
     bool dpad = true,
     bool showCardTitlesAndRatings = true,
+    bool expandFocusedCard = false,
+    bool trailersEnabled = true,
     void Function(StremioMeta item)? onDwell,
     VoidCallback? onTrailerStop,
   }) => MaterialApp(
@@ -106,10 +141,129 @@ void main() {
           onTrailerStop: onTrailerStop,
           dpad: dpad,
           showCardTitlesAndRatings: showCardTitlesAndRatings,
+          expandFocusedCard: expandFocusedCard,
+          trailersEnabled: trailersEnabled,
         ),
       ),
     ),
   );
+
+  testWidgets('card trailers dwell, expand on frames, and cancel on focus or settings changes', (tester) async {
+    final shelves = [SpotlightShelf(title: 'Popular', nodes: rows[0], items: [
+      for (final name in ['Alpha', 'Bravo']) SpotlightCard(
+        metadata: _meta('tt$name', name), title: name,
+        shape: SpotlightCardShape.wide, onOpen: _noop,
+      ),
+    ])];
+    var stoppedHero = 0;
+    await tester.pumpWidget(host([], shelves, expandFocusedCard: true,
+      onTrailerStop: () => stoppedHero++));
+    await tester.pumpAndSettle();
+    rows[0][0].requestFocus();
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+    expect(find.byType(SpotlightCardTrailer), findsNothing);
+    await tester.pump(const Duration(seconds: 1));
+    expect(find.byType(SpotlightCardTrailer), findsOneWidget);
+    expect(stoppedHero, greaterThan(0));
+    final before = (rows[0][0].context!.findRenderObject() as RenderBox).size.width;
+    tester.widget<SpotlightCardTrailer>(find.byType(SpotlightCardTrailer))
+        .onPlayingChanged(true);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 750));
+    final after = (rows[0][0].context!.findRenderObject() as RenderBox).size.width;
+    expect(after, greaterThan(before));
+    await tester.pump(const Duration(seconds: 2));
+    expect(tester.widget<AnimatedOpacity>(find.byKey(
+      const ValueKey('spotlight-trailer-text-ttAlpha'))).opacity, 0);
+    tester.widget<SpotlightCardTrailer>(find.byType(SpotlightCardTrailer))
+        .onPlayingChanged(false);
+    await tester.pump();
+    expect(tester.widget<AnimatedOpacity>(find.byKey(
+      const ValueKey('spotlight-trailer-text-ttAlpha'))).opacity, 1);
+    final attempts = stoppedHero;
+    await tester.pumpWidget(host([], shelves, expandFocusedCard: true,
+      onTrailerStop: () => stoppedHero++));
+    await tester.pump(const Duration(seconds: 5));
+    expect(stoppedHero, attempts, reason: 'rebuild must not repeat the focused preview');
+    rows[0][1].requestFocus();
+    await tester.pump();
+    await tester.pump();
+    expect(find.byType(SpotlightCardTrailer), findsNothing);
+    await tester.pumpWidget(host([], shelves, expandFocusedCard: true,
+      trailersEnabled: false));
+    await tester.pump(const Duration(seconds: 5));
+    expect(find.byType(SpotlightCardTrailer), findsNothing);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('expanded cards remain visible when navigating back left and up', (tester) async {
+    for (final row in rows) {
+      for (final node in row) { node.dispose(); }
+    }
+    rows = List.generate(4, (_) => _rowNodes(7));
+    final shelves = List.generate(4, (r) => SpotlightShelf(
+      title: 'Row $r', nodes: rows[r],
+      items: List.generate(7, (c) => SpotlightCard(
+        metadata: _meta('item-$r-$c', 'Item $r $c'),
+        image: null, title: 'Item $r $c',
+        shape: SpotlightCardShape.wide, onOpen: _noop,
+      )),
+    ));
+    await tester.pumpWidget(host([], shelves, expandFocusedCard: true));
+    await tester.pumpAndSettle();
+    rows[0][0].requestFocus();
+    await tester.pumpAndSettle();
+    for (final direction in [
+      ...List.filled(6, LogicalKeyboardKey.arrowRight),
+      ...List.filled(6, LogicalKeyboardKey.arrowLeft),
+      ...List.filled(3, LogicalKeyboardKey.arrowDown),
+      ...List.filled(3, LogicalKeyboardKey.arrowUp),
+    ]) {
+      await tester.sendKeyEvent(direction);
+      await tester.pumpAndSettle();
+      final node = rows.expand((row) => row).singleWhere((node) => node.hasFocus);
+      final box = node.context!.findRenderObject() as RenderBox;
+      final center = box.localToGlobal(box.size.center(Offset.zero));
+      expect(center.dx, inInclusiveRange(0, 800));
+      expect(center.dy, inInclusiveRange(0, 600));
+    }
+    expect(rows[0][0].hasFocus, isTrue);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('focused descriptions follow focus and toggle off cleanly', (tester) async {
+    final items = [_meta('tt1', 'Alpha'), _meta('tt2', 'Bravo')];
+    final shelves = [SpotlightShelf(
+      title: 'Popular', nodes: rows.first,
+      items: [for (final item in items) SpotlightCard(
+        metadata: item, image: null, title: item.name,
+        shape: SpotlightCardShape.wide, onOpen: () {},
+      )],
+    )];
+    await tester.pumpWidget(host([], shelves, expandFocusedCard: true));
+    await tester.pumpAndSettle();
+    rows.first.first.requestFocus();
+    await tester.pumpAndSettle();
+    expect(find.text('About Alpha.'), findsOneWidget);
+    expect(find.text('About Bravo.'), findsNothing);
+    final expandedWidth = (rows.first.first.context!.findRenderObject() as RenderBox).size.width;
+    final focusHostBefore = tester.element(find.byType(ParallaxFocus).first);
+    rows.first.last.requestFocus();
+    await tester.pumpAndSettle();
+    expect(find.text('About Alpha.'), findsNothing);
+    expect(find.text('About Bravo.'), findsOneWidget);
+    final restingWidth = (rows.first.first.context!.findRenderObject() as RenderBox).size.width;
+    expect(identical(focusHostBefore,
+        tester.element(find.byType(ParallaxFocus).first)), isTrue,
+        reason: 'focus changes must preserve the parallax animation subtree');
+    expect(expandedWidth, greaterThan(restingWidth));
+    await tester.pumpWidget(host([], shelves));
+    await tester.pumpAndSettle();
+    expect(find.text('About Bravo.'), findsNothing);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
+  });
 
   testWidgets(
     'cards receive entry focus before hero data and retain it on arrival',
@@ -578,10 +732,9 @@ void main() {
     expect(find.text('About Bravo.'), findsOneWidget);
   });
 
-  testWidgets('the TV hero asks for a trailer immediately without paging, and '
+  testWidgets('the TV hero asks for a trailer after two seconds without paging, and '
       're-arms after a deliberate move', (tester) async {
-    // Once the TV hero owns focus, tell the host immediately — trailer lookup
-    // is already the useful wait — and do not move the reel.
+    // Each deliberate selection gets its own two-second preview dwell.
     final a = _meta('tt1', 'Alpha');
     final b = _meta('tt2', 'Bravo');
     final dwelled = <String>[];
@@ -613,7 +766,9 @@ void main() {
 
     hero.requestFocus();
     await tester.pumpAndSettle();
-    expect(dwelled, ['tt1'], reason: 'focused: resolve starts immediately');
+    expect(dwelled, isEmpty);
+    await tester.pump(const Duration(seconds: 2));
+    expect(dwelled, ['tt1'], reason: 'focused: resolve starts after dwell');
     expect(
       find.text('About Alpha.'),
       findsOneWidget,
@@ -624,7 +779,17 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
     await tester.pumpAndSettle();
     expect(find.text('About Bravo.'), findsOneWidget);
-    expect(dwelled, ['tt1', 'tt2']);
+    // Return before B starts: A must get a fresh session, not retain its latch.
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+    await tester.pumpAndSettle();
+    await tester.pump(const Duration(seconds: 2));
+    expect(dwelled, ['tt1', 'tt1']);
+    await tester.pump(const Duration(seconds: 5));
+    expect(dwelled, ['tt1', 'tt1'], reason: 'same selection still plays once');
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pumpAndSettle();
+    await tester.pump(const Duration(seconds: 2));
+    expect(dwelled, ['tt1', 'tt1', 'tt2']);
   });
 
   testWidgets('a shrinking board does not strand the cursor past the end', (
@@ -940,6 +1105,7 @@ void main() {
     await tester.pumpAndSettle();
 
     await tester.pumpAndSettle();
+    await tester.pump(const Duration(seconds: 2));
     expect(dwelt, 1, reason: 'the eligible hero must start a trailer resolve');
 
     // Long past any cap: cutting away from something the user is watching to
@@ -1182,6 +1348,26 @@ void main() {
     expect(find.byKey(preview), findsNothing);
   });
 
+  testWidgets('a hidden shelf header keeps its collection cards visible', (
+    tester,
+  ) async {
+    await tester.pumpWidget(host([_meta('tt1', 'Hero')], [
+      SpotlightShelf(
+        title: 'Streaming',
+        tag: 'Collection',
+        showHeader: false,
+        nodes: rows[0],
+        items: [SpotlightCard(title: 'Netflix', onOpen: _noop)],
+      ),
+    ]));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Streaming'), findsNothing);
+    expect(find.text('Collection'), findsNothing);
+    expect(find.text('Netflix'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('an IPTV preview follows desktop hover, not keyboard focus', (
     tester,
   ) async {
@@ -1256,6 +1442,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    await tester.pump(const Duration(seconds: 2));
     expect(dwelled, ['tt1']);
 
     final cardMouseRegion = tester.widget<MouseRegion>(
@@ -1269,7 +1456,8 @@ void main() {
 
     cardMouseRegion.onExit!(const PointerExitEvent());
     await tester.pumpAndSettle();
-    expect(dwelled, ['tt1', 'tt1']);
+    await tester.pump(const Duration(seconds: 3));
+    expect(dwelled, ['tt1'], reason: 'same hero must not replay after another preview');
   });
 
   testWidgets('a single-item reel shows no dots', (tester) async {

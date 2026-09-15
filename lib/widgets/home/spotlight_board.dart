@@ -1,4 +1,7 @@
 import '../../services/diagnostic_log.dart';
+import '../../services/stremio_service.dart';
+import '../../services/metadata_preferences_service.dart';
+import '../../services/profiles/profile_runtime.dart';
 import '../recoverable_network_image.dart';
 import '../../models/metadata_preferences.dart';
 import '../metadata_presentation_mixin.dart';
@@ -21,6 +24,7 @@ import '../../utils/dialog_tap_guard.dart';
 import '../../utils/tv_keys.dart';
 import 'row_tag_pill.dart';
 import 'home_row_focus.dart';
+import 'spotlight_card_trailer.dart';
 import '../collections/collection_focus_glow.dart';
 import '../collections/collection_focus_art.dart';
 import '../movie_watched_badge.dart';
@@ -210,6 +214,10 @@ class SpotlightShelf {
   /// captions regardless — this flag is a non-TV presentation choice.
   final bool captions;
 
+  /// Whether the shelf heading, provenance pill and See-All affordance paint.
+  /// Collection rows may opt out while their cards remain fully interactive.
+  final bool showHeader;
+
   /// Stable identity for element reuse across board updates. Tracker rows
   /// stream in and FRONT-INSERT above the catalog rows; without identity the
   /// board's list reconciles shelves by position and remounts every shelf
@@ -225,6 +233,7 @@ class SpotlightShelf {
     this.onSeeAll,
     this.tag,
     this.captions = true,
+    this.showHeader = true,
     this.id,
   });
 }
@@ -331,6 +340,11 @@ class SpotlightBoard extends StatefulWidget {
   /// Home-card presentation preference. When false, cards keep their artwork,
   /// context metadata and playback state but omit title and rating text.
   final bool showCardTitlesAndRatings;
+  final bool expandFocusedCard;
+  final double cardTrailerVolume;
+  final bool shelvesOnly;
+  final bool forceCardParallax;
+  final VoidCallback? onExitTop;
 
   const SpotlightBoard({
     super.key,
@@ -349,6 +363,11 @@ class SpotlightBoard extends StatefulWidget {
     this.onAmbient,
     this.dpad = true,
     this.showCardTitlesAndRatings = true,
+    this.expandFocusedCard = false,
+    this.cardTrailerVolume = 0,
+    this.shelvesOnly = false,
+    this.forceCardParallax = false,
+    this.onExitTop,
   });
 
   /// The scrolled ground, taken from the THEME.
@@ -765,14 +784,16 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
     _restartCadence();
   }
 
+  String? _dwelledHeroId;
   void _restartCadence() {
     _cadence?.cancel();
     // Nulled, not just cancelled: didUpdateWidget's reconcile decides "is a
     // timer armed" by null-ness, and a cancelled-but-non-null handle reads
     // as armed.
     _cadence = null;
-    _rolling = false;
     if (!mounted) return;
+    if (_dwelledHeroId != null && _dwelledHeroId == _heroItem?.id) return;
+    _rolling = false;
     // The active card owns the one available decoder. A rebuild caused by
     // loading more shelves or resolving hero art must not re-arm the hero
     // underneath it.
@@ -787,13 +808,15 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
     if (widget.dpad && (_row >= 0 || !widget.heroNode.hasFocus)) return;
     // Keep the handoff cancellable so a focus/route change in this event loop
     // can still stop the resolve, but add no user-visible dwell.
-    _cadence = Timer(Duration.zero, _onArtDone);
+    _cadence = Timer(const Duration(seconds: 2), _onArtDone);
   }
 
   /// Dot tap / swipe target: show slide [i] and restart the clock.
   void _jumpTo(int i) {
     if (i < 0 || i >= widget.hero.length) return;
+    if (widget.hero[i].id == _heroId) return;
     _stopRolling();
+    _dwelledHeroId = null;
     setState(() => _heroId = widget.hero[i].id);
     refreshMetadataPresentation();
     _probe();
@@ -831,6 +854,7 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
       return;
     }
     if (widget.trailersEnabled && widget.onDwell != null) {
+      _dwelledHeroId = item.id;
       // Once a trailer is rolling the reel stays put — the video loops until
       // the next deliberate move (swipe, dot tap, LEFT/RIGHT, DOWN).
       setState(() => _rolling = true);
@@ -910,7 +934,7 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
           previous: [for (final s in old.sections) s.id ?? ''],
           next: [for (final s in widget.sections) s.id ?? ''],
           anchor: section.id!,
-          extentOf: (id) => _tvShelfExtent(
+          extentOf: (id) => _shelfExtent(
             widget.sections.firstWhere((s) => s.id == id), _lastMetrics!),
         );
         break;
@@ -1008,6 +1032,7 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
       _restartCadence();
     } else {
       _cadence?.cancel();
+      _dwelledHeroId = null;
       _stopRolling();
     }
   }
@@ -1140,7 +1165,9 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
     if (widget.hero.length < 2) return;
     final n = widget.hero.length;
     final next = (_heroIndex + delta + n) % n;
+    if (widget.hero[next].id == _heroId) return;
     _stopRolling();
+    _dwelledHeroId = null;
     setState(() => _heroId = widget.hero[next].id);
     refreshMetadataPresentation();
     ParallaxTravel.note(Offset(delta.toDouble(), 0));
@@ -1269,6 +1296,10 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
 
   void _up() {
     if (_row <= 0) {
+      if (widget.shelvesOnly) {
+        widget.onExitTop?.call();
+        return;
+      }
       // Local shelves can precede hero data. Do not leave a pending focus
       // request that steals the cursor when the hero eventually mounts.
       if (widget.hero.isEmpty || !(widget.heroNode.context?.mounted ?? false)) {
@@ -1336,6 +1367,22 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
     });
   }
 
+  /// Enter a collection at its selected category, including off-screen rows.
+  void focusShelf(int row) {
+    if (row < 0 || row >= widget.sections.length) return;
+    final metrics = _lastMetrics;
+    if (metrics == null || !_scroll.hasClients) return;
+    setState(() => _row = row);
+    final offset = widget.sections.take(row).fold<double>(
+      0, (sum, shelf) => sum + _shelfExtent(shelf, metrics));
+    // A lazy list's maximum is only an estimate until distant rows mount.
+    // Let layout clamp this exact offset, rather than stopping at that estimate.
+    _scroll.jumpTo(offset);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _focusRow(row, const Offset(0, 1));
+    });
+  }
+
   /// Where the cursor ACTUALLY is in [nodes].
   ///
   /// `_col` is bookkeeping and can drift — a scroll-into-view, a rebuild, or
@@ -1366,6 +1413,9 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
     if (nodes.isEmpty) return;
     final at = _liveCol(nodes);
     final next = at + delta;
+    if (widget.shelvesOnly && delta > 0 && next >= nodes.length) {
+      widget.onLoadMoreRow?.call(_row);
+    }
     if (next < 0 || next >= nodes.length) return;
     // No setState: a horizontal step changes nothing this board PAINTS —
     // the cursor's visuals live inside each cell's own Focus widget, and
@@ -1561,6 +1611,9 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
         // the page overscrolls past its own last shelf. Sizing the hero
         // box is the version the scroll extent agrees with.
         if (index == 0) {
+          if (widget.shelvesOnly) {
+            return const SizedBox.shrink(key: ValueKey('spotlight-hero-band'));
+          }
           return SizedBox(
             key: const ValueKey('spotlight-hero-band'),
             height: heroH * (1 - (m.compact ? 0 : _shelfOverlapFraction)),
@@ -1577,7 +1630,17 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
         final i = index - 1;
         return KeyedSubtree(
           key: ValueKey(shelfKey(i)),
-          child: _shelf(i, m),
+          child: NotificationListener<ScrollUpdateNotification>(
+            onNotification: (notification) {
+              if (widget.shelvesOnly &&
+                  notification.metrics.axis == Axis.horizontal &&
+                  notification.metrics.extentAfter < 400) {
+                widget.onLoadMoreRow?.call(i);
+              }
+              return false;
+            },
+            child: _shelf(i, m),
+          ),
         );
       },
     );
@@ -1619,7 +1682,7 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
       // every pointer in its viewport, which is fine here because nothing in
       // the backdrop is interactive — the hero's tap/swipe surface and the
       // tappable dots ride in the list with the identity.
-      child: m.compact
+      child: m.compact || widget.shelvesOnly
           ? content
           : Stack(
               fit: StackFit.expand,
@@ -2227,7 +2290,7 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
     );
   }
 
-  double _tvShelfExtent(SpotlightShelf section, _M m) {
+  double _shelfExtent(SpotlightShelf section, _M m) {
     double textHeight(String text, TextStyle style) {
       final painter = TextPainter(
         text: TextSpan(text: text, style: DefaultTextStyle.of(context).style.merge(style)),
@@ -2239,16 +2302,21 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
       painter.dispose();
       return height;
     }
-    var header = textHeight(section.title, _shelfTitleStyle(m));
-    final tag = section.tag;
-    if (tag != null && tag.isNotEmpty) {
-      final size = m.title * .72;
-      final tagHeight = textHeight(tag.toUpperCase(), RowTagPill.textStyle(size)) +
-          size * .56 + 2; // vertical padding and the two 1px borders
-      if (tagHeight > header) header = tagHeight;
+    var header = 0.0;
+    if (section.showHeader) {
+      header = textHeight(section.title, _shelfTitleStyle(m));
+      final tag = section.tag;
+      if (tag != null && tag.isNotEmpty) {
+        final size = widget.dpad ? m.title * .72 : 10.0;
+        final tagHeight = textHeight(tag.toUpperCase(), RowTagPill.textStyle(size)) +
+            size * .56 + 2; // vertical padding and the two 1px borders
+        if (tagHeight > header) header = tagHeight;
+      }
     }
     final cardHeight = _shelfCardHeight(section, m);
-    return 20 + header + m.liftUpFor(cardHeight) + cardHeight + m.liftDownFor(cardHeight);
+    return (section.showHeader ? (widget.dpad ? 20 : 34) : (widget.dpad ? 8 : 14)) + header +
+        m.liftUpFor(cardHeight) + cardHeight + m.liftDownFor(cardHeight) +
+        (_shelfHasCaptions(section, m) ? m.captionBlock : 0);
   }
 
   Widget _shelfTitle(SpotlightShelf section, _M m) {
@@ -2307,10 +2375,7 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
         : m.posterH;
   }
 
-  Widget _shelf(int i, _M m) {
-    final section = widget.sections[i];
-    final nodes = section.nodes;
-    final cardHeight = _shelfCardHeight(section, m);
+  bool _shelfHasCaptions(SpotlightShelf section, _M m) {
     // Caption-free rows off TV (see [SpotlightShelf.captions]); TV keeps its
     // overlay captions everywhere. Compact must also keep a caption whenever
     // a card carries metadata: otherwise portrait mode discards ratings and
@@ -2322,25 +2387,35 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
     );
     final hasVisibleCaptionContent =
         widget.showCardTitlesAndRatings || hasCardMetadata;
-    final captions = hasVisibleCaptionContent &&
+    return hasVisibleCaptionContent &&
         (widget.dpad || section.captions || (m.compact && hasCardMetadata));
+  }
+
+  Widget _shelf(int i, _M m) {
+    final section = widget.sections[i];
+    final nodes = section.nodes;
+    final cardHeight = _shelfCardHeight(section, m);
+    final captions = _shelfHasCaptions(section, m);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        Padding(
-          // The gap under the title is `liftUp`, supplied by the row below —
-          // reserved space that is empty at rest and consumed by the lift.
-          // Off TV the rows breathe more — the reference's air is half of
-          // what makes its rows read as considered rather than stacked.
-          padding: EdgeInsets.fromLTRB(
-            m.gutter,
-            widget.dpad ? 20 : 34,
-            m.gutter,
-            0,
-          ),
-          child: _shelfTitle(section, m),
-        ),
+        if (section.showHeader)
+          Padding(
+            // The gap under the title is `liftUp`, supplied by the row below —
+            // reserved space that is empty at rest and consumed by the lift.
+            // Off TV the rows breathe more — the reference's air is half of
+            // what makes its rows read as considered rather than stacked.
+            padding: EdgeInsets.fromLTRB(
+              m.gutter,
+              widget.dpad ? 20 : 34,
+              m.gutter,
+              0,
+            ),
+            child: _shelfTitle(section, m),
+          )
+        else
+          SizedBox(height: widget.dpad ? 8 : 14),
         Padding(
           // The room the lift needs sits OUTSIDE the viewport, as padding.
           //
@@ -2387,6 +2462,11 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
                 captionBlock: captions ? m.captionBlock : 0,
                 showCaption: captions && section.items[c].showCaption,
                 showTitleAndRating: widget.showCardTitlesAndRatings,
+                expandOnFocus: widget.dpad && widget.expandFocusedCard,
+                forceParallax: widget.forceCardParallax,
+                trailerEnabled: widget.trailersEnabled,
+                trailerVolume: widget.cardTrailerVolume,
+                onTrailerStart: widget.onTrailerStop,
                 hoverable: !widget.dpad,
                 dpad: widget.dpad,
                 onDesktopPreviewActivityChanged:
@@ -2616,6 +2696,11 @@ class _Card extends StatefulWidget {
   /// False suppresses only title/rating text. Subtitles such as episode
   /// context remain available when a shelf has useful card metadata.
   final bool showTitleAndRating;
+  final bool expandOnFocus;
+  final bool forceParallax;
+  final bool trailerEnabled;
+  final double trailerVolume;
+  final VoidCallback? onTrailerStart;
 
   /// Pointer hover lifts the card — desktop only. OFF on TV: an Apple TV
   /// trackpad delivers pointer events (see main.dart), and a hover lift
@@ -2644,6 +2729,11 @@ class _Card extends StatefulWidget {
     this.captionBlock = 0,
     this.showCaption = true,
     this.showTitleAndRating = true,
+    this.expandOnFocus = false,
+    this.forceParallax = false,
+    this.trailerEnabled = false,
+    this.trailerVolume = 0,
+    this.onTrailerStart,
     this.hoverable = false,
     this.dpad = true,
     this.onDesktopPreviewActivityChanged,
@@ -2657,6 +2747,72 @@ class _CardState extends State<_Card> with MetadataPresentationMixin<_Card> {
   @override
   StremioMeta? get originalMetadata => widget.card.metadata;
   bool _f = false;
+  Timer? _trailerDwell;
+  bool _trailerRequested = false;
+  bool _trailerPlaying = false;
+  bool _trailerAttempted = false;
+  bool _hideTrailerText = false;
+  Timer? _trailerTextTimer;
+
+  void _armCardTrailer() {
+    _trailerDwell?.cancel();
+    _trailerTextTimer?.cancel();
+    _hideTrailerText = false;
+    if (!_f) _trailerAttempted = false;
+    _trailerRequested = false;
+    _trailerPlaying = false;
+    if (_trailerAttempted || !_f || !_canExpand || !widget.trailerEnabled ||
+        MediaQuery.disableAnimationsOf(context)) return;
+    _trailerDwell = Timer(const Duration(seconds: 2), () {
+      if (!mounted || !_f || !widget.trailerEnabled || !_canExpand ||
+          ModalRoute.of(context)?.isCurrent == false || !TickerMode.of(context) ||
+          (WidgetsBinding.instance.lifecycleState != null &&
+           WidgetsBinding.instance.lifecycleState != AppLifecycleState.resumed)) return;
+      widget.onTrailerStart?.call();
+      _trailerAttempted = true;
+      setState(() => _trailerRequested = true);
+    });
+  }
+  Timer? _descriptionTimer;
+  String? _resolvedDescription;
+  Object? _descriptionScope;
+  int _descriptionRequest = 0;
+
+  void _loadFocusedDescription() {
+    _descriptionTimer?.cancel();
+    final request = ++_descriptionRequest;
+    final item = originalMetadata;
+    if (!_canExpand || !_f || item == null) return;
+    final scope = ProfileRuntime.scope.value;
+    bool current() => mounted && _f && _canExpand &&
+        request == _descriptionRequest &&
+        identical(originalMetadata, item) && ProfileRuntime.scope.value == scope;
+    _descriptionTimer = Timer(const Duration(milliseconds: 300), () async {
+      try {
+        final prefs = await MetadataPreferencesService.loadForBackground(
+          isCurrent: current,
+        );
+        if (prefs == null || !current()) return;
+        if (prefs.provider(MetadataCategory.information) != MetadataPreferences.current &&
+            !prefs.fallback) return;
+        if ((heroPresentation?.description ?? '').trim().isNotEmpty) return;
+        final imdb = item.effectiveImdbId;
+        if (imdb == null) return;
+        final details = await StremioService.instance.fetchMetaDetails(
+          imdbId: imdb, type: item.type,
+        );
+        if (!current()) return;
+        final description = details?.description?.trim();
+        if (description == null || description.isEmpty) return;
+        setState(() {
+          _resolvedDescription = description;
+          _descriptionScope = scope;
+        });
+      } catch (_) {
+        // Optional metadata must never interrupt remote navigation.
+      }
+    });
+  }
 
   /// DPAD centre is a key gesture, not a pointer long-press. Keep the short
   /// press for opening Details, but let a held press reach the card's options
@@ -2697,6 +2853,21 @@ class _CardState extends State<_Card> with MetadataPresentationMixin<_Card> {
   @override
   void didUpdateWidget(_Card oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.card.metadata?.id != widget.card.metadata?.id ||
+        oldWidget.card.metadata?.type != widget.card.metadata?.type) {
+      _trailerAttempted = false;
+    }
+    if (oldWidget.card.metadata?.id != widget.card.metadata?.id ||
+        oldWidget.card.metadata?.type != widget.card.metadata?.type ||
+        oldWidget.expandOnFocus != widget.expandOnFocus ||
+        oldWidget.trailerEnabled != widget.trailerEnabled) {
+      _armCardTrailer();
+    }
+    if (!identical(oldWidget.card.metadata, widget.card.metadata) ||
+        oldWidget.expandOnFocus != widget.expandOnFocus) {
+      _resolvedDescription = null;
+      _loadFocusedDescription();
+    }
     final shouldReport =
         _previewActive &&
         !widget.dpad &&
@@ -2713,6 +2884,10 @@ class _CardState extends State<_Card> with MetadataPresentationMixin<_Card> {
 
   @override
   void dispose() {
+    _trailerDwell?.cancel();
+    _trailerTextTimer?.cancel();
+    _descriptionTimer?.cancel();
+    _descriptionRequest++;
     _hold.reset();
     if (_previewActivityReported) {
       widget.onDesktopPreviewActivityChanged?.call(_previewOwner, false);
@@ -2720,11 +2895,27 @@ class _CardState extends State<_Card> with MetadataPresentationMixin<_Card> {
     super.dispose();
   }
 
+  bool get _canExpand => widget.expandOnFocus && widget.dpad &&
+      (widget.card.metadata?.type == 'movie' ||
+          widget.card.metadata?.type == 'series') &&
+      !widget.captionBelow;
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => TweenAnimationBuilder<double>(
+    tween: Tween(end: _canExpand && _f ? (_trailerPlaying ? 1.38 : 1.18) : 1.0),
+    duration: MediaQuery.disableAnimationsOf(context)
+        ? Duration.zero
+        : _trailerPlaying ? const Duration(milliseconds: 700)
+        : Duration(milliseconds: PlatformUtil.isAndroidTvCached ? 160 : 220),
+    curve: Curves.easeOutCubic,
+    builder: (context, growth, _) => _buildCard(context, growth),
+  );
+
+  Widget _buildCard(BuildContext context, double growth) {
     final app = AppThemeScope.of(context);
     final c = widget.card;
-    final w = widget.height * c.shape.aspect;
+    final expanded = _canExpand && _f;
+    final w = widget.height * c.shape.aspect * growth;
     // Decode at the card's own PHYSICAL width plus the 10% focus growth —
     // never a fixed constant. The hardcoded 400/800 decoded ~1.7× oversized
     // on a TV board, and the TV image cache is byte-capped (56MB, see
@@ -2733,10 +2924,22 @@ class _CardState extends State<_Card> with MetadataPresentationMixin<_Card> {
     // so every DPAD step into an evicted row re-decoded and re-uploaded —
     // the sometimes-laggy navigation. Right-sizing fits a screenful with
     // headroom and makes each upload cheaper.
-    final decodeW = (w * MediaQuery.devicePixelRatioOf(context) * 1.1)
+    // A stable decode size avoids creating a new cached image every animation
+    // frame. Eligible cards reserve their expanded resolution once.
+    final decodeW = (widget.height * c.shape.aspect *
+        (_canExpand && !PlatformUtil.isAndroidTvCached ? 1.18 : 1.0) * MediaQuery.devicePixelRatioOf(context) * 1.1)
         .round()
         .clamp(100, 1000);
     final meta = presentedMetadata;
+    final suppliedDescription = (heroPresentation?.description ?? '').trim();
+    final allowDescriptionFallback =
+        metadataPreferences.provider(MetadataCategory.information) == MetadataPreferences.current ||
+        metadataPreferences.fallback;
+    final description = !expanded ? '' : suppliedDescription.isNotEmpty
+        ? suppliedDescription
+        : allowDescriptionFallback && _descriptionScope == ProfileRuntime.scope.value
+            ? (_resolvedDescription ?? '') : '';
+    final showDescription = description.isNotEmpty;
     final changed = meta != null && !identical(meta, originalMetadata);
     final pending = !c.episodeArtwork && metadataArtworkPending(
       c.shape == SpotlightCardShape.wide ? MetadataCategory.backgrounds : MetadataCategory.posters);
@@ -2759,7 +2962,7 @@ class _CardState extends State<_Card> with MetadataPresentationMixin<_Card> {
     ].join(' · ');
     final hasTitle = widget.showTitleAndRating && displayedTitle.isNotEmpty;
     final hasSubtitle = metaLine.isNotEmpty;
-    final hasCaptionContent = hasTitle || hasSubtitle;
+    final hasCaptionContent = hasTitle || hasSubtitle || showDescription;
     final preview = c.previewBuilder;
     // Exactly one card owns the decoder: desktop follows the pointer, TV
     // follows the remote cursor. The preview is unmounted immediately when it
@@ -2772,7 +2975,7 @@ class _CardState extends State<_Card> with MetadataPresentationMixin<_Card> {
     // scaled. 1.2 is Flutter's normal line box; 33 is the existing 26 + 7
     // vertical padding around those lines.
     final captionLineHeight = widget.caption * 1.2;
-    final captionBedHeight = 33.0 +
+    final captionBedHeight = (showDescription ? widget.height : 33.0) +
         (hasTitle ? captionLineHeight : 0) +
         (hasSubtitle ? captionLineHeight * 0.85 : 0);
 
@@ -2783,7 +2986,7 @@ class _CardState extends State<_Card> with MetadataPresentationMixin<_Card> {
     // or letting the travelling glare wash through them.
     final tvCaptionFamily = PlatformUtil.isTvOS ? 'CupertinoSystemText' : null;
     final overlayCaption =
-        widget.captionBelow || !widget.showCaption || !hasCaptionContent
+        widget.captionBelow || (!widget.showCaption && !showDescription) || !hasCaptionContent
             ? null
             : IgnorePointer(
                 child: Align(
@@ -2791,9 +2994,14 @@ class _CardState extends State<_Card> with MetadataPresentationMixin<_Card> {
                   child: SizedBox(
                     width: double.infinity,
                     child: Padding(
-                      padding: const EdgeInsets.fromLTRB(7, 26, 7, 7),
+                      padding: expanded
+                          ? const EdgeInsets.fromLTRB(12, 10, 12, 10)
+                          : const EdgeInsets.fromLTRB(7, 26, 7, 7),
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: expanded
+                            ? CrossAxisAlignment.start
+                            : CrossAxisAlignment.center,
                         children: [
                           if (hasTitle)
                             Text(
@@ -2821,6 +3029,24 @@ class _CardState extends State<_Card> with MetadataPresentationMixin<_Card> {
                                 color: Colors.white.withValues(alpha: 0.72),
                               ),
                             ),
+                          if (showDescription) ...[
+                            const SizedBox(height: 6),
+                            Text(
+                              description,
+                              maxLines: widget.height >= 180 ? 3 : 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontFamily: tvCaptionFamily,
+                                fontSize: (widget.caption * 0.75).clamp(10.5, 12.0),
+                                fontWeight: FontWeight.w400,
+                                height: 1.35,
+                                // Paint alpha avoids an offscreen opacity layer.
+                                color: Colors.white.withValues(
+                                  alpha: ((growth - 1) / 0.18).clamp(0.0, 1.0),
+                                ),
+                              ),
+                            ),
+                          ],
                         ],
                       ),
                     ),
@@ -2829,9 +3055,12 @@ class _CardState extends State<_Card> with MetadataPresentationMixin<_Card> {
               );
 
     final art = ParallaxFocus(
+      forceEnabled: widget.forceParallax,
       focused: _f || _h,
       radius: BorderRadius.circular(widget.radius),
-      fixedScaleForeground: overlayCaption,
+      // Expanded paragraphs stay in screen space, above every focus/glare
+      // transform. Counter-scaling still leaves text under the 3D transform.
+      fixedScaleForeground: expanded ? null : overlayCaption,
       child: ClipRRect(
         borderRadius: BorderRadius.circular(widget.radius),
         child: SizedBox(
@@ -2924,6 +3153,27 @@ class _CardState extends State<_Card> with MetadataPresentationMixin<_Card> {
                 // so a channel card never flashes to an empty/black plate
                 // while a stream resolves or buffers.
                 IgnorePointer(child: preview(context)),
+              if (_trailerRequested && _f && _canExpand && widget.trailerEnabled)
+                SpotlightCardTrailer(
+                  key: ValueKey(c.metadata!.id),
+                  item: c.metadata!,
+                  volume: widget.trailerVolume,
+                  onPlayingChanged: (playing) {
+                    if (!mounted || !_f || !_trailerRequested ||
+                        _trailerPlaying == playing) return;
+                    setState(() => _trailerPlaying = playing);
+                    _trailerTextTimer?.cancel();
+                    if (playing) {
+                      _trailerTextTimer = Timer(const Duration(seconds: 2), () {
+                        if (mounted && _f && _trailerPlaying) {
+                          setState(() => _hideTrailerText = true);
+                        }
+                      });
+                    } else {
+                      setState(() => _hideTrailerText = false);
+                    }
+                  },
+                ),
               // Keep the gradient with the art: it must still grow to the
               // poster's full width and remain inside its rounded clip. The
               // text itself is the fixed-scale foreground above. No caption,
@@ -2982,7 +3232,7 @@ class _CardState extends State<_Card> with MetadataPresentationMixin<_Card> {
     // FocusExpressionBox: its parallax arm clips the glare at the theme's
     // scaled radius, and Spotlight's 0.7 shape scale would shrink the
     // shipped look's clip from 7 to 4.9.
-    final cursor = app.focus.expression == FocusExpression.parallax
+    final cursor = widget.forceParallax || app.focus.expression == FocusExpression.parallax
         ? art
         : FocusExpressionBox(
             focused: _f || _h,
@@ -2990,13 +3240,29 @@ class _CardState extends State<_Card> with MetadataPresentationMixin<_Card> {
             child: art,
           );
 
-    final cursored = CollectionFocusGlow(
+    final focusArt = CollectionFocusGlow(
       active: _f || _h,
       enabled: c.focusGlowEnabled,
       imageUrl: c.image,
       radius: widget.radius,
       child: cursor,
     );
+
+    // Keep this wrapper mounted on both focus states: swapping Stack for its
+    // child destroys ParallaxFocus's spring exactly when it should animate.
+    final cursored = Stack(
+            fit: StackFit.passthrough,
+            children: [
+              focusArt,
+              if (expanded && overlayCaption != null)
+                Positioned.fill(child: AnimatedOpacity(
+                  key: ValueKey('spotlight-trailer-text-${c.metadata?.id}'),
+                  opacity: _hideTrailerText ? 0 : 1,
+                  duration: MediaQuery.disableAnimationsOf(context) ? Duration.zero : const Duration(milliseconds: 300),
+                  child: overlayCaption,
+                )),
+            ],
+          );
 
     // Compact: art + its caption below, one Column — the caption is part of
     // the card so the tap target covers both. Keep the same metadata line as
@@ -3081,6 +3347,8 @@ class _CardState extends State<_Card> with MetadataPresentationMixin<_Card> {
       skipTraversal: true,
       onFocusChange: (v) {
         setState(() => _f = v);
+        _armCardTrailer();
+        _loadFocusedDescription();
         _reportDesktopPreviewActivity(_previewActive);
         if (!v) _hold.reset();
         if (v && context.findRenderObject() is RenderBox) {

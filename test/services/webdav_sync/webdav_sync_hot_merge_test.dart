@@ -947,6 +947,9 @@ void main() {
 
   test('navigation, player styles and shared Home preferences survive sync', () {
     final navigation = <String, Object>{
+      'tv_collection_list_style': 'journal',
+      'tv_collection_spotlight_alpha_migrated_v1': true,
+      'home_hide_card_titles_and_ratings': true,
       'home_hide_catalog_addon_names': true,
       'home_hero_trailer_volume': 20,
       'detail_trailer_volume': 20,
@@ -991,6 +994,77 @@ void main() {
         );
       } else {
         expect(materialized[entry.key], entry.value, reason: entry.key);
+      }
+    }
+  });
+
+  test('all collection layouts and migration checkpoint survive sync', () {
+    for (final style in ['spotlight', 'grid', 'gallery', 'filmstrip', 'journal']) {
+      final built = _buildWithPreferences(maps, 'device-a', {
+        'tv_collection_list_style': style,
+        'tv_collection_spotlight_alpha_migrated_v1': true,
+      }, now: 100);
+      final merged = WebDavSyncHotMerge.merge(
+        local: _document(device: 'device-b', scalarTime: 50,
+            scalars: {'tv_collection_list_style': 'spotlight'}),
+        peers: [built.document],
+        tombstoneDocuments: const [],
+        nowMs: 200,
+      ).document;
+      final values = WebDavSyncHotMerge.materializePreferences(
+        document: merged, identityMaps: maps);
+      expect(values['tv_collection_list_style'], style);
+      expect(values['tv_collection_spotlight_alpha_migrated_v1'], true);
+      expect(ProfileAppearancePreferences.keys,
+          isNot(contains('tv_collection_list_style')));
+      expect(ProfileAppearancePreferences.keys, contains('tv_home_style'));
+    }
+  });
+
+  test('card title visibility syncs both hiding and showing titles', () {
+    for (final hidden in [true, false]) {
+      final built = _buildWithPreferences(maps, 'device-a', {
+        'home_hide_card_titles_and_ratings': hidden,
+      }, now: 100);
+      final merged = WebDavSyncHotMerge.merge(
+        local: _document(device: 'device-b', scalarTime: 50,
+            scalars: {'home_hide_card_titles_and_ratings': !hidden}),
+        peers: [built.document],
+        tombstoneDocuments: const [],
+        nowMs: 200,
+      ).document;
+      final values = WebDavSyncHotMerge.materializePreferences(
+        document: merged, identityMaps: maps);
+      expect(values['home_hide_card_titles_and_ratings'], hidden);
+      expect(ProfileAppearancePreferences.keys,
+          isNot(contains('home_hide_card_titles_and_ratings')));
+    }
+  });
+
+  test('trailer autoplay and audio settings sync on and off', () {
+    const keys = [
+      'home_hero_trailer_enabled',
+      'home_hero_trailer_audio_enabled',
+      'detail_trailer_autoplay_enabled',
+      'detail_trailer_audio_enabled',
+    ];
+    for (final enabled in [true, false]) {
+      final built = _buildWithPreferences(maps, 'device-a', {
+        for (final key in keys) key: enabled,
+      }, now: 100);
+      final merged = WebDavSyncHotMerge.merge(
+        local: _document(device: 'device-b', scalarTime: 50,
+            scalars: {for (final key in keys) key: !enabled}),
+        peers: [built.document],
+        tombstoneDocuments: const [],
+        nowMs: 200,
+      ).document;
+      final values = WebDavSyncHotMerge.materializePreferences(
+        document: merged, identityMaps: maps);
+      for (final key in keys) {
+        expect(values[key], enabled, reason: key);
+        expect(WebDavSyncScheduler.admitsLocalChangeKey(key), isTrue);
+        expect(ProfileAppearancePreferences.keys, isNot(contains(key)));
       }
     }
   });
