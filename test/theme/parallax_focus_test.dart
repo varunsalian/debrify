@@ -55,6 +55,16 @@ void main() {
     radius: 7,
   ).build();
 
+  testWidgets('Search can opt into parallax without changing the theme', (tester) async {
+    await tester.pumpWidget(host(themeWith(FocusExpression.ring), const ParallaxFocus(
+      focused: true, forceEnabled: true, child: SizedBox(width: 120, height: 180),
+    )));
+    await tester.pumpAndSettle();
+    expect(ParallaxFocus.debugLiveBodies, 1);
+    await tester.pumpWidget(const SizedBox());
+    expect(ParallaxFocus.debugLiveBodies, 0);
+  });
+
   group('the spring', () {
     test('settle carries a spring; every other character does not', () {
       expect(MotionTokens.of(MotionCharacter.settle).focusSpring, isNotNull);

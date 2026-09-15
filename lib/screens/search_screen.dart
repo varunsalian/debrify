@@ -1642,6 +1642,7 @@ class _SearchScreenState extends State<SearchScreen>
   /// The item the last hero-trailer schedule was for — what the suppression
   /// lift above compares against.
   String? _heroTrailerScheduledItemId;
+  String? _heroPreviewAttemptedId;
 
   /// Settings → Home Page toggles, read once per screen life (on TV a tab
   /// switch rebuilds the screen, so Settings changes are picked up on return).
@@ -1962,6 +1963,10 @@ class _SearchScreenState extends State<SearchScreen>
     // trailer-suppression listener; this one is just the latch that tells the
     // post-playback refresh whether anything was actually played).
     MainPageBridge.addPlayerLaunchListener(_markPlaybackStarted);
+    if (widget.isTelevision && widget.searchMode) {
+      _reloadSearchCardPrefs();
+      MainPageBridge.addHomeSettingsListener(_reloadSearchCardPrefs);
+    }
     // Restore a keyword search preserved from a prior tab visit (results +
     // scroll) BEFORE the async default-view load below can start: restoration
     // sets keyword mode synchronously, and a later-resolving catalog default
@@ -2143,6 +2148,11 @@ class _SearchScreenState extends State<SearchScreen>
   /// settings page has always shown on these platforms, so a stored "sound
   /// off" keeps meaning what it meant. Writes go to both surfaces now, so
   /// the pairs converge on first change.
+  void _reloadSearchCardPrefs() {
+    unawaited(_loadHomeCardOrientation());
+    unawaited(_reloadHeroTrailerPrefs());
+  }
+
   Future<void> _reloadHeroTrailerPrefs() async {
     final surface = widget.isTelevision
         ? AmbientTrailerSurface.homeHero
@@ -2502,6 +2512,7 @@ class _SearchScreenState extends State<SearchScreen>
     MainPageBridge.removePlaybackReturnListener(_onPlaybackReturned);
     MainPageBridge.removePlayerLaunchListener(_markPlaybackStarted);
     MainPageBridge.removeHomeSettingsListener(_reloadForHomeSettings);
+    MainPageBridge.removeHomeSettingsListener(_reloadSearchCardPrefs);
     HomeRowRefreshSignal.removeListener(_queueHomeRows);
     _stremio.removeAddonsChangedListener(_onHomeAddonsChanged);
     _homeRefreshTimer?.cancel();
@@ -6567,6 +6578,7 @@ class _SearchScreenState extends State<SearchScreen>
   /// stay put. (This used to hand focus to the sidebar, but the sidebar policy
   /// is now LEFT-only: no other direction may open it.)
   void _leaveBoardTop() {
+    _heroPreviewAttemptedId = null;
     if (widget.searchMode) {
       _searchFocusNode.requestFocus();
     }
@@ -6606,7 +6618,11 @@ class _SearchScreenState extends State<SearchScreen>
       if (_catalogQuery.isNotEmpty &&
           _rowNodes.isNotEmpty &&
           _rowNodes.first.isNotEmpty) {
-        _rowNodes.first.first.requestFocus();
+        if (_spotlightKey.currentState != null) {
+          _spotlightKey.currentState!.focusShelf(0);
+        } else {
+          _rowNodes.first.first.requestFocus();
+        }
       } else {
         _searchFocusNode.requestFocus();
       }
@@ -7979,6 +7995,58 @@ class _SearchScreenState extends State<SearchScreen>
     if (item == null) return null;
     if (landscape) return _wideArtUrl(item);
     return _firstNonEmpty(item.poster, item.background);
+  }
+
+  Widget _buildSearchSpotlightBoard() {
+    final sections = List<CatalogSection>.of(_sections);
+    return Column(
+      children: [
+        // Reserve the status strip so completion never shifts focused cards.
+        if (_catalogSearching || _catalogSearchFailures > 0)
+          _buildSearchStatusStrip()
+        else
+          const SizedBox(height: 16),
+        Expanded(child: SpotlightBoard(
+          key: _spotlightKey,
+          hero: const [], heroNode: _spotlightHeroNode, heroAddon: null,
+          onHeroOpen: _openItem, shelvesOnly: true, dpad: true,
+          showCardTitlesAndRatings: !_hideHomeCardTitlesAndRatings,
+          forceCardParallax: true,
+          onExitTop: _leaveBoardTop,
+          expandFocusedCard: _spotlightFocusDetails,
+          trailersEnabled: _heroTrailerEnabled,
+          cardTrailerVolume: _heroTrailerVolume,
+          onTrailerStop: _clearHeroTrailer,
+          sections: [
+            for (var i = 0; i < sections.length; i++) SpotlightShelf(
+              id: 'search:$_catalogQuery:${sections[i].addon.id}:${sections[i].catalog.id}:$i',
+              title: sections[i].title,
+              tag: _catalogSourceTag(sections[i]),
+              onSeeAll: () => _openCatalogSeeAll(sections[i]),
+              nodes: i < _rowNodes.length ? _rowNodes[i] : const [],
+              items: [
+                for (final item in sections[i].items)
+                  SpotlightCard(
+                    metadata: item, title: item.name, rating: item.imdbRating,
+                    image: _homeLandscapeCards ? _wideArtUrl(item) : item.poster,
+                    fallbackImage: _homeLandscapeCards ? item.poster : null,
+                    shape: _homeLandscapeCards ? SpotlightCardShape.wide : SpotlightCardShape.poster,
+                    watchedImdbId: item.effectiveImdbId ?? item.id,
+                    watchedContentType: item.type,
+                    onOpen: () => _sectionOpenItem(sections[i], item),
+                    onOptions: _pikpakOnly ? null : () => _onCatalogPlay(item, sections[i].addon),
+                  ),
+              ],
+            ),
+          ],
+          onLoadMoreRow: (row) {
+            if (row < 0 || row >= sections.length) return;
+            final current = _sections.indexOf(sections[row]);
+            if (current >= 0) unawaited(_loadMoreRow(current));
+          },
+        )),
+      ],
+    );
   }
 
   Widget _buildSpotlightBoard() {
@@ -11157,15 +11225,16 @@ class _SearchScreenState extends State<SearchScreen>
 
   // ── Hero ─────────────────────────────────────────────────────────────────
 
-  /// Whether the hero spotlight is live for the current tab/state: TV-only, on
-  /// the board always and on the dedicated Search tab once there are results
-  /// (hidden on the blank "type to search" prompt). Single source of truth for
+  /// Whether the hero spotlight is live for the current tab/state: TV-only.
+  /// Dedicated Search uses in-card previews instead of a separate hero.
+  /// Single source of truth for
   /// seeding ([_applySections]), focus tracking ([_setHero]) and rendering
   /// ([_buildBoard]) so they can't drift.
   bool get _heroActive =>
-      widget.isTelevision && (!widget.searchMode || _catalogQuery.isNotEmpty);
+      widget.isTelevision && !widget.searchMode;
 
   void _setHero(StremioMeta item) {
+    if (_heroPreviewAttemptedId != item.id) _heroPreviewAttemptedId = null;
     // Off-TV / blank search prompt the hero isn't rendered, so don't track focus
     // or fire the per-item backdrop-enrichment /meta fetch behind it.
     if (!_heroActive) return;
@@ -11343,6 +11412,8 @@ class _SearchScreenState extends State<SearchScreen>
   }
 
   void _scheduleHeroTrailer(StremioMeta item, {bool fromSpotlight = false}) {
+    // Search previews belong to the focused result card, never a hidden hero.
+    if (widget.isTelevision && widget.searchMode) return;
     if (item.type == 'folder') return;
     // Off-TV nothing ever calls _applyHero (the TV paths that lift the
     // after-playback suppression), so a NEW title arriving through the
@@ -11381,6 +11452,7 @@ class _SearchScreenState extends State<SearchScreen>
     if (_canvasFavFocus.value != null || _heroLiveChannel.value != null) {
       return;
     }
+    if (!fromSpotlight && _heroPreviewAttemptedId == item.id) return;
     _heroTrailerTimer?.cancel();
     final req = ++_heroTrailerReq;
     final scope = ProfileRuntime.scope.value;
@@ -11396,9 +11468,10 @@ class _SearchScreenState extends State<SearchScreen>
     // shared 2.4s focus-rest debounce so flying across their rows stays cheap.
     final resolveDelay = fromSpotlight
         ? Duration.zero
-        : const Duration(milliseconds: 2400);
+        : const Duration(seconds: 2);
     _heroTrailerTimer = Timer(resolveDelay, () async {
       if (!current()) return;
+      _heroPreviewAttemptedId = item.id;
       // The layout may have changed during the dwell — a stage with nowhere
       // to put moving picture must not spin up an engine.
       if (_stageActive && !_stageWantsAmbient) return;
@@ -18716,6 +18789,10 @@ class _SearchScreenState extends State<SearchScreen>
         'Install a catalog add-on (e.g. Cinemeta) from Addons to browse '
             'movies and shows here.',
       );
+    }
+
+    if (widget.isTelevision && widget.searchMode) {
+      return _buildSearchSpotlightBoard();
     }
 
     // STAGE layouts: each owns the whole screen and has its own build path

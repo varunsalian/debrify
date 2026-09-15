@@ -14,6 +14,10 @@ import 'package:debrify/services/tmdb_title_search.dart';
 import 'package:debrify/widgets/app_tab_switcher.dart';
 import 'package:debrify/widgets/text_field_suggestions.dart';
 import 'package:debrify/widgets/tv_text_field.dart';
+import 'package:debrify/widgets/home/spotlight_board.dart';
+import 'package:debrify/widgets/home/spotlight_card_trailer.dart';
+import 'package:debrify/services/storage_service.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -122,6 +126,69 @@ void main() {
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox());
   });
+
+  for (final partialFailure in [false, true]) {
+  testWidgets('TV search results reuse card previews and live preferences (partial failure: $partialFailure)', (tester) async {
+    final addon = StremioAddon(id: 'search-test', name: 'Test',
+      baseUrl: 'https://search.invalid', manifestUrl: 'https://search.invalid/manifest.json',
+      resources: ['catalog'], catalogs: [const StremioAddonCatalog(
+        id: 'movies', type: 'movie', name: 'Movies', extraSupported: ['search'],
+      ), if (partialFailure) const StremioAddonCatalog(
+        id: 'broken', type: 'movie', name: 'Broken', extraSupported: ['search'],
+      )]);
+    SharedPreferences.setMockInitialValues({
+      'stremio_addons_v1': jsonEncode([addon.toJson()]),
+      'home_hero_trailer_enabled': true, 'spotlight_focus_details': true,
+    });
+    final client = MockClient((request) async => request.url.path.contains('/broken/')
+      ? http.Response('{}', 401) : http.Response(
+      request.url.host == 'search.invalid' ? jsonEncode({'metas': [
+        {'id': 'tt100', 'type': 'movie', 'name': 'Result A', 'description': 'Description A'},
+        {'id': 'tt101', 'type': 'movie', 'name': 'Result B', 'description': 'Description B'},
+      ]}) : '{}', request.url.host == 'search.invalid' ? 200 : 404));
+    await tester.runAsync(() => http.runWithClient(() async {
+      await StremioService.instance.getCatalogAddons();
+      await tester.pumpWidget(const MaterialApp(home: SearchScreen(isTelevision: true, searchMode: true)));
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+      await tester.pump();
+      tester.widget<TvTextField>(find.byType(TvTextField).first).onSubmitted?.call('Result');
+      await Future<void>.delayed(const Duration(milliseconds: 500));
+    }, () => client));
+    await tester.pumpAndSettle();
+    SpotlightBoard board() => tester.widget(find.byType(SpotlightBoard));
+    expect(board().shelvesOnly, isTrue);
+    expect(find.text("1 source didn't respond"), partialFailure ? findsOneWidget : findsNothing);
+    expect(board().hero, isEmpty);
+    expect(board().showCardTitlesAndRatings, isTrue);
+    expect(board().forceCardParallax, isTrue);
+    expect(board().expandFocusedCard, isTrue);
+    expect(board().trailersEnabled, isTrue);
+    final state = tester.state<SpotlightBoardState>(find.byType(SpotlightBoard));
+    state.focusShelf(0);
+    await tester.pumpAndSettle();
+    expect(find.text('Description A'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 4));
+    expect(find.byType(SpotlightCardTrailer), findsOneWidget);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pumpAndSettle();
+    expect(board().sections.first.nodes[1].hasFocus, isTrue);
+    expect(find.byType(SpotlightCardTrailer), findsNothing);
+    await StorageService.setHomeHeroTrailerEnabled(false);
+    await StorageService.setSpotlightFocusDetails(false);
+    await StorageService.setHomeHideCardTitlesAndRatings(true);
+    MainPageBridge.notifyHomeSettingsChanged();
+    await tester.pumpAndSettle();
+    expect(board().trailersEnabled, isFalse);
+    expect(board().expandFocusedCard, isFalse);
+    expect(board().showCardTitlesAndRatings, isFalse);
+    expect(find.text('Description B'), findsNothing);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+    await tester.pumpAndSettle();
+    expect(tester.widget<TvTextField>(find.byType(TvTextField).first).focusNode!.hasFocus, isTrue);
+    await tester.pumpWidget(const SizedBox());
+    client.close();
+  });
+  }
 
   testWidgets(
     'Navbar Search shows distinct title choices and ordinary search',

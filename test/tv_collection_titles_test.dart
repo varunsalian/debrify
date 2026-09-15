@@ -26,7 +26,7 @@ void main() {
       await tester.pumpAndSettle();
       key.currentState!.focusFirst();
       await tester.pumpAndSettle();
-      await tester.pump(const Duration(seconds: 3));
+      await tester.pump(const Duration(seconds: 1));
       expect(find.byType(SpotlightCardTrailer), findsNothing);
       await tester.pump(const Duration(seconds: 1));
       expect(find.byType(SpotlightCardTrailer), findsOneWidget);

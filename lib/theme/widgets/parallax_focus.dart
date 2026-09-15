@@ -143,6 +143,9 @@ class ParallaxRichScope extends InheritedWidget {
 /// makes "themes other than parallax add nothing to the tree" true rather than
 /// aspirational.
 class ParallaxFocus extends StatelessWidget {
+  /// Opt-in for surfaces that explicitly use Spotlight's card interaction.
+  /// The animated body still respects reduced motion and device policy.
+  final bool forceEnabled;
   final bool focused;
   final Widget child;
   final ParallaxShape shape;
@@ -168,6 +171,7 @@ class ParallaxFocus extends StatelessWidget {
     this.shape = ParallaxShape.poster,
     this.radius,
     this.fixedScaleForeground,
+    this.forceEnabled = false,
   });
 
   /// Animated bodies currently mounted. Zero under every expression but
@@ -179,7 +183,7 @@ class ParallaxFocus extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final app = AppThemeScope.of(context);
-    if (app.focus.expression != FocusExpression.parallax) {
+    if (!forceEnabled && app.focus.expression != FocusExpression.parallax) {
       return _withFixedScaleForeground(
         child: child,
         foreground: fixedScaleForeground,

@@ -343,6 +343,7 @@ class SpotlightBoard extends StatefulWidget {
   final bool expandFocusedCard;
   final double cardTrailerVolume;
   final bool shelvesOnly;
+  final bool forceCardParallax;
   final VoidCallback? onExitTop;
 
   const SpotlightBoard({
@@ -365,6 +366,7 @@ class SpotlightBoard extends StatefulWidget {
     this.expandFocusedCard = false,
     this.cardTrailerVolume = 0,
     this.shelvesOnly = false,
+    this.forceCardParallax = false,
     this.onExitTop,
   });
 
@@ -782,14 +784,16 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
     _restartCadence();
   }
 
+  String? _dwelledHeroId;
   void _restartCadence() {
     _cadence?.cancel();
     // Nulled, not just cancelled: didUpdateWidget's reconcile decides "is a
     // timer armed" by null-ness, and a cancelled-but-non-null handle reads
     // as armed.
     _cadence = null;
-    _rolling = false;
     if (!mounted) return;
+    if (_dwelledHeroId != null && _dwelledHeroId == _heroItem?.id) return;
+    _rolling = false;
     // The active card owns the one available decoder. A rebuild caused by
     // loading more shelves or resolving hero art must not re-arm the hero
     // underneath it.
@@ -804,13 +808,15 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
     if (widget.dpad && (_row >= 0 || !widget.heroNode.hasFocus)) return;
     // Keep the handoff cancellable so a focus/route change in this event loop
     // can still stop the resolve, but add no user-visible dwell.
-    _cadence = Timer(Duration.zero, _onArtDone);
+    _cadence = Timer(const Duration(seconds: 2), _onArtDone);
   }
 
   /// Dot tap / swipe target: show slide [i] and restart the clock.
   void _jumpTo(int i) {
     if (i < 0 || i >= widget.hero.length) return;
+    if (widget.hero[i].id == _heroId) return;
     _stopRolling();
+    _dwelledHeroId = null;
     setState(() => _heroId = widget.hero[i].id);
     refreshMetadataPresentation();
     _probe();
@@ -848,6 +854,7 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
       return;
     }
     if (widget.trailersEnabled && widget.onDwell != null) {
+      _dwelledHeroId = item.id;
       // Once a trailer is rolling the reel stays put — the video loops until
       // the next deliberate move (swipe, dot tap, LEFT/RIGHT, DOWN).
       setState(() => _rolling = true);
@@ -1025,6 +1032,7 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
       _restartCadence();
     } else {
       _cadence?.cancel();
+      _dwelledHeroId = null;
       _stopRolling();
     }
   }
@@ -1157,7 +1165,9 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
     if (widget.hero.length < 2) return;
     final n = widget.hero.length;
     final next = (_heroIndex + delta + n) % n;
+    if (widget.hero[next].id == _heroId) return;
     _stopRolling();
+    _dwelledHeroId = null;
     setState(() => _heroId = widget.hero[next].id);
     refreshMetadataPresentation();
     ParallaxTravel.note(Offset(delta.toDouble(), 0));
@@ -2453,6 +2463,7 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
                 showCaption: captions && section.items[c].showCaption,
                 showTitleAndRating: widget.showCardTitlesAndRatings,
                 expandOnFocus: widget.dpad && widget.expandFocusedCard,
+                forceParallax: widget.forceCardParallax,
                 trailerEnabled: widget.trailersEnabled,
                 trailerVolume: widget.cardTrailerVolume,
                 onTrailerStart: widget.onTrailerStop,
@@ -2686,6 +2697,7 @@ class _Card extends StatefulWidget {
   /// context remain available when a shelf has useful card metadata.
   final bool showTitleAndRating;
   final bool expandOnFocus;
+  final bool forceParallax;
   final bool trailerEnabled;
   final double trailerVolume;
   final VoidCallback? onTrailerStart;
@@ -2718,6 +2730,7 @@ class _Card extends StatefulWidget {
     this.showCaption = true,
     this.showTitleAndRating = true,
     this.expandOnFocus = false,
+    this.forceParallax = false,
     this.trailerEnabled = false,
     this.trailerVolume = 0,
     this.onTrailerStart,
@@ -2737,19 +2750,26 @@ class _CardState extends State<_Card> with MetadataPresentationMixin<_Card> {
   Timer? _trailerDwell;
   bool _trailerRequested = false;
   bool _trailerPlaying = false;
+  bool _trailerAttempted = false;
+  bool _hideTrailerText = false;
+  Timer? _trailerTextTimer;
 
   void _armCardTrailer() {
     _trailerDwell?.cancel();
+    _trailerTextTimer?.cancel();
+    _hideTrailerText = false;
+    if (!_f) _trailerAttempted = false;
     _trailerRequested = false;
     _trailerPlaying = false;
-    if (!_f || !_canExpand || !widget.trailerEnabled ||
+    if (_trailerAttempted || !_f || !_canExpand || !widget.trailerEnabled ||
         MediaQuery.disableAnimationsOf(context)) return;
-    _trailerDwell = Timer(const Duration(seconds: 4), () {
+    _trailerDwell = Timer(const Duration(seconds: 2), () {
       if (!mounted || !_f || !widget.trailerEnabled || !_canExpand ||
           ModalRoute.of(context)?.isCurrent == false || !TickerMode.of(context) ||
           (WidgetsBinding.instance.lifecycleState != null &&
            WidgetsBinding.instance.lifecycleState != AppLifecycleState.resumed)) return;
       widget.onTrailerStart?.call();
+      _trailerAttempted = true;
       setState(() => _trailerRequested = true);
     });
   }
@@ -2833,7 +2853,12 @@ class _CardState extends State<_Card> with MetadataPresentationMixin<_Card> {
   @override
   void didUpdateWidget(_Card oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (!identical(oldWidget.card.metadata, widget.card.metadata) ||
+    if (oldWidget.card.metadata?.id != widget.card.metadata?.id ||
+        oldWidget.card.metadata?.type != widget.card.metadata?.type) {
+      _trailerAttempted = false;
+    }
+    if (oldWidget.card.metadata?.id != widget.card.metadata?.id ||
+        oldWidget.card.metadata?.type != widget.card.metadata?.type ||
         oldWidget.expandOnFocus != widget.expandOnFocus ||
         oldWidget.trailerEnabled != widget.trailerEnabled) {
       _armCardTrailer();
@@ -2860,6 +2885,7 @@ class _CardState extends State<_Card> with MetadataPresentationMixin<_Card> {
   @override
   void dispose() {
     _trailerDwell?.cancel();
+    _trailerTextTimer?.cancel();
     _descriptionTimer?.cancel();
     _descriptionRequest++;
     _hold.reset();
@@ -3029,6 +3055,7 @@ class _CardState extends State<_Card> with MetadataPresentationMixin<_Card> {
               );
 
     final art = ParallaxFocus(
+      forceEnabled: widget.forceParallax,
       focused: _f || _h,
       radius: BorderRadius.circular(widget.radius),
       // Expanded paragraphs stay in screen space, above every focus/glare
@@ -3135,6 +3162,16 @@ class _CardState extends State<_Card> with MetadataPresentationMixin<_Card> {
                     if (!mounted || !_f || !_trailerRequested ||
                         _trailerPlaying == playing) return;
                     setState(() => _trailerPlaying = playing);
+                    _trailerTextTimer?.cancel();
+                    if (playing) {
+                      _trailerTextTimer = Timer(const Duration(seconds: 2), () {
+                        if (mounted && _f && _trailerPlaying) {
+                          setState(() => _hideTrailerText = true);
+                        }
+                      });
+                    } else {
+                      setState(() => _hideTrailerText = false);
+                    }
                   },
                 ),
               // Keep the gradient with the art: it must still grow to the
@@ -3195,7 +3232,7 @@ class _CardState extends State<_Card> with MetadataPresentationMixin<_Card> {
     // FocusExpressionBox: its parallax arm clips the glare at the theme's
     // scaled radius, and Spotlight's 0.7 shape scale would shrink the
     // shipped look's clip from 7 to 4.9.
-    final cursor = app.focus.expression == FocusExpression.parallax
+    final cursor = widget.forceParallax || app.focus.expression == FocusExpression.parallax
         ? art
         : FocusExpressionBox(
             focused: _f || _h,
@@ -3218,7 +3255,12 @@ class _CardState extends State<_Card> with MetadataPresentationMixin<_Card> {
             children: [
               focusArt,
               if (expanded && overlayCaption != null)
-                Positioned.fill(child: overlayCaption),
+                Positioned.fill(child: AnimatedOpacity(
+                  key: ValueKey('spotlight-trailer-text-${c.metadata?.id}'),
+                  opacity: _hideTrailerText ? 0 : 1,
+                  duration: MediaQuery.disableAnimationsOf(context) ? Duration.zero : const Duration(milliseconds: 300),
+                  child: overlayCaption,
+                )),
             ],
           );
 

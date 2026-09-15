@@ -7,6 +7,38 @@ import 'package:debrify/widgets/hero_trailer_backdrop.dart';
 import 'package:debrify/widgets/trailer_engine.dart';
 
 void main() {
+  testWidgets('finite trailer plays once until a new focus session', (tester) async {
+    final engines = <_PendingFirstFrameEngine>[];
+    final key = GlobalKey<HeroTrailerBackdropState>();
+    Widget host(bool enabled) => MaterialApp(home: HeroTrailerBackdrop(
+      key: key, imageUrl: null, videoUrl: 'https://example.invalid/trailer.mp4',
+      enabled: enabled, startDelay: Duration.zero,
+      engineFactory: () async {
+        final engine = _PendingFirstFrameEngine(); engines.add(engine); return engine;
+      },
+    ));
+    await tester.pumpWidget(host(true));
+    await tester.pump(const Duration(milliseconds: 1));
+    final engine = engines.single;
+    expect(engine.looped, isFalse);
+    engine._firstFrame.complete();
+    engine.playing.add(true);
+    engine.durations.add(const Duration(seconds: 30));
+    await tester.pumpAndSettle();
+    engine.positions.add(const Duration(seconds: 30));
+    engine.playing.add(false);
+    await tester.pumpAndSettle();
+    expect(engine.disposed, isTrue);
+    await tester.pumpWidget(host(true));
+    key.currentState!.didPopNext();
+    await tester.pump(const Duration(seconds: 5));
+    expect(engines, hasLength(1));
+    await tester.pumpWidget(host(false));
+    await tester.pumpWidget(host(true));
+    await tester.pump(const Duration(milliseconds: 1));
+    expect(engines, hasLength(2));
+    await tester.pumpWidget(const SizedBox());
+  });
   testWidgets(
     'covering a trailer releases its engine and return recreates it',
     (tester) async {
@@ -103,6 +135,9 @@ void main() {
 class _PendingFirstFrameEngine implements TrailerEngine {
   final Completer<void> _firstFrame = Completer<void>();
   final durations = StreamController<Duration>.broadcast();
+  final playing = StreamController<bool>.broadcast();
+  final positions = StreamController<Duration>.broadcast();
+  bool? looped;
   bool opened = false;
   bool disposed = false;
   int buildVideoCalls = 0;
@@ -113,10 +148,10 @@ class _PendingFirstFrameEngine implements TrailerEngine {
   bool get rendersUnderlay => true;
 
   @override
-  Stream<bool> get playingStream => const Stream<bool>.empty();
+  Stream<bool> get playingStream => playing.stream;
 
   @override
-  Stream<Duration> get positionStream => const Stream<Duration>.empty();
+  Stream<Duration> get positionStream => positions.stream;
 
   @override
   Stream<Duration> get durationStream => durations.stream;
@@ -136,6 +171,7 @@ class _PendingFirstFrameEngine implements TrailerEngine {
     Map<String, String>? httpHeaders,
   }) async {
     opened = true;
+    looped = loop;
   }
 
   @override
@@ -157,6 +193,8 @@ class _PendingFirstFrameEngine implements TrailerEngine {
   Future<void> dispose() async {
     disposed = true;
     await durations.close();
+    await playing.close();
+    await positions.close();
   }
 
   @override

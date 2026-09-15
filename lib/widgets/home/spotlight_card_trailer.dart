@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../models/metadata_preferences.dart';
@@ -34,12 +35,17 @@ class _SpotlightCardTrailerState extends State<SpotlightCardTrailer> {
   final Object? _scope = ProfileRuntime.scope.value;
   YoutubeResolvedStreams? _streams;
   bool _failed = false;
+  bool _loading = true;
+  Timer? _resolveTimeout;
 
   bool get _current => mounted && ProfileRuntime.scope.value == _scope;
 
   @override
   void initState() {
     super.initState();
+    _resolveTimeout = Timer(const Duration(seconds: 20), () {
+      if (mounted) setState(() { _failed = true; _loading = false; });
+    });
     _resolve();
   }
 
@@ -80,7 +86,7 @@ class _SpotlightCardTrailerState extends State<SpotlightCardTrailer> {
               prefs.fallback)) {
         streams = await ImdbTrailerService.resolveTrailer(imdb, maxHeight: 480);
       }
-      if (!_current || streams == null || !streams.hasPlayable) return;
+      if (!_current || _failed || streams == null || !streams.hasPlayable) return;
       if (ModalRoute.of(context)?.isCurrent == false ||
           (WidgetsBinding.instance.lifecycleState != null &&
               WidgetsBinding.instance.lifecycleState !=
@@ -91,11 +97,15 @@ class _SpotlightCardTrailerState extends State<SpotlightCardTrailer> {
       setState(() => _streams = streams);
     } catch (_) {
       // Artwork remains visible when the provider or stream is unavailable.
+    } finally {
+      _resolveTimeout?.cancel();
+      if (mounted && _streams == null) setState(() => _loading = false);
     }
   }
 
   @override
   void dispose() {
+    _resolveTimeout?.cancel();
     CollectionFocusPlayback.release(_owner);
     super.dispose();
   }
@@ -103,9 +113,10 @@ class _SpotlightCardTrailerState extends State<SpotlightCardTrailer> {
   @override
   Widget build(BuildContext context) {
     final streams = _streams;
-    if (!_current || _failed || streams == null) return const SizedBox.shrink();
+    if (!_current || _failed) return const SizedBox.shrink();
     return IgnorePointer(
-      child: HeroTrailerBackdrop(
+      child: Stack(fit: StackFit.expand, children: [
+      if (streams != null) HeroTrailerBackdrop(
         imageUrl: null,
         videoUrl: streams.playUrl,
         audioUrl: streams.audioUrl,
@@ -116,7 +127,10 @@ class _SpotlightCardTrailerState extends State<SpotlightCardTrailer> {
         videoBlurSigma: 0,
         startDelay: Duration.zero,
         firstFrameTimeout: const Duration(seconds: 12),
-        onPlayingChanged: widget.onPlayingChanged,
+        onPlayingChanged: (playing) {
+          if (mounted && playing && _loading) setState(() => _loading = false);
+          widget.onPlayingChanged(playing);
+        },
         onPlaybackFailed: () {
           if (!mounted) return;
           setState(() => _failed = true);
@@ -124,6 +138,38 @@ class _SpotlightCardTrailerState extends State<SpotlightCardTrailer> {
           widget.onPlayingChanged(false);
         },
       ),
+      if (_loading) const Positioned(top: 12, left: 12, child: _TrailerLoadingDot()),
+      ]),
     );
   }
+}
+
+class _TrailerLoadingDot extends StatefulWidget {
+  const _TrailerLoadingDot();
+  @override
+  State<_TrailerLoadingDot> createState() => _TrailerLoadingDotState();
+}
+
+class _TrailerLoadingDotState extends State<_TrailerLoadingDot> with SingleTickerProviderStateMixin {
+  late final _pulse = AnimationController(vsync: this, duration: const Duration(milliseconds: 700), lowerBound: .3, upperBound: 1);
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (MediaQuery.disableAnimationsOf(context)) {
+      _pulse.stop();
+      _pulse.value = 1;
+    } else {
+      _pulse.repeat(reverse: true);
+    }
+  }
+  @override
+  void dispose() { _pulse.dispose(); super.dispose(); }
+  @override
+  Widget build(BuildContext context) => Semantics(label: 'Loading trailer', child: FadeTransition(
+    opacity: _pulse,
+    child: Container(width: 7, height: 7, decoration: const BoxDecoration(
+      color: Colors.white, shape: BoxShape.circle,
+      boxShadow: [BoxShadow(color: Colors.black54, blurRadius: 4)],
+    )),
+  ));
 }

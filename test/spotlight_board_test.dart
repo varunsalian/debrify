@@ -161,7 +161,7 @@ void main() {
     await tester.pumpAndSettle();
     rows[0][0].requestFocus();
     await tester.pump();
-    await tester.pump(const Duration(seconds: 3));
+    await tester.pump(const Duration(seconds: 1));
     expect(find.byType(SpotlightCardTrailer), findsNothing);
     await tester.pump(const Duration(seconds: 1));
     expect(find.byType(SpotlightCardTrailer), findsOneWidget);
@@ -173,6 +173,19 @@ void main() {
     await tester.pump(const Duration(milliseconds: 750));
     final after = (rows[0][0].context!.findRenderObject() as RenderBox).size.width;
     expect(after, greaterThan(before));
+    await tester.pump(const Duration(seconds: 2));
+    expect(tester.widget<AnimatedOpacity>(find.byKey(
+      const ValueKey('spotlight-trailer-text-ttAlpha'))).opacity, 0);
+    tester.widget<SpotlightCardTrailer>(find.byType(SpotlightCardTrailer))
+        .onPlayingChanged(false);
+    await tester.pump();
+    expect(tester.widget<AnimatedOpacity>(find.byKey(
+      const ValueKey('spotlight-trailer-text-ttAlpha'))).opacity, 1);
+    final attempts = stoppedHero;
+    await tester.pumpWidget(host([], shelves, expandFocusedCard: true,
+      onTrailerStop: () => stoppedHero++));
+    await tester.pump(const Duration(seconds: 5));
+    expect(stoppedHero, attempts, reason: 'rebuild must not repeat the focused preview');
     rows[0][1].requestFocus();
     await tester.pump();
     await tester.pump();
@@ -719,10 +732,9 @@ void main() {
     expect(find.text('About Bravo.'), findsOneWidget);
   });
 
-  testWidgets('the TV hero asks for a trailer immediately without paging, and '
+  testWidgets('the TV hero asks for a trailer after two seconds without paging, and '
       're-arms after a deliberate move', (tester) async {
-    // Once the TV hero owns focus, tell the host immediately — trailer lookup
-    // is already the useful wait — and do not move the reel.
+    // Each deliberate selection gets its own two-second preview dwell.
     final a = _meta('tt1', 'Alpha');
     final b = _meta('tt2', 'Bravo');
     final dwelled = <String>[];
@@ -754,7 +766,9 @@ void main() {
 
     hero.requestFocus();
     await tester.pumpAndSettle();
-    expect(dwelled, ['tt1'], reason: 'focused: resolve starts immediately');
+    expect(dwelled, isEmpty);
+    await tester.pump(const Duration(seconds: 2));
+    expect(dwelled, ['tt1'], reason: 'focused: resolve starts after dwell');
     expect(
       find.text('About Alpha.'),
       findsOneWidget,
@@ -765,7 +779,17 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
     await tester.pumpAndSettle();
     expect(find.text('About Bravo.'), findsOneWidget);
-    expect(dwelled, ['tt1', 'tt2']);
+    // Return before B starts: A must get a fresh session, not retain its latch.
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+    await tester.pumpAndSettle();
+    await tester.pump(const Duration(seconds: 2));
+    expect(dwelled, ['tt1', 'tt1']);
+    await tester.pump(const Duration(seconds: 5));
+    expect(dwelled, ['tt1', 'tt1'], reason: 'same selection still plays once');
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pumpAndSettle();
+    await tester.pump(const Duration(seconds: 2));
+    expect(dwelled, ['tt1', 'tt1', 'tt2']);
   });
 
   testWidgets('a shrinking board does not strand the cursor past the end', (
@@ -1081,6 +1105,7 @@ void main() {
     await tester.pumpAndSettle();
 
     await tester.pumpAndSettle();
+    await tester.pump(const Duration(seconds: 2));
     expect(dwelt, 1, reason: 'the eligible hero must start a trailer resolve');
 
     // Long past any cap: cutting away from something the user is watching to
@@ -1417,6 +1442,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    await tester.pump(const Duration(seconds: 2));
     expect(dwelled, ['tt1']);
 
     final cardMouseRegion = tester.widget<MouseRegion>(
@@ -1430,7 +1456,8 @@ void main() {
 
     cardMouseRegion.onExit!(const PointerExitEvent());
     await tester.pumpAndSettle();
-    expect(dwelled, ['tt1', 'tt1']);
+    await tester.pump(const Duration(seconds: 3));
+    expect(dwelled, ['tt1'], reason: 'same hero must not replay after another preview');
   });
 
   testWidgets('a single-item reel shows no dots', (tester) async {

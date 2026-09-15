@@ -181,6 +181,7 @@ class _CollectionFocusArtState extends State<CollectionFocusArt>
               ),
             if (widget.focused && widget.videoUrl != null && !_failed)
               HeroTrailerBackdrop(
+                repeat: true,
                 key: ValueKey(widget.videoUrl),
                 imageUrl: null,
                 videoUrl: widget.videoUrl,

@@ -18,7 +18,7 @@ import 'serialized_trailer_engine.dart';
 import '../services/collection_focus_playback.dart';
 
 /// OTT-style "living backdrop": shows the static blurred [imageUrl] and, when
-/// [videoUrl] is supplied and enabled, crossfades to an audible, looping trailer in
+/// [videoUrl] is supplied and enabled, crossfades to an audible, one-shot trailer in
 /// the same full-bleed slot. Sits *behind* the detail page's content and tint —
 /// it is purely decorative and never focusable, so DPAD navigation is unaffected.
 ///
@@ -132,6 +132,8 @@ class HeroTrailerBackdrop extends StatefulWidget {
   /// real platform decoder. Production callers always use the platform engine.
   @visibleForTesting
   final Future<TrailerEngine> Function()? engineFactory;
+  /// Only decorative video artwork repeats. Finite trailers play once.
+  final bool repeat;
 
   const HeroTrailerBackdrop({
     super.key,
@@ -154,6 +156,7 @@ class HeroTrailerBackdrop extends StatefulWidget {
     this.focusPreviewOwner,
     this.httpHeaders,
     this.engineFactory,
+    this.repeat = false,
   });
 
   /// See [ambientVolume]. 70% — audible but under the UI, matching the Home
@@ -258,7 +261,9 @@ class HeroTrailerBackdropState extends State<HeroTrailerBackdrop>
   bool get _reduceMotion =>
       MediaQuery.maybeOf(context)?.disableAnimations ?? false;
 
+  bool _completed = false;
   bool get _canPlay =>
+      !_completed &&
       widget.enabled &&
       CollectionFocusPlayback.allows(widget.focusPreviewOwner) &&
       widget.videoUrl != null &&
@@ -356,6 +361,7 @@ class HeroTrailerBackdropState extends State<HeroTrailerBackdrop>
 
     final urlChanged =
         widget.videoUrl != old.videoUrl || widget.audioUrl != old.audioUrl;
+    if (urlChanged || (!old.enabled && widget.enabled)) _completed = false;
     if (urlChanged || widget.enabled != old.enabled) {
       if (!_canPlay) {
         _teardownPlayer();
@@ -492,6 +498,7 @@ class HeroTrailerBackdropState extends State<HeroTrailerBackdrop>
       if (!mounted || _engine != engine || _playing == playing) return;
       setState(() => _playing = playing);
       _syncPlayingNotification();
+      _finishIfEnded();
     });
     // Reveal the video (and tell the parent "playing") only once the first
     // frame has actually RENDERED — `playing` flips true the moment open()
@@ -529,7 +536,7 @@ class HeroTrailerBackdropState extends State<HeroTrailerBackdrop>
     _posSub = engine.positionStream.listen((p) {
       // Loop restart (position wrapped back to the start) → skip the intro
       // again. Ambient only: never fight a manual scrub or foreground seek.
-      if (widget.focusPreviewOwner == null &&
+      if (widget.repeat && widget.focusPreviewOwner == null &&
           !widget.live &&
           !widget.foreground &&
           !_scrubbing &&
@@ -538,6 +545,7 @@ class HeroTrailerBackdropState extends State<HeroTrailerBackdrop>
         engine.seek(_introSkip);
       }
       _lastPos = p;
+      _finishIfEnded();
       // Don't snap the thumb back to stale positions mid-drag. And only
       // REBUILD for it when the seek bar is actually on screen (foreground):
       // the ambient backdrop renders no position UI, so its 4×/s poll used
@@ -563,7 +571,7 @@ class HeroTrailerBackdropState extends State<HeroTrailerBackdrop>
     });
 
     try {
-      // Ambient: audible-but-quiet + looping (sound plays in the backdrop too;
+      // Ambient: audible-but-quiet, finite trailers do not loop (sound plays in the backdrop too;
       // the foreground mute chip is the user's off switch). A teardown (URL
       // switch, toggle off) can detach [engine] mid-open; the engine aborts
       // cleanly, and we re-check identity after.
@@ -574,7 +582,7 @@ class HeroTrailerBackdropState extends State<HeroTrailerBackdrop>
         // path the main player uses for high-res YouTube).
         audioUrl: widget.audioUrl,
         volume: _userMuted ? 0 : widget.ambientVolume,
-        loop: !widget.live,
+        loop: widget.repeat && !widget.live,
         httpHeaders: widget.httpHeaders,
       );
       if (_engine != engine) return;
@@ -697,6 +705,20 @@ class HeroTrailerBackdropState extends State<HeroTrailerBackdrop>
     _fg.forward();
     _applyVolume(foreground: true);
     _engine?.play();
+  }
+
+  void _finishIfEnded() {
+    if (_completed || widget.live || widget.repeat ||
+        !_videoVisible || _duration <= Duration.zero ||
+        (_playing && _lastPos < _duration) ||
+        _lastPos < _duration - const Duration(milliseconds: 250)) return;
+    _completed = true;
+    _teardownPlayer();
+    if (widget.foreground) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) widget.onRequestClose?.call();
+      });
+    }
   }
 
   void _exitForeground() {

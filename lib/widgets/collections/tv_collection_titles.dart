@@ -94,7 +94,7 @@ class TvCollectionTitlesState extends State<TvCollectionTitles>
       setState(() => _previewIdentity = null);
     if (!mounted || !_previewEligible) return;
     final identity = _identity(widget.items[_index]);
-    _trailerDwell = Timer(const Duration(seconds: 4), () {
+    _trailerDwell = Timer(const Duration(seconds: 2), () {
       if (!mounted ||
           !_previewEligible ||
           ModalRoute.of(context)?.isCurrent == false ||
