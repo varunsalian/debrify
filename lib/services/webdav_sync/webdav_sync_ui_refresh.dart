@@ -55,6 +55,7 @@ abstract final class WebDavSyncUiRefresh {
     },
     'home_hide_catalog_addon_names': {_WebDavSyncUiRefreshTarget.homeSettings},
     'home_hide_collection_names': {_WebDavSyncUiRefreshTarget.homeSettings},
+    'spotlight_focus_details': {_WebDavSyncUiRefreshTarget.homeSettings},
     'sources_use_addon_text': {_WebDavSyncUiRefreshTarget.homeSettings},
     'sources_show_addon_logos': {_WebDavSyncUiRefreshTarget.homeSettings},
     'home_disabled_sections_v1': {_WebDavSyncUiRefreshTarget.homeSettings},

@@ -1,4 +1,7 @@
 import '../../services/diagnostic_log.dart';
+import '../../services/stremio_service.dart';
+import '../../services/metadata_preferences_service.dart';
+import '../../services/profiles/profile_runtime.dart';
 import '../recoverable_network_image.dart';
 import '../../models/metadata_preferences.dart';
 import '../metadata_presentation_mixin.dart';
@@ -336,6 +339,7 @@ class SpotlightBoard extends StatefulWidget {
   /// Home-card presentation preference. When false, cards keep their artwork,
   /// context metadata and playback state but omit title and rating text.
   final bool showCardTitlesAndRatings;
+  final bool expandFocusedCard;
 
   const SpotlightBoard({
     super.key,
@@ -354,6 +358,7 @@ class SpotlightBoard extends StatefulWidget {
     this.onAmbient,
     this.dpad = true,
     this.showCardTitlesAndRatings = true,
+    this.expandFocusedCard = false,
   });
 
   /// The scrolled ground, taken from the THEME.
@@ -2399,6 +2404,7 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
                 captionBlock: captions ? m.captionBlock : 0,
                 showCaption: captions && section.items[c].showCaption,
                 showTitleAndRating: widget.showCardTitlesAndRatings,
+                expandOnFocus: widget.dpad && widget.expandFocusedCard,
                 hoverable: !widget.dpad,
                 dpad: widget.dpad,
                 onDesktopPreviewActivityChanged:
@@ -2628,6 +2634,7 @@ class _Card extends StatefulWidget {
   /// False suppresses only title/rating text. Subtitles such as episode
   /// context remain available when a shelf has useful card metadata.
   final bool showTitleAndRating;
+  final bool expandOnFocus;
 
   /// Pointer hover lifts the card — desktop only. OFF on TV: an Apple TV
   /// trackpad delivers pointer events (see main.dart), and a hover lift
@@ -2656,6 +2663,7 @@ class _Card extends StatefulWidget {
     this.captionBlock = 0,
     this.showCaption = true,
     this.showTitleAndRating = true,
+    this.expandOnFocus = false,
     this.hoverable = false,
     this.dpad = true,
     this.onDesktopPreviewActivityChanged,
@@ -2669,6 +2677,46 @@ class _CardState extends State<_Card> with MetadataPresentationMixin<_Card> {
   @override
   StremioMeta? get originalMetadata => widget.card.metadata;
   bool _f = false;
+  Timer? _descriptionTimer;
+  String? _resolvedDescription;
+  Object? _descriptionScope;
+  int _descriptionRequest = 0;
+
+  void _loadFocusedDescription() {
+    _descriptionTimer?.cancel();
+    final request = ++_descriptionRequest;
+    final item = originalMetadata;
+    if (!_canExpand || !_f || item == null) return;
+    final scope = ProfileRuntime.scope.value;
+    bool current() => mounted && _f && _canExpand &&
+        request == _descriptionRequest &&
+        identical(originalMetadata, item) && ProfileRuntime.scope.value == scope;
+    _descriptionTimer = Timer(const Duration(milliseconds: 300), () async {
+      try {
+        final prefs = await MetadataPreferencesService.loadForBackground(
+          isCurrent: current,
+        );
+        if (prefs == null || !current()) return;
+        if (prefs.provider(MetadataCategory.information) != MetadataPreferences.current &&
+            !prefs.fallback) return;
+        if ((heroPresentation?.description ?? '').trim().isNotEmpty) return;
+        final imdb = item.effectiveImdbId;
+        if (imdb == null) return;
+        final details = await StremioService.instance.fetchMetaDetails(
+          imdbId: imdb, type: item.type,
+        );
+        if (!current()) return;
+        final description = details?.description?.trim();
+        if (description == null || description.isEmpty) return;
+        setState(() {
+          _resolvedDescription = description;
+          _descriptionScope = scope;
+        });
+      } catch (_) {
+        // Optional metadata must never interrupt remote navigation.
+      }
+    });
+  }
 
   /// DPAD centre is a key gesture, not a pointer long-press. Keep the short
   /// press for opening Details, but let a held press reach the card's options
@@ -2709,6 +2757,11 @@ class _CardState extends State<_Card> with MetadataPresentationMixin<_Card> {
   @override
   void didUpdateWidget(_Card oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.card.metadata, widget.card.metadata) ||
+        oldWidget.expandOnFocus != widget.expandOnFocus) {
+      _resolvedDescription = null;
+      _loadFocusedDescription();
+    }
     final shouldReport =
         _previewActive &&
         !widget.dpad &&
@@ -2725,6 +2778,8 @@ class _CardState extends State<_Card> with MetadataPresentationMixin<_Card> {
 
   @override
   void dispose() {
+    _descriptionTimer?.cancel();
+    _descriptionRequest++;
     _hold.reset();
     if (_previewActivityReported) {
       widget.onDesktopPreviewActivityChanged?.call(_previewOwner, false);
@@ -2732,11 +2787,26 @@ class _CardState extends State<_Card> with MetadataPresentationMixin<_Card> {
     super.dispose();
   }
 
+  bool get _canExpand => widget.expandOnFocus && widget.dpad &&
+      (widget.card.metadata?.type == 'movie' ||
+          widget.card.metadata?.type == 'series') &&
+      !widget.captionBelow;
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => TweenAnimationBuilder<double>(
+    tween: Tween(end: _canExpand && _f ? 1.18 : 1.0),
+    duration: MediaQuery.disableAnimationsOf(context)
+        ? Duration.zero
+        : Duration(milliseconds: PlatformUtil.isAndroidTvCached ? 160 : 220),
+    curve: Curves.easeOutCubic,
+    builder: (context, growth, _) => _buildCard(context, growth),
+  );
+
+  Widget _buildCard(BuildContext context, double growth) {
     final app = AppThemeScope.of(context);
     final c = widget.card;
-    final w = widget.height * c.shape.aspect;
+    final expanded = _canExpand && _f;
+    final w = widget.height * c.shape.aspect * growth;
     // Decode at the card's own PHYSICAL width plus the 10% focus growth —
     // never a fixed constant. The hardcoded 400/800 decoded ~1.7× oversized
     // on a TV board, and the TV image cache is byte-capped (56MB, see
@@ -2745,10 +2815,22 @@ class _CardState extends State<_Card> with MetadataPresentationMixin<_Card> {
     // so every DPAD step into an evicted row re-decoded and re-uploaded —
     // the sometimes-laggy navigation. Right-sizing fits a screenful with
     // headroom and makes each upload cheaper.
-    final decodeW = (w * MediaQuery.devicePixelRatioOf(context) * 1.1)
+    // A stable decode size avoids creating a new cached image every animation
+    // frame. Eligible cards reserve their expanded resolution once.
+    final decodeW = (widget.height * c.shape.aspect *
+        (_canExpand && !PlatformUtil.isAndroidTvCached ? 1.18 : 1.0) * MediaQuery.devicePixelRatioOf(context) * 1.1)
         .round()
         .clamp(100, 1000);
     final meta = presentedMetadata;
+    final suppliedDescription = (heroPresentation?.description ?? '').trim();
+    final allowDescriptionFallback =
+        metadataPreferences.provider(MetadataCategory.information) == MetadataPreferences.current ||
+        metadataPreferences.fallback;
+    final description = !expanded ? '' : suppliedDescription.isNotEmpty
+        ? suppliedDescription
+        : allowDescriptionFallback && _descriptionScope == ProfileRuntime.scope.value
+            ? (_resolvedDescription ?? '') : '';
+    final showDescription = description.isNotEmpty;
     final changed = meta != null && !identical(meta, originalMetadata);
     final pending = !c.episodeArtwork && metadataArtworkPending(
       c.shape == SpotlightCardShape.wide ? MetadataCategory.backgrounds : MetadataCategory.posters);
@@ -2771,7 +2853,7 @@ class _CardState extends State<_Card> with MetadataPresentationMixin<_Card> {
     ].join(' · ');
     final hasTitle = widget.showTitleAndRating && displayedTitle.isNotEmpty;
     final hasSubtitle = metaLine.isNotEmpty;
-    final hasCaptionContent = hasTitle || hasSubtitle;
+    final hasCaptionContent = hasTitle || hasSubtitle || showDescription;
     final preview = c.previewBuilder;
     // Exactly one card owns the decoder: desktop follows the pointer, TV
     // follows the remote cursor. The preview is unmounted immediately when it
@@ -2784,7 +2866,7 @@ class _CardState extends State<_Card> with MetadataPresentationMixin<_Card> {
     // scaled. 1.2 is Flutter's normal line box; 33 is the existing 26 + 7
     // vertical padding around those lines.
     final captionLineHeight = widget.caption * 1.2;
-    final captionBedHeight = 33.0 +
+    final captionBedHeight = (showDescription ? widget.height : 33.0) +
         (hasTitle ? captionLineHeight : 0) +
         (hasSubtitle ? captionLineHeight * 0.85 : 0);
 
@@ -2795,7 +2877,7 @@ class _CardState extends State<_Card> with MetadataPresentationMixin<_Card> {
     // or letting the travelling glare wash through them.
     final tvCaptionFamily = PlatformUtil.isTvOS ? 'CupertinoSystemText' : null;
     final overlayCaption =
-        widget.captionBelow || !widget.showCaption || !hasCaptionContent
+        widget.captionBelow || (!widget.showCaption && !showDescription) || !hasCaptionContent
             ? null
             : IgnorePointer(
                 child: Align(
@@ -2803,9 +2885,14 @@ class _CardState extends State<_Card> with MetadataPresentationMixin<_Card> {
                   child: SizedBox(
                     width: double.infinity,
                     child: Padding(
-                      padding: const EdgeInsets.fromLTRB(7, 26, 7, 7),
+                      padding: expanded
+                          ? const EdgeInsets.fromLTRB(12, 10, 12, 10)
+                          : const EdgeInsets.fromLTRB(7, 26, 7, 7),
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: expanded
+                            ? CrossAxisAlignment.start
+                            : CrossAxisAlignment.center,
                         children: [
                           if (hasTitle)
                             Text(
@@ -2833,6 +2920,24 @@ class _CardState extends State<_Card> with MetadataPresentationMixin<_Card> {
                                 color: Colors.white.withValues(alpha: 0.72),
                               ),
                             ),
+                          if (showDescription) ...[
+                            const SizedBox(height: 6),
+                            Text(
+                              description,
+                              maxLines: widget.height >= 180 ? 3 : 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontFamily: tvCaptionFamily,
+                                fontSize: (widget.caption * 0.75).clamp(10.5, 12.0),
+                                fontWeight: FontWeight.w400,
+                                height: 1.35,
+                                // Paint alpha avoids an offscreen opacity layer.
+                                color: Colors.white.withValues(
+                                  alpha: ((growth - 1) / 0.18).clamp(0.0, 1.0),
+                                ),
+                              ),
+                            ),
+                          ],
                         ],
                       ),
                     ),
@@ -2843,7 +2948,9 @@ class _CardState extends State<_Card> with MetadataPresentationMixin<_Card> {
     final art = ParallaxFocus(
       focused: _f || _h,
       radius: BorderRadius.circular(widget.radius),
-      fixedScaleForeground: overlayCaption,
+      // Expanded paragraphs stay in screen space, above every focus/glare
+      // transform. Counter-scaling still leaves text under the 3D transform.
+      fixedScaleForeground: expanded ? null : overlayCaption,
       child: ClipRRect(
         borderRadius: BorderRadius.circular(widget.radius),
         child: SizedBox(
@@ -3002,13 +3109,24 @@ class _CardState extends State<_Card> with MetadataPresentationMixin<_Card> {
             child: art,
           );
 
-    final cursored = CollectionFocusGlow(
+    final focusArt = CollectionFocusGlow(
       active: _f || _h,
       enabled: c.focusGlowEnabled,
       imageUrl: c.image,
       radius: widget.radius,
       child: cursor,
     );
+
+    // Keep this wrapper mounted on both focus states: swapping Stack for its
+    // child destroys ParallaxFocus's spring exactly when it should animate.
+    final cursored = Stack(
+            fit: StackFit.passthrough,
+            children: [
+              focusArt,
+              if (expanded && overlayCaption != null)
+                Positioned.fill(child: overlayCaption),
+            ],
+          );
 
     // Compact: art + its caption below, one Column — the caption is part of
     // the card so the tap target covers both. Keep the same metadata line as
@@ -3093,6 +3211,7 @@ class _CardState extends State<_Card> with MetadataPresentationMixin<_Card> {
       skipTraversal: true,
       onFocusChange: (v) {
         setState(() => _f = v);
+        _loadFocusedDescription();
         _reportDesktopPreviewActivity(_previewActive);
         if (!v) _hold.reset();
         if (v && context.findRenderObject() is RenderBox) {

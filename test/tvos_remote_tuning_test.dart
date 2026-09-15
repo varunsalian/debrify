@@ -18,15 +18,15 @@ void main() {
     PlatformUtil.debugSetTvOS(null);
   });
 
-  test('Siri Remote tuning stays deliberately calmer than engine defaults', () {
+  test('Siri Remote tuning matches the publisher tuning example', () {
     final config = TvosRemoteTuning.config;
 
-    expect(config.shortSwipeThreshold, 0.45);
-    expect(config.fastSwipeThreshold, 0.70);
-    expect(config.dpadDeadZone, 0.72);
-    expect(config.continuousSwipeMoveThreshold, 6);
-    expect(config.keyRepeatInitialDelay, const Duration(milliseconds: 500));
-    expect(config.keyRepeatInterval, const Duration(milliseconds: 140));
+    expect(config.shortSwipeThreshold, 0.4);
+    expect(config.fastSwipeThreshold, 0.6);
+    expect(config.dpadDeadZone, 0.6);
+    expect(config.continuousSwipeMoveThreshold, 4);
+    expect(config.keyRepeatInitialDelay, const Duration(milliseconds: 450));
+    expect(config.keyRepeatInterval, const Duration(milliseconds: 100));
   });
 
   test(
@@ -45,12 +45,12 @@ void main() {
 
       expect(received?.method, 'configure');
       expect(received?.arguments, <String, Object>{
-        'shortSwipeThreshold': 0.45,
-        'fastSwipeThreshold': 0.70,
-        'dpadDeadZone': 0.72,
-        'continuousSwipeMoveThreshold': 6,
-        'keyRepeatInitialDelayMs': 500,
-        'keyRepeatIntervalMs': 140,
+        'shortSwipeThreshold': 0.4,
+        'fastSwipeThreshold': 0.6,
+        'dpadDeadZone': 0.6,
+        'continuousSwipeMoveThreshold': 4,
+        'keyRepeatInitialDelayMs': 450,
+        'keyRepeatIntervalMs': 100,
       });
     },
   );

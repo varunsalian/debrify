@@ -6383,6 +6383,16 @@ class StorageService {
     await prefs.setBool(_homeHideCollectionNamesKey, value);
   }
 
+  static Future<bool> getSpotlightFocusDetails() async {
+    final prefs = await ProfilePreferences.instance();
+    return prefs.getBool('spotlight_focus_details') ?? false;
+  }
+
+  static Future<void> setSpotlightFocusDetails(bool value) async {
+    final prefs = await ProfilePreferences.instance();
+    await prefs.setBool('spotlight_focus_details', value);
+  }
+
   static Future<void> clearAllHomePageSettings() async {
     final prefs = await ProfilePreferences.instance();
     await prefs.remove(_homeDefaultSourceTypeKey);
@@ -6400,6 +6410,7 @@ class StorageService {
     await prefs.remove(_homeHideCardTitlesAndRatingsKey);
     await prefs.remove(_homeHideCatalogAddonNamesKey);
     await prefs.remove(_homeHideCollectionNamesKey);
+    await prefs.remove('spotlight_focus_details');
   }
 
   // Reddit Settings

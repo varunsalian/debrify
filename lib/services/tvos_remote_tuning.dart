@@ -4,19 +4,18 @@ import '../utils/platform_util.dart';
 
 /// Debrify's app-wide Siri Remote tuning.
 ///
-/// The engine defaults enter continuous navigation after only three touchpad
-/// move samples and then repeat every 80 ms. On a physical Siri Remote that
-/// makes a short swipe overshoot several focus targets and lets small movement
-/// during a click turn into navigation. These values require a more deliberate
-/// gesture and keep held navigation useful without racing through the UI.
+/// Uses the flutter_tvos publisher's tuning example:
+/// https://pub.dev/packages/flutter_tvos#tuning
+/// This is a starting point for physical-device validation, not an Apple
+/// standard. The previous six-sample / 140 ms configuration felt sluggish.
 abstract final class TvosRemoteTuning {
   static const config = TvRemoteConfig(
-    shortSwipeThreshold: 0.45,
-    fastSwipeThreshold: 0.70,
-    dpadDeadZone: 0.72,
-    continuousSwipeMoveThreshold: 6,
-    keyRepeatInitialDelay: Duration(milliseconds: 500),
-    keyRepeatInterval: Duration(milliseconds: 140),
+    shortSwipeThreshold: 0.4,
+    fastSwipeThreshold: 0.6,
+    dpadDeadZone: 0.6,
+    continuousSwipeMoveThreshold: 4,
+    keyRepeatInitialDelay: Duration(milliseconds: 450),
+    keyRepeatInterval: Duration(milliseconds: 100),
   );
 
   /// Installs the tuning once the Flutter binding exists. No-op off tvOS.

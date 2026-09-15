@@ -5,6 +5,14 @@ import 'package:shared_preferences/shared_preferences.dart';
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
+  test('Spotlight focus details persist and reset with Home settings', () async {
+    expect(await StorageService.getSpotlightFocusDetails(), isFalse);
+    await StorageService.setSpotlightFocusDetails(true);
+    expect(await StorageService.getSpotlightFocusDetails(), isTrue);
+    await StorageService.clearAllHomePageSettings();
+    expect(await StorageService.getSpotlightFocusDetails(), isFalse);
+  });
+
   test('Hold to Quick Play defaults off and persists changes', () async {
     expect(await StorageService.getHomeCwHoldToQuickPlay(), isFalse);
 

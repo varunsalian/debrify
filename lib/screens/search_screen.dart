@@ -2694,6 +2694,7 @@ class _SearchScreenState extends State<SearchScreen>
     if (!mounted) return;
     final reloadGen = ++_homeSettingsReloadGen;
     final reloadSession = HomeCollectionsStore.captureSession();
+    final spotlightFocusDetails = await StorageService.getSpotlightFocusDetails();
     final cardSettings = await Future.wait<Object>([
       StorageService.getHomeCardOrientation(),
       StorageService.getHomeHideCardTitlesAndRatings(),
@@ -2708,12 +2709,14 @@ class _SearchScreenState extends State<SearchScreen>
     if (orientation != _homeCardOrientation ||
         hideTitlesAndRatings != _hideHomeCardTitlesAndRatings ||
         hideCatalogAddonNames != _hideHomeCatalogAddonNames ||
-        hideCollectionNames != _hideHomeCollectionNames) {
+        hideCollectionNames != _hideHomeCollectionNames ||
+        spotlightFocusDetails != _spotlightFocusDetails) {
       setState(() {
         _homeCardOrientation = orientation;
         _hideHomeCardTitlesAndRatings = hideTitlesAndRatings;
         _hideHomeCatalogAddonNames = hideCatalogAddonNames;
         _hideHomeCollectionNames = hideCollectionNames;
+        _spotlightFocusDetails = spotlightFocusDetails;
       });
     }
     // Merged-CW toggles: re-read, and on a change re-sync each provider's node
@@ -6816,6 +6819,7 @@ class _SearchScreenState extends State<SearchScreen>
   }
 
   bool _hideHomeCollectionNames = false;
+  bool _spotlightFocusDetails = false;
 
   bool get _homeLandscapeCards =>
       _homeCardOrientation == HomeCardOrientation.landscape;
@@ -7092,6 +7096,7 @@ class _SearchScreenState extends State<SearchScreen>
   }
 
   Future<void> _loadHomeCardOrientation() async {
+    final spotlightFocusDetails = await StorageService.getSpotlightFocusDetails();
     final values = await Future.wait<Object>([
       StorageService.getHomeCardOrientation(),
       StorageService.getHomeHideCardTitlesAndRatings(),
@@ -7106,7 +7111,8 @@ class _SearchScreenState extends State<SearchScreen>
     if (orientation == _homeCardOrientation &&
         hideTitlesAndRatings == _hideHomeCardTitlesAndRatings &&
         hideCatalogAddonNames == _hideHomeCatalogAddonNames &&
-        hideCollectionNames == _hideHomeCollectionNames) {
+        hideCollectionNames == _hideHomeCollectionNames &&
+        spotlightFocusDetails == _spotlightFocusDetails) {
       return;
     }
     setState(() {
@@ -7114,6 +7120,7 @@ class _SearchScreenState extends State<SearchScreen>
       _hideHomeCardTitlesAndRatings = hideTitlesAndRatings;
       _hideHomeCatalogAddonNames = hideCatalogAddonNames;
       _hideHomeCollectionNames = hideCollectionNames;
+      _spotlightFocusDetails = spotlightFocusDetails;
     });
   }
 
@@ -7986,6 +7993,7 @@ class _SearchScreenState extends State<SearchScreen>
       heroAddon: _spotlightHeroSection?.addon,
       dpad: widget.isTelevision,
       showCardTitlesAndRatings: !_hideHomeCardTitlesAndRatings,
+      expandFocusedCard: _spotlightFocusDetails,
       onHeroOpen: _openItem,
       onLoadMoreRow: (row) {
         if (row < 0 || row >= rails.length) return;

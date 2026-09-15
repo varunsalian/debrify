@@ -90,6 +90,7 @@ void main() {
     List<SpotlightShelf> sections, {
     bool dpad = true,
     bool showCardTitlesAndRatings = true,
+    bool expandFocusedCard = false,
     void Function(StremioMeta item)? onDwell,
     VoidCallback? onTrailerStop,
   }) => MaterialApp(
@@ -106,10 +107,79 @@ void main() {
           onTrailerStop: onTrailerStop,
           dpad: dpad,
           showCardTitlesAndRatings: showCardTitlesAndRatings,
+          expandFocusedCard: expandFocusedCard,
         ),
       ),
     ),
   );
+
+  testWidgets('expanded cards remain visible when navigating back left and up', (tester) async {
+    for (final row in rows) {
+      for (final node in row) { node.dispose(); }
+    }
+    rows = List.generate(4, (_) => _rowNodes(7));
+    final shelves = List.generate(4, (r) => SpotlightShelf(
+      title: 'Row $r', nodes: rows[r],
+      items: List.generate(7, (c) => SpotlightCard(
+        metadata: _meta('item-$r-$c', 'Item $r $c'),
+        image: null, title: 'Item $r $c',
+        shape: SpotlightCardShape.wide, onOpen: _noop,
+      )),
+    ));
+    await tester.pumpWidget(host([], shelves, expandFocusedCard: true));
+    await tester.pumpAndSettle();
+    rows[0][0].requestFocus();
+    await tester.pumpAndSettle();
+    for (final direction in [
+      ...List.filled(6, LogicalKeyboardKey.arrowRight),
+      ...List.filled(6, LogicalKeyboardKey.arrowLeft),
+      ...List.filled(3, LogicalKeyboardKey.arrowDown),
+      ...List.filled(3, LogicalKeyboardKey.arrowUp),
+    ]) {
+      await tester.sendKeyEvent(direction);
+      await tester.pumpAndSettle();
+      final node = rows.expand((row) => row).singleWhere((node) => node.hasFocus);
+      final box = node.context!.findRenderObject() as RenderBox;
+      final center = box.localToGlobal(box.size.center(Offset.zero));
+      expect(center.dx, inInclusiveRange(0, 800));
+      expect(center.dy, inInclusiveRange(0, 600));
+    }
+    expect(rows[0][0].hasFocus, isTrue);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('focused descriptions follow focus and toggle off cleanly', (tester) async {
+    final items = [_meta('tt1', 'Alpha'), _meta('tt2', 'Bravo')];
+    final shelves = [SpotlightShelf(
+      title: 'Popular', nodes: rows.first,
+      items: [for (final item in items) SpotlightCard(
+        metadata: item, image: null, title: item.name,
+        shape: SpotlightCardShape.wide, onOpen: () {},
+      )],
+    )];
+    await tester.pumpWidget(host([], shelves, expandFocusedCard: true));
+    await tester.pumpAndSettle();
+    rows.first.first.requestFocus();
+    await tester.pumpAndSettle();
+    expect(find.text('About Alpha.'), findsOneWidget);
+    expect(find.text('About Bravo.'), findsNothing);
+    final expandedWidth = (rows.first.first.context!.findRenderObject() as RenderBox).size.width;
+    final focusHostBefore = tester.element(find.byType(ParallaxFocus).first);
+    rows.first.last.requestFocus();
+    await tester.pumpAndSettle();
+    expect(find.text('About Alpha.'), findsNothing);
+    expect(find.text('About Bravo.'), findsOneWidget);
+    final restingWidth = (rows.first.first.context!.findRenderObject() as RenderBox).size.width;
+    expect(identical(focusHostBefore,
+        tester.element(find.byType(ParallaxFocus).first)), isTrue,
+        reason: 'focus changes must preserve the parallax animation subtree');
+    expect(expandedWidth, greaterThan(restingWidth));
+    await tester.pumpWidget(host([], shelves));
+    await tester.pumpAndSettle();
+    expect(find.text('About Bravo.'), findsNothing);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
+  });
 
   testWidgets(
     'cards receive entry focus before hero data and retain it on arrival',
