@@ -199,7 +199,8 @@ class _CollectionFolderScreenState extends State<CollectionFolderScreen> {
   final _spotlightNodes = <String, FocusNode>{};
   final _spotlightMetadata = <String, StremioMeta>{};
   bool _spotlightDetails = false;
-  bool _snowyMountain = false;
+  bool _animationsEnabled = false;
+  String _animationStyle = 'snowy_mountain';
   bool _spotlightTrailers = false;
   double _spotlightVolume = 0;
   bool get _spotlight =>
@@ -311,6 +312,7 @@ class _CollectionFolderScreenState extends State<CollectionFolderScreen> {
       final collectionStyle = await StorageService.getTvCollectionListStyle();
       final details = await StorageService.getSpotlightFocusDetails();
       final animations = await StorageService.getHomeAnimationsEnabled();
+      final animationStyle = await StorageService.getHomeAnimationStyle();
       final trailers = await StorageService.getHomeHeroTrailerEnabled();
       final audio = await StorageService.getAmbientTrailerAudioEnabled(
         AmbientTrailerSurface.homeHero,
@@ -342,8 +344,11 @@ class _CollectionFolderScreenState extends State<CollectionFolderScreen> {
       });
       // Appearance-only changes must apply even when the collection data is
       // unchanged, without reloading its rows or losing the scroll position.
-      if (_snowyMountain != animations) {
-        setState(() => _snowyMountain = animations);
+      if (_animationsEnabled != animations || _animationStyle != animationStyle) {
+        setState(() {
+          _animationsEnabled = animations;
+          _animationStyle = animationStyle;
+        });
       }
       if (_configurationError == null && signature == _configurationSignature) {
         return;
@@ -1522,7 +1527,8 @@ class _CollectionFolderScreenState extends State<CollectionFolderScreen> {
       heroAddon: null,
       onHeroOpen: (_, __) {},
       shelvesOnly: true,
-      snowyMountain: _snowyMountain,
+      animationsEnabled: _animationsEnabled,
+      animationStyle: _animationStyle,
       sections: shelves,
       dpad: widget.isTelevision,
       expandFocusedCard: _spotlightDetails,

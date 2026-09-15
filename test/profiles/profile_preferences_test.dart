@@ -54,6 +54,18 @@ void main() {
     },
   );
 
+  test('Midnight rain persists and validates as a portable animation choice', () async {
+    ProfileRuntime.initializeLegacy();
+    await StorageService.setHomeAnimationStyle('midnight_rain');
+    expect(await StorageService.getHomeAnimationStyle(), 'midnight_rain');
+    expect(SanitizedProfilePreferences.allowsEntry('home_animation_style', 'midnight_rain'), isTrue);
+    await expectLater(StorageService.setHomeAnimationStyle('unknown'), throwsArgumentError);
+    expect(await StorageService.getHomeAnimationStyle(), 'midnight_rain');
+    final prefs = await ProfilePreferences.instance();
+    await prefs.setString('home_animation_style', 'future-style');
+    expect(await StorageService.getHomeAnimationStyle(), 'snowy_mountain');
+  });
+
   test('Home animations default off, persist per profile and reset', () async {
     ProfileRuntime.initializeLegacy();
     expect(await StorageService.getHomeAnimationsEnabled(), isFalse);

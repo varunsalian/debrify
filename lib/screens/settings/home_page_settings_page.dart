@@ -627,6 +627,10 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
                                 value: 'snowy_mountain',
                                 child: Text('Snowy mountain'),
                               ),
+                              DropdownMenuItem(
+                                value: 'midnight_rain',
+                                child: Text('Midnight rain'),
+                              ),
                             ],
                             onChanged: (value) {
                               if (value != null) _setHomeAnimation(style: value);

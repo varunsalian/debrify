@@ -26,6 +26,7 @@ import 'row_tag_pill.dart';
 import 'home_row_focus.dart';
 import 'spotlight_card_trailer.dart';
 import 'snowy_mountain_background.dart';
+import 'midnight_rain_background.dart';
 import '../collections/collection_focus_glow.dart';
 import '../collections/collection_focus_art.dart';
 import '../movie_watched_badge.dart';
@@ -344,7 +345,8 @@ class SpotlightBoard extends StatefulWidget {
   final bool expandFocusedCard;
   final double cardTrailerVolume;
   final bool shelvesOnly;
-  final bool snowyMountain;
+  final bool animationsEnabled;
+  final String animationStyle;
   final bool forceCardParallax;
   final VoidCallback? onExitTop;
 
@@ -368,7 +370,8 @@ class SpotlightBoard extends StatefulWidget {
     this.expandFocusedCard = false,
     this.cardTrailerVolume = 0,
     this.shelvesOnly = false,
-    this.snowyMountain = false,
+    this.animationsEnabled = false,
+    this.animationStyle = 'snowy_mountain',
     this.forceCardParallax = false,
     this.onExitTop,
   });
@@ -1685,13 +1688,15 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
       // every pointer in its viewport, which is fine here because nothing in
       // the backdrop is interactive — the hero's tap/swipe surface and the
       // tappable dots ride in the list with the identity.
-      child: (m.compact || widget.shelvesOnly) && !widget.snowyMountain
+      child: (m.compact || widget.shelvesOnly) && !widget.animationsEnabled
           ? content
           : Stack(
               fit: StackFit.expand,
               children: [
-                if (widget.snowyMountain)
-                  Positioned.fill(child: SnowyMountainBackground(lowPower: widget.dpad)),
+                if (widget.animationsEnabled)
+                  Positioned.fill(child: widget.animationStyle == 'midnight_rain'
+                      ? MidnightRainBackground(lowPower: widget.dpad)
+                      : SnowyMountainBackground(lowPower: widget.dpad)),
                 if (!m.compact && !widget.shelvesOnly)
                   // Its own layer: the backdrop is a full-screen image under
                   // two full-screen gradients — the most expensive paint on
@@ -1954,7 +1959,7 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
   /// non-interactive by construction.
   Widget _heroBackdrop(double heroH) {
     final backdrop = _heroBackdropContent(heroH);
-    if (!widget.snowyMountain) return backdrop;
+    if (!widget.animationsEnabled) return backdrop;
     // Keep the title's artwork and trailer in the hero. Fade that entire
     // layer away on scroll to reveal the fixed mountain instead of painting
     // an opaque ground veil over it. The trailer host stays mounted.
@@ -2150,7 +2155,7 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
         // GPU renders as lag). Touch and desktop keep the continuous
         // scroll-driven ramp: free scrolling has no discrete states to snap
         // between, and those GPUs absorb the fill.
-        if (!widget.snowyMountain)
+        if (!widget.animationsEnabled)
           RepaintBoundary(
             child: IgnorePointer(
               child: widget.dpad

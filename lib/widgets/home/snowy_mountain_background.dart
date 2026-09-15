@@ -1,147 +1,22 @@
 import 'dart:math' as math;
 import 'dart:ui' as ui;
-
 import 'package:flutter/material.dart';
-import 'package:flutter/scheduler.dart';
+import 'animated_weather_background.dart';
 
-/// A viewport-fixed landscape with independently painted snow and mist.
-/// Its clock never rebuilds the image, hero, or scrolling shelves.
-class SnowyMountainBackground extends StatefulWidget {
+class SnowyMountainBackground extends StatelessWidget {
   const SnowyMountainBackground({super.key, this.lowPower = false});
-
-  /// Conservative rendering budget for TVs; the UI keeps its normal cadence.
   final bool lowPower;
 
   @override
-  State<SnowyMountainBackground> createState() =>
-      _SnowyMountainBackgroundState();
+  Widget build(BuildContext context) => AnimatedWeatherBackground(
+    assetPath: 'assets/images/home_snowy_mountain.jpg',
+    assetSize: const Size(1672, 941),
+    lowPower: lowPower,
+    painterFactory: _SnowPainter.new,
+  );
 }
 
-class _SnowyMountainBackgroundState extends State<SnowyMountainBackground>
-    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
-  final _time = ValueNotifier<double>(0);
-  late final Ticker _ticker;
-  Duration _previous = Duration.zero;
-  double _pendingSeconds = 0;
-  late final _SnowPainter _painter;
-  bool _foreground = true;
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addObserver(this);
-    _foreground =
-        WidgetsBinding.instance.lifecycleState == null ||
-        WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
-    _painter = _SnowPainter(_time);
-    _ticker = createTicker((elapsed) {
-      final delta = elapsed - _previous;
-      _previous = elapsed;
-      _pendingSeconds += (delta.inMicroseconds / 1000000).clamp(0.0, 0.05);
-      if (!widget.lowPower || _pendingSeconds >= 1 / 30 - 0.0001) {
-        _time.value += _pendingSeconds;
-        _pendingSeconds = 0;
-      }
-    });
-  }
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    _updateClock();
-  }
-
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    _foreground = state == AppLifecycleState.resumed;
-    _updateClock();
-  }
-
-  void _updateClock() {
-    final active =
-        _foreground &&
-        TickerMode.valuesOf(context).enabled &&
-        !MediaQuery.disableAnimationsOf(context) &&
-        (ModalRoute.isCurrentOf(context) ?? true);
-    if (active && !_ticker.isActive) {
-      _previous = Duration.zero;
-      _pendingSeconds = 0;
-      _ticker.start();
-    } else if (!active && _ticker.isActive) {
-      _ticker.stop();
-    }
-  }
-
-  @override
-  void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
-    _ticker.dispose();
-    _painter.dispose();
-    _time.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return IgnorePointer(
-      child: ExcludeSemantics(
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            // Cover-crop may be height-limited. Include that dimension so tall
-            // windows never decode a blurry background; never upscale the asset.
-            final ratio = MediaQuery.devicePixelRatioOf(context);
-            final decodeWidth =
-                (math.max(
-                          constraints.maxWidth,
-                          constraints.maxHeight * 1672 / 941,
-                        ) *
-                        ratio)
-                    .ceil()
-                    .clamp(1, 1672);
-            return ClipRect(
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  RepaintBoundary(
-                    child: Image.asset(
-                      'assets/images/home_snowy_mountain.jpg',
-                      cacheWidth: decodeWidth,
-                      fit: BoxFit.cover,
-                      alignment: const Alignment(0.3, 0),
-                      filterQuality: FilterQuality.medium,
-                      errorBuilder: (_, __, ___) =>
-                          const ColoredBox(color: Color(0xFF07111E)),
-                    ),
-                  ),
-                  const DecoratedBox(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [Color(0xB8030A15), Color(0x00030A15)],
-                        stops: [0, 0.85],
-                      ),
-                    ),
-                  ),
-                  const DecoratedBox(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [Color(0x1807111E), Color(0xD907111E)],
-                      ),
-                    ),
-                  ),
-                  RepaintBoundary(child: CustomPaint(painter: _painter)),
-                ],
-              ),
-            );
-          },
-        ),
-      ),
-    );
-  }
-}
-
-class _SnowPainter extends CustomPainter {
+class _SnowPainter extends WeatherPainter {
   _SnowPainter(this.time) : super(repaint: time) {
     // Rasterize the soft foreground flake once, not one radial shader per
     // flake per frame. 64px retains smooth edges above the maximum draw size.
@@ -167,7 +42,11 @@ class _SnowPainter extends CustomPainter {
   Size? _mistSize;
   ui.Shader? _mistShader;
 
-  void dispose() => _softFlake.dispose();
+  @override
+  void dispose() {
+    _softFlake.dispose();
+    _mistShader?.dispose();
+  }
 
   final ValueNotifier<double> time;
   static final _flakes = List.generate(180, (i) {
@@ -186,6 +65,7 @@ class _SnowPainter extends CustomPainter {
     final t = time.value;
     final paint = _paint..color = Colors.white;
     if (_mistSize != size) {
+      _mistShader?.dispose();
       _mistSize = size;
       _mistShader =
           const RadialGradient(

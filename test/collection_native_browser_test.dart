@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:debrify/widgets/home/snowy_mountain_background.dart';
+import 'package:debrify/widgets/home/midnight_rain_background.dart';
 import 'package:debrify/widgets/collections/collection_category_tabs.dart';
 import 'package:debrify/widgets/collections/tv_collection_titles.dart';
 import 'package:debrify/widgets/home/spotlight_board.dart';
@@ -26,11 +27,13 @@ import 'package:http/testing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
+  for (final style in ['snowy_mountain', 'midnight_rain']) {
   for (final tv in [false, true]) {
-    testWidgets('Spotlight collection inherits snow preference (TV: $tv)', (tester) async {
+    testWidgets('Spotlight collection inherits $style preference (TV: $tv)', (tester) async {
       SharedPreferences.setMockInitialValues({
         'tv_collection_list_style': 'spotlight',
         'home_animations_enabled': true,
+        'home_animation_style': style,
         'home_hero_trailer_enabled': false,
       });
       final source = CollectionCatalogSource.fromJson({
@@ -55,12 +58,20 @@ void main() {
       )));
       await tester.pumpAndSettle();
       final board = tester.widget<SpotlightBoard>(find.byType(SpotlightBoard));
-      expect(board.snowyMountain, isTrue);
+      expect(board.animationsEnabled, isTrue);
       expect(board.shelvesOnly, isTrue);
-      expect(tester.widget<SnowyMountainBackground>(find.byType(SnowyMountainBackground)).lowPower, tv);
+      expect(board.animationStyle, style);
+      if (style == 'midnight_rain') {
+        expect(tester.widget<MidnightRainBackground>(find.byType(MidnightRainBackground)).lowPower, tv);
+        expect(find.byType(SnowyMountainBackground), findsNothing);
+      } else {
+        expect(tester.widget<SnowyMountainBackground>(find.byType(SnowyMountainBackground)).lowPower, tv);
+      }
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox.shrink());
     });
+  }
+
   }
 
   testWidgets('Spotlight short pointer shelves expose paging and sibling retries', (tester) async {

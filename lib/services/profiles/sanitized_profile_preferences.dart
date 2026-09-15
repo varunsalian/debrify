@@ -76,7 +76,7 @@ abstract final class SanitizedProfilePreferences {
       case 'tv_home_style':
         return value is String && _tvHomeStyles.contains(value);
       case 'home_animation_style':
-        return value == 'snowy_mountain';
+        return value == 'snowy_mountain' || value == 'midnight_rain';
       case 'home_card_orientation':
         return value is String &&
             const <String>{'portrait', 'landscape'}.contains(value);

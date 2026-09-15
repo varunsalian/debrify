@@ -2707,6 +2707,7 @@ class _SearchScreenState extends State<SearchScreen>
     final reloadSession = HomeCollectionsStore.captureSession();
     final spotlightFocusDetails = await StorageService.getSpotlightFocusDetails();
     final homeAnimationsEnabled = await StorageService.getHomeAnimationsEnabled();
+    final homeAnimationStyle = await StorageService.getHomeAnimationStyle();
     final cardSettings = await Future.wait<Object>([
       StorageService.getHomeCardOrientation(),
       StorageService.getHomeHideCardTitlesAndRatings(),
@@ -2723,7 +2724,8 @@ class _SearchScreenState extends State<SearchScreen>
         hideCatalogAddonNames != _hideHomeCatalogAddonNames ||
         hideCollectionNames != _hideHomeCollectionNames ||
         spotlightFocusDetails != _spotlightFocusDetails ||
-        homeAnimationsEnabled != _homeAnimationsEnabled) {
+        homeAnimationsEnabled != _homeAnimationsEnabled ||
+        homeAnimationStyle != _homeAnimationStyle) {
       setState(() {
         _homeCardOrientation = orientation;
         _hideHomeCardTitlesAndRatings = hideTitlesAndRatings;
@@ -2731,6 +2733,7 @@ class _SearchScreenState extends State<SearchScreen>
         _hideHomeCollectionNames = hideCollectionNames;
         _spotlightFocusDetails = spotlightFocusDetails;
         _homeAnimationsEnabled = homeAnimationsEnabled;
+        _homeAnimationStyle = homeAnimationStyle;
       });
     }
     // Merged-CW toggles: re-read, and on a change re-sync each provider's node
@@ -6840,6 +6843,7 @@ class _SearchScreenState extends State<SearchScreen>
   bool _hideHomeCollectionNames = false;
   bool _spotlightFocusDetails = false;
   bool _homeAnimationsEnabled = false;
+  String _homeAnimationStyle = 'snowy_mountain';
 
   bool get _homeLandscapeCards =>
       _homeCardOrientation == HomeCardOrientation.landscape;
@@ -7118,6 +7122,7 @@ class _SearchScreenState extends State<SearchScreen>
   Future<void> _loadHomeCardOrientation() async {
     final spotlightFocusDetails = await StorageService.getSpotlightFocusDetails();
     final homeAnimationsEnabled = await StorageService.getHomeAnimationsEnabled();
+    final homeAnimationStyle = await StorageService.getHomeAnimationStyle();
     final values = await Future.wait<Object>([
       StorageService.getHomeCardOrientation(),
       StorageService.getHomeHideCardTitlesAndRatings(),
@@ -7134,7 +7139,8 @@ class _SearchScreenState extends State<SearchScreen>
         hideCatalogAddonNames == _hideHomeCatalogAddonNames &&
         hideCollectionNames == _hideHomeCollectionNames &&
         spotlightFocusDetails == _spotlightFocusDetails &&
-        homeAnimationsEnabled == _homeAnimationsEnabled) {
+        homeAnimationsEnabled == _homeAnimationsEnabled &&
+        homeAnimationStyle == _homeAnimationStyle) {
       return;
     }
     setState(() {
@@ -7144,6 +7150,7 @@ class _SearchScreenState extends State<SearchScreen>
       _hideHomeCollectionNames = hideCollectionNames;
       _spotlightFocusDetails = spotlightFocusDetails;
       _homeAnimationsEnabled = homeAnimationsEnabled;
+      _homeAnimationStyle = homeAnimationStyle;
     });
   }
 
@@ -8062,7 +8069,8 @@ class _SearchScreenState extends State<SearchScreen>
     final rails = _canvasRails;
     return SpotlightBoard(
       key: _spotlightKey,
-      snowyMountain: _homeAnimationsEnabled,
+      animationsEnabled: _homeAnimationsEnabled,
+      animationStyle: _homeAnimationStyle,
       hero: _spotlightHero,
       sections: _spotlightShelves,
       heroNode: _spotlightHeroNode,

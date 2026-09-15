@@ -12,6 +12,7 @@ import 'package:debrify/theme/app_theme_scope.dart';
 import 'package:debrify/widgets/detail/theme/detail_themes.dart';
 import 'package:debrify/widgets/home/spotlight_board.dart';
 import 'package:debrify/widgets/home/snowy_mountain_background.dart';
+import 'package:debrify/widgets/home/midnight_rain_background.dart';
 
 /// The board's second life on phones, tablets and desktop.
 ///
@@ -76,6 +77,7 @@ void main() {
     List<SpotlightShelf> sections, {
     required bool dpad,
     bool snowyMountain = false,
+    String animationStyle = 'snowy_mountain',
     Widget? trailer,
     void Function(StremioMeta, StremioAddon)? onHeroOpen,
     Future<bool> Function()? onLoadMoreShelves,
@@ -92,7 +94,8 @@ void main() {
               onHeroOpen: onHeroOpen ?? (_, __) {},
               onLoadMoreShelves: onLoadMoreShelves,
               dpad: dpad,
-              snowyMountain: snowyMountain,
+              animationsEnabled: snowyMountain,
+              animationStyle: animationStyle,
               trailer: trailer,
             ),
           ),
@@ -115,7 +118,8 @@ void main() {
     return tester.getSize(clips.first);
   }
 
-  testWidgets('snow keeps hero artwork and reveals mountains on desktop scroll', (tester) async {
+  for (final style in ['snowy_mountain', 'midnight_rain']) {
+  testWidgets('$style keeps hero artwork and reveals weather on desktop scroll', (tester) async {
     surface(tester, const Size(1200, 800));
     final sections = List.generate(8, (i) => _section('Shelf $i', [_meta('$i', 'Title $i')]));
     addTearDown(() {
@@ -125,7 +129,7 @@ void main() {
     });
     const trailerKey = ValueKey('idle-trailer-host');
     await tester.pumpWidget(host([StremioMeta(id: 'hero', type: 'movie', name: 'Hero', background: 'https://example.invalid/hero.jpg')], sections,
-        dpad: false, snowyMountain: true,
+        dpad: false, snowyMountain: true, animationStyle: style,
         trailer: const SizedBox.expand(key: trailerKey)));
     await tester.pump(const Duration(milliseconds: 100));
     final trailer = find.byKey(trailerKey);
@@ -135,15 +139,17 @@ void main() {
     final fade = find.ancestor(of: trailer, matching: find.byType(Opacity));
     expect(fade, findsOneWidget);
     expect(tester.widget<Opacity>(fade).opacity, 1);
-    final mountainRect = tester.getRect(find.byType(SnowyMountainBackground));
+    final mountainRect = tester.getRect(find.byType(style == 'midnight_rain' ? MidnightRainBackground : SnowyMountainBackground));
     await tester.drag(find.byType(ListView).first, const Offset(0, -700));
     await tester.pump(const Duration(milliseconds: 500));
     expect(tester.widget<Opacity>(fade).opacity, 0);
-    expect(tester.getRect(find.byType(SnowyMountainBackground)), mountainRect);
+    expect(tester.getRect(find.byType(style == 'midnight_rain' ? MidnightRainBackground : SnowyMountainBackground)), mountainRect);
     expect(trailer, findsOneWidget, reason: 'Keep the trailer lifecycle host mounted');
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
   });
+
+  }
 
   for (final width in [430.0, 1200.0]) {
     testWidgets('snowy mountains stay fixed while scrolling at $width', (tester) async {
