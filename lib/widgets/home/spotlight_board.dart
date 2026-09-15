@@ -25,6 +25,7 @@ import '../../utils/tv_keys.dart';
 import 'row_tag_pill.dart';
 import 'home_row_focus.dart';
 import 'spotlight_card_trailer.dart';
+import 'snowy_mountain_background.dart';
 import '../collections/collection_focus_glow.dart';
 import '../collections/collection_focus_art.dart';
 import '../movie_watched_badge.dart';
@@ -343,6 +344,7 @@ class SpotlightBoard extends StatefulWidget {
   final bool expandFocusedCard;
   final double cardTrailerVolume;
   final bool shelvesOnly;
+  final bool snowyMountain;
   final bool forceCardParallax;
   final VoidCallback? onExitTop;
 
@@ -366,6 +368,7 @@ class SpotlightBoard extends StatefulWidget {
     this.expandFocusedCard = false,
     this.cardTrailerVolume = 0,
     this.shelvesOnly = false,
+    this.snowyMountain = false,
     this.forceCardParallax = false,
     this.onExitTop,
   });
@@ -1682,25 +1685,28 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
       // every pointer in its viewport, which is fine here because nothing in
       // the backdrop is interactive — the hero's tap/swipe surface and the
       // tappable dots ride in the list with the identity.
-      child: m.compact || widget.shelvesOnly
+      child: (m.compact || widget.shelvesOnly) && !widget.snowyMountain
           ? content
           : Stack(
               fit: StackFit.expand,
               children: [
-                // Its own layer: the backdrop is a full-screen image under
-                // two full-screen gradients — the most expensive paint on
-                // the page. Isolated, a board rebuild (row moves, the
-                // trailer's rolling flips) re-composites a cached texture
-                // instead of re-rasterising all three.
-                RepaintBoundary(
-                  child: Align(
-                    alignment: Alignment.topCenter,
-                    child: SizedBox(
-                      height: heroH,
-                      child: _heroBackdrop(heroH),
+                if (widget.snowyMountain)
+                  Positioned.fill(child: SnowyMountainBackground(lowPower: widget.dpad)),
+                if (!m.compact && !widget.shelvesOnly)
+                  // Its own layer: the backdrop is a full-screen image under
+                  // two full-screen gradients — the most expensive paint on
+                  // the page. Isolated, a board rebuild (row moves, the
+                  // trailer's rolling flips) re-composites a cached texture
+                  // instead of re-rasterising all three.
+                  RepaintBoundary(
+                    child: Align(
+                      alignment: Alignment.topCenter,
+                      child: SizedBox(
+                        height: heroH,
+                        child: _heroBackdrop(heroH),
+                      ),
                     ),
                   ),
-                ),
                 content,
                 if (_loadingMoreShelves)
                   Positioned(
@@ -1947,6 +1953,36 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
   /// BEHIND the scroll view (see [_board]); everything here is
   /// non-interactive by construction.
   Widget _heroBackdrop(double heroH) {
+    final backdrop = _heroBackdropContent(heroH);
+    if (!widget.snowyMountain) return backdrop;
+    // Keep the title's artwork and trailer in the hero. Fade that entire
+    // layer away on scroll to reveal the fixed mountain instead of painting
+    // an opaque ground veil over it. The trailer host stays mounted.
+    return AnimatedBuilder(
+      animation: Listenable.merge([_scroll, _veilMetricsRevision]),
+      // TV already snaps the hero visibility on row changes. Its existing
+      // bottom scrim supplies the blend without an extra offscreen mask.
+      child: widget.dpad ? backdrop : ShaderMask(
+        blendMode: BlendMode.dstIn,
+        shaderCallback: (bounds) => const LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Colors.white, Colors.white, Colors.transparent],
+          stops: [0, 0.7, 1],
+        ).createShader(bounds),
+        child: backdrop,
+      ),
+      builder: (context, child) {
+        final off = _scroll.hasClients ? _scroll.offset : 0.0;
+        final opacity = widget.dpad
+            ? (_row < 0 ? 1.0 : 0.0)
+            : (1 - off / (heroH * 0.8)).clamp(0.0, 1.0);
+        return Opacity(opacity: opacity, child: child);
+      },
+    );
+  }
+
+  Widget _heroBackdropContent(double heroH) {
     final item = _heroItem;
     if (item == null) return const SizedBox.shrink();
     final url = _heroArt(item);
@@ -2114,20 +2150,21 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
         // GPU renders as lag). Touch and desktop keep the continuous
         // scroll-driven ramp: free scrolling has no discrete states to snap
         // between, and those GPUs absorb the fill.
-        RepaintBoundary(
-          child: IgnorePointer(
-            child: widget.dpad
-                ? _veil(ground, _row < 0 ? 0.0 : (_row == 0 ? 0.72 : 1.0))
-                : AnimatedBuilder(
-                    animation: Listenable.merge([_scroll, _veilMetricsRevision]),
-                    builder: (context, _) {
-                      final off = _scroll.hasClients ? _scroll.offset : 0.0;
-                      final t = (off / (heroH * 0.8)).clamp(0.0, 1.0);
-                      return _veil(ground, t);
-                    },
-                  ),
+        if (!widget.snowyMountain)
+          RepaintBoundary(
+            child: IgnorePointer(
+              child: widget.dpad
+                  ? _veil(ground, _row < 0 ? 0.0 : (_row == 0 ? 0.72 : 1.0))
+                  : AnimatedBuilder(
+                      animation: Listenable.merge([_scroll, _veilMetricsRevision]),
+                      builder: (context, _) {
+                        final off = _scroll.hasClients ? _scroll.offset : 0.0;
+                        final t = (off / (heroH * 0.8)).clamp(0.0, 1.0);
+                        return _veil(ground, t);
+                      },
+                    ),
+            ),
           ),
-        ),
       ],
     );
   }

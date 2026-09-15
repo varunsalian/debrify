@@ -6396,6 +6396,30 @@ class StorageService {
     await prefs.setBool(_homeHideCollectionNamesKey, value);
   }
 
+  static Future<bool> getHomeAnimationsEnabled() async {
+    final prefs = await ProfilePreferences.instance();
+    return prefs.getBool('home_animations_enabled') ?? false;
+  }
+
+  static Future<void> setHomeAnimationsEnabled(bool value) async {
+    final prefs = await ProfilePreferences.instance();
+    await prefs.setBool('home_animations_enabled', value);
+  }
+
+  static Future<String> getHomeAnimationStyle() async {
+    final prefs = await ProfilePreferences.instance();
+    return switch (prefs.getString('home_animation_style')) {
+      'snowy_mountain' => 'snowy_mountain',
+      _ => 'snowy_mountain',
+    };
+  }
+
+  static Future<void> setHomeAnimationStyle(String value) async {
+    if (value != 'snowy_mountain') throw ArgumentError.value(value);
+    final prefs = await ProfilePreferences.instance();
+    await prefs.setString('home_animation_style', value);
+  }
+
   static Future<bool> getSpotlightFocusDetails() async {
     final prefs = await ProfilePreferences.instance();
     return prefs.getBool('spotlight_focus_details') ?? true;
@@ -6419,6 +6443,8 @@ class StorageService {
     await prefs.remove('${_homeCwMergedRowsKeyPrefix}simkl');
     await prefs.remove('${_homeCwMergedRowsKeyPrefix}mdblist');
     await prefs.remove(_homeFavoritesOpenFolderKey);
+    await prefs.remove('home_animations_enabled');
+    await prefs.remove('home_animation_style');
     await prefs.remove(_homeCardOrientationKey);
     await prefs.remove(_homeHideCardTitlesAndRatingsKey);
     await prefs.remove(_homeHideCatalogAddonNamesKey);

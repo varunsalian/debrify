@@ -54,6 +54,24 @@ void main() {
     },
   );
 
+  test('Home animations default off, persist per profile and reset', () async {
+    ProfileRuntime.initializeLegacy();
+    expect(await StorageService.getHomeAnimationsEnabled(), isFalse);
+    expect(await StorageService.getHomeAnimationStyle(), 'snowy_mountain');
+    await StorageService.setHomeAnimationsEnabled(true);
+    await StorageService.setHomeAnimationStyle('snowy_mountain');
+    expect(await StorageService.getHomeAnimationsEnabled(), isTrue);
+    ProfileRuntime.initializeCommitted(ProfileScope(
+      profileId: 'one', dataGeneration: 1, sessionEpoch: 1,
+    ));
+    expect(await StorageService.getHomeAnimationsEnabled(), isFalse);
+    await StorageService.setHomeAnimationsEnabled(true);
+    await StorageService.clearAllHomePageSettings();
+    expect(await StorageService.getHomeAnimationsEnabled(), isFalse);
+    expect(await StorageService.getHomeAnimationStyle(), 'snowy_mountain');
+    expect((await SharedPreferences.getInstance()).getBool('home_animations_enabled'), isTrue);
+  });
+
   test('legacy mode is byte-compatible with existing keys', () async {
     ProfileRuntime.initializeLegacy();
     final prefs = await ProfilePreferences.instance();

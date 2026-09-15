@@ -34,6 +34,8 @@ abstract final class ProfileAppearancePreferences {
     'discover_show_ratings',
     'discover_show_titles',
     'home_card_orientation',
+    'home_animations_enabled',
+    'home_animation_style',
     'home_collections_gif_touch',
     'home_collections_gif_remote',
     'home_collections_folder_layout',

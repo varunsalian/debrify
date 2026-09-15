@@ -53,6 +53,8 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
   bool _hideCardTitlesAndRatings = false;
   bool _hideCatalogAddonNames = false;
   bool _spotlightFocusDetails = false;
+  bool _homeAnimationsEnabled = false;
+  String _homeAnimationStyle = 'snowy_mountain';
   HomeHeroSource _heroSource = (mode: HomeHeroSourceMode.random, ids: []);
   List<StremioAddon> _addons = [];
 
@@ -249,6 +251,8 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
           await StorageService.getHomeHideCatalogAddonNames();
       final heroSource = await StorageService.getHomeHeroSource();
       final spotlightFocusDetails = await StorageService.getSpotlightFocusDetails();
+      final homeAnimationsEnabled = await StorageService.getHomeAnimationsEnabled();
+      final homeAnimationStyle = await StorageService.getHomeAnimationStyle();
 
       // Only the two views that the current Home screen can render are valid.
       // Migrate the former All, Addon, Trakt, and other retired choices to
@@ -290,6 +294,8 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
         _hideCardTitlesAndRatings = hideCardTitlesAndRatings;
         _hideCatalogAddonNames = hideCatalogAddonNames;
         _spotlightFocusDetails = spotlightFocusDetails;
+        _homeAnimationsEnabled = homeAnimationsEnabled;
+        _homeAnimationStyle = homeAnimationStyle;
         _heroSource = heroSource;
         _loading = false;
       });
@@ -376,6 +382,24 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('Failed to save setting: $e')));
+    }
+  }
+
+  Future<void> _setHomeAnimation({bool? enabled, String? style}) async {
+    try {
+      if (style != null) await StorageService.setHomeAnimationStyle(style);
+      if (enabled != null) await StorageService.setHomeAnimationsEnabled(enabled);
+      if (!mounted) return;
+      setState(() {
+        if (enabled != null) _homeAnimationsEnabled = enabled;
+        if (style != null) _homeAnimationStyle = style;
+      });
+      MainPageBridge.notifyHomeSettingsChanged();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to save setting: $e')),
+      );
     }
   }
 
@@ -577,6 +601,42 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
                   ],
                 ),
                 const SizedBox(height: 16),
+                if (_spotlightLayoutActive) ...[
+                  SettingsSection(
+                    title: 'Spotlight Animations',
+                    children: [
+                      SettingsToggleTile(
+                        icon: Icons.ac_unit_rounded,
+                        title: 'Enable animations',
+                        subtitle: 'Animate the background behind your Home rows',
+                        value: _homeAnimationsEnabled,
+                        onChanged: (value) => _setHomeAnimation(enabled: value),
+                      ),
+                      if (_homeAnimationsEnabled)
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+                          child: DropdownButtonFormField<String>(
+                            isExpanded: true,
+                            initialValue: _homeAnimationStyle,
+                            decoration: const InputDecoration(
+                              labelText: 'Animation',
+                              prefixIcon: Icon(Icons.landscape_rounded),
+                            ),
+                            items: const [
+                              DropdownMenuItem(
+                                value: 'snowy_mountain',
+                                child: Text('Snowy mountain'),
+                              ),
+                            ],
+                            onChanged: (value) {
+                              if (value != null) _setHomeAnimation(style: value);
+                            },
+                          ),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                ],
                 SettingsSection(
                   title: 'Home Cards',
                   children: [

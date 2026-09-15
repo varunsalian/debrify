@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'package:cached_network_image/cached_network_image.dart';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -9,6 +11,7 @@ import 'package:debrify/theme/app_theme.dart';
 import 'package:debrify/theme/app_theme_scope.dart';
 import 'package:debrify/widgets/detail/theme/detail_themes.dart';
 import 'package:debrify/widgets/home/spotlight_board.dart';
+import 'package:debrify/widgets/home/snowy_mountain_background.dart';
 
 /// The board's second life on phones, tablets and desktop.
 ///
@@ -72,6 +75,8 @@ void main() {
     List<StremioMeta> heroItems,
     List<SpotlightShelf> sections, {
     required bool dpad,
+    bool snowyMountain = false,
+    Widget? trailer,
     void Function(StremioMeta, StremioAddon)? onHeroOpen,
     Future<bool> Function()? onLoadMoreShelves,
   }) =>
@@ -87,6 +92,8 @@ void main() {
               onHeroOpen: onHeroOpen ?? (_, __) {},
               onLoadMoreShelves: onLoadMoreShelves,
               dpad: dpad,
+              snowyMountain: snowyMountain,
+              trailer: trailer,
             ),
           ),
         ),
@@ -106,6 +113,60 @@ void main() {
     // The FIRST shelf card clip: the hero paints no ClipRRect.
     expect(clips, findsWidgets);
     return tester.getSize(clips.first);
+  }
+
+  testWidgets('snow keeps hero artwork and reveals mountains on desktop scroll', (tester) async {
+    surface(tester, const Size(1200, 800));
+    final sections = List.generate(8, (i) => _section('Shelf $i', [_meta('$i', 'Title $i')]));
+    addTearDown(() {
+      for (final section in sections) {
+        for (final node in section.nodes) { node.dispose(); }
+      }
+    });
+    const trailerKey = ValueKey('idle-trailer-host');
+    await tester.pumpWidget(host([StremioMeta(id: 'hero', type: 'movie', name: 'Hero', background: 'https://example.invalid/hero.jpg')], sections,
+        dpad: false, snowyMountain: true,
+        trailer: const SizedBox.expand(key: trailerKey)));
+    await tester.pump(const Duration(milliseconds: 100));
+    final trailer = find.byKey(trailerKey);
+    expect(find.byWidgetPredicate((w) => w is CachedNetworkImage &&
+        w.imageUrl == 'https://example.invalid/hero.jpg'), findsOneWidget);
+    // Fade the hero artwork and trailer together, revealing the mountains.
+    final fade = find.ancestor(of: trailer, matching: find.byType(Opacity));
+    expect(fade, findsOneWidget);
+    expect(tester.widget<Opacity>(fade).opacity, 1);
+    final mountainRect = tester.getRect(find.byType(SnowyMountainBackground));
+    await tester.drag(find.byType(ListView).first, const Offset(0, -700));
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(tester.widget<Opacity>(fade).opacity, 0);
+    expect(tester.getRect(find.byType(SnowyMountainBackground)), mountainRect);
+    expect(trailer, findsOneWidget, reason: 'Keep the trailer lifecycle host mounted');
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  for (final width in [430.0, 1200.0]) {
+    testWidgets('snowy mountains stay fixed while scrolling at $width', (tester) async {
+      surface(tester, Size(width, 800));
+      final sections = List.generate(8, (i) => _section('Shelf $i', [_meta('$i', 'Title $i')]));
+      addTearDown(() {
+        for (final section in sections) {
+          for (final node in section.nodes) { node.dispose(); }
+        }
+      });
+      await tester.pumpWidget(host([_meta('hero', 'Hero')], sections,
+          dpad: false, snowyMountain: true));
+      await tester.pump(const Duration(milliseconds: 100));
+      final background = find.byType(SnowyMountainBackground);
+      final before = tester.getRect(background);
+      final vertical = find.byType(ListView).first;
+      await tester.drag(vertical, const Offset(0, -600));
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(tester.getRect(background), before);
+      expect(find.byType(SnowyMountainBackground), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
   }
 
   testWidgets('extent corrections do not rebuild the whole touch board', (
