@@ -6,11 +6,13 @@ void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
   test('Spotlight focus details persist and reset with Home settings', () async {
-    expect(await StorageService.getSpotlightFocusDetails(), isFalse);
+    expect(await StorageService.getSpotlightFocusDetails(), isTrue);
     await StorageService.setSpotlightFocusDetails(true);
     expect(await StorageService.getSpotlightFocusDetails(), isTrue);
-    await StorageService.clearAllHomePageSettings();
+    await StorageService.setSpotlightFocusDetails(false);
     expect(await StorageService.getSpotlightFocusDetails(), isFalse);
+    await StorageService.clearAllHomePageSettings();
+    expect(await StorageService.getSpotlightFocusDetails(), isTrue);
   });
 
   test('Hold to Quick Play defaults off and persists changes', () async {

@@ -1559,6 +1559,7 @@ class StorageService {
   }
 
   static const tvCollectionListStyles = {
+    'spotlight',
     'grid',
     'gallery',
     'filmstrip',
@@ -1567,14 +1568,14 @@ class StorageService {
   static Future<String> getTvCollectionListStyle() async {
     final prefs = await ProfilePreferences.instance();
     final value = prefs.getString('tv_collection_list_style');
-    return tvCollectionListStyles.contains(value) ? value! : 'filmstrip';
+    return tvCollectionListStyles.contains(value) ? value! : 'spotlight';
   }
 
   static Future<void> setTvCollectionListStyle(String value) async {
     final prefs = await ProfilePreferences.instance();
     await prefs.setString(
       'tv_collection_list_style',
-      tvCollectionListStyles.contains(value) ? value : 'filmstrip',
+      tvCollectionListStyles.contains(value) ? value : 'spotlight',
     );
   }
 
@@ -6385,7 +6386,7 @@ class StorageService {
 
   static Future<bool> getSpotlightFocusDetails() async {
     final prefs = await ProfilePreferences.instance();
-    return prefs.getBool('spotlight_focus_details') ?? false;
+    return prefs.getBool('spotlight_focus_details') ?? true;
   }
 
   static Future<void> setSpotlightFocusDetails(bool value) async {

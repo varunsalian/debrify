@@ -42,16 +42,16 @@ void main() {
     });
   }
   test(
-    'collection style defaults to Filmstrip and rejects unknown values',
+    'collection style defaults to Spotlight and preserves explicit selections',
     () async {
       SharedPreferences.setMockInitialValues({});
-      expect(await StorageService.getTvCollectionListStyle(), 'filmstrip');
-      for (final style in ['grid', 'gallery', 'filmstrip', 'journal']) {
+      expect(await StorageService.getTvCollectionListStyle(), 'spotlight');
+      for (final style in ['grid', 'gallery', 'filmstrip', 'journal', 'spotlight']) {
         await StorageService.setTvCollectionListStyle(style);
         expect(await StorageService.getTvCollectionListStyle(), style);
       }
       await StorageService.setTvCollectionListStyle('unknown');
-      expect(await StorageService.getTvCollectionListStyle(), 'filmstrip');
+      expect(await StorageService.getTvCollectionListStyle(), 'spotlight');
     },
   );
   for (final layout in ['gallery', 'filmstrip', 'journal']) {

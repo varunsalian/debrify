@@ -66,6 +66,38 @@ List<FocusNode> _rowNodes(int n) => [
 void _noop() {}
 
 void main() {
+  for (final width in [550.0, 900.0, 1400.0]) {
+    testWidgets('shelf entry uses actual non-TV geometry at width $width', (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      tester.view.physicalSize = Size(width, 800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final key = GlobalKey<SpotlightBoardState>();
+      final heroNode = FocusNode();
+      final nodes = List.generate(65, (_) => FocusNode());
+      await tester.pumpWidget(MaterialApp(home: AppThemeScope(
+        theme: AppTheme.fromDetail(DetailThemes.byId('signal')),
+        child: Scaffold(body: SpotlightBoard(
+          key: key, hero: const [], heroNode: heroNode, heroAddon: null,
+          onHeroOpen: (_, __) {}, dpad: false, shelvesOnly: true,
+          trailersEnabled: false,
+          sections: List.generate(nodes.length, (i) => SpotlightShelf(
+            id: '$i', title: 'Category $i', tag: 'Source', nodes: [nodes[i]],
+            items: [SpotlightCard(title: 'Title $i', subtitle: '2026', onOpen: () {})],
+          )),
+        )),
+      )));
+      await tester.pumpAndSettle();
+      key.currentState!.focusShelf(60);
+      await tester.pumpAndSettle();
+      expect(nodes[60].hasFocus, isTrue);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox());
+      heroNode.dispose();
+      for (final node in nodes) { node.dispose(); }
+    });
+  }
   late FocusNode hero;
   late List<List<FocusNode>> rows;
 

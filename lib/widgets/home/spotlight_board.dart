@@ -342,6 +342,8 @@ class SpotlightBoard extends StatefulWidget {
   final bool showCardTitlesAndRatings;
   final bool expandFocusedCard;
   final double cardTrailerVolume;
+  final bool shelvesOnly;
+  final VoidCallback? onExitTop;
 
   const SpotlightBoard({
     super.key,
@@ -362,6 +364,8 @@ class SpotlightBoard extends StatefulWidget {
     this.showCardTitlesAndRatings = true,
     this.expandFocusedCard = false,
     this.cardTrailerVolume = 0,
+    this.shelvesOnly = false,
+    this.onExitTop,
   });
 
   /// The scrolled ground, taken from the THEME.
@@ -923,7 +927,7 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
           previous: [for (final s in old.sections) s.id ?? ''],
           next: [for (final s in widget.sections) s.id ?? ''],
           anchor: section.id!,
-          extentOf: (id) => _tvShelfExtent(
+          extentOf: (id) => _shelfExtent(
             widget.sections.firstWhere((s) => s.id == id), _lastMetrics!),
         );
         break;
@@ -1282,6 +1286,10 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
 
   void _up() {
     if (_row <= 0) {
+      if (widget.shelvesOnly) {
+        widget.onExitTop?.call();
+        return;
+      }
       // Local shelves can precede hero data. Do not leave a pending focus
       // request that steals the cursor when the hero eventually mounts.
       if (widget.hero.isEmpty || !(widget.heroNode.context?.mounted ?? false)) {
@@ -1349,6 +1357,22 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
     });
   }
 
+  /// Enter a collection at its selected category, including off-screen rows.
+  void focusShelf(int row) {
+    if (row < 0 || row >= widget.sections.length) return;
+    final metrics = _lastMetrics;
+    if (metrics == null || !_scroll.hasClients) return;
+    setState(() => _row = row);
+    final offset = widget.sections.take(row).fold<double>(
+      0, (sum, shelf) => sum + _shelfExtent(shelf, metrics));
+    // A lazy list's maximum is only an estimate until distant rows mount.
+    // Let layout clamp this exact offset, rather than stopping at that estimate.
+    _scroll.jumpTo(offset);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _focusRow(row, const Offset(0, 1));
+    });
+  }
+
   /// Where the cursor ACTUALLY is in [nodes].
   ///
   /// `_col` is bookkeeping and can drift — a scroll-into-view, a rebuild, or
@@ -1379,6 +1403,9 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
     if (nodes.isEmpty) return;
     final at = _liveCol(nodes);
     final next = at + delta;
+    if (widget.shelvesOnly && delta > 0 && next >= nodes.length) {
+      widget.onLoadMoreRow?.call(_row);
+    }
     if (next < 0 || next >= nodes.length) return;
     // No setState: a horizontal step changes nothing this board PAINTS —
     // the cursor's visuals live inside each cell's own Focus widget, and
@@ -1574,6 +1601,9 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
         // the page overscrolls past its own last shelf. Sizing the hero
         // box is the version the scroll extent agrees with.
         if (index == 0) {
+          if (widget.shelvesOnly) {
+            return const SizedBox.shrink(key: ValueKey('spotlight-hero-band'));
+          }
           return SizedBox(
             key: const ValueKey('spotlight-hero-band'),
             height: heroH * (1 - (m.compact ? 0 : _shelfOverlapFraction)),
@@ -1590,7 +1620,17 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
         final i = index - 1;
         return KeyedSubtree(
           key: ValueKey(shelfKey(i)),
-          child: _shelf(i, m),
+          child: NotificationListener<ScrollUpdateNotification>(
+            onNotification: (notification) {
+              if (widget.shelvesOnly &&
+                  notification.metrics.axis == Axis.horizontal &&
+                  notification.metrics.extentAfter < 400) {
+                widget.onLoadMoreRow?.call(i);
+              }
+              return false;
+            },
+            child: _shelf(i, m),
+          ),
         );
       },
     );
@@ -1632,7 +1672,7 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
       // every pointer in its viewport, which is fine here because nothing in
       // the backdrop is interactive — the hero's tap/swipe surface and the
       // tappable dots ride in the list with the identity.
-      child: m.compact
+      child: m.compact || widget.shelvesOnly
           ? content
           : Stack(
               fit: StackFit.expand,
@@ -2240,7 +2280,7 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
     );
   }
 
-  double _tvShelfExtent(SpotlightShelf section, _M m) {
+  double _shelfExtent(SpotlightShelf section, _M m) {
     double textHeight(String text, TextStyle style) {
       final painter = TextPainter(
         text: TextSpan(text: text, style: DefaultTextStyle.of(context).style.merge(style)),
@@ -2257,15 +2297,16 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
       header = textHeight(section.title, _shelfTitleStyle(m));
       final tag = section.tag;
       if (tag != null && tag.isNotEmpty) {
-        final size = m.title * .72;
+        final size = widget.dpad ? m.title * .72 : 10.0;
         final tagHeight = textHeight(tag.toUpperCase(), RowTagPill.textStyle(size)) +
             size * .56 + 2; // vertical padding and the two 1px borders
         if (tagHeight > header) header = tagHeight;
       }
     }
     final cardHeight = _shelfCardHeight(section, m);
-    return (section.showHeader ? 20 : 8) + header +
-        m.liftUpFor(cardHeight) + cardHeight + m.liftDownFor(cardHeight);
+    return (section.showHeader ? (widget.dpad ? 20 : 34) : (widget.dpad ? 8 : 14)) + header +
+        m.liftUpFor(cardHeight) + cardHeight + m.liftDownFor(cardHeight) +
+        (_shelfHasCaptions(section, m) ? m.captionBlock : 0);
   }
 
   Widget _shelfTitle(SpotlightShelf section, _M m) {
@@ -2324,10 +2365,7 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
         : m.posterH;
   }
 
-  Widget _shelf(int i, _M m) {
-    final section = widget.sections[i];
-    final nodes = section.nodes;
-    final cardHeight = _shelfCardHeight(section, m);
+  bool _shelfHasCaptions(SpotlightShelf section, _M m) {
     // Caption-free rows off TV (see [SpotlightShelf.captions]); TV keeps its
     // overlay captions everywhere. Compact must also keep a caption whenever
     // a card carries metadata: otherwise portrait mode discards ratings and
@@ -2339,8 +2377,15 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
     );
     final hasVisibleCaptionContent =
         widget.showCardTitlesAndRatings || hasCardMetadata;
-    final captions = hasVisibleCaptionContent &&
+    return hasVisibleCaptionContent &&
         (widget.dpad || section.captions || (m.compact && hasCardMetadata));
+  }
+
+  Widget _shelf(int i, _M m) {
+    final section = widget.sections[i];
+    final nodes = section.nodes;
+    final cardHeight = _shelfCardHeight(section, m);
+    final captions = _shelfHasCaptions(section, m);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,

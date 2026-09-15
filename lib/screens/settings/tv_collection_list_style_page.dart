@@ -13,7 +13,13 @@ class TvCollectionListStylePage extends StatefulWidget {
 class _TvCollectionListStylePageState extends State<TvCollectionListStylePage> {
   String? _style;
   final _nodes = {
-    for (final style in ['grid', 'gallery', 'filmstrip', 'journal'])
+    for (final style in [
+      'grid',
+      'gallery',
+      'filmstrip',
+      'journal',
+      'spotlight',
+    ])
       style: FocusNode(),
   };
   @override
@@ -26,11 +32,15 @@ class _TvCollectionListStylePageState extends State<TvCollectionListStylePage> {
 
   bool _failed = false, _saving = false;
   static const choices = {
+    'spotlight': (
+      'Spotlight',
+      'Browse category rows with expanding cards and Home trailer previews · default',
+    ),
     'grid': ('Grid', 'The existing poster grid'),
     'gallery': ('Gallery', 'A fixed title preview beside a wall of posters'),
     'filmstrip': (
       'Filmstrip',
-      'Browse a vertical filmstrip beside a large hero · default',
+      'Browse a vertical filmstrip beside a large hero',
     ),
     'journal': (
       'Journal',
