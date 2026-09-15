@@ -69,6 +69,58 @@ void main() {
     name: 'A',
     poster: 'tmdb',
   );
+  testWidgets('same-title refresh keeps artwork until replacement resolves', (tester) async {
+    final refresh = Completer<MetadataPresentation>();
+    final other = Completer<MetadataPresentation>();
+    final provider = Provider((n) => n == 1
+        ? Future.value(const MetadataPresentation(selected))
+        : n == 2 ? refresh.future : other.future);
+    await tester.pumpWidget(MaterialApp(home: CardProbe(original, provider)));
+    await tester.pumpAndSettle();
+    expect(find.text('tmdb'), findsOneWidget);
+    final updated = StremioMeta(id: original.id, type: original.type,
+        name: 'Updated', poster: 'new-addon');
+    await tester.pumpWidget(MaterialApp(home: CardProbe(updated, provider)));
+    await tester.pump();
+    expect(provider.calls, 2);
+    expect(find.text('loading'), findsNothing);
+    expect(find.text('tmdb'), findsOneWidget);
+    refresh.complete(MetadataPresentation(StremioMeta(id: original.id,
+        type: original.type, name: 'Updated', poster: 'new-tmdb')));
+    await tester.pumpAndSettle();
+    expect(find.text('new-tmdb'), findsOneWidget);
+    const different = StremioMeta(id: 'different', type: 'movie', name: 'B');
+    await tester.pumpWidget(MaterialApp(home: CardProbe(different, provider)));
+    await tester.pump();
+    expect(find.text('loading'), findsOneWidget);
+    expect(find.text('new-tmdb'), findsNothing);
+    other.complete(const MetadataPresentation(different));
+    await tester.pumpAndSettle();
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('current-provider refresh replaces retained metadata', (tester) async {
+    await MetadataPreferencesService.save(MetadataPreferences(providers: {
+      for (final category in MetadataCategory.values)
+        category: MetadataPreferences.current,
+    }));
+    final refresh = Completer<MetadataPresentation>();
+    final provider = Provider((n) => n == 1
+        ? Future.value(const MetadataPresentation(original)) : refresh.future);
+    await tester.pumpWidget(MaterialApp(home: CardProbe(original, provider)));
+    await tester.pumpAndSettle();
+    final updated = StremioMeta(id: original.id, type: original.type,
+        name: 'Updated', poster: 'updated-addon');
+    await tester.pumpWidget(MaterialApp(home: CardProbe(updated, provider)));
+    await tester.pump();
+    expect(find.text('addon'), findsOneWidget);
+    expect(find.text('loading'), findsNothing);
+    refresh.complete(MetadataPresentation(updated));
+    await tester.pumpAndSettle();
+    expect(find.text('updated-addon'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+  });
+
   testWidgets('hero retry recovers and becomes reusable', (tester) async {
     final provider = Provider((n) async => MetadataPresentation(selected, retryable: n == 2));
     await tester.pumpWidget(MaterialApp(home: CardProbe(original, provider)));
