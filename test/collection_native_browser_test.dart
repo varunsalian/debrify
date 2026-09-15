@@ -150,6 +150,7 @@ void main() {
   });
   setUp(() {
     SharedPreferences.setMockInitialValues({
+      'tv_collection_spotlight_alpha_migrated_v1': true,
       'tv_collection_list_style': 'grid',
       HomeCollectionsStore.folderLayoutKey: 'rows',
     });
@@ -276,6 +277,7 @@ void main() {
       (tester) async {
         await tester.runAsync(() async {
           SharedPreferences.setMockInitialValues({
+            'tv_collection_spotlight_alpha_migrated_v1': true,
             'tv_collection_list_style': 'grid',
             HideWatchedPrefs.key: true,
             'finished_movies_v1': ['tt1234567'],
@@ -383,6 +385,7 @@ void main() {
       (tester) async {
         await tester.runAsync(() async {
           SharedPreferences.setMockInitialValues({
+            'tv_collection_spotlight_alpha_migrated_v1': true,
             'tv_collection_list_style': 'grid',
             HideWatchedPrefs.key: true,
             'finished_movies_v1': ['tt1234567'],
@@ -900,6 +903,7 @@ void main() {
       ) async {
         SharedPreferences.setMockInitialValues({
           HomeCollectionsStore.folderLayoutKey: 'rows',
+          'tv_collection_spotlight_alpha_migrated_v1': true,
           'tv_collection_list_style': style,
         });
         tester.view.physicalSize = const Size(960, 540);
@@ -937,6 +941,7 @@ void main() {
     testWidgets('$style keeps the compact phone poster grid', (tester) async {
       SharedPreferences.setMockInitialValues({
         HomeCollectionsStore.folderLayoutKey: 'rows',
+        'tv_collection_spotlight_alpha_migrated_v1': true,
         'tv_collection_list_style': style,
       });
       tester.view.physicalSize = const Size(390, 844);
@@ -966,6 +971,7 @@ void main() {
     testWidgets('$style supports an iPad portrait surface', (tester) async {
       SharedPreferences.setMockInitialValues({
         HomeCollectionsStore.folderLayoutKey: 'rows',
+        'tv_collection_spotlight_alpha_migrated_v1': true,
         'tv_collection_list_style': style,
       });
       tester.view.physicalSize = const Size(768, 1024);

@@ -54,6 +54,22 @@ void main() {
       expect(await StorageService.getTvCollectionListStyle(), 'spotlight');
     },
   );
+  test('alpha migrates each existing collection layout only once', () async {
+    for (final style in ['grid', 'gallery', 'filmstrip', 'journal']) {
+      SharedPreferences.setMockInitialValues({'tv_collection_list_style': style});
+      expect(await StorageService.getTvCollectionListStyle(), 'spotlight');
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getString('tv_collection_list_style'), 'spotlight');
+      await StorageService.setTvCollectionListStyle(style);
+      expect(await StorageService.getTvCollectionListStyle(), style);
+      expect(await StorageService.getTvCollectionListStyle(), style);
+    }
+  });
+  test('explicit selection before first read is preserved', () async {
+    SharedPreferences.setMockInitialValues({});
+    await StorageService.setTvCollectionListStyle('journal');
+    expect(await StorageService.getTvCollectionListStyle(), 'journal');
+  });
   for (final layout in ['gallery', 'filmstrip', 'journal']) {
     for (final activate in [
       LogicalKeyboardKey.select,
@@ -123,6 +139,7 @@ void main() {
   testWidgets('picker saves style and keeps remote focus', (tester) async {
     SharedPreferences.setMockInitialValues({
       'tv_collection_list_style': 'grid',
+      'tv_collection_spotlight_alpha_migrated_v1': true,
     });
     await tester.pumpWidget(
       const MaterialApp(home: TvCollectionListStylePage()),

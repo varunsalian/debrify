@@ -1565,19 +1565,31 @@ class StorageService {
     'filmstrip',
     'journal',
   };
-  static Future<String> getTvCollectionListStyle() async {
-    final prefs = await ProfilePreferences.instance();
-    final value = prefs.getString('tv_collection_list_style');
-    return tvCollectionListStyles.contains(value) ? value! : 'spotlight';
-  }
+  // One-time alpha rollout, per profile. Later explicit choices must survive.
+  static const _collectionSpotlightMigrationKey =
+      'tv_collection_spotlight_alpha_migrated_v1';
+  static final Lock _collectionStyleLock = Lock();
 
-  static Future<void> setTvCollectionListStyle(String value) async {
-    final prefs = await ProfilePreferences.instance();
-    await prefs.setString(
-      'tv_collection_list_style',
-      tvCollectionListStyles.contains(value) ? value : 'spotlight',
-    );
-  }
+  static Future<String> getTvCollectionListStyle() =>
+      _collectionStyleLock.synchronized(() async {
+        final prefs = await ProfilePreferences.instance();
+        if (prefs.getBool(_collectionSpotlightMigrationKey) != true) {
+          await prefs.setString('tv_collection_list_style', 'spotlight');
+          await prefs.setBool(_collectionSpotlightMigrationKey, true);
+        }
+        final value = prefs.getString('tv_collection_list_style');
+        return tvCollectionListStyles.contains(value) ? value! : 'spotlight';
+      });
+
+  static Future<void> setTvCollectionListStyle(String value) =>
+      _collectionStyleLock.synchronized(() async {
+        final prefs = await ProfilePreferences.instance();
+        await prefs.setString(
+          'tv_collection_list_style',
+          tvCollectionListStyles.contains(value) ? value : 'spotlight',
+        );
+        await prefs.setBool(_collectionSpotlightMigrationKey, true);
+      });
 
   static const String _tvPlayerControlsStyleKey = 'tv_player_controls_style';
   static const Set<String> _tvPlayerControlsStyles = {
