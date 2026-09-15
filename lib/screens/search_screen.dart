@@ -16146,6 +16146,11 @@ class _SearchScreenState extends State<SearchScreen>
             focusNode: _searchFocusNode,
             onChanged: _onQueryChanged,
             onSubmitted: _onQuerySubmitted,
+            // Apple's fullscreen keyboard emits only an ambiguous end-editing
+            // signal for both Search and Back. On this dedicated search field,
+            // executing the typed query is preferable to silently revealing a
+            // suggestion strip and leaving Catalog search unsubmitted.
+            submitOnTvosEndEditing: widget.searchMode,
             textInputAction: TextInputAction.search,
             textAlign: TextAlign.center,
             style: TextStyle(color: scheme.onSurface, fontSize: tv ? 16 : 15),

@@ -58,6 +58,7 @@ class TvTextField extends StatefulWidget {
     this.keyboardInkOnAccent = Colors.white,
     this.onChanged,
     this.onSubmitted,
+    this.submitOnTvosEndEditing = false,
     this.onUpArrow,
     this.onDownArrow,
     this.onLeftArrow,
@@ -140,6 +141,14 @@ class TvTextField extends StatefulWidget {
 
   final ValueChanged<String>? onChanged;
   final ValueChanged<String>? onSubmitted;
+
+  /// Submit a tvOS system-keyboard session even when suggestions are showing.
+  ///
+  /// tvOS reports its Search action and Back dismissal through the same native
+  /// end-editing signal. Ordinary fields prefer revealing suggestions on that
+  /// ambiguous signal; dedicated search surfaces should prefer honoring the
+  /// entered query, accepting that Back can cause a harmless search as well.
+  final bool submitOnTvosEndEditing;
 
   /// Optional app-owned choices, shared by the stock editor and DPAD keyboard.
   /// Ordinary fields do not attach an overlay or intercept suggestion keys.
@@ -1372,7 +1381,9 @@ class TvTextFieldState extends State<TvTextField> {
     if (!usingPlatformKeyboard) return;
     final node = _tvShell ? _editNode : _shellNode;
     if (!node.hasFocus) return;
-    if (_suggestions.isNotEmpty && !_suggestionsDismissed) {
+    if (!widget.submitOnTvosEndEditing &&
+        _suggestions.isNotEmpty &&
+        !_suggestionsDismissed) {
       // Apple's fullscreen editor covered the app's choices. Reveal them when
       // it closes; the host includes its ordinary search as an explicit choice.
       // Fields without suggestions retain the unconditional-submit fallback.

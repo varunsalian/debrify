@@ -125,6 +125,7 @@ void main() {
       expect(find.byType(TextFieldSuggestions), findsNothing);
       // Caret-only notifications after submit must not restart title lookup.
       final field = tester.widget<TvTextField>(find.byType(TvTextField).first);
+      expect(field.submitOnTvosEndEditing, isTrue);
       field.controller.selection = const TextSelection.collapsed(offset: 0);
       await tester.pump(const Duration(milliseconds: 400));
       expect(fixture.search.value, isEmpty);
