@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:debrify/widgets/home/snowy_mountain_background.dart';
 import 'package:debrify/widgets/collections/collection_category_tabs.dart';
 import 'package:debrify/widgets/collections/tv_collection_titles.dart';
 import 'package:debrify/widgets/home/spotlight_board.dart';
@@ -25,6 +26,43 @@ import 'package:http/testing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
+  for (final tv in [false, true]) {
+    testWidgets('Spotlight collection inherits snow preference (TV: $tv)', (tester) async {
+      SharedPreferences.setMockInitialValues({
+        'tv_collection_list_style': 'spotlight',
+        'home_animations_enabled': true,
+        'home_hero_trailer_enabled': false,
+      });
+      final source = CollectionCatalogSource.fromJson({
+        'provider': 'tmdb', 'tmdbSourceType': 'DISCOVER',
+        'title': 'Movies', 'debrifySourceId': 'movies',
+      })!;
+      final native = CollectionNativeSourceService(
+        tmdbToken: 'dummy', resolveIds: false,
+        client: MockClient((_) async => http.Response(jsonEncode({
+          'results': [{'id': 42, 'title': 'Movie'}], 'total_pages': 1,
+        }), 200)),
+      );
+      addTearDown(native.close);
+      await tester.pumpWidget(MaterialApp(home: MediaQuery(
+        data: const MediaQueryData(size: Size(1400, 1100), disableAnimations: true),
+        child: CollectionFolderScreen(
+          collection: HomeCollection(id: 'snow', title: 'Collection', folders: [
+            HomeCollectionFolder(id: 'folder', title: 'Folder', sources: [source]),
+          ]), sourceKey: source.key, isTelevision: tv,
+          nativeSources: native, onOpenItem: (_) {},
+        ),
+      )));
+      await tester.pumpAndSettle();
+      final board = tester.widget<SpotlightBoard>(find.byType(SpotlightBoard));
+      expect(board.snowyMountain, isTrue);
+      expect(board.shelvesOnly, isTrue);
+      expect(tester.widget<SnowyMountainBackground>(find.byType(SnowyMountainBackground)).lowPower, tv);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+  }
+
   testWidgets('Spotlight short pointer shelves expose paging and sibling retries', (tester) async {
     SharedPreferences.setMockInitialValues({'tv_collection_list_style': 'spotlight'});
     tester.view.physicalSize = const Size(1400, 1100);
