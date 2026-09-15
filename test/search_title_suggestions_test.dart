@@ -52,6 +52,7 @@ void main() {
 
   Future<({TmdbTitleSearch search, List<http.Request> requests})> mount(
     WidgetTester tester, {
+    bool television = false,
     Future<StremioMeta> Function(StremioMeta)? resolve,
     Widget Function(Widget)? wrap,
   }) async {
@@ -89,6 +90,7 @@ void main() {
         MaterialApp(
           home: (wrap ?? (Widget child) => child)(
             SearchScreen(
+              isTelevision: television,
               searchMode: true,
               titleSearch: search,
               suggestedTitleResolver:
@@ -105,6 +107,21 @@ void main() {
     );
     return (search: search, requests: requests);
   }
+
+  testWidgets('TV search uses a compact left-aligned header', (tester) async {
+    tester.view.physicalSize = const Size(960, 540);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await mount(tester, television: true);
+    final field = tester.widget<TvTextField>(find.byType(TvTextField).first);
+    expect(field.textAlign, TextAlign.start);
+    final bounds = tester.getRect(find.byType(TvTextField).first);
+    expect(bounds.left, lessThan(100));
+    expect(bounds.height, lessThanOrEqualTo(60));
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
+  });
 
   testWidgets(
     'Navbar Search shows distinct title choices and ordinary search',

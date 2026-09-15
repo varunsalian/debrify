@@ -16062,14 +16062,16 @@ class _SearchScreenState extends State<SearchScreen>
       );
     }
 
-    // Wide/TV: a centered pill search (Stremio-style) with the mode toggle
-    // pinned to the right. A left spacer matching the toggle keeps the search
-    // truly centered (sized for the three-segment Catalog/Keyword/Lists bar).
+    // Dedicated TV Search uses a compact toolbar without the balancing spacer.
+    // Other wide surfaces retain their centered search field.
     return Padding(
-      padding: EdgeInsets.fromLTRB(20, tv ? 18 : 14, 20, 10),
+      padding: tv && widget.searchMode
+          ? const EdgeInsets.fromLTRB(24, 8, 24, 8)
+          : EdgeInsets.fromLTRB(20, tv ? 18 : 14, 20, 10),
       child: Row(
         children: [
-          SizedBox(width: compactModeMenu ? 156 : 252),
+          if (!tv || !widget.searchMode)
+            SizedBox(width: compactModeMenu ? 156 : 252),
           Expanded(
             child: Center(
               child: ConstrainedBox(
@@ -16090,7 +16092,8 @@ class _SearchScreenState extends State<SearchScreen>
   Widget _buildSearchField(bool tv) {
     final app = AppThemeScope.of(context);
     final scheme = Theme.of(context).colorScheme;
-    final radius = app.shape.br(26);
+    final compactSearch = tv && widget.searchMode;
+    final radius = app.shape.br(compactSearch ? 12 : 26);
     return Focus(
       canRequestFocus: false,
       skipTraversal: true,
@@ -16161,7 +16164,7 @@ class _SearchScreenState extends State<SearchScreen>
             // suggestion strip and leaving Catalog search unsubmitted.
             submitOnTvosEndEditing: widget.searchMode,
             textInputAction: TextInputAction.search,
-            textAlign: TextAlign.center,
+            textAlign: compactSearch ? TextAlign.start : TextAlign.center,
             style: TextStyle(color: scheme.onSurface, fontSize: tv ? 16 : 15),
             // Shell-mode LEFT: no caret exists at the shell, so left always
             // escapes to the sidebar (the LEFT-only sidebar policy). While
@@ -16223,7 +16226,7 @@ class _SearchScreenState extends State<SearchScreen>
               fillColor: app.fade(app.core.tx, 0.06),
               contentPadding: EdgeInsets.symmetric(
                 horizontal: 20,
-                vertical: tv ? 16 : 14,
+                vertical: compactSearch ? 10 : (tv ? 16 : 14),
               ),
             ),
           );
@@ -17771,7 +17774,8 @@ class _SearchScreenState extends State<SearchScreen>
   /// the next row's header) under the hero. So scale the poster with the screen
   /// height.
   double _railPosterW(BuildContext context) =>
-      homeRailPosterWidth(context, isTelevision: widget.isTelevision);
+      homeRailPosterWidth(context, isTelevision: widget.isTelevision,
+        searchResults: widget.searchMode);
 
   /// TITLE-card size for a classic board rail under the Home Cards
   /// orientation. Landscape keeps Spotlight's proportions — about 1.6× the
@@ -17797,7 +17801,7 @@ class _SearchScreenState extends State<SearchScreen>
     final catalogRowH = _railTitleCardH(context) + 14;
     return (boardH - _railHeaderH - catalogRowH - 24).clamp(
       150.0,
-      widget.searchMode ? 180.0 : 440.0,
+      widget.searchMode ? 150.0 : 440.0,
     );
   }
 
