@@ -569,7 +569,11 @@ class TvPlaybackCheckpoint {
       !shouldPersistCompletion &&
       // The live movie path saves progress even near the end when no local
       // watched marker applies (tracker-managed movies and unidentified files).
-      (contentType == 'single' || positionMs * 100.0 / durationMs < 95.0);
+      (contentType == 'single' ||
+          positionMs * 100.0 / durationMs <
+              (contentType == 'series' && localCompletionTracking
+                  ? completionThreshold
+                  : 95));
 
   String get recoveryId =>
       jsonEncode([profileId, dataGeneration, sessionId, sequence, updatedAtMs]);
@@ -655,7 +659,7 @@ class TvPlaybackCheckpoint {
   static int _int(Object? value) => value is num ? value.toInt() : 0;
   static int _completionThreshold(Object? value) {
     final parsed = _int(value);
-    return (parsed == 0 ? 80 : parsed).clamp(50, 95);
+    return (parsed == 0 ? 80 : parsed).clamp(50, 100);
   }
 
   static int? _nullableInt(Object? value) =>

@@ -10,6 +10,7 @@ public class TextureSW: NSObject, FlutterTexture, ResizableTextureProtocol {
   private let handle: OpaquePointer
   private let updateCallback: UpdateCallback
   private var renderContext: OpaquePointer?
+  public var isValid: Bool { renderContext != nil }
   private var textureContexts = SwappableObjectManager<TextureSWContext>(
     objects: [],
     skipCheckArgs: true
@@ -17,15 +18,16 @@ public class TextureSW: NSObject, FlutterTexture, ResizableTextureProtocol {
 
   init(
     handle: OpaquePointer,
-    updateCallback: @escaping UpdateCallback
+    updateCallback: @escaping UpdateCallback,
+    synchronous: Bool = false
   ) {
     self.handle = handle
     self.updateCallback = updateCallback
 
     super.init()
 
-    DispatchQueue.main.async {
-      self.initMPV()
+    if synchronous { initMPV() } else {
+      DispatchQueue.main.async { self.initMPV() }
     }
   }
 
@@ -52,9 +54,11 @@ public class TextureSW: NSObject, FlutterTexture, ResizableTextureProtocol {
       mpv_render_param(type: MPV_RENDER_PARAM_INVALID, data: nil),
     ]
 
-    MPVHelpers.checkError(
-      mpv_render_context_create(&renderContext, handle, &params)
-    )
+    let status = mpv_render_context_create(&renderContext, handle, &params)
+    guard status >= 0, renderContext != nil else {
+      NSLog("TextureSW: could not create render context: \(status)")
+      return
+    }
 
     mpv_render_context_set_update_callback(
       renderContext,
@@ -104,6 +108,7 @@ public class TextureSW: NSObject, FlutterTexture, ResizableTextureProtocol {
   }
 
   public func render(_ size: CGSize) {
+    guard renderContext != nil else { return }
     let textureContext = textureContexts.nextAvailable()
     if textureContext == nil {
       return

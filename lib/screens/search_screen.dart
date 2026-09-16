@@ -1,3 +1,4 @@
+import '../widgets/random_playback_dialog.dart';
 import '../widgets/clear_pinned_sources_button.dart';
 import '../widgets/recoverable_network_image.dart';
 import '../models/metadata_card_artwork.dart';
@@ -2706,6 +2707,8 @@ class _SearchScreenState extends State<SearchScreen>
     final reloadGen = ++_homeSettingsReloadGen;
     final reloadSession = HomeCollectionsStore.captureSession();
     final spotlightFocusDetails = await StorageService.getSpotlightFocusDetails();
+    final homeAnimationsEnabled = await StorageService.getHomeAnimationsEnabled();
+    final homeAnimationStyle = await StorageService.getHomeAnimationStyle();
     final cardSettings = await Future.wait<Object>([
       StorageService.getHomeCardOrientation(),
       StorageService.getHomeHideCardTitlesAndRatings(),
@@ -2721,13 +2724,17 @@ class _SearchScreenState extends State<SearchScreen>
         hideTitlesAndRatings != _hideHomeCardTitlesAndRatings ||
         hideCatalogAddonNames != _hideHomeCatalogAddonNames ||
         hideCollectionNames != _hideHomeCollectionNames ||
-        spotlightFocusDetails != _spotlightFocusDetails) {
+        spotlightFocusDetails != _spotlightFocusDetails ||
+        homeAnimationsEnabled != _homeAnimationsEnabled ||
+        homeAnimationStyle != _homeAnimationStyle) {
       setState(() {
         _homeCardOrientation = orientation;
         _hideHomeCardTitlesAndRatings = hideTitlesAndRatings;
         _hideHomeCatalogAddonNames = hideCatalogAddonNames;
         _hideHomeCollectionNames = hideCollectionNames;
         _spotlightFocusDetails = spotlightFocusDetails;
+        _homeAnimationsEnabled = homeAnimationsEnabled;
+        _homeAnimationStyle = homeAnimationStyle;
       });
     }
     // Merged-CW toggles: re-read, and on a change re-sync each provider's node
@@ -6836,6 +6843,8 @@ class _SearchScreenState extends State<SearchScreen>
 
   bool _hideHomeCollectionNames = false;
   bool _spotlightFocusDetails = false;
+  bool _homeAnimationsEnabled = false;
+  String _homeAnimationStyle = 'snowy_mountain';
 
   bool get _homeLandscapeCards =>
       _homeCardOrientation == HomeCardOrientation.landscape;
@@ -7113,6 +7122,8 @@ class _SearchScreenState extends State<SearchScreen>
 
   Future<void> _loadHomeCardOrientation() async {
     final spotlightFocusDetails = await StorageService.getSpotlightFocusDetails();
+    final homeAnimationsEnabled = await StorageService.getHomeAnimationsEnabled();
+    final homeAnimationStyle = await StorageService.getHomeAnimationStyle();
     final values = await Future.wait<Object>([
       StorageService.getHomeCardOrientation(),
       StorageService.getHomeHideCardTitlesAndRatings(),
@@ -7128,7 +7139,9 @@ class _SearchScreenState extends State<SearchScreen>
         hideTitlesAndRatings == _hideHomeCardTitlesAndRatings &&
         hideCatalogAddonNames == _hideHomeCatalogAddonNames &&
         hideCollectionNames == _hideHomeCollectionNames &&
-        spotlightFocusDetails == _spotlightFocusDetails) {
+        spotlightFocusDetails == _spotlightFocusDetails &&
+        homeAnimationsEnabled == _homeAnimationsEnabled &&
+        homeAnimationStyle == _homeAnimationStyle) {
       return;
     }
     setState(() {
@@ -7137,6 +7150,8 @@ class _SearchScreenState extends State<SearchScreen>
       _hideHomeCatalogAddonNames = hideCatalogAddonNames;
       _hideHomeCollectionNames = hideCollectionNames;
       _spotlightFocusDetails = spotlightFocusDetails;
+      _homeAnimationsEnabled = homeAnimationsEnabled;
+      _homeAnimationStyle = homeAnimationStyle;
     });
   }
 
@@ -8054,7 +8069,10 @@ class _SearchScreenState extends State<SearchScreen>
     // make a callback page a different catalog than the shelf it came from.
     final rails = _canvasRails;
     return SpotlightBoard(
+      largeScreenInteractions: true,
       key: _spotlightKey,
+      animationsEnabled: _homeAnimationsEnabled,
+      animationStyle: _homeAnimationStyle,
       hero: _spotlightHero,
       sections: _spotlightShelves,
       heroNode: _spotlightHeroNode,
@@ -14364,6 +14382,8 @@ class _SearchScreenState extends State<SearchScreen>
     StremioMeta item,
     StremioAddon addon,
   ) async {
+    final mode = await showRandomPlaybackDialog(context, title: item.name);
+    if (!mounted || mode == null) return;
     final imdb = _imdbOf(item);
     if (imdb == null) {
       _snack('No IMDb match to pick an episode for "${item.name}".');
@@ -14407,6 +14427,7 @@ class _SearchScreenState extends State<SearchScreen>
     final pick = episodes[Random().nextInt(episodes.length)];
     _playSelection(
       AdvancedSearchSelection(
+        initialContinuousShuffle: mode == RandomPlaybackMode.continuous,
         imdbId: imdb,
         isSeries: true,
         title: item.name,
@@ -15755,6 +15776,7 @@ class _SearchScreenState extends State<SearchScreen>
   /// Auto-best in-tab play: search torrents for the selection, pick the best
   /// instantly-playable source, and play — never leaving the Search tab.
   PlaybackMeta _metaFor(AdvancedSearchSelection sel) => PlaybackMeta.catalog(
+    initialContinuousShuffle: sel.initialContinuousShuffle,
     // Only a real IMDb id here — the launcher's Trakt auto-sync + local
     // Continue Watching must never fire on an empty or non-IMDb (IPTV) id,
     // even though the search itself still uses sel.imdbId (the addon id).

@@ -47,6 +47,16 @@ void main() {
     expect(await StorageService.getEpisodeCompletionThreshold(), 75);
   });
 
+  test('100 percent persists independently for movies and episodes', () async {
+    expect(StorageService.localCompletionThresholdOptions, contains(100));
+    await StorageService.setMovieCompletionThreshold(100);
+    await StorageService.setEpisodeCompletionThreshold(95);
+    expect(await StorageService.getMovieCompletionThreshold(), 100);
+    expect(await StorageService.getEpisodeCompletionThreshold(), 95);
+    await StorageService.setEpisodeCompletionThreshold(100);
+    expect(await StorageService.getEpisodeCompletionThreshold(), 100);
+  });
+
   test('finishing a local movie clears resume and continue watching', () async {
     await StorageService.saveContinueWatchingItem(
       imdbId: 'TT001',

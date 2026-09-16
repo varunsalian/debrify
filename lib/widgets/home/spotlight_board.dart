@@ -6,10 +6,12 @@ import '../recoverable_network_image.dart';
 import '../../models/metadata_preferences.dart';
 import '../metadata_presentation_mixin.dart';
 import 'dart:async';
+import 'dart:math' show max;
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/rendering.dart' show ScrollDirection;
 
 import '../../models/stremio_addon.dart';
 import '../../services/debrify_image_cache.dart';
@@ -25,11 +27,15 @@ import '../../utils/tv_keys.dart';
 import 'row_tag_pill.dart';
 import 'home_row_focus.dart';
 import 'spotlight_card_trailer.dart';
+import 'snowy_mountain_background.dart';
+import 'midnight_rain_background.dart';
+import 'moonlit_ocean_background.dart';
 import '../collections/collection_focus_glow.dart';
 import '../collections/collection_focus_art.dart';
 import '../movie_watched_badge.dart';
 import '../../utils/platform_util.dart';
 import '../../utils/wide_touch_scale.dart';
+import '../../utils/spotlight_interaction_policy.dart';
 
 /// What a card is, once a shelf stops being a list of TITLES.
 ///
@@ -343,7 +349,10 @@ class SpotlightBoard extends StatefulWidget {
   final bool expandFocusedCard;
   final double cardTrailerVolume;
   final bool shelvesOnly;
+  final bool animationsEnabled;
+  final String animationStyle;
   final bool forceCardParallax;
+  final bool largeScreenInteractions;
   final VoidCallback? onExitTop;
 
   const SpotlightBoard({
@@ -366,7 +375,10 @@ class SpotlightBoard extends StatefulWidget {
     this.expandFocusedCard = false,
     this.cardTrailerVolume = 0,
     this.shelvesOnly = false,
+    this.animationsEnabled = false,
+    this.animationStyle = 'snowy_mountain',
     this.forceCardParallax = false,
+    this.largeScreenInteractions = false,
     this.onExitTop,
   });
 
@@ -539,6 +551,171 @@ class _M {
 }
 
 class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentationMixin<SpotlightBoard> {
+  final Set<_CardState> _visibleCards = {};
+  final Set<BuildContext> _scrollingSources = {};
+  Size? _selectionViewport;
+  Object? _scrollRowId;
+  _CardState? _selectedCard;
+  bool _largeCardInteractions = false;
+  bool _selectionQueued = false;
+  bool _selectionFromScroll = false;
+  bool _scrollInterruptedPreview = false;
+
+  void _registerCard(_CardState card) {
+    _visibleCards.add(card);
+    if (_largeCardInteractions && (_selectedCard == null || _selectionFromScroll)) {
+      _queueScrollSelection();
+    }
+  }
+
+  void _unregisterCard(_CardState card) {
+    _visibleCards.remove(card);
+    if (identical(_selectedCard, card)) _selectedCard = null;
+    if (_largeCardInteractions && _scrollingSources.isNotEmpty) {
+      _queueScrollSelection();
+    }
+  }
+
+  void _selectCard(_CardState? card, {required bool scrolling}) {
+    // Changing widths during a drag can collapse a short row's scroll extent
+    // and cancel the gesture. Hold painted widths until scrolling settles.
+    for (final visible in _visibleCards) {
+      if (visible.mounted) visible._freezeScrollWidth(scrolling);
+    }
+    final previous = _selectedCard;
+    _selectedCard = card;
+    if (!identical(previous, card) && previous?.mounted == true) {
+      previous!._setWideSelection(false, moving: false);
+    }
+    card?._setWideSelection(true, moving: scrolling);
+  }
+
+  void _interactWithCard(_CardState card, bool active) {
+    if (!_largeCardInteractions) return;
+    // Hover can change as cards move beneath a stationary pointer.
+    // Only scroll completion may release the moving state.
+    if (_scrollingSources.isNotEmpty) {
+      if (_pointerOwnsScrollSelection) _queueScrollSelection();
+      return;
+    }
+    if (active) {
+      _selectionFromScroll = false;
+      _scrollInterruptedPreview = false;
+      _selectCard(card, scrolling: false);
+    } else if (!_selectionFromScroll && identical(_selectedCard, card)) {
+      // Hover and keyboard focus can overlap. Losing either one must not
+      // hide the cursor while the other still owns this card.
+      if (card._f || card._h) return;
+      _CardState? focused;
+      for (final candidate in _visibleCards) {
+        if (candidate.mounted && candidate._f) {
+          focused = candidate;
+          break;
+        }
+      }
+      _selectCard(focused, scrolling: false);
+    }
+  }
+
+  bool get _pointerOwnsScrollSelection => switch (Theme.of(context).platform) {
+    TargetPlatform.macOS || TargetPlatform.windows || TargetPlatform.linux => true,
+    _ => false,
+  };
+
+  bool _onCardScroll(ScrollNotification notification) {
+    if (!_largeCardInteractions) return false;
+    final userStarted =
+        (notification is UserScrollNotification && notification.direction != ScrollDirection.idle) ||
+        (notification is ScrollStartNotification && notification.dragDetails != null);
+    final source = notification.context;
+    if (userStarted) {
+      _selectionFromScroll = true;
+      if (notification.metrics.axis == Axis.vertical) _scrollRowId = null;
+      if (source != null) _scrollingSources.add(source);
+      _scrollInterruptedPreview = true;
+      _queueScrollSelection();
+    }
+    // Layout corrections and ensureVisible are not new user gestures.
+    if (!_scrollingSources.contains(source)) return false;
+    if (notification is ScrollEndNotification) _scrollingSources.remove(source);
+    if (notification is ScrollStartNotification ||
+        notification is ScrollUpdateNotification ||
+        notification is ScrollEndNotification) {
+      _queueScrollSelection();
+    }
+    return false;
+  }
+
+  /// Like the phone detail rail, scrolling supplies a visual reading cursor.
+  /// Measure actual cards because Spotlight mixes shapes and expanded widths.
+  /// Only one visible shelf/card owns it; cached offscreen cells never preview.
+  void _queueScrollSelection() {
+    if (_selectionQueued) return;
+    _selectionQueued = true;
+    WidgetsBinding.instance.ensureVisualUpdate();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _selectionQueued = false;
+      if (!mounted) return;
+      _scrollingSources.removeWhere((source) => !source.mounted);
+      if (!_visibleCards.any((card) => card.mounted && card.widget.rowId == _scrollRowId)) {
+        _scrollRowId = null;
+      }
+      if (!_largeCardInteractions) {
+        _selectCard(null, scrolling: false);
+        return;
+      }
+
+      if (_scrollInterruptedPreview) {
+        _scrollInterruptedPreview = false;
+        _selectedCard?._setWideSelection(true, moving: true);
+      }
+      // Desktop scrolling must not replace the pointer with the touch
+      // reading cursor. MouseRegion also updates when content moves under
+      // a stationary pointer; its callbacks queue another selection pass.
+      if (_pointerOwnsScrollSelection) {
+        _CardState? hovered;
+        _CardState? focused;
+        for (final card in _visibleCards) {
+          if (!card.mounted || !card.widget.largeInteractions) continue;
+          if (card._h) hovered = card;
+          if (card._f) focused = card;
+        }
+        _selectionFromScroll = false;
+        _selectCard(hovered ?? focused, scrolling: _scrollingSources.isNotEmpty);
+        if (_scrollingSources.isEmpty && _desktopPreviewOwners.isEmpty) _restartCadence();
+        return;
+      }
+      final render = context.findRenderObject();
+      if (render is! RenderBox || !render.hasSize) return;
+      final bounds = Offset.zero & render.size;
+      final readingY = bounds.height * 0.6;
+      final readingX = _lastMetrics?.gutter ?? 24;
+      _CardState? nearest;
+      double bestRow = double.infinity;
+      double bestColumn = double.infinity;
+      for (final card in _visibleCards) {
+        if (!card.mounted || !card.widget.largeInteractions) continue;
+        if (_selectionFromScroll && _scrollRowId != null && card.widget.rowId != _scrollRowId) continue;
+        final box = card.context.findRenderObject();
+        if (box is! RenderBox || !box.hasSize || !box.attached) continue;
+        final rect = box.localToGlobal(Offset.zero, ancestor: render) & box.size;
+        final visible = rect.intersect(bounds);
+        if (visible.height < rect.height * 0.65 || visible.width < 24) continue;
+        // Preserve explicit selection only while its card remains visible.
+        if (!_selectionFromScroll && identical(card, _selectedCard)) return;
+        final row = (rect.center.dy - readingY).abs();
+        final column = (rect.left - readingX).abs();
+        if (row < bestRow - 4 || ((row - bestRow).abs() <= 4 && column < bestColumn)) {
+          nearest = card;
+          bestRow = row;
+          bestColumn = column;
+        }
+      }
+      _selectCard(nearest, scrolling: _scrollingSources.isNotEmpty);
+      if (_scrollingSources.isEmpty && _desktopPreviewOwners.isEmpty) _restartCadence();
+    });
+  }
+
   _M? _lastMetrics;
   @override
   bool get prioritizeMetadata => true;
@@ -786,6 +963,7 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
 
   String? _dwelledHeroId;
   void _restartCadence() {
+    if (_largeCardInteractions && _scrollingSources.isNotEmpty) return;
     _cadence?.cancel();
     // Nulled, not just cancelled: didUpdateWidget's reconcile decides "is a
     // timer armed" by null-ness, and a cancelled-but-non-null handle reads
@@ -1541,6 +1719,22 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
         child: LayoutBuilder(
           builder: (context, constraints) {
             final m = _M(constraints.maxWidth, dpad: widget.dpad);
+            final large = widget.largeScreenInteractions && !widget.dpad && spotlightUsesRichCards(
+              viewport: MediaQuery.sizeOf(context),
+              platform: Theme.of(context).platform,
+              availableWidth: constraints.maxWidth,
+            );
+            final selectionViewport = Size(constraints.maxWidth, constraints.maxHeight);
+            if (_selectionViewport != selectionViewport) {
+              _selectionViewport = selectionViewport;
+              _scrollRowId = null;
+              _queueScrollSelection();
+            }
+            if (large != _largeCardInteractions) {
+              _largeCardInteractions = large;
+              _scrollingSources.clear();
+              _queueScrollSelection();
+            }
             // The hero is measured against the board's real height, so it is
             // the same share of the screen on every panel.
             final viewport = constraints.maxHeight.isFinite
@@ -1630,9 +1824,14 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
         final i = index - 1;
         return KeyedSubtree(
           key: ValueKey(shelfKey(i)),
-          child: NotificationListener<ScrollUpdateNotification>(
+          child: NotificationListener<ScrollNotification>(
             onNotification: (notification) {
-              if (widget.shelvesOnly &&
+              if (_largeCardInteractions && notification.metrics.axis == Axis.horizontal &&
+                  ((notification is UserScrollNotification && notification.direction != ScrollDirection.idle) ||
+                   (notification is ScrollStartNotification && notification.dragDetails != null))) {
+                _scrollRowId = widget.sections[i].id ?? i;
+              }
+              if (notification is ScrollUpdateNotification && widget.shelvesOnly &&
                   notification.metrics.axis == Axis.horizontal &&
                   notification.metrics.extentAfter < 400) {
                 widget.onLoadMoreRow?.call(i);
@@ -1668,7 +1867,10 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
         }
         return false;
       },
-      child: list,
+      child: NotificationListener<ScrollNotification>(
+        onNotification: _onCardScroll,
+        child: list,
+      ),
     );
     return DecoratedBox(
       decoration: BoxDecoration(
@@ -1682,25 +1884,34 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
       // every pointer in its viewport, which is fine here because nothing in
       // the backdrop is interactive — the hero's tap/swipe surface and the
       // tappable dots ride in the list with the identity.
-      child: m.compact || widget.shelvesOnly
+      child: (m.compact || widget.shelvesOnly) && !widget.animationsEnabled
           ? content
           : Stack(
               fit: StackFit.expand,
               children: [
-                // Its own layer: the backdrop is a full-screen image under
-                // two full-screen gradients — the most expensive paint on
-                // the page. Isolated, a board rebuild (row moves, the
-                // trailer's rolling flips) re-composites a cached texture
-                // instead of re-rasterising all three.
-                RepaintBoundary(
-                  child: Align(
-                    alignment: Alignment.topCenter,
-                    child: SizedBox(
-                      height: heroH,
-                      child: _heroBackdrop(heroH),
+                if (widget.animationsEnabled)
+                  Positioned.fill(
+                    child: switch (widget.animationStyle) {
+                      'moonlit_ocean' => MoonlitOceanBackground(lowPower: widget.dpad),
+                      'midnight_rain' => MidnightRainBackground(lowPower: widget.dpad),
+                      _ => SnowyMountainBackground(lowPower: widget.dpad),
+                    },
+                  ),
+                if (!m.compact && !widget.shelvesOnly)
+                  // Its own layer: the backdrop is a full-screen image under
+                  // two full-screen gradients — the most expensive paint on
+                  // the page. Isolated, a board rebuild (row moves, the
+                  // trailer's rolling flips) re-composites a cached texture
+                  // instead of re-rasterising all three.
+                  RepaintBoundary(
+                    child: Align(
+                      alignment: Alignment.topCenter,
+                      child: SizedBox(
+                        height: heroH,
+                        child: _heroBackdrop(heroH),
+                      ),
                     ),
                   ),
-                ),
                 content,
                 if (_loadingMoreShelves)
                   Positioned(
@@ -1947,6 +2158,36 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
   /// BEHIND the scroll view (see [_board]); everything here is
   /// non-interactive by construction.
   Widget _heroBackdrop(double heroH) {
+    final backdrop = _heroBackdropContent(heroH);
+    if (!widget.animationsEnabled) return backdrop;
+    // Keep the title's artwork and trailer in the hero. Fade that entire
+    // layer away on scroll to reveal the fixed mountain instead of painting
+    // an opaque ground veil over it. The trailer host stays mounted.
+    return AnimatedBuilder(
+      animation: Listenable.merge([_scroll, _veilMetricsRevision]),
+      // TV already snaps the hero visibility on row changes. Its existing
+      // bottom scrim supplies the blend without an extra offscreen mask.
+      child: widget.dpad ? backdrop : ShaderMask(
+        blendMode: BlendMode.dstIn,
+        shaderCallback: (bounds) => const LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Colors.white, Colors.white, Colors.transparent],
+          stops: [0, 0.7, 1],
+        ).createShader(bounds),
+        child: backdrop,
+      ),
+      builder: (context, child) {
+        final off = _scroll.hasClients ? _scroll.offset : 0.0;
+        final opacity = widget.dpad
+            ? (_row < 0 ? 1.0 : 0.0)
+            : (1 - off / (heroH * 0.8)).clamp(0.0, 1.0);
+        return Opacity(opacity: opacity, child: child);
+      },
+    );
+  }
+
+  Widget _heroBackdropContent(double heroH) {
     final item = _heroItem;
     if (item == null) return const SizedBox.shrink();
     final url = _heroArt(item);
@@ -2114,20 +2355,21 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
         // GPU renders as lag). Touch and desktop keep the continuous
         // scroll-driven ramp: free scrolling has no discrete states to snap
         // between, and those GPUs absorb the fill.
-        RepaintBoundary(
-          child: IgnorePointer(
-            child: widget.dpad
-                ? _veil(ground, _row < 0 ? 0.0 : (_row == 0 ? 0.72 : 1.0))
-                : AnimatedBuilder(
-                    animation: Listenable.merge([_scroll, _veilMetricsRevision]),
-                    builder: (context, _) {
-                      final off = _scroll.hasClients ? _scroll.offset : 0.0;
-                      final t = (off / (heroH * 0.8)).clamp(0.0, 1.0);
-                      return _veil(ground, t);
-                    },
-                  ),
+        if (!widget.animationsEnabled)
+          RepaintBoundary(
+            child: IgnorePointer(
+              child: widget.dpad
+                  ? _veil(ground, _row < 0 ? 0.0 : (_row == 0 ? 0.72 : 1.0))
+                  : AnimatedBuilder(
+                      animation: Listenable.merge([_scroll, _veilMetricsRevision]),
+                      builder: (context, _) {
+                        final off = _scroll.hasClients ? _scroll.offset : 0.0;
+                        final t = (off / (heroH * 0.8)).clamp(0.0, 1.0);
+                        return _veil(ground, t);
+                      },
+                    ),
+            ),
           ),
-        ),
       ],
     );
   }
@@ -2446,24 +2688,37 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
               // being sliced off at the viewport edge.
               clipBehavior: Clip.none,
               scrollDirection: Axis.horizontal,
-              padding: EdgeInsets.symmetric(horizontal: m.gutter),
+              // Let the last card reach the reading cursor even on short rows.
+              padding: EdgeInsets.only(
+                left: m.gutter,
+                right: _largeCardInteractions && section.items.isNotEmpty
+                    ? max(m.gutter, (_selectionViewport?.width ?? 0) - m.gutter -
+                        cardHeight * section.items.last.shape.aspect)
+                    : m.gutter,
+              ),
               itemCount: section.items.length,
               separatorBuilder: (_, __) => SizedBox(width: m.gap),
               itemBuilder: (context, c) => _Card(
+                rowId: section.id ?? i,
+                largeInteractions: _largeCardInteractions,
+                register: _registerCard,
+                unregister: _unregisterCard,
+                onInteraction: _interactWithCard,
                 card: section.items[c],
                 node: c < nodes.length ? nodes[c] : null,
                 // Every shape shares the ROW's height and takes the width its
                 // aspect implies, so a shelf that mixes posters and channel
                 // tiles sits on one baseline instead of stepping up and down.
                 height: cardHeight,
+                expandedHeight: m.wideCardW / SpotlightCardShape.wide.aspect,
                 caption: m.caption,
                 radius: m.radius,
                 captionBelow: m.compact && captions,
                 captionBlock: captions ? m.captionBlock : 0,
                 showCaption: captions && section.items[c].showCaption,
                 showTitleAndRating: widget.showCardTitlesAndRatings,
-                expandOnFocus: widget.dpad && widget.expandFocusedCard,
-                forceParallax: widget.forceCardParallax,
+                expandOnFocus: (widget.dpad || _largeCardInteractions) && widget.expandFocusedCard,
+                forceParallax: widget.forceCardParallax || _largeCardInteractions,
                 trailerEnabled: widget.trailersEnabled,
                 trailerVolume: widget.cardTrailerVolume,
                 onTrailerStart: widget.onTrailerStop,
@@ -2673,12 +2928,18 @@ class _HeroOpenPill extends StatelessWidget {
 }
 
 class _Card extends StatefulWidget {
+  final Object? rowId;
+  final bool largeInteractions;
+  final void Function(_CardState)? register;
+  final void Function(_CardState)? unregister;
+  final void Function(_CardState, bool)? onInteraction;
   final SpotlightCard card;
   final FocusNode? node;
 
   /// The ROW's height. Width follows from the shape's aspect, so a shelf that
   /// mixes posters and channel tiles keeps one baseline.
   final double height;
+  final double expandedHeight;
   final double caption;
   final double radius;
 
@@ -2720,9 +2981,15 @@ class _Card extends StatefulWidget {
       onDesktopPreviewActivityChanged;
 
   const _Card({
+    this.rowId,
+    this.largeInteractions = false,
+    this.register,
+    this.unregister,
+    this.onInteraction,
     required this.card,
     required this.node,
     required this.height,
+    required this.expandedHeight,
     required this.caption,
     this.radius = 7,
     this.captionBelow = false,
@@ -2744,6 +3011,46 @@ class _Card extends StatefulWidget {
 }
 
 class _CardState extends State<_Card> with MetadataPresentationMixin<_Card> {
+  double _paintedGrowth = 1;
+  double? _scrollGrowth;
+
+  void _freezeScrollWidth(bool scrolling) {
+    if (scrolling == (_scrollGrowth != null)) return;
+    setState(() => _scrollGrowth = scrolling ? _paintedGrowth : null);
+  }
+
+  bool _wideSelected = false;
+  bool _moving = false;
+  bool get _activeCard => widget.largeInteractions ? _wideSelected : _f;
+  bool? _lastReducedMotion;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final reduced = MediaQuery.disableAnimationsOf(context);
+    if (_lastReducedMotion != null && _lastReducedMotion != reduced && widget.largeInteractions) {
+      _trailerAttempted = false;
+      _armCardTrailer();
+    }
+    _lastReducedMotion = reduced;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    widget.register?.call(this);
+  }
+
+  void _setWideSelection(bool selected, {required bool moving}) {
+    if (_wideSelected == selected && _moving == moving) return;
+    setState(() {
+      _wideSelected = selected;
+      _moving = moving;
+    });
+    _armCardTrailer();
+    _loadFocusedDescription();
+    _reportDesktopPreviewActivity(_previewActive);
+  }
   @override
   StremioMeta? get originalMetadata => widget.card.metadata;
   bool _f = false;
@@ -2758,13 +3065,13 @@ class _CardState extends State<_Card> with MetadataPresentationMixin<_Card> {
     _trailerDwell?.cancel();
     _trailerTextTimer?.cancel();
     _hideTrailerText = false;
-    if (!_f) _trailerAttempted = false;
+    if (!_activeCard || _moving) _trailerAttempted = false;
     _trailerRequested = false;
     _trailerPlaying = false;
-    if (_trailerAttempted || !_f || !_canExpand || !widget.trailerEnabled ||
+    if (_trailerAttempted || !_activeCard || _moving || !_canExpand || !widget.trailerEnabled ||
         MediaQuery.disableAnimationsOf(context)) return;
     _trailerDwell = Timer(const Duration(seconds: 2), () {
-      if (!mounted || !_f || !widget.trailerEnabled || !_canExpand ||
+      if (!mounted || !_activeCard || _moving || !widget.trailerEnabled || !_canExpand ||
           ModalRoute.of(context)?.isCurrent == false || !TickerMode.of(context) ||
           (WidgetsBinding.instance.lifecycleState != null &&
            WidgetsBinding.instance.lifecycleState != AppLifecycleState.resumed)) return;
@@ -2782,9 +3089,9 @@ class _CardState extends State<_Card> with MetadataPresentationMixin<_Card> {
     _descriptionTimer?.cancel();
     final request = ++_descriptionRequest;
     final item = originalMetadata;
-    if (!_canExpand || !_f || item == null) return;
+    if (!_canExpand || !_activeCard || _moving || item == null) return;
     final scope = ProfileRuntime.scope.value;
-    bool current() => mounted && _f && _canExpand &&
+    bool current() => mounted && _activeCard && _canExpand &&
         request == _descriptionRequest &&
         identical(originalMetadata, item) && ProfileRuntime.scope.value == scope;
     _descriptionTimer = Timer(const Duration(milliseconds: 300), () async {
@@ -2830,13 +3137,16 @@ class _CardState extends State<_Card> with MetadataPresentationMixin<_Card> {
   final Object _previewOwner = Object();
   bool _previewActivityReported = false;
 
-  bool get _previewActive => widget.dpad
+  bool get _previewActive => widget.largeInteractions
+      ? _wideSelected && !_moving
+      : widget.dpad
       ? _f
       : _h || (widget.card.previewOnKeyboardFocus && _f);
 
   void _setHover(bool hovered) {
     if (_h == hovered) return;
     setState(() => _h = hovered);
+    if (widget.largeInteractions) widget.onInteraction?.call(this, hovered);
     _reportDesktopPreviewActivity(_previewActive);
   }
 
@@ -2844,7 +3154,8 @@ class _CardState extends State<_Card> with MetadataPresentationMixin<_Card> {
     final report = active &&
         !widget.dpad &&
         (widget.card.previewBuilder != null ||
-            widget.card.collectionVideoUrl != null);
+            widget.card.collectionVideoUrl != null ||
+            (_canExpand && widget.trailerEnabled));
     if (_previewActivityReported == report) return;
     _previewActivityReported = report;
     widget.onDesktopPreviewActivityChanged?.call(_previewOwner, report);
@@ -2859,6 +3170,7 @@ class _CardState extends State<_Card> with MetadataPresentationMixin<_Card> {
     }
     if (oldWidget.card.metadata?.id != widget.card.metadata?.id ||
         oldWidget.card.metadata?.type != widget.card.metadata?.type ||
+        oldWidget.largeInteractions != widget.largeInteractions ||
         oldWidget.expandOnFocus != widget.expandOnFocus ||
         oldWidget.trailerEnabled != widget.trailerEnabled) {
       _armCardTrailer();
@@ -2872,7 +3184,8 @@ class _CardState extends State<_Card> with MetadataPresentationMixin<_Card> {
         _previewActive &&
         !widget.dpad &&
         (widget.card.previewBuilder != null ||
-            widget.card.collectionVideoUrl != null);
+            widget.card.collectionVideoUrl != null ||
+            (_canExpand && widget.trailerEnabled));
     if (_previewActivityReported && !shouldReport) {
       _previewActivityReported = false;
       oldWidget.onDesktopPreviewActivityChanged?.call(_previewOwner, false);
@@ -2884,6 +3197,7 @@ class _CardState extends State<_Card> with MetadataPresentationMixin<_Card> {
 
   @override
   void dispose() {
+    widget.unregister?.call(this);
     _trailerDwell?.cancel();
     _trailerTextTimer?.cancel();
     _descriptionTimer?.cancel();
@@ -2895,15 +3209,21 @@ class _CardState extends State<_Card> with MetadataPresentationMixin<_Card> {
     super.dispose();
   }
 
-  bool get _canExpand => widget.expandOnFocus && widget.dpad &&
+  bool get _canExpand => widget.expandOnFocus && (widget.dpad || widget.largeInteractions) &&
       (widget.card.metadata?.type == 'movie' ||
           widget.card.metadata?.type == 'series') &&
       !widget.captionBelow;
 
   @override
   Widget build(BuildContext context) => TweenAnimationBuilder<double>(
-    tween: Tween(end: _canExpand && _f ? (_trailerPlaying ? 1.38 : 1.18) : 1.0),
-    duration: MediaQuery.disableAnimationsOf(context)
+    // Focused title cards use the same landscape width and growth stages,
+    // regardless of the resting poster preference.
+    tween: Tween(end: _scrollGrowth ?? (_canExpand && _activeCard && !_moving
+        ? (widget.expandedHeight * SpotlightCardShape.wide.aspect /
+            (widget.height * widget.card.shape.aspect)) *
+            (_trailerPlaying ? 1.38 : 1.18)
+        : 1.0)),
+    duration: _scrollGrowth != null || MediaQuery.disableAnimationsOf(context)
         ? Duration.zero
         : _trailerPlaying ? const Duration(milliseconds: 700)
         : Duration(milliseconds: PlatformUtil.isAndroidTvCached ? 160 : 220),
@@ -2912,10 +3232,14 @@ class _CardState extends State<_Card> with MetadataPresentationMixin<_Card> {
   );
 
   Widget _buildCard(BuildContext context, double growth) {
+    _paintedGrowth = growth;
     final app = AppThemeScope.of(context);
     final c = widget.card;
-    final expanded = _canExpand && _f;
+    final expanded = _canExpand && _activeCard && !_moving;
     final w = widget.height * c.shape.aspect * growth;
+    // Keep the row's baseline and height; only widen the selected poster.
+    // The width uses landscape-rail sizing rather than the taller poster.
+    final height = widget.height;
     // Decode at the card's own PHYSICAL width plus the 10% focus growth —
     // never a fixed constant. The hardcoded 400/800 decoded ~1.7× oversized
     // on a TV board, and the TV image cache is byte-capped (56MB, see
@@ -2926,7 +3250,7 @@ class _CardState extends State<_Card> with MetadataPresentationMixin<_Card> {
     // headroom and makes each upload cheaper.
     // A stable decode size avoids creating a new cached image every animation
     // frame. Eligible cards reserve their expanded resolution once.
-    final decodeW = (widget.height * c.shape.aspect *
+    final decodeW = ((expanded ? widget.expandedHeight : widget.height) * (expanded ? SpotlightCardShape.wide.aspect : c.shape.aspect) *
         (_canExpand && !PlatformUtil.isAndroidTvCached ? 1.18 : 1.0) * MediaQuery.devicePixelRatioOf(context) * 1.1)
         .round()
         .clamp(100, 1000);
@@ -2941,11 +3265,22 @@ class _CardState extends State<_Card> with MetadataPresentationMixin<_Card> {
             ? (_resolvedDescription ?? '') : '';
     final showDescription = description.isNotEmpty;
     final changed = meta != null && !identical(meta, originalMetadata);
-    final pending = !c.episodeArtwork && metadataArtworkPending(
-      c.shape == SpotlightCardShape.wide ? MetadataCategory.backgrounds : MetadataCategory.posters);
-    final url = pending ? null : c.imageForPresentation(meta, metadataPreferences);
+    final artwork = expanded && c.shape != SpotlightCardShape.wide
+        ? SpotlightCard(
+            metadata: c.metadata,
+            title: c.title,
+            onOpen: c.onOpen,
+            shape: SpotlightCardShape.wide,
+            episodeArtwork: c.episodeArtwork,
+            image: c.episodeArtwork ? c.image : c.metadata?.background,
+            fallbackImage: c.image,
+          )
+        : c;
+    final pending = !artwork.episodeArtwork && metadataArtworkPending(
+      artwork.shape == SpotlightCardShape.wide ? MetadataCategory.backgrounds : MetadataCategory.posters);
+    final url = pending ? null : artwork.imageForPresentation(meta, metadataPreferences);
     final displayedTitle = changed ? meta.name : c.title;
-    final fallbackUrl = c.imageErrorFallback(meta, metadataPreferences);
+    final fallbackUrl = artwork.imageErrorFallback(meta, metadataPreferences);
     Widget artPlaceholder() => Center(child: Padding(
       padding: const EdgeInsets.all(12),
       child: Text(displayedTitle, maxLines: 2, overflow: TextOverflow.ellipsis,
@@ -2975,7 +3310,7 @@ class _CardState extends State<_Card> with MetadataPresentationMixin<_Card> {
     // scaled. 1.2 is Flutter's normal line box; 33 is the existing 26 + 7
     // vertical padding around those lines.
     final captionLineHeight = widget.caption * 1.2;
-    final captionBedHeight = (showDescription ? widget.height : 33.0) +
+    final captionBedHeight = (showDescription ? height : 33.0) +
         (hasTitle ? captionLineHeight : 0) +
         (hasSubtitle ? captionLineHeight * 0.85 : 0);
 
@@ -3033,7 +3368,7 @@ class _CardState extends State<_Card> with MetadataPresentationMixin<_Card> {
                             const SizedBox(height: 6),
                             Text(
                               description,
-                              maxLines: widget.height >= 180 ? 3 : 2,
+                              maxLines: height >= 180 ? 3 : 2,
                               overflow: TextOverflow.ellipsis,
                               style: TextStyle(
                                 fontFamily: tvCaptionFamily,
@@ -3056,7 +3391,7 @@ class _CardState extends State<_Card> with MetadataPresentationMixin<_Card> {
 
     final art = ParallaxFocus(
       forceEnabled: widget.forceParallax,
-      focused: _f || _h,
+      focused: widget.largeInteractions ? _wideSelected : _f || _h,
       radius: BorderRadius.circular(widget.radius),
       // Expanded paragraphs stay in screen space, above every focus/glare
       // transform. Counter-scaling still leaves text under the 3D transform.
@@ -3065,7 +3400,7 @@ class _CardState extends State<_Card> with MetadataPresentationMixin<_Card> {
         borderRadius: BorderRadius.circular(widget.radius),
         child: SizedBox(
           width: w,
-          height: widget.height,
+          height: height,
           child: Stack(
             fit: StackFit.expand,
             children: [
@@ -3098,7 +3433,7 @@ class _CardState extends State<_Card> with MetadataPresentationMixin<_Card> {
                   // inset would eat a quarter of the height.
                   padding: EdgeInsets.all(
                     contained
-                        ? (w < widget.height ? w : widget.height) * 0.14
+                        ? (w < height ? w : height) * 0.14
                         : 0,
                   ),
                   child: RecoverableNetworkImage(
@@ -3153,19 +3488,19 @@ class _CardState extends State<_Card> with MetadataPresentationMixin<_Card> {
                 // so a channel card never flashes to an empty/black plate
                 // while a stream resolves or buffers.
                 IgnorePointer(child: preview(context)),
-              if (_trailerRequested && _f && _canExpand && widget.trailerEnabled)
+              if (_trailerRequested && _activeCard && !_moving && _canExpand && widget.trailerEnabled)
                 SpotlightCardTrailer(
                   key: ValueKey(c.metadata!.id),
                   item: c.metadata!,
                   volume: widget.trailerVolume,
                   onPlayingChanged: (playing) {
-                    if (!mounted || !_f || !_trailerRequested ||
+                    if (!mounted || !_activeCard || _moving || !_trailerRequested ||
                         _trailerPlaying == playing) return;
                     setState(() => _trailerPlaying = playing);
                     _trailerTextTimer?.cancel();
                     if (playing) {
                       _trailerTextTimer = Timer(const Duration(seconds: 2), () {
-                        if (mounted && _f && _trailerPlaying) {
+                        if (mounted && _activeCard && _trailerPlaying) {
                           setState(() => _hideTrailerText = true);
                         }
                       });
@@ -3235,13 +3570,13 @@ class _CardState extends State<_Card> with MetadataPresentationMixin<_Card> {
     final cursor = widget.forceParallax || app.focus.expression == FocusExpression.parallax
         ? art
         : FocusExpressionBox(
-            focused: _f || _h,
+            focused: widget.largeInteractions ? _wideSelected : _f || _h,
             radius: widget.radius,
             child: art,
           );
 
     final focusArt = CollectionFocusGlow(
-      active: _f || _h,
+      active: widget.largeInteractions ? _wideSelected : _f || _h,
       enabled: c.focusGlowEnabled,
       imageUrl: c.image,
       radius: widget.radius,
@@ -3347,7 +3682,12 @@ class _CardState extends State<_Card> with MetadataPresentationMixin<_Card> {
       skipTraversal: true,
       onFocusChange: (v) {
         setState(() => _f = v);
-        _armCardTrailer();
+        if (widget.largeInteractions) {
+          // Effective selection owns trailer updates when hover and focus overlap.
+          widget.onInteraction?.call(this, v);
+        } else {
+          _armCardTrailer();
+        }
         _loadFocusedDescription();
         _reportDesktopPreviewActivity(_previewActive);
         if (!v) _hold.reset();

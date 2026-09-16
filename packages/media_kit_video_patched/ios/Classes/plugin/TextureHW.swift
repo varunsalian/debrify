@@ -110,6 +110,7 @@ public class TextureHW: NSObject, FlutterTexture, ResizableTextureProtocol {
 
     mpv_render_context_set_update_callback(renderContext, nil, nil)
     mpv_render_context_free(renderContext)
+    glFinish() // Complete submitted GL work before a PiP renderer handoff.
   }
 
   public func resize(_ size: CGSize) {

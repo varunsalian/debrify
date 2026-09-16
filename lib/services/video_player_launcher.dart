@@ -1,3 +1,4 @@
+import '../utils/show_shuffle.dart';
 import 'dart:async';
 import '../utils/platform_util.dart';
 import 'dart:convert';
@@ -5,12 +6,13 @@ import 'dart:io';
 import 'dart:math';
 
 import 'package:android_intent_plus/android_intent.dart';
+import 'package:android_intent_plus/flag.dart';
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
 import '../models/iptv_playlist.dart';
-import '../theme/app_surfaces.dart';
+import '../screens/video_player/player_pip_route.dart';
 import '../models/movie_collection.dart';
 import '../models/torrent.dart';
 import '../services/external_player_service.dart';
@@ -213,6 +215,7 @@ class VideoPlayerLaunchArgs {
   final String? webDavPath;
   final Future<Map<String, String>?> Function()? requestMagicNext;
   final Future<Map<String, dynamic>?> Function()? requestNextChannel;
+  final bool initialContinuousShuffle;
   final bool startFromRandom;
   final int randomStartMaxPercent;
   final double? startAtPercent;
@@ -338,6 +341,7 @@ class VideoPlayerLaunchArgs {
     this.webDavPath,
     this.requestMagicNext,
     this.requestNextChannel,
+    this.initialContinuousShuffle = false,
     this.startFromRandom = false,
     this.randomStartMaxPercent = 40,
     this.startAtPercent,
@@ -425,6 +429,7 @@ class VideoPlayerLaunchArgs {
     webDavPath: webDavPath,
     requestMagicNext: requestMagicNext,
     requestNextChannel: requestNextChannel,
+    initialContinuousShuffle: initialContinuousShuffle,
     startFromRandom: startFromRandom,
     randomStartMaxPercent: randomStartMaxPercent,
     startAtPercent: startAtPercent,
@@ -501,6 +506,7 @@ class VideoPlayerLaunchArgs {
       pikpakCollectionId: pikpakCollectionId,
       requestMagicNext: requestMagicNext,
       requestNextChannel: requestNextChannel,
+      initialContinuousShuffle: initialContinuousShuffle,
       startFromRandom: startFromRandom,
       randomStartMaxPercent: randomStartMaxPercent,
       startAtPercent: startAtPercent,
@@ -555,6 +561,17 @@ class VideoPlayerLaunchArgs {
 }
 
 class VideoPlayerLauncher {
+  /// The external app needs its own temporary grant for this exact document.
+  /// Debrify's persisted folder/file permission is not shared across apps.
+  static AndroidIntent androidExternalVideoIntent(String url) => AndroidIntent(
+    action: 'action_view',
+    data: url,
+    type: 'video/*',
+    flags: Uri.tryParse(url)?.scheme == 'content'
+        ? const [Flag.FLAG_GRANT_READ_URI_PERMISSION]
+        : null,
+  );
+
   /// Select the single URL handed to an external player.
   ///
   /// External-player intents, URL schemes, and generic commands cannot
@@ -830,6 +847,7 @@ class VideoPlayerLauncher {
           webDavPath: args.webDavPath,
           requestMagicNext: args.requestMagicNext,
           requestNextChannel: args.requestNextChannel,
+          initialContinuousShuffle: args.initialContinuousShuffle,
           startFromRandom: args.startFromRandom,
           randomStartMaxPercent: args.randomStartMaxPercent,
           startAtPercent: args.startAtPercent,
@@ -925,6 +943,7 @@ class VideoPlayerLauncher {
           webDavPath: args.webDavPath,
           requestMagicNext: args.requestMagicNext,
           requestNextChannel: args.requestNextChannel,
+          initialContinuousShuffle: args.initialContinuousShuffle,
           startFromRandom: args.startFromRandom,
           randomStartMaxPercent: args.randomStartMaxPercent,
           startAtPercent: args.startAtPercent,
@@ -1201,7 +1220,7 @@ class VideoPlayerLauncher {
     // keeps it (and every dialog/sheet it opens) on today's look under any
     // app theme.
     final result = await Navigator.of(context).push<Map<String, dynamic>?>(
-      FrozenLegacyPageRoute(builder: (_) => args.toWidget()),
+      videoPlayerRoute(builder: (_) => args.toWidget()),
     );
 
     if (result?['startupSourcesExhausted'] == true &&
@@ -1594,11 +1613,7 @@ class VideoPlayerLauncher {
     } else if (Platform.isAndroid) {
       // Android: Show Intent chooser for video player apps
       try {
-        final intent = AndroidIntent(
-          action: 'action_view',
-          data: url,
-          type: 'video/*',
-        );
+        final intent = androidExternalVideoIntent(url);
         await intent.launch();
         return true;
       } catch (e) {
@@ -3008,6 +3023,7 @@ class VideoPlayerLauncher {
 
       // Build payload with Stremio TV guide data
       final payloadMap = result.payload.toMap();
+      payloadMap['initialContinuousShuffle'] = args.initialContinuousShuffle;
       if (args.stremioTvChannels != null &&
           args.stremioTvChannels!.isNotEmpty) {
         payloadMap['stremioTvGuide'] = {
@@ -3679,6 +3695,7 @@ class VideoPlayerLauncher {
             guideEpisodes.add({
               'season': season,
               'episode': number,
+              'shuffleEligible': isShuffleEpisodeEligible(m),
               if (info.title != null) 'title': info.title,
               if (info.poster != null) 'artwork': info.poster,
               if (info.plot != null) 'description': info.plot,

@@ -29,6 +29,7 @@ abstract final class SanitizedProfilePreferences {
       case 'home_hide_card_titles_and_ratings':
       case 'home_hide_catalog_addon_names':
       case 'home_hide_collection_names':
+      case 'home_animations_enabled':
       case 'spotlight_focus_details':
       case 'sources_use_addon_text':
       case 'sources_show_addon_logos':
@@ -74,6 +75,10 @@ abstract final class SanitizedProfilePreferences {
             const <String>{'bright', 'soft', 'dim'}.contains(value);
       case 'tv_home_style':
         return value is String && _tvHomeStyles.contains(value);
+      case 'home_animation_style':
+        return value == 'snowy_mountain' ||
+            value == 'midnight_rain' ||
+            value == 'moonlit_ocean';
       case 'home_card_orientation':
         return value is String &&
             const <String>{'portrait', 'landscape'}.contains(value);

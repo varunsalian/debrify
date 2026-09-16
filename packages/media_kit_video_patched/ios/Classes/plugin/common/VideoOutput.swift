@@ -35,6 +35,11 @@ public class VideoOutput: NSObject {
   private var textureId: Int64 = -1
   private var currentSize: CGSize = CGSize.zero
   private var disposed: Bool = false
+  // Accessed only by the rendering worker.
+  private var pipFrame: ((CVPixelBuffer) -> Void)?
+  private var pipRendering = false
+  private var originalHwdec: String?
+
 
   init(
     handle: Int64,
@@ -82,6 +87,90 @@ public class VideoOutput: NSObject {
         completion()
       }
     }
+  }
+
+  /// Called while foregrounded, before AVKit is allowed to start PiP.
+  public func preparePip(frame: @escaping (CVPixelBuffer) -> Void,
+                         completion: @escaping (Bool) -> Void) {
+    worker.enqueue {
+      guard !self.disposed, let texture = self.texture as? SafeResizableTexture else {
+        DispatchQueue.main.async { completion(false) }
+        return
+      }
+      self.pipFrame = frame
+      if !self.pipRendering {
+        let videoTrack = self.stringProperty("vid") ?? "auto"
+        self.originalHwdec = self.stringProperty("hwdec")
+        self.setPropertyAsync("hwdec", "auto-copy")
+        var valid = false
+        texture.replace {
+          let software = TextureSW(handle: self.handle, updateCallback: { [weak self] in
+            self?.updateCallback()
+          }, synchronous: true)
+          valid = software.isValid
+          return software
+        }
+        if !valid {
+          self.pipFrame = nil
+          if self.enableHardwareAcceleration && !VideoOutput.isSimulator {
+            texture.replace {
+              TextureHW(handle: self.handle, updateCallback: { [weak self] in self?.updateCallback() })
+            }
+          }
+          self.setPropertyAsync("vid", videoTrack)
+          if let hwdec = self.originalHwdec { self.setPropertyAsync("hwdec", hwdec) }
+          self.originalHwdec = nil
+          self.currentSize = .zero
+          DispatchQueue.main.async { completion(false) }
+          return
+        }
+        self.pipRendering = true
+        self.currentSize = .zero
+        // Freeing libmpv's active render context deselects video. Re-select the
+        // same track against the new context without reopening or seeking media.
+        self.setPropertyAsync("vid", videoTrack)
+      }
+      DispatchQueue.main.async { completion(true) }
+    }
+  }
+
+  /// Only restore OpenGL while foregrounded. The PiP owner defers this on close
+  /// in the background; disposal still frees the software context normally.
+  public func stopPipFrames() { worker.enqueue { self.pipFrame = nil } }
+
+  public func finishPip() {
+    worker.enqueue {
+      self.pipFrame = nil
+      guard !self.disposed, self.pipRendering,
+            let texture = self.texture as? SafeResizableTexture else { return }
+      self.pipRendering = false
+      let videoTrack = self.stringProperty("vid") ?? "auto"
+      if self.enableHardwareAcceleration && !VideoOutput.isSimulator {
+        texture.replace {
+          TextureHW(handle: self.handle, updateCallback: { [weak self] in
+            self?.updateCallback()
+          })
+        }
+      }
+      if let hwdec = self.originalHwdec { self.setPropertyAsync("hwdec", hwdec) }
+      self.originalHwdec = nil
+      self.setPropertyAsync("vid", videoTrack)
+      self.currentSize = .zero
+    }
+  }
+
+  private func stringProperty(_ name: String) -> String? {
+    guard let value = mpv_get_property_string(handle, name) else { return nil }
+    defer { mpv_free(value) }
+    return String(cString: value)
+  }
+
+  private func setPropertyAsync(_ name: String, _ value: String) {
+    let values: [String] = ["set", name, value]
+    let strings: [UnsafeMutablePointer<CChar>] = values.map { value in value.withCString { strdup($0)! } }
+    defer { strings.forEach { free($0) } }
+    var args: [UnsafePointer<CChar>?] = strings.map { UnsafePointer<CChar>($0) } + [nil]
+    mpv_command_async(handle, 0, &args)
   }
 
   public func setSize(width: Int64?, height: Int64?) {
@@ -168,7 +257,12 @@ public class VideoOutput: NSObject {
 
   private func _updateCallback() {
     if disposed { return }
-    let size = videoSize
+    var size = videoSize
+    if pipRendering && size.width > 0 && size.height > 0 {
+      let scale = min(1, 960 / max(size.width, size.height))
+      size = CGSize(width: max(2, floor(size.width * scale / 2) * 2),
+                    height: max(2, floor(size.height * scale / 2) * 2))
+    }
 
     if size.width == 0 || size.height == 0 {
       return
@@ -190,6 +284,9 @@ public class VideoOutput: NSObject {
     }
 
     texture.render(size)
+    if let frame = pipFrame, let buffer = texture.copyPixelBuffer()?.takeRetainedValue() {
+      frame(buffer)
+    }
     DispatchQueue.main.sync { [weak self] in
       guard let that = self else { return }
       // Textures must be marked as available from the main thread

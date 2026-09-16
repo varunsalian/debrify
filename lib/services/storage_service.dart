@@ -137,7 +137,8 @@ class StorageService {
   // Generation 4 repairs profiles imported with a remote defaults checkpoint
   // but without its device-local appearance values. Fill only absent keys;
   // explicit Looks and custom settings remain unchanged.
-  static const int _currentDefaultsGeneration = 4;
+  // Generation 5 enables source logos and original add-on formatting once.
+  static const int _currentDefaultsGeneration = 5;
   static const String _defaultsGenerationKey = 'defaults_generation';
 
   /// MUST run before [TextBrightnessController.warm] / theme warms in
@@ -211,6 +212,11 @@ class StorageService {
           theme == 'spotlight' ? 'spotlight' : 'grid',
         );
       }
+    }
+    if (gen < 5 &&
+        prefs.getBool('sources_presentation_defaults_copied_v1') != true) {
+      await prefs.setBool('sources_show_addon_logos', true);
+      await prefs.setBool('sources_use_addon_text', true);
     }
     await prefs.setInt(_defaultsGenerationKey, _currentDefaultsGeneration);
   }
@@ -426,8 +432,8 @@ class StorageService {
   static const String _skipSegmentProviderKey = 'skip_segment_provider';
 
   /// Completion thresholds selectable in Settings → Playback. A lower bound
-  /// avoids treating a brief accidental play as watched; 95% still lets users
-  /// finish a title without waiting through every trailing credit frame.
+  /// avoids treating a brief accidental play as watched; 100% lets users
+  /// require playback to reach the end.
   static const List<int> localCompletionThresholdOptions = <int>[
     50,
     60,
@@ -437,6 +443,7 @@ class StorageService {
     85,
     90,
     95,
+    100,
   ];
   static const int defaultLocalCompletionThreshold = 80;
 
@@ -6366,7 +6373,7 @@ class StorageService {
 
   static Future<bool> getShowAddonLogos() async {
     final prefs = await ProfilePreferences.instance();
-    return prefs.getBool('sources_show_addon_logos') ?? false;
+    return prefs.getBool('sources_show_addon_logos') ?? true;
   }
 
   static Future<void> setShowAddonLogos(bool value) async {
@@ -6376,7 +6383,7 @@ class StorageService {
 
   static Future<bool> getUseAddonTextFormatting() async {
     final prefs = await ProfilePreferences.instance();
-    return prefs.getBool('sources_use_addon_text') ?? false;
+    return prefs.getBool('sources_use_addon_text') ?? true;
   }
 
   static Future<void> setUseAddonTextFormatting(bool value) async {
@@ -6394,6 +6401,34 @@ class StorageService {
   static Future<void> setHomeHideCollectionNames(bool value) async {
     final prefs = await ProfilePreferences.instance();
     await prefs.setBool(_homeHideCollectionNamesKey, value);
+  }
+
+  static Future<bool> getHomeAnimationsEnabled() async {
+    final prefs = await ProfilePreferences.instance();
+    return prefs.getBool('home_animations_enabled') ?? false;
+  }
+
+  static Future<void> setHomeAnimationsEnabled(bool value) async {
+    final prefs = await ProfilePreferences.instance();
+    await prefs.setBool('home_animations_enabled', value);
+  }
+
+  static Future<String> getHomeAnimationStyle() async {
+    final prefs = await ProfilePreferences.instance();
+    return switch (prefs.getString('home_animation_style')) {
+      'midnight_rain' => 'midnight_rain',
+      'moonlit_ocean' => 'moonlit_ocean',
+      'snowy_mountain' => 'snowy_mountain',
+      _ => 'snowy_mountain',
+    };
+  }
+
+  static Future<void> setHomeAnimationStyle(String value) async {
+    if (!const {'snowy_mountain', 'midnight_rain', 'moonlit_ocean'}.contains(value)) {
+      throw ArgumentError.value(value);
+    }
+    final prefs = await ProfilePreferences.instance();
+    await prefs.setString('home_animation_style', value);
   }
 
   static Future<bool> getSpotlightFocusDetails() async {
@@ -6419,6 +6454,8 @@ class StorageService {
     await prefs.remove('${_homeCwMergedRowsKeyPrefix}simkl');
     await prefs.remove('${_homeCwMergedRowsKeyPrefix}mdblist');
     await prefs.remove(_homeFavoritesOpenFolderKey);
+    await prefs.remove('home_animations_enabled');
+    await prefs.remove('home_animation_style');
     await prefs.remove(_homeCardOrientationKey);
     await prefs.remove(_homeHideCardTitlesAndRatingsKey);
     await prefs.remove(_homeHideCatalogAddonNamesKey);

@@ -314,7 +314,7 @@ class _DetailShowcaseState extends State<DetailShowcase> {
   final GlobalKey _seasonsKey = GlobalKey();
   final GlobalKey _episodesKey = GlobalKey();
 
-  /// Compact episodes rail: which card sits at the reading position. Touch
+  /// Touch episodes rail: which card sits at the reading position. Touch
   /// has no cursor, so "focus" is what the scroll has settled on — the IPTV
   /// centered-selector grammar. The settled card wears the same parallax
   /// lift the TV cursor grants, and the highlight hops cell to cell live as
@@ -326,7 +326,7 @@ class _DetailShowcaseState extends State<DetailShowcase> {
 
   void _onEpScroll() {
     final m = _m;
-    if (m == null || !m.compact || !_epScroll.hasClients) return;
+    if (m == null || widget.dpad || !_epScroll.hasClients) return;
     final extent = m.epCell + m.epGap;
     if (extent <= 0) return;
     final settled = (_epScroll.offset / extent).round();
@@ -1472,7 +1472,7 @@ class _DetailShowcaseState extends State<DetailShowcase> {
                       episode: ep,
                       // Real focus (a phone with a keyboard exists) OR the
                       // scroll-settled reading position — see [_epSettled].
-                      focused: focused || i == _epSettled,
+                      focused: focused || (!widget.dpad && i == _epSettled),
                       progress: view.progressOf(ep),
                       isNext: view.isNext(ep),
                       fallbackImage: view.showImageUrl,
@@ -1480,7 +1480,7 @@ class _DetailShowcaseState extends State<DetailShowcase> {
                     )
                   : ShowcaseEpisodeCell(
                       episode: ep,
-                      focused: focused,
+                      focused: focused || (!widget.dpad && i == _epSettled),
                       progress: view.progressOf(ep),
                       isNext: view.isNext(ep),
                       fallbackImage: view.showImageUrl,

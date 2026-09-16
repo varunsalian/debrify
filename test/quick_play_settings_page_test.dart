@@ -28,14 +28,14 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('add-on formatting defaults off and saves its toggle', (tester) async {
+  testWidgets('add-on formatting defaults on and saves its toggle', (tester) async {
     SharedPreferences.setMockInitialValues({});
     await pumpPage(tester);
-    expect(await StorageService.getUseAddonTextFormatting(), isFalse);
+    expect(await StorageService.getUseAddonTextFormatting(), isTrue);
     await tester.ensureVisible(find.text('Use add-on text formatting'));
     await tester.tap(find.text('Use add-on text formatting'));
     await tester.pumpAndSettle();
-    expect(await StorageService.getUseAddonTextFormatting(), isTrue);
+    expect(await StorageService.getUseAddonTextFormatting(), isFalse);
   });
 
   testWidgets('shows tabs, the torrent switch, and the priority section', (

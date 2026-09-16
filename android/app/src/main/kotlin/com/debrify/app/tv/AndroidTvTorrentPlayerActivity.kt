@@ -826,6 +826,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private var movieGroups: MovieGroups? = null
     private var continuousShuffleEnabled = false
     private val shuffleBag = mutableListOf<Int>()
+    private val showShuffle = ShowShuffle()
+    private var showShuffleGeneration = 0
     private var lastBackPressTime: Long = 0
 
     // IPTV mode state
@@ -1466,6 +1468,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         override fun onPlaybackStateChanged(playbackState: Int) {
             when (playbackState) {
                 Player.STATE_READY -> {
+                    if (pendingShufflePlayback?.mediaStarted == true) pendingShufflePlayback = null
                     hasEverBeenReady = true
                     iptvTuneDiagnostics.onReady(player?.currentPosition ?: 0L)
                     if (isIptvMode) {
@@ -1679,6 +1682,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
                     val model = payload ?: return
                     if (continuousShuffleEnabled) {
+                        if (playShowShuffle(autoAdvance = true)) return
                         val shuffleIndex = pickShuffleIndex()
                         if (shuffleIndex != null) {
                             showNextOverlay(model.items[shuffleIndex])
@@ -1752,6 +1756,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         }
 
         override fun onPlayerError(error: PlaybackException) {
+            if (pendingShufflePlayback?.mediaStarted == true &&
+                !currentPlaybackItemIsPikPak() && failShufflePlayback()) return
             if (!isIptvMode && manualSourceRestoreInProgress) {
                 manualSourceRestoreInProgress = false
                 showStatusPillTransient("Previous source could not be restored")
@@ -1989,6 +1995,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         // Check for IPTV mode before normal payload parsing
         try {
             val payloadCheck = JSONObject(rawPayload)
+            continuousShuffleEnabled = payloadCheck.optBoolean("initialContinuousShuffle", false)
             // IPTV returns from this block before [parsePayload], but its
             // finish event must still identify the bridge launch that owns
             // the callbacks it is about to clear.
@@ -2216,6 +2223,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                             durationMs = if (g.has("durationMs")) g.optLong("durationMs") else null,
                             trackerProgressPercent = if (g.has("trackerProgressPercent")) g.optDouble("trackerProgressPercent") else null,
                             watched = g.optBoolean("watched", false),
+                            shuffleEligible = g.optBoolean("shuffleEligible", true),
                         )
                     )
                 }
@@ -4407,8 +4415,25 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         index: Int,
         suppressTrakt: Boolean = false,
         suppressResume: Boolean = false,
+        shuffleAttempt: ShufflePlaybackAttempt? = null,
     ) {
+        if (shuffleAttempt != null && !shuffleAttemptCurrent(shuffleAttempt)) return
+        val outgoingIndex = currentIndex
+        if (shuffleAttempt != null && shuffleAttempt.restorePreparation == null) {
+            shuffleAttempt.restorePreparation = {
+                currentIndex = outgoingIndex
+                payload?.items?.getOrNull(outgoingIndex)?.let {
+                    activeVodHeaders = buildProtectedMediaOrigins(listOf(it)) to it.httpHeaders
+                }
+                updateCatalogEpisodeControls()
+            }
+        }
+        pendingShufflePlayback = null
         mediaPreparationGeneration++
+        if (shuffleAttempt != null) {
+            shuffleAttempt.navigation = mediaPreparationGeneration
+            watchShufflePlayback(shuffleAttempt)
+        }
         // A sleep stop wins over anything already queued: the auto-advance
         // arms a 1.5s postDelayed before starting the next item, and a
         // countdown expiring inside that window would otherwise be undone by
@@ -4481,6 +4506,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
     private fun resolveAndPlay(index: Int, item: PlaybackItem) {
         android.util.Log.d("AndroidTvPlayer", "resolveAndPlay - index: $index, resumeId: ${item.resumeId}, id: ${item.id}")
+        val navigation = mediaPreparationGeneration
+        val shuffleAttempt = pendingShufflePlayback
         setResolvingState(true)
         val startupGeneration = if (startupFailoverCursor?.committed == false) {
             startupFailoverGeneration
@@ -4502,6 +4529,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
         // Request stream from Flutter with async callback
         requestStreamFromFlutter(item, index) { url, provider ->
+            if (navigation != mediaPreparationGeneration ||
+                (shuffleAttempt != null && !shuffleAttemptCurrent(shuffleAttempt))) return@requestStreamFromFlutter
             android.util.Log.d("AndroidTvPlayer", "resolveAndPlay - received url: $url")
             if (manualSourceIndex != null &&
                 (manualSourceSwitchSnapshot == null ||
@@ -4541,6 +4570,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                     warning = true,
                 )
                 android.util.Log.e("AndroidTvPlayer", "resolveAndPlay - URL is null or empty!")
+                if (failShufflePlayback()) return@requestStreamFromFlutter
                 if (!failManualSourceCandidate("initial-resolve") &&
                     !failStartupResolution(currentStremioSourceIndex, "initial-resolve")
                 ) {
@@ -4563,13 +4593,16 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     }
 
     private fun discoverProtectedMime(url: String, headers: Map<String, String>, ready: (String?) -> Unit) {
+        val shuffleAttempt = pendingShufflePlayback
         val generation = ++mediaPreparationGeneration
+        shuffleAttempt?.navigation = generation
         val sourceToken = stremioResolutionToken
         mediaPreparationScope.launch {
             val mimeType = withContext(Dispatchers.IO) {
                 ProtectedStreamHttp.discoverMimeType(protectedStreamClient, url, headers)
             }
             if (generation == mediaPreparationGeneration && sourceToken == stremioResolutionToken &&
+                (shuffleAttempt == null || shuffleAttemptCurrent(shuffleAttempt)) &&
                 !isFinishing && !isDestroyed && !sleepStopLatched) {
                 ready(mimeType)
             }
@@ -4577,6 +4610,13 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     }
 
     private fun startPlayback(item: PlaybackItem, mimeDiscovered: Boolean = false) {
+        pendingShufflePlayback?.let {
+            if (!shuffleAttemptCurrent(it)) {
+                restoreShufflePreparation(it)
+                pendingShufflePlayback = null
+                return
+            }
+        }
         if (!isIptvMode && !mimeDiscovered && item.mimeType == null &&
             ProtectedStreamHttp.needsDiscovery(item.url, item.httpHeaders)) {
             discoverProtectedMime(item.url, item.httpHeaders) { mimeType ->
@@ -4678,6 +4718,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         val mergedSource = buildMergedSourceOrNull(item, mediaItem)
 
         player?.apply {
+            pendingShufflePlayback?.mediaStarted = true
             if (mergedSource != null) {
                 subtitleTrackReadiness.onMediaReplacement()
                 setMediaSource(mergedSource)
@@ -5041,6 +5082,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
     private fun playNext() {
         if (continuousShuffleEnabled) {
+            if (playShowShuffle()) return
             val shuffleIndex = pickShuffleIndex()
             if (shuffleIndex != null) {
                 isAutoAdvancing = true
@@ -5132,6 +5174,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     }
 
     private fun playRandom() {
+        if (playShowShuffle()) return
         val model = payload ?: return
         if (model.items.isEmpty()) {
             Toast.makeText(this, "No items in playlist", Toast.LENGTH_SHORT).show()
@@ -5139,8 +5182,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         }
 
         val randomIndex = pickShuffleIndex() ?: return
-        isAutoAdvancing = true
-        playItem(randomIndex)
+        isAutoAdvancing = false
+        playItem(randomIndex, suppressResume = true)
     }
 
     private fun showRandomPlaybackDialog() {
@@ -5163,17 +5206,17 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 when (which) {
                     0 -> {
                         continuousShuffleEnabled = false
-                        shuffleBag.clear()
+                        resetShuffle()
                         playRandom()
                     }
                     1 -> {
                         if (continuousShuffleEnabled) {
                             continuousShuffleEnabled = false
-                            shuffleBag.clear()
+                            resetShuffle()
                             Toast.makeText(this, "Continuous shuffle off", Toast.LENGTH_SHORT).show()
                         } else {
                             continuousShuffleEnabled = true
-                            shuffleBag.clear()
+                            resetShuffle()
                             Toast.makeText(this, "Continuous shuffle on", Toast.LENGTH_SHORT).show()
                             playRandom()
                         }
@@ -5181,6 +5224,171 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 }
             }
             .show()
+    }
+
+    private fun resetShuffle() {
+        pendingShufflePlayback?.let { restoreShufflePreparation(it) }
+        pendingShufflePlayback = null
+        shuffleBag.clear()
+        showShuffle.clear()
+        showShuffleGeneration++
+        queuedShuffleGeneration = null
+    }
+
+    private class ShufflePlaybackAttempt(
+        var navigation: Int,
+        val generation: Int,
+        val autoAdvance: Boolean,
+        val onUnavailable: () -> Unit,
+        var mediaStarted: Boolean = false,
+        var restorePreparation: (() -> Unit)? = null,
+        var finished: Boolean = false,
+    )
+    private var pendingShufflePlayback: ShufflePlaybackAttempt? = null
+    private var queuedShuffleGeneration: Int? = null
+    private var queuedShuffleNavigation: Int? = null
+
+    private fun shuffleAttemptCurrent(attempt: ShufflePlaybackAttempt): Boolean =
+        !attempt.finished && shuffleAttemptOwned(attempt)
+
+    private fun shuffleAttemptOwned(attempt: ShufflePlaybackAttempt): Boolean =
+        !isFinishing && !isDestroyed && attempt.generation == showShuffleGeneration &&
+            attempt.navigation == mediaPreparationGeneration &&
+            (!attempt.autoAdvance || !sleepStopLatched)
+
+    private fun restoreShufflePreparation(attempt: ShufflePlaybackAttempt) {
+        if (!attempt.mediaStarted && attempt.navigation == mediaPreparationGeneration) {
+            attempt.restorePreparation?.invoke()
+        }
+    }
+
+    private fun failShufflePlayback(): Boolean {
+        val attempt = pendingShufflePlayback ?: return false
+        pendingShufflePlayback = null
+        restoreShufflePreparation(attempt)
+        val current = shuffleAttemptCurrent(attempt)
+        attempt.finished = true
+        if (current) {
+            progressHandler.post { if (shuffleAttemptOwned(attempt)) attempt.onUnavailable() }
+        }
+        return true
+    }
+
+    private var shuffleWatchGeneration = 0
+
+    private fun watchShufflePlayback(attempt: ShufflePlaybackAttempt) {
+        val watchGeneration = ++shuffleWatchGeneration
+        pendingShufflePlayback = attempt
+        progressHandler.postDelayed({
+            if (pendingShufflePlayback === attempt && watchGeneration == shuffleWatchGeneration) {
+                if (attempt.mediaStarted && currentPlaybackItemIsPikPak() && isPikPakRetrying &&
+                    shuffleAttemptCurrent(attempt)) watchShufflePlayback(attempt)
+                else failShufflePlayback()
+            }
+        }, 15000)
+    }
+
+    private fun clearQueuedShuffle(generation: Int) {
+        if (queuedShuffleGeneration == generation) {
+            queuedShuffleGeneration = null
+            queuedShuffleNavigation = null
+        }
+    }
+
+    // The explicit shuffle supersedes the older fetch. Do not let that fetch's
+    // playItem advance navigation and accidentally cancel the queued command.
+    private fun yieldEpisodeFetchToQueuedShuffle(): Boolean =
+        queuedShuffleGeneration == showShuffleGeneration &&
+            queuedShuffleNavigation == mediaPreparationGeneration &&
+            !isFinishing && !isDestroyed
+
+    private fun canShuffleWholeShow(): Boolean {
+        val model = payload ?: return false
+        return hasPlaylistResolver && !isIptvMode && !isStremioTvMode &&
+            model.contentType.equals("series", ignoreCase = true) &&
+            model.guideEpisodes.isNotEmpty()
+    }
+
+    /** Resolve outside the pack only when catalog playback supplies a resolver. */
+    private fun playShowShuffle(
+        attempted: Set<ShuffleEpisode> = emptySet(),
+        autoAdvance: Boolean = false,
+    ): Boolean {
+        if (!canShuffleWholeShow()) return false
+        if (episodeFetchInFlight) {
+            if (autoAdvance || queuedShuffleGeneration == showShuffleGeneration) return true
+            val generation = showShuffleGeneration
+            queuedShuffleGeneration = generation
+            val navigation = mediaPreparationGeneration
+            queuedShuffleNavigation = navigation
+            fun retryWhenIdle() {
+                if (generation != showShuffleGeneration || navigation != mediaPreparationGeneration ||
+                    isFinishing || isDestroyed) {
+                    clearQueuedShuffle(generation)
+                    return
+                }
+                if (episodeFetchInFlight) progressHandler.postDelayed({ retryWhenIdle() }, 50)
+                else {
+                    clearQueuedShuffle(generation)
+                    playShowShuffle(attempted, autoAdvance)
+                }
+            }
+            progressHandler.postDelayed({ retryWhenIdle() }, 50)
+            return true
+        }
+        val model = payload ?: return false
+        val current = model.items.getOrNull(currentIndex)?.let { item ->
+            val season = item.season
+            val episode = item.episode
+            if (season != null && episode != null) ShuffleEpisode(season, episode) else null
+        }
+        val eligible = model.guideEpisodes.filter {
+            it.season > 0 && it.episode > 0 && it.shuffleEligible
+        }.map { ShuffleEpisode(it.season, it.episode) }
+        val target = if (attempted.size < 3) showShuffle.pick(eligible, current, attempted) else null
+        if (target == null) {
+            showStatusPillTransient("No other playable episode found for shuffle")
+            return true
+        }
+        hideUpNextCard()
+        val generation = showShuffleGeneration
+        fun fetchTarget() {
+            val fetchAttempt = ShufflePlaybackAttempt(mediaPreparationGeneration, generation, autoAdvance,
+                onUnavailable = { playShowShuffle(attempted + target, autoAdvance) })
+            if (!shuffleAttemptCurrent(fetchAttempt)) return
+            requestEpisodeFetch(target.season, target.episode, autoAdvance = autoAdvance,
+                suppressResume = true,
+                shuffleAttempt = fetchAttempt,
+                shouldContinue = { shuffleAttemptCurrent(fetchAttempt) },
+                onUnavailable = { if (shuffleAttemptCurrent(fetchAttempt)) fetchAttempt.onUnavailable() })
+        }
+        val index = model.items.indexOfFirst {
+            it.season == target.season && it.episode == target.episode
+        }
+        if (index < 0) {
+            fetchTarget()
+            return true
+        }
+        val attempt = ShufflePlaybackAttempt(mediaPreparationGeneration, generation, autoAdvance,
+            onUnavailable = { fetchTarget() })
+        fun openPrepared(item: PlaybackItem) {
+            if (!shuffleAttemptCurrent(attempt)) return
+            model.items[index] = item
+            isAutoAdvancing = autoAdvance
+            playItem(index, suppressResume = true, shuffleAttempt = attempt)
+        }
+        val item = model.items[index]
+        if (item.url.isBlank()) {
+            // Resolve before changing currentIndex, so cancellation/failure
+            // leaves the outgoing stream associated with its own episode.
+            watchShufflePlayback(attempt)
+            requestStreamFromFlutter(item, index) { url, provider ->
+                if (!shuffleAttemptCurrent(attempt)) return@requestStreamFromFlutter
+                if (url.isNullOrEmpty()) failShufflePlayback()
+                else openPrepared(item.copy(url = url, provider = provider ?: item.provider))
+            }
+        } else openPrepared(item)
+        return true
     }
 
     private fun getShuffleEligibleIndices(): List<Int> {
@@ -6322,6 +6530,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             .build()
 
         player?.apply {
+            pendingShufflePlayback?.mediaStarted = true
             subtitleTrackReadiness.onMediaReplacement()
             setMediaItem(mediaItem)
             prepare()
@@ -6397,6 +6606,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 // the failure back to the gate (manual pick restores the
                 // previous source; startup advances the failover cursor)
                 // instead of skipping to the next playlist item.
+                if (failShufflePlayback()) return@waitForPikPakMetadata
                 if (failManualSourceCandidate("pikpak-exhausted")) {
                     return@waitForPikPakMetadata
                 }
@@ -8277,6 +8487,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     // the current episode is near its end and a playable next item exists.
     private fun maybeShowUpNext() {
         if (upNextVisible) return
+        if (continuousShuffleEnabled && canShuffleWholeShow()) return
         if (isIptvMode || isStremioTvMode) return
         if (upNextDismissedForIndex == currentIndex) return
         if (!isCleanPlaybackState()) return
@@ -14994,13 +15205,13 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         } else if (tag == "shuffle") {
             "Shuffle & autoplay" to listOf(
                 mrow("Play random once", accent = true, onOk = {
-                    continuousShuffleEnabled = false; shuffleBag.clear(); playRandom(); unifiedMenu?.hide()
+                    continuousShuffleEnabled = false; resetShuffle(); playRandom(); unifiedMenu?.hide()
                 }),
                 mrow("Shuffle continuously", value = if (continuousShuffleEnabled) "On" else "Off",
                     selected = continuousShuffleEnabled, onOk = {
                         val turningOn = !continuousShuffleEnabled
                         continuousShuffleEnabled = turningOn
-                        shuffleBag.clear()
+                        resetShuffle()
                         Toast.makeText(
                             this, if (turningOn) "Continuous shuffle on" else "Continuous shuffle off",
                             Toast.LENGTH_SHORT
@@ -16351,6 +16562,10 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         season: Int,
         episode: Int,
         autoAdvance: Boolean = false,
+        suppressResume: Boolean = autoAdvance,
+        shuffleAttempt: ShufflePlaybackAttempt? = null,
+        onUnavailable: (() -> Unit)? = null,
+        shouldContinue: (() -> Boolean)? = null,
     ) {
         if (episodeFetchInFlight) return
         val label = String.format(java.util.Locale.US, "S%02dE%02d", season, episode)
@@ -16369,21 +16584,26 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 override fun success(result: Any?) {
                     runOnUiThread {
                         episodeFetchInFlight = false
-                        if (token != stremioResolutionToken) return@runOnUiThread
+                        if (token != stremioResolutionToken || shouldContinue?.invoke() == false) return@runOnUiThread
+                        if (yieldEpisodeFetchToQueuedShuffle()) return@runOnUiThread
                         val map = result as? Map<*, *>
                         val items = map?.get("items") as? List<*>
                         val fetchedSourceIndex = (map?.get("sourceIndex") as? Number)?.toInt()
                         if (map == null || items.isNullOrEmpty() || fetchedSourceIndex == null) {
-                            showStatusPillTransient("No playable source found for $label")
+                            if (onUnavailable != null) onUnavailable()
+                            else showStatusPillTransient("No playable source found for $label")
                             return@runOnUiThread
                         }
+                        isAutoAdvancing = autoAdvance
                         adoptSourceList(map)
+                        if (shuffleAttempt != null) watchShufflePlayback(shuffleAttempt)
                         switchToSourcePlaylist(
                             fetchedSourceIndex,
                             items,
                             targetSeason = season,
                             targetEpisode = episode,
-                            suppressTargetResume = autoAdvance,
+                            suppressTargetResume = suppressResume,
+                            shuffleAttempt = shuffleAttempt,
                         )
                     }
                 }
@@ -16391,8 +16611,9 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 override fun error(errorCode: String, errorMessage: String?, errorDetails: Any?) {
                     runOnUiThread {
                         episodeFetchInFlight = false
-                        if (token != stremioResolutionToken) return@runOnUiThread
-                        showStatusPillTransient("No playable source found for $label")
+                        if (token != stremioResolutionToken || shouldContinue?.invoke() == false) return@runOnUiThread
+                        if (onUnavailable != null) onUnavailable()
+                        else showStatusPillTransient("No playable source found for $label")
                     }
                 }
 
@@ -16436,6 +16657,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                     runOnUiThread {
                         episodeFetchInFlight = false
                         if (token != stremioResolutionToken) return@runOnUiThread
+                        if (yieldEpisodeFetchToQueuedShuffle()) return@runOnUiThread
                         val map = result as? Map<*, *>
                         val items = map?.get("items") as? List<*>
                         val fetchedSourceIndex = (map?.get("sourceIndex") as? Number)?.toInt()
@@ -17612,10 +17834,25 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         targetEpisode: Int? = null,
         suppressTargetResume: Boolean = false,
         requireExactStartupEpisode: Boolean = false,
+        shuffleAttempt: ShufflePlaybackAttempt? = null,
     ) {
         android.util.Log.d("AndroidTvPlayer", "switchToSourcePlaylist: sourceIndex=$sourceIndex, rawItems=${rawItems.size}, target=S${targetSeason}E${targetEpisode}")
 
         val model = payload ?: return
+        if (shuffleAttempt != null) {
+            val outgoingItems = model.items.toList()
+            val outgoingIndex = currentIndex
+            val outgoingSource = currentStremioSourceIndex
+            val outgoingType = model.contentType
+            shuffleAttempt.restorePreparation = {
+                model.items.clear()
+                model.items.addAll(outgoingItems)
+                currentIndex = outgoingIndex
+                currentStremioSourceIndex = outgoingSource
+                rebuildNavigationMaps(model, outgoingType)
+                updateCatalogEpisodeControls()
+            }
+        }
 
         // Capture playback position + current item identity so the new source
         // resumes the same content instead of restarting from the beginning.
@@ -17884,6 +18121,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             targetIndex,
             suppressTrakt = matchedSameContent,
             suppressResume = suppressTargetResume,
+            shuffleAttempt = shuffleAttempt,
         )
 
         // Report the switch outcome once playback settles
@@ -18166,9 +18404,9 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             }
             val localCompletionTracking = obj.optBoolean("localCompletionTracking", false)
             val movieCompletionThreshold =
-                obj.optInt("movieCompletionThreshold", 80).coerceIn(50, 95)
+                obj.optInt("movieCompletionThreshold", 80).coerceIn(50, 100)
             val episodeCompletionThreshold =
-                obj.optInt("episodeCompletionThreshold", 80).coerceIn(50, 95)
+                obj.optInt("episodeCompletionThreshold", 80).coerceIn(50, 100)
 
             // Parse Stremio sources for source switching
             val stremioSourcesJson = obj.optJSONArray("stremioSources")
@@ -19533,6 +19771,7 @@ internal fun mergeLateMetadataDuration(
 
 /** One episode of the show's full TVMaze list, for the episode guide. */
 private data class GuideEpisode(
+    val shuffleEligible: Boolean = true,
     val season: Int,
     val episode: Int,
     val title: String?,

@@ -1,17 +1,18 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../utils/file_utils.dart';
 import '../utils/series_parser.dart';
 import 'series_source_service.dart';
+import 'android_local_source_service.dart';
 
 class LocalBoundSourceService {
   static const String mobileDisabledReason =
-      'Local source binding is not supported on Android or iOS yet.';
-  static const String _androidRestrictionMessage =
-      'Local sources on Android are supported only from Downloads/Debrify.';
+      'Local source binding is not supported on iOS yet.';
 
   static const List<String> _videoExtensions = [
     'mp4',
@@ -40,63 +41,69 @@ class LocalBoundSourceService {
 
     final mode = await showModalBottomSheet<_LocalPickMode>(
       context: context,
+      isScrollControlled: true,
       backgroundColor: const Color(0xFF1E293B),
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
       ),
       builder: (sheetContext) {
         return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 36,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: Colors.white24,
-                    borderRadius: BorderRadius.circular(99),
-                  ),
-                ),
-                const SizedBox(height: 14),
-                const Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    'Local Movie Source',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w700,
+          child: SingleChildScrollView(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 36,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: Colors.white24,
+                      borderRadius: BorderRadius.circular(99),
                     ),
                   ),
-                ),
-                const SizedBox(height: 4),
-                const Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    'Choose a video file or scan a folder for the best match.',
-                    style: TextStyle(color: Colors.white54, fontSize: 12),
+                  const SizedBox(height: 14),
+                  const Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      'Local Movie Source',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
                   ),
-                ),
-                const SizedBox(height: 14),
-                _LocalPickTile(
-                  icon: Icons.movie_creation_outlined,
-                  color: const Color(0xFF34D399),
-                  title: 'Pick Video File',
-                  subtitle: 'Bind one local movie file',
-                  onTap: () =>
-                      Navigator.of(sheetContext).pop(_LocalPickMode.file),
-                ),
-                const SizedBox(height: 8),
-                _LocalPickTile(
-                  icon: Icons.folder_open_rounded,
-                  color: const Color(0xFF60A5FA),
-                  title: 'Pick Folder',
-                  subtitle: 'Match by filename, then use the largest match',
-                  onTap: () =>
-                      Navigator.of(sheetContext).pop(_LocalPickMode.folder),
-                ),
-              ],
+                  const SizedBox(height: 4),
+                  const Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      'Choose a video file or browse a folder.',
+                      style: TextStyle(color: Colors.white54, fontSize: 12),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  _LocalPickTile(
+                    autofocus: true,
+                    icon: Icons.movie_creation_outlined,
+                    color: const Color(0xFF34D399),
+                    title: 'Pick Video File',
+                    subtitle: 'Bind one local movie file',
+                    onTap: () =>
+                        Navigator.of(sheetContext).pop(_LocalPickMode.file),
+                  ),
+                  const SizedBox(height: 8),
+                  _LocalPickTile(
+                    icon: Icons.folder_open_rounded,
+                    color: const Color(0xFF60A5FA),
+                    title: 'Pick Folder',
+                    subtitle: Platform.isAndroid
+                        ? 'Choose a movie file inside a folder'
+                        : 'Match by filename, then use the largest match',
+                    onTap: () =>
+                        Navigator.of(sheetContext).pop(_LocalPickMode.folder),
+                  ),
+                ],
+              ),
             ),
           ),
         );
@@ -124,15 +131,11 @@ class LocalBoundSourceService {
       return null;
     }
 
+    if (Platform.isAndroid) return _pickAndroidSeries(context, title);
+
     final path = await FilePicker.platform.getDirectoryPath();
     if (path == null || path.trim().isEmpty) return null;
     if (!context.mounted) return null;
-    if (!_isSupportedLocalPath(path)) {
-      if (context.mounted) {
-        _showSnack(context, _androidRestrictionMessage, isError: true);
-      }
-      return null;
-    }
 
     final seriesFolder = await _resolveSeriesFolder(
       context,
@@ -216,13 +219,13 @@ class LocalBoundSourceService {
     return episodes;
   }
 
-  static bool get isLocalBindingDisabled =>
-      Platform.isAndroid || Platform.isIOS;
+  static bool get isLocalBindingDisabled => Platform.isIOS;
 
   static String? get localDisabledReason =>
       isLocalBindingDisabled ? mobileDisabledReason : null;
 
   static Future<SeriesSource?> _pickFile(BuildContext context) async {
+    if (Platform.isAndroid) return _pickAndroidMovie(context, folder: false);
     final result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
       allowedExtensions: _videoExtensions,
@@ -231,12 +234,6 @@ class LocalBoundSourceService {
     );
     final path = result?.files.single.path;
     if (path == null || path.trim().isEmpty) return null;
-    if (!_isSupportedLocalPath(path)) {
-      if (context.mounted) {
-        _showSnack(context, _androidRestrictionMessage, isError: true);
-      }
-      return null;
-    }
     return _sourceFromFile(File(path));
   }
 
@@ -245,14 +242,9 @@ class LocalBoundSourceService {
     required String title,
     String? year,
   }) async {
+    if (Platform.isAndroid) return _pickAndroidMovie(context, folder: true);
     final path = await FilePicker.platform.getDirectoryPath();
     if (path == null || path.trim().isEmpty) return null;
-    if (!_isSupportedLocalPath(path)) {
-      if (context.mounted) {
-        _showSnack(context, _androidRestrictionMessage, isError: true);
-      }
-      return null;
-    }
 
     final candidates = await _scanFolder(path);
     if (candidates.isEmpty) {
@@ -274,6 +266,156 @@ class LocalBoundSourceService {
     if (!context.mounted) return null;
     final selected = await _showManualFileChooser(context, candidates);
     return selected == null ? null : _sourceFromFile(selected.file);
+  }
+
+  static Future<List<LocalSourceDocument>> _scanAndroidFolder(
+    BuildContext context,
+    String uri,
+  ) async {
+    final navigator = Navigator.of(context);
+    final progress = DialogRoute<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const PopScope(
+        canPop: false,
+        child: AlertDialog(
+          content: Row(
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(width: 20),
+              Expanded(child: Text('Reading local folder…')),
+            ],
+          ),
+        ),
+      ),
+    );
+    unawaited(navigator.push(progress));
+    try {
+      return await AndroidLocalSourceService.videos(uri);
+    } finally {
+      if (navigator.mounted && progress.isActive) {
+        navigator.removeRoute(progress);
+      }
+    }
+  }
+
+  static Future<SeriesSource?> _pickAndroidMovie(
+    BuildContext context, {
+    required bool folder,
+  }) async {
+    try {
+      final picked = await AndroidLocalSourceService.pick(directory: folder);
+      if (picked == null || !context.mounted) return null;
+      if (!folder) {
+        if (picked.isDirectory || !FileUtils.isVideoFile(picked.name)) {
+          _showSnack(context, 'Please select a video file.', isError: true);
+          return null;
+        }
+        return picked.toSource();
+      }
+      final videos = await _scanAndroidFolder(context, picked.uri);
+      if (!context.mounted) return null;
+      if (videos.isEmpty) {
+        _showSnack(
+          context,
+          'No video files found in that folder.',
+          isError: true,
+        );
+        return null;
+      }
+      videos.sort((a, b) => a.relativePath.compareTo(b.relativePath));
+      final selected = await showDialog<LocalSourceDocument>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Choose movie file'),
+          content: SizedBox(
+            width: 560,
+            height: MediaQuery.sizeOf(dialogContext).height * 0.5,
+            child: ListView.builder(
+              itemCount: videos.length,
+              itemBuilder: (_, index) => ListTile(
+                autofocus: index == 0,
+                title: Text(videos[index].name),
+                subtitle: Text(videos[index].relativePath),
+                onTap: () => Navigator.of(dialogContext).pop(videos[index]),
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('Cancel'),
+            ),
+          ],
+        ),
+      );
+      return selected?.toSource();
+    } on PlatformException catch (error) {
+      if (context.mounted) {
+        _showSnack(
+          context,
+          error.message ?? 'Local source could not be opened.',
+          isError: true,
+        );
+      }
+    } on LocalSourceUnavailable catch (error) {
+      if (context.mounted) _showSnack(context, error.message, isError: true);
+    }
+    return null;
+  }
+
+  static Future<SeriesSource?> _pickAndroidSeries(
+    BuildContext context,
+    String title,
+  ) async {
+    try {
+      final folder = await AndroidLocalSourceService.pick(directory: true);
+      if (folder == null || !context.mounted) return null;
+      final videos = await _scanAndroidFolder(context, folder.uri);
+      final episodes = AndroidLocalSourceService.episodes(videos);
+      if (!context.mounted) return null;
+      if (episodes.isEmpty) {
+        _showSnack(
+          context,
+          'No episodes found. Select this show’s folder with episode filenames such as S01E01.',
+          isError: true,
+        );
+        return null;
+      }
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          scrollable: true,
+          title: Text('Use folder for $title?'),
+          content: Text(
+            '${folder.name}\n${episodes.length} episodes found.\n\nChoose a folder containing only this series.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              autofocus: true,
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: const Text('Use folder'),
+            ),
+          ],
+        ),
+      );
+      return confirmed == true ? folder.toSource() : null;
+    } on PlatformException catch (error) {
+      if (context.mounted) {
+        _showSnack(
+          context,
+          error.message ?? 'Local folder could not be opened.',
+          isError: true,
+        );
+      }
+    } on LocalSourceUnavailable catch (error) {
+      if (context.mounted) _showSnack(context, error.message, isError: true);
+    }
+    return null;
   }
 
   static Future<List<_LocalVideoCandidate>> _scanFolder(String path) async {
@@ -499,10 +641,7 @@ class LocalBoundSourceService {
                 children: [
                   const Text(
                     'Choose Series Folder',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w700,
-                    ),
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
                   ),
                   const SizedBox(height: 4),
                   Text(
@@ -587,10 +726,7 @@ class LocalBoundSourceService {
                 children: [
                   const Text(
                     'Choose Local File',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w700,
-                    ),
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
                   ),
                   const SizedBox(height: 4),
                   const Text(
@@ -722,25 +858,6 @@ class LocalBoundSourceService {
 
   static String _withoutLeadingArticle(String normalizedTitle) {
     return normalizedTitle.replaceFirst(RegExp(r'^(the|a|an) '), '');
-  }
-
-  static bool _isSupportedLocalPath(String path) {
-    if (!Platform.isAndroid) return true;
-    final normalizedRaw = path
-        .trim()
-        .replaceAll('\\', '/')
-        .replaceAll(RegExp(r'/+'), '/')
-        .toLowerCase();
-    final normalized = normalizedRaw.startsWith('/')
-        ? normalizedRaw
-        : '/$normalizedRaw';
-    return _isInsidePath(normalized, '/download/debrify') ||
-        _isInsidePath(normalized, '/downloads/debrify');
-  }
-
-  static bool _isInsidePath(String normalizedPath, String normalizedRoot) {
-    return normalizedPath.endsWith(normalizedRoot) ||
-        normalizedPath.contains('$normalizedRoot/');
   }
 
   static void _showSnack(
@@ -884,6 +1001,7 @@ class LocalSeriesEpisodeFile {
 }
 
 class _LocalPickTile extends StatelessWidget {
+  final bool autofocus;
   final IconData icon;
   final Color color;
   final String title;
@@ -891,6 +1009,7 @@ class _LocalPickTile extends StatelessWidget {
   final VoidCallback onTap;
 
   const _LocalPickTile({
+    this.autofocus = false,
     required this.icon,
     required this.color,
     required this.title,
@@ -901,15 +1020,11 @@ class _LocalPickTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListTile(
+      autofocus: autofocus,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       tileColor: Colors.white.withValues(alpha: 0.05),
       leading: Icon(icon, color: color),
-      title: Text(
-        title,
-        style: const TextStyle(
-          fontWeight: FontWeight.w600,
-        ),
-      ),
+      title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
       subtitle: Text(subtitle, style: const TextStyle(color: Colors.white54)),
       trailing: const Icon(Icons.chevron_right_rounded, color: Colors.white38),
       onTap: onTap,

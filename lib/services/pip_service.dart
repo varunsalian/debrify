@@ -2,17 +2,12 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart';
 
 import '../utils/platform_util.dart';
 
-/// Android Picture-in-Picture bridge for the phone media_kit player.
-///
-/// PiP works by shrinking the whole host Activity (MainActivity) into a
-/// floating window; the media_kit Flutter texture keeps rendering as long as
-/// the Activity/engine survives. Android phones only (API 26+) — Android TV
-/// has its own native player and does not use phone-style PiP, and non-Android
-/// platforms have no equivalent, so [isSupported] is false there.
-///
+/// Picture-in-Picture bridge for Android phones and the iOS media_kit player.
+/// Android presents the activity; iOS presents frames through AVKit.
 /// A single active *owner* holds the PiP callbacks at any time (see [attach]):
 /// PiP mode/action events only ever reach the top-most player screen, never a
 /// background instance, and route replacement can't clobber the incoming
@@ -22,25 +17,36 @@ class PipService {
 
   static const MethodChannel _channel = MethodChannel('com.debrify.app/pip');
 
+  @visibleForTesting
+  static TargetPlatform? debugPlatform;
+  static bool get _isIOS => (debugPlatform == null
+      ? Platform.isIOS
+      : debugPlatform == TargetPlatform.iOS);
+  static bool get _isAndroid => (debugPlatform == null
+      ? Platform.isAndroid
+      : debugPlatform == TargetPlatform.android);
+  static bool get _eligible =>
+      (_isIOS && !PlatformUtil.isTvOS) ||
+      (_isAndroid && !PlatformUtil.isAndroidTvCached);
+
   static bool _handlerWired = false;
   static bool? _nativeSupported; // null until resolved from native
   static Object? _owner;
+  static String? _iosPlayerHandle;
   static void Function(bool)? _onMode;
   static void Function(String)? _onAction;
+  static Future<bool> Function()? _onRestore;
 
   /// Cheap synchronous gate for UI: Android phone, not TV, and native has
   /// confirmed PiP capability (API >= 26 + FEATURE_PICTURE_IN_PICTURE). Returns
   /// false until [resolveSupport] has completed — callers should await that
   /// once first, then rely on this.
-  static bool get isSupported =>
-      Platform.isAndroid &&
-      !PlatformUtil.isAndroidTvCached &&
-      (_nativeSupported ?? false);
+  static bool get isSupported => _eligible && (_nativeSupported ?? false);
 
   /// Confirm PiP capability with the native side once, then cache it. Returns
   /// false immediately on non-Android / TV without a channel hop.
   static Future<bool> resolveSupport() async {
-    if (!Platform.isAndroid || PlatformUtil.isAndroidTvCached) {
+    if (!_eligible) {
       _nativeSupported = false;
       return false;
     }
@@ -62,14 +68,20 @@ class PipService {
     Object owner, {
     required void Function(bool) onMode,
     required void Function(String) onAction,
+    Future<bool> Function()? onRestore,
   }) {
     final previousOnMode = _onMode;
-    if (previousOnMode != null && !identical(_owner, owner)) {
+    final previousOwner = _owner;
+    if (_isIOS && previousOwner != null && !identical(previousOwner, owner)) {
+      detach(previousOwner);
+    }
+    if (previousOnMode != null && !identical(previousOwner, owner)) {
       previousOnMode(false);
     }
     _owner = owner;
     _onMode = onMode;
     _onAction = onAction;
+    _onRestore = onRestore;
     _ensureHandler();
   }
 
@@ -79,9 +91,16 @@ class PipService {
   static void detach(Object owner) {
     if (!identical(_owner, owner)) return;
     _owner = null;
+    _iosPlayerHandle = null;
     _onMode = null;
     _onAction = null;
+    _onRestore = null;
     unawaited(setAutoEnter(false));
+    if (_isIOS && isSupported) {
+      unawaited(
+        _channel.invokeMethod<void>('detach').catchError((Object _) {}),
+      );
+    }
   }
 
   /// Whether [owner] is currently the active PiP client.
@@ -90,10 +109,16 @@ class PipService {
   /// Request the activity to enter PiP now, sized to [aspectWidth]:[aspectHeight]
   /// when both are positive (native falls back to 16:9 and clamps out-of-range
   /// ratios). Returns whether the transition was accepted.
-  static Future<bool> enterPip({int? aspectWidth, int? aspectHeight}) async {
+  static Future<bool> enterPip({
+    int? aspectWidth,
+    int? aspectHeight,
+    int? playerHandle,
+  }) async {
     if (!isSupported) return false;
     try {
+      if (_isIOS) _iosPlayerHandle = playerHandle?.toString();
       final ok = await _channel.invokeMethod<bool>('enterPip', {
+        if (_isIOS) 'playerHandle': playerHandle?.toString(),
         'aspectWidth': aspectWidth ?? 0,
         'aspectHeight': aspectHeight ?? 0,
       });
@@ -130,28 +155,55 @@ class PipService {
     required bool hasNext,
     int? aspectWidth,
     int? aspectHeight,
+    int? positionMs,
+    int? durationMs,
   }) async {
     if (!isSupported) return;
     try {
       await _channel.invokeMethod('updatePlaybackState', {
         'isPlaying': isPlaying,
         'hasNext': hasNext,
+        if (_isIOS) 'positionMs': positionMs ?? 0,
+        if (_isIOS) 'durationMs': durationMs ?? 0,
         'aspectWidth': aspectWidth ?? 0,
         'aspectHeight': aspectHeight ?? 0,
       });
     } catch (_) {}
   }
 
+  @visibleForTesting
+  static void resetForTesting() {
+    _owner = null;
+    _iosPlayerHandle = null;
+    _onMode = null;
+    _onAction = null;
+    _onRestore = null;
+    _nativeSupported = null;
+    _handlerWired = false;
+    debugPlatform = null;
+    _channel.setMethodCallHandler(null);
+  }
+
   static void _ensureHandler() {
     if (_handlerWired) return;
     _handlerWired = true;
     _channel.setMethodCallHandler((call) async {
+      dynamic value = call.arguments;
+      if (_isIOS) {
+        if (value is! Map ||
+            _iosPlayerHandle == null ||
+            value['playerHandle'] != _iosPlayerHandle)
+          return null;
+        value = value['value'];
+      }
       switch (call.method) {
+        case 'onPipRestore':
+          return await _onRestore?.call() ?? false;
         case 'onPipModeChanged':
-          _onMode?.call(call.arguments as bool? ?? false);
+          _onMode?.call(value as bool? ?? false);
           break;
         case 'onPipAction':
-          final action = call.arguments as String? ?? '';
+          final action = value as String? ?? '';
           if (action.isNotEmpty) _onAction?.call(action);
           break;
       }

@@ -222,6 +222,26 @@ void main() {
         reason: 'hold-OK is the TV options gesture; the kebab is touch-only');
   });
 
+  for (final size in [const Size(768, 1024), const Size(1280, 800)]) {
+    testWidgets('wide touch episodes follow the scroll reading position at $size',
+        (tester) async {
+      _surface(tester, size);
+      await tester.pumpWidget(_host(_model(), dpad: false, size: size));
+      await tester.pumpAndSettle();
+      final cells = find.byType(ShowcaseEpisodeCell, skipOffstage: false);
+      expect(tester.widgetList<ShowcaseEpisodeCell>(cells)
+          .where((cell) => cell.focused).map((cell) => cell.episode.number), [1]);
+      final rail = find.ancestor(of: cells.first, matching: find.byType(ListView)).first;
+      final controller = tester.widget<ListView>(rail).controller!;
+      final metrics = ShowcaseMetrics.of(tester.element(cells.first));
+      controller.jumpTo(metrics.epCell + metrics.epGap);
+      await tester.pumpAndSettle();
+      expect(tester.widgetList<ShowcaseEpisodeCell>(cells)
+          .where((cell) => cell.focused).map((cell) => cell.episode.number), [2]);
+      expect(tester.takeException(), isNull);
+    });
+  }
+
   testWidgets('the compact kebab fires options', (tester) async {
     _surface(tester, _phone);
     TraktEpisode? optioned;

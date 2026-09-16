@@ -24,6 +24,8 @@ class ProfileCreationService {
     'tv_ui_scale_percent',
     'tv_home_style',
     'home_card_orientation',
+    'home_animations_enabled',
+    'home_animation_style',
     'home_hide_card_titles_and_ratings',
     'home_hide_catalog_addon_names',
     'home_hide_collection_names',
@@ -109,6 +111,9 @@ class ProfileCreationService {
           await actor.validate(registry);
           await _copyValue(source, target, key);
         }
+        // These are deliberate new-profile choices, not legacy opt-outs.
+        // Do not copy the general checkpoint: other migrations still apply.
+        await target.setBool('sources_presentation_defaults_copied_v1', true);
       }
       await actor.validate(registry);
       return staged;

@@ -2,10 +2,37 @@ import 'package:debrify/services/video_player_launcher.dart';
 import 'package:debrify/services/local_playback_resume_resolver.dart';
 import 'package:debrify/services/torrent_playback_service.dart';
 import 'package:debrify/models/torrent.dart';
+import 'package:android_intent_plus/flag.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  group('Android external document handoff', () {
+    for (final url in [
+      'content://documents/document/movie%3Aone',
+      'content://documents/tree/series%3Aone/document/episode%3Atwo',
+    ]) {
+      test('grants read access to the selected document: $url', () {
+        final intent = VideoPlayerLauncher.androidExternalVideoIntent(url);
+        expect(intent.action, 'action_view');
+        expect(intent.data, url);
+        expect(intent.type, 'video/*');
+        // No write, persistent, or prefix grant to the rest of the folder.
+        expect(intent.flags, [Flag.FLAG_GRANT_READ_URI_PERMISSION]);
+      });
+    }
+    test('network and ordinary file launches retain their existing flags', () {
+      for (final url in [
+        'https://example.com/video.mp4',
+        'file:///video.mp4',
+      ]) {
+        final intent = VideoPlayerLauncher.androidExternalVideoIntent(url);
+        expect(intent.data, url);
+        expect(intent.flags, isNull);
+      }
+    });
+  });
+
   group('tracker launch argument compatibility', () {
     test('legacy suppression alias preserves its original behavior', () {
       const args = VideoPlayerLaunchArgs(

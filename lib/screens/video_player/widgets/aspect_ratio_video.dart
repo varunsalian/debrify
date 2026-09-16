@@ -3,6 +3,7 @@ import 'package:media_kit_video/media_kit_video.dart' as mkv;
 
 class AspectRatioVideo extends StatelessWidget {
   final mkv.VideoController videoController;
+  final bool pauseUponEnteringBackgroundMode;
   final double? customAspectRatio;
   final BoxFit currentFit;
   final mkv.SubtitleViewConfiguration? subtitleViewConfiguration;
@@ -13,6 +14,7 @@ class AspectRatioVideo extends StatelessWidget {
     required this.customAspectRatio,
     required this.currentFit,
     this.subtitleViewConfiguration,
+    this.pauseUponEnteringBackgroundMode = true,
   });
 
   @override
@@ -21,6 +23,7 @@ class AspectRatioVideo extends StatelessWidget {
       // No forced aspect ratio; let the Video widget scale internally
       return mkv.Video(
         controller: videoController,
+        pauseUponEnteringBackgroundMode: pauseUponEnteringBackgroundMode,
         controls: null,
         fit: currentFit,
         subtitleViewConfiguration:
@@ -34,10 +37,12 @@ class AspectRatioVideo extends StatelessWidget {
         aspectRatio: customAspectRatio!,
         child: mkv.Video(
           controller: videoController,
+          pauseUponEnteringBackgroundMode: pauseUponEnteringBackgroundMode,
           controls: null,
           fit: BoxFit.cover,
           subtitleViewConfiguration:
-              subtitleViewConfiguration ?? const mkv.SubtitleViewConfiguration(),
+              subtitleViewConfiguration ??
+              const mkv.SubtitleViewConfiguration(),
         ),
       ),
     );

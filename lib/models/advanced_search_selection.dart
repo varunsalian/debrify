@@ -1,4 +1,5 @@
 class AdvancedSearchSelection {
+  final bool initialContinuousShuffle;
   final String imdbId;
   final bool isSeries;
   final String title;
@@ -41,6 +42,7 @@ class AdvancedSearchSelection {
   final bool fromCatalogItemDetail;
 
   const AdvancedSearchSelection({
+    this.initialContinuousShuffle = false,
     required this.imdbId,
     required this.isSeries,
     required this.title,
@@ -69,6 +71,7 @@ class AdvancedSearchSelection {
   /// too instead of being silently dropped by an out-of-date inline copy.
   AdvancedSearchSelection scopedToSeason(int? season) =>
       AdvancedSearchSelection(
+        initialContinuousShuffle: initialContinuousShuffle,
         imdbId: imdbId,
         isSeries: isSeries,
         title: title,
