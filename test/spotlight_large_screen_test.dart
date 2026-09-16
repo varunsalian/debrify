@@ -78,6 +78,7 @@ void main() {
     }
   });
   Widget host({
+    SpotlightCardShape shape = SpotlightCardShape.poster,
     bool trailers = false,
     bool reduced = false,
     bool expand = true,
@@ -111,6 +112,7 @@ void main() {
                     items: List.generate(
                       itemCount,
                       (index) => SpotlightCard(
+                        shape: shape,
                         metadata: StremioMeta(
                           id: 'title${shelf * 10 + index}',
                           type: 'movie',
@@ -155,7 +157,10 @@ void main() {
       await tester.pumpAndSettle();
       expect(active(), findsOneWidget);
       expect(tester.element(active()), isNot(same(first)));
-      await tester.tap(active());
+      final visibleCard = tester.getRect(active()).intersect(
+        Offset.zero & const Size(1024, 768),
+      );
+      await tester.tapAt(visibleCard.center);
       expect(opened, 1);
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox());
@@ -424,7 +429,7 @@ void main() {
     expect(active(), findsOneWidget);
     expect(
       (nodes[1].context!.findRenderObject() as RenderBox).size.aspectRatio,
-      greaterThan(1.7),
+      greaterThan(1.0),
     );
     expect(tester.element(find.byType(SpotlightCardTrailer)), same(preview));
     await tester.sendKeyEvent(LogicalKeyboardKey.enter);
@@ -457,7 +462,7 @@ void main() {
       expect(active(), findsOneWidget);
       expect(
         (nodes[1].context!.findRenderObject() as RenderBox).size.aspectRatio,
-        greaterThan(1.7),
+        greaterThan(1.0),
       );
       expect(tester.element(find.byType(SpotlightCardTrailer)), same(preview));
       nodes[1].requestFocus();
@@ -554,6 +559,24 @@ void main() {
     await tester.pumpWidget(const SizedBox());
   });
 
+  testWidgets('expanded posters retain row height with landscape-sized width', (tester) async {
+    surface(tester, const Size(1200, 800));
+    await tester.pumpWidget(host(platform: TargetPlatform.macOS));
+    await tester.pumpAndSettle();
+    final restingSize = (nodes[1].context!.findRenderObject() as RenderBox).size;
+    nodes[1].requestFocus();
+    await tester.pumpAndSettle();
+    final posterSize = (nodes[1].context!.findRenderObject() as RenderBox).size;
+    await tester.pumpWidget(host(platform: TargetPlatform.macOS, shape: SpotlightCardShape.wide));
+    await tester.pumpAndSettle();
+    final landscapeSize = (nodes[1].context!.findRenderObject() as RenderBox).size;
+    expect(posterSize.width, closeTo(landscapeSize.width, 0.01));
+    expect(posterSize.height, closeTo(restingSize.height, 0.01));
+    expect(posterSize.width, greaterThan(restingSize.width));
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
+  });
+
   testWidgets('desktop hover and keyboard each own one expanded card', (
     tester,
   ) async {
@@ -568,7 +591,7 @@ void main() {
     expect(active(), findsOneWidget);
     expect(
       (nodes[2].context!.findRenderObject() as RenderBox).size.aspectRatio,
-      greaterThan(1.7),
+      greaterThan(1.0),
     );
     await mouse.removePointer();
     nodes[1].requestFocus();
@@ -576,7 +599,7 @@ void main() {
     expect(active(), findsOneWidget);
     expect(
       (nodes[1].context!.findRenderObject() as RenderBox).size.aspectRatio,
-      greaterThan(1.7),
+      greaterThan(1.0),
     );
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox());

@@ -177,7 +177,8 @@ void main() {
     expect(after / before, closeTo(1.38 / 1.18, 0.01));
     final focusedSize = (rows[0][0].context!.findRenderObject() as RenderBox).size;
     expect(focusedSize.width / focusedSize.height,
-        closeTo(SpotlightCardShape.wide.aspect * 1.38, 0.01));
+        closeTo((shape == SpotlightCardShape.wide
+            ? SpotlightCardShape.wide.aspect : 470 / 390) * 1.38, 0.01));
     await tester.pump(const Duration(seconds: 2));
     expect(tester.widget<AnimatedOpacity>(find.byKey(
       const ValueKey('spotlight-trailer-text-ttAlpha'))).opacity, 0);
@@ -222,12 +223,13 @@ void main() {
     expect(image('wide'), findsOneWidget);
     expect(image('poster'), findsNothing);
     final focused = (rows[0][0].context!.findRenderObject() as RenderBox).size;
-    expect(focused.width / focused.height, closeTo(16 / 9 * 1.18, .01));
+    expect(focused.width / focused.height, closeTo(470 / 390 * 1.18, .01));
     rows[0][1].requestFocus();
     await tester.pumpAndSettle();
     expect(image('poster'), findsOneWidget);
     final resting = (rows[0][0].context!.findRenderObject() as RenderBox).size;
     expect(resting.width / resting.height, closeTo(2 / 3, .01));
+    expect(focused.height, closeTo(resting.height, .01));
     await tester.pumpWidget(host([], shelves, expandFocusedCard: false, trailersEnabled: false));
     rows[0][0].requestFocus();
     await tester.pumpAndSettle();

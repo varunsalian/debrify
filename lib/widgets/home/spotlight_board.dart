@@ -2710,6 +2710,7 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
                 // aspect implies, so a shelf that mixes posters and channel
                 // tiles sits on one baseline instead of stepping up and down.
                 height: cardHeight,
+                expandedHeight: m.wideCardW / SpotlightCardShape.wide.aspect,
                 caption: m.caption,
                 radius: m.radius,
                 captionBelow: m.compact && captions,
@@ -2938,6 +2939,7 @@ class _Card extends StatefulWidget {
   /// The ROW's height. Width follows from the shape's aspect, so a shelf that
   /// mixes posters and channel tiles keeps one baseline.
   final double height;
+  final double expandedHeight;
   final double caption;
   final double radius;
 
@@ -2987,6 +2989,7 @@ class _Card extends StatefulWidget {
     required this.card,
     required this.node,
     required this.height,
+    required this.expandedHeight,
     required this.caption,
     this.radius = 7,
     this.captionBelow = false,
@@ -3213,10 +3216,11 @@ class _CardState extends State<_Card> with MetadataPresentationMixin<_Card> {
 
   @override
   Widget build(BuildContext context) => TweenAnimationBuilder<double>(
-    // Focused title cards use the same landscape aspect and growth stages,
+    // Focused title cards use the same landscape width and growth stages,
     // regardless of the resting poster preference.
     tween: Tween(end: _scrollGrowth ?? (_canExpand && _activeCard && !_moving
-        ? (SpotlightCardShape.wide.aspect / widget.card.shape.aspect) *
+        ? (widget.expandedHeight * SpotlightCardShape.wide.aspect /
+            (widget.height * widget.card.shape.aspect)) *
             (_trailerPlaying ? 1.38 : 1.18)
         : 1.0)),
     duration: _scrollGrowth != null || MediaQuery.disableAnimationsOf(context)
@@ -3233,6 +3237,9 @@ class _CardState extends State<_Card> with MetadataPresentationMixin<_Card> {
     final c = widget.card;
     final expanded = _canExpand && _activeCard && !_moving;
     final w = widget.height * c.shape.aspect * growth;
+    // Keep the row's baseline and height; only widen the selected poster.
+    // The width uses landscape-rail sizing rather than the taller poster.
+    final height = widget.height;
     // Decode at the card's own PHYSICAL width plus the 10% focus growth —
     // never a fixed constant. The hardcoded 400/800 decoded ~1.7× oversized
     // on a TV board, and the TV image cache is byte-capped (56MB, see
@@ -3243,7 +3250,7 @@ class _CardState extends State<_Card> with MetadataPresentationMixin<_Card> {
     // headroom and makes each upload cheaper.
     // A stable decode size avoids creating a new cached image every animation
     // frame. Eligible cards reserve their expanded resolution once.
-    final decodeW = (widget.height * (expanded ? SpotlightCardShape.wide.aspect : c.shape.aspect) *
+    final decodeW = ((expanded ? widget.expandedHeight : widget.height) * (expanded ? SpotlightCardShape.wide.aspect : c.shape.aspect) *
         (_canExpand && !PlatformUtil.isAndroidTvCached ? 1.18 : 1.0) * MediaQuery.devicePixelRatioOf(context) * 1.1)
         .round()
         .clamp(100, 1000);
@@ -3303,7 +3310,7 @@ class _CardState extends State<_Card> with MetadataPresentationMixin<_Card> {
     // scaled. 1.2 is Flutter's normal line box; 33 is the existing 26 + 7
     // vertical padding around those lines.
     final captionLineHeight = widget.caption * 1.2;
-    final captionBedHeight = (showDescription ? widget.height : 33.0) +
+    final captionBedHeight = (showDescription ? height : 33.0) +
         (hasTitle ? captionLineHeight : 0) +
         (hasSubtitle ? captionLineHeight * 0.85 : 0);
 
@@ -3361,7 +3368,7 @@ class _CardState extends State<_Card> with MetadataPresentationMixin<_Card> {
                             const SizedBox(height: 6),
                             Text(
                               description,
-                              maxLines: widget.height >= 180 ? 3 : 2,
+                              maxLines: height >= 180 ? 3 : 2,
                               overflow: TextOverflow.ellipsis,
                               style: TextStyle(
                                 fontFamily: tvCaptionFamily,
@@ -3393,7 +3400,7 @@ class _CardState extends State<_Card> with MetadataPresentationMixin<_Card> {
         borderRadius: BorderRadius.circular(widget.radius),
         child: SizedBox(
           width: w,
-          height: widget.height,
+          height: height,
           child: Stack(
             fit: StackFit.expand,
             children: [
@@ -3426,7 +3433,7 @@ class _CardState extends State<_Card> with MetadataPresentationMixin<_Card> {
                   // inset would eat a quarter of the height.
                   padding: EdgeInsets.all(
                     contained
-                        ? (w < widget.height ? w : widget.height) * 0.14
+                        ? (w < height ? w : height) * 0.14
                         : 0,
                   ),
                   child: RecoverableNetworkImage(
