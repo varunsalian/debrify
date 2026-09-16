@@ -261,10 +261,12 @@ class _CollectionFolderScreenState extends State<CollectionFolderScreen> {
       widget.fromHome &&
       widget.sourceKey == null &&
       !widget.isTelevision &&
+      !(_supportsCollectionStyles && _collectionListStyle == 'spotlight') &&
       (defaultTargetPlatform == TargetPlatform.android ||
           defaultTargetPlatform == TargetPlatform.iOS);
 
   bool get _tabs =>
+      _spotlight ||
       _touchCategories ||
       widget.sourceKey != null ||
       _layout == CollectionFolderLayout.tabs;

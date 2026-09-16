@@ -28,6 +28,52 @@ import 'package:http/testing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
+  for (final platform in [TargetPlatform.macOS, TargetPlatform.iOS, TargetPlatform.android]) {
+    for (final tv in [false, true]) {
+      testWidgets('Spotlight Home folder opens all rows directly: $platform TV $tv', (tester) async {
+        debugDefaultTargetPlatformOverride = platform;
+        addTearDown(() => debugDefaultTargetPlatformOverride = null);
+        tester.view.physicalSize = const Size(1400, 1100);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+        SharedPreferences.setMockInitialValues({
+          'tv_collection_list_style': 'spotlight',
+          'home_hero_trailer_enabled': false,
+          HomeCollectionsStore.folderLayoutKey: 'rows',
+        });
+        final sources = [
+          for (final title in ['Recent', 'Popular'])
+            CollectionCatalogSource.fromJson({
+              'provider': 'tmdb', 'tmdbSourceType': 'DISCOVER',
+              'title': title, 'debrifySourceId': title,
+            })!,
+        ];
+        final native = CollectionNativeSourceService(
+          tmdbToken: 'dummy', resolveIds: false,
+          client: MockClient((_) async => http.Response(jsonEncode({
+            'results': [{'id': 42, 'title': 'Movie'}], 'total_pages': 1,
+          }), 200)),
+        );
+        addTearDown(native.close);
+        await tester.pumpWidget(MaterialApp(home: CollectionFolderScreen(
+          collection: HomeCollection(id: 'studios', title: 'Studios', folders: [
+            HomeCollectionFolder(id: 'marvel', title: 'Marvel', sources: sources),
+          ]),
+          fromHome: true, isTelevision: tv,
+          nativeSources: native, onOpenItem: (_) {},
+        )));
+        await tester.pumpAndSettle();
+        expect(find.byType(CollectionListGallery), findsNothing);
+        expect(find.byType(CollectionCategoryTabs), findsNothing);
+        final board = tester.widget<SpotlightBoard>(find.byType(SpotlightBoard));
+        expect(board.sections.map((section) => section.title), ['Recent', 'Popular']);
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox());
+        debugDefaultTargetPlatformOverride = null;
+      });
+    }
+  }
+
   for (final style in ['snowy_mountain', 'midnight_rain', 'moonlit_ocean']) {
   for (final tv in [false, true]) {
     testWidgets('Spotlight collection inherits $style preference (TV: $tv)', (tester) async {
