@@ -11,6 +11,7 @@ abstract final class ProfileAppearancePreferences {
   static const Set<String> keys = <String>{
     // This checkpoint belongs to the local appearance values it initializes.
     'defaults_generation',
+    'sources_presentation_defaults_copied_v1',
     'app_theme',
     'detail_theme',
     'theme_overrides',

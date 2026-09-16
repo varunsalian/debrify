@@ -122,6 +122,34 @@ void main() {
     },
   );
 
+  test('copied source opt-outs survive first activation migrations', () async {
+    await StorageService.migrateDefaultsGeneration();
+    await StorageService.setShowAddonLogos(false);
+    await StorageService.setUseAddonTextFormatting(false);
+    final authorization = await ProfileAuthorizationContext.capture(registry);
+    final staged = await ProfileCreationService(registry).createStaged(
+      actor: authorization,
+      name: 'Copied',
+      role: UserProfileRole.member,
+      policy: ProfilePolicy.defaultsFor(UserProfileRole.member),
+      copyDefaultsFromActive: true,
+    );
+    final member = await registry.completeProfileSetup(
+      staged.id,
+      actingProfileId: authorization.profileId,
+      actingAuthorizationRevision: authorization.authorizationRevision,
+      actingSessionEpoch: authorization.sessionEpoch,
+    );
+    await registry.setActiveProfile(member.id);
+    ProfileRuntime.publish(scope(member, 2));
+    final prefs = await ProfilePreferences.instance();
+    expect(prefs.getInt('defaults_generation'), isNull);
+    await StorageService.migrateDefaultsGeneration();
+    expect(await StorageService.getShowAddonLogos(), isFalse);
+    expect(await StorageService.getUseAddonTextFormatting(), isFalse);
+    expect(prefs.getInt('defaults_generation'), 5);
+  });
+
   test('Admin-created profile is ready without running onboarding', () async {
     final authorization = await ProfileAuthorizationContext.capture(registry);
     final staged = await ProfileCreationService(registry).createStaged(

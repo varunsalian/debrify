@@ -6,6 +6,28 @@ import 'package:debrify/services/storage_service.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  test('source presentation defaults on for new installs', () async {
+    SharedPreferences.setMockInitialValues({});
+    expect(await StorageService.getShowAddonLogos(), isTrue);
+    expect(await StorageService.getUseAddonTextFormatting(), isTrue);
+  });
+
+  test('update enables both source settings once and preserves later opt-outs', () async {
+    SharedPreferences.setMockInitialValues({
+      'defaults_generation': 4,
+      'sources_show_addon_logos': false,
+      'sources_use_addon_text': false,
+    });
+    await StorageService.migrateDefaultsGeneration();
+    expect(await StorageService.getShowAddonLogos(), isTrue);
+    expect(await StorageService.getUseAddonTextFormatting(), isTrue);
+    await StorageService.setShowAddonLogos(false);
+    await StorageService.setUseAddonTextFormatting(false);
+    await StorageService.migrateDefaultsGeneration();
+    expect(await StorageService.getShowAddonLogos(), isFalse);
+    expect(await StorageService.getUseAddonTextFormatting(), isFalse);
+  });
+
   group('defaults generation (update-aware flagship look)', () {
     test('a pre-Spotlight install adopts the full bundle once', () async {
       SharedPreferences.setMockInitialValues({});
@@ -24,7 +46,7 @@ void main() {
       // `app_theme` FIRST, and the gen-3 block reads what it wrote. This is
       // the ordering the gen-3 block depends on.
       expect(prefs.getString('debrify_tv_style'), 'spotlight');
-      expect(prefs.getInt('defaults_generation'), 4);
+      expect(prefs.getInt('defaults_generation'), 5);
 
       // The getters resolve the migrated values (they validate the sets).
       expect(await StorageService.getAppTheme(), 'spotlight');
@@ -51,7 +73,7 @@ void main() {
       // Gen 3's proxy is the theme: signal is not spotlight, so Debrify TV
       // keeps the grid rather than restyling a non-flagship install.
       expect(prefs.getString('debrify_tv_style'), 'grid');
-      expect(prefs.getInt('defaults_generation'), 4);
+      expect(prefs.getInt('defaults_generation'), 5);
     });
 
     test('synced checkpoint without appearance repairs to Spotlight', () async {
@@ -68,7 +90,7 @@ void main() {
     });
 
     test('an already-migrated install is a strict no-op', () async {
-      SharedPreferences.setMockInitialValues({'defaults_generation': 4});
+      SharedPreferences.setMockInitialValues({'defaults_generation': 5});
       await StorageService.migrateDefaultsGeneration();
       final prefs = await SharedPreferences.getInstance();
 
@@ -78,7 +100,7 @@ void main() {
       expect(prefs.getString('tv_sidebar_style'), isNull);
       expect(prefs.getBool('home_hero_trailer_enabled'), isNull);
       expect(prefs.getString('debrify_tv_style'), isNull);
-      expect(prefs.getInt('defaults_generation'), 4);
+      expect(prefs.getInt('defaults_generation'), 5);
     });
 
     test('generation 2 turns both ambient trailer surfaces on', () async {
@@ -91,7 +113,7 @@ void main() {
 
       expect(prefs.getBool('home_hero_trailer_enabled'), isTrue);
       expect(prefs.getBool('detail_trailer_autoplay_enabled'), isTrue);
-      expect(prefs.getInt('defaults_generation'), 4);
+      expect(prefs.getInt('defaults_generation'), 5);
       // Generation 4 repairs absent appearance values even with an old checkpoint.
       expect(prefs.getString('app_theme'), 'spotlight');
 
@@ -163,7 +185,7 @@ void main() {
         await StorageService.migrateDefaultsGeneration();
         final prefs = await SharedPreferences.getInstance();
         expect(prefs.getString('debrify_tv_style'), 'spotlight');
-        expect(prefs.getInt('defaults_generation'), 4);
+        expect(prefs.getInt('defaults_generation'), 5);
       },
     );
 

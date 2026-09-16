@@ -137,7 +137,8 @@ class StorageService {
   // Generation 4 repairs profiles imported with a remote defaults checkpoint
   // but without its device-local appearance values. Fill only absent keys;
   // explicit Looks and custom settings remain unchanged.
-  static const int _currentDefaultsGeneration = 4;
+  // Generation 5 enables source logos and original add-on formatting once.
+  static const int _currentDefaultsGeneration = 5;
   static const String _defaultsGenerationKey = 'defaults_generation';
 
   /// MUST run before [TextBrightnessController.warm] / theme warms in
@@ -211,6 +212,11 @@ class StorageService {
           theme == 'spotlight' ? 'spotlight' : 'grid',
         );
       }
+    }
+    if (gen < 5 &&
+        prefs.getBool('sources_presentation_defaults_copied_v1') != true) {
+      await prefs.setBool('sources_show_addon_logos', true);
+      await prefs.setBool('sources_use_addon_text', true);
     }
     await prefs.setInt(_defaultsGenerationKey, _currentDefaultsGeneration);
   }
@@ -6367,7 +6373,7 @@ class StorageService {
 
   static Future<bool> getShowAddonLogos() async {
     final prefs = await ProfilePreferences.instance();
-    return prefs.getBool('sources_show_addon_logos') ?? false;
+    return prefs.getBool('sources_show_addon_logos') ?? true;
   }
 
   static Future<void> setShowAddonLogos(bool value) async {
@@ -6377,7 +6383,7 @@ class StorageService {
 
   static Future<bool> getUseAddonTextFormatting() async {
     final prefs = await ProfilePreferences.instance();
-    return prefs.getBool('sources_use_addon_text') ?? false;
+    return prefs.getBool('sources_use_addon_text') ?? true;
   }
 
   static Future<void> setUseAddonTextFormatting(bool value) async {

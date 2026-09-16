@@ -111,6 +111,9 @@ class ProfileCreationService {
           await actor.validate(registry);
           await _copyValue(source, target, key);
         }
+        // These are deliberate new-profile choices, not legacy opt-outs.
+        // Do not copy the general checkpoint: other migrations still apply.
+        await target.setBool('sources_presentation_defaults_copied_v1', true);
       }
       await actor.validate(registry);
       return staged;
