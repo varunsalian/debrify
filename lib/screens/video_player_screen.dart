@@ -2,6 +2,7 @@ import '../utils/episode_playback_request.dart';
 import '../utils/show_shuffle.dart';
 import '../models/subtitle_source_priority.dart';
 import 'video_player/utils/subtitle_priority_selection.dart';
+import 'video_player/player_pip_route.dart';
 import 'dart:async';
 import '../services/player_visibility.dart';
 import '../utils/media_kit_init.dart';
@@ -866,6 +867,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    _iosPipSession = PlayerPipSession.of(context);
     _refreshDockGeometry();
   }
 
@@ -1470,19 +1472,21 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       ];
     }
 
-    // Picture-in-Picture (Android phone): once native confirms capability,
+    // Picture-in-Picture (Android phone and iOS): once native confirms capability,
     // become the active PiP owner and listen so we can collapse chrome inside
     // the tiny window. Auto-enter is armed later, when the video is actually
     // ready (see the player `ready` callback), so pressing Home never shrinks
     // a black/loading frame. Skipped when options are hidden — that context
     // deliberately suppresses the PiP button and tap controls.
-    if (Platform.isAndroid && !widget.hideOptions) {
+    if ((Platform.isAndroid || (Platform.isIOS && !PlatformUtil.isTvOS)) &&
+        !widget.hideOptions) {
       PipService.resolveSupport().then((ok) {
         if (!mounted || !ok) return;
         PipService.attach(
           this,
           onMode: _onPipModeChanged,
           onAction: _onPipAction,
+          onRestore: _restoreIosPipPlayer,
         );
         // Reveal the PiP button now that support is known.
         setState(() {});
@@ -3480,6 +3484,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     });
     _posSub = player.stream.position.listen((d) {
       if (!isCurrent()) return;
+      if (Platform.isIOS && d.inSeconds != _lastIosPipPositionSecond) {
+        _lastIosPipPositionSecond = d.inSeconds;
+        _pushPipState();
+      }
       _subtitleAutoSync?.observePosition(d.inMilliseconds);
       _iptvDiag.onProgress(d, playing: _isPlaying);
       // _isPlaying tracks mpv's pause property: a cache-stall keeps it true
@@ -4328,7 +4336,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // both natively and in Flutter. Restored bitmap selections re-enable it.
     if (platform is mk.NativePlayer) {
       try {
-        await platform.setProperty('sub-visibility', 'no');
+        await platform.setProperty(
+          'sub-visibility',
+          Platform.isIOS && (_isPipActive || _iosPipStarting) ? 'yes' : 'no',
+        );
       } catch (error) {
         debugPrint('Player: subtitle visibility reset failed: $error');
       }
@@ -4431,7 +4442,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   ) async {
     final platform = _player.platform;
     if (platform is! mk.NativePlayer) return;
-    final nativeRendering = requiresNativeSubtitleRendering(track);
+    final nativeRendering =
+        requiresNativeSubtitleRendering(track) ||
+        (Platform.isIOS && (_isPipActive || _iosPipStarting));
     await platform.setProperty(
       'sub-visibility',
       nativeRendering ? 'yes' : 'no',
@@ -5688,14 +5701,19 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // its own await will see the flag set and return without a second pop.
     if (!mounted || _seriesNextDispatched) return true;
     _seriesNextDispatched = true;
-    Navigator.of(context).pop(<String, dynamic>{
+    final result = <String, dynamic>{
       'quickPlayNext': true,
       'imdbId': widget.contentImdbId,
       'season': nextEp.season,
       'episode': nextEp.episode,
       'title': widget.contentTitle ?? widget.title,
       'contentType': widget.contentType,
-    });
+    };
+    if (_iosPipSession?.isParked ?? false) {
+      _iosPipSession!.close(result);
+    } else {
+      Navigator.of(context).pop(result);
+    }
     return true;
   }
 
@@ -10864,19 +10882,67 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     }
   }
 
+  bool _iosPipStarting = false;
+  bool _iosPipDetached = false;
+  PlayerPipSession? _iosPipSession;
+  int _lastIosPipPositionSecond = -1;
+
   /// Enter PiP now, sized to the current video's pixel aspect when known.
-  void _enterPip() {
-    if (!PipService.isOwner(this)) return;
-    _pushPipState();
-    final w = _player.state.width ?? 0;
-    final h = _player.state.height ?? 0;
-    unawaited(PipService.enterPip(aspectWidth: w, aspectHeight: h));
+  Future<void> _enterPip() async {
+    if (!PipService.isOwner(this) ||
+        !_playerCreated ||
+        _isTransitioning ||
+        _iosPipStarting ||
+        _isPipActive)
+      return;
+    final player = _player;
+    if (Platform.isIOS) setState(() => _iosPipStarting = true);
+    var entered = false;
+    try {
+      final handle = Platform.isIOS ? await player.handle : null;
+      if (!mounted || !PipService.isOwner(this) || !identical(player, _player))
+        return;
+      if (Platform.isIOS) {
+        await _setNativeSubtitleVisibilityForTrack(player.state.track.subtitle);
+      }
+      _pushPipState();
+      entered = await PipService.enterPip(
+        aspectWidth: player.state.width,
+        aspectHeight: player.state.height,
+        playerHandle: handle,
+      );
+    } catch (error) {
+      debugPrint('PiP entry failed: $error');
+    } finally {
+      if (mounted && PipService.isOwner(this) && identical(player, _player)) {
+        if (Platform.isIOS) {
+          setState(() => _iosPipStarting = false);
+          unawaited(
+            _setNativeSubtitleVisibilityForTrack(player.state.track.subtitle),
+          );
+        }
+        if (!entered) {
+          if (WidgetsBinding.instance.lifecycleState ==
+              AppLifecycleState.paused) {
+            _pauseForBackground();
+          }
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Picture in Picture could not start. Please try again.',
+              ),
+            ),
+          );
+        }
+      }
+    }
   }
 
   /// Arm auto-enter (Home button) for this screen, seeding the current video
   /// aspect so the auto-entered window matches the video shape. No-op unless
   /// this screen is the active, supported PiP owner.
   void _armPipAutoEnter() {
+    if (Platform.isIOS) return; // iOS prepares its renderer on explicit entry.
     if (!PipService.isOwner(this)) return;
     final w = _player.state.width ?? 0;
     final h = _player.state.height ?? 0;
@@ -10894,6 +10960,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       PipService.updatePlaybackState(
         isPlaying: _isPlaying,
         hasNext: _hasAnyNext,
+        positionMs: _player.state.position.inMilliseconds,
+        durationMs: _player.state.duration.inMilliseconds,
         aspectWidth: w,
         aspectHeight: h,
       ),
@@ -10910,12 +10978,67 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       _pushPipState();
     }
     setState(() => _isPipActive = inPip);
+    if (Platform.isIOS && _playerCreated) {
+      if (inPip && (_iosPipSession?.park() ?? false)) {
+        _iosPipDetached = true;
+        unawaited(SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge));
+        unawaited(
+          SystemChrome.setPreferredOrientations(DeviceOrientation.values),
+        );
+      } else if (!inPip && (_iosPipSession?.isParked ?? false)) {
+        // Native close (or a newer playback owner) ends the detached session.
+        // Fullscreen restoration has already reattached it before this event.
+        _iosPipSession?.close();
+        return;
+      }
+      unawaited(
+        _setNativeSubtitleVisibilityForTrack(_player.state.track.subtitle),
+      );
+    }
+  }
+
+  Future<bool> _restoreIosPipPlayer() async {
+    if (!mounted || !PipService.isOwner(this)) return false;
+    final session = _iosPipSession;
+    if (session == null) return false;
+    if (session.isParked && !session.restore()) return false;
+    _iosPipDetached = false;
+    await SystemChrome.setPreferredOrientations(
+      _landscapeLocked
+          ? const [
+              DeviceOrientation.landscapeLeft,
+              DeviceOrientation.landscapeRight,
+            ]
+          : const [DeviceOrientation.portraitUp],
+    );
+    await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+    await WidgetsBinding.instance.endOfFrame;
+    return mounted && PipService.isOwner(this);
   }
 
   /// Handle taps on the PiP window's action buttons.
   void _onPipAction(String action) {
-    if (!mounted) return;
+    if (!mounted || !_playerCreated) return;
+    if (action.startsWith('seek:')) {
+      final seconds = double.tryParse(action.substring(5));
+      if (seconds == null || !seconds.isFinite || _isTransitioning) return;
+      final target =
+          (_player.state.position.inMilliseconds + (seconds * 1000).round())
+              .clamp(0, _player.state.duration.inMilliseconds);
+      final position = Duration(milliseconds: target);
+      unawaited(_player.seek(position));
+      _traktScrobbleSeek(position);
+      _simklScrobbleSeek(position);
+      _mdblistScrobbleSeek(position);
+      return;
+    }
     switch (action) {
+      case 'play':
+        if (!_isPlaying) _togglePlay();
+        break;
+      case 'pause':
+        if (_isPlaying) _togglePlay();
+        break;
       case 'playpause':
         _togglePlay();
         break;
@@ -10932,6 +11055,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   /// visible PiP activity stays at `inactive` (see [_lifecycle]).
   void _pauseForBackground() {
     if (!Platform.isAndroid && !Platform.isIOS) return;
+    if (Platform.isIOS && (_isPipActive || _iosPipStarting)) return;
     // A renderer restart has intentionally invalidated the old player and may
     // not have created the replacement yet. Preserve playback intent without
     // requiring either instance to be live at this exact lifecycle callback.
@@ -11002,8 +11126,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
   @override
   void dispose() {
+    final replacedPip =
+        (_iosPipSession?.wasReplaced ?? false) ||
+        (_iosPipDetached && !PipService.isOwner(this));
+    _iosPipSession?.close();
     PlayerVisibility.closed(this);
-    ProfileLockController.instance.setPlaybackActive(false);
+    if (!replacedPip) ProfileLockController.instance.setPlaybackActive(false);
     _iptvDiag.onSessionEnd();
     _iptvLiveRecovery.cancel();
     _iptvReconnectText.dispose();
@@ -11162,26 +11290,30 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _transitionStopTimer?.cancel();
     _rainbowController.dispose();
     // Each helper awaits native failures before completing, including disposal.
-    unawaited(PlayerDisplayControls.instance.resetBrightness());
-    unawaited(PlayerDisplayControls.instance.setWakelock(false));
+    if (!replacedPip) {
+      unawaited(PlayerDisplayControls.instance.resetBrightness());
+      unawaited(PlayerDisplayControls.instance.setWakelock(false));
+    }
     if (Platform.isWindows || Platform.isLinux) {
       windowManager.setFullScreen(false);
     }
-    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
-    AndroidNativeDownloader.isTelevision().then((isTv) {
-      if (!isTv) {
-        // Restore all orientations so the app respects device auto-rotate
-        // after the player exits (matches main.dart's _initOrientation).
-        // Locking portraitUp here forced users to flip the device back to
-        // browse lists after watching in landscape.
-        SystemChrome.setPreferredOrientations(<DeviceOrientation>[
-          DeviceOrientation.portraitUp,
-          DeviceOrientation.portraitDown,
-          DeviceOrientation.landscapeLeft,
-          DeviceOrientation.landscapeRight,
-        ]);
-      }
-    });
+    if (!replacedPip) {
+      SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+      AndroidNativeDownloader.isTelevision().then((isTv) {
+        if (!isTv) {
+          // Restore all orientations so the app respects device auto-rotate
+          // after the player exits (matches main.dart's _initOrientation).
+          // Locking portraitUp here forced users to flip the device back to
+          // browse lists after watching in landscape.
+          SystemChrome.setPreferredOrientations(<DeviceOrientation>[
+            DeviceOrientation.portraitUp,
+            DeviceOrientation.portraitDown,
+            DeviceOrientation.landscapeLeft,
+            DeviceOrientation.landscapeRight,
+          ]);
+        }
+      });
+    }
     super.dispose();
   }
 
@@ -13082,6 +13214,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   // transient and the elevation setting already exists for exactly this
   // preference, so subtitles stay where the user put them.
   mkv.SubtitleViewConfiguration _buildSubtitleViewConfig() {
+    if (Platform.isIOS && (_isPipActive || _iosPipStarting)) {
+      return const mkv.SubtitleViewConfiguration(visible: false);
+    }
     final settings = _subtitleSettings;
     if (settings == null) {
       return const mkv.SubtitleViewConfiguration();
@@ -13100,6 +13235,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         'video_elevation_${_subtitleSettings?.elevationIndex ?? 0}',
       ),
       videoController: _videoController,
+      pauseUponEnteringBackgroundMode: !Platform.isIOS,
       customAspectRatio: _getCustomAspectRatio(),
       currentFit: _currentFit(),
       subtitleViewConfiguration: _buildSubtitleViewConfig(),
@@ -14050,6 +14186,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                             'video_elevation_${_subtitleSettings?.elevationIndex ?? 0}',
                           ),
                           controller: _videoController,
+                          pauseUponEnteringBackgroundMode: !Platform.isIOS,
                           controls: null,
                           fit: _currentFit(),
                           subtitleViewConfiguration: _buildSubtitleViewConfig(),

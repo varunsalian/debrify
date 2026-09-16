@@ -11,10 +11,18 @@ public class SafeResizableTexture:
   ResizableTextureProtocol
 {
   private let lock = NSRecursiveLock()
-  private let child: ResizableTextureProtocol
+  private var child: ResizableTextureProtocol
 
   init(_ child: ResizableTextureProtocol) {
     self.child = child
+  }
+
+  /// Keep Flutter's registered texture stable while changing the mpv renderer.
+  public func replace(with makeChild: () -> ResizableTextureProtocol) {
+    locked {
+      child.dispose()
+      child = makeChild()
+    }
   }
 
   public func dispose() {
@@ -34,7 +42,7 @@ public class SafeResizableTexture:
   }
 
   public func copyPixelBuffer() -> Unmanaged<CVPixelBuffer>? {
-    return child.copyPixelBuffer()
+    return locked { child.copyPixelBuffer() }
   }
 
   private func locked<T>(do block: () -> T) -> T {

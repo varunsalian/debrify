@@ -11,7 +11,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
 import '../models/iptv_playlist.dart';
-import '../theme/app_surfaces.dart';
+import '../screens/video_player/player_pip_route.dart';
 import '../models/movie_collection.dart';
 import '../models/torrent.dart';
 import '../services/external_player_service.dart';
@@ -1208,7 +1208,7 @@ class VideoPlayerLauncher {
     // keeps it (and every dialog/sheet it opens) on today's look under any
     // app theme.
     final result = await Navigator.of(context).push<Map<String, dynamic>?>(
-      FrozenLegacyPageRoute(builder: (_) => args.toWidget()),
+      videoPlayerRoute(builder: (_) => args.toWidget()),
     );
 
     if (result?['startupSourcesExhausted'] == true &&

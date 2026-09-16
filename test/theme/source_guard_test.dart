@@ -73,7 +73,9 @@ void main() {
 
   test('video_player_launcher pushes via FrozenLegacyPageRoute', () {
     final source = _code(File('lib/services/video_player_launcher.dart'));
-    expect(source.contains('FrozenLegacyPageRoute'), isTrue);
+    expect(source.contains('videoPlayerRoute('), isTrue);
+    final route = _code(File('lib/screens/video_player/player_pip_route.dart'));
+    expect(route.contains('extends FrozenLegacyPageRoute'), isTrue);
     expect(source.contains('MaterialPageRoute'), isFalse);
   });
 
