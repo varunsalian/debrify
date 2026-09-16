@@ -551,7 +551,8 @@ class _M {
 
 class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentationMixin<SpotlightBoard> {
   final Set<_CardState> _visibleCards = {};
-  final Set<Axis> _scrollingAxes = {};
+  final Set<BuildContext> _scrollingSources = {};
+  Size? _selectionViewport;
   _CardState? _selectedCard;
   bool _largeCardInteractions = false;
   bool _selectionQueued = false;
@@ -568,9 +569,17 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
   void _unregisterCard(_CardState card) {
     _visibleCards.remove(card);
     if (identical(_selectedCard, card)) _selectedCard = null;
+    if (_largeCardInteractions && _scrollingSources.isNotEmpty) {
+      _queueScrollSelection();
+    }
   }
 
   void _selectCard(_CardState? card, {required bool scrolling}) {
+    // Changing widths during a drag can collapse a short row's scroll extent
+    // and cancel the gesture. Hold painted widths until scrolling settles.
+    for (final visible in _visibleCards) {
+      if (visible.mounted) visible._freezeScrollWidth(scrolling);
+    }
     final previous = _selectedCard;
     _selectedCard = card;
     if (!identical(previous, card) && previous?.mounted == true) {
@@ -583,7 +592,7 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
     if (!_largeCardInteractions) return;
     // Hover can change as cards move beneath a stationary pointer.
     // Only scroll completion may release the moving state.
-    if (_scrollingAxes.isNotEmpty) return;
+    if (_scrollingSources.isNotEmpty) return;
     if (active) {
       _selectionFromScroll = false;
       _scrollInterruptedPreview = false;
@@ -608,7 +617,7 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
     if (notification is UserScrollNotification &&
         notification.direction != ScrollDirection.idle) {
       _selectionFromScroll = true;
-      _scrollingAxes.add(notification.metrics.axis);
+      if (notification.context != null) _scrollingSources.add(notification.context!);
       _scrollInterruptedPreview = true;
       _queueScrollSelection();
     }
@@ -617,10 +626,10 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
     }
     if (!_selectionFromScroll) return false;
     if (notification is ScrollStartNotification) {
-      _scrollingAxes.add(notification.metrics.axis);
+      if (notification.context != null) _scrollingSources.add(notification.context!);
       _scrollInterruptedPreview = true;
     } else if (notification is ScrollEndNotification) {
-      _scrollingAxes.remove(notification.metrics.axis);
+      _scrollingSources.remove(notification.context);
     }
     if (notification is ScrollStartNotification ||
         notification is ScrollUpdateNotification ||
@@ -637,16 +646,16 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
   void _queueScrollSelection() {
     if (_selectionQueued) return;
     _selectionQueued = true;
+    WidgetsBinding.instance.ensureVisualUpdate();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _selectionQueued = false;
       if (!mounted) return;
+      _scrollingSources.removeWhere((source) => !source.mounted);
       if (!_largeCardInteractions) {
         _selectCard(null, scrolling: false);
         return;
       }
-      // A hover/key event can arrive after this scroll callback was queued.
-      // Its newer explicit cursor wins over the pending geometry sample.
-      if (!_selectionFromScroll && _selectedCard != null) return;
+
       if (_scrollInterruptedPreview) {
         _scrollInterruptedPreview = false;
         _selectedCard?._setWideSelection(true, moving: true);
@@ -666,6 +675,8 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
         final rect = box.localToGlobal(Offset.zero, ancestor: render) & box.size;
         final visible = rect.intersect(bounds);
         if (visible.height < rect.height * 0.65 || visible.width < 24) continue;
+        // Preserve explicit selection only while its card remains visible.
+        if (!_selectionFromScroll && identical(card, _selectedCard)) return;
         final row = (rect.center.dy - readingY).abs();
         final column = (rect.left - readingX).abs();
         if (row < bestRow - 4 || ((row - bestRow).abs() <= 4 && column < bestColumn)) {
@@ -674,8 +685,8 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
           bestColumn = column;
         }
       }
-      _selectCard(nearest, scrolling: _scrollingAxes.isNotEmpty);
-      if (_scrollingAxes.isEmpty && _desktopPreviewOwners.isEmpty) _restartCadence();
+      _selectCard(nearest, scrolling: _scrollingSources.isNotEmpty);
+      if (_scrollingSources.isEmpty && _desktopPreviewOwners.isEmpty) _restartCadence();
     });
   }
 
@@ -926,7 +937,7 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
 
   String? _dwelledHeroId;
   void _restartCadence() {
-    if (_largeCardInteractions && _scrollingAxes.isNotEmpty) return;
+    if (_largeCardInteractions && _scrollingSources.isNotEmpty) return;
     _cadence?.cancel();
     // Nulled, not just cancelled: didUpdateWidget's reconcile decides "is a
     // timer armed" by null-ness, and a cancelled-but-non-null handle reads
@@ -1687,9 +1698,14 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
               platform: Theme.of(context).platform,
               availableWidth: constraints.maxWidth,
             );
+            final selectionViewport = Size(constraints.maxWidth, constraints.maxHeight);
+            if (_selectionViewport != selectionViewport) {
+              _selectionViewport = selectionViewport;
+              _queueScrollSelection();
+            }
             if (large != _largeCardInteractions) {
               _largeCardInteractions = large;
-              _scrollingAxes.clear();
+              _scrollingSources.clear();
               _queueScrollSelection();
             }
             // The hero is measured against the board's real height, so it is
@@ -2950,6 +2966,14 @@ class _Card extends StatefulWidget {
 }
 
 class _CardState extends State<_Card> with MetadataPresentationMixin<_Card> {
+  double _paintedGrowth = 1;
+  double? _scrollGrowth;
+
+  void _freezeScrollWidth(bool scrolling) {
+    if (scrolling == (_scrollGrowth != null)) return;
+    setState(() => _scrollGrowth = scrolling ? _paintedGrowth : null);
+  }
+
   bool _wideSelected = false;
   bool _moving = false;
   bool get _activeCard => widget.largeInteractions ? _wideSelected : _f;
@@ -3149,11 +3173,11 @@ class _CardState extends State<_Card> with MetadataPresentationMixin<_Card> {
   Widget build(BuildContext context) => TweenAnimationBuilder<double>(
     // Focused title cards use the same landscape aspect and growth stages,
     // regardless of the resting poster preference.
-    tween: Tween(end: _canExpand && _activeCard && !_moving
+    tween: Tween(end: _scrollGrowth ?? (_canExpand && _activeCard && !_moving
         ? (SpotlightCardShape.wide.aspect / widget.card.shape.aspect) *
             (_trailerPlaying ? 1.38 : 1.18)
-        : 1.0),
-    duration: MediaQuery.disableAnimationsOf(context)
+        : 1.0)),
+    duration: _scrollGrowth != null || MediaQuery.disableAnimationsOf(context)
         ? Duration.zero
         : _trailerPlaying ? const Duration(milliseconds: 700)
         : Duration(milliseconds: PlatformUtil.isAndroidTvCached ? 160 : 220),
@@ -3162,6 +3186,7 @@ class _CardState extends State<_Card> with MetadataPresentationMixin<_Card> {
   );
 
   Widget _buildCard(BuildContext context, double growth) {
+    _paintedGrowth = growth;
     final app = AppThemeScope.of(context);
     final c = widget.card;
     final expanded = _canExpand && _activeCard && !_moving;

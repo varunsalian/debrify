@@ -82,6 +82,7 @@ void main() {
     bool reduced = false,
     bool expand = true,
     int shelfCount = 1,
+    int itemCount = 10,
     TargetPlatform platform = TargetPlatform.iOS,
   }) => MaterialApp(
     theme: ThemeData(platform: platform),
@@ -108,7 +109,7 @@ void main() {
                     title: 'Movies $shelf',
                     nodes: nodes.sublist(shelf * 10, shelf * 10 + 10),
                     items: List.generate(
-                      10,
+                      itemCount,
                       (index) => SpotlightCard(
                         metadata: StremioMeta(
                           id: 'title${shelf * 10 + index}',
@@ -160,6 +161,175 @@ void main() {
       await tester.pumpWidget(const SizedBox());
     },
   );
+
+  testWidgets('short tablet row keeps its scroll extent during a swipe', (
+    tester,
+  ) async {
+    surface(tester, const Size(1024, 768));
+    await tester.pumpWidget(host(itemCount: 4));
+    await tester.pumpAndSettle();
+    final scrollable = tester.state<ScrollableState>(
+      find
+          .descendant(of: horizontal(), matching: find.byType(Scrollable))
+          .first,
+    );
+    final extent = scrollable.position.maxScrollExtent;
+    expect(extent, greaterThan(0));
+    final drag = await tester.startGesture(tester.getCenter(horizontal()));
+    await drag.moveBy(const Offset(-30, 0));
+    await tester.pump();
+    await drag.moveBy(const Offset(-80, 0));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pump();
+    expect(
+      scrollable.position.maxScrollExtent,
+      greaterThanOrEqualTo(extent - 1),
+    );
+    expect(scrollable.position.pixels, greaterThan(0));
+    await drag.up();
+    await tester.pumpAndSettle();
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('overlapping horizontal rows stay moving until both end', (
+    tester,
+  ) async {
+    surface(tester, const Size(1200, 1000));
+    nodes.addAll(List.generate(10, (_) => FocusNode()));
+    await tester.pumpWidget(host(shelfCount: 2, trailers: true));
+    await tester.pumpAndSettle();
+    final rows = tester
+        .stateList<ScrollableState>(
+          find.descendant(of: horizontal(), matching: find.byType(Scrollable)),
+        )
+        .toList();
+    expect(rows, hasLength(2));
+    for (final row in rows) {
+      ScrollStartNotification(
+        metrics: row.position,
+        context: row.context,
+        dragDetails: DragStartDetails(),
+      ).dispatch(row.context);
+    }
+    await tester.pump();
+    ScrollEndNotification(
+      metrics: rows[0].position,
+      context: rows[0].context,
+    ).dispatch(rows[0].context);
+    await tester.pumpAndSettle();
+    await tester.pump(const Duration(seconds: 3));
+    expect(find.byType(SpotlightCardTrailer), findsNothing);
+    ScrollEndNotification(
+      metrics: rows[1].position,
+      context: rows[1].context,
+    ).dispatch(rows[1].context);
+    await tester.pumpAndSettle();
+    await tester.pump(const Duration(seconds: 2));
+    expect(find.byType(SpotlightCardTrailer), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets(
+    'desktop height resize reselects a visible card above the breakpoint',
+    (tester) async {
+      surface(tester, const Size(1200, 1000));
+      nodes.addAll(List.generate(20, (_) => FocusNode()));
+      await tester.pumpWidget(
+        host(shelfCount: 3, trailers: true, platform: TargetPlatform.windows),
+      );
+      await tester.pumpAndSettle();
+      await tester.pump(const Duration(seconds: 2));
+      final before = tester.element(active());
+      tester.view.physicalSize = const Size(1200, 400);
+      await tester.pumpAndSettle();
+      expect(active(), findsOneWidget);
+      expect(tester.element(active()), isNot(same(before)));
+      expect(tester.getRect(active()).top, lessThan(400));
+      expect(tester.getRect(active()).bottom, greaterThan(0));
+      await tester.pump(const Duration(seconds: 2));
+      expect(find.byType(SpotlightCardTrailer), findsOneWidget);
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
+
+  testWidgets('tablet fling advances and settles without losing selection', (
+    tester,
+  ) async {
+    surface(tester, const Size(1024, 768));
+    await tester.pumpWidget(host(trailers: true));
+    await tester.pumpAndSettle();
+    final row = tester.state<ScrollableState>(
+      find
+          .descendant(of: horizontal(), matching: find.byType(Scrollable))
+          .first,
+    );
+    await tester.fling(horizontal(), const Offset(-500, 0), 1500);
+    await tester.pump();
+    expect(find.byType(SpotlightCardTrailer), findsNothing);
+    await tester.pumpAndSettle();
+    expect(row.position.pixels, greaterThan(200));
+    expect(active(), findsOneWidget);
+    await tester.pump(const Duration(seconds: 2));
+    expect(find.byType(SpotlightCardTrailer), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets(
+    'removing a scrolling row releases previews on the remaining row',
+    (tester) async {
+      surface(tester, const Size(1200, 1000));
+      nodes.addAll(List.generate(10, (_) => FocusNode()));
+      await tester.pumpWidget(host(shelfCount: 2, trailers: true));
+      await tester.pumpAndSettle();
+      final row = tester
+          .stateList<ScrollableState>(
+            find.descendant(
+              of: horizontal(),
+              matching: find.byType(Scrollable),
+            ),
+          )
+          .last;
+      ScrollStartNotification(
+        metrics: row.position,
+        context: row.context,
+        dragDetails: DragStartDetails(),
+      ).dispatch(row.context);
+      await tester.pumpAndSettle();
+      await tester.pumpWidget(host(shelfCount: 1, trailers: true));
+      await tester.pumpAndSettle();
+      await tester.pump(const Duration(seconds: 3));
+      expect(find.byType(SpotlightCardTrailer), findsOneWidget);
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
+
+  testWidgets('cancelled tablet drag allows scrolling and preview to resume', (
+    tester,
+  ) async {
+    surface(tester, const Size(1024, 768));
+    await tester.pumpWidget(host(trailers: true));
+    await tester.pumpAndSettle();
+    final drag = await tester.startGesture(tester.getCenter(horizontal()));
+    await drag.moveBy(const Offset(-30, 0));
+    await tester.pump();
+    await drag.moveBy(const Offset(-150, 0));
+    await tester.pump();
+    await drag.cancel();
+    await tester.pumpAndSettle();
+    await tester.pump(const Duration(seconds: 3));
+    expect(find.byType(SpotlightCardTrailer), findsOneWidget);
+    final row = tester.state<ScrollableState>(
+      find
+          .descendant(of: horizontal(), matching: find.byType(Scrollable))
+          .first,
+    );
+    final before = row.position.pixels;
+    await tester.drag(horizontal(), const Offset(-400, 0));
+    await tester.pumpAndSettle();
+    expect(row.position.pixels, greaterThan(before));
+    await tester.pumpWidget(const SizedBox());
+  });
 
   testWidgets('hover exit preserves keyboard focus and its running preview', (
     tester,
