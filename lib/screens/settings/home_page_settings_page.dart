@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../utils/spotlight_interaction_policy.dart';
 import '../../models/stremio_addon.dart';
 import '../../services/home_collections_store.dart';
 import '../../services/iptv_media_store.dart' show IptvListMeta;
@@ -648,11 +649,15 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
                 SettingsSection(
                   title: 'Home Cards',
                   children: [
-                    if (PlatformUtil.isTelevision && _spotlightLayoutActive)
+                    if (_spotlightLayoutActive && spotlightUsesRichCards(
+                      viewport: MediaQuery.sizeOf(context),
+                      platform: Theme.of(context).platform,
+                      dpad: PlatformUtil.isTelevision,
+                    ))
                       SettingsToggleTile(
                         icon: Icons.description_outlined,
                         title: 'Expand Focused Card',
-                        subtitle: 'Widen the focused card and show its description inside',
+                        subtitle: 'Widen the active card and show its description while scrolling, hovering, or using the remote',
                         value: _spotlightFocusDetails,
                         onChanged: _setSpotlightFocusDetails,
                       ),

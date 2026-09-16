@@ -1,0 +1,404 @@
+import 'dart:ui' show PointerDeviceKind;
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:debrify/models/stremio_addon.dart';
+import 'package:debrify/theme/app_theme.dart';
+import 'package:debrify/theme/app_theme_scope.dart';
+import 'package:debrify/theme/widgets/parallax_focus.dart';
+import 'package:debrify/widgets/detail/theme/detail_themes.dart';
+import 'package:debrify/widgets/home/spotlight_board.dart';
+import 'package:debrify/widgets/home/spotlight_card_trailer.dart';
+import 'package:debrify/utils/spotlight_interaction_policy.dart';
+
+void main() {
+  test(
+    'tablets and desktop windows qualify without enabling landscape phones',
+    () {
+      for (final platform in [TargetPlatform.iOS, TargetPlatform.android]) {
+        expect(
+          spotlightUsesRichCards(
+            viewport: const Size(1024, 768),
+            platform: platform,
+          ),
+          isTrue,
+        );
+        expect(
+          spotlightUsesRichCards(
+            viewport: const Size(844, 390),
+            platform: platform,
+          ),
+          isFalse,
+        );
+        expect(
+          spotlightUsesRichCards(
+            viewport: const Size(500, 768),
+            platform: platform,
+          ),
+          isFalse,
+        );
+      }
+      for (final platform in [
+        TargetPlatform.macOS,
+        TargetPlatform.windows,
+        TargetPlatform.linux,
+      ]) {
+        expect(
+          spotlightUsesRichCards(
+            viewport: const Size(1000, 500),
+            platform: platform,
+          ),
+          isTrue,
+        );
+        expect(
+          spotlightUsesRichCards(
+            viewport: const Size(500, 800),
+            platform: platform,
+          ),
+          isFalse,
+        );
+      }
+    },
+  );
+
+  late FocusNode hero;
+  late List<FocusNode> nodes;
+  var opened = 0;
+  setUp(() {
+    SharedPreferences.setMockInitialValues({});
+    hero = FocusNode();
+    nodes = List.generate(10, (_) => FocusNode());
+    opened = 0;
+  });
+  tearDown(() {
+    hero.dispose();
+    for (final node in nodes) {
+      node.dispose();
+    }
+  });
+  Widget host({
+    bool trailers = false,
+    bool reduced = false,
+    bool expand = true,
+    int shelfCount = 1,
+    TargetPlatform platform = TargetPlatform.iOS,
+  }) => MaterialApp(
+    theme: ThemeData(platform: platform),
+    home: Builder(
+      builder: (context) => MediaQuery(
+        data: MediaQuery.of(context).copyWith(disableAnimations: reduced),
+        child: AppThemeScope(
+          theme: AppTheme.fromDetail(DetailThemes.byId('signal')),
+          child: Scaffold(
+            body: SpotlightBoard(
+              hero: const [],
+              heroNode: hero,
+              heroAddon: null,
+              onHeroOpen: (_, __) {},
+              dpad: false,
+              shelvesOnly: true,
+              largeScreenInteractions: true,
+              expandFocusedCard: expand,
+              trailersEnabled: trailers,
+              sections: [
+                for (var shelf = 0; shelf < shelfCount; shelf++)
+                  SpotlightShelf(
+                    id: 'movies$shelf',
+                    title: 'Movies $shelf',
+                    nodes: nodes.sublist(shelf * 10, shelf * 10 + 10),
+                    items: List.generate(
+                      10,
+                      (index) => SpotlightCard(
+                        metadata: StremioMeta(
+                          id: 'title${shelf * 10 + index}',
+                          type: 'movie',
+                          name: 'Title ${shelf * 10 + index}',
+                          description: 'Description ${shelf * 10 + index}',
+                        ),
+                        title: 'Title ${shelf * 10 + index}',
+                        onOpen: () => opened++,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+  Finder active() => find.byWidgetPredicate(
+    (widget) => widget is ParallaxFocus && widget.focused,
+  );
+  Finder horizontal() => find.byWidgetPredicate(
+    (widget) => widget is ListView && widget.scrollDirection == Axis.horizontal,
+  );
+  void surface(WidgetTester tester, Size size) {
+    tester.view.physicalSize = size;
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+  }
+
+  testWidgets(
+    'tablet scrolling moves one visual focus and a single tap still opens',
+    (tester) async {
+      surface(tester, const Size(1024, 768));
+      await tester.pumpWidget(host());
+      await tester.pumpAndSettle();
+      expect(active(), findsOneWidget);
+      final first = tester.element(active());
+      expect(nodes.any((node) => node.hasFocus), isFalse);
+      await tester.drag(horizontal(), const Offset(-500, 0));
+      await tester.pumpAndSettle();
+      expect(active(), findsOneWidget);
+      expect(tester.element(active()), isNot(same(first)));
+      await tester.tap(active());
+      expect(opened, 1);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
+
+  testWidgets('hover exit preserves keyboard focus and its running preview', (
+    tester,
+  ) async {
+    surface(tester, const Size(1200, 800));
+    await tester.pumpWidget(
+      host(platform: TargetPlatform.windows, trailers: true),
+    );
+    await tester.pump();
+    nodes[1].requestFocus();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pump(const Duration(seconds: 2));
+    expect(find.byType(SpotlightCardTrailer), findsOneWidget);
+    final preview = tester.element(find.byType(SpotlightCardTrailer));
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await mouse.addPointer(location: const Offset(1190, 790));
+    final card = nodes[1].context!.findRenderObject() as RenderBox;
+    await mouse.moveTo(card.localToGlobal(card.size.center(Offset.zero)));
+    await tester.pump();
+    await mouse.moveTo(const Offset(1190, 790));
+    await tester.pump();
+    expect(nodes[1].hasFocus, isTrue);
+    expect(active(), findsOneWidget);
+    expect(
+      (nodes[1].context!.findRenderObject() as RenderBox).size.aspectRatio,
+      greaterThan(1.7),
+    );
+    expect(tester.element(find.byType(SpotlightCardTrailer)), same(preview));
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    expect(opened, 1);
+    await mouse.removePointer();
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets(
+    'keyboard focus changes preserve a hovered card and its running preview',
+    (tester) async {
+      surface(tester, const Size(1200, 800));
+      await tester.pumpWidget(
+        host(platform: TargetPlatform.windows, trailers: true),
+      );
+      await tester.pumpAndSettle();
+      nodes[1].requestFocus();
+      await tester.pumpAndSettle();
+      final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      await mouse.addPointer(location: const Offset(1190, 790));
+      final card = nodes[1].context!.findRenderObject() as RenderBox;
+      await mouse.moveTo(card.localToGlobal(card.size.center(Offset.zero)));
+      await tester.pumpAndSettle();
+      await tester.pump(const Duration(seconds: 2));
+      expect(find.byType(SpotlightCardTrailer), findsOneWidget);
+      final preview = tester.element(find.byType(SpotlightCardTrailer));
+      nodes[1].unfocus();
+      await tester.pumpAndSettle();
+      expect(nodes[1].hasFocus, isFalse);
+      expect(active(), findsOneWidget);
+      expect(
+        (nodes[1].context!.findRenderObject() as RenderBox).size.aspectRatio,
+        greaterThan(1.7),
+      );
+      expect(tester.element(find.byType(SpotlightCardTrailer)), same(preview));
+      nodes[1].requestFocus();
+      await tester.pumpAndSettle();
+      expect(nodes[1].hasFocus, isTrue);
+      expect(tester.element(find.byType(SpotlightCardTrailer)), same(preview));
+      await mouse.removePointer();
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
+
+  testWidgets('leaving another hovered card restores keyboard selection', (
+    tester,
+  ) async {
+    surface(tester, const Size(1200, 800));
+    await tester.pumpWidget(host(platform: TargetPlatform.windows));
+    await tester.pumpAndSettle();
+    nodes[1].requestFocus();
+    await tester.pumpAndSettle();
+    final selected = tester.element(active());
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await mouse.addPointer(location: const Offset(1190, 790));
+    final other = nodes[2].context!.findRenderObject() as RenderBox;
+    await mouse.moveTo(other.localToGlobal(other.size.center(Offset.zero)));
+    await tester.pumpAndSettle();
+    expect(tester.element(active()), isNot(same(selected)));
+    await mouse.moveTo(const Offset(1190, 790));
+    await tester.pumpAndSettle();
+    expect(nodes[1].hasFocus, isTrue);
+    expect(tester.element(active()), same(selected));
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    expect(opened, 1);
+    await mouse.removePointer();
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('hover during a held scroll does not restart trailer dwell', (
+    tester,
+  ) async {
+    surface(tester, const Size(1200, 800));
+    await tester.pumpWidget(
+      host(platform: TargetPlatform.windows, trailers: true),
+    );
+    await tester.pumpAndSettle();
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await mouse.addPointer(location: const Offset(1190, 790));
+    final drag = await tester.startGesture(tester.getCenter(horizontal()));
+    await drag.moveBy(const Offset(-100, 0));
+    await tester.pump();
+    final card = nodes[2].context!.findRenderObject() as RenderBox;
+    await mouse.moveTo(card.localToGlobal(card.size.center(Offset.zero)));
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 3));
+    expect(find.byType(SpotlightCardTrailer), findsNothing);
+    final selected = tester.element(active());
+    await drag.moveBy(const Offset(-400, 0));
+    await tester.pump();
+    await tester.pump();
+    expect(tester.element(active()), isNot(same(selected)));
+    await tester.pump(const Duration(seconds: 3));
+    expect(find.byType(SpotlightCardTrailer), findsNothing);
+    await mouse.moveTo(const Offset(1190, 790));
+    await drag.up();
+    await tester.pumpAndSettle();
+    await tester.pump(const Duration(seconds: 2));
+    expect(find.byType(SpotlightCardTrailer), findsOneWidget);
+    await mouse.removePointer();
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('desktop hover and keyboard each own one expanded card', (
+    tester,
+  ) async {
+    surface(tester, const Size(1200, 800));
+    await tester.pumpWidget(host(platform: TargetPlatform.windows));
+    await tester.pumpAndSettle();
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await mouse.addPointer(location: const Offset(1190, 790));
+    final target = nodes[2].context!.findRenderObject() as RenderBox;
+    await mouse.moveTo(target.localToGlobal(target.size.center(Offset.zero)));
+    await tester.pumpAndSettle();
+    expect(active(), findsOneWidget);
+    expect(
+      (nodes[2].context!.findRenderObject() as RenderBox).size.aspectRatio,
+      greaterThan(1.7),
+    );
+    await mouse.removePointer();
+    nodes[1].requestFocus();
+    await tester.pumpAndSettle();
+    expect(active(), findsOneWidget);
+    expect(
+      (nodes[1].context!.findRenderObject() as RenderBox).size.aspectRatio,
+      greaterThan(1.7),
+    );
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets(
+    'card trailer waits for scrolling to stop and resize removes the preview',
+    (tester) async {
+      surface(tester, const Size(1024, 768));
+      await tester.pumpWidget(host(trailers: true));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(find.byType(SpotlightCardTrailer), findsNothing);
+      await tester.pump(const Duration(seconds: 2));
+      expect(find.byType(SpotlightCardTrailer), findsOneWidget);
+      await tester.drag(horizontal(), const Offset(-400, 0));
+      await tester.pump();
+      await tester.pump();
+      expect(find.byType(SpotlightCardTrailer), findsNothing);
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pump(const Duration(seconds: 2));
+      expect(find.byType(SpotlightCardTrailer), findsOneWidget);
+      tester.view.physicalSize = const Size(500, 768);
+      await tester.pump();
+      await tester.pump();
+      expect(find.byType(SpotlightCardTrailer), findsNothing);
+      expect(active(), findsNothing);
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
+
+  testWidgets(
+    'landscape phones stay compact in behavior and reduced motion blocks previews',
+    (tester) async {
+      surface(tester, const Size(844, 390));
+      await tester.pumpWidget(host(trailers: true));
+      await tester.pump(const Duration(seconds: 3));
+      expect(active(), findsNothing);
+      expect(find.byType(SpotlightCardTrailer), findsNothing);
+      tester.view.physicalSize = const Size(1024, 768);
+      await tester.pumpWidget(host(trailers: true, reduced: true));
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 3));
+      expect(find.byType(SpotlightCardTrailer), findsNothing);
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
+
+  testWidgets('vertical scroll transfers the preview to a visible shelf', (
+    tester,
+  ) async {
+    surface(tester, const Size(1024, 768));
+    nodes.addAll(List.generate(40, (_) => FocusNode()));
+    await tester.pumpWidget(host(shelfCount: 5));
+    await tester.pumpAndSettle();
+    final before = tester.element(active());
+    final vertical = find.byWidgetPredicate(
+      (widget) => widget is ListView && widget.scrollDirection == Axis.vertical,
+    );
+    await tester.drag(vertical, const Offset(0, -650));
+    await tester.pumpAndSettle();
+    expect(active(), findsOneWidget);
+    expect(tester.element(active()), isNot(same(before)));
+    final rect = tester.getRect(active());
+    expect(rect.top, greaterThanOrEqualTo(0));
+    expect(rect.bottom, lessThanOrEqualTo(768));
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets(
+    'disabling expansion or reduced motion tears down a running card preview',
+    (tester) async {
+      surface(tester, const Size(1024, 768));
+      await tester.pumpWidget(host(trailers: true));
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 3));
+      expect(find.byType(SpotlightCardTrailer), findsOneWidget);
+      await tester.pumpWidget(host(trailers: true, reduced: true));
+      await tester.pump();
+      expect(find.byType(SpotlightCardTrailer), findsNothing);
+      await tester.pumpWidget(host(trailers: true, expand: false));
+      await tester.pump(const Duration(seconds: 3));
+      expect(find.byType(SpotlightCardTrailer), findsNothing);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
+}

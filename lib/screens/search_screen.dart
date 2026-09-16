@@ -8069,6 +8069,7 @@ class _SearchScreenState extends State<SearchScreen>
     // make a callback page a different catalog than the shelf it came from.
     final rails = _canvasRails;
     return SpotlightBoard(
+      largeScreenInteractions: true,
       key: _spotlightKey,
       animationsEnabled: _homeAnimationsEnabled,
       animationStyle: _homeAnimationStyle,
