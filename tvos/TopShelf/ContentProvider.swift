@@ -2,7 +2,10 @@ import Foundation
 import TVServices
 
 private enum TopShelfStore {
-    static let appGroup = "group.com.varunsalian.debrifytv"
+    static var appGroup: String {
+        Bundle.main.object(forInfoDictionaryKey: "DebrifyAppGroup") as? String
+            ?? "group.com.varunsalian.debrifytv"
+    }
     static let snapshotPath = "Library/Caches/top-shelf-v1.json"
     static let actionsPath = "Library/Caches/top-shelf-actions-v1.json"
     static let previewDirectory = "Library/Caches/TopShelfPreviews/"

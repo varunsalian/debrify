@@ -20,6 +20,11 @@ if (keystorePropertiesFile.exists()) {
     keystoreProperties.load(FileInputStream(keystorePropertiesFile))
 }
 
+// Opt-in identity used by tool/build_personal.sh. Normal builds are unchanged.
+val isPersonalBuild = providers.gradleProperty("debrifyPersonalBuild")
+    .map(String::toBoolean)
+    .orElse(false)
+
 android {
     namespace = "com.debrify.app"
     compileSdk = flutter.compileSdkVersion
@@ -52,12 +57,12 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.debrify.app"
+        applicationId = if (isPersonalBuild.get()) "com.debrify.app.personal" else "com.debrify.app"
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
-        resValue("string", "app_name", "Debrify")
+        resValue("string", "app_name", if (isPersonalBuild.get()) "Debrify Personal" else "Debrify")
     }
 
     signingConfigs {

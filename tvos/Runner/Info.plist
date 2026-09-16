@@ -10,7 +10,9 @@
 		<string>infuse</string>
 	</array>
 	<key>CFBundleDisplayName</key>
-	<string>Debrify</string>
+	<string>$(DEBRIFY_APP_DISPLAY_NAME)</string>
+	<key>DebrifyAppGroup</key>
+	<string>$(DEBRIFY_APP_GROUP)</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>

@@ -1,3 +1,4 @@
 // Keep the extension's bundle versions exactly aligned with the Flutter app
 // without inheriting Runner's CocoaPods linker flags.
 #include "../Flutter/Generated.xcconfig"
+DEBRIFY_APP_GROUP = group.com.varunsalian.debrifytv

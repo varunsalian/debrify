@@ -621,7 +621,10 @@ class AppDelegate: FlutterAppDelegate {
     private let profilePrivacy = TvOsProfilePrivacyController()
     private var pendingTopShelfAction: [String: String]?
 
-    private static let topShelfAppGroup = "group.com.varunsalian.debrifytv"
+    private static var topShelfAppGroup: String {
+        Bundle.main.object(forInfoDictionaryKey: "DebrifyAppGroup") as? String
+            ?? "group.com.varunsalian.debrifytv"
+    }
     private static let topShelfSnapshotPath = "Library/Caches/top-shelf-v1.json"
     private static let topShelfActionsPath = "Library/Caches/top-shelf-actions-v1.json"
     private static let topShelfPreviewDirectory = "Library/Caches/TopShelfPreviews"
