@@ -609,7 +609,10 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
                       SettingsToggleTile(
                         icon: Icons.ac_unit_rounded,
                         title: 'Enable animations',
-                        subtitle: 'Animate Home and Spotlight collection backgrounds',
+                        subtitle: 'Animate Home and Spotlight collection backgrounds. '
+                            'Keep this off on low-end TVs or devices with limited memory, '
+                            'as animations may slow down Home.',
+                        subtitleMaxLines: 6,
                         value: _homeAnimationsEnabled,
                         onChanged: (value) => _setHomeAnimation(enabled: value),
                       ),
