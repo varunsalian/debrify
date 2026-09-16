@@ -41,6 +41,7 @@ class MainActivity : FlutterActivity() {
 	// ── SAF download-folder picker ──────────────────────────────────────────
 	private val REQUEST_PICK_DOWNLOAD_DIR = 51423
 	private var pendingDirPickResult: MethodChannel.Result? = null
+    private var localSourceAccess: com.debrify.app.storage.LocalSourceAccess? = null
 
 	// ── TV voice dictation (in-app SpeechRecognizer) ────────────────────────
 	// Deliberately NOT the ACTION_RECOGNIZE_SPEECH activity: that hands the
@@ -65,6 +66,7 @@ class MainActivity : FlutterActivity() {
 	private var voiceEvents: EventChannel.EventSink? = null
 
 	override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        if (localSourceAccess?.onActivityResult(requestCode, resultCode, data) == true) return
 		if (requestCode == REQUEST_PICK_DOWNLOAD_DIR) {
 			val pending = pendingDirPickResult
 			pendingDirPickResult = null
@@ -1084,6 +1086,8 @@ class MainActivity : FlutterActivity() {
     }
 
     override fun onDestroy() {
+        localSourceAccess?.dispose()
+        localSourceAccess = null
         recordActivityLifecycle("destroy")
         tvTrailerPlayer?.releaseAll()
         tvTrailerPlayer = null
@@ -1292,6 +1296,8 @@ class MainActivity : FlutterActivity() {
         diagnosticEngineId = System.identityHashCode(flutterEngine)
         recordActivityLifecycle("engine_configure")
 		super.configureFlutterEngine(flutterEngine)
+        localSourceAccess?.dispose()
+        localSourceAccess = com.debrify.app.storage.LocalSourceAccess(this, flutterEngine.dartExecutor.binaryMessenger)
 		com.debrify.app.security.DeviceSecretCipherPlugin.register(flutterEngine)
 		MethodChannel(
 			flutterEngine.dartExecutor.binaryMessenger,

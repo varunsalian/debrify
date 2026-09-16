@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'android_local_source_service.dart';
 import 'next_episode_service.dart';
 import 'profiles/profile_runtime.dart';
 
@@ -3183,6 +3184,40 @@ class TorrentPlaybackService {
     SeriesSource source,
     PlaybackMeta meta,
   ) async {
+    if (AndroidLocalSourceService.isDocumentSource(source)) {
+      if (!Platform.isAndroid) {
+        return (
+          null,
+          'This local source requires access on its Android device.',
+        );
+      }
+      try {
+        final resolved = await AndroidLocalSourceService.resolve(
+          source,
+          season: meta.season,
+          episode: meta.episode,
+          series: meta.contentType == 'series',
+        );
+        return (
+          _Resolved(
+            title: source.torrentName,
+            playUrl: resolved.playlist[resolved.startIndex].url,
+            playlist: resolved.playlist,
+            startIndex: resolved.startIndex,
+          ),
+          null,
+        );
+      } on LocalSourceUnavailable catch (error) {
+        return (null, '${error.message} Falling back to search.');
+      } on PlatformException {
+        // Permission loss, detached storage and provider failures may recover.
+        // Keep the binding so the user can reconnect or grant access again.
+        return (
+          null,
+          'Local source is unavailable. Reconnect the drive or select it again. Falling back to search.',
+        );
+      }
+    }
     final localPath = (source.localPath?.trim().isNotEmpty ?? false)
         ? source.localPath!.trim()
         : source.debridTorrentId.trim();

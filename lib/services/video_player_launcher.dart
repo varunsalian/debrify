@@ -6,6 +6,7 @@ import 'dart:io';
 import 'dart:math';
 
 import 'package:android_intent_plus/android_intent.dart';
+import 'package:android_intent_plus/flag.dart';
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -560,6 +561,17 @@ class VideoPlayerLaunchArgs {
 }
 
 class VideoPlayerLauncher {
+  /// The external app needs its own temporary grant for this exact document.
+  /// Debrify's persisted folder/file permission is not shared across apps.
+  static AndroidIntent androidExternalVideoIntent(String url) => AndroidIntent(
+    action: 'action_view',
+    data: url,
+    type: 'video/*',
+    flags: Uri.tryParse(url)?.scheme == 'content'
+        ? const [Flag.FLAG_GRANT_READ_URI_PERMISSION]
+        : null,
+  );
+
   /// Select the single URL handed to an external player.
   ///
   /// External-player intents, URL schemes, and generic commands cannot
@@ -1601,11 +1613,7 @@ class VideoPlayerLauncher {
     } else if (Platform.isAndroid) {
       // Android: Show Intent chooser for video player apps
       try {
-        final intent = AndroidIntent(
-          action: 'action_view',
-          data: url,
-          type: 'video/*',
-        );
+        final intent = androidExternalVideoIntent(url);
         await intent.launch();
         return true;
       } catch (e) {
