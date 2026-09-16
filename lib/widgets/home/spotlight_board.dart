@@ -6,6 +6,7 @@ import '../recoverable_network_image.dart';
 import '../../models/metadata_preferences.dart';
 import '../metadata_presentation_mixin.dart';
 import 'dart:async';
+import 'dart:math' show max;
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
@@ -553,6 +554,7 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
   final Set<_CardState> _visibleCards = {};
   final Set<BuildContext> _scrollingSources = {};
   Size? _selectionViewport;
+  Object? _scrollRowId;
   _CardState? _selectedCard;
   bool _largeCardInteractions = false;
   bool _selectionQueued = false;
@@ -614,27 +616,23 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
 
   bool _onCardScroll(ScrollNotification notification) {
     if (!_largeCardInteractions) return false;
-    if (notification is UserScrollNotification &&
-        notification.direction != ScrollDirection.idle) {
+    final userStarted =
+        (notification is UserScrollNotification && notification.direction != ScrollDirection.idle) ||
+        (notification is ScrollStartNotification && notification.dragDetails != null);
+    final source = notification.context;
+    if (userStarted) {
       _selectionFromScroll = true;
-      if (notification.context != null) _scrollingSources.add(notification.context!);
+      if (notification.metrics.axis == Axis.vertical) _scrollRowId = null;
+      if (source != null) _scrollingSources.add(source);
       _scrollInterruptedPreview = true;
       _queueScrollSelection();
     }
-    if (notification is ScrollStartNotification && notification.dragDetails != null) {
-      _selectionFromScroll = true;
-    }
-    if (!_selectionFromScroll) return false;
-    if (notification is ScrollStartNotification) {
-      if (notification.context != null) _scrollingSources.add(notification.context!);
-      _scrollInterruptedPreview = true;
-    } else if (notification is ScrollEndNotification) {
-      _scrollingSources.remove(notification.context);
-    }
+    // Layout corrections and ensureVisible are not new user gestures.
+    if (!_scrollingSources.contains(source)) return false;
+    if (notification is ScrollEndNotification) _scrollingSources.remove(source);
     if (notification is ScrollStartNotification ||
         notification is ScrollUpdateNotification ||
         notification is ScrollEndNotification) {
-      _selectionFromScroll = true;
       _queueScrollSelection();
     }
     return false;
@@ -651,6 +649,9 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
       _selectionQueued = false;
       if (!mounted) return;
       _scrollingSources.removeWhere((source) => !source.mounted);
+      if (!_visibleCards.any((card) => card.mounted && card.widget.rowId == _scrollRowId)) {
+        _scrollRowId = null;
+      }
       if (!_largeCardInteractions) {
         _selectCard(null, scrolling: false);
         return;
@@ -670,6 +671,7 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
       double bestColumn = double.infinity;
       for (final card in _visibleCards) {
         if (!card.mounted || !card.widget.largeInteractions) continue;
+        if (_selectionFromScroll && _scrollRowId != null && card.widget.rowId != _scrollRowId) continue;
         final box = card.context.findRenderObject();
         if (box is! RenderBox || !box.hasSize || !box.attached) continue;
         final rect = box.localToGlobal(Offset.zero, ancestor: render) & box.size;
@@ -1701,6 +1703,7 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
             final selectionViewport = Size(constraints.maxWidth, constraints.maxHeight);
             if (_selectionViewport != selectionViewport) {
               _selectionViewport = selectionViewport;
+              _scrollRowId = null;
               _queueScrollSelection();
             }
             if (large != _largeCardInteractions) {
@@ -1797,9 +1800,14 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
         final i = index - 1;
         return KeyedSubtree(
           key: ValueKey(shelfKey(i)),
-          child: NotificationListener<ScrollUpdateNotification>(
+          child: NotificationListener<ScrollNotification>(
             onNotification: (notification) {
-              if (widget.shelvesOnly &&
+              if (_largeCardInteractions && notification.metrics.axis == Axis.horizontal &&
+                  ((notification is UserScrollNotification && notification.direction != ScrollDirection.idle) ||
+                   (notification is ScrollStartNotification && notification.dragDetails != null))) {
+                _scrollRowId = widget.sections[i].id ?? i;
+              }
+              if (notification is ScrollUpdateNotification && widget.shelvesOnly &&
                   notification.metrics.axis == Axis.horizontal &&
                   notification.metrics.extentAfter < 400) {
                 widget.onLoadMoreRow?.call(i);
@@ -2656,10 +2664,18 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
               // being sliced off at the viewport edge.
               clipBehavior: Clip.none,
               scrollDirection: Axis.horizontal,
-              padding: EdgeInsets.symmetric(horizontal: m.gutter),
+              // Let the last card reach the reading cursor even on short rows.
+              padding: EdgeInsets.only(
+                left: m.gutter,
+                right: _largeCardInteractions && section.items.isNotEmpty
+                    ? max(m.gutter, (_selectionViewport?.width ?? 0) - m.gutter -
+                        cardHeight * section.items.last.shape.aspect)
+                    : m.gutter,
+              ),
               itemCount: section.items.length,
               separatorBuilder: (_, __) => SizedBox(width: m.gap),
               itemBuilder: (context, c) => _Card(
+                rowId: section.id ?? i,
                 largeInteractions: _largeCardInteractions,
                 register: _registerCard,
                 unregister: _unregisterCard,
@@ -2887,6 +2903,7 @@ class _HeroOpenPill extends StatelessWidget {
 }
 
 class _Card extends StatefulWidget {
+  final Object? rowId;
   final bool largeInteractions;
   final void Function(_CardState)? register;
   final void Function(_CardState)? unregister;
@@ -2938,6 +2955,7 @@ class _Card extends StatefulWidget {
       onDesktopPreviewActivityChanged;
 
   const _Card({
+    this.rowId,
     this.largeInteractions = false,
     this.register,
     this.unregister,

@@ -331,6 +331,77 @@ void main() {
     await tester.pumpWidget(const SizedBox());
   });
 
+  testWidgets('all four cards can reach the reading cursor by touch', (
+    tester,
+  ) async {
+    surface(tester, const Size(1024, 768));
+    await tester.pumpWidget(host(itemCount: 4));
+    await tester.pumpAndSettle();
+    for (var index = 1; index < 4; index++) {
+      for (var attempt = 0; attempt < 15; attempt++) {
+        final target = find.ancestor(
+          of: active(),
+          matching: find.byWidgetPredicate(
+            (widget) => widget is Focus && widget.focusNode == nodes[index],
+          ),
+        );
+        if (target.evaluate().isNotEmpty) break;
+        await tester.drag(horizontal(), const Offset(-120, 0));
+        await tester.pumpAndSettle();
+      }
+      expect(
+        find.ancestor(
+          of: active(),
+          matching: find.byWidgetPredicate(
+            (widget) => widget is Focus && widget.focusNode == nodes[index],
+          ),
+        ),
+        findsOneWidget,
+      );
+    }
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('horizontal swipe owns its row before vertical transfer', (
+    tester,
+  ) async {
+    surface(tester, const Size(1024, 768));
+    nodes.addAll(List.generate(40, (_) => FocusNode()));
+    await tester.pumpWidget(host(itemCount: 4, shelfCount: 5));
+    await tester.pumpAndSettle();
+    await tester.drag(horizontal().first, const Offset(-250, 0));
+    await tester.pumpAndSettle();
+    expect(
+      find.ancestor(
+        of: active(),
+        matching: find.byWidgetPredicate(
+          (widget) =>
+              widget is Focus && nodes.take(4).contains(widget.focusNode),
+        ),
+      ),
+      findsOneWidget,
+    );
+    final vertical = find.byWidgetPredicate(
+      (widget) => widget is ListView && widget.scrollDirection == Axis.vertical,
+    );
+    await tester.drag(vertical, const Offset(0, -400));
+    await tester.pumpAndSettle();
+    final selected = tester.element(active());
+    expect(
+      find.ancestor(
+        of: active(),
+        matching: find.byWidgetPredicate(
+          (widget) =>
+              widget is Focus && nodes.take(4).contains(widget.focusNode),
+        ),
+      ),
+      findsNothing,
+    );
+    await tester.pump(const Duration(seconds: 3));
+    expect(tester.element(active()), same(selected));
+    await tester.pumpWidget(const SizedBox());
+  });
+
   testWidgets('hover exit preserves keyboard focus and its running preview', (
     tester,
   ) async {
