@@ -12227,6 +12227,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                       _canFetchEpisodes
                   ? () => _showPlaylistSheet(context)
                   : null,
+              onRandom:
+                  _effectiveIptvChannels == null &&
+                      ((_activePlaylist?.isNotEmpty ?? false) ||
+                          _canFetchEpisodes)
+                  ? () => unawaited(_showRandomPlaybackMenu())
+                  : null,
               onShowSources: hasSources ? _showSourceSheetOverlay : null,
               onShowGuide: hasGuide
                   ? (_channelEntries.isNotEmpty &&

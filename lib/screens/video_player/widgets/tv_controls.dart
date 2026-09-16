@@ -43,6 +43,7 @@ class TvControls extends StatefulWidget {
     this.onNext,
     this.onPrevious,
     this.onShowPlaylist,
+    this.onRandom,
     this.onShowSources,
     this.onShowGuide,
     this.onShowIptvChannels,
@@ -115,6 +116,7 @@ class TvControls extends StatefulWidget {
   final VoidCallback? onNext;
   final VoidCallback? onPrevious;
   final VoidCallback? onShowPlaylist;
+  final VoidCallback? onRandom;
   final VoidCallback? onShowSources;
   final VoidCallback? onShowGuide;
   final VoidCallback? onShowIptvChannels;
@@ -451,6 +453,7 @@ class _TvControlsState extends State<TvControls> {
         widget.onShowPlaylist,
         option: true,
       );
+      add(Icons.shuffle_rounded, 'Shuffle', widget.onRandom, option: true);
       add(Icons.dns_rounded, 'Sources', widget.onShowSources, option: true);
       add(
         Icons.speed_rounded,
