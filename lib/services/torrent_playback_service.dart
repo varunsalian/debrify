@@ -66,6 +66,7 @@ import 'video_player_launcher.dart';
 /// Content identity for a playback, so the player can record Continue Watching,
 /// fetch subtitles, and drive the Episodes button (matching Home).
 class PlaybackMeta {
+  final bool initialContinuousShuffle;
   final String? imdbId;
   final String? contentType; // 'movie' | 'series'
   final int? season;
@@ -94,6 +95,7 @@ class PlaybackMeta {
   /// poster, exactly as it did before this existed.
   final PlayLoaderArt? art;
   const PlaybackMeta({
+    this.initialContinuousShuffle = false,
     this.imdbId,
     this.contentType,
     this.season,
@@ -113,6 +115,7 @@ class PlaybackMeta {
   });
 
   const PlaybackMeta.catalog({
+    this.initialContinuousShuffle = false,
     this.imdbId,
     this.contentType,
     this.season,
@@ -4714,6 +4717,9 @@ class TorrentPlaybackService {
     PlaylistViewMode? viewMode,
     Map<String, String>? httpHeaders,
   }) => VideoPlayerLaunchArgs(
+    // Continuous shuffle needs the in-app episode-fetch and EOF callbacks.
+    disableExternalPlayer: meta?.initialContinuousShuffle ?? false,
+    initialContinuousShuffle: meta?.initialContinuousShuffle ?? false,
     videoUrl: videoUrl,
     httpHeaders: httpHeaders,
     title: title,

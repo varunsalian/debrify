@@ -1,3 +1,4 @@
+import '../widgets/random_playback_dialog.dart';
 import '../widgets/clear_pinned_sources_button.dart';
 import '../widgets/recoverable_network_image.dart';
 import '../models/metadata_card_artwork.dart';
@@ -14380,6 +14381,8 @@ class _SearchScreenState extends State<SearchScreen>
     StremioMeta item,
     StremioAddon addon,
   ) async {
+    final mode = await showRandomPlaybackDialog(context, title: item.name);
+    if (!mounted || mode == null) return;
     final imdb = _imdbOf(item);
     if (imdb == null) {
       _snack('No IMDb match to pick an episode for "${item.name}".');
@@ -14423,6 +14426,7 @@ class _SearchScreenState extends State<SearchScreen>
     final pick = episodes[Random().nextInt(episodes.length)];
     _playSelection(
       AdvancedSearchSelection(
+        initialContinuousShuffle: mode == RandomPlaybackMode.continuous,
         imdbId: imdb,
         isSeries: true,
         title: item.name,
@@ -15771,6 +15775,7 @@ class _SearchScreenState extends State<SearchScreen>
   /// Auto-best in-tab play: search torrents for the selection, pick the best
   /// instantly-playable source, and play — never leaving the Search tab.
   PlaybackMeta _metaFor(AdvancedSearchSelection sel) => PlaybackMeta.catalog(
+    initialContinuousShuffle: sel.initialContinuousShuffle,
     // Only a real IMDb id here — the launcher's Trakt auto-sync + local
     // Continue Watching must never fire on an empty or non-IMDb (IPTV) id,
     // even though the search itself still uses sel.imdbId (the addon id).

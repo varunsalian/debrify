@@ -1995,6 +1995,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         // Check for IPTV mode before normal payload parsing
         try {
             val payloadCheck = JSONObject(rawPayload)
+            continuousShuffleEnabled = payloadCheck.optBoolean("initialContinuousShuffle", false)
             // IPTV returns from this block before [parsePayload], but its
             // finish event must still identify the bridge launch that owns
             // the callbacks it is about to clear.

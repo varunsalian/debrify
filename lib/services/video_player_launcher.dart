@@ -214,6 +214,7 @@ class VideoPlayerLaunchArgs {
   final String? webDavPath;
   final Future<Map<String, String>?> Function()? requestMagicNext;
   final Future<Map<String, dynamic>?> Function()? requestNextChannel;
+  final bool initialContinuousShuffle;
   final bool startFromRandom;
   final int randomStartMaxPercent;
   final double? startAtPercent;
@@ -339,6 +340,7 @@ class VideoPlayerLaunchArgs {
     this.webDavPath,
     this.requestMagicNext,
     this.requestNextChannel,
+    this.initialContinuousShuffle = false,
     this.startFromRandom = false,
     this.randomStartMaxPercent = 40,
     this.startAtPercent,
@@ -426,6 +428,7 @@ class VideoPlayerLaunchArgs {
     webDavPath: webDavPath,
     requestMagicNext: requestMagicNext,
     requestNextChannel: requestNextChannel,
+    initialContinuousShuffle: initialContinuousShuffle,
     startFromRandom: startFromRandom,
     randomStartMaxPercent: randomStartMaxPercent,
     startAtPercent: startAtPercent,
@@ -502,6 +505,7 @@ class VideoPlayerLaunchArgs {
       pikpakCollectionId: pikpakCollectionId,
       requestMagicNext: requestMagicNext,
       requestNextChannel: requestNextChannel,
+      initialContinuousShuffle: initialContinuousShuffle,
       startFromRandom: startFromRandom,
       randomStartMaxPercent: randomStartMaxPercent,
       startAtPercent: startAtPercent,
@@ -831,6 +835,7 @@ class VideoPlayerLauncher {
           webDavPath: args.webDavPath,
           requestMagicNext: args.requestMagicNext,
           requestNextChannel: args.requestNextChannel,
+          initialContinuousShuffle: args.initialContinuousShuffle,
           startFromRandom: args.startFromRandom,
           randomStartMaxPercent: args.randomStartMaxPercent,
           startAtPercent: args.startAtPercent,
@@ -926,6 +931,7 @@ class VideoPlayerLauncher {
           webDavPath: args.webDavPath,
           requestMagicNext: args.requestMagicNext,
           requestNextChannel: args.requestNextChannel,
+          initialContinuousShuffle: args.initialContinuousShuffle,
           startFromRandom: args.startFromRandom,
           randomStartMaxPercent: args.randomStartMaxPercent,
           startAtPercent: args.startAtPercent,
@@ -3009,6 +3015,7 @@ class VideoPlayerLauncher {
 
       // Build payload with Stremio TV guide data
       final payloadMap = result.payload.toMap();
+      payloadMap['initialContinuousShuffle'] = args.initialContinuousShuffle;
       if (args.stremioTvChannels != null &&
           args.stremioTvChannels!.isNotEmpty) {
         payloadMap['stremioTvGuide'] = {

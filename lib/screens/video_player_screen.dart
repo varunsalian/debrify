@@ -253,6 +253,7 @@ class VideoPlayerScreen extends StatefulWidget {
   // Optional: Channel directory for channel guide
   final List<Map<String, dynamic>>? channelDirectory;
   // Advanced: start each video at a random timestamp
+  final bool initialContinuousShuffle;
   final bool startFromRandom;
   final int randomStartMaxPercent;
   // Start video at a specific percentage (0.0 to 1.0)
@@ -345,6 +346,7 @@ class VideoPlayerScreen extends StatefulWidget {
     this.requestNextChannel,
     this.requestChannelById,
     this.channelDirectory,
+    this.initialContinuousShuffle = false,
     this.startFromRandom = false,
     this.randomStartMaxPercent = 40,
     this.startAtPercent,
@@ -1415,6 +1417,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   @override
   void initState() {
     super.initState();
+    _continuousShuffleEnabled = widget.initialContinuousShuffle;
     _activeHttpHeaders = widget.httpHeaders;
     PlayerVisibility.opened(this);
     AnalyticsService.screenView('video_player');
