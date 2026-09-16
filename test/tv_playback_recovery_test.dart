@@ -33,6 +33,96 @@ void main() {
         );
   });
 
+  test('cold recovery preserves an unfinished episode at 97 percent', () async {
+    final raw = _checkpoint(positionMs: 3028860, completionThreshold: 100);
+    final checkpoint = TvPlaybackCheckpoint.tryParse(jsonEncode(raw))!;
+    expect(checkpoint.shouldPersistCompletion, isFalse);
+    expect(checkpoint.isResumable, isTrue);
+    await StorageService.saveSeriesPlaybackState(
+      seriesTitle: 'The Example Show',
+      season: 2,
+      episode: 4,
+      positionMs: 2000000,
+      durationMs: checkpoint.durationMs,
+      recoveryUpdatedAtMs: checkpoint.updatedAtMs - 1000,
+    );
+    var applied = false;
+    await TvPlaybackRecovery.recoverJournal(
+      jsonEncode(raw),
+      scope: scope,
+      apply: (value, returning) async {
+        expect(returning, isFalse);
+        applied = await TvPlaybackRecovery.applyCheckpoint(
+          value,
+          sameProcessReturn: returning,
+        );
+        return applied;
+      },
+      acknowledge: (_) async {},
+      discard: (_) async => fail('unfinished episode discarded'),
+    );
+    expect(applied, isTrue);
+    expect(
+      (await StorageService.getSeriesPlaybackState(
+        seriesTitle: 'The Example Show',
+        season: 2,
+        episode: 4,
+      ))?['positionMs'],
+      3028860,
+    );
+  });
+
+  test(
+    'near-end recovery still rejects completed and tracker-managed episodes',
+    () {
+      for (final raw in [
+        _checkpoint(positionMs: 3028860, completionThreshold: 95),
+        _checkpoint(
+          positionMs: 3028860,
+          completionThreshold: 100,
+          localCompletionTracking: false,
+        ),
+        _checkpoint(
+          positionMs: 3028860,
+          completionThreshold: 100,
+          completed: true,
+        ),
+        _checkpoint(positionMs: 3122536, completionThreshold: 100),
+      ]) {
+        expect(
+          TvPlaybackCheckpoint.tryParse(jsonEncode(raw))!.isResumable,
+          isFalse,
+        );
+      }
+    },
+  );
+
+  test('100 percent survives recovery and EOF still marks completion', () {
+    final unfinished = TvPlaybackCheckpoint.tryParse(
+      jsonEncode(
+        _checkpoint(
+          contentType: 'single',
+          positionMs: 3100000,
+          completionThreshold: 100,
+        ),
+      ),
+    )!;
+    expect(unfinished.completionThreshold, 100);
+    expect(unfinished.shouldPersistCompletion, isFalse);
+    expect(unfinished.isLocalMovieRewatch, isTrue);
+    final ended = TvPlaybackCheckpoint.tryParse(
+      jsonEncode(
+        _checkpoint(
+          positionMs: 3100000,
+          completionThreshold: 100,
+          completed: true,
+        ),
+      ),
+    )!;
+    expect(ended.completionThreshold, 100);
+    expect(ended.shouldPersistCompletion, isTrue);
+  });
+
   test(
     'recovery channel failure never prevents allocating a player session',
     () async {

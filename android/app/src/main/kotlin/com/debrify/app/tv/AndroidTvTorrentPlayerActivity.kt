@@ -18403,9 +18403,9 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             }
             val localCompletionTracking = obj.optBoolean("localCompletionTracking", false)
             val movieCompletionThreshold =
-                obj.optInt("movieCompletionThreshold", 80).coerceIn(50, 95)
+                obj.optInt("movieCompletionThreshold", 80).coerceIn(50, 100)
             val episodeCompletionThreshold =
-                obj.optInt("episodeCompletionThreshold", 80).coerceIn(50, 95)
+                obj.optInt("episodeCompletionThreshold", 80).coerceIn(50, 100)
 
             // Parse Stremio sources for source switching
             val stremioSourcesJson = obj.optJSONArray("stremioSources")

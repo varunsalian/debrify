@@ -426,8 +426,8 @@ class StorageService {
   static const String _skipSegmentProviderKey = 'skip_segment_provider';
 
   /// Completion thresholds selectable in Settings → Playback. A lower bound
-  /// avoids treating a brief accidental play as watched; 95% still lets users
-  /// finish a title without waiting through every trailing credit frame.
+  /// avoids treating a brief accidental play as watched; 100% lets users
+  /// require playback to reach the end.
   static const List<int> localCompletionThresholdOptions = <int>[
     50,
     60,
@@ -437,6 +437,7 @@ class StorageService {
     85,
     90,
     95,
+    100,
   ];
   static const int defaultLocalCompletionThreshold = 80;
 
