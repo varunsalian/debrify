@@ -1523,6 +1523,7 @@ class _CollectionFolderScreenState extends State<CollectionFolderScreen> {
       );
     }
     return SpotlightBoard(
+      largeScreenInteractions: true,
       key: _spotlightKey,
       hero: const [],
       heroNode: _spotlightHeroNode,

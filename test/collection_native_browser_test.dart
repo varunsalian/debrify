@@ -67,6 +67,7 @@ void main() {
         expect(find.byType(CollectionCategoryTabs), findsNothing);
         final board = tester.widget<SpotlightBoard>(find.byType(SpotlightBoard));
         expect(board.sections.map((section) => section.title), ['Recent', 'Popular']);
+        expect(board.largeScreenInteractions, isTrue);
         expect(tester.takeException(), isNull);
         await tester.pumpWidget(const SizedBox());
         debugDefaultTargetPlatformOverride = null;
@@ -105,6 +106,7 @@ void main() {
       )));
       await tester.pumpAndSettle();
       final board = tester.widget<SpotlightBoard>(find.byType(SpotlightBoard));
+      expect(board.largeScreenInteractions, isTrue);
       expect(board.animationsEnabled, isTrue);
       expect(board.shelvesOnly, isTrue);
       expect(board.animationStyle, style);
