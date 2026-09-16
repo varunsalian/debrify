@@ -594,7 +594,10 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
     if (!_largeCardInteractions) return;
     // Hover can change as cards move beneath a stationary pointer.
     // Only scroll completion may release the moving state.
-    if (_scrollingSources.isNotEmpty) return;
+    if (_scrollingSources.isNotEmpty) {
+      if (_pointerOwnsScrollSelection) _queueScrollSelection();
+      return;
+    }
     if (active) {
       _selectionFromScroll = false;
       _scrollInterruptedPreview = false;
@@ -613,6 +616,11 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
       _selectCard(focused, scrolling: false);
     }
   }
+
+  bool get _pointerOwnsScrollSelection => switch (Theme.of(context).platform) {
+    TargetPlatform.macOS || TargetPlatform.windows || TargetPlatform.linux => true,
+    _ => false,
+  };
 
   bool _onCardScroll(ScrollNotification notification) {
     if (!_largeCardInteractions) return false;
@@ -660,6 +668,22 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
       if (_scrollInterruptedPreview) {
         _scrollInterruptedPreview = false;
         _selectedCard?._setWideSelection(true, moving: true);
+      }
+      // Desktop scrolling must not replace the pointer with the touch
+      // reading cursor. MouseRegion also updates when content moves under
+      // a stationary pointer; its callbacks queue another selection pass.
+      if (_pointerOwnsScrollSelection) {
+        _CardState? hovered;
+        _CardState? focused;
+        for (final card in _visibleCards) {
+          if (!card.mounted || !card.widget.largeInteractions) continue;
+          if (card._h) hovered = card;
+          if (card._f) focused = card;
+        }
+        _selectionFromScroll = false;
+        _selectCard(hovered ?? focused, scrolling: _scrollingSources.isNotEmpty);
+        if (_scrollingSources.isEmpty && _desktopPreviewOwners.isEmpty) _restartCadence();
+        return;
       }
       final render = context.findRenderObject();
       if (render is! RenderBox || !render.hasSize) return;

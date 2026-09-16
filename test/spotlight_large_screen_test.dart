@@ -1,5 +1,5 @@
-import 'dart:ui' show PointerDeviceKind;
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -231,7 +231,7 @@ void main() {
   });
 
   testWidgets(
-    'desktop height resize reselects a visible card above the breakpoint',
+    'desktop height resize does not select a card without pointer or focus',
     (tester) async {
       surface(tester, const Size(1200, 1000));
       nodes.addAll(List.generate(20, (_) => FocusNode()));
@@ -240,15 +240,12 @@ void main() {
       );
       await tester.pumpAndSettle();
       await tester.pump(const Duration(seconds: 2));
-      final before = tester.element(active());
+      expect(active(), findsNothing);
       tester.view.physicalSize = const Size(1200, 400);
       await tester.pumpAndSettle();
-      expect(active(), findsOneWidget);
-      expect(tester.element(active()), isNot(same(before)));
-      expect(tester.getRect(active()).top, lessThan(400));
-      expect(tester.getRect(active()).bottom, greaterThan(0));
+      expect(active(), findsNothing);
       await tester.pump(const Duration(seconds: 2));
-      expect(find.byType(SpotlightCardTrailer), findsOneWidget);
+      expect(find.byType(SpotlightCardTrailer), findsNothing);
       await tester.pumpWidget(const SizedBox());
     },
   );
@@ -510,24 +507,50 @@ void main() {
     final drag = await tester.startGesture(tester.getCenter(horizontal()));
     await drag.moveBy(const Offset(-100, 0));
     await tester.pump();
-    final card = nodes[2].context!.findRenderObject() as RenderBox;
+    final card = nodes[1].context!.findRenderObject() as RenderBox;
     await mouse.moveTo(card.localToGlobal(card.size.center(Offset.zero)));
     await tester.pump();
     await tester.pump(const Duration(seconds: 3));
     expect(find.byType(SpotlightCardTrailer), findsNothing);
-    final selected = tester.element(active());
     await drag.moveBy(const Offset(-400, 0));
     await tester.pump();
     await tester.pump();
-    expect(tester.element(active()), isNot(same(selected)));
     await tester.pump(const Duration(seconds: 3));
     expect(find.byType(SpotlightCardTrailer), findsNothing);
     await mouse.moveTo(const Offset(1190, 790));
     await drag.up();
     await tester.pumpAndSettle();
     await tester.pump(const Duration(seconds: 2));
-    expect(find.byType(SpotlightCardTrailer), findsOneWidget);
+    expect(find.byType(SpotlightCardTrailer), findsNothing);
+    expect(active(), findsNothing);
     await mouse.removePointer();
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('macOS scroll keeps selection under the stationary mouse', (
+    tester,
+  ) async {
+    surface(tester, const Size(1200, 800));
+    await tester.pumpWidget(host(platform: TargetPlatform.macOS, expand: false));
+    await tester.pumpAndSettle();
+    expect(active(), findsNothing);
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    final target = nodes[2].context!.findRenderObject() as RenderBox;
+    final position = target.localToGlobal(target.size.center(Offset.zero));
+    await mouse.addPointer(location: position);
+    await tester.pumpAndSettle();
+    await tester.sendEventToBinding(PointerScrollEvent(
+      position: position,
+      scrollDelta: const Offset(250, 0),
+    ));
+    await tester.pumpAndSettle();
+    expect(active(), findsOneWidget);
+    expect(tester.getRect(active()).contains(position), isTrue);
+    await mouse.moveTo(const Offset(1190, 790));
+    await tester.pumpAndSettle();
+    expect(active(), findsNothing);
+    await mouse.removePointer();
+    expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox());
   });
 
