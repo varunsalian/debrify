@@ -1,3 +1,4 @@
+import '../utils/show_shuffle.dart';
 import 'dart:async';
 import '../utils/platform_util.dart';
 import 'dart:convert';
@@ -3679,6 +3680,7 @@ class VideoPlayerLauncher {
             guideEpisodes.add({
               'season': season,
               'episode': number,
+              'shuffleEligible': isShuffleEpisodeEligible(m),
               if (info.title != null) 'title': info.title,
               if (info.poster != null) 'artwork': info.poster,
               if (info.plot != null) 'description': info.plot,

@@ -30,7 +30,7 @@ void main() {
       final selection = _between(
         flutterPlayer,
         'Future<void> _handleSourceSelected(',
-        'Future<void> _switchToSourcePlaylist(',
+        'Future<bool> _switchToSourcePlaylist(',
       );
       final directSwitch = _between(
         flutterPlayer,
@@ -81,7 +81,7 @@ void main() {
   test('Flutter failed playlist picks restore an outgoing direct stream', () {
     final playlistSwitch = _between(
       flutterPlayer,
-      'Future<void> _switchToSourcePlaylist(',
+      'Future<bool> _switchToSourcePlaylist(',
       'Future<void> _switchToStremioSource(',
     );
 
@@ -258,7 +258,9 @@ void main() {
     );
     expect(
       nativePlayer,
-      contains('payloadCheck.optInt("sourcePersistenceSessionId", 0)'),
+      contains(
+        'payloadCheck.optInt("sourcePersistenceSessionId", sourcePersistenceSessionId)',
+      ),
     );
     expect(playerBridge, contains('ignoring stale playback finish'));
   });

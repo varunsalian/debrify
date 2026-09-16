@@ -1,3 +1,5 @@
+import '../utils/episode_playback_request.dart';
+import '../utils/show_shuffle.dart';
 import '../models/subtitle_source_priority.dart';
 import 'video_player/utils/subtitle_priority_selection.dart';
 import 'dart:async';
@@ -630,6 +632,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   Timer? _manualSelectionResetTimer; // Timer to reset manual selection flag
   bool _continuousShuffleEnabled = false;
   final List<int> _shuffleBag = [];
+  final ShowShuffle _showShuffle = ShowShuffle();
+  bool _showShuffleInProgress = false;
+  int? _activeShowShuffleGeneration;
+  int _showShuffleGeneration = 0;
+  int _episodeNavigationGeneration = 0;
 
   // Channel metadata for Debrify TV flows
   String? _currentChannelName;
@@ -4235,7 +4242,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     required bool play,
     bool? desiredPlay,
     bool liveStream = false,
+    EpisodePlaybackRequest? request,
   }) async {
+    if (request?.isCurrent == false) return;
     // EVERY content open invalidates the outgoing media's resume protection —
     // the one choke point all switch paths share, so no path (Stremio TV
     // channel, Magic TV next, zap, source switch, startup ladder) can leave a
@@ -4320,6 +4329,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       } catch (error) {
         debugPrint('Player: subtitle visibility reset failed: $error');
       }
+    }
+    if (request != null) {
+      await request.commit(() => _player.open(media, play: play));
+      return;
     }
     return _player.open(media, play: play);
   }
@@ -4669,6 +4682,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
     // Playlist auto-advance keeps priority over guide-based Stremio TV next.
     if (_continuousShuffleEnabled) {
+      if (await _playShowShuffle(autoAdvance: true)) return;
       final shuffleIndex = _pickShuffleIndex();
       if (shuffleIndex != null) {
         _isAutoAdvancing = true;
@@ -5058,7 +5072,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
   Future<void> _showRandomPlaybackMenu() async {
     final entries = _activePlaylist ?? const [];
-    if (entries.isEmpty) {
+    if (entries.isEmpty && !_canFetchEpisodes) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('No playlist items available')),
       );
@@ -5126,6 +5140,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       setState(() {
         _continuousShuffleEnabled = false;
         _shuffleBag.clear();
+        _showShuffle.clear();
+        _showShuffleGeneration++;
       });
       ScaffoldMessenger.of(
         context,
@@ -5134,6 +5150,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       setState(() {
         _continuousShuffleEnabled = true;
         _shuffleBag.clear();
+        _showShuffle.clear();
+        _showShuffleGeneration++;
       });
       ScaffoldMessenger.of(
         context,
@@ -5148,16 +5166,143 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         setState(() {
           _continuousShuffleEnabled = false;
           _shuffleBag.clear();
+          _showShuffle.clear();
+          _showShuffleGeneration++;
         });
       } else {
         _shuffleBag.clear();
+        _showShuffle.clear();
+        _showShuffleGeneration++;
       }
     }
 
+    if (await _playShowShuffle()) return;
     final nextIndex = _pickShuffleIndex();
     if (nextIndex == null) return;
     _setManualSelectionMode();
     await _loadPlaylistIndex(nextIndex, autoplay: true);
+  }
+
+  /// Returns true when show-wide shuffle owns this request, including failure.
+  /// Never fall through to ordered playback after exhausting random candidates.
+  Future<bool> _playShowShuffle({bool autoAdvance = false}) async {
+    if (!_canFetchEpisodes) return false;
+    final generation = _showShuffleGeneration;
+    final navigation = _episodeNavigationGeneration;
+    while (_showShuffleInProgress || _episodeFetchInProgress) {
+      if (_showShuffleInProgress &&
+          _activeShowShuffleGeneration == generation) {
+        return true;
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 25));
+      if (!mounted ||
+          generation != _showShuffleGeneration ||
+          navigation != _episodeNavigationGeneration) {
+        return true;
+      }
+    }
+    _showShuffleInProgress = true;
+    _activeShowShuffleGeneration = generation;
+    bool requestIsCurrent() =>
+        mounted &&
+        generation == _showShuffleGeneration &&
+        (!autoAdvance || !_sleepStopLatched);
+    final request = EpisodePlaybackRequest(
+      currentIdentity: () => _playlistIdentityToken,
+      currentNavigation: () => _episodeNavigationGeneration,
+      isActive: requestIsCurrent,
+    );
+    try {
+      await (_episodeMetadataReady ??= _preloadEpisodeInfo());
+      if (!request.isCurrent) return true;
+      if (_seriesPlaylist == null) {
+        final synthetic = _buildSyntheticGuide();
+        if (synthetic != null && synthetic.$1.fullTvmazeEpisodes.isEmpty) {
+          await synthetic.$1.fetchEpisodeInfo(
+            playlistItem: _constructPlaylistItemData(),
+            imdbId: _currentSeriesImdbId,
+          );
+        }
+      }
+      if (!request.isCurrent) return true;
+      final full = _seriesPlaylist?.fullTvmazeEpisodes.isNotEmpty == true
+          ? _seriesPlaylist!.fullTvmazeEpisodes
+          : (_syntheticGuidePlaylist?.fullTvmazeEpisodes ??
+                const <Map<String, dynamic>>[]);
+      if (full.isEmpty) return false;
+      final eligible = full
+          .where((m) => isShuffleEpisodeEligible(m))
+          .map((m) => (m['season'] as int, m['number'] as int))
+          .toList();
+      final attempted = <ShuffleEpisode>{};
+      for (var attempt = 0; attempt < 3; attempt++) {
+        final current = _traktSeasonEpisode();
+        final target = _showShuffle.pick(
+          eligible,
+          current.season == null || current.episode == null
+              ? null
+              : (current.season!, current.episode!),
+          excluded: attempted,
+        );
+        if (target == null) break;
+        attempted.add(target);
+        final index =
+            _seriesPlaylist?.findOriginalIndexBySeasonEpisode(
+              target.$1,
+              target.$2,
+            ) ??
+            -1;
+        if (index >= 0) {
+          // EOF loads must retain sleep-stop and start-from-zero semantics,
+          // including when URL resolution outlasts the manual-selection timer.
+          _isAutoAdvancing = autoAdvance;
+          if (!autoAdvance) _setManualSelectionMode();
+          final outcome = await request.attempt(
+            () => _loadPlaylistIndex(
+              index,
+              autoplay: true,
+              suppressResume: true,
+              request: request,
+            ),
+          );
+          if (outcome != EpisodePlaybackOutcome.unavailable) return true;
+          // A pack entry can have an unavailable URL. Try another source for
+          // this episode before moving on to the next random candidate.
+        }
+        final outcome = await _fetchAndPlayEpisode(
+          target.$1,
+          target.$2,
+          shuffleGeneration: generation,
+          autoAdvance: autoAdvance,
+          request: request,
+        );
+        if (outcome != EpisodePlaybackOutcome.unavailable) return true;
+      }
+      if (mounted) {
+        setState(() => _isTransitioning = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('No other playable episode found for shuffle'),
+          ),
+        );
+      }
+      return true;
+    } catch (error) {
+      debugPrint('Show shuffle failed: $error');
+      if (mounted) {
+        setState(() => _isTransitioning = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not load a random episode')),
+        );
+      }
+      return true;
+    } finally {
+      _showShuffleInProgress = false;
+      _activeShowShuffleGeneration = null;
+      if (mounted && generation != _showShuffleGeneration && _isTransitioning) {
+        setState(() => _isTransitioning = false);
+      }
+    }
   }
 
   List<int> _shuffleEligibleIndices() {
@@ -5327,6 +5472,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       await _player.pause();
     } catch (_) {}
     if (_continuousShuffleEnabled) {
+      if (await _playShowShuffle()) return;
       final shuffleIndex = _pickShuffleIndex();
       if (shuffleIndex != null) {
         _setManualSelectionMode();
@@ -8438,19 +8584,24 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     });
   }
 
-  Future<void> _switchToSourcePlaylist(
+  Future<bool> _switchToSourcePlaylist(
     int sourceIndex,
     List<PlaylistEntry> newPlaylist, {
     int? targetSeason,
     int? targetEpisode,
     bool validateExplicitSelection = false,
+    bool suppressResume = false,
+    EpisodePlaybackRequest? request,
   }) async {
+    if (request == null) _episodeNavigationGeneration++;
+    if (request?.isCurrent == false) return false;
     _hideSourceSheet();
     _clearBufferingIndicator();
     final outgoingPlaylist = _activePlaylist == null
         ? null
         : List<PlaylistEntry>.of(_activePlaylist!);
     final outgoingIndex = _currentIndex;
+    final outgoingCachedSeries = _cachedSeriesPlaylist;
     final outgoingSourceIndex = _currentSourceIndex;
     // If a startup resume never landed, the live position is a restart
     // artifact — carry the HELD target across the switch (and into the
@@ -8483,18 +8634,17 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // still point at it — after the swap the index would resolve against the
     // new playlist. _loadPlaylistIndex below is told to skip its own save.
     await _saveResume();
-    if (!mounted) return;
+    if (!mounted || request?.isCurrent == false) return false;
     setState(() {
       _isTransitioning = true;
       _tvScrubGeneration++;
       _tvAbandonScrub();
-      _currentSourceIndex = sourceIndex;
     });
     _startTransitionOverlay();
     try {
       await _player.pause();
     } catch (_) {}
-    if (!mounted) return;
+    if (!mounted || request?.isCurrent == false) return false;
 
     // Replace playlist and invalidate series cache. A source/episode switch
     // stays within the same show, so the full TVMaze episode list carries
@@ -8508,11 +8658,17 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     final carriedTvmazeShowId = outgoingSeries?.tvmazeShowId;
     final carriedTvmazeShowName = outgoingSeries?.tvmazeShowName;
     final carriedPosterUrl = outgoingSeries?.showPosterUrl;
-    setState(() {
+    void replacePlaylist() => setState(() {
+      _currentSourceIndex = sourceIndex;
       _activePlaylist = newPlaylist;
       _cachedSeriesPlaylist = null;
       _playlistIdentityToken++;
     });
+    if (request != null) {
+      if (!request.replacePlaylist(replacePlaylist)) return false;
+    } else {
+      replacePlaylist();
+    }
     final rebuilt = _seriesPlaylist;
     if (rebuilt != null) {
       rebuilt.imdbId ??= carriedImdbId;
@@ -8584,12 +8740,20 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // the same content; a fallback episode keeps its own Trakt resume.
     var committed = false;
     if (!validateExplicitSelection) {
-      committed = await _loadPlaylistIndex(
-        targetIndex,
-        autoplay: true,
-        skipInitialSave: true,
-        preferLocalResume: landedOnSameContent,
-      );
+      try {
+        committed = await _loadPlaylistIndex(
+          targetIndex,
+          autoplay: true,
+          skipInitialSave: true,
+          preferLocalResume: landedOnSameContent,
+          suppressResume: suppressResume,
+          request: request,
+        );
+      } catch (error) {
+        if (request == null) rethrow;
+        debugPrint('Episode source load failed: $error');
+        committed = false;
+      }
     } else {
       _manualSourceGateActive = true;
       try {
@@ -8600,6 +8764,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
               autoplay: true,
               skipInitialSave: true,
               preferLocalResume: landedOnSameContent,
+              suppressResume: suppressResume,
+              request: request,
               manualValidationSource: selectedSource,
               manualValidationSourceIndex: sourceIndex,
             );
@@ -8611,7 +8777,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           );
           committed = false;
         }
-        if (!mounted) return;
+        if (!mounted || request?.isCurrent == false) return false;
         if (!committed &&
             outgoingPlaylist != null &&
             outgoingPlaylist.isNotEmpty) {
@@ -8671,7 +8837,24 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         _resumeTrackingAfterValidationGate();
       }
     }
-    if (!mounted) return;
+    if (!mounted) return false;
+    if (!committed && request != null) {
+      // Only roll back preparation. If media open has started, the request
+      // retains the incoming identity so progress stays with that media.
+      final restored = request.restorePlaylist(
+        () => setState(() {
+          _activePlaylist = outgoingPlaylist;
+          _cachedSeriesPlaylist = outgoingCachedSeries;
+          _playlistIdentityToken++;
+          _currentSourceIndex = outgoingSourceIndex;
+          _currentIndex = outgoingIndex;
+          _currentStreamUrl = outgoingDirectUrl;
+          _activeHttpHeaders = outgoingHeaders;
+        }),
+      );
+      if (restored) await _switchMdblistTarget();
+    }
+    if (request?.isCurrent == false) return false;
 
     if (committed) {
       unawaited(_commitValidatedStremioSource(selectedSource));
@@ -8698,6 +8881,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       _rainbowActive = false;
       if (mounted) setState(() {});
     });
+    return committed;
   }
 
   Map<String, String>? _activeHttpHeaders;
@@ -9559,13 +9743,75 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   Future<bool> _loadPlaylistIndex(
     int index, {
     bool autoplay = false,
+    EpisodePlaybackRequest? request,
     bool skipInitialSave = false,
     // Source switch on the same content: resume the checkpointed local position
     // exactly (see _maybeRestoreResume).
     bool preferLocalResume = false,
+    bool suppressResume = false,
     Torrent? manualValidationSource,
     int? manualValidationSourceIndex,
   }) async {
+    if (request == null) {
+      return _loadPlaylistIndexAttempt(
+        index,
+        autoplay: autoplay,
+        skipInitialSave: skipInitialSave,
+        preferLocalResume: preferLocalResume,
+        suppressResume: suppressResume,
+        manualValidationSource: manualValidationSource,
+        manualValidationSourceIndex: manualValidationSourceIndex,
+      );
+    }
+    final outgoingIndex = _currentIndex;
+    final outgoingUrl = _currentStreamUrl;
+    final outgoingHeaders = _activeHttpHeaders;
+    final outgoingMedia = _activeOpenedMedia;
+    final outgoingShouldPlay = _activeMediaShouldPlay;
+    final outgoingPaused = _activeMediaUserPaused;
+    var loaded = false;
+    try {
+      loaded = await _loadPlaylistIndexAttempt(
+        index,
+        autoplay: autoplay,
+        request: request,
+        skipInitialSave: skipInitialSave,
+        preferLocalResume: preferLocalResume,
+        suppressResume: suppressResume,
+        manualValidationSource: manualValidationSource,
+        manualValidationSourceIndex: manualValidationSourceIndex,
+      );
+      return loaded;
+    } finally {
+      if (!loaded && mounted) {
+        final restored = request.restorePlaylist(() {
+          _currentIndex = outgoingIndex;
+          _currentStreamUrl = outgoingUrl;
+          _activeHttpHeaders = outgoingHeaders;
+          _activeOpenedMedia = outgoingMedia;
+          _activeMediaShouldPlay = outgoingShouldPlay;
+          _activeMediaUserPaused = outgoingPaused;
+          _isAutoAdvancing = false;
+        });
+        if (restored) await _switchMdblistTarget();
+      }
+    }
+  }
+
+  Future<bool> _loadPlaylistIndexAttempt(
+    int index, {
+    bool autoplay = false,
+    EpisodePlaybackRequest? request,
+    bool skipInitialSave = false,
+    // Source switch on the same content: resume the checkpointed local position
+    // exactly (see _maybeRestoreResume).
+    bool preferLocalResume = false,
+    bool suppressResume = false,
+    Torrent? manualValidationSource,
+    int? manualValidationSourceIndex,
+  }) async {
+    if (request == null) _episodeNavigationGeneration++;
+    if (request?.isCurrent == false) return false;
     // A new item is being loaded: any scrub in flight belongs to the outgoing
     // one and must never land on this one; same for the landing verifier
     // (epoch bump — a verifier retry must never seek the incoming item).
@@ -9603,6 +9849,50 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       'PikPak: _loadPlaylistIndex called with index: $index, autoplay: $autoplay',
     );
 
+    // Resolve before changing the playing identity: a cancelled or failed
+    // lookup must not label the outgoing stream as the unplayed target.
+    final entry = _activePlaylist![index];
+    // Resolve the actual streaming URL if needed
+    String videoUrl = entry.url;
+    if (videoUrl.isEmpty) {
+      try {
+        videoUrl = await _resolvePlaylistEntryUrl(index);
+      } catch (e) {
+        final errorText = e.toString().replaceFirst('Exception: ', '');
+        if (mounted && request?.isCurrent != false) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Failed to prepare video: $errorText',
+                style: const TextStyle(color: Colors.white),
+              ),
+              backgroundColor: Theme.of(context).colorScheme.error,
+              duration: VideoPlayerTimingConstants.controlsAutoHideDuration,
+            ),
+          );
+        }
+        videoUrl = entry.url;
+      }
+    }
+    if (!mounted || request?.isCurrent == false) return false;
+    if (videoUrl.isEmpty) {
+      if (request == null) _currentStreamUrl = null;
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text(
+              'No playable URL found for this entry',
+              style: TextStyle(color: Colors.white),
+            ),
+            backgroundColor: Theme.of(context).colorScheme.error,
+            duration: VideoPlayerTimingConstants.controlsAutoHideDuration,
+          ),
+        );
+      }
+      _clearTransitionOnFailure();
+      return false;
+    }
+
     // Scrobble stop for the current episode before switching
     _stopTraktHeartbeat();
     _traktScrobble('stop');
@@ -9619,14 +9909,15 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     if (!skipInitialSave) {
       await _saveResume();
     }
+    if (!mounted || request?.isCurrent == false) return false;
     // The outgoing item's guarded checkpoint has run; from here on the guard
     // belongs to nobody. Clearing now stops it suppressing the incoming item's
     // saves and makes any in-flight landing verifier abort instead of
     // re-issuing the outgoing item's target against the new one.
     _resumeWriteGuard.clear();
-    final entry = _activePlaylist![index];
     _currentIndex = index;
     await _switchMdblistTarget();
+    if (!mounted || request?.isCurrent == false) return false;
     _resetLocalCompletionState();
 
     // Clear subtitle cache and selection when changing content
@@ -9647,46 +9938,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       'PikPak: Loading playlist entry - provider: ${entry.provider}, pikpakFileId: ${entry.pikpakFileId}',
     );
 
-    // Resolve the actual streaming URL if needed
-    String videoUrl = entry.url;
-    if (videoUrl.isEmpty) {
-      try {
-        videoUrl = await _resolvePlaylistEntryUrl(index);
-      } catch (e) {
-        final errorText = e.toString().replaceFirst('Exception: ', '');
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                'Failed to prepare video: $errorText',
-                style: const TextStyle(color: Colors.white),
-              ),
-              backgroundColor: Theme.of(context).colorScheme.error,
-              duration: VideoPlayerTimingConstants.controlsAutoHideDuration,
-            ),
-          );
-        }
-        videoUrl = entry.url;
-      }
-    }
-    if (videoUrl.isEmpty) {
-      _currentStreamUrl = null;
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text(
-              'No playable URL found for this entry',
-              style: TextStyle(color: Colors.white),
-            ),
-            backgroundColor: Theme.of(context).colorScheme.error,
-            duration: VideoPlayerTimingConstants.controlsAutoHideDuration,
-          ),
-        );
-      }
-      _clearTransitionOnFailure();
-      return false;
-    }
-
     _currentStreamUrl = videoUrl;
 
     // Check if this is a PikPak video
@@ -9702,11 +9953,13 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       // _playPikPakVideoWithRetry will increment _pikPakRetryId to cancel previous retries
       final pikPakLoaded = await _playPikPakVideoWithRetry(
         videoUrl,
+        request: request,
         // A manual source transaction owns its single failure message. The
         // retry UI remains unchanged while cold storage is being reactivated.
         showFailure: manualValidationSourceIndex == null,
       );
       if (manualValidationSourceIndex != null && !pikPakLoaded) return false;
+      if (request != null && suppressResume && !pikPakLoaded) return false;
       if (!autoplay) {
         // Still use retry but without autoplay; pause only after it succeeds.
         _activeMediaShouldPlay = false;
@@ -9729,13 +9982,39 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         await _openMedia(
           mk.Media(videoUrl, httpHeaders: _activeHttpHeaders),
           play: autoplay,
+          request: request,
         );
       }
     }
 
-    // Wait for the video to load and duration to be available
-    await _waitForVideoReady();
-    await _maybeRestoreResume(preferLocalResume: preferLocalResume);
+    if (!mounted || request?.isCurrent == false) return false;
+    // Shuffle needs playback proof to decide whether to try another episode.
+    // Ordinary episode/source navigation retains its existing readiness path.
+    if (request != null && suppressResume) {
+      final ready = await waitForEpisodePlayback(
+        isCurrent: () => request.isCurrent,
+        isPaused: () => _activeMediaUserPaused || _pausedByLifecycle,
+        isReady: () =>
+            _player.state.duration > Duration.zero &&
+            (_activeMediaUserPaused ||
+                _pausedByLifecycle ||
+                (_player.state.playing &&
+                    _player.state.position >=
+                        const Duration(milliseconds: 40))),
+      );
+      if (!ready) return false;
+    } else {
+      await _waitForVideoReady();
+    }
+    if (!mounted || request?.isCurrent == false) return false;
+    if (suppressResume) {
+      // Starting a random episode at zero is independent of whether the
+      // viewer requested it or EOF advanced automatically.
+      _resumeWriteGuard.clear();
+      _isAutoAdvancing = false;
+    } else {
+      await _maybeRestoreResume(preferLocalResume: preferLocalResume);
+    }
     // Restore audio and subtitle track preferences
     await _restoreTrackPreferences();
 
@@ -10040,7 +10319,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     String? overridePikPakFileId,
     bool isDebrifyTV = false,
     bool showFailure = true,
+    EpisodePlaybackRequest? request,
   }) async {
+    if (request?.isCurrent == false) return false;
     // Only apply retry logic for PikPak videos
     // Support both playlist entries and Debrify TV (requestMagicNext) flows
     final currentEntry =
@@ -10068,6 +10349,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       await _openMedia(
         mk.Media(videoUrl, httpHeaders: _activeHttpHeaders),
         play: true,
+        request: request,
       );
       return true;
     }
@@ -10098,6 +10380,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       await _openMedia(
         mk.Media(videoUrl, httpHeaders: _activeHttpHeaders),
         play: true,
+        request: request,
       );
     } catch (e) {
       print('PikPak: Initial player.open() failed with error: $e');
@@ -10108,7 +10391,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     while (attempt <= maxRetries) {
       try {
         // Check if cancelled before starting attempt
-        if (_pikPakRetryId != myRetryId) {
+        if (_pikPakRetryId != myRetryId || request?.isCurrent == false) {
           print(
             'PikPak: Retry loop cancelled before attempt ${attempt + 1} (navigation occurred)',
           );
@@ -10143,6 +10426,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           additionalMonitoringSeconds: cappedDelay,
         );
 
+        if (request?.isCurrent == false) return false;
         if (loadSuccess) {
           // Success! Video loaded (either immediately or during monitoring/delay)
           print('PikPak: Video metadata loaded successfully - file is ready!');
@@ -10227,7 +10511,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         }
 
         // Check if cancelled
-        if (_pikPakRetryId != myRetryId) {
+        if (_pikPakRetryId != myRetryId || request?.isCurrent == false) {
           print(
             'PikPak: Retry loop cancelled before reopening player (navigation occurred)',
           );
@@ -10246,6 +10530,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           await _openMedia(
             mk.Media(videoUrl, httpHeaders: _activeHttpHeaders),
             play: true,
+            request: request,
           );
         } catch (e) {
           print(
@@ -10328,7 +10613,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         }
 
         // Check if cancelled
-        if (_pikPakRetryId != myRetryId) {
+        if (_pikPakRetryId != myRetryId || request?.isCurrent == false) {
           print(
             'PikPak: Retry loop cancelled during error handling (navigation occurred)',
           );
@@ -10347,6 +10632,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           await _openMedia(
             mk.Media(videoUrl, httpHeaders: _activeHttpHeaders),
             play: true,
+            request: request,
           );
         } catch (reopenError) {
           print(
@@ -13052,15 +13338,30 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   /// leaving the player: try packs already in the source list, then an
   /// episode-targeted fetch, then a fresh pack search — switching to the
   /// first candidate that resolves and actually contains the episode.
-  Future<void> _fetchAndPlayEpisode(int season, int episode) async {
+  Future<EpisodePlaybackOutcome> _fetchAndPlayEpisode(
+    int season,
+    int episode, {
+    int? shuffleGeneration,
+    bool autoAdvance = false,
+    EpisodePlaybackRequest? request,
+  }) async {
     if (!_canFetchEpisodes || _episodeFetchInProgress) {
       // A next/prev press may have raised the transition curtain already;
       // never leave it up when the request can't run.
       if (mounted && _isTransitioning) {
         setState(() => _isTransitioning = false);
       }
-      return;
+      return EpisodePlaybackOutcome.cancelled;
     }
+    if (request == null) _episodeNavigationGeneration++;
+    request ??= EpisodePlaybackRequest(
+      currentIdentity: () => _playlistIdentityToken,
+      currentNavigation: () => _episodeNavigationGeneration,
+      isActive: () =>
+          mounted &&
+          (shuffleGeneration == null ||
+              shuffleGeneration == _showShuffleGeneration),
+    );
     final fetcher = widget.seriesSourceFetcher!;
     _episodeFetchInProgress = true;
     final messenger = ScaffoldMessenger.of(context);
@@ -13072,25 +13373,29 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       ),
     );
     try {
-      final token = _playlistIdentityToken;
-
       final pinned = fetcher.pinnedDirectCandidates;
       if (pinned != null) {
         await for (final candidate in pinned(season, episode)) {
-          if (!mounted || token != _playlistIdentityToken) return;
+          if (!request.isCurrent) {
+            return EpisodePlaybackOutcome.cancelled;
+          }
           final sources = List<Torrent>.of(_effectiveSources ?? const []);
           final index = sources.length;
           sources.add(candidate);
           setState(() => _augmentedSources = sources);
-          if (await _tryEpisodeCandidate(
+          final outcome = await _tryEpisodeCandidate(
             index,
             candidate,
             season,
             episode,
-            token,
-          ))
-            return;
-          if (!mounted || token != _playlistIdentityToken) return;
+            request,
+            shuffleGeneration: shuffleGeneration,
+            autoAdvance: autoAdvance,
+          );
+          if (outcome != EpisodePlaybackOutcome.unavailable) return outcome;
+          if (!request.isCurrent) {
+            return EpisodePlaybackOutcome.cancelled;
+          }
         }
       }
 
@@ -13108,8 +13413,19 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
             t.streamType == StreamType.torrent && _packCoversSeason(t, season);
         if (!matchesEpisode && !coversAsPack) continue;
         attempts++;
-        if (await _tryEpisodeCandidate(i, t, season, episode, token)) return;
-        if (!mounted || token != _playlistIdentityToken) return;
+        final outcome = await _tryEpisodeCandidate(
+          i,
+          t,
+          season,
+          episode,
+          request,
+          shuffleGeneration: shuffleGeneration,
+          autoAdvance: autoAdvance,
+        );
+        if (outcome != EpisodePlaybackOutcome.unavailable) return outcome;
+        if (!request.isCurrent) {
+          return EpisodePlaybackOutcome.cancelled;
+        }
       }
 
       // 2. Episode-targeted fetch (direct links resolve instantly).
@@ -13123,7 +13439,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       } catch (_) {
         fetched = null;
       }
-      if (!mounted || token != _playlistIdentityToken) return;
+      if (!request.isCurrent) {
+        return EpisodePlaybackOutcome.cancelled;
+      }
       if (fetched != null && fetched.isNotEmpty) {
         final base = _effectiveSources ?? const <Torrent>[];
         final merged = SeriesSourceFetcher.mergeSources(base, fetched);
@@ -13133,8 +13451,19 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           final t = merged[i];
           if (t.streamType == StreamType.externalUrl) continue;
           attempts++;
-          if (await _tryEpisodeCandidate(i, t, season, episode, token)) return;
-          if (!mounted || token != _playlistIdentityToken) return;
+          final outcome = await _tryEpisodeCandidate(
+            i,
+            t,
+            season,
+            episode,
+            request,
+            shuffleGeneration: shuffleGeneration,
+            autoAdvance: autoAdvance,
+          );
+          if (outcome != EpisodePlaybackOutcome.unavailable) return outcome;
+          if (!request.isCurrent) {
+            return EpisodePlaybackOutcome.cancelled;
+          }
         }
       }
 
@@ -13149,7 +13478,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       } catch (_) {
         packs = null;
       }
-      if (!mounted || token != _playlistIdentityToken) return;
+      if (!request.isCurrent) {
+        return EpisodePlaybackOutcome.cancelled;
+      }
       if (packs != null && packs.isNotEmpty) {
         final base = _effectiveSources ?? const <Torrent>[];
         final merged = SeriesSourceFetcher.mergeSources(base, packs);
@@ -13164,12 +13495,23 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
             continue;
           }
           attempts++;
-          if (await _tryEpisodeCandidate(i, t, season, episode, token)) return;
-          if (!mounted || token != _playlistIdentityToken) return;
+          final outcome = await _tryEpisodeCandidate(
+            i,
+            t,
+            season,
+            episode,
+            request,
+            shuffleGeneration: shuffleGeneration,
+            autoAdvance: autoAdvance,
+          );
+          if (outcome != EpisodePlaybackOutcome.unavailable) return outcome;
+          if (!request.isCurrent) {
+            return EpisodePlaybackOutcome.cancelled;
+          }
         }
       }
 
-      if (mounted && token == _playlistIdentityToken) {
+      if (request.isCurrent) {
         // A next/prev press raised the transition curtain before calling in
         // here — drop it, or a failed fetch leaves the screen black.
         if (_isTransitioning) {
@@ -13179,31 +13521,37 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           SnackBar(content: Text('No playable source found for $label')),
         );
       }
+      return EpisodePlaybackOutcome.unavailable;
     } finally {
       _episodeFetchInProgress = false;
     }
   }
 
   /// Resolve one candidate and switch to it when it actually contains the
-  /// target episode. Returns true when playback switched (or when the
-  /// attempt went stale and the loop must stop).
-  Future<bool> _tryEpisodeCandidate(
+  /// target episode, reporting failure independently of playlist replacement.
+  Future<EpisodePlaybackOutcome> _tryEpisodeCandidate(
     int sourceIndex,
     Torrent t,
     int season,
     int episode,
-    int token,
-  ) async {
-    if (!await widget.seriesSourceFetcher!.allowsCandidate(t)) return false;
-    if (!mounted || token != _playlistIdentityToken) return true;
+    EpisodePlaybackRequest request, {
+    int? shuffleGeneration,
+    bool autoAdvance = false,
+  }) async {
+    if (!await widget.seriesSourceFetcher!.allowsCandidate(t)) {
+      return EpisodePlaybackOutcome.unavailable;
+    }
+    if (!request.isCurrent) return EpisodePlaybackOutcome.cancelled;
     List<PlaylistEntry>? playlist;
     try {
       playlist = await widget.resolveSourceToPlaylist!(t);
     } catch (_) {
       playlist = null;
     }
-    if (!mounted || token != _playlistIdentityToken) return true;
-    if (playlist == null || playlist.isEmpty) return false;
+    if (!request.isCurrent) return EpisodePlaybackOutcome.cancelled;
+    if (playlist == null || playlist.isEmpty) {
+      return EpisodePlaybackOutcome.unavailable;
+    }
     if (playlist.length == 1) {
       final info = SeriesParser.parseFilename(playlist.first.title);
       if (info.season == null || info.episode == null) {
@@ -13215,7 +13563,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           ),
         ];
       } else if (info.season != season || info.episode != episode) {
-        return false; // resolves to a DIFFERENT episode — wrong result
+        return EpisodePlaybackOutcome
+            .unavailable; // resolves to a DIFFERENT episode — wrong result
       }
     } else {
       final sp = SeriesPlaylist.fromPlaylistEntries(
@@ -13224,17 +13573,23 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         forceSeries: true,
       );
       if (sp.findOriginalIndexBySeasonEpisode(season, episode) < 0) {
-        return false; // pack without the target — try the next candidate
+        return EpisodePlaybackOutcome
+            .unavailable; // pack without the target — try the next candidate
       }
     }
     _setManualSelectionMode(allowResume: true);
-    await _switchToSourcePlaylist(
-      sourceIndex,
-      playlist,
-      targetSeason: season,
-      targetEpisode: episode,
+    if (shuffleGeneration != null) _isAutoAdvancing = autoAdvance;
+    final resolvedPlaylist = playlist;
+    return request.attempt(
+      () => _switchToSourcePlaylist(
+        sourceIndex,
+        resolvedPlaylist,
+        targetSeason: season,
+        targetEpisode: episode,
+        suppressResume: shuffleGeneration != null,
+        request: request,
+      ),
     );
-    return true;
   }
 
   /// The episode adjacent to (season, episode) in the show's full TVMaze
