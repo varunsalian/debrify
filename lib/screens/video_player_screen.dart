@@ -1,3 +1,4 @@
+import '../widgets/playback_startup_view.dart';
 import '../utils/episode_playback_request.dart';
 import '../utils/show_shuffle.dart';
 import '../models/subtitle_source_priority.dart';
@@ -14225,81 +14226,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                   const Center(
                     child: CircularProgressIndicator(color: Colors.white),
                   ),
-                if (_startupGateActive && !_startupGateOverlayHidden)
-                  ColoredBox(
-                    color: Colors.black,
-                    child: SafeArea(
-                      child: Align(
-                        alignment: Alignment.topRight,
-                        child: Padding(
-                          padding: EdgeInsets.only(
-                            top: PlatformUtil.isTelevision ? 32 : 16,
-                            right: PlatformUtil.isTelevision ? 48 : 20,
-                          ),
-                          child: Container(
-                            constraints: BoxConstraints(
-                              maxWidth: math.min(
-                                PlatformUtil.isTelevision ? 440.0 : 320.0,
-                                math.max(
-                                  120.0,
-                                  MediaQuery.sizeOf(context).width -
-                                      (PlatformUtil.isTelevision ? 96.0 : 40.0),
-                                ),
-                              ),
-                            ),
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 14,
-                              vertical: 10,
-                            ),
-                            decoration: BoxDecoration(
-                              color: const Color(0xE61A1C20),
-                              borderRadius: BorderRadius.circular(999),
-                              border: Border.all(
-                                color: Colors.white.withValues(alpha: 0.14),
-                              ),
-                              boxShadow: const [
-                                BoxShadow(
-                                  color: Color(0x66000000),
-                                  blurRadius: 18,
-                                  offset: Offset(0, 6),
-                                ),
-                              ],
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const SizedBox(
-                                  width: 15,
-                                  height: 15,
-                                  child: CircularProgressIndicator(
-                                    color: Colors.white60,
-                                    strokeWidth: 1.8,
-                                  ),
-                                ),
-                                const SizedBox(width: 10),
-                                Flexible(
-                                  child: Text(
-                                    _startupGateMessage,
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
-                                    softWrap: true,
-                                    style: const TextStyle(
-                                      color: Colors.white70,
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w500,
-                                      letterSpacing: 0.1,
-                                      decoration: TextDecoration.none,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                // Transition overlay above video
+                // Non-startup transitions still use the existing loading UI.
                 if (_rainbowActive) _buildTransitionOverlay(),
                 if (_showStremioTvNextLoading)
                   _buildStremioTvNextLoadingOverlay(),
@@ -14550,33 +14477,19 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                   ),
                 // Above the gesture layer: startup hides normal controls, but
                 // leaving the player must remain available while links resolve.
-                if (_startupGateActive &&
-                    !_startupGateOverlayHidden &&
-                    !inPip &&
-                    !widget.hideBackButton)
-                  Positioned(
-                    top: 0,
-                    left: 0,
-                    child: SafeArea(
-                      child: Padding(
-                        padding: EdgeInsets.only(
-                          top: PlatformUtil.isTelevision ? 32 : 16,
-                          left: PlatformUtil.isTelevision ? 48 : 20,
-                        ),
-                        child: IconButton.filledTonal(
-                          key: const ValueKey('startup-source-back'),
-                          tooltip: 'Back',
-                          autofocus: PlatformUtil.isTelevision,
-                          style: IconButton.styleFrom(
-                            backgroundColor: const Color(0xE61A1C20),
-                            foregroundColor: Colors.white,
-                          ),
-                          onPressed: () => Navigator.of(context).maybePop(),
-                          icon: const Icon(Icons.arrow_back),
-                        ),
-                      ),
-                    ),
-                  ),
+                if (_startupGateActive && !_startupGateOverlayHidden)
+                  Positioned.fill(child: inPip
+                    // PiP must not reveal candidates before validation succeeds.
+                    // No controls, focus, or gestures in the compact shield.
+                    ? const AbsorbPointer(child: ColoredBox(color: Colors.black))
+                    : PlaybackStartupView(
+                    title: widget.contentTitle ?? widget.title,
+                    episode: widget.contentType == 'series' && widget.contentSeason != null && widget.contentEpisode != null
+                        ? 'Season ${widget.contentSeason} · Episode ${widget.contentEpisode}' : null,
+                    details: _startupGateMessage,
+                    retrying: _startupGateMessage.startsWith('Stream unavailable'),
+                    onBack: widget.hideBackButton ? null : () => Navigator.of(context).maybePop(),
+                  )),
                 // Controls overlay (shown only when ready)
                 if (isReady &&
                     !inPip &&

@@ -2400,6 +2400,13 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         playerView = findViewById(R.id.android_tv_player_view)
         startupGateView = findViewById(R.id.android_tv_startup_gate)
         startupGateStatus = findViewById(R.id.android_tv_startup_gate_status)
+        findViewById<View>(R.id.startup_back).setOnClickListener { finish() }
+        findViewById<View>(R.id.startup_details).setOnClickListener {
+            android.app.AlertDialog.Builder(this)
+                .setTitle("Playback details")
+                .setMessage("Connecting to source ${startupFailoverCursor?.attempts ?: 1} of ${if (startupTryNextOnFailure) startupMaxAttempts else 1}. Waiting for a valid first frame.")
+                .setPositiveButton("Close", null).show()
+        }
         titleContainer = findViewById(R.id.android_tv_title_container)
         titleView = findViewById(R.id.android_tv_player_title)
         // OTT-style title views (compact mode)
@@ -6831,6 +6838,12 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     // D-pad navigation
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         val keyCode = event.keyCode
+        if (::startupGateView.isInitialized && startupGateView.visibility == View.VISIBLE &&
+            keyCode in listOf(KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN,
+                KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_RIGHT,
+                KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER)) {
+            return super.dispatchKeyEvent(event)
+        }
 
         // Handle subtitle line picker overlay (floats on top of video)
         if (linePickerOverlay?.isVisible == true) {
@@ -16996,7 +17009,6 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         startupFailoverTimeout = timeout
         progressHandler.postDelayed(timeout, STARTUP_FAILOVER_TIMEOUT_MS)
         val attempt = startupFailoverCursor?.attempts ?: 1
-        val attemptLimit = if (startupTryNextOnFailure) startupMaxAttempts else 1
         // Mirrors the Dart gate copy: a debrid-direct first open is loading
         // the user's own source, not "checking" candidates. Failover retries
         // keep the counter.
@@ -17005,12 +17017,24 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             !currentPlaybackItemIsPikPak()
         startupGateView.visibility =
             if (debridFirstOpen) View.GONE else View.VISIBLE
+        val heading = findViewById<TextView>(R.id.startup_title)
+        heading.text = titleView.text
+        heading.animate().cancel()
+        heading.alpha = 0f
+        heading.translationY = 12f
+        heading.animate().alpha(1f).translationY(0f).setDuration(600L).start()
+        if (!debridFirstOpen && !startupGateView.hasFocus()) {
+            findViewById<View>(R.id.startup_back).requestFocus()
+        }
+        findViewById<TextView>(R.id.startup_explanation).text = if (attempt <= 1)
+            "Connecting and waiting for the first frames."
+        else "The previous source couldn’t start. Trying an alternative."
         startupGateStatus.text = if (debridFirstOpen) {
             "Loading stream…"
         } else if (attempt <= 1) {
-            "Checking stream 1 of $attemptLimit…"
+            "Opening your stream"
         } else {
-            "Stream unavailable · Trying $attempt of $attemptLimit…"
+            "Connecting to another source"
         }
         startupLog(
             "event=candidate_open attempt=$attempt " +

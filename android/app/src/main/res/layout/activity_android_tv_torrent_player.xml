@@ -24,43 +24,35 @@
         android:id="@+id/android_tv_startup_gate"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:background="#000000"
+        android:background="@drawable/playback_startup_background"
         android:visibility="gone"
         android:elevation="9dp"
         android:clickable="true"
         android:focusable="false">
 
-        <LinearLayout
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_gravity="top|end"
-            android:layout_marginTop="32dp"
-            android:layout_marginEnd="48dp"
-            android:background="@drawable/startup_gate_status_pill"
-            android:elevation="6dp"
-            android:gravity="center_vertical"
-            android:orientation="horizontal"
-            android:paddingStart="14dp"
-            android:paddingTop="10dp"
-            android:paddingEnd="14dp"
-            android:paddingBottom="10dp">
-
-            <ProgressBar
-                android:layout_width="15dp"
-                android:layout_height="15dp"
-                android:indeterminate="true"
-                android:indeterminateTint="#99FFFFFF" />
-
-            <TextView
-                android:id="@+id/android_tv_startup_gate_status"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="10dp"
-                android:fontFamily="sans-serif-medium"
-                android:gravity="center_vertical"
-                android:letterSpacing="0.01"
-                android:textColor="#B3FFFFFF"
-                android:textSize="13sp" />
+        <Button android:id="@+id/startup_back"
+            android:layout_width="wrap_content" android:layout_height="wrap_content"
+            android:layout_margin="24dp" android:text="← Back" />
+        <TextView android:id="@+id/startup_title"
+            android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:layout_gravity="center" android:layout_marginHorizontal="64dp"
+            android:layout_marginBottom="64dp" android:gravity="center"
+            android:maxLines="2" android:ellipsize="end"
+            android:textColor="#FFFFFF" android:textSize="36sp" android:fontFamily="sans-serif-medium" />
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:layout_gravity="bottom" android:layout_margin="32dp" android:orientation="vertical">
+            <TextView android:id="@+id/android_tv_startup_gate_status"
+                android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:textColor="#80D4BC" android:textSize="18sp" android:fontFamily="sans-serif-medium" />
+            <TextView android:id="@+id/startup_explanation"
+                android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:layout_marginTop="8dp" android:textColor="#B3FFFFFF" android:textSize="14sp" />
+            <ProgressBar style="?android:attr/progressBarStyleHorizontal"
+                android:layout_width="240dp" android:layout_height="3dp"
+                android:layout_marginTop="16dp" android:indeterminate="true" android:indeterminateTint="#80D4BC" />
+            <Button android:id="@+id/startup_details"
+                android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:layout_marginTop="8dp" android:text="Playback details" />
         </LinearLayout>
     </FrameLayout>
 
