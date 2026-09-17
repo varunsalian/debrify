@@ -237,6 +237,7 @@ class _DetailMarqueeState extends State<DetailMarquee> {
           Padding(
             padding: EdgeInsets.only(left: gutter, right: gutter, bottom: 9),
             child: DetailSeasonControl(
+              onOptions: view.seasonOptions == null ? null : () => view.seasonOptions!(view.selectedSeasonNumber),
               seasonNumber: view.selectedSeasonNumber,
               episodeCount: episodes.length,
               canPrev: _seasonIndex(view) > 0,

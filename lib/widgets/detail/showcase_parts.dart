@@ -15,6 +15,7 @@ import '../../utils/platform_util.dart';
 import '../../utils/tv_keys.dart';
 import '../../utils/wide_touch_scale.dart';
 import '../episodes_panel.dart';
+import '../season_action_region.dart';
 import '../tracker_brand_marks.dart';
 import '../viewport_artwork_scope.dart';
 import 'detail_model.dart';
@@ -1370,6 +1371,7 @@ class ShowcaseSeasons extends StatelessWidget {
             label: 'Season ${s.number}',
             active: active,
             onTap: () => view.selectSeason(s.number),
+            onOptions: view.seasonOptions == null ? null : () => view.seasonOptions!(s.number),
           );
         },
       ),
@@ -1436,10 +1438,12 @@ class _SeasonDropdownState extends State<_SeasonDropdown> {
 
   @override
   Widget build(BuildContext context) {
-    return Focus(
+    return SeasonActionRegion(onTap: _open,
+      onOptions: widget.view.seasonOptions == null ? null : () => widget.view.seasonOptions!(widget.view.selectedSeasonNumber),
+      child: Focus(
       focusNode: widget.node,
       onFocusChange: (v) => setState(() => _f = v),
-      onKeyEvent: (_, e) => _activate(e, _open),
+      onKeyEvent: (_, e) => widget.view.seasonOptions == null ? _activate(e, _open) : KeyEventResult.ignored,
       child: GestureDetector(
         onTap: _open,
         child: Container(
@@ -1466,7 +1470,7 @@ class _SeasonDropdownState extends State<_SeasonDropdown> {
           ),
         ),
       ),
-    );
+    ));
   }
 }
 
@@ -1475,12 +1479,14 @@ class _SeasonPill extends StatefulWidget {
   final String label;
   final bool active;
   final VoidCallback onTap;
+  final VoidCallback? onOptions;
 
   const _SeasonPill({
     required this.node,
     required this.label,
     required this.active,
     required this.onTap,
+    this.onOptions,
   });
 
   @override
@@ -1493,7 +1499,7 @@ class _SeasonPillState extends State<_SeasonPill> {
   @override
   Widget build(BuildContext context) {
     final k = ShowcaseMetrics.of(context).k;
-    return Focus(
+    return SeasonActionRegion(onTap: widget.onTap, onOptions: widget.onOptions, child: Focus(
       focusNode: widget.node,
       onFocusChange: (v) {
         setState(() => _f = v);
@@ -1501,7 +1507,7 @@ class _SeasonPillState extends State<_SeasonPill> {
       },
       // Selecting on FOCUS would reload the episode list on every step of a
       // walk across the seasons. OK commits; the walk is free.
-      onKeyEvent: (_, e) => _activate(e, widget.onTap),
+      onKeyEvent: (_, e) => widget.onOptions == null ? _activate(e, widget.onTap) : KeyEventResult.ignored,
       // The wide row is what every TOUCH tablet gets (compact swaps in the
       // dropdown below 600), so the pill needs a finger path too — OK-only
       // left the season control dead under a finger. Opaque: the pill draws
@@ -1535,7 +1541,7 @@ class _SeasonPillState extends State<_SeasonPill> {
           ),
         ),
       ),
-    );
+    ));
   }
 }
 

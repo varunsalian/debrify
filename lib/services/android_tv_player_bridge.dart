@@ -5,6 +5,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart' show visibleForTesting;
 
 // For debugPrint
 import 'package:flutter/material.dart' show debugPrint;
@@ -47,10 +48,12 @@ typedef MovieMetadataProvider =
 
 /// Serializes source-binding writes for one native-player launch without
 /// letting a stuck platform preference write poison later playback sessions.
-class _StremioSourcePersistenceSession {
-  _StremioSourcePersistenceSession(this.id);
+@visibleForTesting
+class StremioSourcePersistenceSession {
+  StremioSourcePersistenceSession(this.id, {this.waitTimeout = timeout});
 
   static const timeout = Duration(seconds: 5);
+  final Duration waitTimeout;
 
   final int id;
   Future<void> _tail = Future<void>.value();
@@ -60,12 +63,9 @@ class _StremioSourcePersistenceSession {
     if (!_accepting) return Future<void>.value();
     final queued = _tail.then((_) async {
       try {
-        await operation().timeout(timeout);
-      } on TimeoutException {
-        debugPrint(
-          'AndroidTvPlayerBridge: source persistence timed out '
-          '(session=$id)',
-        );
+        // A timeout cannot cancel a preference write. Keep the real operation
+        // on the queue so the next write cannot race its eventual completion.
+        await operation();
       } catch (error, stack) {
         debugPrint(
           'AndroidTvPlayerBridge: source persistence failed '
@@ -74,13 +74,17 @@ class _StremioSourcePersistenceSession {
       }
     });
     _tail = queued;
-    return queued;
+    return queued.timeout(waitTimeout, onTimeout: () {
+      debugPrint(
+        'AndroidTvPlayerBridge: source persistence timed out (session=$id)',
+      );
+    });
   }
 
   Future<void> closeAndDrain() async {
     _accepting = false;
     try {
-      await _tail.timeout(timeout);
+      await _tail.timeout(waitTimeout);
     } on TimeoutException {
       debugPrint(
         'AndroidTvPlayerBridge: source persistence drain timed out '
@@ -127,9 +131,13 @@ class AndroidTvPlayerBridge {
   static Future<String?> Function(int)? _stremioSourceResolver;
   static Future<List<Map<String, dynamic>>?> Function(int)?
   _sourcePlaylistResolver;
+  static Future<List<Map<String, dynamic>>?> Function(int)?
+      _startupSourcePlaylistResolver;
   static Future<void> Function(int)? _stremioSourceCommitter;
   static PlaybackFinishedCallback? _startupSourcesExhaustedCallback;
-  static _StremioSourcePersistenceSession? _sourcePersistenceSession;
+  static Future<void> Function(int, String)? _startupSourceFailedCallback;
+  static Future<void> _startupFailureDrain = Future<void>.value();
+  static StremioSourcePersistenceSession? _sourcePersistenceSession;
   static NativePlaybackProgressSession? _progressSession;
   static Future<void> _progressDrain = Future<void>.value();
   static Object _beginNativePlayback() {
@@ -603,7 +611,10 @@ class AndroidTvPlayerBridge {
           debugPrint(
             'AndroidTvPlayerBridge: requestSourcePlaylistResolve received - args: ${call.arguments}',
           );
-          final playlistResolver = _sourcePlaylistResolver;
+          final playlistRequest = call.arguments;
+          final playlistResolver = playlistRequest is Map && playlistRequest['automaticRecovery'] == true
+              ? _startupSourcePlaylistResolver ?? _sourcePlaylistResolver
+              : _sourcePlaylistResolver;
           if (playlistResolver == null) {
             debugPrint(
               'AndroidTvPlayerBridge: ERROR - no source playlist resolver registered!',
@@ -658,6 +669,22 @@ class AndroidTvPlayerBridge {
           }
           await persistenceSession.enqueue(() => committer(sourceIndex));
           return null;
+        case 'startupSourceFailed':
+          final failure = call.arguments;
+          final failureSession = _sourcePersistenceSession;
+          if (failure is! Map || failureSession == null ||
+              failure['sourcePersistenceSessionId'] != failureSession.id) return null;
+          final failureCallback = _startupSourceFailedCallback;
+          final failedIndex = failure['sourceIndex'];
+          final failureReason = failure['reason'];
+          if (failureCallback == null || failedIndex is! int || failureReason is! String) return null;
+          // Enqueue synchronously on the same session as commits: a successful
+          // candidate must never read the saved list before this removal ends.
+          _startupFailureDrain = failureSession.enqueue(
+            () => failureCallback(failedIndex, failureReason),
+          );
+          await _startupFailureDrain;
+          return null;
         case 'requestMoreTorrentSources':
           // Series source tabs: the native player asked for the not-yet-
           // fetched category. A null/failed fetch throws so the native side
@@ -666,6 +693,7 @@ class AndroidTvPlayerBridge {
             'AndroidTvPlayerBridge: requestMoreTorrentSources received - args: ${call.arguments}',
           );
           final moreProvider = _moreSourcesProvider;
+          await _startupFailureDrain;
           if (moreProvider == null) {
             debugPrint(
               'AndroidTvPlayerBridge: no more-sources provider registered',
@@ -838,8 +866,10 @@ class AndroidTvPlayerBridge {
           _movieMetadataProvider = null;
           _stremioSourceResolver = null;
           _sourcePlaylistResolver = null;
+          _startupSourcePlaylistResolver = null;
           _stremioSourceCommitter = null;
           _startupSourcesExhaustedCallback = null;
+          _startupSourceFailedCallback = null;
           _moreSourcesProvider = null;
           _addonSourcesProvider = null;
           _episodeFetchProvider = null;
@@ -851,6 +881,7 @@ class AndroidTvPlayerBridge {
             _sourcePersistenceSession = null;
           }
           await finishedDrain;
+          await _startupFailureDrain;
           if (persistenceSession != null) {
             await persistenceSession.closeAndDrain();
           }
@@ -866,7 +897,8 @@ class AndroidTvPlayerBridge {
           // Clear the old session before recovery can launch a replacement
           // player and begin receiving its own next-episode requests.
           _quickPlayNextEpisodeResult = null;
-          if (startupExhausted && recoverFromStartupExhaustion != null) {
+          if (startupExhausted && finishedArgs['startupRecoveryConsumed'] != true &&
+              recoverFromStartupExhaustion != null) {
             try {
               await recoverFromStartupExhaustion();
             } catch (e, stack) {
@@ -1674,8 +1706,10 @@ class AndroidTvPlayerBridge {
     MovieMetadataProvider? onRequestMovieMetadata,
     Future<String?> Function(int)? onResolveStremioSource,
     Future<List<Map<String, dynamic>>?> Function(int)? onResolveSourcePlaylist,
+    Future<List<Map<String, dynamic>>?> Function(int)? onResolveStartupSourcePlaylist,
     Future<void> Function(int)? onCommitStremioSource,
     PlaybackFinishedCallback? onStartupSourcesExhausted,
+    Future<void> Function(int, String)? onStartupSourceFailed,
     Future<Map<String, dynamic>?> Function(String, {int? season, int? episode})?
     onRequestMoreSources,
     Future<Map<String, dynamic>?> Function(
@@ -1712,7 +1746,7 @@ class AndroidTvPlayerBridge {
     }
     final lockOwner = _beginNativePlayback();
     _nativePlaybackLockOwner = lockOwner;
-    final persistenceSession = _StremioSourcePersistenceSession(sessionId);
+    final persistenceSession = StremioSourcePersistenceSession(sessionId);
     _sourcePersistenceSession = persistenceSession;
     final profileOwner = ProfileSessionMemory.captureOwner();
     final progressSession = onProgress == null
@@ -1736,8 +1770,10 @@ class AndroidTvPlayerBridge {
     _movieMetadataProvider = onRequestMovieMetadata;
     _stremioSourceResolver = onResolveStremioSource;
     _sourcePlaylistResolver = onResolveSourcePlaylist;
+    _startupSourcePlaylistResolver = onResolveStartupSourcePlaylist;
     _stremioSourceCommitter = onCommitStremioSource;
     _startupSourcesExhaustedCallback = onStartupSourcesExhausted;
+    _startupSourceFailedCallback = onStartupSourceFailed;
     _moreSourcesProvider = onRequestMoreSources;
     _addonSourcesProvider = onRequestAddonSources;
     _episodeFetchProvider = onRequestEpisodeFetch;
@@ -1827,6 +1863,7 @@ class AndroidTvPlayerBridge {
       _movieMetadataProvider = null;
       _stremioSourceResolver = null;
       _sourcePlaylistResolver = null;
+      _startupSourcePlaylistResolver = null;
       _moreSourcesProvider = null;
       _addonSourcesProvider = null;
       _episodeFetchProvider = null;

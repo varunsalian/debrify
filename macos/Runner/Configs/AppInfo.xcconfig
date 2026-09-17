@@ -5,10 +5,14 @@
 // 'flutter create' template.
 
 // The application's name. By default this is also the title of the Flutter window.
-PRODUCT_NAME = debrify
+DEBRIFY_PRODUCT_NAME = debrify
+PRODUCT_NAME = $(DEBRIFY_PRODUCT_NAME)
 
 // The application's bundle identifier
-PRODUCT_BUNDLE_IDENTIFIER = com.example.torrentSearchApp
+PRODUCT_BUNDLE_IDENTIFIER = com.example.torrentSearchApp$(DEBRIFY_BUNDLE_SUFFIX)
 
 // The copyright displayed in application information
 PRODUCT_COPYRIGHT = Copyright © 2025 com.example. All rights reserved.
+
+// May be overridden by tool/build_personal.sh without changing normal builds.
+DEBRIFY_APP_DISPLAY_NAME = $(PRODUCT_NAME)

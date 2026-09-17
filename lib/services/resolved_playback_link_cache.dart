@@ -10,6 +10,18 @@ import 'series_source_service.dart';
 
 /// Device-local, encrypted links. Durable pins remain the source of truth.
 class ResolvedPlaybackLinkCache {
+  static Future<void> removeFailedSource(Torrent source) async {
+    if (source.directUrl == null || source.directUrl!.isEmpty) return;
+    final prefs = await ProfilePreferences.instance();
+    await _lock.synchronized(() async {
+      final entries = await _read(prefs);
+      entries.removeWhere((_, entry) {
+        final saved = entry['source'];
+        return saved is Map && saved['direct_url'] == source.directUrl;
+      });
+      await prefs.setString(preferenceKey, await SecretVault.seal(jsonEncode(entries)));
+    });
+  }
   static const preferenceKey = 'resolved_playback_links_v1';
   static const maxAge = Duration(hours: 72);
   static final _lock = Lock();

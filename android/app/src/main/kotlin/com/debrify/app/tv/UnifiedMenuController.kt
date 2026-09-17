@@ -13,9 +13,10 @@ import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import com.debrify.app.R
 
 /**
- * Unified player menu — a DPAD-driven three-column ("Miller columns") overlay that
+ * Unified player menu — a DPAD-driven two-pane, right-side overlay that
  * consolidates the player's scattered dialogs (audio, subtitles + per-addon tracks,
  * appearance, timing/sync, sources, display, playback) behind one cinema-themed
  * surface. NOTHING is delegated to the old panels — every column is inline.
@@ -25,7 +26,9 @@ import android.widget.TextView
  * [Callbacks.buildModel]. Selection/focus is painted manually (no native view focus)
  * except the search field, which uses real focus + IME (see edit mode).
  *
- * Column 1 = section, column 2 = sub-control, column 3 = options/actions.
+ * The existing three-list model is retained for host compatibility. Section and
+ * sub-control lists are adapted to MediaKit's section rail; tracks and providers
+ * are grouped inside the value pane, never promoted to rail sections.
  * Layout: [com.debrify.app.R.layout.view_unified_menu].
  */
 class UnifiedMenuController(
@@ -133,6 +136,25 @@ class UnifiedMenuController(
 
     private val sel = intArrayOf(0, 0, 0)   // section, col2, col3(+1 in SEARCH where 0=field)
     private var activeCol = 0
+    private data class RailItem(val section: Int, val sub: Int, val row: Row)
+    private var railItems: List<RailItem> = emptyList()
+    private var subtitleSearch = false
+    private val paneGroups = mutableMapOf<Int, String?>()
+    private val panel: View = root.findViewById(R.id.unified_panel)
+
+    init {
+        root.findViewById<View>(R.id.unified_scrim).setOnClickListener { hide() }
+        root.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
+            val compact = root.width < dp(720)
+            val width = if (compact) root.width else (root.width * .46f).toInt().coerceIn(dp(430), dp(560))
+            if (width > 0 && panel.layoutParams.width != width) {
+                panel.layoutParams = panel.layoutParams.apply { this.width = width }
+            }
+            val rail = col2Header.parent as View
+            val railWidth = dp(if (compact) 168 else 208)
+            if (rail.layoutParams.width != railWidth) rail.layoutParams = rail.layoutParams.apply { this.width = railWidth }
+        }
+    }
     private var model: Model = Model(emptyList(), "", emptyList(), "", emptyList())
 
     var isVisible: Boolean = false
@@ -160,6 +182,7 @@ class UnifiedMenuController(
 
     // ── public API ──────────────────────────────────────────────────────────
     fun show(sectionId: String, sub: String? = null) {
+        subtitleSearch = sub == "search"
         val s = sectionIds.indexOf(sectionId).coerceAtLeast(0)
         sel[0] = s; sel[1] = 0; sel[2] = 0
         model = callbacks.buildModel(sel[0], sel[1])
@@ -167,10 +190,16 @@ class UnifiedMenuController(
             val idx = model.col2.indexOfFirst { it.tag == sub }
             if (idx >= 0) { sel[1] = idx; model = callbacks.buildModel(sel[0], sel[1]) }
         }
+        rebuildModel()
         // Land on the leaf column for a fast change; on the current option where possible.
         activeCol = 2
+        val targetedRows = model.col3.indices.filter { model.col3[it].enabled &&
+            (sub == null || paneGroups[it] == sub) }
         sel[2] = if (model.col3Mode == Col3Mode.SEARCH) 0
-                 else model.col3.indexOfFirst { it.selected }.let { if (it < 0) 0 else it }
+                 else targetedRows.firstOrNull { model.col3[it].selected }
+                     ?: targetedRows.firstOrNull()
+                     ?: model.col3.indexOfFirst { it.enabled && it.selected }.takeIf { it >= 0 }
+                     ?: firstEnabled(model.col3)
         inEditMode = false
         isVisible = true
         render()
@@ -178,6 +207,8 @@ class UnifiedMenuController(
         root.visibility = View.VISIBLE
         root.alpha = 0f
         root.animate().alpha(1f).setDuration(160).start()
+        panel.translationX = dp(32).toFloat()
+        panel.animate().translationX(0f).setDuration(220).start()
         maybeEnterSearchField()
     }
 
@@ -219,9 +250,11 @@ class UnifiedMenuController(
         if (!handled) return false
         if (event.action != KeyEvent.ACTION_DOWN) return true
         when (event.keyCode) {
-            // Single-press dismiss, matching the dialogs this menu replaced.
-            // Column-back is on LEFT; BACK always closes.
-            KeyEvent.KEYCODE_BACK, KeyEvent.KEYCODE_ESCAPE -> hide()
+            // Match MediaKit: Back returns from values to the rail, then closes.
+            KeyEvent.KEYCODE_BACK, KeyEvent.KEYCODE_ESCAPE -> {
+                if (subtitleSearch) { leaveSubtitleSearch() }
+                else if (activeCol == 2) { activeCol = 1; exitEditMode(); render() } else hide()
+            }
             KeyEvent.KEYCODE_DPAD_LEFT -> onLeft()
             KeyEvent.KEYCODE_DPAD_RIGHT -> onRight()
             KeyEvent.KEYCODE_DPAD_UP -> moveSel(-1)
@@ -249,7 +282,8 @@ class UnifiedMenuController(
             val row = currentCol3Row()
             if (row != null && row.adjustable) { row.onAdjust?.invoke(-1); render(); return }
         }
-        if (activeCol > 0) { activeCol--; clampSel(); render() }
+        if (subtitleSearch) { leaveSubtitleSearch(); return }
+        if (activeCol > 1) { activeCol = 1; clampSel(); render() }
     }
 
     private fun onRight() {
@@ -258,6 +292,7 @@ class UnifiedMenuController(
             if (row != null && row.adjustable) { row.onAdjust?.invoke(1); render(); return }
             return
         }
+        if (callbacks.onSectionActivated(sel[0])) return
         activeCol++; clampSel()
         if (activeCol == 2) landOnCol3()
         render()
@@ -289,6 +324,18 @@ class UnifiedMenuController(
     }
 
     private fun moveSel(delta: Int) {
+        if (activeCol <= 1) {
+            val current = railItems.indexOfFirst { it.section == sel[0] && it.sub == sel[1] }
+                .let { if (it >= 0) it else railItems.indexOfFirst { item -> item.section == sel[0] } }
+            var next = current + delta
+            while (next in railItems.indices && !railItems[next].row.enabled) next += delta
+            val item = railItems.getOrNull(next) ?: return
+            sel[0] = item.section; sel[1] = item.sub; sel[2] = 0
+            subtitleSearch = false
+            activeCol = 1
+            exitEditMode(); render()
+            return
+        }
         val count = colCount(activeCol)
         if (count == 0) return
         var i = sel[activeCol]
@@ -313,7 +360,10 @@ class UnifiedMenuController(
                 if (callbacks.onSectionActivated(sel[0])) return
                 activeCol = 1; sel[1] = 0; sel[2] = 0; rebuildModel(); render()
             }
-            1 -> { activeCol = 2; landOnCol3(); rebuildModel(); render(); maybeEnterSearchField() }
+            1 -> {
+                if (callbacks.onSectionActivated(sel[0])) return
+                activeCol = 2; landOnCol3(); rebuildModel(); render(); maybeEnterSearchField()
+            }
             else -> {
                 if (model.col3Mode == Col3Mode.SEARCH && sel[2] == 0) { enterEditMode(); render(); return }
                 val row = currentCol3Row() ?: return
@@ -335,7 +385,44 @@ class UnifiedMenuController(
     }
 
     private fun rebuildModel() {
-        model = callbacks.buildModel(sel[0], sel[1])
+        paneGroups.clear()
+        val raw = callbacks.buildModel(sel[0], sel[1])
+        val section = sectionIds.getOrNull(sel[0])
+        val tag = raw.col2.getOrNull(sel[1])?.tag
+        val subtitleTracks = section == "subs" &&
+            (tag == "emb" || tag == "track" || tag?.startsWith("addon:") == true || tag == "search")
+        val audioTracks = section == "audio" && (tag == "audio" || tag == "night")
+        if ((!subtitleTracks && !audioTracks) || subtitleSearch) { model = raw; return }
+        val rows = mutableListOf<Row>()
+        if (subtitleTracks) {
+            val search = raw.col2.indexOfFirst { it.tag == "search" }
+            if (search >= 0) rows.add(Row("Wrong subtitles? Fix the title", accent = true, onOk = {
+                subtitleSearch = true; sel[1] = search; sel[2] = 0
+                exitEditMode(); rebuildModel(); maybeEnterSearchField()
+            }))
+        }
+        raw.col2.forEachIndexed { index, control ->
+            val include = if (audioTracks) control.tag == "audio" || control.tag == "night"
+                else control.tag == "emb" || control.tag == "track" || control.tag?.startsWith("addon:") == true
+            if (include) {
+                val values = callbacks.buildModel(sel[0], index).col3
+                // Off precedes Embedded, just like MediaKit.
+                val off = if (subtitleTracks && (control.tag == "emb" || control.tag == "track"))
+                    values.filter { it.title == "Off" } else emptyList()
+                off.forEach { paneGroups[rows.size] = control.tag; rows.add(it) }
+                rows.add(Row(control.title, enabled = false, tag = "pane_header"))
+                values.filterNot { it in off }.forEach {
+                    paneGroups[rows.size] = control.tag; rows.add(it)
+                }
+            }
+        }
+        model = raw.copy(col3Title = if (subtitleTracks) "Subtitles" else "Audio", col3 = rows,
+            col3Mode = Col3Mode.ROWS, previewVisible = false)
+    }
+
+    private fun leaveSubtitleSearch() {
+        subtitleSearch = false; exitEditMode(); sel[1] = 0; sel[2] = 0
+        render()
     }
 
     // ── search field / edit mode ──────────────────────────────────────────────
@@ -347,6 +434,7 @@ class UnifiedMenuController(
         if (inEditMode) return
         inEditMode = true
         searchField.post {
+            if (!isVisible || !inEditMode || model.col3Mode != Col3Mode.SEARCH) return@post
             searchField.requestFocus()
             searchField.setSelection(searchField.text?.length ?: 0)
         }
@@ -369,11 +457,35 @@ class UnifiedMenuController(
     // ── rendering ───────────────────────────────────────────────────────────
     fun render() {
         if (!isVisible) return
+        // Provider responses can insert hundreds of rows ahead of the focused
+        // track. Preserve its identity, not its old position in the flattened list.
+        val focusedGroup = if (activeCol == 2) paneGroups[sel[2]] else null
+        val focusedRow = if (focusedGroup != null) model.col3.getOrNull(sel[2]) else null
+        fun sameIdentity(row: Row): Boolean = focusedRow != null &&
+            if (focusedRow.tag != null) row.tag == focusedRow.tag
+            else row.tag == null && row.title == focusedRow.title && row.value == focusedRow.value
+        // Legacy/native track rows may not carry IDs. Their occurrence within
+        // the provider group distinguishes equal labels without depending on
+        // the size of any preceding provider's results.
+        val occurrence = (0 until sel[2]).count {
+            paneGroups[it] == focusedGroup && model.col3.getOrNull(it)?.let {
+                row -> row.enabled && sameIdentity(row)
+            } == true
+        }
         rebuildModel()
+        if (focusedRow != null) {
+            val groupRows = model.col3.indices.filter {
+                paneGroups[it] == focusedGroup && model.col3[it].enabled
+            }
+            val match = groupRows.filter { sameIdentity(model.col3[it]) }.getOrNull(occurrence)
+            sel[2] = match ?: groupRows.firstOrNull() ?: firstEnabled(model.col3)
+        }
         clampSelSilent()
+        if (model.col3Mode != Col3Mode.SEARCH) exitEditMode()
         if (model.previewVisible) { preview.visibility = View.VISIBLE; callbacks.stylePreview(preview) }
         else preview.visibility = View.GONE
         var scrollTarget: View? = null
+        var railTarget: View? = null
 
         col1.removeAllViews()
         model.col1.forEachIndexed { i, r ->
@@ -382,20 +494,47 @@ class UnifiedMenuController(
             col1.addView(v); if (active) scrollTarget = v
         }
 
-        col2Header.text = model.col2Title
+        col2Header.text = "PLAYER MENU"
         col2.removeAllViews()
-        model.col2.forEachIndexed { i, r ->
-            val active = activeCol == 1 && i == sel[1]
-            val v = makeRow(r, sel = i == sel[1], active = active)
-            col2.addView(v); if (active) scrollTarget = v
+        railItems = model.col1.flatMapIndexed { section, _ ->
+            callbacks.buildModel(section, 0).col2.mapIndexedNotNull { sub, row ->
+                val id = sectionIds.getOrNull(section)
+                val title = when {
+                    id == "audio" && row.tag == "night" -> return@mapIndexedNotNull null
+                    id == "audio" && row.tag == "audio" -> "Audio"
+                    id == "subs" && (row.tag == "search" || row.tag?.startsWith("addon:") == true) -> return@mapIndexedNotNull null
+                    id == "subs" && (row.tag == "emb" || row.tag == "track") -> "Subtitles"
+                    row.tag == "appearance" -> "Subtitle style"
+                    row.tag == "timing" -> "Sync"
+                    row.tag == "speed" -> "Speed"
+                    row.tag == "aspect" -> "Aspect"
+                    else -> row.title
+                }
+                RailItem(section, sub, row.copy(title = title, selected = false))
+            }
+        }
+        val exactRail = railItems.firstOrNull { it.section == sel[0] && it.sub == sel[1] }
+        val selectedRail = exactRail ?: railItems.firstOrNull { it.section == sel[0] }
+        railItems.forEach { item ->
+            val selected = item == selectedRail
+            val active = activeCol == 1 && selected
+            val v = makeRow(item.row, sel = selected, active = active)
+            v.setOnClickListener {
+                subtitleSearch = false
+                sel[0] = item.section; sel[1] = item.sub; sel[2] = 0
+                activeCol = 1; rebuildModel(); activate()
+            }
+            col2.addView(v); if (selected) railTarget = v
         }
 
-        col3Header.text = model.col3Title
+        col3Header.text = listOf(model.col2Title, model.col3Title).filter { it.isNotBlank() }.distinct().joinToString("\n")
         col3.removeAllViews()
         if (model.col3Mode == Col3Mode.SEARCH) {
             (searchField.parent as? ViewGroup)?.removeView(searchField)
             val fieldActive = activeCol == 2 && sel[2] == 0
             searchField.background = rowBg(active = fieldActive, sel = fieldActive)
+            searchField.setTextColor(if (fieldActive) Color.BLACK else Color.WHITE)
+            searchField.setHintTextColor(if (fieldActive) 0x99000000.toInt() else 0x80FFFFFF.toInt())
             searchField.setPadding(dp(12), dp(10), dp(12), dp(10))
             val lp = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
@@ -406,6 +545,7 @@ class UnifiedMenuController(
             // removeAllViews above detaches the field mid-typing (an async render can
             // fire while the user types); restore focus so the IME/keystrokes survive.
             if (inEditMode) searchField.post {
+                if (!isVisible || !inEditMode || model.col3Mode != Col3Mode.SEARCH) return@post
                 searchField.requestFocus()
                 searchField.setSelection(searchField.text?.length ?: 0)
             }
@@ -413,17 +553,19 @@ class UnifiedMenuController(
             model.col3.forEachIndexed { i, r ->
                 val active = activeCol == 2 && sel[2] == i + 1
                 val v = makeRow(r, sel = sel[2] == i + 1, active = active)
+                v.setOnClickListener { exitEditMode(); activeCol = 2; sel[2] = i + 1; activate() }
                 col3.addView(v); if (active) scrollTarget = v
             }
         } else {
             model.col3.forEachIndexed { i, r ->
                 val active = activeCol == 2 && i == sel[2]
                 val v = makeRow(r, sel = i == sel[2], active = active)
+                v.setOnClickListener { activeCol = 2; sel[2] = i; activate() }
                 col3.addView(v); if (active) scrollTarget = v
             }
         }
 
-        scrollTarget?.let { t ->
+        listOfNotNull(railTarget, scrollTarget).distinct().forEach { t ->
             ((t.parent as? View)?.parent as? ScrollView)?.let { sv ->
                 sv.post { sv.smoothScrollTo(0, (t.top - sv.height / 3).coerceAtLeast(0)) }
             }
@@ -439,11 +581,14 @@ class UnifiedMenuController(
 
     private fun rowBg(active: Boolean, sel: Boolean): GradientDrawable = GradientDrawable().apply {
         cornerRadius = dp(9).toFloat()
-        setColor(when { active -> 0x40E50914; sel -> 0x18FFFFFF; else -> 0x00000000 })
-        if (active) setStroke(dp(1), 0x80E50914.toInt())
+        setColor(when { active -> Color.WHITE; sel -> 0x18FFFFFF; else -> 0x00000000 })
     }
 
     private fun makeRow(r: Row, sel: Boolean, active: Boolean): View {
+        if (r.tag == "pane_header") return TextView(activity).apply {
+            text = r.title.uppercase(); textSize = 10f; letterSpacing = .12f
+            setTextColor(0x6BFFFFFF); setPadding(dp(12), dp(16), dp(12), dp(8))
+        }
         val row = LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -468,6 +613,7 @@ class UnifiedMenuController(
             setTextColor(
                 when {
                     !r.enabled -> 0x66FFFFFF.toInt()
+                    active -> Color.BLACK
                     r.accent -> 0xFFFF4D57.toInt()
                     active || sel -> Color.WHITE
                     else -> 0xC8FFFFFF.toInt()
@@ -477,13 +623,13 @@ class UnifiedMenuController(
         })
         if (r.selected) {
             row.addView(TextView(activity).apply {
-                text = "●"; textSize = 10f; setTextColor(0xFFFF4D57.toInt()); setPadding(dp(6), 0, dp(6), 0)
+                text = "✓"; textSize = 13f; setTextColor(if (active) Color.BLACK else Color.WHITE); setPadding(dp(6), 0, dp(6), 0)
             })
         }
         r.value?.let { v ->
             row.addView(TextView(activity).apply {
                 text = v; textSize = 12f
-                setTextColor(if (r.accent) 0xFFFF4D57.toInt() else 0x8CFFFFFF.toInt())
+                setTextColor(if (active) 0x99000000.toInt() else if (r.accent) 0xFFFF4D57.toInt() else 0x8CFFFFFF.toInt())
             })
         }
         return row

@@ -60,6 +60,128 @@ class _HostState extends State<_Host> {
 }
 
 void main() {
+  testWidgets('pinned provider can fetch all results without losing its source', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    var calls = 0;
+    final pinned = _source(name: 'Pinned direct', source: 'stremio:comet',
+      type: StreamType.directUrl, hash: '');
+    await tester.pumpWidget(_Host(initial: [pinned], fetcher: SeriesSourceFetcher(
+      season: 1, episode: 2,
+      searchPacks: (_, _) async => [], searchEpisodes: (_, _) async => [],
+      listAddons: () async => const [SourceAddonRef('comet-id', 'Comet')],
+      fetchAddonEpisodes: (_, _, _) async {
+        calls++;
+        return [pinned, _source(name: 'Alternative direct', source: 'stremio:comet',
+          type: StreamType.directUrl, hash: '')];
+      },
+    )));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Comet'));
+    await tester.pumpAndSettle();
+    expect(find.text('Fetch all results'), findsOneWidget);
+    await tester.tap(find.text('Fetch all results'));
+    await tester.pumpAndSettle();
+    expect(calls, 1);
+    expect(find.text('Pinned direct'), findsOneWidget);
+    expect(find.text('Alternative direct'), findsOneWidget);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    expect(calls, 2, reason: 'Fetch all results is also reachable by remote');
+    expect(tester.takeException(), isNull);
+  });
+  testWidgets('episode picker excludes old direct links and retains original indexes', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    Torrent scoped(String name, int episode, StreamType type) => Torrent.fromJson({
+      ..._source(name: name, source: 'stremio:test', type: type, hash: name).toJson(),
+      'stremio_video_id': 'tt123:1:$episode',
+    });
+    final sources = [
+      scoped('Old direct', 1, StreamType.directUrl),
+      scoped('Old error', 1, StreamType.externalUrl),
+      scoped('Reusable pack', 1, StreamType.torrent),
+      scoped('Current direct', 3, StreamType.directUrl),
+      scoped('Alternative', 3, StreamType.directUrl),
+    ];
+    int? picked;
+    await tester.pumpWidget(MaterialApp(home: SourceSheet(
+      sources: sources, currentSourceIndex: 3, currentSeason: 1, currentEpisode: 3,
+      resolveSource: (_) async => 'https://example.test/video',
+      onSourceSelected: (index, _) => picked = index, onClose: () {},
+    )));
+    await tester.pumpAndSettle();
+    expect(find.text('Old direct'), findsNothing);
+    expect(find.text('Old error'), findsNothing);
+    expect(find.text('Reusable pack'), findsOneWidget);
+    expect(find.text('Current direct'), findsOneWidget);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pump();
+    expect(picked, 4);
+    expect(SeriesSourceFetcher.visibleForEpisode(sources[0], 1, 1), isTrue);
+    expect(SeriesSourceFetcher.visibleForEpisode(sources[0], 2, 1), isFalse);
+    expect(SeriesSourceFetcher.visibleForEpisode(sources[0], null, null), isTrue);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('opens on a distant playing source with variable-height cards', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final sources = List.generate(45, (i) => _source(
+      name: 'Source $i ${List.filled(18 + i % 5, 'extended release details').join(' ')}',
+      source: 'stremio:test', type: StreamType.directUrl, hash: 'direct$i',
+    ));
+    int? picked;
+    await tester.pumpWidget(MaterialApp(home: SourceSheet(
+      sources: sources, currentSourceIndex: 35,
+      resolveSource: (_) async => 'https://example.test/video',
+      onSourceSelected: (index, _) => picked = index, onClose: () {},
+    )));
+    await tester.pumpAndSettle();
+    final title = find.text(sources[35].displayTitle);
+    expect(title, findsOneWidget);
+    expect(tester.getRect(title).overlaps(const Rect.fromLTWH(0, 0, 800, 600)), isTrue);
+    expect(find.byIcon(Icons.check_circle_rounded), findsOneWidget);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pumpAndSettle();
+    expect(find.byIcon(Icons.check_circle_rounded), findsOneWidget);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pump();
+    expect(picked, 36);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('playing marker follows committed index and survives a failed resolution', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final sources = [
+      _source(name: 'First', source: 'stremio:test'),
+      _source(name: 'Second', source: 'stremio:test'),
+    ];
+    Widget sheet(int current) => MaterialApp(home: SourceSheet(
+      sources: sources, currentSourceIndex: current,
+      resolveSource: (_) async => null,
+      onSourceSelected: (_, _) => fail('Failed source must not be selected'),
+      onClose: () {},
+    ));
+    Finder markedCard() => find.ancestor(
+      of: find.byIcon(Icons.check_circle_rounded),
+      matching: find.byType(AnimatedContainer),
+    ).first;
+    await tester.pumpWidget(sheet(0));
+    await tester.pumpAndSettle();
+    expect(find.descendant(of: markedCard(), matching: find.text('First')), findsOneWidget);
+    await tester.tap(find.text('Second'));
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 3));
+    await tester.pumpAndSettle();
+    expect(find.descendant(of: markedCard(), matching: find.text('First')), findsOneWidget);
+    await tester.pumpWidget(sheet(1));
+    await tester.pumpAndSettle();
+    expect(find.descendant(of: markedCard(), matching: find.text('Second')), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+  });
+
   for (final type in StreamType.values) {
   testWidgets('original format retains transport in player picker: ${type.name}', (tester) async {
     SharedPreferences.setMockInitialValues({});

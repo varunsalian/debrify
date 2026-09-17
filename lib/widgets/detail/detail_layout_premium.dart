@@ -1119,6 +1119,7 @@ class _DetailPremiumState extends State<DetailPremium> {
       (s) => s.number == view.selectedSeasonNumber,
     );
     return DetailSeasonControl(
+      onOptions: view.seasonOptions == null ? null : () => view.seasonOptions!(view.selectedSeasonNumber),
       seasonNumber: view.selectedSeasonNumber,
       episodeCount: view.episodes.length,
       canPrev: index > 0,

@@ -22,6 +22,8 @@ import '../widgets/home/catalog_continuation_button.dart';
 import '../services/home_row_refresh.dart';
 import '../services/profiles/connection_resource_service.dart';
 import 'dart:async';
+import '../services/diagnostic_log.dart';
+import '../services/resolved_playback_link_cache.dart';
 import 'dart:convert';
 import 'dart:developer' as developer;
 import 'dart:math';
@@ -13542,6 +13544,9 @@ class _SearchScreenState extends State<SearchScreen>
                   // shows one, so the button and the action agree.
                   preferTraktResume: true,
                 ),
+                onRewatch: () => _onCatalogPlay(item, addon,
+                  isTraktSource: isTraktSource, isMdblistSource: isMdblistSource,
+                  startFromBeginning: true),
                 // Movie only: the Sources (manual list) button.
                 onBrowse: item.type == 'movie'
                     ? () => _onCatalogBrowse(
@@ -13679,6 +13684,9 @@ class _SearchScreenState extends State<SearchScreen>
                 isMdblistSource: isMdblistSource,
                 preferTraktResume: true,
               ),
+              onRewatch: () => _onCatalogPlay(item, addon,
+                isTraktSource: isTraktSource, isMdblistSource: isMdblistSource,
+                startFromBeginning: true),
               // Enriched backdrop/logo/meta for the Marquee play loader —
               // the catalog row that opened this page rarely has any of it.
               onLoaderArt: (art) => _adoptDetailPlayArt(item, art),
@@ -13760,6 +13768,18 @@ class _SearchScreenState extends State<SearchScreen>
     // the score — skips the rating dialog rather than asking twice.
     int? presetRating,
   }) async {
+    if (action == TraktItemMenuAction.clearWatchProgress) {
+      await handleTraktMenuAction(context, item, action);
+      if (!mounted) return;
+      _seriesResumeCache.clear();
+      await Future.wait([
+        _loadContinueWatching(),
+        _loadTraktContinueWatching(refreshBound: false),
+        _loadSimklContinueWatching(refreshBound: false),
+        _loadMdblistContinueWatching(refreshBound: false),
+      ]);
+      return;
+    }
     if (action == TraktItemMenuAction.removeFromPlayback) {
       if (imdb != null) await _handleContinueDetailAction(action, imdb);
       return;
@@ -13788,9 +13808,10 @@ class _SearchScreenState extends State<SearchScreen>
     // Skipped on the dedicated Search tab, which never renders those rows.
     if (mounted &&
         !widget.searchMode &&
-        (action == TraktItemMenuAction.markWatched ||
+        (action == TraktItemMenuAction.clearTraktProgress ||
+            action == TraktItemMenuAction.markWatched ||
             action == TraktItemMenuAction.markUnwatched)) {
-      _loadTraktContinueWatching(refreshBound: false);
+      await _loadTraktContinueWatching(refreshBound: false);
     }
   }
 
@@ -13814,13 +13835,14 @@ class _SearchScreenState extends State<SearchScreen>
     // shifts CW membership. Skipped on the dedicated Search tab (no rows there).
     if (mounted &&
         !widget.searchMode &&
-        (action == SimklItemMenuAction.removeFromContinueWatching ||
+        (action == SimklItemMenuAction.clearWatchProgress ||
+            action == SimklItemMenuAction.removeFromContinueWatching ||
             action == SimklItemMenuAction.removeFromList ||
             action == SimklItemMenuAction.moveToCompleted ||
             action == SimklItemMenuAction.moveToDropped ||
             action == SimklItemMenuAction.moveToOnHold ||
             action == SimklItemMenuAction.moveToWatching)) {
-      _loadSimklContinueWatching(refreshBound: false);
+      await _loadSimklContinueWatching(refreshBound: false);
     }
   }
 
@@ -13840,7 +13862,8 @@ class _SearchScreenState extends State<SearchScreen>
       presetRating: presetRating,
     );
     if (!mounted || widget.searchMode) return;
-    if (action == MdblistItemMenuAction.markWatched ||
+    if (action == MdblistItemMenuAction.clearWatchProgress ||
+        action == MdblistItemMenuAction.markWatched ||
         action == MdblistItemMenuAction.markUnwatched ||
         action == MdblistItemMenuAction.drop ||
         action == MdblistItemMenuAction.restore) {
@@ -14448,6 +14471,7 @@ class _SearchScreenState extends State<SearchScreen>
     StremioAddon addon, {
     bool isTraktSource = false,
     bool isMdblistSource = false,
+    bool startFromBeginning = false,
     // Merged series page: episodes are already shown inline, so a no-IMDb
     // series must NOT fall back to pushing a standalone EpisodesScreen (that
     // would stack a duplicate episode list on top). It resolves the resume
@@ -14526,6 +14550,20 @@ class _SearchScreenState extends State<SearchScreen>
       // right addon id into meta.addonId (addon-stream resume/next), instead of a
       // stale one left over from a previously-browsed series.
       _activeAddonId = addon.id;
+      // Rewatch is not resume reconciliation: even a cached S1E1 selection
+      // carries stale percentages. Never consult tracker/CW caches here.
+      if (startFromBeginning) {
+        await launch(AdvancedSearchSelection(
+          imdbId: item.effectiveImdbId ?? item.id,
+          isSeries: item.type == 'series', title: item.name, year: item.year,
+          season: item.type == 'series' ? 1 : null,
+          episode: item.type == 'series' ? 1 : null,
+          contentType: item.type, posterUrl: item.poster,
+          traktSource: isTraktSource, mdblistSource: isMdblistSource,
+          traktProgressPercent: 0, simklProgressPercent: 0, mdblistProgressPercent: 0,
+        ));
+        return;
+      }
 
       if (isMdblistSource &&
           trackingPolicy.progressFrom(TrackingSource.mdblist)) {

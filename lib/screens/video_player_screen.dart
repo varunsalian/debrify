@@ -1,9 +1,11 @@
+import '../widgets/playback_startup_view.dart';
 import '../utils/episode_playback_request.dart';
 import '../utils/show_shuffle.dart';
 import '../models/subtitle_source_priority.dart';
 import 'video_player/utils/subtitle_priority_selection.dart';
 import 'video_player/player_pip_route.dart';
 import 'dart:async';
+import '../services/source_selection_diagnostics.dart';
 import '../services/player_visibility.dart';
 import '../utils/media_kit_init.dart';
 import 'dart:io';
@@ -4732,6 +4734,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       return;
     }
 
+    // Match manual Next for direct links and exhausted packs: keep the player
+    // alive while resolving the following episode.
+    if (await _fetchNextEpisodeInPlayer(autoAdvance: true)) return;
+
     if (_activePlaylist == null || _activePlaylist!.isEmpty) {
       // No playlist — try series next episode
       await _handleSeriesNextEpisode();
@@ -5512,25 +5518,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
     // Series content beyond the pack: fetch the next episode IN-PLAYER when
     // possible (no relaunch), falling back to the pop-and-quick-play handoff.
-    if (_canFetchEpisodes) {
-      final se = _traktSeasonEpisode();
-      if (se.season != null && se.episode != null) {
-        var next = _adjacentEpisode(se.season!, se.episode!, 1);
-        if (next == null && widget.contentImdbId != null) {
-          final nextEp = await NextEpisodeService.findNextEpisode(
-            widget.contentImdbId!,
-            se.season!,
-            se.episode!,
-          );
-          if (nextEp != null) next = (nextEp.season, nextEp.episode);
-          if (!mounted) return;
-        }
-        if (next != null) {
-          await _fetchAndPlayEpisode(next.$1, next.$2);
-          return;
-        }
-      }
-    }
+    if (await _fetchNextEpisodeInPlayer()) return;
 
     // Series content without season pack: find next episode and trigger Quick Play
     if (widget.requestMagicNext == null) {
@@ -5637,9 +5625,33 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     }
   }
 
-  /// When no playlist-based next episode exists and content is a series,
-  /// find the next episode via Stremio meta and pop the player with the result.
-  /// The caller (TorrentSearchScreen) will receive this and trigger Quick Play.
+  /// Shared manual/EOF path beyond the current pack. A handled fetch, including
+  /// cancellation or failure, stays in-player rather than relaunching it.
+  Future<bool> _fetchNextEpisodeInPlayer({bool autoAdvance = false}) async {
+    if (!_canFetchEpisodes) return false;
+    if (_episodeFetchInProgress) return true;
+    final identity = _playlistIdentityToken;
+    final navigation = _episodeNavigationGeneration;
+    bool stale() => !mounted || identity != _playlistIdentityToken ||
+        navigation != _episodeNavigationGeneration ||
+        (autoAdvance && _sleepStopLatched);
+    if (stale()) return true;
+    final se = _traktSeasonEpisode();
+    if (se.season == null || se.episode == null) return false;
+    var next = _adjacentEpisode(se.season!, se.episode!, 1);
+    if (next == null && widget.contentImdbId != null) {
+      final episode = await NextEpisodeService.findNextEpisode(
+        widget.contentImdbId!, se.season!, se.episode!);
+      if (episode != null) next = (episode.season, episode.episode);
+    }
+    if (stale()) return true;
+    if (next == null) return false;
+    debugPrint('Player: Next episode S${next.$1}E${next.$2} in-player autoAdvance=$autoAdvance');
+    await _fetchAndPlayEpisode(next.$1, next.$2, autoAdvance: autoAdvance);
+    return true;
+  }
+
+  /// Legacy fallback: pop with the next episode for the caller's Quick Play.
   Future<bool> _handleSeriesNextEpisode() async {
     // Already popping to hand off the next episode — a second trigger (manual
     // Next racing end-of-video auto-advance) must not run again.
@@ -8454,6 +8466,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   }
 
   Future<void> _commitValidatedStremioSource(Torrent? source) async {
+    logSourceSelection('player_source_committed', source: source,
+        index: _currentSourceIndex, player: 'mpv');
     final commit = widget.onStremioSourceCommitted;
     if (source == null || commit == null) return;
     try {
@@ -9019,6 +9033,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       unawaited(_commitValidatedStremioSource(source));
     } catch (e) {
       debugPrint('Player: manual Stremio source rejected (${e.runtimeType})');
+      logSourceSelection('player_switch_rejected', source: source, index: index,
+          previousIndex: previousSourceIndex, player: 'mpv', reason: 'validation_failed');
       // The candidate player is stopped by the validator. Restore the known
       // working stream when possible, but never validate/fail over to another
       // row: this was an explicit user selection.
@@ -13504,6 +13520,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       currentNavigation: () => _episodeNavigationGeneration,
       isActive: () =>
           mounted &&
+          (!autoAdvance || !_sleepStopLatched) &&
           (shuffleGeneration == null ||
               shuffleGeneration == _showShuffleGeneration),
     );
@@ -13520,7 +13537,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     try {
       final pinned = fetcher.pinnedDirectCandidates;
       if (pinned != null) {
-        await for (final candidate in pinned(season, episode)) {
+        await for (final candidate in pinned(season, episode, onPreferredMissing: () {
+          if (!request!.isCurrent || !mounted) return;
+          messenger.showSnackBar(const SnackBar(content: Text(
+              'Your previous source is unavailable for this episode. Trying other sources.')));
+        })) {
           if (!request.isCurrent) {
             return EpisodePlaybackOutcome.cancelled;
           }
@@ -13683,6 +13704,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     int? shuffleGeneration,
     bool autoAdvance = false,
   }) async {
+    logSourceSelection('next_episode_candidate', source: t, index: sourceIndex,
+        season: season, episode: episode, player: 'mpv');
     if (!await widget.seriesSourceFetcher!.allowsCandidate(t)) {
       return EpisodePlaybackOutcome.unavailable;
     }
@@ -13695,6 +13718,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     }
     if (!request.isCurrent) return EpisodePlaybackOutcome.cancelled;
     if (playlist == null || playlist.isEmpty) {
+      logSourceSelection('next_episode_candidate_rejected', source: t, index: sourceIndex,
+          season: season, episode: episode, player: 'mpv', reason: 'no_playlist');
       return EpisodePlaybackOutcome.unavailable;
     }
     if (playlist.length == 1) {
@@ -13723,18 +13748,21 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       }
     }
     _setManualSelectionMode(allowResume: true);
-    if (shuffleGeneration != null) _isAutoAdvancing = autoAdvance;
+    _isAutoAdvancing = autoAdvance;
     final resolvedPlaylist = playlist;
-    return request.attempt(
+    final outcome = await request.attempt(
       () => _switchToSourcePlaylist(
         sourceIndex,
         resolvedPlaylist,
         targetSeason: season,
         targetEpisode: episode,
-        suppressResume: shuffleGeneration != null,
+        suppressResume: autoAdvance || shuffleGeneration != null,
         request: request,
       ),
     );
+    logSourceSelection('next_episode_candidate_outcome', source: t, index: sourceIndex,
+        season: season, episode: episode, player: 'mpv', reason: outcome.name);
+    return outcome;
   }
 
   /// The episode adjacent to (season, episode) in the show's full TVMaze
@@ -14198,81 +14226,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                   const Center(
                     child: CircularProgressIndicator(color: Colors.white),
                   ),
-                if (_startupGateActive && !_startupGateOverlayHidden)
-                  ColoredBox(
-                    color: Colors.black,
-                    child: SafeArea(
-                      child: Align(
-                        alignment: Alignment.topRight,
-                        child: Padding(
-                          padding: EdgeInsets.only(
-                            top: PlatformUtil.isTelevision ? 32 : 16,
-                            right: PlatformUtil.isTelevision ? 48 : 20,
-                          ),
-                          child: Container(
-                            constraints: BoxConstraints(
-                              maxWidth: math.min(
-                                PlatformUtil.isTelevision ? 440.0 : 320.0,
-                                math.max(
-                                  120.0,
-                                  MediaQuery.sizeOf(context).width -
-                                      (PlatformUtil.isTelevision ? 96.0 : 40.0),
-                                ),
-                              ),
-                            ),
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 14,
-                              vertical: 10,
-                            ),
-                            decoration: BoxDecoration(
-                              color: const Color(0xE61A1C20),
-                              borderRadius: BorderRadius.circular(999),
-                              border: Border.all(
-                                color: Colors.white.withValues(alpha: 0.14),
-                              ),
-                              boxShadow: const [
-                                BoxShadow(
-                                  color: Color(0x66000000),
-                                  blurRadius: 18,
-                                  offset: Offset(0, 6),
-                                ),
-                              ],
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const SizedBox(
-                                  width: 15,
-                                  height: 15,
-                                  child: CircularProgressIndicator(
-                                    color: Colors.white60,
-                                    strokeWidth: 1.8,
-                                  ),
-                                ),
-                                const SizedBox(width: 10),
-                                Flexible(
-                                  child: Text(
-                                    _startupGateMessage,
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
-                                    softWrap: true,
-                                    style: const TextStyle(
-                                      color: Colors.white70,
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w500,
-                                      letterSpacing: 0.1,
-                                      decoration: TextDecoration.none,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                // Transition overlay above video
+                // Non-startup transitions still use the existing loading UI.
                 if (_rainbowActive) _buildTransitionOverlay(),
                 if (_showStremioTvNextLoading)
                   _buildStremioTvNextLoadingOverlay(),
@@ -14521,6 +14475,21 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                     onPanUpdate: _onPanUpdate,
                     onPanEnd: _onPanEnd,
                   ),
+                // Above the gesture layer: startup hides normal controls, but
+                // leaving the player must remain available while links resolve.
+                if (_startupGateActive && !_startupGateOverlayHidden)
+                  Positioned.fill(child: inPip
+                    // PiP must not reveal candidates before validation succeeds.
+                    // No controls, focus, or gestures in the compact shield.
+                    ? const AbsorbPointer(child: ColoredBox(color: Colors.black))
+                    : PlaybackStartupView(
+                    title: widget.contentTitle ?? widget.title,
+                    episode: widget.contentType == 'series' && widget.contentSeason != null && widget.contentEpisode != null
+                        ? 'Season ${widget.contentSeason} · Episode ${widget.contentEpisode}' : null,
+                    details: _startupGateMessage,
+                    retrying: _startupGateMessage.startsWith('Stream unavailable'),
+                    onBack: widget.hideBackButton ? null : () => Navigator.of(context).maybePop(),
+                  )),
                 // Controls overlay (shown only when ready)
                 if (isReady &&
                     !inPip &&

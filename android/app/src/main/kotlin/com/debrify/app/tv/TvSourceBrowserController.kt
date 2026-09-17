@@ -9,6 +9,13 @@ import android.view.View
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import com.debrify.app.R
+
+internal fun sourceVisibleForEpisode(streamType: String, videoId: String?, season: Int?, episode: Int?): Boolean {
+    if (streamType == "torrent" || season == null || episode == null) return true
+    val scope = Regex(":(\\d+):(\\d+)$").find(videoId.orEmpty()) ?: return true
+    return scope.groupValues[1].toIntOrNull() == season && scope.groupValues[2].toIntOrNull() == episode
+}
 
 /** Full-screen, DPAD-driven source picker. Grouping is presentation only: entries
  * retain their original source indexes and their incoming order. */
@@ -23,6 +30,11 @@ data class TvSourceBrowserEntry(
     val seasonPack: Boolean,
     val badgeName: String = title,
     val badgeDescription: String? = null,
+    val description: String? = null,
+    val originalText: Boolean = false,
+    val transport: String = if (direct) "directUrl" else "torrent",
+    val addonName: String? = null,
+    val addonLogo: String? = null,
 )
 
 class TvSourceBrowserController(
@@ -53,7 +65,7 @@ class TvSourceBrowserController(
          * as zero-count rail groups so a silent addon stays visible. */
         fun placeholderGroups(): List<Pair<String, String>> = emptyList()
 
-        /** Per-addon fetch state for an EMPTY group: null = no fetch for this
+        /** Per-addon fetch state, including populated groups: null = no fetch for this
          * group, else "idle" / "fetching" / "failed" / "fetched" (fetched but
          * still empty = retryable). */
         fun groupFetchState(groupId: String): String? = null
@@ -105,6 +117,8 @@ class TvSourceBrowserController(
     private data class BadgeSlot(
         val entry: TvSourceBrowserEntry,
         val title: TextView,
+        val description: TextView?,
+        val identity: TextView?,
         val view: TvStreamBadgeStrip,
         val builtIn: TvStreamBadgeStrip,
         val current: Boolean,
@@ -113,17 +127,22 @@ class TvSourceBrowserController(
         fun showBuiltIn(configured: Boolean) {
             fun badge(label: String): Map<String, Any> = mapOf(
                 "label" to label,
-                "textColor" to if (current && label == "▮▮▮") {
-                    if (active) 0xFFAB2733.toInt() else 0xFFE23D4C.toInt()
-                } else if (active) Color.BLACK else 0xCCFFFFFF.toInt(),
+                "textColor" to if (active) Color.BLACK else 0xCCFFFFFF.toInt(),
                 "fillColor" to if (active) 0x0F000000 else 0x14FFFFFF,
             )
             builtIn.show(buildList {
-                if (!configured && entry.quality.isNotBlank()) add(badge(entry.quality))
-                entry.size?.let { add(badge(it)) }
-                if (!entry.direct && entry.seeders > 0) add(badge("${entry.seeders} seeders"))
-                if (entry.direct) add(badge("DIRECT"))
-                if (current) add(badge("▮▮▮"))
+                if (entry.originalText) {
+                    add(badge(when (entry.transport.lowercase()) {
+                        "directurl" -> "DIRECT"
+                        "externalurl" -> "EXTERNAL"
+                        else -> "TORRENT"
+                    }))
+                } else {
+                    if (!configured && entry.quality.isNotBlank()) add(badge(entry.quality))
+                    if (entry.direct) add(badge("DIRECT"))
+                    entry.size?.let { add(badge(it)) }
+                    if (!entry.direct && entry.seeders > 0) add(badge("${entry.seeders} seeders"))
+                }
             })
         }
     }
@@ -355,7 +374,8 @@ class TvSourceBrowserController(
             render()
         } else {
             val oldSelection = selectedResult
-            selectedResult = (selectedResult + delta).coerceIn(0, (visible().size - 1).coerceAtLeast(0))
+            val fetchable = groups.getOrNull(selectedGroup)?.id?.let { callbacks.groupFetchState(it) } != null
+            selectedResult = (selectedResult + delta).coerceIn(0, (visible().size - 1 + if (fetchable) 1 else 0).coerceAtLeast(0))
             if (selectedResult != oldSelection) refreshResultSelection(oldSelection)
         }
     }
@@ -367,7 +387,7 @@ class TvSourceBrowserController(
             callbacks.onSourceSelected(entry.index)
             return
         }
-        // Empty addon group: the sole row is "Fetch results".
+        // The fetch action follows the group's source rows.
         val groupId = groups.getOrNull(selectedGroup)?.id ?: return
         val state = callbacks.groupFetchState(groupId) ?: return
         if (state != "fetching") callbacks.requestGroupFetch(groupId)
@@ -439,26 +459,25 @@ class TvSourceBrowserController(
         context.setTextColor(if (transientError == null) 0x8CFFFFFF.toInt() else 0xFFFF7A85.toInt())
         loadMore.visibility = View.GONE
         results.removeAllViews()
-        // Empty addon group: one "Fetch results" row (also the retry after a
-        // failure or an empty fetch).
-        val fetchState = if (entries.isEmpty() && groupId != null) {
+        // Keep fetching available even when the launch only supplied a pin.
+        val fetchState = if (groupId != null) {
             callbacks.groupFetchState(groupId)
         } else null
-        if (fetchState != null && groupId != null) {
-            val active = zone == Zone.RESULTS && selectedResult >= 0
-            val label = when (fetchState) {
-                "fetching" -> "Fetching episode results…"
-                "failed" -> "Fetch failed — try again"
-                else -> "Fetch results  ›"
-            }
-            results.addView(fetchRow(label, active, fetchState != "fetching") {
-                callbacks.requestGroupFetch(groupId)
-            })
-        }
         entries.forEachIndexed { i, entry ->
             results.addView(sourceRow(entry, zone == Zone.RESULTS && i == selectedResult, entry.index == callbacks.currentIndex()) {
                 selectedResult = i
                 callbacks.onSourceSelected(entry.index)
+            })
+        }
+        if (fetchState != null && groupId != null) {
+            val active = zone == Zone.RESULTS && selectedResult == entries.size
+            val label = when (fetchState) {
+                "fetching" -> "Fetching episode results…"
+                "failed" -> "Fetch failed — try again"
+                else -> if (entries.isEmpty()) "Fetch results  ›" else "Fetch all results  ›"
+            }
+            results.addView(fetchRow(label, active, fetchState != "fetching") {
+                callbacks.requestGroupFetch(groupId)
             })
         }
         resultsScroll.post {
@@ -468,6 +487,10 @@ class TvSourceBrowserController(
     }
 
     private fun refreshResultSelection(oldSelection: Int) {
+        if (oldSelection >= visible().size || selectedResult >= visible().size) {
+            renderResults()
+            return
+        }
         listOf(oldSelection, selectedResult).distinct().forEach { index ->
             val row = results.getChildAt(index) ?: return@forEach
             val slot = row.tag as? BadgeSlot ?: return@forEach
@@ -476,6 +499,11 @@ class TvSourceBrowserController(
             slot.active = active
             (row.background as GradientDrawable).setColor(if (active) Color.WHITE else 0x07FFFFFF)
             slot.title.setTextColor(if (active) Color.BLACK else 0xE6FFFFFF.toInt())
+            slot.description?.setTextColor(if (active) 0x8A000000.toInt() else 0x99FFFFFF.toInt())
+            slot.identity?.setTextColor(if (active) Color.BLACK else Color.WHITE)
+            slot.title.compoundDrawablesRelative[2]?.setTint(
+                if (active) 0xFF16734C.toInt() else 0xFF35C88A.toInt()
+            )
             slot.showBuiltIn(customBadgesConfigured)
         }
         resultsScroll.post {
@@ -509,28 +537,73 @@ class TvSourceBrowserController(
     }
 
     private fun sourceRow(entry: TvSourceBrowserEntry, active: Boolean, current: Boolean, click: () -> Unit): View = LinearLayout(activity).apply {
-        orientation = LinearLayout.VERTICAL
+        orientation = LinearLayout.HORIZONTAL
+        gravity = android.view.Gravity.CENTER_VERTICAL
         minimumHeight = dp(58)
         setPadding(dp(18), dp(11), dp(18), dp(11))
-        background = bg(active, false)
+        background = bg(active, false).apply {
+            setStroke(dp(2), if (current) 0xFF35C88A.toInt() else Color.TRANSPARENT)
+        }
+        isSelected = current
         setOnClickListener { click() }
         val title = TextView(activity).apply {
             text = entry.title
             setTextColor(if (active) Color.BLACK else 0xE6FFFFFF.toInt())
             textSize = 14f
             setTypeface(typeface, 1)
+            if (current) {
+                contentDescription = "${entry.title}, Playing"
+                val marker = activity.getDrawable(R.drawable.ic_source_playing)?.mutate()
+                marker?.setBounds(0, 0, dp(21), dp(21))
+                marker?.setTint(if (active) 0xFF16734C.toInt() else 0xFF35C88A.toInt())
+                compoundDrawablePadding = dp(14)
+                setCompoundDrawablesRelative(null, null, marker, null)
+            }
         }
-        addView(title, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+        val body = LinearLayout(activity).apply { orientation = LinearLayout.VERTICAL }
+        addView(body, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        body.addView(title, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+        val description = entry.description?.let { detail ->
+            TextView(activity).apply {
+                text = detail
+                textSize = 12f
+                setTextColor(if (active) 0x8A000000.toInt() else 0x99FFFFFF.toInt())
+                setLineSpacing(0f, 1.5f)
+                body.addView(this, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(3) })
+            }
+        }
         val builtIn = TvStreamBadgeStrip(activity, chipHeightDp = 22)
-        addView(builtIn, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+        body.addView(builtIn, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(9) })
         val badges = TvStreamBadgeStrip(activity)
-        addView(badges, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+        body.addView(badges, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+        var identity: TextView? = null
+        entry.addonName?.takeIf { it.isNotBlank() }?.let { name ->
+            val provider = LinearLayout(activity).apply {
+                orientation = LinearLayout.VERTICAL
+                gravity = android.view.Gravity.CENTER
+            }
+            addView(provider, LinearLayout.LayoutParams(dp(80), LinearLayout.LayoutParams.WRAP_CONTENT).apply { marginStart = dp(12) })
+            val logo = android.widget.ImageView(activity)
+            provider.addView(logo, LinearLayout.LayoutParams(dp(40), dp(40)))
+            logo.setImageResource(android.R.drawable.ic_menu_gallery)
+            entry.addonLogo?.takeIf { it.isNotBlank() }?.let {
+                com.bumptech.glide.Glide.with(activity).load(it).fitCenter()
+                    .error(android.R.drawable.ic_menu_gallery).into(logo)
+            }
+            identity = TextView(activity).apply {
+                text = name
+                textSize = 11f
+                gravity = android.view.Gravity.CENTER
+                setTextColor(if (active) Color.BLACK else Color.WHITE)
+                provider.addView(this, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(5) })
+            }
+        }
         // Unlike Flutter's lazy list, every native row remains laid out. The
         // selected row's top delta directly captures expansion above it.
         addOnLayoutChangeListener { view, _, top, _, _, _, oldTop, _, oldBottom ->
             preserveBadgeAnchor(view, top, oldTop, oldBottom - oldTop)
         }
-        val slot = BadgeSlot(entry, title, badges, builtIn, current, active)
+        val slot = BadgeSlot(entry, title, description, identity, badges, builtIn, current, active)
         tag = slot
         slot.showBuiltIn(customBadgesConfigured)
         badgeCache[badgeKey(entry)]?.let { badges.show(it) }

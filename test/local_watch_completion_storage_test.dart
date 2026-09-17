@@ -1,7 +1,11 @@
+import 'dart:convert';
 import 'package:debrify/services/debrify_tv_database.dart';
 import 'package:debrify/services/iptv_media_store.dart';
 import 'package:debrify/models/stremio_addon.dart';
 import 'package:debrify/services/storage_service.dart';
+import 'package:debrify/services/series_progress_reset_service.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -124,6 +128,271 @@ void main() {
     );
     expect(StorageService.localCompletionRevision.value, revisionBefore + 1);
   });
+
+  test(
+    'reset reports a failed tracker and still clears local and other trackers',
+    () async {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('trakt_access_token', 'test-token');
+      await prefs.setString('simkl_access_token', 'test-token');
+      await StorageService.saveSeriesPlaybackState(
+        seriesTitle: 'Show',
+        season: 1,
+        episode: 1,
+        positionMs: 500,
+        durationMs: 1000,
+        imdbId: 'tt001',
+      );
+      final requests = <Uri>[];
+      await http.runWithClient(
+        () async {
+          final failures = await SeriesProgressResetService.clear(
+            'tt001',
+            'Show',
+          );
+          expect(failures, ['Trakt']);
+          expect(
+            await StorageService.getEpisodeProgressByImdbId('tt001'),
+            isEmpty,
+          );
+        },
+        () => MockClient((request) async {
+          requests.add(request.url);
+          if (request.url.host.contains('trakt'))
+            return http.Response('{}', 503);
+          return http.Response('[]', 200);
+        }),
+      );
+      expect(requests.where((uri) => uri.host.contains('simkl')), isNotEmpty);
+    },
+  );
+
+  test(
+    'expired Trakt token with failed refresh reports Trakt failure',
+    () async {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('trakt_access_token', 'expired-token');
+      await prefs.setString('trakt_refresh_token', 'refresh-token');
+      await prefs.setInt('trakt_token_expiry', 1);
+      final requests = <Uri>[];
+      await http.runWithClient(
+        () async {
+          expect(await SeriesProgressResetService.clear('tt001', 'Show'), [
+            'Trakt',
+          ]);
+        },
+        () => MockClient((request) async {
+          requests.add(request.url);
+          return http.Response('{}', 503);
+        }),
+      );
+      expect(requests, isNotEmpty);
+      expect(requests.every((uri) => uri.path == '/oauth/token'), isTrue);
+    },
+  );
+
+  test(
+    'completion rederivation preserves another IMDb series with the same title',
+    () async {
+      final prefs = await SharedPreferences.getInstance();
+      await StorageService.markEpisodeAsFinished(
+        seriesTitle: 'Shared Title',
+        season: 1,
+        episode: 1,
+        imdbId: 'tt002',
+      );
+      final before = prefs.getString('playback_state_v1');
+      // The reset title's inventory uses the same display name as a distinct show.
+      await prefs.setString(
+        StorageService.localSeriesCompletionStateKey,
+        jsonEncode({
+          'tt001': {
+            'title': 'Shared Title',
+            'episodes': {'1-1': 0},
+            'caughtUp': false,
+          },
+        }),
+      );
+      expect(
+        await SeriesProgressResetService.clear('tt001', 'Shared Title'),
+        isEmpty,
+      );
+      expect(prefs.getString('playback_state_v1'), before);
+      final completion = jsonDecode(
+        prefs.getString(StorageService.localSeriesCompletionStateKey)!,
+      );
+      expect(completion['tt001']['caughtUp'], isFalse);
+      expect(
+        await StorageService.getFinishedEpisodesByImdbId(
+          imdbId: 'tt001',
+          seriesTitle: 'Shared Title',
+        ),
+        isEmpty,
+      );
+      expect(
+        await StorageService.getFinishedEpisodesByImdbId(imdbId: 'tt002'),
+        {
+          '1': {1},
+        },
+      );
+    },
+  );
+
+  test(
+    'completion title fallback still supports ID-less legacy records',
+    () async {
+      await StorageService.markEpisodeAsFinished(
+        seriesTitle: 'Legacy Show',
+        season: 1,
+        episode: 2,
+      );
+      final index = await StorageService.getFinishedSeriesEpisodeIndex();
+      expect(index['title:legacy show'], {
+        '1': {2},
+      });
+      expect(
+        await StorageService.getFinishedEpisodesByImdbId(
+          imdbId: 'tt-legacy',
+          seriesTitle: 'Legacy Show',
+        ),
+        {
+          '1': {2},
+        },
+      );
+    },
+  );
+
+  test('reset skips Trakt only when credentials are absent', () async {
+    var requests = 0;
+    await http.runWithClient(
+      () async {
+        expect(
+          await SeriesProgressResetService.clear('tt001', 'Show'),
+          isEmpty,
+        );
+      },
+      () => MockClient((request) async {
+        requests++;
+        return http.Response('{}', 503);
+      }),
+    );
+    expect(requests, 0);
+  });
+
+  test(
+    'global movie reset clears watched and resume state only for that movie',
+    () async {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('series_source_tt001', 'keep');
+      for (final id in ['tt001', 'tt002']) {
+        await StorageService.markMovieAsFinished(id);
+        await StorageService.saveVideoPlaybackState(
+          videoTitle: id,
+          videoUrl: 'https://test/$id',
+          positionMs: 500,
+          durationMs: 1000,
+          imdbId: id,
+        );
+        await StorageService.saveContinueWatchingItem(
+          imdbId: id,
+          title: id,
+          contentType: 'movie',
+        );
+      }
+      expect(
+        await SeriesProgressResetService.clear('tt001', 'Movie', isMovie: true),
+        isEmpty,
+      );
+      expect(await StorageService.isMovieFinished('tt001'), isFalse);
+      expect(
+        await StorageService.getVideoPlaybackState(videoTitle: 'tt001'),
+        isNull,
+      );
+      expect(await StorageService.isMovieFinished('tt002'), isTrue);
+      expect(
+        await StorageService.getVideoPlaybackState(
+          videoTitle: 'tt002',
+          includeFinished: true,
+        ),
+        isNotNull,
+      );
+      expect(
+        (await StorageService.getContinueWatchingItems()).any(
+          (e) => e['imdbId'] == 'tt001',
+        ),
+        isFalse,
+      );
+      expect(prefs.getString('series_source_tt001'), 'keep');
+    },
+  );
+
+  test(
+    'series reset clears all seasons and tracker snapshots but preserves other titles and bindings',
+    () async {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('series_source_tt001', 'keep source binding');
+      for (final id in ['tt001', 'tt002']) {
+        for (final season in [0, 1, 2]) {
+          await StorageService.saveSeriesPlaybackState(
+            seriesTitle: id,
+            season: season,
+            episode: 1,
+            positionMs: 500,
+            durationMs: 1000,
+            imdbId: id,
+          );
+          await StorageService.markEpisodeAsFinished(
+            seriesTitle: id,
+            season: season,
+            episode: 2,
+            imdbId: id,
+          );
+        }
+        await StorageService.saveEpisodeTraktProgress(
+          imdbId: id,
+          percents: {'1_1': 50},
+        );
+        await StorageService.saveEpisodeSimklProgress(
+          imdbId: id,
+          percents: {'1_1': 50},
+        );
+        await StorageService.saveEpisodeMdblistProgress(
+          imdbId: id,
+          percents: {'1_1': 50},
+        );
+      }
+      await StorageService.clearSeriesWatchProgress('tt001', 'tt001');
+      expect(await StorageService.getEpisodeProgressByImdbId('tt001'), isEmpty);
+      expect(
+        await StorageService.getFinishedEpisodesByImdbId(
+          imdbId: 'tt001',
+          seriesTitle: 'tt001',
+        ),
+        isEmpty,
+      );
+      expect(
+        await StorageService.getEpisodeTraktProgress(imdbId: 'tt001'),
+        isEmpty,
+      );
+      expect(
+        await StorageService.getEpisodeSimklProgress(imdbId: 'tt001'),
+        isEmpty,
+      );
+      expect(
+        await StorageService.getEpisodeMdblistProgress(imdbId: 'tt001'),
+        isEmpty,
+      );
+      expect(
+        await StorageService.getEpisodeProgressByImdbId('tt002'),
+        isNotEmpty,
+      );
+      expect(
+        await StorageService.getEpisodeSimklProgress(imdbId: 'tt002'),
+        isNotEmpty,
+      );
+      expect(prefs.getString('series_source_tt001'), 'keep source binding');
+    },
+  );
 
   test('clearing playback by IMDb invalidates local completion', () async {
     await StorageService.markEpisodeAsFinished(

@@ -23,6 +23,143 @@ void main() {
   final playbackService = File(
     'lib/services/torrent_playback_service.dart',
   ).readAsStringSync();
+  final launcher = File(
+    'lib/services/video_player_launcher.dart',
+  ).readAsStringSync();
+
+  test('both automatic tracker launch copies retain saved-source recovery', () {
+    final copies = launcher
+        .split('args = VideoPlayerLaunchArgs(')
+        .skip(1)
+        .where((copy) => copy.trimLeft().startsWith('videoUrl: args.videoUrl'))
+        .toList();
+    expect(copies, hasLength(2));
+    for (final copy in copies) {
+      final arguments = copy.split(');').first;
+      expect(
+        arguments,
+        contains(
+          'startupHasRemainingSavedSources: args.startupHasRemainingSavedSources',
+        ),
+      );
+      expect(
+        arguments,
+        contains('startupResolverProvider: args.startupResolverProvider'),
+      );
+    }
+  });
+
+  test(
+    'recovery uses automatic probes without changing manual source resolution',
+    () {
+      expect(
+        nativePlayer,
+        contains(
+          '"automaticRecovery" to (startupFailoverDispatching && startupRecoveryCandidateIndices != null)',
+        ),
+      );
+      expect(
+        playerBridge,
+        contains("playlistRequest['automaticRecovery'] == true"),
+      );
+      expect(
+        playerBridge,
+        contains('_startupSourcePlaylistResolver ?? _sourcePlaylistResolver'),
+      );
+      expect(
+        launcher,
+        contains('automaticRecovery && !await recoveryPreflight.allows'),
+      );
+      expect(
+        launcher,
+        contains('TorrentPlaybackService.resolveRecoverySource(torrent,'),
+      );
+      expect(launcher, contains(': await resolveSourceToPlaylist(torrent)'));
+      final automaticProbe = _between(
+        playbackService,
+        'static Future<List<PlaylistEntry>?> resolveRecoverySource(',
+        '/// Builds the [SeriesSourceFetcher]',
+      );
+      expect(automaticProbe, contains('_probeCandidates(provider, [source]'));
+      expect(
+        automaticProbe,
+        contains('tryNextOnFailure: false, maxAttempts: 1'),
+      );
+    },
+  );
+
+  test(
+    'saved direct recovery snapshots its effective acquisition provider',
+    () {
+      final launch = _between(
+        playbackService,
+        'static Future<void> _launch(',
+        'static bool _isSeriesPlaylist(',
+      );
+      expect(launch, contains('final resolverProvider ='));
+      expect(launch, contains('await _defaultConfiguredProvider()'));
+      expect(launch, contains('_resolverFor(resolverProvider)'));
+      expect(launch, contains('startupResolverProvider: resolverProvider'));
+      expect(
+        launch,
+        contains('recoveryProvider ?? await _defaultConfiguredProvider()'),
+      );
+      expect(
+        launch,
+        contains(
+          '_lazySourceCommitter(meta, preferredProvider: resolverProvider)',
+        ),
+      );
+      expect(
+        nativePlayer,
+        contains('startupResolverProvider.equals("pikpak", ignoreCase = true)'),
+      );
+      expect(
+        nativePlayer,
+        contains('startupPikPakTorrentAcquisitionAttempted = true'),
+      );
+    },
+  );
+
+  test(
+    'native recovery reports candidate production before merging duplicates',
+    () {
+      expect(launcher, contains("'recoveryCandidateCount': automatic.length"));
+      expect(nativePlayer, contains('map["recoveryCandidateCount"]'));
+      expect(nativePlayer, contains('startupRecoveryIsConsumed('));
+    },
+  );
+
+  test('saved direct fetch and resolution honor the preferred provider', () {
+    final direct = _between(
+      playbackService,
+      '// Addon-direct pins store provenance',
+      '// Cheap skip: a bound DEBRID source',
+    );
+    expect(direct, contains('recoveryProvider: preferredProvider'));
+    expect(
+      direct,
+      contains('seriesFetcherFor(meta: meta, provider: preferredProvider)'),
+    );
+    expect(
+      direct,
+      contains('movieFetcherFor(meta: meta, provider: preferredProvider)'),
+    );
+  });
+
+  test('failure removals and commits share the session persistence queue', () {
+    final failure = _between(
+      playerBridge,
+      "case 'startupSourceFailed':",
+      "case 'requestMoreTorrentSources':",
+    );
+    expect(failure, contains('failureSession.enqueue('));
+    expect(failure, isNot(contains('_startupFailureDrain.then')));
+    expect(
+      playerBridge,
+      contains('persistenceSession.enqueue(() => committer(sourceIndex))'),
+    );
+  });
 
   test(
     'Flutter explicit source picks validate only the selected candidate',
@@ -172,24 +309,66 @@ void main() {
     expect(flutterPlayer, contains('if (containsRequestedEpisode)'));
   });
 
-  test('Flutter startup failures retain pins and still recover', () {
-    final startup = _between(
-      flutterPlayer,
-      'Future<bool> _openInitialVodWithFailover(',
-      'Future<void> _commitValidatedStremioSource(',
-    );
-    final directBinding = _between(
-      playbackService,
-      '// Addon-direct pins store provenance',
-      '// Cheap skip: a bound DEBRID source',
-    );
+  test(
+    'Flutter startup failures unpin the failed source and still recover',
+    () {
+      final startup = _between(
+        flutterPlayer,
+        'Future<bool> _openInitialVodWithFailover(',
+        'Future<void> _commitValidatedStremioSource(',
+      );
+      final directBinding = _between(
+        playbackService,
+        '// Addon-direct pins store provenance',
+        '// Cheap skip: a bound DEBRID source',
+      );
 
-    expect(startup, isNot(contains('_reportRejectedStremioSource')));
-    expect(flutterPlayer, contains("'startupSourcesExhausted': true"));
-    expect(playbackService, isNot(contains('_rejectedDirectSourceHandler')));
-    expect(directBinding, isNot(contains('removeSourceEntry(imdbId, source)')));
-    expect(playbackService, contains('remainingSources'));
-    expect(playbackService, contains('skipBoundSources: true'));
+      expect(startup, isNot(contains('_reportRejectedStremioSource')));
+      expect(flutterPlayer, contains("'startupSourcesExhausted': true"));
+      expect(playbackService, isNot(contains('_rejectedDirectSourceHandler')));
+      expect(directBinding, contains('removeSourceEntry(imdbId, source)'));
+      expect(directBinding, contains('ResolvedPlaybackLinkCache.remove'));
+      expect(directBinding, isNot(contains('[source, ...remainingSources]')));
+      expect(
+        directBinding,
+        contains(
+          'startupHasRemainingSavedSources: remainingSources.isNotEmpty',
+        ),
+      );
+      expect(playbackService, contains('remainingSources'));
+      expect(playbackService, contains('skipBoundSources: true'));
+    },
+  );
+
+  test('every saved-source launch preserves remaining-pin recovery', () {
+    final boundPlayback = _between(
+      playbackService,
+      'static Future<bool> _playViaBound(',
+      '/// Continue after a saved source resolved successfully',
+    );
+    // Direct addons, local files, and debrid/native-cloud packs all need the
+    // flag, including when native startup has only one permitted attempt.
+    final launches = boundPlayback.split('await _launch(').skip(1).toList();
+    expect(launches, hasLength(3));
+    for (final launch in launches) {
+      final arguments = launch.split('onStartupSourcesExhausted:').first;
+      final cleanup = _between(
+        launch,
+        'onStartupSourcesExhausted:',
+        'await _recoverAfterBoundStartupFailure(',
+      );
+      expect(cleanup, contains('await FailedSavedSource.cleanup('));
+      expect(
+        cleanup,
+        isNot(contains('await SeriesSourceService.removeSourceEntry')),
+      );
+      expect(
+        arguments,
+        contains(
+          'startupHasRemainingSavedSources: remainingSources.isNotEmpty',
+        ),
+      );
+    }
   });
 
   test('bound startup recovery retains the preferred provider', () {
@@ -245,9 +424,9 @@ void main() {
   });
 
   test('Android TV source commits are bounded and session scoped', () {
-    expect(playerBridge, contains('class _StremioSourcePersistenceSession'));
-    expect(playerBridge, contains('operation().timeout(timeout)'));
-    expect(playerBridge, contains('_tail.timeout(timeout)'));
+    expect(playerBridge, contains('class StremioSourcePersistenceSession'));
+    expect(playerBridge, contains('queued.timeout(waitTimeout'));
+    expect(playerBridge, contains('_tail.timeout(waitTimeout)'));
     expect(
       playerBridge,
       contains("payloadWithFont['sourcePersistenceSessionId']"),

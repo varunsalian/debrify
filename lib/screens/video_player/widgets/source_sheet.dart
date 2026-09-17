@@ -1,4 +1,5 @@
 import 'dart:ui';
+import '../../../services/source_selection_diagnostics.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -161,7 +162,9 @@ class _SourceSheetState extends State<SourceSheet> {
   void didUpdateWidget(SourceSheet oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (!identical(oldWidget.sources, widget.sources) ||
-        oldWidget.currentSourceIndex != widget.currentSourceIndex) {
+        oldWidget.currentSourceIndex != widget.currentSourceIndex ||
+        oldWidget.currentSeason != widget.currentSeason ||
+        oldWidget.currentEpisode != widget.currentEpisode) {
       final focusedOriginal = _focusedEntry?.originalIndex;
       final selectedId = _groups.isEmpty ? 'all' : _groups[_selectedGroup].id;
       _rebuildGroups(selectedId: selectedId, focusedOriginal: focusedOriginal);
@@ -207,6 +210,13 @@ class _SourceSheetState extends State<SourceSheet> {
     final buckets = <String, List<_SourceEntry>>{};
     final labels = <String, String>{};
     for (var index = 0; index < widget.sources.length; index++) {
+      // Preserve original indexes for the player/bridge while hiding links
+      // from earlier episodes. The active source must always remain reachable.
+      if (index != widget.currentSourceIndex &&
+          !SeriesSourceFetcher.visibleForEpisode(widget.sources[index],
+              widget.currentSeason, widget.currentEpisode)) {
+        continue;
+      }
       final entry = _SourceEntry(index, widget.sources[index]);
       all.add(entry);
       final id = _groupId(entry.torrent);
@@ -354,24 +364,36 @@ class _SourceSheetState extends State<SourceSheet> {
     final run = ++_sourceFocusAnimationRun;
     _sourceFocusAnimationActive = true;
     try {
-      final context = _sourceKeys[_focusedEntry?.originalIndex]?.currentContext;
-      if (context != null) {
-        await Scrollable.ensureVisible(
-          context,
-          duration: const Duration(milliseconds: 160),
-          curve: Curves.easeOutCubic,
-          alignment: 0.45,
+      final targetIndex = _focusedEntry?.originalIndex;
+      if (targetIndex == null) return; // The fixed fetch action is already visible.
+      while (mounted && run == _sourceFocusAnimationRun &&
+          !_sourceScrollManuallyControlled &&
+          _focusZone == _FocusZone.sources &&
+          targetIndex == _focusedEntry?.originalIndex) {
+        final rowContext = _sourceKeys[targetIndex]?.currentContext;
+        if (rowContext != null && rowContext.mounted) {
+          await Scrollable.ensureVisible(
+            rowContext,
+            duration: const Duration(milliseconds: 160),
+            curve: Curves.easeOutCubic,
+            alignment: 0.45,
+          );
+          return;
+        }
+        if (!_sourceScrollController.hasClients || targetIndex == null) return;
+        // Source cards have variable heights (addon text and badges). Walk
+        // until the lazy target mounts, then align its actual geometry.
+        final firstMounted = _visibleEntries.indexWhere(
+          (entry) => _sourceKeys[entry.originalIndex]?.currentContext != null,
         );
-      } else if (_sourceScrollController.hasClients && _focusedSource >= 0) {
-        final target = (_focusedSource * 63.0).clamp(
-          0.0,
-          _sourceScrollController.position.maxScrollExtent,
-        );
-        await _sourceScrollController.animateTo(
-          target,
-          duration: const Duration(milliseconds: 160),
-          curve: Curves.easeOutCubic,
-        );
+        final backwards = firstMounted >= 0 && _focusedSource < firstMounted;
+        final position = _sourceScrollController.position;
+        final next = (position.pixels +
+            (backwards ? -1 : 1) * position.viewportDimension).clamp(
+              position.minScrollExtent, position.maxScrollExtent);
+        if (next == position.pixels) return;
+        position.jumpTo(next);
+        await WidgetsBinding.instance.endOfFrame;
       }
     } finally {
       if (run == _sourceFocusAnimationRun) _sourceFocusAnimationActive = false;
@@ -402,6 +424,9 @@ class _SourceSheetState extends State<SourceSheet> {
         _resolvingIndex != null) {
       return;
     }
+    logSourceSelection('player_manual_pick', source: entry.torrent,
+        index: entry.originalIndex, previousIndex: widget.currentSourceIndex,
+        season: widget.currentSeason, episode: widget.currentEpisode, player: 'mpv');
     setState(() {
       _resolvingIndex = entry.originalIndex;
       _errorMessage = null;
@@ -410,13 +435,19 @@ class _SourceSheetState extends State<SourceSheet> {
       final url = await widget.resolveSource(entry.torrent);
       if (!mounted) return;
       if (url != null && url.isNotEmpty) {
+        logSourceSelection('player_link_resolved', source: entry.torrent,
+            index: entry.originalIndex, player: 'mpv');
         widget.onSourceSelected(entry.originalIndex, url);
       } else {
+        logSourceSelection('player_resolution_failed', source: entry.torrent,
+            index: entry.originalIndex, player: 'mpv', reason: 'unavailable');
         await _showResolutionError(
           'Source unavailable — not cached or not a video',
         );
       }
     } catch (_) {
+      logSourceSelection('player_resolution_failed', source: entry.torrent,
+          index: entry.originalIndex, player: 'mpv', reason: 'exception');
       if (mounted) await _showResolutionError('Failed to resolve source');
     }
   }
@@ -433,13 +464,12 @@ class _SourceSheetState extends State<SourceSheet> {
     }
   }
 
-  /// Whether the selected group is an empty addon group whose per-addon
+  /// Whether the selected group has a per-provider
   /// fetch is available — the state that renders the "Fetch results" row.
   bool get _groupFetchAvailable {
     if (_groups.isEmpty) return false;
     final group = _groups[_selectedGroup];
-    return group.entries.isEmpty &&
-        ((_addonIdsByGroup.containsKey(group.id) &&
+    return ((_addonIdsByGroup.containsKey(group.id) &&
                 widget.seriesFetcher?.fetchAddonEpisodes != null) ||
             (_engineIdByGroup.containsKey(group.id) &&
                 widget.seriesFetcher?.fetchEngine != null));
@@ -610,7 +640,7 @@ class _SourceSheetState extends State<SourceSheet> {
         _ensureFocusedVisible();
       }
     } else if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
-      if (_focusedSource < _visibleEntries.length - 1) {
+      if (_focusedSource < _visibleEntries.length - 1 + (_groupFetchAvailable ? 1 : 0)) {
         setState(() => _focusedSource++);
         _ensureFocusedVisible();
       }
@@ -828,6 +858,8 @@ class _SourceSheetState extends State<SourceSheet> {
                   ),
                 ),
         ),
+        if (_visibleEntries.isNotEmpty && _groupFetchAvailable)
+          _buildGroupFetch(),
       ],
     ),
   );
@@ -847,13 +879,14 @@ class _SourceSheetState extends State<SourceSheet> {
               ? 'Fetching episode results…'
               : failed
               ? 'Fetch failed — try again'
-              : 'Fetch results',
-          focused: _focusZone == _FocusZone.sources && _focusedSource >= 0,
+              : _visibleEntries.isEmpty ? 'Fetch results' : 'Fetch all results',
+          focused: _focusZone == _FocusZone.sources &&
+              (_visibleEntries.isEmpty || _focusedSource == _visibleEntries.length),
           enabled: !fetching,
           onTap: _fetchAddonGroup,
         ),
         const SizedBox(height: 10),
-        Text(
+        if (_visibleEntries.isEmpty) Text(
           failed
               ? "This provider couldn't be reached."
               : fetched
@@ -1120,17 +1153,11 @@ class _SourceRow extends StatelessWidget {
             ),
           )
         : current
-        ? Text(
-            '▮▮▮',
-            semanticsLabel: 'Playing',
-            style: TextStyle(
-              color: inverse
-                  ? const Color(0xFFAB2733)
-                  : const Color(0xFFE23D4C),
-              fontSize: 11,
-              fontWeight: FontWeight.w900,
-              letterSpacing: 1,
-            ),
+        ? Icon(
+            Icons.check_circle_rounded,
+            semanticLabel: 'Playing',
+            color: inverse ? const Color(0xFF16734C) : const Color(0xFF35C88A),
+            size: 21,
           )
         : null;
     return GestureDetector(
@@ -1142,6 +1169,10 @@ class _SourceRow extends StatelessWidget {
         decoration: BoxDecoration(
           color: inverse ? Colors.white : Colors.white.withValues(alpha: .025),
           borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: current ? const Color(0xFF35C88A) : Colors.transparent,
+            width: 1.5,
+          ),
           boxShadow: inverse
               ? [
                   const BoxShadow(

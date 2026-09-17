@@ -473,7 +473,7 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
               ? StorageService.getEpisodeSimklProgress(imdbId: imdbId)
               : Future.value(const <String, double>{}),
           (imdbId != null && imdbId.isNotEmpty)
-              ? StorageService.getEpisodeMdblistProgress(imdbId: imdbId)
+              ? StorageService.getConnectedEpisodeMdblistProgress(imdbId: imdbId)
               : Future.value(const <String, double>{}),
           TrackingSourcePolicy.load(),
         ]);

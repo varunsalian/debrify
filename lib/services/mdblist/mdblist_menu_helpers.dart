@@ -6,6 +6,7 @@ import '../watched_status_service.dart';
 import 'mdblist_models.dart';
 import 'mdblist_service.dart';
 import '../watched_action_coordinator.dart';
+import '../../widgets/clear_provider_progress_dialog.dart';
 
 enum MdblistItemMenuAction {
   addToWatchlist,
@@ -19,6 +20,7 @@ enum MdblistItemMenuAction {
   drop,
   restore,
   removeFromContinueWatching,
+  clearWatchProgress,
 }
 
 enum MdblistEpisodeMenuAction { markWatched, markUnwatched, rate, removeRating }
@@ -46,6 +48,9 @@ List<MdblistMenuOption> buildMdblistMenuOptions({
 }) {
   if (!authenticated) return const [];
   return [
+    const MdblistMenuOption(action: MdblistItemMenuAction.clearWatchProgress,
+      icon: Icons.restart_alt_rounded, color: Color(0xFFEF4444),
+      label: 'Clear watch progress on MDBList', caption: 'Clear progress'),
     MdblistMenuOption(
       action: status?.inWatchlist == true
           ? MdblistItemMenuAction.removeFromWatchlist
@@ -162,6 +167,9 @@ Future<void> handleMdblistMenuAction(
   bool success;
   String label;
   switch (action) {
+    case MdblistItemMenuAction.clearWatchProgress:
+      await showClearProviderProgressDialog(context, item, TrackingSource.mdblist);
+      return;
     case MdblistItemMenuAction.addToWatchlist:
       success = await service.addToWatchlist(ids, type);
       label = 'Added to MDBList Watchlist';

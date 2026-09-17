@@ -25,6 +25,9 @@ import '../services/imdb_enrichment_service.dart';
 import '../services/imdb_parents_guide_service.dart';
 import '../services/main_page_bridge.dart';
 import '../services/storage_service.dart';
+import '../services/movie_completion_service.dart';
+import '../services/mdblist/mdblist_service.dart';
+import '../widgets/rewatch_progress_dialog.dart';
 import '../services/video_player_launcher.dart';
 import '../services/imdb_trailer_service.dart';
 import '../services/youtube_service.dart';
@@ -98,6 +101,7 @@ class MergedDetailScreen extends StatefulWidget {
     ({bool started, int season, int episode})? promised,
   )
   onResume;
+  final Future<void> Function()? onRewatch;
 
   /// Resolves whether the title has prior progress and, for a series, the
   /// season/episode [onResume] would land on — so the button can read
@@ -200,6 +204,7 @@ class MergedDetailScreen extends StatefulWidget {
     this.isMdblistSource = false,
     this.onItemSelected,
     this.onQuickPlay,
+    this.onRewatch,
     this.onBrowsePrimaryEpisodeSources,
     this.boundSourceCount,
     this.onSelectSource,
@@ -472,6 +477,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
     TraktItemMenuAction.playRandomEpisode,
     TraktItemMenuAction.searchPacks,
     TraktItemMenuAction.removeFromPlayback,
+    TraktItemMenuAction.clearWatchProgress,
   };
 
   List<TraktMenuOption> get _appMenuOptions => [
@@ -511,6 +517,9 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
   @override
   void initState() {
     super.initState();
+    StorageService.trackingSourceRevision.addListener(_onMovieProgressPolicyChanged);
+    StorageService.movieFinishedRevision.addListener(_loadLocalMovieFinished);
+    MdblistService.instance.watchedRevision.addListener(_loadLocalMovieFinished);
     AnalyticsService.screenView('series_detail');
     MainPageBridge.addPlaybackReturnListener(_onPlaybackReturned);
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -582,6 +591,10 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
   }
 
   void _playPrimary() {
+    if (_primaryLabel == 'Rewatch') {
+      unawaited(_guardPlay(_rewatchTitle));
+      return;
+    }
     final promised = _primaryEpisodePromise;
     debugPrint(
       '[SeriesResume] detail-primary-pressed title="${_item.name}" '
@@ -593,6 +606,32 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
       'promised=${promised == null ? 'none' : 'S${promised.season}E${promised.episode}'}',
     );
     unawaited(_guardPlay(() => widget.onResume(promised)));
+  }
+
+  bool _seriesCompleted = false;
+  bool _rewatchPending = false;
+
+  Future<void> _rewatchTitle() async {
+    final restart = widget.onRewatch;
+    if (restart == null) return;
+    final cleared = await resetProgressForRewatch(context,
+      id: _item.imdbId ?? _item.id, title: _item.name, isMovie: _isMovie,
+      onConfirmed: () => setState(() => _rewatchPending = true));
+    if (!mounted) return;
+    _episodesPanelKey.currentState?.refreshWatchProgress();
+    if (!cleared) return;
+    ++_movieCompletionGeneration; // Discard reads started before the reset.
+    setState(() {
+      _seriesCompleted = false;
+      _rewatchPending = false;
+      _localMovieFinished = false;
+      _simklStatus = null;
+      _resumeStarted = false;
+      _resumeSeason = 1;
+      _resumeEpisode = 1;
+      _hasMergedEpisodeTarget = false;
+    });
+    await restart();
   }
 
   void _browsePrimarySources() {
@@ -813,14 +852,23 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
   }
 
   Future<void> _loadLocalMovieFinished() async {
+    final generation = ++_movieCompletionGeneration;
     if (!_isMovie) return;
     final imdbId =
         _item.effectiveImdbId ?? (_item.id.startsWith('tt') ? _item.id : null);
     if (imdbId == null || imdbId.isEmpty) return;
-    final finished = await StorageService.isMovieFinished(imdbId);
-    if (mounted && finished != _localMovieFinished) {
+    final finished = await MovieCompletionService.load(imdbId);
+    if (mounted && generation == _movieCompletionGeneration && finished != _localMovieFinished) {
       setState(() => _localMovieFinished = finished);
     }
+  }
+
+  int _movieCompletionGeneration = 0;
+
+  void _onMovieProgressPolicyChanged() {
+    if (!mounted) return;
+    setState(() => _localMovieFinished = false);
+    _loadLocalMovieFinished();
   }
 
   Future<void> _loadResumeInfo() async {
@@ -1006,12 +1054,16 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
   /// The primary-button label: "Start Watching" before any progress, otherwise
   /// "Resume" with an OTT-style "· S3E4" tag for series. Falls back to the
   /// static Play/Resume label until the resume state resolves.
-  String get _primaryLabel {
+  String get _primaryLabel => widget.onRewatch == null && _resolvedPrimaryLabel == 'Rewatch'
+      ? 'Play' : _resolvedPrimaryLabel;
+
+  String get _resolvedPrimaryLabel {
+    if (_rewatchPending || (!_isMovie && _seriesCompleted)) return 'Rewatch';
     // Completion is available independently of the optional resume loader.
     // Keep the rewatch affordance visible for movie routes that omit one.
     if (!_resumeLoaded) {
       if (_isMovie &&
-          (_localMovieFinished || _simklStatus?.currentStatus == 'completed')) {
+          _localMovieFinished) {
         return 'Rewatch';
       }
       return _isMovie ? 'Play' : 'Resume';
@@ -1021,7 +1073,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
       // session; its Play un-marks it watched so the rewatch re-enters
       // Continue Watching — surface that intent as "Rewatch".
       if (_isMovie &&
-          (_localMovieFinished || _simklStatus?.currentStatus == 'completed')) {
+          _localMovieFinished) {
         return 'Rewatch';
       }
       return _isMovie ? 'Play' : 'Start Watching';
@@ -1055,6 +1107,9 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
 
   @override
   void dispose() {
+    StorageService.trackingSourceRevision.removeListener(_onMovieProgressPolicyChanged);
+    StorageService.movieFinishedRevision.removeListener(_loadLocalMovieFinished);
+    MdblistService.instance.watchedRevision.removeListener(_loadLocalMovieFinished);
     appRouteObserver.unsubscribe(this);
     MainPageBridge.removePlaybackReturnListener(_onPlaybackReturned);
     _infoScroll.dispose();
@@ -2786,6 +2841,10 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
       case TraktItemMenuAction.removeFromPlayback:
         return 'Remove this from Continue Watching so it stops showing on your '
             'home rows and resume list.';
+      case TraktItemMenuAction.clearWatchProgress:
+        return 'Reset watched history and resume progress on this device and connected Trakt, Simkl and MDBList accounts. Saved sources are kept.';
+      case TraktItemMenuAction.clearTraktProgress:
+        return 'Clear watched history and resume progress on Trakt only. Local progress and other trackers are kept.';
       case TraktItemMenuAction.removeFromTraktPlayback:
         return 'Delete this title\'s playback progress (and watch history) on '
             'Trakt so it leaves the Trakt Continue Watching rows.';
@@ -2796,6 +2855,8 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
   /// own More menu — mirrors [_descriptionFor].
   static String _descriptionForSimkl(SimklItemMenuAction a) {
     switch (a) {
+      case SimklItemMenuAction.clearWatchProgress:
+        return 'Clear watched history and resume progress on Simkl only. Local progress and other trackers are kept.';
       case SimklItemMenuAction.moveToPlanToWatch:
         return 'Move this to your Simkl "Plan to Watch" list — a personal '
             'watch queue synced across every device signed into your account.';
@@ -2843,6 +2904,9 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
         onSelected: (action) async {
           Navigator.of(sheetCtx).pop();
           await widget.onTraktAction?.call(action);
+          if (mounted && action == TraktItemMenuAction.clearWatchProgress) {
+            _refreshAfterPlayback();
+          }
           // Binding a source changes the pill's count, and "Remove from
           // Continue Watching" changes the resume label.
           if (mounted) setState(() {});
@@ -2876,6 +2940,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
         ],
         onAction: (action) async {
           await widget.onTraktAction?.call(action);
+          if (mounted && action == TraktItemMenuAction.clearTraktProgress) _refreshAfterPlayback();
         },
         onRate: widget.onTraktRate,
         statusLoader: widget.traktStatusLoader,
@@ -2910,6 +2975,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
             widget.simklMenuBuilder?.call(status) ?? widget.simklMenuOptions,
         onAction: (action) async {
           await widget.onSimklAction?.call(action);
+          if (mounted && action == SimklItemMenuAction.clearWatchProgress) _refreshAfterPlayback();
         },
         onRate: widget.onSimklRate,
         statusLoader: widget.simklStatusLoader,
@@ -2958,6 +3024,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
                   title: Text(option.label),
                   onTap: () async {
                     await widget.onMdblistAction?.call(option.action);
+                    if (mounted && option.action == MdblistItemMenuAction.clearWatchProgress) _refreshAfterPlayback();
                     await _loadMdblistStatus();
                     if (sheetContext.mounted) Navigator.pop(sheetContext);
                   },
@@ -3023,6 +3090,11 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
       onPlayEpisode: widget.onPlayEpisode == null ? null : _playDirectEpisode,
       watchProgressLoader: widget.watchProgressLoader,
       onNextEpisodeChanged: _onNextEpisodeChanged,
+      onSeriesCompletedChanged: (completed) {
+        if (mounted && completed != _seriesCompleted) {
+          setState(() => _seriesCompleted = completed);
+        }
+      },
     );
   }
 
@@ -4910,6 +4982,7 @@ class _TraktSheetState extends State<_TraktSheet> {
     final collectionOff = opt(TraktItemMenuAction.addToCollection);
     final markWatched = opt(TraktItemMenuAction.markWatched);
     final markUnwatched = opt(TraktItemMenuAction.markUnwatched);
+    final clearProgress = opt(TraktItemMenuAction.clearTraktProgress);
     // Only `addToList` is ever emitted (and `handleTraktMenuAction` returns
     // early on removeFromList — there's no context for *which* list), so this
     // section is add-only by design.
@@ -5021,6 +5094,11 @@ class _TraktSheetState extends State<_TraktSheet> {
                             _run(() => widget.onAction(markUnwatched.action)),
                       ),
                     ],
+                    if (clearProgress != null)
+                      _SheetActionRow(icon: clearProgress.icon, label: clearProgress.label,
+                        description: _MergedDetailScreenState._descriptionFor(clearProgress.action),
+                        autofocus: claimFocus(),
+                        onTap: () => _run(() => widget.onAction(clearProgress.action))),
                     if (canRate) ...[
                       const _SheetGroupLabel('Rating'),
                       _SheetRatingStrip(
@@ -5195,6 +5273,7 @@ class _SimklSheetState extends State<_SimklSheet> {
     final current = _status?.currentStatus;
     final canRemove = opt(SimklItemMenuAction.removeFromList) != null;
     final removeCw = opt(SimklItemMenuAction.removeFromContinueWatching);
+    final clearProgress = opt(SimklItemMenuAction.clearWatchProgress);
     final canRate = opt(SimklItemMenuAction.rate) != null;
     final canUnrate = opt(SimklItemMenuAction.removeRating) != null;
 
@@ -5291,6 +5370,10 @@ class _SimklSheetState extends State<_SimklSheet> {
                             : null,
                       ),
                     ],
+                    if (clearProgress != null)
+                      _SheetActionRow(icon: clearProgress.icon, label: clearProgress.label,
+                        description: _MergedDetailScreenState._descriptionForSimkl(clearProgress.action),
+                        onTap: () => _run(() => widget.onAction(clearProgress.action))),
                     if (removeCw != null) ...[
                       const _SheetGroupLabel('Playback'),
                       _SheetActionRow(
