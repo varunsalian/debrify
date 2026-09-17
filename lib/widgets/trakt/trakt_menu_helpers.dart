@@ -4,6 +4,7 @@ import '../../models/tracking_source.dart';
 import '../../services/trakt/trakt_service.dart';
 import '../../services/watched_action_coordinator.dart';
 import '../../services/series_progress_reset_service.dart';
+import '../clear_provider_progress_dialog.dart';
 
 /// Actions available in the Trakt episode overflow menu.
 enum TraktEpisodeMenuAction { markWatched, markUnwatched, rate }
@@ -27,6 +28,7 @@ enum TraktItemMenuAction {
   playRandomEpisode,
   searchPacks,
   clearWatchProgress,
+  clearTraktProgress,
 }
 
 /// Shows a 1-10 rating dialog. Returns the selected rating or null.
@@ -221,6 +223,9 @@ Future<void> handleTraktMenuAction(
   String actionLabel = '';
 
   switch (action) {
+    case TraktItemMenuAction.clearTraktProgress:
+      await showClearProviderProgressDialog(context, item, TrackingSource.trakt);
+      return;
     case TraktItemMenuAction.addToWatchlist:
       actionLabel = 'Added to Trakt Watchlist';
       success = await traktService.addToWatchlist(imdbId, type);
@@ -454,6 +459,9 @@ List<TraktMenuOption> buildTraktAddOnlyMenuOptions({
       ),
     // these flip between Add and Remove to mirror the user's real library.
     if (isTraktAuthenticated) ...[
+      const TraktMenuOption(action: TraktItemMenuAction.clearTraktProgress,
+        icon: Icons.restart_alt_rounded, color: Color(0xFFEF4444),
+        label: 'Clear watch progress on Trakt', caption: 'Clear progress', isTrakt: true),
       if (inWatchlist)
         const TraktMenuOption(
           action: TraktItemMenuAction.removeFromWatchlist,

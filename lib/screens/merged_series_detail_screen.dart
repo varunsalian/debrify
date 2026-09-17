@@ -2789,6 +2789,8 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
             'home rows and resume list.';
       case TraktItemMenuAction.clearWatchProgress:
         return 'Reset all episodes on this device and connected Trakt, Simkl and MDBList accounts. Saved sources are kept.';
+      case TraktItemMenuAction.clearTraktProgress:
+        return 'Clear watched history and resume progress on Trakt only. Local progress and other trackers are kept.';
       case TraktItemMenuAction.removeFromTraktPlayback:
         return 'Delete this title\'s playback progress (and watch history) on '
             'Trakt so it leaves the Trakt Continue Watching rows.';
@@ -2799,6 +2801,8 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
   /// own More menu — mirrors [_descriptionFor].
   static String _descriptionForSimkl(SimklItemMenuAction a) {
     switch (a) {
+      case SimklItemMenuAction.clearWatchProgress:
+        return 'Clear watched history and resume progress on Simkl only. Local progress and other trackers are kept.';
       case SimklItemMenuAction.moveToPlanToWatch:
         return 'Move this to your Simkl "Plan to Watch" list — a personal '
             'watch queue synced across every device signed into your account.';
@@ -2882,6 +2886,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
         ],
         onAction: (action) async {
           await widget.onTraktAction?.call(action);
+          if (mounted && action == TraktItemMenuAction.clearTraktProgress) _refreshAfterPlayback();
         },
         onRate: widget.onTraktRate,
         statusLoader: widget.traktStatusLoader,
@@ -2916,6 +2921,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
             widget.simklMenuBuilder?.call(status) ?? widget.simklMenuOptions,
         onAction: (action) async {
           await widget.onSimklAction?.call(action);
+          if (mounted && action == SimklItemMenuAction.clearWatchProgress) _refreshAfterPlayback();
         },
         onRate: widget.onSimklRate,
         statusLoader: widget.simklStatusLoader,
@@ -2964,6 +2970,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
                   title: Text(option.label),
                   onTap: () async {
                     await widget.onMdblistAction?.call(option.action);
+                    if (mounted && option.action == MdblistItemMenuAction.clearWatchProgress) _refreshAfterPlayback();
                     await _loadMdblistStatus();
                     if (sheetContext.mounted) Navigator.pop(sheetContext);
                   },
@@ -4916,6 +4923,7 @@ class _TraktSheetState extends State<_TraktSheet> {
     final collectionOff = opt(TraktItemMenuAction.addToCollection);
     final markWatched = opt(TraktItemMenuAction.markWatched);
     final markUnwatched = opt(TraktItemMenuAction.markUnwatched);
+    final clearProgress = opt(TraktItemMenuAction.clearTraktProgress);
     // Only `addToList` is ever emitted (and `handleTraktMenuAction` returns
     // early on removeFromList — there's no context for *which* list), so this
     // section is add-only by design.
@@ -5027,6 +5035,11 @@ class _TraktSheetState extends State<_TraktSheet> {
                             _run(() => widget.onAction(markUnwatched.action)),
                       ),
                     ],
+                    if (clearProgress != null)
+                      _SheetActionRow(icon: clearProgress.icon, label: clearProgress.label,
+                        description: _MergedDetailScreenState._descriptionFor(clearProgress.action),
+                        autofocus: claimFocus(),
+                        onTap: () => _run(() => widget.onAction(clearProgress.action))),
                     if (canRate) ...[
                       const _SheetGroupLabel('Rating'),
                       _SheetRatingStrip(
@@ -5201,6 +5214,7 @@ class _SimklSheetState extends State<_SimklSheet> {
     final current = _status?.currentStatus;
     final canRemove = opt(SimklItemMenuAction.removeFromList) != null;
     final removeCw = opt(SimklItemMenuAction.removeFromContinueWatching);
+    final clearProgress = opt(SimklItemMenuAction.clearWatchProgress);
     final canRate = opt(SimklItemMenuAction.rate) != null;
     final canUnrate = opt(SimklItemMenuAction.removeRating) != null;
 
@@ -5297,6 +5311,10 @@ class _SimklSheetState extends State<_SimklSheet> {
                             : null,
                       ),
                     ],
+                    if (clearProgress != null)
+                      _SheetActionRow(icon: clearProgress.icon, label: clearProgress.label,
+                        description: _MergedDetailScreenState._descriptionForSimkl(clearProgress.action),
+                        onTap: () => _run(() => widget.onAction(clearProgress.action))),
                     if (removeCw != null) ...[
                       const _SheetGroupLabel('Playback'),
                       _SheetActionRow(

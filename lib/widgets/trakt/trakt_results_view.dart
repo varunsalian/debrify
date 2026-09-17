@@ -1019,6 +1019,7 @@ class TraktResultsViewState extends State<TraktResultsView> {
       case TraktItemMenuAction.removeFromTraktPlayback:
         return; // Only offered on the detail screens, not in Trakt results
       case TraktItemMenuAction.clearWatchProgress:
+      case TraktItemMenuAction.clearTraktProgress:
         await handleTraktMenuAction(context, item, action);
         if (mounted) _fetchItems();
         return;

@@ -13802,9 +13802,10 @@ class _SearchScreenState extends State<SearchScreen>
     // Skipped on the dedicated Search tab, which never renders those rows.
     if (mounted &&
         !widget.searchMode &&
-        (action == TraktItemMenuAction.markWatched ||
+        (action == TraktItemMenuAction.clearTraktProgress ||
+            action == TraktItemMenuAction.markWatched ||
             action == TraktItemMenuAction.markUnwatched)) {
-      _loadTraktContinueWatching(refreshBound: false);
+      await _loadTraktContinueWatching(refreshBound: false);
     }
   }
 
@@ -13828,13 +13829,14 @@ class _SearchScreenState extends State<SearchScreen>
     // shifts CW membership. Skipped on the dedicated Search tab (no rows there).
     if (mounted &&
         !widget.searchMode &&
-        (action == SimklItemMenuAction.removeFromContinueWatching ||
+        (action == SimklItemMenuAction.clearWatchProgress ||
+            action == SimklItemMenuAction.removeFromContinueWatching ||
             action == SimklItemMenuAction.removeFromList ||
             action == SimklItemMenuAction.moveToCompleted ||
             action == SimklItemMenuAction.moveToDropped ||
             action == SimklItemMenuAction.moveToOnHold ||
             action == SimklItemMenuAction.moveToWatching)) {
-      _loadSimklContinueWatching(refreshBound: false);
+      await _loadSimklContinueWatching(refreshBound: false);
     }
   }
 
@@ -13854,7 +13856,8 @@ class _SearchScreenState extends State<SearchScreen>
       presetRating: presetRating,
     );
     if (!mounted || widget.searchMode) return;
-    if (action == MdblistItemMenuAction.markWatched ||
+    if (action == MdblistItemMenuAction.clearWatchProgress ||
+        action == MdblistItemMenuAction.markWatched ||
         action == MdblistItemMenuAction.markUnwatched ||
         action == MdblistItemMenuAction.drop ||
         action == MdblistItemMenuAction.restore) {

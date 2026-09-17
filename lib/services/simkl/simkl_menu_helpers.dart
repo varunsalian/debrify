@@ -3,6 +3,7 @@ import '../../models/stremio_addon.dart';
 import '../../models/tracking_source.dart';
 import 'simkl_service.dart';
 import '../watched_action_coordinator.dart';
+import '../../widgets/clear_provider_progress_dialog.dart';
 
 /// Actions available in the Simkl item quick-action strip.
 ///
@@ -20,6 +21,7 @@ enum SimklItemMenuAction {
   removeFromContinueWatching,
   rate,
   removeRating,
+  clearWatchProgress,
 }
 
 /// Shows a 1-10 rating dialog. Returns the selected rating or null.
@@ -153,6 +155,9 @@ Future<void> handleSimklMenuAction(
   String actionLabel = '';
 
   switch (action) {
+    case SimklItemMenuAction.clearWatchProgress:
+      await showClearProviderProgressDialog(context, item, TrackingSource.simkl);
+      return;
     case SimklItemMenuAction.moveToPlanToWatch:
       actionLabel = 'Moved to Plan to Watch on Simkl';
       success = await simklService.addToList(imdbId, type, 'plantowatch');
@@ -305,6 +310,9 @@ List<SimklMenuOption> buildSimklMenuOptions({
   }
 
   return [
+    const SimklMenuOption(action: SimklItemMenuAction.clearWatchProgress,
+      icon: Icons.restart_alt_rounded, color: Color(0xFFEF4444),
+      label: 'Clear watch progress on Simkl', caption: 'Clear progress'),
     if (current != 'plantowatch')
       moveOption(
         'plantowatch',
