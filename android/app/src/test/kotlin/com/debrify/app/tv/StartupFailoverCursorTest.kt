@@ -6,6 +6,80 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class StartupFailoverCursorTest {
+    @Test fun `recovery whitelist leaves manual-only rows unattempted`() {
+        val cursor = StartupFailoverCursor(0, 5)
+        assertEquals(0, cursor.beginInitial(1))
+        assertEquals(2, cursor.nextIndex(4, listOf(2)) { true })
+        assertNull(cursor.nextIndex(4, listOf(2)) { true })
+        assertEquals(2, cursor.attempts)
+    }
+
+    @Test fun `episode stage can visit earlier manual indices without retrying attempts`() {
+        val cursor = StartupFailoverCursor(0, 4)
+        cursor.beginInitial(1)
+        assertEquals(3, cursor.nextIndex(4, listOf(3, 2)) { true })
+        assertEquals(2, cursor.nextIndex(4, listOf(3, 2)) { true })
+        assertEquals(1, cursor.nextIndex(5, listOf(3, 1, 4)) { true })
+        assertNull(cursor.nextIndex(5, listOf(4)) { true })
+        assertEquals(4, cursor.attempts)
+    }
+
+    @Test fun `empty pack stage does not spend the episode retry budget`() {
+        val cursor = StartupFailoverCursor(0, 2)
+        cursor.beginInitial(1)
+        assertNull(cursor.nextIndex(3, emptyList()) { true })
+        assertEquals(1, cursor.attempts)
+        assertEquals(2, cursor.nextIndex(3, listOf(2)) { true })
+    }
+    @Test fun `nonempty recovery exhausts once even below attempt cap`() {
+        // Duplicate-only responses and the PikPak guard must not restart search.
+        assertTrue(startupRecoveryIsConsumed(false, true, 2, 5))
+        assertTrue(startupRecoveryIsConsumed(false, true, 1, 5))
+    }
+
+    @Test fun `empty or failed recovery preserves fallback within budget`() {
+        assertEquals(false, startupRecoveryIsConsumed(false, false, 1, 5))
+        assertTrue(startupRecoveryIsConsumed(false, false, 5, 5))
+    }
+
+    @Test fun `remaining saved pins retain their recovery stage`() {
+        assertEquals(false, startupRecoveryIsConsumed(true, false, 1, 1))
+        assertEquals(false, startupRecoveryIsConsumed(true, true, 5, 5))
+    }
+    @Test fun `independent addon configurations remain eligible`() {
+        assertTrue(startupFailureKey("config-one", "File.mkv", 42, "directUrl", videoId = "tt1:1:1") !=
+            startupFailureKey("config-two", "File.mkv", 42, "directUrl", videoId = "tt1:1:1"))
+    }
+    @Test fun `transient failure keeps alternate transport eligible`() {
+        val direct = startupFailureKey("addon", "File.mkv", 42L, "directUrl", "timeout")
+        val torrent = startupFailureKey("addon", "File.mkv", 42L, "torrent")
+        assertTrue(direct != torrent)
+        assertEquals(startupFailureKey("addon", "File.mkv", 42L, null, videoId = "tt1:1:1"),
+            startupFailureKey("addon", "File.mkv", 42L, "directUrl", "player:ERROR_CODE_DECODING_FAILED", videoId = "tt1:1:1"))
+    }
+    @Test fun `ambiguous labels and distinct hashes do not collide`() {
+        assertTrue(startupFailureKey("addon", "Unknown", 0, "directUrl", url = "https://one") !=
+            startupFailureKey("addon", "Unknown", 0, "directUrl", url = "https://two"))
+        assertTrue(startupFailureKey("addon", "Unknown", 0, "torrent", infohash = "a".repeat(40)) !=
+            startupFailureKey("addon", "Unknown", 0, "torrent", infohash = "b".repeat(40)))
+        assertEquals(startupFailureKey("addon", "File.mkv", 42, "directUrl", videoId = "tt1:1:1", url = "https://old"),
+            startupFailureKey("addon", "File.mkv", 42, "directUrl", videoId = "tt1:1:1", url = "https://new"))
+    }
+    @Test fun `empty recovery preserves fallback but spent budget consumes it`() {
+        assertEquals(false, startupBudgetConsumed(1, 5))
+        assertEquals(true, startupBudgetConsumed(5, 5))
+        assertEquals(true, startupBudgetConsumed(1, 1))
+    }
+    @Test fun `expanding saved source results keeps attempts and does not retry the failed release`() {
+        val cursor = StartupFailoverCursor(startIndex = 0, maxAttempts = 3)
+        assertEquals(0, cursor.beginInitial(1))
+        assertNull(cursor.nextIndex(1) { true })
+        // Fetch appended a refreshed URL for the failed release at index 1.
+        assertEquals(2, cursor.nextIndex(5) { it != 1 })
+        assertEquals(3, cursor.nextIndex(5) { it != 1 })
+        assertNull(cursor.nextIndex(5) { true })
+        assertEquals(3, cursor.attempts)
+    }
     @Test
     fun `walks forward in provider order without wrapping`() {
         val cursor = StartupFailoverCursor(startIndex = 1, maxAttempts = 5)

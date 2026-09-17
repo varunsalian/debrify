@@ -1,4 +1,7 @@
 import '../utils/show_shuffle.dart';
+import 'failed_saved_source.dart';
+import 'torrent_playback_service.dart';
+import 'startup_recovery_sources.dart';
 import 'dart:async';
 import 'source_selection_diagnostics.dart';
 import '../utils/platform_util.dart';
@@ -284,6 +287,7 @@ class VideoPlayerLaunchArgs {
   /// closed. Bound-source launches use this to continue through the remaining
   /// eligible pins, then perform a fresh search without replaying failed pins.
   final Future<void> Function()? onStartupSourcesExhausted;
+  final bool startupHasRemainingSavedSources;
   // Series source tabs: on-demand "Load more sources" fetcher for the
   // pack/episode split. Non-null only for series plays with a searchable id.
   final SeriesSourceFetcher? seriesSourceFetcher;
@@ -381,6 +385,7 @@ class VideoPlayerLaunchArgs {
     this.startupResolverProvider,
     this.onStremioSourceCommitted,
     this.onStartupSourcesExhausted,
+    this.startupHasRemainingSavedSources = false,
     this.seriesSourceFetcher,
     this.stremioTvChannels,
     this.stremioTvCurrentChannelId,
@@ -469,6 +474,7 @@ class VideoPlayerLaunchArgs {
     startupResolverProvider: startupResolverProvider,
     onStremioSourceCommitted: onStremioSourceCommitted,
     onStartupSourcesExhausted: onStartupSourcesExhausted,
+    startupHasRemainingSavedSources: startupHasRemainingSavedSources,
     seriesSourceFetcher: seriesSourceFetcher,
     stremioTvChannels: stremioTvChannels,
     stremioTvCurrentChannelId: stremioTvCurrentChannelId,
@@ -885,6 +891,7 @@ class VideoPlayerLauncher {
           resolveSourceToPlaylist: args.resolveSourceToPlaylist,
           startupFailoverEnabled: args.startupFailoverEnabled,
           startupResolverProvider: args.startupResolverProvider,
+          startupHasRemainingSavedSources: args.startupHasRemainingSavedSources,
           onStremioSourceCommitted: args.onStremioSourceCommitted,
           onStartupSourcesExhausted: args.onStartupSourcesExhausted,
           seriesSourceFetcher: args.seriesSourceFetcher,
@@ -981,6 +988,7 @@ class VideoPlayerLauncher {
           resolveSourceToPlaylist: args.resolveSourceToPlaylist,
           startupFailoverEnabled: args.startupFailoverEnabled,
           startupResolverProvider: args.startupResolverProvider,
+          startupHasRemainingSavedSources: args.startupHasRemainingSavedSources,
           onStremioSourceCommitted: args.onStremioSourceCommitted,
           onStartupSourcesExhausted: args.onStartupSourcesExhausted,
           seriesSourceFetcher: args.seriesSourceFetcher,
@@ -2263,10 +2271,16 @@ class VideoPlayerLauncher {
 
       // Build playlist resolver for Android TV (if resolveSourceToPlaylist is available)
       final resolveSourceToPlaylist = args.resolveSourceToPlaylist;
-      Future<List<Map<String, dynamic>>?> Function(int)?
+      final recoveryPreflight = RecoveryDirectPreflight(
+        budget: TorrentPlaybackService.directValidationBudgetForRules(null),
+        isMovie: args.contentType == 'movie',
+        shouldProbe: TorrentPlaybackService.shouldPreflightDirectStream,
+      );
+      var validateRecoveryDirectLinks = true;
+      Future<List<Map<String, dynamic>>?> Function(int, {bool automaticRecovery})?
       sourcePlaylistResolverForTv;
       if (currentStremioSources.isNotEmpty && resolveSourceToPlaylist != null) {
-        sourcePlaylistResolverForTv = (int sourceIndex) async {
+        sourcePlaylistResolverForTv = (int sourceIndex, {bool automaticRecovery = false}) async {
           // Claim a switch token up front so a slower, superseded resolve can't
           // repoint the resolver at a stale source after a newer switch wins.
           final switchToken = resolver.beginSwitch();
@@ -2280,7 +2294,14 @@ class VideoPlayerLauncher {
           debugPrint(
             'VideoPlayerLauncher: resolving source playlist $sourceIndex: ${torrent.displayTitle}',
           );
-          final playlistEntries = await resolveSourceToPlaylist(torrent);
+          if (automaticRecovery && !await recoveryPreflight.allows(torrent,
+              enabled: validateRecoveryDirectLinks)) return null;
+          final playlistEntries = automaticRecovery
+              ? await TorrentPlaybackService.resolveRecoverySource(torrent,
+                  provider: args.startupResolverProvider,
+                  season: args.contentType == 'series' ? args.contentSeason : null,
+                  episode: args.contentType == 'series' ? args.contentEpisode : null)
+              : await resolveSourceToPlaylist(torrent);
           if (playlistEntries == null || playlistEntries.isEmpty) return null;
 
           // Use SeriesPlaylist to detect series and compute season/episode
@@ -2537,17 +2558,14 @@ class VideoPlayerLauncher {
       }
 
       final sourceCommit = args.onStremioSourceCommitted;
-      Future<void> Function(int)? sourceCommitterForTv;
-      if (sourceCommit != null) {
-        sourceCommitterForTv = (int sourceIndex) async {
+      final sourceCommitterForTv = (int sourceIndex) async {
           if (sourceIndex < 0 || sourceIndex >= currentStremioSources.length) {
             return;
           }
           logSourceSelection('player_source_committed',
               source: currentStremioSources[sourceIndex], index: sourceIndex, player: 'exo');
-          await sourceCommit(currentStremioSources[sourceIndex]);
-        };
-      }
+          if (sourceCommit != null) await sourceCommit(currentStremioSources[sourceIndex]);
+      };
 
       // "Load more sources" for the series source tabs: run the missing
       // category's search (packs/episodes), APPEND the deduped results onto
@@ -2566,27 +2584,64 @@ class VideoPlayerLauncher {
         moreSourcesProviderForTv =
             (String mode, {int? season, int? episode}) async {
               final generation = stremioSourcesGeneration;
+              final automaticRecovery = mode.startsWith('startup:');
+              var fetchMode = mode;
+              String? recoveryNextMode;
+              final recoveryRules = automaticRecovery
+                  ? await StorageService.getQuickPlayRules(isMovie: seriesFetcher.isMovie)
+                  : null;
+              if (recoveryRules != null) {
+                final stages = StartupRecoverySources.stages(
+                  isMovie: seriesFetcher.isMovie,
+                  rules: recoveryRules,
+                  provider: args.startupResolverProvider,
+                );
+                final stageIndex = mode == 'startup:continue' ? 1 : 0;
+                if (stageIndex >= stages.length) return null;
+                fetchMode = stages[stageIndex];
+                validateRecoveryDirectLinks = recoveryRules.validateDirectLinks;
+                if (stageIndex + 1 < stages.length) {
+                  recoveryNextMode = 'startup:continue';
+                }
+              }
               // season/episode = what the native player is CURRENTLY on (a pack
               // playlist auto-advances without relaunching); the fetcher falls
               // back to the launch episode when absent.
               final fetched = await seriesFetcher.fetch(
-                mode,
+                fetchMode,
                 season: season,
                 episode: episode,
+                automaticRecovery: automaticRecovery,
               );
-              if (fetched == null) return null;
+              if (fetched == null && !automaticRecovery) return null;
+              var automatic = fetched ?? <Torrent>[];
+              if (recoveryRules != null) {
+                final ladder = await TorrentPlaybackService.loadLadder(includeSize: seriesFetcher.isMovie, rules: recoveryRules);
+                automatic = await TorrentPlaybackService.prepareRecoverySources(
+                  automatic, rules: recoveryRules, ladder: ladder,
+                  provider: args.startupResolverProvider,
+                );
+              }
               // The holder was replaced mid-fetch (channel switch): these
               // results belong to the previous content — drop them.
               if (generation != stremioSourcesGeneration) return null;
-              currentStremioSources = SeriesSourceFetcher.mergeSources(
-                currentStremioSources,
-                fetched,
+              final merged = StartupRecoverySources.merge(
+                existing: currentStremioSources,
+                fetched: fetched ?? const <Torrent>[],
+                automatic: automatic,
+                replaceExistingAutomatic: automaticRecovery,
               );
+              currentStremioSources = merged.sources;
               debugPrint(
-                'VideoPlayerLauncher: load-more "$mode" → ${fetched.length} fetched, '
+                'VideoPlayerLauncher: load-more "$mode" → ${fetched?.length ?? 0} fetched, '
                 '${currentStremioSources.length} total sources',
               );
               return {
+                if (automaticRecovery) ...{
+                  'recoveryCandidateCount': automatic.length,
+                  'recoveryCandidateIndices': merged.automaticIndices,
+                  'recoveryNextMode': recoveryNextMode,
+                },
                 'stremioSources': currentStremioSources
                     .map((t) => t.toJson())
                     .toList(),
@@ -3041,6 +3096,7 @@ class VideoPlayerLauncher {
 
       // Build payload with Stremio TV guide data
       final payloadMap = result.payload.toMap();
+      payloadMap['startupHasRemainingSavedSources'] = args.startupHasRemainingSavedSources;
       payloadMap['useAddonTextFormatting'] = await StorageService.getUseAddonTextFormatting();
       payloadMap['showAddonLogos'] = await StorageService.getShowAddonLogos();
       payloadMap['initialContinuousShuffle'] = args.initialContinuousShuffle;
@@ -3193,9 +3249,19 @@ class VideoPlayerLauncher {
             : null,
         onResolveStremioSource: stremioSourceResolverForTv,
         onResolveSourcePlaylist: sourcePlaylistResolverForTv,
+        onResolveStartupSourcePlaylist: sourcePlaylistResolverForTv == null ? null
+            : (index) => sourcePlaylistResolverForTv!(index, automaticRecovery: true),
         onCommitStremioSource: sourceCommitterForTv,
         onStartupSourcesExhausted: args.onStartupSourcesExhausted,
         onRequestMoreSources: moreSourcesProviderForTv,
+        onStartupSourceFailed: (index, reason) async {
+          if (index < 0 || index >= currentStremioSources.length) return;
+          await FailedSavedSource.forget(
+            args.contentImdbId,
+            currentStremioSources[index],
+            reason: reason,
+          );
+        },
         onRequestAddonSources: addonSourcesProviderForTv,
         onRequestEpisodeFetch: episodeFetchProviderForTv,
         onRequestStremioTvGuideData: args.stremioTvGuideDataProvider,

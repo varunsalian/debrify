@@ -1074,6 +1074,13 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private var startupMaxAttempts = 1
     private var startupResolverProvider: String? = null
     private var startupRecoveryAvailable = false
+    private var startupHasRemainingSavedSources = false
+    private var startupRecoveryFetching = false
+    private var startupRecoveryConsumed = false
+    private var startupRecoveryProducedCandidates = false
+    private var startupRecoveryNextMode: String? = null
+    private var startupRecoveryCandidateIndices: List<Int>? = null
+    private val startupFailedReleases = mutableSetOf<List<Any?>>()
     private var startupSourcesExhausted = false
     private var sourcePersistenceSessionId = 0
     private var recoveryProfileId: String? = null
@@ -16553,6 +16560,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         )
         if (startupSourcesExhausted) {
             result["startupSourcesExhausted"] = true
+            result["startupRecoveryConsumed"] = startupRecoveryConsumed
         }
         val channel = MainActivity.getAndroidTvPlayerChannel()
         recordPlaybackLifecycle("finish_sent", "bridgeAvailable=${channel != null}")
@@ -16759,6 +16767,11 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
     private fun beginStartupFailoverIfEligible() {
         startupSourcesExhausted = false
+        startupRecoveryConsumed = false
+        startupRecoveryProducedCandidates = false
+        startupRecoveryNextMode = null
+        startupRecoveryCandidateIndices = null
+        startupFailedReleases.clear()
         val model = payload
         if (model == null) {
             startupLog("event=bypass reason=missing_payload")
@@ -17128,6 +17141,15 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         if (cursor.committed || startupFailoverDispatching) return
         startupFailoverDispatching = true
         try {
+            if (reason != "recovery-results") {
+                stremioSources.getOrNull(currentStremioSourceIndex)?.let {
+                    startupFailedReleases.add(it.failureKey(reason))
+                }
+                MainActivity.getAndroidTvPlayerChannel()?.invokeMethod("startupSourceFailed", mapOf(
+                    "sourcePersistenceSessionId" to sourcePersistenceSessionId,
+                    "sourceIndex" to currentStremioSourceIndex, "reason" to reason,
+                ))
+            }
             startupFailoverTimeout?.let { progressHandler.removeCallbacks(it) }
             startupFailoverTimeout = null
             startupCommitCheck?.let { progressHandler.removeCallbacks(it) }
@@ -17140,14 +17162,42 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             setResolvingState(false)
             player?.stop()
 
-            val nextIndex = cursor.nextIndex(stremioSources.size) { index ->
+            val nextIndex = cursor.nextIndex(stremioSources.size, startupRecoveryCandidateIndices) { index ->
                 val candidate = stremioSources.getOrNull(index)
                 candidate?.streamType != "externalUrl" &&
+                    candidate?.let {
+                        it.failureKey("player:ERROR_CODE_DECODING_FAILED") !in startupFailedReleases &&
+                            it.failureKey() !in startupFailedReleases
+                    } == true &&
                     !(startupResolverProvider.equals("pikpak", ignoreCase = true) &&
                         startupPikPakTorrentAcquisitionAttempted &&
                         candidate?.streamType == "torrent")
             }
             if (nextIndex == null) {
+                startupRecoveryConsumed = startupRecoveryIsConsumed(
+                    startupHasRemainingSavedSources, startupRecoveryProducedCandidates,
+                    cursor.attempts, if (startupTryNextOnFailure) startupMaxAttempts else 1)
+                val initialRecovery = startupRecoveryAvailable && stremioSources.size == 1 &&
+                    stremioSources.first().isDirectStream && (seriesSourceTabs || movieMoreSources)
+                if (!startupHasRemainingSavedSources && startupTryNextOnFailure &&
+                    cursor.attempts < startupMaxAttempts &&
+                    (initialRecovery || startupRecoveryNextMode != null)) {
+                    // Keep the opaque gate and this activity alive while Dart
+                    // expands the episode/movie results. The cursor's attempt
+                    // budget and attempted indices survive the fetch.
+                    startupRecoveryAvailable = false
+                    startupRecoveryFetching = true
+                    val recoveryMode = startupRecoveryNextMode ?: "startup:begin"
+                    startupRecoveryNextMode = null
+                    startupLog("event=recovery_fetch attempts=${cursor.attempts}")
+                    requestMoreTorrentSources(recoveryMode)
+                    progressHandler.postDelayed({
+                        if (startupRecoveryFetching && moreSourcesLoadingMode == recoveryMode && !isFinishing && !isDestroyed) {
+                            failMoreTorrentSources()
+                        }
+                    }, 30_000L)
+                    return
+                }
                 startupSourcesExhausted = true
                 startupLog(
                     "event=exhausted attempts=${cursor.attempts} " +
@@ -17582,7 +17632,10 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
     private fun resolveSourceToPlaylistViaFlutter(source: StremioSource, token: Int) {
         try {
-            val args = hashMapOf<String, Any?>("sourceIndex" to source.index)
+            val args = hashMapOf<String, Any?>(
+                "sourceIndex" to source.index,
+                "automaticRecovery" to (startupFailoverDispatching && startupRecoveryCandidateIndices != null),
+            )
             android.util.Log.d("AndroidTvPlayer", "resolveSourceToPlaylist - sending to Flutter: index=${source.index}, token=$token")
 
             MainActivity.getAndroidTvPlayerChannel()?.invokeMethod(
@@ -17679,7 +17732,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         if (moreSourcesLoadingMode != null) return
         val channel = MainActivity.getAndroidTvPlayerChannel()
         if (channel == null) {
-            showStatusPillTransient("Couldn't load more sources")
+            failMoreTorrentSources()
             return
         }
         moreSourcesLoadingMode = mode
@@ -17719,6 +17772,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     }
 
     private fun applyMoreTorrentSources(mode: String, map: Map<*, *>?) {
+        if (isFinishing || isDestroyed) return
         moreSourcesLoadingMode = null
         if (map == null) {
             failMoreTorrentSources(alreadyCleared = true)
@@ -17747,6 +17801,18 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         updateStremioQualityBadge()
         unifiedMenu?.render()
         sourceBrowser?.render()
+        if (startupRecoveryFetching) {
+            startupRecoveryFetching = false
+            // A completed search with candidates owns recovery, even when all
+            // were duplicates/ineligible or fewer than the attempt budget.
+            // Do not restart Dart recovery with a fresh acquisition allowance.
+            startupRecoveryProducedCandidates = startupRecoveryProducedCandidates ||
+                (map["recoveryCandidateCount"] as? Number)?.toInt()?.let { it > 0 } == true
+            startupRecoveryCandidateIndices = (map["recoveryCandidateIndices"] as? List<*>)
+                ?.mapNotNull { (it as? Number)?.toInt() } ?: emptyList()
+            startupRecoveryNextMode = map["recoveryNextMode"] as? String
+            failStartupCandidate("recovery-results")
+        }
     }
 
     /** Per-addon fetch from the source browser: episode results first — the
@@ -17879,6 +17945,10 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         }
         unifiedMenu?.render()
         sourceBrowser?.render()
+        if (startupRecoveryFetching) {
+            startupRecoveryFetching = false
+            progressHandler.post { if (!isFinishing && !isDestroyed) failStartupCandidate("recovery-results") }
+        }
     }
 
     private fun switchToSourcePlaylist(
@@ -18481,6 +18551,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             startupResolverProvider = obj.optString("startupResolverProvider")
                 .takeIf { it.isNotEmpty() }
             startupRecoveryAvailable = obj.optBoolean("startupRecoveryAvailable", false)
+            startupHasRemainingSavedSources = obj.optBoolean("startupHasRemainingSavedSources", false)
             sourcePersistenceSessionId = obj.optInt("sourcePersistenceSessionId", sourcePersistenceSessionId)
             startupLog(
                 "event=payload_parsed sourceCount=${stremioSources.size} " +
@@ -19700,7 +19771,11 @@ private data class StremioSource(
     val addonPresentation: Pair<String, String?>? = null,
     val addonDisplayName: String? = null,
     val addonLogo: String? = null,
+    val hasRealInfoHash: Boolean = true,
+    val addonKey: String? = null,
 ) {
+    fun failureKey(reason: String = "") = startupFailureKey(addonKey ?: addonId ?: source, name, sizeBytes, streamType, reason,
+        videoId, if (hasRealInfoHash) infohash else null, directUrl)
     val isDirectStream: Boolean get() = streamType == "directUrl"
 
     /** Season/series-pack coverage — drives the series source-tab split. */
@@ -19732,6 +19807,8 @@ private data class StremioSource(
                 index = index,
                 name = name,
                 infohash = obj.optString("infohash", ""),
+                hasRealInfoHash = obj.optBoolean("has_real_infohash", true),
+                addonKey = obj.optString("stremio_addon_key").takeIf { it.isNotEmpty() },
                 directUrl = obj.optString("direct_url").takeIf { it.isNotEmpty() },
                 httpHeaders = ProtectedStreamHttp.headers(obj.opt("http_headers")),
                 streamType = obj.optString("stream_type", "torrent"),
@@ -19755,6 +19832,8 @@ private data class StremioSource(
                 index = index,
                 name = name,
                 infohash = (map["infohash"] as? String) ?: "",
+                hasRealInfoHash = (map["has_real_infohash"] as? Boolean) ?: true,
+                addonKey = (map["stremio_addon_key"] as? String)?.takeIf { it.isNotEmpty() },
                 directUrl = (map["direct_url"] as? String)?.takeIf { it.isNotEmpty() },
                 httpHeaders = ProtectedStreamHttp.headers(map["http_headers"]),
                 streamType = (map["stream_type"] as? String) ?: "torrent",

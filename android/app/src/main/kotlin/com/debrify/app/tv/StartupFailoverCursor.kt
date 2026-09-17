@@ -1,5 +1,25 @@
 package com.debrify.app.tv
 
+internal fun startupFailureKey(addon: String?, name: String, size: Long, transport: String?, reason: String = "",
+    videoId: String? = null, infohash: String? = null, url: String? = null): List<Any?> {
+    val decoder = reason.contains("DECODING_FAILED") || reason.contains("DECODING_FORMAT_UNSUPPORTED") || reason.contains("DECODER_INIT_FAILED")
+    val hash = infohash?.lowercase()?.takeIf { Regex("(?:[a-f0-9]{40}|[a-f0-9]{64})").matches(it) }
+    val reliable = hash != null || (!videoId.isNullOrBlank() && size > 0 &&
+        Regex(".*\\.(mkv|mp4|avi|mov|webm|m4v|ts)$", RegexOption.IGNORE_CASE).matches(name.trim()))
+    return listOf(addon, videoId, hash, name.trim().lowercase(), size,
+        if (reliable) null else url, if (decoder && reliable) null else transport)
+}
+
+internal fun startupBudgetConsumed(attempts: Int, limit: Int): Boolean = attempts >= limit.coerceAtLeast(1)
+
+internal fun startupRecoveryIsConsumed(
+    hasRemainingSavedSources: Boolean,
+    producedCandidates: Boolean,
+    attempts: Int,
+    limit: Int,
+): Boolean = !hasRemainingSavedSources &&
+    (producedCandidates || startupBudgetConsumed(attempts, limit))
+
 internal fun isCurrentStartupGeneration(captured: Int?, current: Int): Boolean =
     captured == null || captured == current
 
@@ -70,11 +90,12 @@ internal class StartupFailoverCursor(
         return begin(startIndex.coerceIn(0, sourceCount - 1))
     }
 
-    fun nextIndex(sourceCount: Int, eligible: (Int) -> Boolean): Int? {
+    fun nextIndex(sourceCount: Int, orderedIndices: List<Int>? = null, eligible: (Int) -> Boolean): Int? {
         if (committed || attempted.size >= attemptLimit || sourceCount <= 0) return null
         val after = attempted.lastOrNull() ?: (startIndex - 1)
-        for (index in (after + 1) until sourceCount) {
-            if (index !in attempted && eligible(index)) return begin(index)
+        val candidates = orderedIndices ?: ((after + 1) until sourceCount).toList()
+        for (index in candidates) {
+            if (index in 0 until sourceCount && index !in attempted && eligible(index)) return begin(index)
         }
         return null
     }

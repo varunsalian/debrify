@@ -57,6 +57,7 @@ import 'source_priority.dart';
 import 'stremio_service.dart';
 import 'series_source_service.dart';
 import 'resolved_playback_link_cache.dart';
+import 'failed_saved_source.dart';
 import 'storage_service.dart';
 import 'stream_url_validator.dart';
 import 'startup_stream_policy.dart';
@@ -1193,20 +1194,32 @@ class TorrentPlaybackService {
       } on TorrentNotCachedException catch (e) {
         logSourceSelection('quick_play_probe_rejected', source: t, reason: 'not_cached');
         // Probed torrent is downloading — remove it so RD stays clean.
-        try {
-          await DebridService.deleteTorrent(e.apiKey, e.torrentId);
-        } catch (_) {}
+        await cleanupFailedAutomaticAcquisition(e);
       } on AllDebridTorrentNotReadyException catch (e) {
         logSourceSelection('quick_play_probe_rejected', source: t, reason: 'not_ready');
-        try {
-          await AllDebridService.deleteMagnet(e.apiKey, e.magnetId);
-        } catch (_) {}
+        await cleanupFailedAutomaticAcquisition(e);
       } catch (_) {
         logSourceSelection('quick_play_probe_rejected', source: t, reason: 'provider_error');
         // _TorboxNotCached / _PremiumizeNotCached / transient — try next.
       }
     }
     return (null, null);
+  }
+
+  /// Delete only the acquisition identified by the provider's not-ready error.
+  /// A failed cleanup must not prevent trying another playable source.
+  @visibleForTesting
+  static Future<void> cleanupFailedAutomaticAcquisition(Object error, {
+    Future<void> Function(String, String)? deleteRealDebrid,
+    Future<void> Function(String, String)? deleteAllDebrid,
+  }) async {
+    try {
+      if (error is TorrentNotCachedException) {
+        await (deleteRealDebrid ?? DebridService.deleteTorrent)(error.apiKey, error.torrentId);
+      } else if (error is AllDebridTorrentNotReadyException) {
+        await (deleteAllDebrid ?? AllDebridService.deleteMagnet)(error.apiKey, error.magnetId);
+      }
+    } catch (_) {}
   }
 
   /// Full catalog-play flow: pick provider, show the cinematic overlay (with the
@@ -1664,8 +1677,7 @@ class TorrentPlaybackService {
 
   /// Loads the quick-play ladder: inactive (a no-op) when the user disabled
   /// "Apply filters to Quick Play" or has no default filters saved.
-  /// Public only for tests (the kill-switch gate).
-  @visibleForTesting
+  /// Shared with native startup recovery to enforce the same filter policy.
   static Future<FilterLadder> loadLadder({
     bool includeSize = true,
     QuickPlayRules? rules,
@@ -1726,7 +1738,6 @@ class TorrentPlaybackService {
   }
 
   /// Applies only the ordering/filtering explicitly selected by [rules].
-  @visibleForTesting
   static List<Torrent> orderCandidatesForRules(
     List<Torrent> torrents, {
     required QuickPlayRules rules,
@@ -1912,7 +1923,6 @@ class TorrentPlaybackService {
   /// Direct-link validation historically inspected five links regardless of
   /// the torrent retry preference. Keep those independent: migrating a legacy
   /// retry count must not change direct-link behavior.
-  @visibleForTesting
   static int directValidationBudgetForRules(QuickPlayRules? _) => 5;
 
   /// Whether a direct stream may safely be touched by Dart before the player.
@@ -1921,7 +1931,6 @@ class TorrentPlaybackService {
   /// commonly returns a provider/CDN URL whose final host no longer contains
   /// "aiostreams", while the addon id/source still identifies the link as an
   /// IP-bound proxy result.
-  @visibleForTesting
   static bool shouldPreflightDirectStream(Torrent torrent) {
     return !StartupStreamPolicy.isAioStreams(
       addonId: torrent.stremioAddonId,
@@ -2036,6 +2045,7 @@ class TorrentPlaybackService {
     QuickPlayRules? rules,
     bool Function()? isCancelled,
     void Function()? onCacheCheck,
+    bool preserveRepresentations = false,
   }) async {
     final activeRules = rules ?? QuickPlayRules.debrifyDefault(isMovie: false);
     final engineTimeout = activeRules.searchTimeoutSeconds == 0
@@ -2133,6 +2143,7 @@ class TorrentPlaybackService {
     // Ladder tier is the PRIMARY pack sort key (stable over the coverage/
     // seeders order): the winning pack gets PINNED by auto-bind, so it must
     // be one the user's filters approve of when any such pack exists.
+    if (preserveRepresentations) return packs;
     packs = orderCandidatesForRules(packs, rules: activeRules, ladder: ladder);
     if (isCancelled?.call() ?? false) return packs;
     if (packs.isNotEmpty &&
@@ -2269,6 +2280,86 @@ class TorrentPlaybackService {
     return torrents;
   }
 
+  /// Recovery uses the same searches, but keeps representations until strict
+  /// rules have been applied. Manual drawer deduplication is intentionally later.
+  static Future<List<Torrent>?> Function(String, int, int) _recoverySearch(
+    PlaybackMeta meta, String? provider,
+  ) => (mode, season, episode) async {
+    final isMovie = meta.contentType == 'movie';
+    final rules = await StorageService.getQuickPlayRules(isMovie: isMovie);
+    final prov = await _effectiveFetchProvider(provider);
+    if (rules.sourcePriority.isNotEmpty) await warmSourceAliases();
+    if (mode == SeriesSourceFetcher.modePacks) {
+      if (prov == null || prov == 'pikpak') return null;
+      return searchSeriesPackSources(
+        imdbId: meta.imdbId!, label: meta.title ?? '', season: season,
+        provider: prov, rules: rules,
+        ladder: await loadLadder(includeSize: false, rules: rules),
+        preserveRepresentations: true,
+      );
+    }
+    if (prov != null) {
+      return searchCuratedSources(
+        imdbId: meta.imdbId!, label: meta.title ?? '', isMovie: isMovie,
+        season: isMovie ? null : season, episode: isMovie ? null : episode,
+        provider: prov, rules: rules,
+      );
+    }
+    if (!allowsAddonSearch(rules) || !rules.allowDirectLinks) return [];
+    final result = await TorrentService.searchStremioAddonsOnly(
+      imdbId: meta.imdbId!, isMovie: isMovie,
+      season: isMovie ? null : season, episode: isMovie ? null : episode,
+      timeout: rules.addonTimeoutSeconds == 15 ? null : Duration(seconds: rules.addonTimeoutSeconds),
+      preserveOrder: rules.ranking == QuickPlayRanking.exactOrder,
+    );
+    final list = (result['torrents'] as List).cast<Torrent>().where(
+      (t) => t.streamType == StreamType.directUrl && (t.directUrl?.isNotEmpty ?? false),
+    ).toList();
+    return list.isEmpty && ((result['addonErrors'] as Map?)?.isNotEmpty ?? false)
+        ? null : list;
+  };
+
+  /// Shared automatic preparation: strict eligibility BEFORE dedupe, then the
+  /// same provider cache-first pass used by Quick Play's torrent preparation.
+  static Future<List<Torrent>> prepareRecoverySources(
+    List<Torrent> raw, {
+    required QuickPlayRules rules,
+    required String? provider,
+    required FilterLadder ladder,
+    Future<List<Torrent>> Function(String, List<Torrent>)? cacheCheck,
+  }) async {
+    final ordered = orderCandidatesForRules(raw, rules: rules, ladder: ladder);
+    if (provider != 'torbox' && provider != 'premiumize') return ordered;
+    var torrents = ordered.where((t) => t.streamType == StreamType.torrent).toList();
+    if (torrents.isEmpty) return ordered;
+    torrents = await (cacheCheck ?? _cacheFirst)(provider!, torrents);
+    torrents = orderCacheCheckedCandidatesForRules(torrents, rules: rules, ladder: ladder);
+    return mergePreparedTorrentOrder(ordered, torrents);
+  }
+
+  /// One native recovery attempt, using Quick Play's exact-episode validation
+  /// and RD/AllDebrid acquisition cleanup. Native owns the overall retry cap.
+  static Future<List<PlaylistEntry>?> resolveRecoverySource(
+    Torrent source, {required String? provider, int? season, int? episode}
+  ) async {
+    if (source.streamType == StreamType.directUrl) {
+      if (source.directUrl?.isNotEmpty != true) return null;
+      return [PlaylistEntry(url: source.directUrl!, title: source.displayTitle,
+        httpHeaders: source.httpHeaders ?? const {})];
+    }
+    if (provider == null) return null;
+    final (resolved, _) = await _probeCandidates(provider, [source],
+      season: season, episode: episode,
+      rules: QuickPlayRules.debrifyDefault(isMovie: season == null)
+          .copyWith(tryNextOnFailure: false, maxAttempts: 1),
+    );
+    if (resolved == null) return null;
+    if (resolved.playlist?.isNotEmpty == true) return resolved.playlist;
+    if (resolved.playUrl?.isNotEmpty != true) return null;
+    return [PlaylistEntry(url: resolved.playUrl!, title: resolved.title,
+      httpHeaders: resolved.httpHeaders ?? const {})];
+  }
+
   /// Builds the [SeriesSourceFetcher] a series play hands to the player: the
   /// "Load more sources" backend for the pack/episode source tabs. Returns
   /// null when the play isn't fetchable-series-shaped (movies, no concrete
@@ -2303,6 +2394,7 @@ class TorrentPlaybackService {
     var initialSearchConsumed = false;
 
     return SeriesSourceFetcher(
+      searchForRecovery: _recoverySearch(meta, provider),
       season: season,
       episode: episode,
       pinnedDirectCandidates: (s, e, {onPreferredMissing}) async* {
@@ -2561,6 +2653,7 @@ class TorrentPlaybackService {
     }
     final label = meta.title ?? '';
     return SeriesSourceFetcher.movie(
+      searchForRecovery: _recoverySearch(meta, provider),
       searchMovie: () async {
         final prov = await _effectiveFetchProvider(provider);
         if (prov == null) return null;
@@ -3813,10 +3906,9 @@ class TorrentPlaybackService {
 
       // Addon-direct pins store provenance, never the expiring URL. Resolve
       // the current movie/episode endpoint now and launch the freshly returned
-      // link. A failed refresh or validation is attempt-scoped: addon,
-      // network, and CDN availability do not prove this durable profile is
-      // invalid. The loop still skips it for this play, and recovery bypasses
-      // bound sources before fresh search, so retaining it cannot loop now.
+      // link. A rejected playable link is unpinned and evicted from the cache;
+      // recovery moves to the remaining pins, then a fresh search. There is no
+      // persistent blacklist: fresh search/manual selection may find it again.
       if (source.isAddonDirect) {
         logSourceSelection('saved_direct_attempt', index: sourcePosition,
             season: meta.season, episode: meta.episode,
@@ -3900,6 +3992,11 @@ class TorrentPlaybackService {
                 if (cancel.cancelled) return true;
               }
               if (!alive) {
+                await SeriesSourceService.removeSourceEntry(imdbId, source);
+                await ResolvedPlaybackLinkCache.remove(
+                  id: imdbId, type: meta.contentType ?? 'series',
+                  season: meta.season, episode: meta.episode, pin: source,
+                );
                 continue;
               }
             }
@@ -3919,34 +4016,35 @@ class TorrentPlaybackService {
               ),
               fresh.displayTitle,
               provider: SeriesSource.addonDirectService,
+              recoveryProvider: preferredProvider,
+              startupHasRemainingSavedSources: remainingSources.isNotEmpty,
               meta: meta,
               sources: [fresh],
               sourceIndex: 0,
               seriesFetcher:
-                  seriesFetcherFor(meta: meta) ?? movieFetcherFor(meta: meta),
+                  seriesFetcherFor(meta: meta, provider: preferredProvider) ??
+                  movieFetcherFor(meta: meta, provider: preferredProvider),
               overlay: overlay,
               startupFailoverEnabled: true,
               onStartupSourcesExhausted: () async {
-                if (usingCache) {
-                  try {
-                    await ResolvedPlaybackLinkCache.remove(
-                      id: imdbId,
-                      type: meta.contentType ?? 'series',
-                      season: meta.season,
-                      episode: meta.episode,
-                      pin: source,
-                    );
-                  } catch (_) {}
-                }
+                await FailedSavedSource.cleanup(
+                  removePin: () => SeriesSourceService.removeSourceEntry(imdbId, source),
+                  removeCache: () => ResolvedPlaybackLinkCache.remove(
+                    id: imdbId,
+                    type: meta.contentType ?? 'series',
+                    season: meta.season,
+                    episode: meta.episode,
+                    pin: source,
+                  ),
+                );
                 if (!context.mounted) return;
                 await _recoverAfterBoundStartupFailure(
                   context,
                   imdbId,
-                  usingCache ? [source, ...remainingSources] : remainingSources,
+                  remainingSources,
                   label: label,
                   meta: meta,
                   preferredProvider: preferredProvider,
-                  skipLinkCache: usingCache,
                 );
               },
             );
@@ -3995,17 +4093,23 @@ class TorrentPlaybackService {
             r,
             r.title,
             provider: SeriesSource.localService,
+            startupHasRemainingSavedSources: remainingSources.isNotEmpty,
             meta: meta,
             overlay: overlay,
             startupFailoverEnabled: true,
-            onStartupSourcesExhausted: () => _recoverAfterBoundStartupFailure(
+            onStartupSourcesExhausted: () async {
+              await FailedSavedSource.cleanup(
+                removePin: () => SeriesSourceService.removeSourceEntry(imdbId, source),
+              );
+              await _recoverAfterBoundStartupFailure(
               context,
               imdbId,
               remainingSources,
               label: label,
               meta: meta,
               preferredProvider: preferredProvider,
-            ),
+              );
+            },
           );
           return true;
         }
@@ -4104,6 +4208,7 @@ class TorrentPlaybackService {
           res,
           nativeCloud ? source.torrentName : t!.displayTitle,
           provider: prov,
+          startupHasRemainingSavedSources: remainingSources.isNotEmpty,
           meta: meta,
           sources: nativeCloud ? null : [t!],
           sourceIndex: 0,
@@ -4116,14 +4221,19 @@ class TorrentPlaybackService {
                     movieFetcherFor(meta: meta, provider: prov)),
           overlay: overlay,
           startupFailoverEnabled: true,
-          onStartupSourcesExhausted: () => _recoverAfterBoundStartupFailure(
+          onStartupSourcesExhausted: () async {
+            await FailedSavedSource.cleanup(
+              removePin: () => SeriesSourceService.removeSourceEntry(imdbId, source),
+            );
+            await _recoverAfterBoundStartupFailure(
             context,
             imdbId,
             remainingSources,
             label: label,
             meta: meta,
             preferredProvider: preferredProvider,
-          ),
+            );
+          },
         );
         return true;
       }
@@ -4781,6 +4891,7 @@ class TorrentPlaybackService {
     String? startupResolverProvider,
     Future<void> Function(Torrent)? onStremioSourceCommitted,
     Future<void> Function()? onStartupSourcesExhausted,
+    bool startupHasRemainingSavedSources = false,
     SeriesSourceFetcher? seriesSourceFetcher,
     PlaybackMeta? meta,
     String? rdTorrentId,
@@ -4805,6 +4916,7 @@ class TorrentPlaybackService {
     startupResolverProvider: startupResolverProvider,
     onStremioSourceCommitted: onStremioSourceCommitted,
     onStartupSourcesExhausted: onStartupSourcesExhausted,
+    startupHasRemainingSavedSources: startupHasRemainingSavedSources,
     seriesSourceFetcher: seriesSourceFetcher,
     contentImdbId: meta?.imdbId,
     contentType: meta?.contentType,
@@ -5062,6 +5174,7 @@ class TorrentPlaybackService {
     _Resolved r,
     String title, {
     required String provider,
+    String? recoveryProvider,
     PlaybackMeta? meta,
     List<Torrent>? sources,
     int sourceIndex = 0,
@@ -5076,6 +5189,7 @@ class TorrentPlaybackService {
     PipelineLoadingOverlay? overlay,
     bool startupFailoverEnabled = false,
     Future<void> Function()? onStartupSourcesExhausted,
+    bool startupHasRemainingSavedSources = false,
   }) async {
     // Once push() takes the handoff callback the LAUNCHER owns the dismissal
     // (player-visible time, or its own always-fires safety net); the finally
@@ -5123,6 +5237,15 @@ class TorrentPlaybackService {
       }
       // Args built BEFORE the flag flips: a throw while constructing them
       // must still hit the finally's dismiss, since push() never ran.
+      // Snapshot the provider used for any fetched torrent candidates. Native
+      // startup must know it before recovery so PikPak's acquisition cap also
+      // applies when the initial saved source is a direct link.
+      final resolverProvider =
+          provider == SeriesSource.localService ||
+              provider == SeriesSource.addonDirectService
+          ? recoveryProvider ?? await _defaultConfiguredProvider()
+          : provider;
+      if (!context.mounted) return;
       final args = _playerArgs(
         videoUrl: r.playUrl!,
         httpHeaders: r.httpHeaders,
@@ -5140,23 +5263,19 @@ class TorrentPlaybackService {
             (sources != null &&
                 sources.isNotEmpty &&
                 (sources.length > 1 || seriesFetcher != null))
-            ? (provider == SeriesSource.localService ||
-                      provider == SeriesSource.addonDirectService
+            ? (resolverProvider == null
                   ? _lazyProviderResolver()
-                  : _resolverFor(provider))
+                  : _resolverFor(resolverProvider))
             : null,
         startupFailoverEnabled: startupFailoverEnabled,
-        startupResolverProvider:
-            provider == SeriesSource.localService ||
-                provider == SeriesSource.addonDirectService
-            ? null
-            : provider,
+        startupResolverProvider: resolverProvider,
         onStremioSourceCommitted:
             provider == SeriesSource.localService ||
                 provider == SeriesSource.addonDirectService
-            ? _lazySourceCommitter(meta)
+            ? _lazySourceCommitter(meta, preferredProvider: resolverProvider)
             : _validatedLaunchCommitter(provider, meta),
         onStartupSourcesExhausted: onStartupSourcesExhausted,
+        startupHasRemainingSavedSources: startupHasRemainingSavedSources,
         seriesSourceFetcher: seriesFetcher,
         meta: meta,
         rdTorrentId: r.rdTorrentId,
@@ -5490,8 +5609,9 @@ class TorrentPlaybackService {
 
   /// Commit hook for launches whose resolver chooses a provider lazily.
   static Future<void> Function(Torrent) _lazySourceCommitter(
-    PlaybackMeta? meta,
-  ) {
+    PlaybackMeta? meta, {
+    String? preferredProvider,
+  }) {
     var tail = Future<void>.value();
     return (Torrent t) {
       final commit = tail.then((_) async {
@@ -5500,7 +5620,7 @@ class TorrentPlaybackService {
           await _rebindOnSourceSwitch(meta, t, SeriesSource.addonDirectService);
           return;
         }
-        final provider = await _defaultConfiguredProvider();
+        final provider = preferredProvider ?? await _defaultConfiguredProvider();
         if (provider == null) return;
         await _rebindOnSourceSwitch(meta, t, provider);
       });

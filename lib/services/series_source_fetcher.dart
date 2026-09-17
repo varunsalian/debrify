@@ -86,6 +86,7 @@ class SeriesSourceFetcher {
     this.validateCandidate,
     this.pinnedDirectCandidates,
     this.prepareNextDirectEpisode,
+    this.searchForRecovery,
   }) : _searchPacks = searchPacks,
        _searchEpisodes = searchEpisodes,
        _searchMovie = null,
@@ -100,6 +101,7 @@ class SeriesSourceFetcher {
     this.fetchAddonEpisodes,
     this.fetchEngine,
     this.validateCandidate,
+    this.searchForRecovery,
   }) : _searchMovie = searchMovie,
        _searchPacks = null,
        _searchEpisodes = null,
@@ -126,7 +128,11 @@ class SeriesSourceFetcher {
   /// behavior of older/custom fetchers; callers should use [allowsCandidate]
   /// rather than reading this directly.
   final SeriesSourceCandidateValidator? validateCandidate;
-  final Stream<Torrent> Function(int season, int episode, {void Function()? onPreferredMissing})?
+  final Stream<Torrent> Function(
+    int season,
+    int episode, {
+    void Function()? onPreferredMissing,
+  })?
   pinnedDirectCandidates;
 
   final Future<void> Function(int season, int episode, Torrent source)?
@@ -173,6 +179,11 @@ class SeriesSourceFetcher {
   final SeriesSourceSearch? _searchEpisodes;
   final MovieSourceSearch? _searchMovie;
 
+  /// Curated but not manually deduplicated: strict automatic eligibility must
+  /// run before representations of the same hash are collapsed.
+  final Future<List<Torrent>?> Function(String mode, int season, int episode)?
+  searchForRecovery;
+
   /// Whether this is the movie flavor (flat list, [modeMovie] only).
   bool get isMovie => _searchMovie != null;
 
@@ -208,23 +219,35 @@ class SeriesSourceFetcher {
   /// possibly empty — or null when the search failed or [mode] doesn't apply
   /// to this flavor. The fetched flag flips only on success, so a failed
   /// fetch keeps "Load more" available to retry.
-  Future<List<Torrent>?> fetch(String mode, {int? season, int? episode}) async {
+  Future<List<Torrent>?> fetch(
+    String mode, {
+    int? season,
+    int? episode,
+    bool automaticRecovery = false,
+  }) async {
     final s = season ?? this.season;
     final e = episode ?? this.episode;
     final List<Torrent>? result;
-    switch (mode) {
-      case modePacks:
-        result = await _searchPacks?.call(s, e);
-        break;
-      case modeEpisodes:
-        result = await _searchEpisodes?.call(s, e);
-        break;
-      case modeMovie:
-        result = await _searchMovie?.call();
-        break;
-      default:
-        return null;
-    }
+    if (automaticRecovery && searchForRecovery != null) {
+      try {
+        result = await searchForRecovery!(mode, s, e);
+      } catch (_) {
+        return null; // Keep the stage retryable and allow the next stage.
+      }
+    } else
+      switch (mode) {
+        case modePacks:
+          result = await _searchPacks?.call(s, e);
+          break;
+        case modeEpisodes:
+          result = await _searchEpisodes?.call(s, e);
+          break;
+        case modeMovie:
+          result = await _searchMovie?.call();
+          break;
+        default:
+          return null;
+      }
     if (result == null) return null;
     if (mode == modePacks) {
       packsFetched = true;
@@ -254,10 +277,16 @@ class SeriesSourceFetcher {
   /// Direct/external addon rows belong to the episode endpoint that returned
   /// them. Keep torrent packs reusable and legacy rows with unknown scope.
   static bool visibleForEpisode(Torrent source, int? season, int? episode) {
-    if (source.streamType == StreamType.torrent || season == null || episode == null) return true;
-    final scope = RegExp(r':(\d+):(\d+)$').firstMatch(source.stremioVideoId ?? '');
+    if (source.streamType == StreamType.torrent ||
+        season == null ||
+        episode == null)
+      return true;
+    final scope = RegExp(
+      r':(\d+):(\d+)$',
+    ).firstMatch(source.stremioVideoId ?? '');
     return scope == null ||
-        (int.parse(scope.group(1)!) == season && int.parse(scope.group(2)!) == episode);
+        (int.parse(scope.group(1)!) == season &&
+            int.parse(scope.group(2)!) == episode);
   }
 
   /// Dedupe identity: infohash for torrents, URL for direct streams.
