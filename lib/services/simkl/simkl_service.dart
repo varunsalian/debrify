@@ -819,6 +819,62 @@ class SimklService {
     return true;
   }
 
+  /// Reset watched episodes without removing the show from the library.
+  Future<bool> clearSeriesHistory(String imdbId) async {
+    final token = await StorageService.getSimklAccessToken();
+    if (token == null || token.isEmpty) return false;
+    final rows = await _postOrNull(
+      '/sync/watched',
+      [
+        {
+          'ids': {'imdb': imdbId},
+        },
+      ],
+      token: token,
+      label: 'clearSeriesHistory read',
+      query: {'extended': 'episodes'},
+    );
+    if (rows is! List) return false;
+    final seasons = <Map<String, dynamic>>[];
+    for (final row in rows) {
+      if (row is! Map || row['seasons'] is! List) return false;
+      for (final season in row['seasons'] as List) {
+        if (season is! Map ||
+            season['number'] is! num ||
+            season['episodes'] is! List)
+          return false;
+        final episodes = <Map<String, dynamic>>[];
+        for (final episode in season['episodes'] as List) {
+          if (episode is! Map) return false;
+          if (episode['watched'] != true) continue;
+          if (episode['number'] is! num) return false;
+          episodes.add({'number': episode['number']});
+        }
+        if (episodes.isNotEmpty)
+          seasons.add({'number': season['number'], 'episodes': episodes});
+      }
+    }
+    if (seasons.isEmpty) return true;
+    final result = await _postOrNull(
+      '/sync/history/remove',
+      {
+        'shows': [
+          {
+            'ids': {'imdb': imdbId},
+            'seasons': seasons,
+          },
+        ],
+      },
+      token: token,
+      label: 'clearSeriesHistory',
+    );
+    if (!_wasMatched(result, 'shows')) return false;
+    _invalidateLibraryCache();
+    EpisodeTrackerSnapshotRevision.invalidateTitle('simkl', imdbId);
+    StorageService.movieFinishedRevision.value++;
+    return true;
+  }
+
   /// Builds the `{ids, seasons: [{number, episodes: [{number}]}]}` show
   /// reference shared by every episode-scoped write above.
   Map<String, dynamic> _episodeRef(String showImdbId, int season, int episode) {

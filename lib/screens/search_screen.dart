@@ -13762,6 +13762,18 @@ class _SearchScreenState extends State<SearchScreen>
     // the score — skips the rating dialog rather than asking twice.
     int? presetRating,
   }) async {
+    if (action == TraktItemMenuAction.clearWatchProgress) {
+      await handleTraktMenuAction(context, item, action);
+      if (!mounted) return;
+      _seriesResumeCache.clear();
+      await Future.wait([
+        _loadContinueWatching(),
+        _loadTraktContinueWatching(refreshBound: false),
+        _loadSimklContinueWatching(refreshBound: false),
+        _loadMdblistContinueWatching(refreshBound: false),
+      ]);
+      return;
+    }
     if (action == TraktItemMenuAction.removeFromPlayback) {
       if (imdb != null) await _handleContinueDetailAction(action, imdb);
       return;

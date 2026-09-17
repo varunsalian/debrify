@@ -472,6 +472,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
     TraktItemMenuAction.playRandomEpisode,
     TraktItemMenuAction.searchPacks,
     TraktItemMenuAction.removeFromPlayback,
+    TraktItemMenuAction.clearWatchProgress,
   };
 
   List<TraktMenuOption> get _appMenuOptions => [
@@ -2786,6 +2787,8 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
       case TraktItemMenuAction.removeFromPlayback:
         return 'Remove this from Continue Watching so it stops showing on your '
             'home rows and resume list.';
+      case TraktItemMenuAction.clearWatchProgress:
+        return 'Reset all episodes on this device and connected Trakt, Simkl and MDBList accounts. Saved sources are kept.';
       case TraktItemMenuAction.removeFromTraktPlayback:
         return 'Delete this title\'s playback progress (and watch history) on '
             'Trakt so it leaves the Trakt Continue Watching rows.';
@@ -2843,6 +2846,9 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
         onSelected: (action) async {
           Navigator.of(sheetCtx).pop();
           await widget.onTraktAction?.call(action);
+          if (mounted && action == TraktItemMenuAction.clearWatchProgress) {
+            _refreshAfterPlayback();
+          }
           // Binding a source changes the pill's count, and "Remove from
           // Continue Watching" changes the resume label.
           if (mounted) setState(() {});

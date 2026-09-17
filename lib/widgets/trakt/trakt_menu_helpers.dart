@@ -3,6 +3,7 @@ import '../../models/stremio_addon.dart';
 import '../../models/tracking_source.dart';
 import '../../services/trakt/trakt_service.dart';
 import '../../services/watched_action_coordinator.dart';
+import '../../services/series_progress_reset_service.dart';
 
 /// Actions available in the Trakt episode overflow menu.
 enum TraktEpisodeMenuAction { markWatched, markUnwatched, rate }
@@ -25,6 +26,7 @@ enum TraktItemMenuAction {
   selectSource,
   playRandomEpisode,
   searchPacks,
+  clearWatchProgress,
 }
 
 /// Shows a 1-10 rating dialog. Returns the selected rating or null.
@@ -272,6 +274,60 @@ Future<void> handleTraktMenuAction(
       return; // No context for which list to remove from
     case TraktItemMenuAction.removeFromPlayback:
       return; // Only handled in TraktResultsView which has playback IDs
+    case TraktItemMenuAction.clearWatchProgress:
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Clear watch progress?'),
+          content: Text(
+            'Clear every episode’s watched history and resume progress for ${item.name} on this device and all connected Trakt, Simkl and MDBList accounts?\n\nSaved sources, ratings and library entries are kept. This cannot be undone.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Clear progress'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true || !context.mounted) return;
+      final navigator = Navigator.of(context, rootNavigator: true);
+      showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => const PopScope(
+          canPop: false,
+          child: AlertDialog(
+            content: Row(
+              children: [
+                CircularProgressIndicator(),
+                SizedBox(width: 20),
+                Expanded(child: Text('Clearing watch progress…')),
+              ],
+            ),
+          ),
+        ),
+      );
+      final failures = await SeriesProgressResetService.clear(
+        imdbId,
+        item.name,
+      );
+      if (navigator.mounted) navigator.pop();
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            failures.isEmpty
+                ? 'Watch progress cleared.'
+                : 'Could not fully clear: ${failures.join(', ')}. Please retry.',
+          ),
+        ),
+      );
+      return;
     case TraktItemMenuAction.removeFromTraktPlayback:
       return; // Handled by callers that hold the TraktContinueWatchingItem
     case TraktItemMenuAction.addToStremioTv:
@@ -388,6 +444,14 @@ List<TraktMenuOption> buildTraktAddOnlyMenuOptions({
         caption: 'Packs',
       ),
     // Trakt-syncing actions — badged TRAKT in the UI. When [status] is known
+    if (isSeries)
+      const TraktMenuOption(
+        action: TraktItemMenuAction.clearWatchProgress,
+        icon: Icons.restart_alt_rounded,
+        color: Color(0xFFEF4444),
+        label: 'Clear watch progress',
+        caption: 'Clear progress',
+      ),
     // these flip between Add and Remove to mirror the user's real library.
     if (isTraktAuthenticated) ...[
       if (inWatchlist)

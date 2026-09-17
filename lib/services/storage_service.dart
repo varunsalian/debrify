@@ -2792,6 +2792,26 @@ class StorageService {
     );
   }
 
+  /// Exact series reset; never touches source bindings or unrelated titles.
+  static Future<void> clearSeriesWatchProgress(String imdbId, String title) async {
+    final id = imdbId.trim().toLowerCase();
+    if (id.isEmpty) throw ArgumentError.value(imdbId, 'imdbId');
+    final map = await _getPlaybackStateMap();
+    map.removeWhere((key, raw) {
+      if (raw is! Map) return false;
+      final storedId = raw['imdbId']?.toString().trim().toLowerCase();
+      return storedId == id ||
+          ((storedId == null || storedId.isEmpty) && raw['type'] == 'series' &&
+           raw['title']?.toString().trim().toLowerCase() == title.trim().toLowerCase());
+    });
+    await _savePlaybackStateMap(map, recordDeletions: true);
+    await setSeriesExplicitlyWatched(id, watched: false);
+    await saveEpisodeTraktProgress(imdbId: id, percents: {});
+    await saveEpisodeSimklProgress(imdbId: id, percents: {});
+    await saveEpisodeMdblistProgress(imdbId: id, percents: {});
+    localCompletionRevision.value++;
+  }
+
   static Future<void> _savePlaybackStateMap(
     Map<String, dynamic> map, {
     bool recordDeletions = false,
@@ -3374,7 +3394,10 @@ class StorageService {
     }
     if (result.isNotEmpty) return result;
     if (seriesTitle != null && seriesTitle.isNotEmpty) {
-      return getFinishedEpisodes(seriesTitle: seriesTitle);
+      // Only ID-less legacy records may provide title fallback. A matching
+      // display title does not make another IMDb series the same show.
+      final index = await getFinishedSeriesEpisodeIndex();
+      return index['title:${seriesTitle.trim().toLowerCase()}'] ?? {};
     }
     return {};
   }
@@ -3405,7 +3428,10 @@ class StorageService {
       }
 
       final imdbId = raw['imdbId']?.toString().trim().toLowerCase();
-      if (imdbId != null && imdbId.isNotEmpty) mergeInto(imdbId);
+      if (imdbId != null && imdbId.isNotEmpty) {
+        mergeInto(imdbId);
+        continue;
+      }
       final title = raw['title']?.toString().trim().toLowerCase();
       if (title != null && title.isNotEmpty) mergeInto('title:$title');
     }
