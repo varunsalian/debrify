@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:debrify/services/simkl/simkl_service.dart';
 import 'package:debrify/services/episode_tracker_snapshot_revision.dart';
 import 'package:debrify/models/tracking_source.dart';
 import 'package:debrify/services/season_watched_service.dart';
@@ -13,6 +14,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   setUp(() {
+    SimklService.instance.resetProfileScope();
     ProfileRuntime.debugReset();
     ProfileRuntime.initializeLegacy();
     SharedPreferences.setMockInitialValues({
@@ -21,6 +23,132 @@ void main() {
     });
   });
   tearDown(ProfileRuntime.debugReset);
+  for (final scenario in [
+    (body: '[]', status: 200, expected: false),
+    (body: '[]', status: 503, expected: null),
+    (body: '{}', status: 200, expected: null),
+  ]) {
+    test(
+      'Simkl season status distinguishes empty history ${scenario.status} ${scenario.body}',
+      () async {
+        await http.runWithClient(
+          () async {
+            expect(
+              await SeasonWatchedService.isWatched('tt001', 'Example', 1, [
+                1,
+                2,
+              ], TrackingSource.simkl),
+              scenario.expected,
+            );
+          },
+          () => MockClient((request) async {
+            expect(request.url.path, '/sync/watched');
+            expect(request.url.queryParameters['extended'], 'episodes');
+            return http.Response(scenario.body, scenario.status);
+          }),
+        );
+      },
+    );
+  }
+  test('partial unwatch retains direction and isolates retry targets', () {
+    final retries = SeasonWatchedRetryState();
+    retries.begin('tt001', 1, TrackingSource.trakt, false);
+    // A partial inventory would normally offer watched; pending intent wins.
+    const fullyWatchedAfterPartialFailure = false;
+    expect(
+      retries.pending('tt001', 1, TrackingSource.trakt) ??
+          !fullyWatchedAfterPartialFailure,
+      false,
+    );
+    expect(retries.pending('tt001', 2, TrackingSource.trakt), isNull);
+    expect(retries.pending('tt002', 1, TrackingSource.trakt), isNull);
+    expect(retries.pending('tt001', 1, TrackingSource.simkl), isNull);
+    retries.complete('tt001', 1, TrackingSource.trakt);
+    expect(retries.pending('tt001', 1, TrackingSource.trakt), isNull);
+  });
+  test(
+    'local season status toggles independently and preserves another season',
+    () async {
+      Future<bool?> status() => SeasonWatchedService.isWatched(
+        'tt001',
+        'Example',
+        1,
+        [1, 2],
+        TrackingSource.local,
+      );
+      expect(await status(), false);
+      await SeasonWatchedService.mark(
+        'tt001',
+        1,
+        [1],
+        TrackingSource.local,
+        seriesTitle: 'Example',
+      );
+      expect(await status(), false);
+      await SeasonWatchedService.mark(
+        'tt001',
+        1,
+        [2],
+        TrackingSource.local,
+        seriesTitle: 'Example',
+      );
+      await SeasonWatchedService.mark(
+        'tt001',
+        2,
+        [1],
+        TrackingSource.local,
+        seriesTitle: 'Example',
+      );
+      expect(await status(), true);
+      expect(
+        await SeasonWatchedService.mark(
+          'tt001',
+          1,
+          [1, 2],
+          TrackingSource.local,
+          seriesTitle: 'Example',
+          watched: false,
+        ),
+        0,
+      );
+      expect(await status(), false);
+      expect(
+        await StorageService.getFinishedEpisodesByImdbId(imdbId: 'tt001'),
+        {
+          '2': {1},
+        },
+      );
+    },
+  );
+  for (final provider in [TrackingSource.trakt, TrackingSource.simkl]) {
+    test('$provider removes only selected season history', () async {
+      final removed = <int>[];
+      await http.runWithClient(
+        () async {
+          expect(
+            await SeasonWatchedService.mark(
+              'tt001',
+              2,
+              [1, 3],
+              provider,
+              watched: false,
+            ),
+            0,
+          );
+        },
+        () => MockClient((request) async {
+          expect(request.url.host, contains(provider.name));
+          if (request.method == 'GET') return http.Response('[]', 200);
+          expect(request.url.path, '/sync/history/remove');
+          final season = jsonDecode(request.body)['shows'][0]['seasons'][0];
+          expect(season['number'], 2);
+          removed.add(season['episodes'][0]['number'] as int);
+          return http.Response('{}', 200);
+        }),
+      );
+      expect(removed, [1, 3]);
+    });
+  }
   test('Trakt skips watched episodes and rechecks history on retry', () async {
     final watched = <int>{1};
     final writes = <int>[];

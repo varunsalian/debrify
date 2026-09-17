@@ -1486,18 +1486,22 @@ class SimklService {
   /// `POST /sync/watched?extended=episodes`. Empty set on failure — mirrors
   /// TraktService.fetchWatchedShowEpisodes's contract.
   Future<Set<String>> fetchWatchedShowEpisodes(String showImdbId) async {
+    return await fetchWatchedShowEpisodesOrNull(showImdbId) ?? {};
+  }
+
+  Future<Set<String>?> fetchWatchedShowEpisodesOrNull(String showImdbId) async {
     final item = await _fetchWatchedShowEpisodeItem(showImdbId);
-    if (item == null) return {};
+    if (item == null) return null;
     final out = <String>{};
     final seasons = item['seasons'];
-    if (seasons is! List) return out;
+    if (seasons is! List) return null;
     for (final s in seasons) {
-      if (s is! Map<String, dynamic>) continue;
+      if (s is! Map<String, dynamic>) return null;
       final seasonNum = (s['number'] as num?)?.toInt();
       final episodes = s['episodes'];
-      if (seasonNum == null || episodes is! List) continue;
+      if (seasonNum == null || episodes is! List) return null;
       for (final e in episodes) {
-        if (e is! Map<String, dynamic>) continue;
+        if (e is! Map<String, dynamic>) return null;
         if (e['watched'] != true) continue;
         final epNum = (e['number'] as num?)?.toInt();
         if (epNum != null) out.add('$seasonNum-$epNum');
@@ -1547,7 +1551,9 @@ class SimklService {
       label: 'fetchWatchedShowEpisodes',
       query: {'extended': 'episodes'},
     );
-    if (result is! List || result.isEmpty) return null;
+    if (result is! List) return null;
+    // A successful empty history is authoritative, not a failed lookup.
+    if (result.isEmpty) return {'seasons': <dynamic>[]};
     final item = result.first;
     if (item is! Map<String, dynamic>) return null;
     return item;

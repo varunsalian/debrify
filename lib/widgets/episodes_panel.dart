@@ -2158,6 +2158,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
       _episodeSeasons.indexWhere((s) => s.number == _selectedSeasonNumber);
 
   bool _seasonActionBusy = false;
+  final _seasonRetries = SeasonWatchedRetryState();
 
   Future<void> _showSeasonOptions(int number) async {
     if (_isDirectSource || _seasonActionBusy) return;
@@ -2172,20 +2173,6 @@ class EpisodesPanelState extends State<EpisodesPanel> {
       if (!mounted) return;
       final providers = [TrackingSource.local, TrackingSource.trakt, TrackingSource.simkl, TrackingSource.mdblist];
       final names = ['locally', 'on Trakt', 'on Simkl', 'on MDBList'];
-      final choice = await showModalBottomSheet<TrackingSource>(context: context,
-        isScrollControlled: true,
-        showDragHandle: true, builder: (ctx) => TvHeldKeyGuard(child: SafeArea(child:
-          ConstrainedBox(
-            constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(ctx).height * 0.7),
-            child: ListView(shrinkWrap: true, children: [
-            ListTile(title: Text('Season $number')),
-            for (var i = 0; i < providers.length; i++)
-              if (connected[i]) ListTile(leading: const Icon(Icons.done_all_rounded),
-                autofocus: widget.isTelevision && !connected.take(i).any((value) => value),
-                title: Text('Mark season as watched ${names[i]}'),
-                onTap: () => Navigator.pop(ctx, providers[i])),
-          ])))));
-      if (choice == null || !mounted) return;
       var season = _episodeSeasons.where((s) => s.number == number).firstOrNull;
       if (season == null || season.episodes.isEmpty) {
         final seasons = await _fetchSeasons(show);
@@ -2196,17 +2183,52 @@ class EpisodesPanelState extends State<EpisodesPanel> {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not load season episodes. Please retry.')));
         return;
       }
+      final episodeNumbers = season.episodes.map((e) => e.number).toList();
+      final statuses = await Future.wait([
+        for (var i = 0; i < providers.length; i++)
+          connected[i] ? SeasonWatchedService.isWatched(show.effectiveImdbId ?? show.id,
+            show.name, number, episodeNumbers, providers[i]) : Future<bool?>.value(null),
+      ]);
+      if (!mounted) return;
+      final id = show.effectiveImdbId ?? show.id;
+      final retryTargets = [for (final provider in providers)
+        _seasonRetries.pending(id, number, provider)];
+      final targets = [for (var i = 0; i < providers.length; i++)
+        retryTargets[i] ?? (statuses[i] == null ? null : !statuses[i]!)];
+      final choice = await showModalBottomSheet<TrackingSource>(context: context,
+        isScrollControlled: true,
+        showDragHandle: true, builder: (ctx) => TvHeldKeyGuard(child: SafeArea(child:
+          ConstrainedBox(
+            constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(ctx).height * 0.7),
+            child: ListView(shrinkWrap: true, children: [
+            ListTile(title: Text('Season $number')),
+            for (var i = 0; i < providers.length; i++)
+              if (connected[i]) ListTile(leading: const Icon(Icons.done_all_rounded),
+                autofocus: widget.isTelevision && !connected.take(i).any((value) => value),
+                enabled: targets[i] != null,
+                title: Text(targets[i] == null ? 'Watch status unavailable ${names[i]}'
+                  : '${retryTargets[i] != null ? 'Retry: mark' : 'Mark'} season as ${targets[i]! ? 'watched' : 'unwatched'} ${names[i]}'),
+                subtitle: targets[i] == null ? const Text('Close and reopen to retry.') : null,
+                onTap: () => Navigator.pop(ctx, providers[i])),
+          ])))));
+      if (choice == null || !mounted) return;
       final name = names[providers.indexOf(choice)];
+      final watched = targets[providers.indexOf(choice)]!;
+      final action = watched ? 'watched' : 'unwatched';
       final messenger = ScaffoldMessenger.of(context);
-      messenger.showSnackBar(SnackBar(content: Text('Marking Season $number watched $name…')));
-      final failures = await SeasonWatchedService.mark(show.effectiveImdbId ?? show.id,
-        number, season.episodes.map((e) => e.number), choice, seriesTitle: show.name);
+      messenger.showSnackBar(SnackBar(content: Text('Marking Season $number $action $name…')));
+      // Retain intent through partial failure or an exception. A fresh status
+      // may now be partial, but must not reverse the user's pending operation.
+      _seasonRetries.begin(id, number, choice, watched);
+      final failures = await SeasonWatchedService.mark(id,
+        number, episodeNumbers, choice, seriesTitle: show.name, watched: watched);
+      if (failures == 0) _seasonRetries.complete(id, number, choice);
       if (!mounted) return;
       refreshWatchProgress();
       messenger.hideCurrentSnackBar();
       messenger.showSnackBar(SnackBar(content: Text(failures == 0
-        ? 'Season $number marked watched $name.'
-        : 'Could not mark $failures episodes $name. Please retry.')));
+        ? 'Season $number marked $action $name.'
+        : 'Could not mark $failures episodes $action $name. Reopen the season menu to retry.')));
     } catch (_) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
         content: Text('Could not update season watch status. Please retry.')));
