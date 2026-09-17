@@ -39,14 +39,18 @@ class SeriesProgressResetService {
     return run();
   }
 
-  static Future<List<String>> clear(String id, String title) {
+  static Future<List<String>> clear(
+    String id,
+    String title, {
+    bool isMovie = false,
+  }) {
     if (ProfileRuntime.isInitialized && ProfileRuntime.isProfileCommitted) {
       return ProfileRuntime.withCapturedScope(
         ProfileRuntime.capture(),
-        () => _clear(id, title),
+        () => _clear(id, title, isMovie: isMovie),
       );
     }
-    return _clear(id, title);
+    return _clear(id, title, isMovie: isMovie);
   }
 
   static Future<List<String>> _clear(
@@ -67,10 +71,15 @@ class SeriesProgressResetService {
 
     if (provider == null)
       await attempt('this device', () async {
-        await StorageService.clearSeriesWatchProgress(id, title);
-        // The exact reset already removed completion records. Only rederive;
-        // legacy title-based cleanup can also match a different IMDb show.
-        await LocalSeriesCompletionService.instance.caughtUpIds();
+        if (isMovie) {
+          await StorageService.clearPlaybackStateByImdbId(id);
+          await StorageService.unmarkMovieAsFinished(id);
+        } else {
+          await StorageService.clearSeriesWatchProgress(id, title);
+          // The exact reset already removed completion records. Only rederive;
+          // legacy title-based cleanup can also match a different IMDb show.
+          await LocalSeriesCompletionService.instance.caughtUpIds();
+        }
         await StorageService.removeContinueWatchingItem(id);
         return true;
       });

@@ -280,6 +280,53 @@ void main() {
   });
 
   test(
+    'global movie reset clears watched and resume state only for that movie',
+    () async {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('series_source_tt001', 'keep');
+      for (final id in ['tt001', 'tt002']) {
+        await StorageService.markMovieAsFinished(id);
+        await StorageService.saveVideoPlaybackState(
+          videoTitle: id,
+          videoUrl: 'https://test/$id',
+          positionMs: 500,
+          durationMs: 1000,
+          imdbId: id,
+        );
+        await StorageService.saveContinueWatchingItem(
+          imdbId: id,
+          title: id,
+          contentType: 'movie',
+        );
+      }
+      expect(
+        await SeriesProgressResetService.clear('tt001', 'Movie', isMovie: true),
+        isEmpty,
+      );
+      expect(await StorageService.isMovieFinished('tt001'), isFalse);
+      expect(
+        await StorageService.getVideoPlaybackState(videoTitle: 'tt001'),
+        isNull,
+      );
+      expect(await StorageService.isMovieFinished('tt002'), isTrue);
+      expect(
+        await StorageService.getVideoPlaybackState(
+          videoTitle: 'tt002',
+          includeFinished: true,
+        ),
+        isNotNull,
+      );
+      expect(
+        (await StorageService.getContinueWatchingItems()).any(
+          (e) => e['imdbId'] == 'tt001',
+        ),
+        isFalse,
+      );
+      expect(prefs.getString('series_source_tt001'), 'keep');
+    },
+  );
+
+  test(
     'series reset clears all seasons and tracker snapshots but preserves other titles and bindings',
     () async {
       final prefs = await SharedPreferences.getInstance();

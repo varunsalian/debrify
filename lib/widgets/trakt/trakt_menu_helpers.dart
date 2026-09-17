@@ -285,7 +285,8 @@ Future<void> handleTraktMenuAction(
         builder: (ctx) => AlertDialog(
           title: const Text('Clear watch progress?'),
           content: Text(
-            'Clear every episode’s watched history and resume progress for ${item.name} on this device and all connected Trakt, Simkl and MDBList accounts?\n\nSaved sources, ratings and library entries are kept. This cannot be undone.',
+            'Clear ${item.type == 'movie' ? 'watched history and resume progress' : 'every episode’s watched history and resume progress'} for ${item.name} on this device and all connected Trakt, Simkl and MDBList accounts?\n\nSaved sources are kept. This cannot be undone.'
+            '${item.type == 'movie' ? '\n\nIf Simkl is connected, its movie reset also removes the movie from its library and permanently deletes its saved rating.' : '\n\nRatings and library entries are kept.'}',
           ),
           actions: [
             TextButton(
@@ -320,6 +321,7 @@ Future<void> handleTraktMenuAction(
       final failures = await SeriesProgressResetService.clear(
         imdbId,
         item.name,
+        isMovie: item.type == 'movie',
       );
       if (navigator.mounted) navigator.pop();
       if (!context.mounted) return;
@@ -449,7 +451,7 @@ List<TraktMenuOption> buildTraktAddOnlyMenuOptions({
         caption: 'Packs',
       ),
     // Trakt-syncing actions — badged TRAKT in the UI. When [status] is known
-    if (isSeries)
+    if (isSeries || isMovie)
       const TraktMenuOption(
         action: TraktItemMenuAction.clearWatchProgress,
         icon: Icons.restart_alt_rounded,

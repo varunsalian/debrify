@@ -21,6 +21,50 @@ void main() {
   tearDown(ProfileRuntime.debugReset);
 
   testWidgets(
+    'global movie reset is available without trackers and uses movie confirmation',
+    (tester) async {
+      expect(
+        buildTraktAddOnlyMenuOptions(
+          isMovie: true,
+          isTraktAuthenticated: false,
+        ).any((o) => o.action == TraktItemMenuAction.clearWatchProgress),
+        isTrue,
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Builder(
+              builder: (context) => TextButton(
+                onPressed: () => handleTraktMenuAction(
+                  context,
+                  const StremioMeta(id: 'tt001', type: 'movie', name: 'Movie'),
+                  TraktItemMenuAction.clearWatchProgress,
+                ),
+                child: const Text('Reset'),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('Reset'));
+      await tester.pumpAndSettle();
+      expect(
+        find.textContaining(
+          'Clear watched history and resume progress for Movie',
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.textContaining('permanently deletes its saved rating'),
+        findsOneWidget,
+      );
+      expect(find.textContaining('every episode'), findsNothing);
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+    },
+  );
+
+  testWidgets(
     'reset is offered without Trakt and cancel performs no requests',
     (tester) async {
       expect(

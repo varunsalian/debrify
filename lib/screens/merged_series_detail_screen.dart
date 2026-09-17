@@ -2788,7 +2788,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
         return 'Remove this from Continue Watching so it stops showing on your '
             'home rows and resume list.';
       case TraktItemMenuAction.clearWatchProgress:
-        return 'Reset all episodes on this device and connected Trakt, Simkl and MDBList accounts. Saved sources are kept.';
+        return 'Reset watched history and resume progress on this device and connected Trakt, Simkl and MDBList accounts. Saved sources are kept.';
       case TraktItemMenuAction.clearTraktProgress:
         return 'Clear watched history and resume progress on Trakt only. Local progress and other trackers are kept.';
       case TraktItemMenuAction.removeFromTraktPlayback:
