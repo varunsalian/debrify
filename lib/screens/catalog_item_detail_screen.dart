@@ -23,6 +23,9 @@ import '../services/imdb_parents_guide_service.dart';
 import '../services/main_page_bridge.dart';
 import '../services/series_source_service.dart';
 import '../services/storage_service.dart';
+import '../services/movie_completion_service.dart';
+import '../services/mdblist/mdblist_service.dart';
+import '../widgets/rewatch_progress_dialog.dart';
 import '../widgets/detail/theme/detail_theme.dart';
 import '../widgets/detail/detail_primary_sources.dart';
 import '../widgets/parents_guide_section.dart';
@@ -48,6 +51,7 @@ class CatalogItemDetailScreen extends StatefulWidget {
 
   /// Triggers the primary play action.
   final VoidCallback onPlay;
+  final VoidCallback? onRewatch;
 
   /// Hands the host this title's loader artwork (backdrop, logo, meta line) as
   /// it resolves, so a Play pressed from here opens the Marquee loader with the
@@ -114,6 +118,7 @@ class CatalogItemDetailScreen extends StatefulWidget {
     super.key,
     required this.item,
     required this.onPlay,
+    this.onRewatch,
     required this.onBrowse,
     this.onBrowsePrimaryEpisodeSources,
     this.enablePrimarySourcesHold = true,
@@ -214,19 +219,21 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
   /// Live Simkl status (drives the "Rewatch" relabel). Null until
   /// [simklStatusLoader] resolves — the button keeps "Play" until then.
   SimklTitleStatus? _simklStatus;
+  // Completion from the selected Progress source(s), not Home tick settings.
   bool _localMovieFinished = false;
   bool _inMyWatchlist = false;
 
-  /// A movie the user has already finished on Simkl (status `completed`). Its
-  /// Play button reads "Rewatch" and the play path un-marks it watched so the
-  /// rewatch re-enters Continue Watching.
+  /// Policy-filtered completion shared across local and all three trackers.
   bool get _isCompletedMovie =>
       _item.type != 'series' &&
-      (_localMovieFinished || _simklStatus?.currentStatus == 'completed');
+      _localMovieFinished;
 
   @override
   void initState() {
     super.initState();
+    StorageService.trackingSourceRevision.addListener(_onMovieProgressPolicyChanged);
+    StorageService.movieFinishedRevision.addListener(_loadLocalMovieFinished);
+    MdblistService.instance.watchedRevision.addListener(_loadLocalMovieFinished);
     AnalyticsService.screenView('catalog_detail');
     MainPageBridge.addPlaybackReturnListener(_onPlaybackReturned);
     _revealCtrl = AnimationController(
@@ -310,14 +317,23 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
   }
 
   Future<void> _loadLocalMovieFinished() async {
+    final generation = ++_movieCompletionGeneration;
     if (_item.type == 'series') return;
     final imdbId =
         _item.effectiveImdbId ?? (_item.id.startsWith('tt') ? _item.id : null);
     if (imdbId == null || imdbId.isEmpty) return;
-    final finished = await StorageService.isMovieFinished(imdbId);
-    if (mounted && finished != _localMovieFinished) {
+    final finished = await MovieCompletionService.load(imdbId);
+    if (mounted && generation == _movieCompletionGeneration && finished != _localMovieFinished) {
       setState(() => _localMovieFinished = finished);
     }
+  }
+
+  int _movieCompletionGeneration = 0;
+
+  void _onMovieProgressPolicyChanged() {
+    if (!mounted) return;
+    setState(() => _localMovieFinished = false);
+    _loadLocalMovieFinished();
   }
 
   Future<void> _loadResumeInfo() async {
@@ -357,7 +373,11 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
   /// The primary-button label: "Start Watching" before any progress, otherwise
   /// "Resume" with an OTT-style "· S3E4" tag for series. Falls back to the
   /// static "Play" until the resume state resolves.
-  String get _primaryLabel {
+  String get _primaryLabel => widget.onRewatch == null && _resolvedPrimaryLabel == 'Rewatch'
+      ? 'Play' : _resolvedPrimaryLabel;
+
+  String get _resolvedPrimaryLabel {
+    if (_rewatchPending) return 'Rewatch';
     final isMovie = _item.type != 'series';
     // Some entry points (for example the catalog browser) intentionally omit
     // a resume loader. Local/Simkl completion is still enough to distinguish
@@ -372,6 +392,33 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
       return 'Resume';
     }
     return 'Resume · S${_resumeSeason}E$_resumeEpisode';
+  }
+
+  bool _rewatchPending = false;
+  bool _rewatchBusy = false;
+
+  Future<void> _playPrimary() async {
+    if (_rewatchBusy) return;
+    final restart = widget.onRewatch;
+    if (restart == null || _item.type == 'series' || _primaryLabel != 'Rewatch') {
+      widget.onPlay();
+      return;
+    }
+    _rewatchBusy = true;
+    try {
+      final cleared = await resetProgressForRewatch(context,
+        id: _item.imdbId ?? _item.id, title: _item.name, isMovie: true,
+        onConfirmed: () => setState(() => _rewatchPending = true));
+      if (!mounted || !cleared) return;
+      ++_movieCompletionGeneration; // Discard reads started before the reset.
+      setState(() {
+        _rewatchPending = false;
+        _localMovieFinished = false;
+        _simklStatus = null;
+        _resumeStarted = false;
+      });
+      restart();
+    } finally { _rewatchBusy = false; }
   }
 
   @override
@@ -587,6 +634,9 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
 
   @override
   void dispose() {
+    StorageService.trackingSourceRevision.removeListener(_onMovieProgressPolicyChanged);
+    StorageService.movieFinishedRevision.removeListener(_loadLocalMovieFinished);
+    MdblistService.instance.watchedRevision.removeListener(_loadLocalMovieFinished);
     appRouteObserver.unsubscribe(this);
     MainPageBridge.removePlaybackReturnListener(_onPlaybackReturned);
     _revealCtrl.dispose();
@@ -1752,7 +1802,7 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
         // TV only: the top row is the highest focusable widget, so a D-pad
         // "up" there reveals the header instead of dead-ending.
         onArrowUp: widget.isTelevision ? _scrollWideToTop : null,
-        onPlay: widget.onPlay,
+        onPlay: _playPrimary,
         onPlayLongPress: _canBrowsePrimarySources
             ? _browsePrimarySources
             : null,

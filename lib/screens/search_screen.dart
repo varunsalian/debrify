@@ -13544,6 +13544,9 @@ class _SearchScreenState extends State<SearchScreen>
                   // shows one, so the button and the action agree.
                   preferTraktResume: true,
                 ),
+                onRewatch: () => _onCatalogPlay(item, addon,
+                  isTraktSource: isTraktSource, isMdblistSource: isMdblistSource,
+                  startFromBeginning: true),
                 // Movie only: the Sources (manual list) button.
                 onBrowse: item.type == 'movie'
                     ? () => _onCatalogBrowse(
@@ -13681,6 +13684,9 @@ class _SearchScreenState extends State<SearchScreen>
                 isMdblistSource: isMdblistSource,
                 preferTraktResume: true,
               ),
+              onRewatch: () => _onCatalogPlay(item, addon,
+                isTraktSource: isTraktSource, isMdblistSource: isMdblistSource,
+                startFromBeginning: true),
               // Enriched backdrop/logo/meta for the Marquee play loader —
               // the catalog row that opened this page rarely has any of it.
               onLoaderArt: (art) => _adoptDetailPlayArt(item, art),
@@ -14465,6 +14471,7 @@ class _SearchScreenState extends State<SearchScreen>
     StremioAddon addon, {
     bool isTraktSource = false,
     bool isMdblistSource = false,
+    bool startFromBeginning = false,
     // Merged series page: episodes are already shown inline, so a no-IMDb
     // series must NOT fall back to pushing a standalone EpisodesScreen (that
     // would stack a duplicate episode list on top). It resolves the resume
@@ -14543,6 +14550,20 @@ class _SearchScreenState extends State<SearchScreen>
       // right addon id into meta.addonId (addon-stream resume/next), instead of a
       // stale one left over from a previously-browsed series.
       _activeAddonId = addon.id;
+      // Rewatch is not resume reconciliation: even a cached S1E1 selection
+      // carries stale percentages. Never consult tracker/CW caches here.
+      if (startFromBeginning) {
+        await launch(AdvancedSearchSelection(
+          imdbId: item.effectiveImdbId ?? item.id,
+          isSeries: item.type == 'series', title: item.name, year: item.year,
+          season: item.type == 'series' ? 1 : null,
+          episode: item.type == 'series' ? 1 : null,
+          contentType: item.type, posterUrl: item.poster,
+          traktSource: isTraktSource, mdblistSource: isMdblistSource,
+          traktProgressPercent: 0, simklProgressPercent: 0, mdblistProgressPercent: 0,
+        ));
+        return;
+      }
 
       if (isMdblistSource &&
           trackingPolicy.progressFrom(TrackingSource.mdblist)) {

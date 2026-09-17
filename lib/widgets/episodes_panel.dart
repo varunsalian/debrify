@@ -36,6 +36,7 @@ import '../services/tracking_source_policy.dart';
 import '../services/watched_action_coordinator.dart';
 import '../services/season_watched_service.dart';
 import 'season_action_region.dart';
+import '../utils/series_rewatch.dart';
 
 /// The episode drill-down engine + UI, extracted out of `EpisodesScreen` so it
 /// can be hosted both as a standalone route (the existing `EpisodesScreen`
@@ -232,6 +233,7 @@ class EpisodesPanel extends StatefulWidget {
   /// fetches landing) must not late-flip a settled pill.
   final void Function(EpisodeResumeTarget next, {bool mutation})?
   onNextEpisodeChanged;
+  final ValueChanged<bool>? onSeriesCompletedChanged;
 
   /// Alternate arrangement. Null (the default) keeps today's rendering exactly;
   /// when set, the panel renders ONLY what this returns — no chrome of its own —
@@ -262,6 +264,7 @@ class EpisodesPanel extends StatefulWidget {
     this.onPlayEpisode,
     this.watchProgressLoader,
     this.onNextEpisodeChanged,
+    this.onSeriesCompletedChanged,
     this.contentBuilder,
   });
 
@@ -580,6 +583,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
         _nextEpisode = next;
       });
       if (next != null) _publishNextEpisode(next);
+      _publishSeriesCompletion();
     }
   }
 
@@ -645,6 +649,13 @@ class EpisodesPanelState extends State<EpisodesPanel> {
       episodeResumeTarget(next: next, progress: _episodeWatchProgress),
       mutation: mutation,
     );
+  }
+
+  void _publishSeriesCompletion() {
+    widget.onSeriesCompletedChanged?.call(!_isDirectSource && isSeriesFullyWatched(
+      {for (final s in _episodeSeasons) s.number: s.episodes.map((e) => e.number)},
+      _episodeWatchProgress,
+    ));
   }
 
   void _onMdblistPlaybackRevision() {
@@ -799,6 +810,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
       });
       final next = _nextEpisode;
       if (next != null) _publishNextEpisode(next, mutation: true);
+      _publishSeriesCompletion();
     }
     final label =
         'Marked as ${watched ? 'Watched' : 'Unwatched'}'
@@ -1263,6 +1275,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
         ..addEntries(seasons.map((season) => MapEntry(season.number, season)));
       unawaited(_loadSelectedEpisodeMetadata());
       final mergedNext = _nextEpisode;
+      _publishSeriesCompletion();
       if (mergedNext != null) {
         _publishNextEpisode(mergedNext);
       }

@@ -171,7 +171,10 @@ class SeriesProgressResetService {
       if (provider != null && provider.name != tracker) continue;
       EpisodeTrackerSnapshotRevision.invalidateTitle(tracker, id);
     }
-    if (provider == null) StorageService.localCompletionRevision.value++;
+    if (provider == null) {
+      EpisodeTrackerSnapshotRevision.invalidateTitle('local', id);
+      StorageService.localCompletionRevision.value++;
+    }
     StorageService.movieFinishedRevision.value++;
     return failures;
   }
