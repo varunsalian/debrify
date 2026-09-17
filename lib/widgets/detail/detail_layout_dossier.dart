@@ -323,6 +323,7 @@ class _DetailDossierState extends State<DetailDossier> {
             child: Row(
               children: [
                 DetailSeasonControl(
+                  onOptions: view.seasonOptions == null ? null : () => view.seasonOptions!(view.selectedSeasonNumber),
                   seasonNumber: view.selectedSeasonNumber,
                   episodeCount: episodes.length,
                   canPrev: idx > 0,

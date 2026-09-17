@@ -34,6 +34,8 @@ import '../services/mdblist/mdblist_menu_helpers.dart';
 import 'home/home_theme.dart';
 import '../services/tracking_source_policy.dart';
 import '../services/watched_action_coordinator.dart';
+import '../services/season_watched_service.dart';
+import 'season_action_region.dart';
 
 /// The episode drill-down engine + UI, extracted out of `EpisodesScreen` so it
 /// can be hosted both as a standalone route (the existing `EpisodesScreen`
@@ -101,6 +103,7 @@ class EpisodesPanelView {
   final void Function(TraktEpisode) options;
   final void Function(int delta) stepSeason;
   final void Function(int seasonNumber) selectSeason;
+  final void Function(int seasonNumber)? seasonOptions;
 
   /// Host's stable LEFT-crossing target, when it supplied one.
   final VoidCallback? onLeftEdge;
@@ -126,6 +129,7 @@ class EpisodesPanelView {
     required this.options,
     required this.stepSeason,
     required this.selectSeason,
+    this.seasonOptions,
     required this.onLeftEdge,
     required this.onRetry,
     required this.onSearchForSources,
@@ -1848,7 +1852,18 @@ class EpisodesPanelState extends State<EpisodesPanel> {
     // focus change, and an inherited-widget lookup there would re-subscribe
     // per DPAD move on the weak TV GPU.
     final t = DetailThemeScope.maybeOf(context);
-    return ListenableBuilder(
+    return SeasonActionRegion(
+      onOptions: _isDirectSource ? null : () => _showSeasonOptions(_selectedSeasonNumber),
+      onTap: () async {
+        final number = await showModalBottomSheet<int>(context: context,
+          builder: (ctx) => TvHeldKeyGuard(child: SafeArea(child: ListView(
+            shrinkWrap: true, children: [for (final season in _episodeSeasons)
+              ListTile(title: Text('Season ${season.number}'),
+                onTap: () => Navigator.pop(ctx, season.number)),
+            ]))));
+        if (mounted && number != null) _onSeasonChanged(number);
+      },
+      child: ListenableBuilder(
       listenable: _episodeSeasonDropdownFocusNode,
       builder: (context, _) {
         final hasFocus = _episodeSeasonDropdownFocusNode.hasFocus;
@@ -1911,7 +1926,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
           ),
         );
       },
-    );
+    ));
   }
 
   /// Inline "couldn't load episodes" panel with Retry (recovers a transient
@@ -2115,6 +2130,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
       options: _showEpisodeOptions,
       stepSeason: _stepSeason,
       selectSeason: (n) => _onSeasonChanged(n),
+      seasonOptions: _isDirectSource ? null : _showSeasonOptions,
       onLeftEdge: widget.onFocusLeftEdge,
       onRetry: () => _enterEpisodeMode(
         show,
@@ -2140,6 +2156,62 @@ class EpisodesPanelState extends State<EpisodesPanel> {
 
   int get _currentSeasonIndex =>
       _episodeSeasons.indexWhere((s) => s.number == _selectedSeasonNumber);
+
+  bool _seasonActionBusy = false;
+
+  Future<void> _showSeasonOptions(int number) async {
+    if (_isDirectSource || _seasonActionBusy) return;
+    final show = _selectedShow;
+    if (show == null) return;
+    _seasonActionBusy = true;
+    try {
+      final connected = [true, ...await Future.wait([
+        _traktService.isAuthenticated(), _simklService.isAuthenticated(),
+        _mdblistService.isAuthenticated(),
+      ])];
+      if (!mounted) return;
+      final providers = [TrackingSource.local, TrackingSource.trakt, TrackingSource.simkl, TrackingSource.mdblist];
+      final names = ['locally', 'on Trakt', 'on Simkl', 'on MDBList'];
+      final choice = await showModalBottomSheet<TrackingSource>(context: context,
+        isScrollControlled: true,
+        showDragHandle: true, builder: (ctx) => TvHeldKeyGuard(child: SafeArea(child:
+          ConstrainedBox(
+            constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(ctx).height * 0.7),
+            child: ListView(shrinkWrap: true, children: [
+            ListTile(title: Text('Season $number')),
+            for (var i = 0; i < providers.length; i++)
+              if (connected[i]) ListTile(leading: const Icon(Icons.done_all_rounded),
+                autofocus: widget.isTelevision && !connected.take(i).any((value) => value),
+                title: Text('Mark season as watched ${names[i]}'),
+                onTap: () => Navigator.pop(ctx, providers[i])),
+          ])))));
+      if (choice == null || !mounted) return;
+      var season = _episodeSeasons.where((s) => s.number == number).firstOrNull;
+      if (season == null || season.episodes.isEmpty) {
+        final seasons = await _fetchSeasons(show);
+        season = seasons.where((s) => s.number == number).firstOrNull;
+      }
+      if (!mounted) return;
+      if (season == null || season.episodes.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not load season episodes. Please retry.')));
+        return;
+      }
+      final name = names[providers.indexOf(choice)];
+      final messenger = ScaffoldMessenger.of(context);
+      messenger.showSnackBar(SnackBar(content: Text('Marking Season $number watched $name…')));
+      final failures = await SeasonWatchedService.mark(show.effectiveImdbId ?? show.id,
+        number, season.episodes.map((e) => e.number), choice, seriesTitle: show.name);
+      if (!mounted) return;
+      refreshWatchProgress();
+      messenger.hideCurrentSnackBar();
+      messenger.showSnackBar(SnackBar(content: Text(failures == 0
+        ? 'Season $number marked watched $name.'
+        : 'Could not mark $failures episodes $name. Please retry.')));
+    } catch (_) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Could not update season watch status. Please retry.')));
+    } finally { _seasonActionBusy = false; }
+  }
 
   void _stepSeason(int delta) {
     if (_episodeSeasons.isEmpty) return;

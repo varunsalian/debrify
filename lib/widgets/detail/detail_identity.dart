@@ -6,6 +6,7 @@ import '../../services/debrify_image_cache.dart';
 import '../../utils/platform_util.dart';
 import '../../utils/tv_keys.dart';
 import '../tracker_brand_marks.dart';
+import '../season_action_region.dart';
 import 'detail_model.dart';
 import 'detail_style.dart';
 import 'theme/detail_theme.dart';
@@ -1028,6 +1029,7 @@ class DetailSeasonControl extends StatefulWidget {
   final VoidCallback onPrev;
   final VoidCallback onNext;
   final VoidCallback onPick;
+  final VoidCallback? onOptions;
   final FocusNode? focusNode;
   final VoidCallback? onUpEdge;
   final VoidCallback? onDownEdge;
@@ -1044,6 +1046,7 @@ class DetailSeasonControl extends StatefulWidget {
     required this.onPrev,
     required this.onNext,
     required this.onPick,
+    this.onOptions,
     this.focusNode,
     this.onUpEdge,
     this.onDownEdge,
@@ -1097,7 +1100,7 @@ class _DetailSeasonControlState extends State<DetailSeasonControl> {
             child: Material(
               color: t.ghostFill,
               borderRadius: t.brBtn,
-              child: InkWell(
+              child: SeasonActionRegion(onTap: widget.onPick, onOptions: widget.onOptions, child: InkWell(
                 focusNode: widget.focusNode,
                 borderRadius: t.brBtn,
                 onTap: widget.onPick,
@@ -1138,7 +1141,7 @@ class _DetailSeasonControlState extends State<DetailSeasonControl> {
                   ),
                 ),
               ),
-            ),
+            )),
           ),
           const SizedBox(width: 10),
           Text(
