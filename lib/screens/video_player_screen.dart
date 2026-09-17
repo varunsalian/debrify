@@ -14548,6 +14548,35 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                     onPanUpdate: _onPanUpdate,
                     onPanEnd: _onPanEnd,
                   ),
+                // Above the gesture layer: startup hides normal controls, but
+                // leaving the player must remain available while links resolve.
+                if (_startupGateActive &&
+                    !_startupGateOverlayHidden &&
+                    !inPip &&
+                    !widget.hideBackButton)
+                  Positioned(
+                    top: 0,
+                    left: 0,
+                    child: SafeArea(
+                      child: Padding(
+                        padding: EdgeInsets.only(
+                          top: PlatformUtil.isTelevision ? 32 : 16,
+                          left: PlatformUtil.isTelevision ? 48 : 20,
+                        ),
+                        child: IconButton.filledTonal(
+                          key: const ValueKey('startup-source-back'),
+                          tooltip: 'Back',
+                          autofocus: PlatformUtil.isTelevision,
+                          style: IconButton.styleFrom(
+                            backgroundColor: const Color(0xE61A1C20),
+                            foregroundColor: Colors.white,
+                          ),
+                          onPressed: () => Navigator.of(context).maybePop(),
+                          icon: const Icon(Icons.arrow_back),
+                        ),
+                      ),
+                    ),
+                  ),
                 // Controls overlay (shown only when ready)
                 if (isReady &&
                     !inPip &&
