@@ -4733,6 +4733,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       return;
     }
 
+    // Match manual Next for direct links and exhausted packs: keep the player
+    // alive while resolving the following episode.
+    if (await _fetchNextEpisodeInPlayer(autoAdvance: true)) return;
+
     if (_activePlaylist == null || _activePlaylist!.isEmpty) {
       // No playlist — try series next episode
       await _handleSeriesNextEpisode();
@@ -5513,25 +5517,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
     // Series content beyond the pack: fetch the next episode IN-PLAYER when
     // possible (no relaunch), falling back to the pop-and-quick-play handoff.
-    if (_canFetchEpisodes) {
-      final se = _traktSeasonEpisode();
-      if (se.season != null && se.episode != null) {
-        var next = _adjacentEpisode(se.season!, se.episode!, 1);
-        if (next == null && widget.contentImdbId != null) {
-          final nextEp = await NextEpisodeService.findNextEpisode(
-            widget.contentImdbId!,
-            se.season!,
-            se.episode!,
-          );
-          if (nextEp != null) next = (nextEp.season, nextEp.episode);
-          if (!mounted) return;
-        }
-        if (next != null) {
-          await _fetchAndPlayEpisode(next.$1, next.$2);
-          return;
-        }
-      }
-    }
+    if (await _fetchNextEpisodeInPlayer()) return;
 
     // Series content without season pack: find next episode and trigger Quick Play
     if (widget.requestMagicNext == null) {
@@ -5638,9 +5624,33 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     }
   }
 
-  /// When no playlist-based next episode exists and content is a series,
-  /// find the next episode via Stremio meta and pop the player with the result.
-  /// The caller (TorrentSearchScreen) will receive this and trigger Quick Play.
+  /// Shared manual/EOF path beyond the current pack. A handled fetch, including
+  /// cancellation or failure, stays in-player rather than relaunching it.
+  Future<bool> _fetchNextEpisodeInPlayer({bool autoAdvance = false}) async {
+    if (!_canFetchEpisodes) return false;
+    if (_episodeFetchInProgress) return true;
+    final identity = _playlistIdentityToken;
+    final navigation = _episodeNavigationGeneration;
+    bool stale() => !mounted || identity != _playlistIdentityToken ||
+        navigation != _episodeNavigationGeneration ||
+        (autoAdvance && _sleepStopLatched);
+    if (stale()) return true;
+    final se = _traktSeasonEpisode();
+    if (se.season == null || se.episode == null) return false;
+    var next = _adjacentEpisode(se.season!, se.episode!, 1);
+    if (next == null && widget.contentImdbId != null) {
+      final episode = await NextEpisodeService.findNextEpisode(
+        widget.contentImdbId!, se.season!, se.episode!);
+      if (episode != null) next = (episode.season, episode.episode);
+    }
+    if (stale()) return true;
+    if (next == null) return false;
+    debugPrint('Player: Next episode S${next.$1}E${next.$2} in-player autoAdvance=$autoAdvance');
+    await _fetchAndPlayEpisode(next.$1, next.$2, autoAdvance: autoAdvance);
+    return true;
+  }
+
+  /// Legacy fallback: pop with the next episode for the caller's Quick Play.
   Future<bool> _handleSeriesNextEpisode() async {
     // Already popping to hand off the next episode — a second trigger (manual
     // Next racing end-of-video auto-advance) must not run again.
@@ -13509,6 +13519,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       currentNavigation: () => _episodeNavigationGeneration,
       isActive: () =>
           mounted &&
+          (!autoAdvance || !_sleepStopLatched) &&
           (shuffleGeneration == null ||
               shuffleGeneration == _showShuffleGeneration),
     );
@@ -13736,7 +13747,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       }
     }
     _setManualSelectionMode(allowResume: true);
-    if (shuffleGeneration != null) _isAutoAdvancing = autoAdvance;
+    _isAutoAdvancing = autoAdvance;
     final resolvedPlaylist = playlist;
     final outcome = await request.attempt(
       () => _switchToSourcePlaylist(
@@ -13744,7 +13755,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         resolvedPlaylist,
         targetSeason: season,
         targetEpisode: episode,
-        suppressResume: shuffleGeneration != null,
+        suppressResume: autoAdvance || shuffleGeneration != null,
         request: request,
       ),
     );
