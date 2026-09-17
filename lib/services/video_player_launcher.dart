@@ -2362,7 +2362,7 @@ class VideoPlayerLauncher {
               ? await Future.wait([
                   StorageService.getEpisodeTraktProgress(imdbId: sourceImdbId),
                   StorageService.getEpisodeSimklProgress(imdbId: sourceImdbId),
-                  StorageService.getEpisodeMdblistProgress(
+                  StorageService.getConnectedEpisodeMdblistProgress(
                     imdbId: sourceImdbId,
                   ),
                 ])
@@ -2508,6 +2508,7 @@ class VideoPlayerLauncher {
               if (trackerPercent != null)
                 'traktProgressPercent': trackerPercent,
               'watched': resolvedLocal.watched,
+              'allowLocalProgressDisplay': trackingPolicy.progressFrom(TrackingSource.local),
             });
           }
           debugPrint(
@@ -2805,7 +2806,7 @@ class VideoPlayerLauncher {
                       StorageService.getEpisodeSimklProgress(
                         imdbId: episodeImdbId,
                       ),
-                      StorageService.getEpisodeMdblistProgress(
+                      StorageService.getConnectedEpisodeMdblistProgress(
                         imdbId: episodeImdbId,
                       ),
                     ])
@@ -2871,6 +2872,7 @@ class VideoPlayerLauncher {
               row['updatedAt'] =
                   (localState?['updatedAt'] as num?)?.toInt() ?? 0;
               row['watched'] = resolvedLocal.watched;
+              row['allowLocalProgressDisplay'] = trackingPolicy.progressFrom(TrackingSource.local);
               items[1] = row;
             }
             return {
@@ -3574,7 +3576,7 @@ class VideoPlayerLauncher {
                   StorageService.getEpisodeSimklProgress(
                     imdbId: discoveredImdbId,
                   ),
-                  StorageService.getEpisodeMdblistProgress(
+                  StorageService.getConnectedEpisodeMdblistProgress(
                     imdbId: discoveredImdbId,
                   ),
                 ])
@@ -3634,6 +3636,7 @@ class VideoPlayerLauncher {
               // Explicit local completion differs from tracker 100%: remote
               // completion yields to a local partial during an active rewatch.
               'watched': localState.watched,
+              'allowLocalProgressDisplay': trackingPolicy.progressFrom(TrackingSource.local),
             };
           }
 
@@ -4827,6 +4830,7 @@ class _AndroidTvPlaybackItem {
   // Trakt, Simkl, and MDBList.
   final double? traktProgressPercent;
   final bool watched;
+  final bool allowLocalProgressDisplay;
 
   const _AndroidTvPlaybackItem({
     required this.id,
@@ -4848,6 +4852,7 @@ class _AndroidTvPlaybackItem {
     required this.provider,
     this.traktProgressPercent,
     this.watched = false,
+    this.allowLocalProgressDisplay = true,
   });
 
   Map<String, dynamic> toMap() {
@@ -4872,6 +4877,7 @@ class _AndroidTvPlaybackItem {
       if (traktProgressPercent != null)
         'traktProgressPercent': traktProgressPercent,
       'watched': watched,
+      'allowLocalProgressDisplay': allowLocalProgressDisplay,
     };
   }
 }
@@ -5128,7 +5134,7 @@ class _AndroidTvPlaybackPayloadBuilder {
         ? await Future.wait([
             StorageService.getEpisodeTraktProgress(imdbId: args.contentImdbId!),
             StorageService.getEpisodeSimklProgress(imdbId: args.contentImdbId!),
-            StorageService.getEpisodeMdblistProgress(
+            StorageService.getConnectedEpisodeMdblistProgress(
               imdbId: args.contentImdbId!,
             ),
           ])
@@ -5269,6 +5275,7 @@ class _AndroidTvPlaybackPayloadBuilder {
           resumeId: resumeId,
           provider: entry.provider,
           watched: resolvedLocal.watched,
+          allowLocalProgressDisplay: trackingPolicy.progressFrom(TrackingSource.local),
           traktProgressPercent: episodeKey != null
               ? furthestEpisodeTrackerPercent([
                   trackingPolicy.guideProgressFrom(

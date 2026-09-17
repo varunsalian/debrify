@@ -3589,6 +3589,14 @@ class StorageService {
     }
   }
 
+  /// Player-facing read: never display a departed account's cached snapshot.
+  static Future<Map<String, double>> getConnectedEpisodeMdblistProgress({
+    required String imdbId,
+  }) async {
+    if (!await hasMdblistCredential()) return {};
+    return getEpisodeMdblistProgress(imdbId: imdbId);
+  }
+
   static Future<void> saveEpisodeMdblistProgress({
     required String imdbId,
     required Map<String, double> percents,

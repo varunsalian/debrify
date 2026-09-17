@@ -2328,6 +2328,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                     ),
                     traktProgressPercent = newTrackerProgress ?: item.traktProgressPercent,
                     watched = watched,
+                    allowLocalProgressDisplay = update.optBoolean("allowLocalProgressDisplay", item.allowLocalProgressDisplay),
                 )
                 model.items[originalIndex] = updatedItem
                 anyUpdated = true
@@ -19837,6 +19838,8 @@ internal data class PlaybackItem(
     // Explicit local completion. Unlike tracker 100%, this must not yield to
     // an old partial position as an assumed active rewatch.
     val watched: Boolean = false,
+    // Display policy is separate from live positions needed for source switching.
+    val allowLocalProgressDisplay: Boolean = true,
     // The title as it arrived in the launch payload — on torrent launches the
     // release filename. Metadata pushes overwrite [title] with the fetched
     // episode name, so quality parsing (updateOttExtras) reads THIS, which
@@ -19861,7 +19864,7 @@ internal data class PlaybackItem(
      *  card would dim into the watched state while you're 20% into a rewatch. */
     fun displayProgressPercent(): Int {
         if (watched) return 100
-        val local = if (durationMs > 0 && resumePositionMs > 0) {
+        val local = if (allowLocalProgressDisplay && durationMs > 0 && resumePositionMs > 0) {
             ((resumePositionMs.toDouble() / durationMs.toDouble()) * 100).toInt()
         } else {
             0
@@ -19870,7 +19873,7 @@ internal data class PlaybackItem(
         // resumePositionMs > 0 (not local >= 1): a just-started rewatch of a long
         // episode truncates to local == 0% but is still an active rewatch —
         // matching the Dart series-browser's `local > 0` bound.
-        if (trakt >= 95 && resumePositionMs > 0 && local < 95) return local
+        if (allowLocalProgressDisplay && trakt >= 95 && resumePositionMs > 0 && local < 95) return local
         return maxOf(local, trakt)
     }
 
@@ -19897,6 +19900,7 @@ internal data class PlaybackItem(
                 provider = if (obj.has("provider")) obj.optString("provider") else null,
                 traktProgressPercent = if (obj.has("traktProgressPercent")) obj.optDouble("traktProgressPercent") else null,
                 watched = obj.optBoolean("watched", false),
+                allowLocalProgressDisplay = obj.optBoolean("allowLocalProgressDisplay", true),
                 sourceTitle = obj.nullableString("sourceTitle")
                     ?: obj.optString("title").takeIf { it.isNotEmpty() },
             )
