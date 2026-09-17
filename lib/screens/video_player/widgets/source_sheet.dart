@@ -1,4 +1,5 @@
 import 'dart:ui';
+import '../../../services/source_selection_diagnostics.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -422,6 +423,9 @@ class _SourceSheetState extends State<SourceSheet> {
         _resolvingIndex != null) {
       return;
     }
+    logSourceSelection('player_manual_pick', source: entry.torrent,
+        index: entry.originalIndex, previousIndex: widget.currentSourceIndex,
+        season: widget.currentSeason, episode: widget.currentEpisode, player: 'mpv');
     setState(() {
       _resolvingIndex = entry.originalIndex;
       _errorMessage = null;
@@ -430,13 +434,19 @@ class _SourceSheetState extends State<SourceSheet> {
       final url = await widget.resolveSource(entry.torrent);
       if (!mounted) return;
       if (url != null && url.isNotEmpty) {
+        logSourceSelection('player_link_resolved', source: entry.torrent,
+            index: entry.originalIndex, player: 'mpv');
         widget.onSourceSelected(entry.originalIndex, url);
       } else {
+        logSourceSelection('player_resolution_failed', source: entry.torrent,
+            index: entry.originalIndex, player: 'mpv', reason: 'unavailable');
         await _showResolutionError(
           'Source unavailable — not cached or not a video',
         );
       }
     } catch (_) {
+      logSourceSelection('player_resolution_failed', source: entry.torrent,
+          index: entry.originalIndex, player: 'mpv', reason: 'exception');
       if (mounted) await _showResolutionError('Failed to resolve source');
     }
   }

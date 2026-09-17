@@ -1,5 +1,6 @@
 import '../utils/show_shuffle.dart';
 import 'dart:async';
+import 'source_selection_diagnostics.dart';
 import '../utils/platform_util.dart';
 import 'dart:convert';
 import 'dart:io';
@@ -2541,6 +2542,8 @@ class VideoPlayerLauncher {
           if (sourceIndex < 0 || sourceIndex >= currentStremioSources.length) {
             return;
           }
+          logSourceSelection('player_source_committed',
+              source: currentStremioSources[sourceIndex], index: sourceIndex, player: 'exo');
           await sourceCommit(currentStremioSources[sourceIndex]);
         };
       }
@@ -2757,8 +2760,18 @@ class VideoPlayerLauncher {
           }
 
           Future<Map<String, dynamic>?> winWith(int i) async {
+            logSourceSelection('next_episode_candidate', source: currentStremioSources[i],
+                index: i, season: season, episode: episode, player: 'exo');
             final items = await resolvePlaylistForTv(i);
-            if (stale() || items == null || items.length < 2) return null;
+            if (stale() || items == null || items.length < 2) {
+              logSourceSelection('next_episode_candidate_rejected', index: i,
+                  season: season, episode: episode, player: 'exo',
+                  reason: stale() ? 'superseded' : 'no_playlist');
+              return null;
+            }
+            logSourceSelection('next_episode_candidate_resolved',
+                source: currentStremioSources[i], index: i,
+                season: season, episode: episode, player: 'exo');
             // items[0] is the '__meta__' map; stamp the target identity onto
             // a lone stream so native lands on the right episode. The generic
             // source resolver cannot know the requested identity, so hydrate

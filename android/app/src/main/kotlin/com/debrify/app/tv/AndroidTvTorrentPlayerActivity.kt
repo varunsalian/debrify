@@ -2553,6 +2553,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                     override fun onSourceSelected(index: Int) {
                         if (index == currentStremioSourceIndex) return
                         val source = stremioSources.firstOrNull { it.index == index } ?: return
+                        sourceSelectionLog("player_manual_pick", index, currentStremioSourceIndex)
                         sourceBrowser?.hide()
                         onStremioSourceSelected(source)
                     }
@@ -16892,6 +16893,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         manualSourceCandidateUrl = null
         restartProgressUpdates()
         reportValidatedSourceCommit(sourceIndex)
+        sourceSelectionLog("player_switch_committed", sourceIndex, snapshot.sourceIndex)
         showStatusPillTransient("✓ ${source?.displayTitle ?: "Source"}")
         startupLog(
             "event=manual_candidate_commit ${startupSourceFields(sourceIndex)} " +
@@ -16959,6 +16961,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 "reason=$reason restoredSourceIndex=${snapshot.sourceIndex}",
             warning = true,
         )
+        sourceSelectionLog("player_switch_rejected", failedIndex ?: -1, snapshot.sourceIndex, reason)
         return true
     }
 
@@ -17261,6 +17264,15 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         )
         if (warning) android.util.Log.w(STARTUP_FAILOVER_LOG_TAG, message)
         else android.util.Log.d(STARTUP_FAILOVER_LOG_TAG, message)
+    }
+
+    private fun sourceSelectionLog(event: String, index: Int, previous: Int? = null, reason: String? = null) {
+        val item = payload?.items?.getOrNull(currentIndex)
+        val source = stremioSources.firstOrNull { it.index == index }
+        val message = "SourceSelect: event=$event player=exo index=$index previous=$previous " +
+            "season=${item?.season} episode=${item?.episode} transport=${source?.streamType} reason=$reason"
+        DiagnosticFileLog.record(source = "source_selection", event = event, message = message)
+        android.util.Log.i("SourceSelect", message)
     }
 
     private fun setupStremioSources() {

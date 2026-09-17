@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'source_selection_diagnostics.dart';
 import 'dart:convert';
 import 'dart:io';
 import 'android_local_source_service.dart';
@@ -225,6 +226,8 @@ class TorrentPlaybackService {
     int sourceIndex = 0,
     String searchKeyword = '',
   }) async {
+    logSourceSelection('manual_pick', source: torrent, index: sourceIndex,
+        season: meta?.season, episode: meta?.episode);
     // Direct-URL addon streams bypass debrid entirely. Content metadata and
     // the in-player Sources switcher ride along (matching Home's
     // _playDirectStream) so series streams get Continue Watching, subtitles,
@@ -485,6 +488,8 @@ class TorrentPlaybackService {
     // [provider] when the caller resolved one (torrent chain); otherwise it
     // stays on the bound-sources → addon-stream path this play came from.
     Future<void> playDirect(Torrent direct) async {
+      logSourceSelection('quick_play_direct_selected', source: direct,
+          index: torrents.indexOf(direct), season: meta?.season, episode: meta?.episode);
       // The loader (when one is up) stays through the launch prep; the
       // launcher dismisses it the moment the player takes the screen, and
       // guarantees the dismissal on failure so it can never linger. The
@@ -555,6 +560,8 @@ class TorrentPlaybackService {
     final deadDirectUrls = <String>{};
     var validationBudget = directValidationBudgetForRules(rules);
     Future<bool> directLooksAlive(Torrent t) async {
+      logSourceSelection('quick_play_direct_candidate', source: t,
+          index: torrents.indexOf(t), season: meta?.season, episode: meta?.episode);
       if (rules?.validateDirectLinks == false) return true;
       if (!validatableVod) return true;
       // AIOStreams/debrid proxy URLs can be single-use or bind themselves to
@@ -599,6 +606,8 @@ class TorrentPlaybackService {
         lenient: true,
         headers: t.httpHeaders,
       );
+      logSourceSelection('quick_play_direct_preflight', source: t,
+          reason: alive ? 'accepted_for_player_validation' : 'rejected');
       debugPrint(
         '[StartupFailover] event=preflight_result platform=flutter '
         'ok=$alive remainingBudget=$validationBudget',
@@ -1136,10 +1145,15 @@ class TorrentPlaybackService {
     );
     for (final t in candidates.take(maxAttempts)) {
       if (cancelled()) return (null, null);
+      logSourceSelection('quick_play_probe', source: t,
+          season: season, episode: episode);
       onCandidate?.call(t);
       try {
         final magnet = await _magnetFor(t);
-        if (magnet == null) continue;
+        if (magnet == null) {
+          logSourceSelection('quick_play_probe_rejected', source: t, reason: 'no_acquisition');
+          continue;
+        }
         if (cancelled()) return (null, null);
         final r = await _add(prov, magnet, t);
         if (r.playUrl != null && r.playUrl!.isNotEmpty) {
@@ -1151,6 +1165,8 @@ class TorrentPlaybackService {
           if (season != null &&
               episode != null &&
               !_resolvedHasEpisode(r, season, episode)) {
+            logSourceSelection('quick_play_probe_rejected', source: t,
+                season: season, episode: episode, reason: 'episode_not_in_pack');
             // Delete the fresh RD/PikPak entry this probe created so skips
             // don't pile up orphans (TorBox/AllDebrid dedup the add; Premiumize
             // adds nothing), matching _playViaBound's cleanup.
@@ -1169,18 +1185,24 @@ class TorrentPlaybackService {
             }
             continue;
           }
+          logSourceSelection('quick_play_probe_resolved', source: t,
+              season: season, episode: episode);
           return (r, t);
         }
+        logSourceSelection('quick_play_probe_rejected', source: t, reason: 'no_play_url');
       } on TorrentNotCachedException catch (e) {
+        logSourceSelection('quick_play_probe_rejected', source: t, reason: 'not_cached');
         // Probed torrent is downloading — remove it so RD stays clean.
         try {
           await DebridService.deleteTorrent(e.apiKey, e.torrentId);
         } catch (_) {}
       } on AllDebridTorrentNotReadyException catch (e) {
+        logSourceSelection('quick_play_probe_rejected', source: t, reason: 'not_ready');
         try {
           await AllDebridService.deleteMagnet(e.apiKey, e.magnetId);
         } catch (_) {}
       } catch (_) {
+        logSourceSelection('quick_play_probe_rejected', source: t, reason: 'provider_error');
         // _TorboxNotCached / _PremiumizeNotCached / transient — try next.
       }
     }
@@ -1211,6 +1233,8 @@ class TorrentPlaybackService {
     // post-failure recovery keep their existing no-prompt contract for free.
     VoidCallback? openSourcePicker,
   }) async {
+    logSourceSelection('play_selection_start', season: season, episode: episode,
+        reason: skipBoundSources ? 'recovery_skip_saved' : 'saved_then_quick_play');
     final label = meta.title ?? '';
     if (imdbId.isEmpty) {
       _snack(context, 'No IMDb match to find sources for "$label".');
@@ -3789,6 +3813,9 @@ class TorrentPlaybackService {
       // invalid. The loop still skips it for this play, and recovery bypasses
       // bound sources before fresh search, so retaining it cannot loop now.
       if (source.isAddonDirect) {
+        logSourceSelection('saved_direct_attempt', index: sourcePosition,
+            season: meta.season, episode: meta.episode,
+            reason: source.bingeGroup?.isNotEmpty == true ? 'binge_group' : 'stream_identity');
         fallbackHint =
             'Saved direct source is unavailable. Falling back to search.';
         try {
@@ -3822,6 +3849,9 @@ class TorrentPlaybackService {
                 );
           var usingCache = cached != null;
           var fresh = cached ?? await refresh();
+          logSourceSelection('saved_direct_resolved', source: fresh,
+              season: meta.season, episode: meta.episode,
+              reason: fresh == null ? 'no_match' : usingCache ? 'cached_link' : 'addon_refresh');
           if (cancel.cancelled) return true;
           var freshUrl = fresh?.directUrl;
           if (fresh != null && freshUrl != null && freshUrl.isNotEmpty) {
@@ -4688,6 +4718,7 @@ class TorrentPlaybackService {
     required PlaybackMeta meta,
     String? provider,
   }) async {
+    logSourceSelection('next_episode_start', season: meta.season, episode: meta.episode);
     final label = meta.title ?? '';
     if (provider != null) {
       await playFromSelection(
@@ -5051,6 +5082,9 @@ class TorrentPlaybackService {
           (sources != null && sourceIndex >= 0 && sourceIndex < sources.length)
           ? sources[sourceIndex]
           : null;
+      logSourceSelection('launch_candidate', source: winner, index: sourceIndex,
+          season: meta?.season, episode: meta?.episode,
+          reason: startupFailoverEnabled ? 'automatic_with_fallback' : 'explicit_or_saved');
       String? subtitleLine;
       if (r.hasPlaylist) {
         subtitleLine = '${r.playlist!.length} files';
@@ -5416,6 +5450,9 @@ class TorrentPlaybackService {
         initialCommitPending = false;
       }
       final commit = tail.then((_) async {
+        logSourceSelection('validated_source', source: t,
+            season: meta?.season, episode: meta?.episode,
+            reason: isInitial ? 'initial_playback' : 'player_switch');
         await _cacheValidatedDirect(meta, t);
         var bindingProvider = provider;
         if (t.streamType == StreamType.torrent &&

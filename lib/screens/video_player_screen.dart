@@ -4,6 +4,7 @@ import '../models/subtitle_source_priority.dart';
 import 'video_player/utils/subtitle_priority_selection.dart';
 import 'video_player/player_pip_route.dart';
 import 'dart:async';
+import '../services/source_selection_diagnostics.dart';
 import '../services/player_visibility.dart';
 import '../utils/media_kit_init.dart';
 import 'dart:io';
@@ -8454,6 +8455,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   }
 
   Future<void> _commitValidatedStremioSource(Torrent? source) async {
+    logSourceSelection('player_source_committed', source: source,
+        index: _currentSourceIndex, player: 'mpv');
     final commit = widget.onStremioSourceCommitted;
     if (source == null || commit == null) return;
     try {
@@ -9019,6 +9022,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       unawaited(_commitValidatedStremioSource(source));
     } catch (e) {
       debugPrint('Player: manual Stremio source rejected (${e.runtimeType})');
+      logSourceSelection('player_switch_rejected', source: source, index: index,
+          previousIndex: previousSourceIndex, player: 'mpv', reason: 'validation_failed');
       // The candidate player is stopped by the validator. Restore the known
       // working stream when possible, but never validate/fail over to another
       // row: this was an explicit user selection.
@@ -13683,6 +13688,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     int? shuffleGeneration,
     bool autoAdvance = false,
   }) async {
+    logSourceSelection('next_episode_candidate', source: t, index: sourceIndex,
+        season: season, episode: episode, player: 'mpv');
     if (!await widget.seriesSourceFetcher!.allowsCandidate(t)) {
       return EpisodePlaybackOutcome.unavailable;
     }
@@ -13695,6 +13702,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     }
     if (!request.isCurrent) return EpisodePlaybackOutcome.cancelled;
     if (playlist == null || playlist.isEmpty) {
+      logSourceSelection('next_episode_candidate_rejected', source: t, index: sourceIndex,
+          season: season, episode: episode, player: 'mpv', reason: 'no_playlist');
       return EpisodePlaybackOutcome.unavailable;
     }
     if (playlist.length == 1) {
@@ -13725,7 +13734,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _setManualSelectionMode(allowResume: true);
     if (shuffleGeneration != null) _isAutoAdvancing = autoAdvance;
     final resolvedPlaylist = playlist;
-    return request.attempt(
+    final outcome = await request.attempt(
       () => _switchToSourcePlaylist(
         sourceIndex,
         resolvedPlaylist,
@@ -13735,6 +13744,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         request: request,
       ),
     );
+    logSourceSelection('next_episode_candidate_outcome', source: t, index: sourceIndex,
+        season: season, episode: episode, player: 'mpv', reason: outcome.name);
+    return outcome;
   }
 
   /// The episode adjacent to (season, episode) in the show's full TVMaze

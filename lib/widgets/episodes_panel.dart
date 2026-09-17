@@ -1,4 +1,5 @@
 import '../services/metadata_preferences_service.dart';
+import '../services/diagnostic_log.dart';
 import '../services/profiles/profile_runtime.dart';
 import '../services/metadata_episode_service.dart';
 import 'dart:async';
@@ -419,6 +420,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
       try {
         final map = await progressLoader();
         if (!mounted || generation != _episodeModeGeneration) return;
+        _logEpisodeProgress(map, {'direct_local': map}, {'direct_local': 'loaded'});
         setState(() => _episodeWatchProgress = map);
       } catch (e) {
         debugPrint('EpisodesPanel: direct progress fetch failed: $e');
@@ -438,6 +440,13 @@ class EpisodesPanelState extends State<EpisodesPanel> {
     };
     if (!mounted || generation != _episodeModeGeneration) return;
 
+    final inputs = <String, Map<String, double>>{'local': Map.of(merged)};
+    final statuses = <String, String>{
+      for (final source in TrackingSource.values)
+        source.name: policy.progressFrom(source) ? 'not_connected' : 'excluded_by_policy',
+      'local': policy.progressFrom(TrackingSource.local) ? 'loaded' : 'excluded_by_policy',
+    };
+
     // Overlay Trakt state when connected — gated on auth like the Simkl block
     // below (fresh storage read, not a raced field). The fetches were already
     // empty no-ops without a token, but they logged "failed (null)" on every
@@ -455,6 +464,11 @@ class EpisodesPanelState extends State<EpisodesPanel> {
         if (!mounted || generation != _episodeModeGeneration) return;
 
         // Fully-watched episodes win outright.
+        inputs['trakt'] = {
+          ...playback,
+          for (final key in watched) key: 100.0,
+        };
+        statuses['trakt'] = 'loaded';
         for (final key in watched) {
           merged[key] = 100.0;
         }
@@ -468,6 +482,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
           }
         }
       } catch (e) {
+        statuses['trakt'] = 'error';
         debugPrint('EpisodesPanel: Trakt episode progress fetch failed: $e');
       }
     }
@@ -497,6 +512,11 @@ class EpisodesPanelState extends State<EpisodesPanel> {
         );
         if (!mounted || generation != _episodeModeGeneration) return;
 
+        inputs['simkl'] = {
+          ...playback,
+          for (final key in watched) key: 100.0,
+        };
+        statuses['simkl'] = 'loaded';
         for (final key in watched) {
           merged[key] = 100.0;
         }
@@ -508,6 +528,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
           }
         }
       } catch (e) {
+        statuses['simkl'] = 'error';
         debugPrint('EpisodesPanel: Simkl episode progress fetch failed: $e');
       }
     }
@@ -518,14 +539,19 @@ class EpisodesPanelState extends State<EpisodesPanel> {
           final result = await _mdblistService.fetchShowEpisodeProgress(imdbId);
           if (!mounted || generation != _episodeModeGeneration) return;
           if (result.isUsable) {
+            inputs['mdblist'] = Map.of(result.data!);
+            statuses['mdblist'] = 'loaded';
             for (final entry in result.data!.entries) {
               final existing = merged[entry.key] ?? 0;
               if (entry.value >= 100 || entry.value > existing) {
                 merged[entry.key] = entry.value;
               }
             }
+          } else {
+            statuses['mdblist'] = 'unavailable';
           }
         } catch (e) {
+          statuses['mdblist'] = 'error';
           debugPrint(
             'EpisodesPanel: MDBList episode progress fetch failed: $e',
           );
@@ -544,11 +570,56 @@ class EpisodesPanelState extends State<EpisodesPanel> {
 
     if (mounted && generation == _episodeModeGeneration) {
       final next = _mergedUpNext(merged, _trackerNextRaw);
+      _logEpisodeProgress(merged, inputs, statuses, next: next);
       setState(() {
         _episodeWatchProgress = merged;
         _nextEpisode = next;
       });
       if (next != null) _publishNextEpisode(next);
+    }
+  }
+
+  /// Refresh-time diagnostics; never logs tokens, URLs, or episode titles.
+  void _logEpisodeProgress(
+    Map<String, double> merged,
+    Map<String, Map<String, double>> inputs,
+    Map<String, String> statuses, {
+    EpisodeCoordinate? next,
+  }) {
+    final keys = <String>{
+      ...merged.keys,
+      for (final input in inputs.values) ...input.keys,
+      for (final season in _episodeSeasons)
+        for (final episode in season.episodes) '${episode.season}-${episode.number}',
+    };
+    final refresh = DateTime.now().microsecondsSinceEpoch;
+    for (final key in keys) {
+      final coordinate = RegExp(r'^(\d+)[_-](\d+)$').firstMatch(key);
+      if (coordinate == null) continue;
+      final season = int.parse(coordinate.group(1)!);
+      final episode = int.parse(coordinate.group(2)!);
+      final progress = merged[key] ?? 0;
+      final winners = inputs.entries.where((entry) {
+        final value = entry.value[key];
+        return value != null && value > 0 && value == progress &&
+            (!const ['trakt', 'simkl'].contains(entry.key) || value > 5);
+      }).map((entry) => entry.key).toList();
+      final fields = <String, Object?>{
+        'refresh': refresh,
+        'season': season,
+        'episode': episode,
+        'display_percent': progress,
+        'watched': progress >= 100,
+        'up_next': next?.season == season && next?.episode == episode,
+        'winning_sources': DiagnosticLabel(winners.isEmpty ? 'none' : winners.join('+')),
+        for (final entry in statuses.entries) '${entry.key}_status': DiagnosticLabel(entry.value),
+        for (final entry in inputs.entries) '${entry.key}_percent': entry.value[key],
+      };
+      DiagnosticLog.instance.recordEvent(source: 'episode_progress', event: 'detail_merge', fields: fields);
+      debugPrint('EpisodeProgress: refresh=$refresh S${season}E$episode '
+          'inputs=${{for (final entry in inputs.entries) entry.key: entry.value[key]}} '
+          'status=$statuses displayed=$progress winners=${winners.join('+')} '
+          'watched=${progress >= 100} upNext=${fields['up_next']}');
     }
   }
 
