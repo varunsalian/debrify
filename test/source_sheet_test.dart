@@ -60,6 +60,38 @@ class _HostState extends State<_Host> {
 }
 
 void main() {
+  testWidgets('pinned provider can fetch all results without losing its source', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    var calls = 0;
+    final pinned = _source(name: 'Pinned direct', source: 'stremio:comet',
+      type: StreamType.directUrl, hash: '');
+    await tester.pumpWidget(_Host(initial: [pinned], fetcher: SeriesSourceFetcher(
+      season: 1, episode: 2,
+      searchPacks: (_, _) async => [], searchEpisodes: (_, _) async => [],
+      listAddons: () async => const [SourceAddonRef('comet-id', 'Comet')],
+      fetchAddonEpisodes: (_, _, _) async {
+        calls++;
+        return [pinned, _source(name: 'Alternative direct', source: 'stremio:comet',
+          type: StreamType.directUrl, hash: '')];
+      },
+    )));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Comet'));
+    await tester.pumpAndSettle();
+    expect(find.text('Fetch all results'), findsOneWidget);
+    await tester.tap(find.text('Fetch all results'));
+    await tester.pumpAndSettle();
+    expect(calls, 1);
+    expect(find.text('Pinned direct'), findsOneWidget);
+    expect(find.text('Alternative direct'), findsOneWidget);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    expect(calls, 2, reason: 'Fetch all results is also reachable by remote');
+    expect(tester.takeException(), isNull);
+  });
   testWidgets('episode picker excludes old direct links and retains original indexes', (tester) async {
     SharedPreferences.setMockInitialValues({});
     Torrent scoped(String name, int episode, StreamType type) => Torrent.fromJson({

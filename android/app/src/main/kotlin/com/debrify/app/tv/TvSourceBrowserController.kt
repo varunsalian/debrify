@@ -60,7 +60,7 @@ class TvSourceBrowserController(
          * as zero-count rail groups so a silent addon stays visible. */
         fun placeholderGroups(): List<Pair<String, String>> = emptyList()
 
-        /** Per-addon fetch state for an EMPTY group: null = no fetch for this
+        /** Per-addon fetch state, including populated groups: null = no fetch for this
          * group, else "idle" / "fetching" / "failed" / "fetched" (fetched but
          * still empty = retryable). */
         fun groupFetchState(groupId: String): String? = null
@@ -359,7 +359,8 @@ class TvSourceBrowserController(
             render()
         } else {
             val oldSelection = selectedResult
-            selectedResult = (selectedResult + delta).coerceIn(0, (visible().size - 1).coerceAtLeast(0))
+            val fetchable = groups.getOrNull(selectedGroup)?.id?.let { callbacks.groupFetchState(it) } != null
+            selectedResult = (selectedResult + delta).coerceIn(0, (visible().size - 1 + if (fetchable) 1 else 0).coerceAtLeast(0))
             if (selectedResult != oldSelection) refreshResultSelection(oldSelection)
         }
     }
@@ -371,7 +372,7 @@ class TvSourceBrowserController(
             callbacks.onSourceSelected(entry.index)
             return
         }
-        // Empty addon group: the sole row is "Fetch results".
+        // The fetch action follows the group's source rows.
         val groupId = groups.getOrNull(selectedGroup)?.id ?: return
         val state = callbacks.groupFetchState(groupId) ?: return
         if (state != "fetching") callbacks.requestGroupFetch(groupId)
@@ -443,26 +444,25 @@ class TvSourceBrowserController(
         context.setTextColor(if (transientError == null) 0x8CFFFFFF.toInt() else 0xFFFF7A85.toInt())
         loadMore.visibility = View.GONE
         results.removeAllViews()
-        // Empty addon group: one "Fetch results" row (also the retry after a
-        // failure or an empty fetch).
-        val fetchState = if (entries.isEmpty() && groupId != null) {
+        // Keep fetching available even when the launch only supplied a pin.
+        val fetchState = if (groupId != null) {
             callbacks.groupFetchState(groupId)
         } else null
-        if (fetchState != null && groupId != null) {
-            val active = zone == Zone.RESULTS && selectedResult >= 0
-            val label = when (fetchState) {
-                "fetching" -> "Fetching episode results…"
-                "failed" -> "Fetch failed — try again"
-                else -> "Fetch results  ›"
-            }
-            results.addView(fetchRow(label, active, fetchState != "fetching") {
-                callbacks.requestGroupFetch(groupId)
-            })
-        }
         entries.forEachIndexed { i, entry ->
             results.addView(sourceRow(entry, zone == Zone.RESULTS && i == selectedResult, entry.index == callbacks.currentIndex()) {
                 selectedResult = i
                 callbacks.onSourceSelected(entry.index)
+            })
+        }
+        if (fetchState != null && groupId != null) {
+            val active = zone == Zone.RESULTS && selectedResult == entries.size
+            val label = when (fetchState) {
+                "fetching" -> "Fetching episode results…"
+                "failed" -> "Fetch failed — try again"
+                else -> if (entries.isEmpty()) "Fetch results  ›" else "Fetch all results  ›"
+            }
+            results.addView(fetchRow(label, active, fetchState != "fetching") {
+                callbacks.requestGroupFetch(groupId)
             })
         }
         resultsScroll.post {
@@ -472,6 +472,10 @@ class TvSourceBrowserController(
     }
 
     private fun refreshResultSelection(oldSelection: Int) {
+        if (oldSelection >= visible().size || selectedResult >= visible().size) {
+            renderResults()
+            return
+        }
         listOf(oldSelection, selectedResult).distinct().forEach { index ->
             val row = results.getChildAt(index) ?: return@forEach
             val slot = row.tag as? BadgeSlot ?: return@forEach

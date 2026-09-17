@@ -365,6 +365,7 @@ class _SourceSheetState extends State<SourceSheet> {
     _sourceFocusAnimationActive = true;
     try {
       final targetIndex = _focusedEntry?.originalIndex;
+      if (targetIndex == null) return; // The fixed fetch action is already visible.
       while (mounted && run == _sourceFocusAnimationRun &&
           !_sourceScrollManuallyControlled &&
           _focusZone == _FocusZone.sources &&
@@ -463,13 +464,12 @@ class _SourceSheetState extends State<SourceSheet> {
     }
   }
 
-  /// Whether the selected group is an empty addon group whose per-addon
+  /// Whether the selected group has a per-provider
   /// fetch is available — the state that renders the "Fetch results" row.
   bool get _groupFetchAvailable {
     if (_groups.isEmpty) return false;
     final group = _groups[_selectedGroup];
-    return group.entries.isEmpty &&
-        ((_addonIdsByGroup.containsKey(group.id) &&
+    return ((_addonIdsByGroup.containsKey(group.id) &&
                 widget.seriesFetcher?.fetchAddonEpisodes != null) ||
             (_engineIdByGroup.containsKey(group.id) &&
                 widget.seriesFetcher?.fetchEngine != null));
@@ -640,7 +640,7 @@ class _SourceSheetState extends State<SourceSheet> {
         _ensureFocusedVisible();
       }
     } else if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
-      if (_focusedSource < _visibleEntries.length - 1) {
+      if (_focusedSource < _visibleEntries.length - 1 + (_groupFetchAvailable ? 1 : 0)) {
         setState(() => _focusedSource++);
         _ensureFocusedVisible();
       }
@@ -858,6 +858,8 @@ class _SourceSheetState extends State<SourceSheet> {
                   ),
                 ),
         ),
+        if (_visibleEntries.isNotEmpty && _groupFetchAvailable)
+          _buildGroupFetch(),
       ],
     ),
   );
@@ -877,13 +879,14 @@ class _SourceSheetState extends State<SourceSheet> {
               ? 'Fetching episode results…'
               : failed
               ? 'Fetch failed — try again'
-              : 'Fetch results',
-          focused: _focusZone == _FocusZone.sources && _focusedSource >= 0,
+              : _visibleEntries.isEmpty ? 'Fetch results' : 'Fetch all results',
+          focused: _focusZone == _FocusZone.sources &&
+              (_visibleEntries.isEmpty || _focusedSource == _visibleEntries.length),
           enabled: !fetching,
           onTap: _fetchAddonGroup,
         ),
         const SizedBox(height: 10),
-        Text(
+        if (_visibleEntries.isEmpty) Text(
           failed
               ? "This provider couldn't be reached."
               : fetched
