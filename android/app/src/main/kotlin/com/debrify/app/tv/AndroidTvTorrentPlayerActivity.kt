@@ -258,6 +258,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private var player: ExoPlayer? = null
     private var trackSelector: DefaultTrackSelector? = null
     private var subtitleListener: Player.Listener? = null
+    private var displayMatchMode = TvContentDisplayMatchMode.SYSTEM
+    private var displayModeController: TvDisplayModeController? = null
 
     private val decoderAnalyticsListener = object : AnalyticsListener {
         private var inputFormat: Format? = null
@@ -268,6 +270,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             decoderReuseEvaluation: DecoderReuseEvaluation?,
         ) {
             inputFormat = format
+            displayModeController?.onVideoFormat(format)
         }
 
         override fun onVideoDecoderInitialized(
@@ -2892,6 +2895,18 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             // this (downloads and recordings already take their own locks —
             // playback was the only network consumer without one).
             .setWakeMode(C.WAKE_MODE_NETWORK)
+
+        when (displayMatchMode) {
+            TvContentDisplayMatchMode.OFF -> playerBuilder.setVideoChangeFrameRateStrategy(
+                C.VIDEO_CHANGE_FRAME_RATE_STRATEGY_OFF,
+            )
+            TvContentDisplayMatchMode.FRAME_RATE,
+            TvContentDisplayMatchMode.FRAME_RATE_AND_RESOLUTION,
+            -> playerBuilder.setVideoChangeFrameRateStrategy(
+                C.VIDEO_CHANGE_FRAME_RATE_STRATEGY_ONLY_IF_SEAMLESS,
+            )
+            TvContentDisplayMatchMode.SYSTEM -> Unit
+        }
 
         // IPTV buffering: media3 1.8.0's stock DefaultLoadControl already
         // resumes 2s after a rebuffer (the plan's audit assumed the old 5s
@@ -16212,6 +16227,16 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             systemAudioEffectsEnabled = com.debrify.app.profiles.ProfilePreferenceProjection
                 .getBoolean(this, "player_system_audio_effects", false)
 
+            displayMatchMode = TvContentDisplayMatchMode.fromStorage(
+                com.debrify.app.profiles.ProfilePreferenceProjection.getString(
+                    this,
+                    "content_display_match_mode",
+                    TvContentDisplayMatchMode.SYSTEM.storageKey,
+                ),
+            )
+            displayModeController?.clear()
+            displayModeController = TvDisplayModeController(this, displayMatchMode)
+
             // Manual community intro/outro buttons. These are the same keys the
             // Flutter Playback settings page writes; enabled never means auto-seek.
             skipSegmentsEnabled = com.debrify.app.profiles.ProfilePreferenceProjection
@@ -16227,7 +16252,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 TvSkipSegmentClients.AUTO
             }
 
-            android.util.Log.d("AndroidTvPlayer", "Loaded defaults - aspect=$resizeModeIndex, nightMode=$nightModeIndex, audioEffects=$systemAudioEffectsEnabled, skipSegments=$skipSegmentsEnabled, skipProvider=$skipSegmentProviderId")
+            android.util.Log.d("AndroidTvPlayer", "Loaded defaults - aspect=$resizeModeIndex, nightMode=$nightModeIndex, audioEffects=$systemAudioEffectsEnabled, displayMatch=${displayMatchMode.storageKey}, skipSegments=$skipSegmentsEnabled, skipProvider=$skipSegmentProviderId")
         } catch (e: Exception) {
             android.util.Log.e("AndroidTvPlayer", "Error loading player defaults", e)
             // Keep default values
@@ -18795,6 +18820,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        displayModeController?.clear()
+        displayModeController = null
         mediaPreparationScope.cancel()
         mediaPreparationGeneration++
         sourceBrowser?.destroy()

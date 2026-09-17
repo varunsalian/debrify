@@ -2,6 +2,7 @@ import UIKit
 import Flutter
 import TVServices
 import AVFoundation
+import AVKit
 import CryptoKit
 import Security
 
@@ -613,6 +614,7 @@ class AppDelegate: FlutterAppDelegate {
     private var systemChannel: FlutterMethodChannel?
     private var topShelfChannel: FlutterMethodChannel?
     private var deviceChannel: FlutterMethodChannel?
+    private var displayMatchChannel: FlutterMethodChannel?
     private var deviceSecretChannel: FlutterMethodChannel?
     private let deviceSecretCipher = TvOsDeviceSecretCipher()
     private var profileRecoveryChannel: FlutterMethodChannel?
@@ -713,6 +715,97 @@ class AppDelegate: FlutterAppDelegate {
             }
         }
         self.deviceChannel = deviceChannel
+
+        // The MediaKit player does not own an AVPlayerViewController, so tvOS
+        // cannot infer content display criteria for it. Dart publishes the
+        // decoded source cadence and dimensions once libmpv has metadata;
+        // AVDisplayManager then performs the same system-governed Match
+        // Content negotiation used by native players. The user's Apple TV
+        // setting remains authoritative, and tvOS may retain its configured
+        // output resolution even when content dimensions are supplied.
+        let displayMatchChannel = FlutterMethodChannel(
+            name: "debrify/tvos_display_match",
+            binaryMessenger: flutterViewController.binaryMessenger)
+        displayMatchChannel.setMethodCallHandler { [weak self] call, result in
+            guard let self, let window = self.window else {
+                result(FlutterError(code: "display_unavailable", message: nil, details: nil))
+                return
+            }
+            switch call.method {
+            case "clear":
+                window.avDisplayManager.preferredDisplayCriteria = nil
+                NSLog("[DisplayMatch] cleared")
+                result(nil)
+            case "apply":
+                guard let arguments = call.arguments as? [String: Any],
+                      let refreshRate = (arguments["refreshRate"] as? NSNumber)?.floatValue,
+                      refreshRate.isFinite, refreshRate > 0,
+                      let sourceWidth = (arguments["width"] as? NSNumber)?.int32Value,
+                      let sourceHeight = (arguments["height"] as? NSNumber)?.int32Value,
+                      sourceWidth > 0, sourceHeight > 0 else {
+                    result(FlutterError(
+                        code: "invalid_display_criteria",
+                        message: "Source dimensions and frame rate are required.",
+                        details: nil))
+                    return
+                }
+                let matchResolution = arguments["matchResolution"] as? Bool ?? false
+                let dimensions: (Int32, Int32)
+                if matchResolution {
+                    dimensions = (sourceWidth, sourceHeight)
+                } else {
+                    let output = UIScreen.main.currentMode?.size ?? UIScreen.main.nativeBounds.size
+                    dimensions = (
+                        Int32(max(1, output.width.rounded())),
+                        Int32(max(1, output.height.rounded())))
+                }
+                let codecName = (arguments["codec"] as? String ?? "").lowercased()
+                let codecType: CMVideoCodecType
+                if codecName.contains("hevc") || codecName.contains("h265") {
+                    codecType = kCMVideoCodecType_HEVC
+                } else if codecName.contains("av1") {
+                    codecType = kCMVideoCodecType_AV1
+                } else if codecName.contains("vp9") {
+                    codecType = kCMVideoCodecType_VP9
+                } else {
+                    codecType = kCMVideoCodecType_H264
+                }
+                var description: CMVideoFormatDescription?
+                let status = CMVideoFormatDescriptionCreate(
+                    allocator: kCFAllocatorDefault,
+                    codecType: codecType,
+                    width: dimensions.0,
+                    height: dimensions.1,
+                    extensions: nil,
+                    formatDescriptionOut: &description)
+                guard status == noErr, let description else {
+                    result(FlutterError(
+                        code: "display_format_failed",
+                        message: "Could not describe the source video format.",
+                        details: status))
+                    return
+                }
+                window.avDisplayManager.preferredDisplayCriteria = AVDisplayCriteria(
+                    refreshRate: refreshRate,
+                    formatDescription: description)
+                NSLog(
+                    "[DisplayMatch] requested %dx%d@%.3f source=%dx%d full=%@ enabled=%@",
+                    dimensions.0,
+                    dimensions.1,
+                    refreshRate,
+                    sourceWidth,
+                    sourceHeight,
+                    matchResolution.description,
+                    window.avDisplayManager.isDisplayCriteriaMatchingEnabled.description)
+                result([
+                    "matchingEnabled": window.avDisplayManager.isDisplayCriteriaMatchingEnabled,
+                    "switchInProgress": window.avDisplayManager.isDisplayModeSwitchInProgress,
+                ])
+            default:
+                result(FlutterMethodNotImplemented)
+            }
+        }
+        self.displayMatchChannel = displayMatchChannel
 
         self.deviceSecretChannel = deviceSecretCipher.install(
             on: flutterViewController.binaryMessenger)

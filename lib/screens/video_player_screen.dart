@@ -32,6 +32,7 @@ import '../services/analytics_service.dart';
 import '../services/pip_service.dart';
 import '../services/audio_effect_session_service.dart';
 import '../services/tvos_decode_remedy.dart';
+import '../services/tvos_display_match_service.dart';
 import '../services/android_native_downloader.dart';
 import '../services/desktop_recording_service.dart';
 import '../services/live_recording_service.dart';
@@ -115,6 +116,7 @@ import '../models/stremio_subtitle.dart';
 import '../models/stremio_addon.dart';
 import '../models/torrent.dart';
 import '../models/android_video_renderer_mode.dart';
+import '../models/content_display_match_mode.dart';
 import '../services/series_source_fetcher.dart';
 import '../services/stremio_service.dart';
 import '../services/stremio_subtitle_service.dart';
@@ -437,6 +439,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   /// Preloaded in [_loadPlayerDefaults]; [_createPlayerInstance] is
   /// synchronous and cannot read prefs itself.
   bool _tvosForceSoftwareDecode = false;
+  ContentDisplayMatchMode _contentDisplayMatchMode =
+      ContentDisplayMatchMode.systemDefault;
+  int _tvosDisplayMatchToken = 0;
+  Timer? _tvosDisplayMatchTimer;
+  String? _lastTvosDisplayMatchSignature;
 
   /// Audio-output settings (AUDIO_FIDELITY_PLAN.md), preloaded in
   /// [_loadPlayerDefaults] and applied by [_configurePlayerAudio].
@@ -3689,9 +3696,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       _decoderProbeParams = null;
       _rendererStartupGuardToken++;
       _rendererStartupValidationGeneration = -1;
+      _resetTvosDisplayMatchForMediaBoundary();
       return;
     }
     _decoderProbeParams = params;
+    _scheduleTvosDisplayMatch(params);
     _scheduleDecoderProbe();
     _scheduleRendererStartupValidation();
     final remedy = _tvosDecodeRemedy;
@@ -3700,6 +3709,95 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       // the ladder's own transitional events are ignored inside it.
       unawaited(remedy.evaluate(params, _decoderProbeGeneration));
     }
+  }
+
+  void _resetTvosDisplayMatchForMediaBoundary() {
+    _tvosDisplayMatchToken++;
+    _tvosDisplayMatchTimer?.cancel();
+    _tvosDisplayMatchTimer = null;
+    _lastTvosDisplayMatchSignature = null;
+    if (!PlatformUtil.isTvOS ||
+        !_contentDisplayMatchMode.requestsMatching) {
+      return;
+    }
+    // AVDisplayManager retains criteria until explicitly replaced. Clear the
+    // outgoing item's request so content with missing/invalid fps metadata can
+    // never inherit the previous refresh rate.
+    unawaited(
+      TvosDisplayMatchService.clear().catchError((Object error) {
+        debugPrint('DisplayMatch: tvOS boundary clear failed: $error');
+      }),
+    );
+  }
+
+  void _scheduleTvosDisplayMatch(mk.VideoParams params) {
+    if (!PlatformUtil.isTvOS || !_contentDisplayMatchMode.requestsMatching) {
+      return;
+    }
+    final width = params.dw ?? params.w ?? 0;
+    final height = params.dh ?? params.h ?? 0;
+    if (width <= 0 || height <= 0) return;
+    final token = ++_tvosDisplayMatchToken;
+    _tvosDisplayMatchTimer?.cancel();
+    _tvosDisplayMatchTimer = Timer(const Duration(milliseconds: 200), () async {
+      if (_screenDisposed || token != _tvosDisplayMatchToken) return;
+      final platform = _player.platform;
+      if (platform is! mk.NativePlayer) return;
+      final selectedTrack = _player.state.track.video;
+      var fps = selectedTrack.fps;
+      if (fps == null || !fps.isFinite || fps <= 0) {
+        for (final property in const ['container-fps', 'estimated-vf-fps']) {
+          try {
+            final candidate = double.tryParse(
+              await platform.getProperty(property),
+            );
+            if (candidate != null && candidate.isFinite && candidate > 0) {
+              fps = candidate;
+              break;
+            }
+          } catch (_) {
+            // Some containers publish only one of the two fps properties.
+          }
+        }
+      }
+      if (_screenDisposed ||
+          token != _tvosDisplayMatchToken ||
+          fps == null ||
+          !fps.isFinite ||
+          fps <= 0) {
+        return;
+      }
+      var codec = selectedTrack.codec;
+      if (codec == null || codec.isEmpty) {
+        try {
+          codec = await platform.getProperty('video-codec');
+        } catch (_) {
+          codec = null;
+        }
+      }
+      if (_screenDisposed || token != _tvosDisplayMatchToken) return;
+      final signature =
+          '${_contentDisplayMatchMode.storageKey}|$width|$height|${fps.toStringAsFixed(4)}|${codec ?? ''}';
+      if (signature == _lastTvosDisplayMatchSignature) return;
+      try {
+        final status = await TvosDisplayMatchService.apply(
+          mode: _contentDisplayMatchMode,
+          width: width,
+          height: height,
+          refreshRate: fps,
+          codec: codec,
+        );
+        if (_screenDisposed || token != _tvosDisplayMatchToken) return;
+        _lastTvosDisplayMatchSignature = signature;
+        debugPrint(
+          'DisplayMatch: tvOS requested ${width}x$height@${fps.toStringAsFixed(3)} '
+          'mode=${_contentDisplayMatchMode.storageKey} '
+          'enabled=${status['matchingEnabled']}',
+        );
+      } catch (error) {
+        debugPrint('DisplayMatch: tvOS request failed: $error');
+      }
+    });
   }
 
   Future<void> _installDecoderObservers(
@@ -4172,6 +4270,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _decoderProbeTimer = null;
     _decoderProbeParams = null;
     _lastDecoderDiagnosticSignature = null;
+    // This is the guaranteed boundary for every playlist item, IPTV zap,
+    // startup candidate, and manual source switch. VideoParams normally emits
+    // an invalid value too, but display correctness must not depend on it.
+    _resetTvosDisplayMatchForMediaBoundary();
     _playbackUiClock.beginMedia();
     _activeSkipSegmentUi.clear();
   }
@@ -5842,6 +5944,15 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     if (PlatformUtil.isTvOS) {
       _tvosForceSoftwareDecode =
           await StorageService.getTvosForceSoftwareDecode();
+      _contentDisplayMatchMode =
+          await StorageService.getContentDisplayMatchMode();
+      if (!_contentDisplayMatchMode.requestsMatching) {
+        try {
+          await TvosDisplayMatchService.clear();
+        } catch (error) {
+          debugPrint('DisplayMatch: tvOS clear failed: $error');
+        }
+      }
     }
 
     // Audio-output settings, preloaded for [_configurePlayerAudio] — the
@@ -11272,6 +11383,16 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _playerInstanceGeneration++;
     _decoderProbeTimer?.cancel();
     _decoderProbeTimer = null;
+    _tvosDisplayMatchToken++;
+    _tvosDisplayMatchTimer?.cancel();
+    _tvosDisplayMatchTimer = null;
+    if (PlatformUtil.isTvOS && !replacedPip) {
+      unawaited(
+        TvosDisplayMatchService.clear().catchError((Object error) {
+          debugPrint('DisplayMatch: tvOS dispose clear failed: $error');
+        }),
+      );
+    }
     _posSub?.cancel();
     _durSub?.cancel();
     _playbackUiClock.dispose();

@@ -9,6 +9,7 @@ import '../../services/subtitle_font_service.dart';
 import '../../services/analytics_service.dart';
 import '../../services/skip_segment_service.dart';
 import '../../models/android_video_renderer_mode.dart';
+import '../../models/content_display_match_mode.dart';
 import '../video_player/services/network_tuning.dart';
 import '../../utils/deovr_utils.dart' as deovr;
 import '../video_player/services/subtitle_settings_service.dart';
@@ -111,6 +112,8 @@ class _ExternalPlayerSettingsPageState
   bool _tvosLegacyAudioOutput = false; // tvOS diagnostics
   AndroidVideoRendererMode _androidVideoRendererMode =
       AndroidVideoRendererMode.automatic;
+  ContentDisplayMatchMode _contentDisplayMatchMode =
+      ContentDisplayMatchMode.systemDefault;
   bool _startPortrait = false; // Phone only, opt-in
   bool _subtitleAutoSync = false; // Native players only, experimental opt-in
   int _movieCompletionThreshold =
@@ -149,6 +152,7 @@ class _ExternalPlayerSettingsPageState
   final FocusNode _tvosForceStereoFocusNode = FocusNode();
   final FocusNode _tvosLegacyAudioFocusNode = FocusNode();
   final FocusNode _androidVideoRendererFocusNode = FocusNode();
+  final FocusNode _contentDisplayMatchFocusNode = FocusNode();
   final FocusNode _iptvDecoderFocusNode = FocusNode();
   final FocusNode _startPortraitFocusNode = FocusNode();
   final FocusNode _subtitleAutoSyncFocusNode = FocusNode();
@@ -174,6 +178,7 @@ class _ExternalPlayerSettingsPageState
   bool _tvosForceStereoFocused = false;
   bool _tvosLegacyAudioFocused = false;
   bool _androidVideoRendererFocused = false;
+  bool _contentDisplayMatchFocused = false;
   bool _iptvDecoderFocused = false;
   String _iptvDecoderMode = 'auto';
   bool _startPortraitFocused = false;
@@ -315,6 +320,12 @@ class _ExternalPlayerSettingsPageState
         _androidVideoRendererFocused = _androidVideoRendererFocusNode.hasFocus;
       });
     });
+    _contentDisplayMatchFocusNode.addListener(() {
+      if (!mounted) return;
+      setState(() {
+        _contentDisplayMatchFocused = _contentDisplayMatchFocusNode.hasFocus;
+      });
+    });
     _iptvDecoderFocusNode.addListener(() {
       if (!mounted) return;
       setState(() {
@@ -436,6 +447,7 @@ class _ExternalPlayerSettingsPageState
     _tvosForceStereoFocusNode.dispose();
     _tvosLegacyAudioFocusNode.dispose();
     _androidVideoRendererFocusNode.dispose();
+    _contentDisplayMatchFocusNode.dispose();
     _iptvDecoderFocusNode.dispose();
     _startPortraitFocusNode.dispose();
     _subtitleAutoSyncFocusNode.dispose();
@@ -577,6 +589,8 @@ class _ExternalPlayerSettingsPageState
           : false;
       final androidVideoRendererMode =
           await StorageService.getAndroidVideoRendererMode();
+      final contentDisplayMatchMode =
+          await StorageService.getContentDisplayMatchMode();
       final startPortrait = await StorageService.getPlayerStartPortrait();
       final subtitleAutoSync =
           await StorageService.getSubtitleAutoSyncEnabled();
@@ -643,6 +657,7 @@ class _ExternalPlayerSettingsPageState
         _tvosForceStereo = tvosForceStereo;
         _tvosLegacyAudioOutput = tvosLegacyAudioOutput;
         _androidVideoRendererMode = androidVideoRendererMode;
+        _contentDisplayMatchMode = contentDisplayMatchMode;
         _iptvDecoderMode = iptvDecoderMode;
         _startPortrait = startPortrait;
         _subtitleAutoSync = subtitleAutoSync;
@@ -1143,6 +1158,12 @@ class _ExternalPlayerSettingsPageState
     final mode = AndroidVideoRendererMode.fromStorage(storageKey);
     setState(() => _androidVideoRendererMode = mode);
     await StorageService.setAndroidVideoRendererMode(mode);
+  }
+
+  Future<void> _setContentDisplayMatchMode(String storageKey) async {
+    final mode = ContentDisplayMatchMode.fromStorage(storageKey);
+    setState(() => _contentDisplayMatchMode = mode);
+    await StorageService.setContentDisplayMatchMode(mode);
   }
 
   Future<void> _setIptvDecoderMode(String value) async {
@@ -2481,6 +2502,46 @@ class _ExternalPlayerSettingsPageState
             isFocused: _aspectFocused,
           ),
           const SizedBox(height: 12),
+
+          if (_isAndroidTv || PlatformUtil.isTvOS) ...[
+            _buildDropdownSetting(
+              context,
+              label: 'Match content display',
+              value: _contentDisplayMatchMode.storageKey,
+              items: {
+                for (final mode in ContentDisplayMatchMode.values)
+                  mode.storageKey: mode.label,
+              },
+              onChanged: _setContentDisplayMatchMode,
+              focusNode: _contentDisplayMatchFocusNode,
+              isFocused: _contentDisplayMatchFocused,
+            ),
+            const SizedBox(height: 6),
+            Text(
+              switch (_contentDisplayMatchMode) {
+                ContentDisplayMatchMode.systemDefault =>
+                  'Keeps the player’s existing platform behavior. Choose a matching mode to request content-specific output.',
+                ContentDisplayMatchMode.off =>
+                  'Disables player-requested display matching. Restart playback to apply.',
+                ContentDisplayMatchMode.frameRate =>
+                  PlatformUtil.isTvOS
+                      ? 'Requests the source frame rate from Apple TV. Apple TV Settings → Video and Audio → Match Content → Match Frame Rate must be enabled.'
+                      : 'Keeps the current output resolution and selects a compatible refresh rate. A brief black screen during a mode switch is normal.',
+                ContentDisplayMatchMode.frameRateAndResolution =>
+                  PlatformUtil.isTvOS
+                      ? 'Sends Apple TV the source frame rate, dimensions, and video format. tvOS chooses the output mode and may keep its configured resolution; resolution matching is best-effort. Match Content must be enabled in Apple TV settings.'
+                      : 'Selects the closest output resolution and compatible refresh rate. A brief black screen during a mode switch is normal.',
+              },
+              style: theme.textTheme.bodySmall?.copyWith(
+                color:
+                    _contentDisplayMatchMode ==
+                        ContentDisplayMatchMode.systemDefault
+                    ? t.dim
+                    : t.warning,
+              ),
+            ),
+            const SizedBox(height: 12),
+          ],
 
           // Android TV only. A frozen picture with running
           // audio on live IPTV is almost always the box's

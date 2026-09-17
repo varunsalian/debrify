@@ -28,6 +28,7 @@ import '../models/sidebar_configuration.dart';
 import '../models/stremio_addon.dart';
 import '../models/webdav_item.dart';
 import '../models/android_video_renderer_mode.dart';
+import '../models/content_display_match_mode.dart';
 import '../models/tv_hero_artwork_quality.dart';
 import '../models/tracking_source.dart';
 import '../utils/json_isolate.dart';
@@ -364,6 +365,8 @@ class StorageService {
   static const String _networkConnectPatienceKey = 'network_connect_patience';
   static const String _iptvDecoderModeKey = 'iptv_decoder_mode';
   static const String _networkBufferSizeKey = 'network_buffer_size';
+  static const String _contentDisplayMatchModeKey =
+      'content_display_match_mode';
   static const String _updateAutoCheckEnabledKey = 'update_auto_check_enabled';
   static const String _updateIgnoredVersionKey = 'update_ignored_version';
 
@@ -7051,6 +7054,23 @@ class StorageService {
   static Future<void> setNetworkBufferSize(String value) async {
     final prefs = await ProfilePreferences.instance();
     await prefs.setString(_networkBufferSizeKey, value);
+  }
+
+  /// Television output matching. The default deliberately preserves the
+  /// behavior from before this setting existed instead of silently changing
+  /// display modes for existing profiles.
+  static Future<ContentDisplayMatchMode> getContentDisplayMatchMode() async {
+    final prefs = await ProfilePreferences.instance();
+    return ContentDisplayMatchMode.fromStorage(
+      prefs.getString(_contentDisplayMatchModeKey),
+    );
+  }
+
+  static Future<void> setContentDisplayMatchMode(
+    ContentDisplayMatchMode mode,
+  ) async {
+    final prefs = await ProfilePreferences.instance();
+    await prefs.setString(_contentDisplayMatchModeKey, mode.storageKey);
   }
 
   static int _normalizeLocalCompletionThreshold(int value) {

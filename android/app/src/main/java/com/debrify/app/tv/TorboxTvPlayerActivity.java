@@ -160,6 +160,8 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
     private String provider;
     private PlayerView playerView;
     private ExoPlayer player;
+    private TvContentDisplayMatchMode displayMatchMode = TvContentDisplayMatchMode.SYSTEM;
+    private TvDisplayModeController displayModeController;
     private final AnalyticsListener decoderAnalyticsListener = new AnalyticsListener() {
         private Format inputFormat;
 
@@ -169,6 +171,9 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
                 Format format,
                 @Nullable DecoderReuseEvaluation decoderReuseEvaluation) {
             inputFormat = format;
+            if (displayModeController != null) {
+                displayModeController.onVideoFormat(format);
+            }
         }
 
         @Override
@@ -843,11 +848,19 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
             trackChangeListener = null;
             player.release();
         }
-        player = new ExoPlayer.Builder(this, renderersFactory)
+        ExoPlayer.Builder playerBuilder = new ExoPlayer.Builder(this, renderersFactory)
                 .setTrackSelector(trackSelector)
                 .setLoadControl(loadControl)
-                .setBandwidthMeter(bandwidthMeter)
-                .build();
+                .setBandwidthMeter(bandwidthMeter);
+        if (displayMatchMode == TvContentDisplayMatchMode.OFF) {
+            playerBuilder.setVideoChangeFrameRateStrategy(
+                    C.VIDEO_CHANGE_FRAME_RATE_STRATEGY_OFF);
+        } else if (displayMatchMode == TvContentDisplayMatchMode.FRAME_RATE ||
+                displayMatchMode == TvContentDisplayMatchMode.FRAME_RATE_AND_RESOLUTION) {
+            playerBuilder.setVideoChangeFrameRateStrategy(
+                    C.VIDEO_CHANGE_FRAME_RATE_STRATEGY_ONLY_IF_SEAMLESS);
+        }
+        player = playerBuilder.build();
         player.addListener(playbackListener);
         player.addAnalyticsListener(decoderAnalyticsListener);
         playerView.setPlayer(player);
@@ -1621,7 +1634,15 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
                 .getLong(this, "player_night_mode_index", 0);
             nightModeIndex = Math.max(0, Math.min(nightModeIndex, nightModeGains.length - 1));
 
-            android.util.Log.d("TorboxTvPlayer", "Loaded defaults - aspect=" + resizeModeIndex + ", nightMode=" + nightModeIndex);
+            displayMatchMode = TvContentDisplayMatchMode.Companion.fromStorage(
+                    com.debrify.app.profiles.ProfilePreferenceProjection.getString(
+                            this,
+                            "content_display_match_mode",
+                            TvContentDisplayMatchMode.SYSTEM.getStorageKey()));
+            if (displayModeController != null) displayModeController.clear();
+            displayModeController = new TvDisplayModeController(this, displayMatchMode);
+
+            android.util.Log.d("TorboxTvPlayer", "Loaded defaults - aspect=" + resizeModeIndex + ", nightMode=" + nightModeIndex + ", displayMatch=" + displayMatchMode.getStorageKey());
         } catch (Exception e) {
             android.util.Log.e("TorboxTvPlayer", "Error loading player defaults", e);
             // Keep default values
@@ -6032,6 +6053,10 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
     }
 
     protected void onDestroy() {
+        if (displayModeController != null) {
+            displayModeController.clear();
+            displayModeController = null;
+        }
         if (subtitleControlsLift != null) {
             subtitleControlsLift.cancel();
         }

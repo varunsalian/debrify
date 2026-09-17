@@ -56,6 +56,7 @@ class ProfileCreationService {
     'player_default_aspect_index_tv',
     'player_night_mode_index',
     'player_system_audio_effects',
+    'content_display_match_mode',
     'player_default_subtitle_language',
     'subtitle_source_priority_v1',
     'player_default_audio_language',

@@ -211,6 +211,7 @@ class ProfilePreferences implements SharedPreferences {
     'player_default_aspect_index_tv',
     'player_night_mode_index',
     'player_system_audio_effects',
+    'content_display_match_mode',
     'skip_segments_enabled',
     'skip_segment_provider',
     'player_default_subtitle_language',

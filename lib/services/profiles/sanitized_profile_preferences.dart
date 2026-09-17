@@ -70,6 +70,14 @@ abstract final class SanitizedProfilePreferences {
         return value is String && _appThemes.contains(value);
       case 'detail_theme':
         return value is String && _detailThemes.contains(value);
+      case 'content_display_match_mode':
+        return value is String &&
+            const <String>{
+              'system',
+              'off',
+              'frame_rate',
+              'frame_rate_resolution',
+            }.contains(value);
       case 'text_brightness':
         return value is String &&
             const <String>{'bright', 'soft', 'dim'}.contains(value);
