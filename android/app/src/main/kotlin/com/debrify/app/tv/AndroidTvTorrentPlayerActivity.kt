@@ -1080,6 +1080,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private var recoveryDataGeneration = 0
     private var recoveryTitle: String? = null
     private var recoverySeriesTitle: String? = null
+    private var useAddonTextFormatting = false
+    private var showSourceAddonLogos = false
     private var recoveryImdbId: String? = null
     private val recoveryStartedAtMs = System.currentTimeMillis()
     private var recoverySequence = 0L
@@ -2006,6 +2008,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 payloadCheck.optInt("playbackOwnerDataGeneration", 0)
             recoveryTitle = payloadCheck.nullableString("title")
             recoverySeriesTitle = payloadCheck.nullableString("seriesTitle")
+            useAddonTextFormatting = payloadCheck.optBoolean("useAddonTextFormatting", false)
+            showSourceAddonLogos = payloadCheck.optBoolean("showAddonLogos", false)
             recoveryImdbId = payloadCheck.nullableString("imdbId")
             if (payloadCheck.optString("mode") == "iptv") {
                 initIptvMode(payloadCheck)
@@ -2494,9 +2498,15 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                             source.streamType, source.videoId, item?.season, item?.episode
                         )
                     }.map { source ->
+                        val original = if (useAddonTextFormatting) source.addonPresentation else null
                         TvSourceBrowserEntry(
                             index = source.index,
-                            title = source.displayTitle,
+                            title = original?.first ?: source.displayTitle,
+                            description = original?.second,
+                            originalText = original != null,
+                            transport = source.streamType,
+                            addonName = if (showSourceAddonLogos) source.addonDisplayName else null,
+                            addonLogo = if (showSourceAddonLogos) source.addonLogo else null,
                             source = source.source,
                             quality = source.quality,
                             size = source.formattedSize,
@@ -19686,6 +19696,9 @@ private data class StremioSource(
     val coverageType: String? = null,
     val badgeDescription: String? = null,
     val videoId: String? = null,
+    val addonPresentation: Pair<String, String?>? = null,
+    val addonDisplayName: String? = null,
+    val addonLogo: String? = null,
 ) {
     val isDirectStream: Boolean get() = streamType == "directUrl"
 
@@ -19729,6 +19742,9 @@ private data class StremioSource(
                 coverageType = obj.optString("coverage_type").takeIf { it.isNotEmpty() },
                 badgeDescription = sourceBadgeDescription(obj.optString("stream_label"), obj.optString("stream_description")),
                 videoId = obj.optString("stremio_video_id").takeIf { it.isNotEmpty() },
+                addonPresentation = sourceAddonPresentation(obj.nullableString("stream_label"), obj.nullableString("stream_original_title"), obj.nullableString("stream_description")),
+                addonDisplayName = obj.nullableString("addon_display_name"),
+                addonLogo = obj.nullableString("addon_logo"),
             )
         }
 
@@ -19749,6 +19765,9 @@ private data class StremioSource(
                 coverageType = (map["coverage_type"] as? String)?.takeIf { it.isNotEmpty() },
                 badgeDescription = sourceBadgeDescription(map["stream_label"] as? String, map["stream_description"] as? String),
                 videoId = map["stremio_video_id"] as? String,
+                addonPresentation = sourceAddonPresentation(map["stream_label"] as? String, map["stream_original_title"] as? String, map["stream_description"] as? String),
+                addonDisplayName = map["addon_display_name"] as? String,
+                addonLogo = map["addon_logo"] as? String,
             )
         }
 

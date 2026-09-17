@@ -3041,6 +3041,8 @@ class VideoPlayerLauncher {
 
       // Build payload with Stremio TV guide data
       final payloadMap = result.payload.toMap();
+      payloadMap['useAddonTextFormatting'] = await StorageService.getUseAddonTextFormatting();
+      payloadMap['showAddonLogos'] = await StorageService.getShowAddonLogos();
       payloadMap['initialContinuousShuffle'] = args.initialContinuousShuffle;
       if (args.stremioTvChannels != null &&
           args.stremioTvChannels!.isNotEmpty) {

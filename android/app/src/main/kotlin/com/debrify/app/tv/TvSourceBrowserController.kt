@@ -30,6 +30,11 @@ data class TvSourceBrowserEntry(
     val seasonPack: Boolean,
     val badgeName: String = title,
     val badgeDescription: String? = null,
+    val description: String? = null,
+    val originalText: Boolean = false,
+    val transport: String = if (direct) "directUrl" else "torrent",
+    val addonName: String? = null,
+    val addonLogo: String? = null,
 )
 
 class TvSourceBrowserController(
@@ -112,6 +117,8 @@ class TvSourceBrowserController(
     private data class BadgeSlot(
         val entry: TvSourceBrowserEntry,
         val title: TextView,
+        val description: TextView?,
+        val identity: TextView?,
         val view: TvStreamBadgeStrip,
         val builtIn: TvStreamBadgeStrip,
         val current: Boolean,
@@ -124,10 +131,18 @@ class TvSourceBrowserController(
                 "fillColor" to if (active) 0x0F000000 else 0x14FFFFFF,
             )
             builtIn.show(buildList {
-                if (!configured && entry.quality.isNotBlank()) add(badge(entry.quality))
-                entry.size?.let { add(badge(it)) }
-                if (!entry.direct && entry.seeders > 0) add(badge("${entry.seeders} seeders"))
-                if (entry.direct) add(badge("DIRECT"))
+                if (entry.originalText) {
+                    add(badge(when (entry.transport.lowercase()) {
+                        "directurl" -> "DIRECT"
+                        "externalurl" -> "EXTERNAL"
+                        else -> "TORRENT"
+                    }))
+                } else {
+                    if (!configured && entry.quality.isNotBlank()) add(badge(entry.quality))
+                    if (entry.direct) add(badge("DIRECT"))
+                    entry.size?.let { add(badge(it)) }
+                    if (!entry.direct && entry.seeders > 0) add(badge("${entry.seeders} seeders"))
+                }
             })
         }
     }
@@ -484,6 +499,8 @@ class TvSourceBrowserController(
             slot.active = active
             (row.background as GradientDrawable).setColor(if (active) Color.WHITE else 0x07FFFFFF)
             slot.title.setTextColor(if (active) Color.BLACK else 0xE6FFFFFF.toInt())
+            slot.description?.setTextColor(if (active) 0x8A000000.toInt() else 0x99FFFFFF.toInt())
+            slot.identity?.setTextColor(if (active) Color.BLACK else Color.WHITE)
             slot.title.compoundDrawablesRelative[2]?.setTint(
                 if (active) 0xFF16734C.toInt() else 0xFF35C88A.toInt()
             )
@@ -520,7 +537,8 @@ class TvSourceBrowserController(
     }
 
     private fun sourceRow(entry: TvSourceBrowserEntry, active: Boolean, current: Boolean, click: () -> Unit): View = LinearLayout(activity).apply {
-        orientation = LinearLayout.VERTICAL
+        orientation = LinearLayout.HORIZONTAL
+        gravity = android.view.Gravity.CENTER_VERTICAL
         minimumHeight = dp(58)
         setPadding(dp(18), dp(11), dp(18), dp(11))
         background = bg(active, false).apply {
@@ -542,17 +560,50 @@ class TvSourceBrowserController(
                 setCompoundDrawablesRelative(null, null, marker, null)
             }
         }
-        addView(title, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+        val body = LinearLayout(activity).apply { orientation = LinearLayout.VERTICAL }
+        addView(body, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        body.addView(title, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+        val description = entry.description?.let { detail ->
+            TextView(activity).apply {
+                text = detail
+                textSize = 12f
+                setTextColor(if (active) 0x8A000000.toInt() else 0x99FFFFFF.toInt())
+                setLineSpacing(0f, 1.5f)
+                body.addView(this, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(3) })
+            }
+        }
         val builtIn = TvStreamBadgeStrip(activity, chipHeightDp = 22)
-        addView(builtIn, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+        body.addView(builtIn, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(9) })
         val badges = TvStreamBadgeStrip(activity)
-        addView(badges, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+        body.addView(badges, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+        var identity: TextView? = null
+        entry.addonName?.takeIf { it.isNotBlank() }?.let { name ->
+            val provider = LinearLayout(activity).apply {
+                orientation = LinearLayout.VERTICAL
+                gravity = android.view.Gravity.CENTER
+            }
+            addView(provider, LinearLayout.LayoutParams(dp(80), LinearLayout.LayoutParams.WRAP_CONTENT).apply { marginStart = dp(12) })
+            val logo = android.widget.ImageView(activity)
+            provider.addView(logo, LinearLayout.LayoutParams(dp(40), dp(40)))
+            logo.setImageResource(android.R.drawable.ic_menu_gallery)
+            entry.addonLogo?.takeIf { it.isNotBlank() }?.let {
+                com.bumptech.glide.Glide.with(activity).load(it).fitCenter()
+                    .error(android.R.drawable.ic_menu_gallery).into(logo)
+            }
+            identity = TextView(activity).apply {
+                text = name
+                textSize = 11f
+                gravity = android.view.Gravity.CENTER
+                setTextColor(if (active) Color.BLACK else Color.WHITE)
+                provider.addView(this, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(5) })
+            }
+        }
         // Unlike Flutter's lazy list, every native row remains laid out. The
         // selected row's top delta directly captures expansion above it.
         addOnLayoutChangeListener { view, _, top, _, _, _, oldTop, _, oldBottom ->
             preserveBadgeAnchor(view, top, oldTop, oldBottom - oldTop)
         }
-        val slot = BadgeSlot(entry, title, badges, builtIn, current, active)
+        val slot = BadgeSlot(entry, title, description, identity, badges, builtIn, current, active)
         tag = slot
         slot.showBuiltIn(customBadgesConfigured)
         badgeCache[badgeKey(entry)]?.let { badges.show(it) }
