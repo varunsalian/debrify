@@ -14645,6 +14645,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                     val cur = stremioSubtitles.getOrNull(currentStremioSubtitleIndex)
                     mrow(
                         sub.displayName, value = sub.lang.uppercase(Locale.US),
+                        tag = "subtitle:${sub.url}",
                         // Require addonId match too: a URL shared by two addons dedupes
                         // to one owner, so only that addon's row highlights.
                         selected = cur?.url == sub.url && cur.addonId == addonId,
