@@ -71,11 +71,57 @@ class _SourcesScreenState extends State<_SourcesScreen> {
   );
   List<SeriesSource> _bound = [];
   Torrent? _selectedDirect;
+  Torrent? _cachedEpisodeSource;
+  bool _showCachedEpisodeSource = false;
   int _selectionFocusRun = 0;
+  final int _pickerTraceId = DateTime.now().microsecondsSinceEpoch;
+
+  void _logPickerSelection(
+    String event, [
+    Map<String, Object?> detail = const {},
+  ]) {
+    final selected = _selectedDirect;
+    final fields = <String, Object?>{
+      'picker': _pickerTraceId,
+      'search': _searchToken,
+      'season': widget.selection.season,
+      'episode': widget.selection.episode,
+      'bound_count': _bound.length,
+      'results': _torrents.length,
+      'visible': _visible.length,
+      'match_index': selected == null ? -1 : _torrents.indexOf(selected),
+      'visible_index': selected == null ? -1 : _visible.indexOf(selected),
+      'searching': _searching,
+      'frozen': _streamFrozen,
+      'rail_focus': _cinemaKey.currentState?.hasRailFocus ?? false,
+      'filter_focus': _filterFocus.hasFocus,
+      'pill_focus': _pillFocus.hasFocus,
+      'tv': widget.isTelevision,
+      'provider_filter': _sourceFilter != null,
+      ...detail,
+    };
+    DiagnosticLog.instance.recordEvent(
+      source: 'source_selection',
+      event: 'picker_$event',
+      fields: fields.map(
+        (key, value) =>
+            MapEntry(key, value is String ? DiagnosticLabel(value) : value),
+      ),
+    );
+    // Scalars survive the privacy filter; no addon configuration or URLs.
+    debugPrint(
+      'SourcePicker: event=$event ${fields.entries.map((e) => '${e.key}=${e.value}').join(' ')}',
+    );
+  }
 
   void _updateSelectedDirect() {
     _selectedDirect = null;
-    if (_bound.isEmpty || !_bound.first.isAddonDirect) return;
+    if (_bound.isEmpty || !_bound.first.isAddonDirect) {
+      _logPickerSelection('match', {
+        'reason': _bound.isEmpty ? 'no_saved_source' : 'primary_not_direct',
+      });
+      return;
+    }
     final pin = _bound.first;
     final candidates =
         _torrents
@@ -92,39 +138,95 @@ class _SourcesScreenState extends State<_SourcesScreen> {
       streamIndex: pin.streamIndex ?? 0,
       bingeGroup: pin.bingeGroup,
     );
+    final groupMatches = candidates
+        .where((t) => t.stremioBingeGroup == pin.bingeGroup)
+        .length;
+    final profileMatches = candidates
+        .where((t) => t.stremioStreamKey == pin.streamKey)
+        .length;
+    _logPickerSelection('match', {
+      'direct_results': _torrents.where((t) => t.isDirectStream).length,
+      'addon_matches': candidates.length,
+      'uses_binge_group': pin.bingeGroup?.isNotEmpty == true,
+      'group_matches': groupMatches,
+      'profile_matches': profileMatches,
+      'saved_stream_index': pin.streamIndex,
+      'matched_stream_index': _selectedDirect?.stremioStreamIndex,
+      'reason': _selectedDirect != null
+          ? 'matched'
+          : candidates.isEmpty
+          ? 'addon_configuration_not_found'
+          : pin.bingeGroup?.isNotEmpty == true
+          ? 'binge_group_not_found'
+          : 'stream_identity_not_found',
+    });
   }
 
   // Lazy rows have no Focus context until built. Walk the viewport until the
   // target mounts, then align precisely using its actual (variable) height.
-  Future<void> _revealSelectedDirect() async {
+  Future<void> _revealSelectedDirect({bool preserveFocus = false}) async {
     final run = ++_selectionFocusRun;
     final token = _searchToken;
     final target = _selectedDirect;
-    if (target == null) return;
+    if (target == null) {
+      _logPickerSelection('reveal_skipped', {'reason': 'no_match'});
+      return;
+    }
     final index = _visible.indexOf(target);
-    if (index < 0) return;
+    if (index < 0) {
+      _logPickerSelection('reveal_skipped', {'reason': 'match_not_visible'});
+      return;
+    }
+    _logPickerSelection('reveal_start');
     while (mounted &&
         run == _selectionFocusRun &&
         token == _searchToken &&
-        !_streamFrozen) {
+        (preserveFocus || !_streamFrozen)) {
       await WidgetsBinding.instance.endOfFrame;
       if (!mounted ||
           run != _selectionFocusRun ||
           token != _searchToken ||
-          _streamFrozen ||
+          (!preserveFocus && _streamFrozen) ||
           _filterFocus.hasFocus ||
           _pillFocus.hasFocus ||
-          (_cinemaKey.currentState?.hasRailFocus ?? false) ||
+          (!preserveFocus &&
+              (_cinemaKey.currentState?.hasRailFocus ?? false)) ||
           index >= _nodes.length) {
+        _logPickerSelection('reveal_skipped', {
+          'reason': !mounted
+              ? 'unmounted'
+              : run != _selectionFocusRun
+              ? 'newer_result_batch'
+              : token != _searchToken
+              ? 'new_search'
+              : _streamFrozen
+              ? 'user_interaction'
+              : _filterFocus.hasFocus
+              ? 'filter_focused'
+              : _pillFocus.hasFocus
+              ? 'new_results_focused'
+              : (_cinemaKey.currentState?.hasRailFocus ?? false)
+              ? 'sidebar_focused'
+              : 'missing_focus_node',
+        });
         return;
       }
       final rowContext = _nodes[index].context;
       if (rowContext != null && rowContext.mounted) {
-        if (widget.isTelevision) _nodes[index].requestFocus();
+        if (preserveFocus) _lastCinemaSource = index;
+        if (widget.isTelevision && !preserveFocus) _nodes[index].requestFocus();
         await Scrollable.ensureVisible(rowContext, alignment: 0.3);
+        _logPickerSelection('reveal_complete', {
+          'focus_requested': widget.isTelevision && !preserveFocus,
+        });
         return;
       }
-      if (!_resultsScroll.hasClients) return;
+      if (!_resultsScroll.hasClients) {
+        _logPickerSelection('reveal_skipped', {
+          'reason': 'scroll_not_attached',
+        });
+        return;
+      }
       final position = _resultsScroll.position;
       final attached = <int>[
         for (var i = 0; i < _nodes.length; i++)
@@ -134,7 +236,12 @@ class _SourcesScreenState extends State<_SourcesScreen> {
       final next =
           (position.pixels + (backwards ? -1 : 1) * position.viewportDimension)
               .clamp(position.minScrollExtent, position.maxScrollExtent);
-      if (next == position.pixels) return;
+      if (next == position.pixels) {
+        _logPickerSelection('reveal_skipped', {
+          'reason': 'scroll_boundary_before_row_mounted',
+        });
+        return;
+      }
       position.jumpTo(next);
       WidgetsBinding.instance.ensureVisualUpdate();
     }
@@ -402,10 +509,39 @@ class _SourcesScreenState extends State<_SourcesScreen> {
     final bound = _imdbId.isEmpty
         ? <SeriesSource>[]
         : await SeriesSourceService.getSources(_imdbId);
+    Torrent? cached;
+    if (widget.selection.isSeries &&
+        widget.selection.season != null &&
+        widget.selection.episode != null &&
+        bound.isNotEmpty &&
+        bound.first.isAddonDirect) {
+      final pin = bound.first;
+      try {
+        final addons = await StremioService.instance.getAddons();
+        if (addons.any(
+          (addon) =>
+              addon.enabled &&
+              addon.supportsStreams &&
+              addon.sourceBindingKey == pin.addonKey,
+        )) {
+          cached = await ResolvedPlaybackLinkCache.get(
+            id: _imdbId,
+            type: widget.meta.contentType ?? 'series',
+            season: widget.selection.season,
+            episode: widget.selection.episode,
+            pin: pin,
+          );
+        }
+      } catch (_) {
+        _logPickerSelection('cache_unavailable');
+      }
+    }
     if (!mounted) return;
     setState(() {
       _bound = bound;
+      _cachedEpisodeSource = cached;
       _updateSelectedDirect();
+      _logPickerSelection('saved_sources_loaded');
     });
   }
 
@@ -609,14 +745,46 @@ class _SourcesScreenState extends State<_SourcesScreen> {
     // (whole series/season, no episode) drop direct-link singles and apply the
     // requested season scope while retaining provider order. The Sources
     // browser does not apply an implicit relevance sort.
-    final List<Torrent> torrents;
+    List<Torrent> torrents;
     if (sel.isSeries && sel.season != null && sel.episode != null) {
       torrents = sourceOrdered;
     } else {
       torrents = _filterSeriesPacks(sourceOrdered, sel);
     }
+    // Include the fallback before buffering so it counts as a pending row even
+    // when the final engine response adds no other sources.
+    if (!_searching &&
+        _cachedEpisodeSource != null &&
+        _bound.isNotEmpty &&
+        _bound.first.isAddonDirect) {
+      final pin = _bound.first;
+      final candidates =
+          torrents
+              .where(
+                (t) => t.isDirectStream && t.stremioAddonKey == pin.addonKey,
+              )
+              .toList()
+            ..sort(
+              (a, b) => (a.stremioStreamIndex ?? 0).compareTo(
+                b.stremioStreamIndex ?? 0,
+              ),
+            );
+      if (StremioService.selectPinnedDirectStream(
+            candidates,
+            streamKey: pin.streamKey ?? '',
+            streamIndex: pin.streamIndex ?? 0,
+            bingeGroup: pin.bingeGroup,
+          ) ==
+          null) {
+        torrents = [_cachedEpisodeSource!, ...torrents];
+        _logPickerSelection('cached_episode_inserted');
+      }
+    }
     if (_streamFrozen) {
       _pendingTorrents = torrents;
+      _logPickerSelection('batch_buffered', {
+        'pending_results': torrents.length,
+      });
       if (mounted) setState(() {}); // pill count / banner update
       return;
     }
@@ -644,8 +812,22 @@ class _SourcesScreenState extends State<_SourcesScreen> {
     }
     _torrents = torrents;
     _updateSelectedDirect();
-    _visible = _redesign ? _applyToolbar(torrents) : torrents;
+    _showCachedEpisodeSource = torrents.any(
+      (t) => identical(t, _cachedEpisodeSource),
+    );
+    _visible = _redesign ? _applyToolbar(_torrents) : _torrents;
     _syncStreamNodes();
+    _logPickerSelection('focus_decision', {
+      'reason': focusedTorrent != null
+          ? 'preserve_user_focus'
+          : _streamFrozen
+          ? 'user_interaction'
+          : _selectedDirect == null
+          ? 'no_match'
+          : !_visible.contains(_selectedDirect)
+          ? 'match_filtered_or_deduplicated'
+          : 'reveal_match',
+    });
     if (mounted) {
       setState(() {
         _loading = false;
@@ -771,6 +953,7 @@ class _SourcesScreenState extends State<_SourcesScreen> {
   /// First real user interaction → stop live-reshuffling; buffer new arrivals
   /// behind the pill instead.
   void _freezeStreaming() {
+    ++_selectionFocusRun;
     _streamFrozen = true;
   }
 
@@ -1221,6 +1404,9 @@ class _SourcesScreenState extends State<_SourcesScreen> {
     // provider's offset has no attached focus target at index zero.
     if (_resultsScroll.hasClients) _resultsScroll.jumpTo(0);
     _rebuildVisible();
+    if (_visible.contains(_selectedDirect)) {
+      unawaited(_revealSelectedDirect(preserveFocus: true));
+    }
     for (final status in _addonStatuses) {
       if (status.sourceKey == key && _statusActionable(status)) {
         unawaited(_retryAddon(status));
@@ -2167,6 +2353,9 @@ class _SourcesScreenState extends State<_SourcesScreen> {
         : FormatTagDetector.detect(t.name);
     return SourceRow(
       isCurrentSource: identical(t, _selectedDirect),
+      notice: _showCachedEpisodeSource && identical(t, _cachedEpisodeSource)
+          ? 'Last played source · Not returned by the latest search. Using its cached link.'
+          : null,
       listIndex: i,
       cinemaLayout: cinema,
       title: t.displayTitle,

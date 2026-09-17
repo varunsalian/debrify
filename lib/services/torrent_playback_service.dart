@@ -2305,7 +2305,7 @@ class TorrentPlaybackService {
     return SeriesSourceFetcher(
       season: season,
       episode: episode,
-      pinnedDirectCandidates: (s, e) async* {
+      pinnedDirectCandidates: (s, e, {onPreferredMissing}) async* {
         final List<SeriesSource> pins;
         try {
           pins = await SeriesSourceService.getSources(imdbId);
@@ -2328,8 +2328,13 @@ class TorrentPlaybackService {
                   season: s,
                   episode: e,
                 );
-            if (fresh != null) yield fresh;
+            if (fresh != null) {
+              yield fresh;
+            } else if (identical(pin, pins.first)) {
+              onPreferredMissing?.call();
+            }
           } catch (_) {
+            if (identical(pin, pins.first)) onPreferredMissing?.call();
             /* Try the next saved source. */
           }
         }

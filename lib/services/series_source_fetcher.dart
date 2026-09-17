@@ -126,7 +126,7 @@ class SeriesSourceFetcher {
   /// behavior of older/custom fetchers; callers should use [allowsCandidate]
   /// rather than reading this directly.
   final SeriesSourceCandidateValidator? validateCandidate;
-  final Stream<Torrent> Function(int season, int episode)?
+  final Stream<Torrent> Function(int season, int episode, {void Function()? onPreferredMissing})?
   pinnedDirectCandidates;
 
   final Future<void> Function(int season, int episode, Torrent source)?

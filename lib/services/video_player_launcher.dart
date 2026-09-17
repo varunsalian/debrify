@@ -2759,6 +2759,7 @@ class VideoPlayerLauncher {
             return sp.findOriginalIndexBySeasonEpisode(season, episode) >= 0;
           }
 
+          var preferredSourceMissing = false;
           Future<Map<String, dynamic>?> winWith(int i) async {
             logSourceSelection('next_episode_candidate', source: currentStremioSources[i],
                 index: i, season: season, episode: episode, player: 'exo');
@@ -2874,6 +2875,7 @@ class VideoPlayerLauncher {
             }
             return {
               'sourceIndex': i,
+              'preferredSourceMissing': preferredSourceMissing,
               'items': items,
               'targetSeason': season,
               'targetEpisode': episode,
@@ -2885,7 +2887,8 @@ class VideoPlayerLauncher {
 
           final pinned = seriesFetcher.pinnedDirectCandidates;
           if (pinned != null) {
-            await for (final candidate in pinned(season, episode)) {
+            await for (final candidate in pinned(season, episode,
+                onPreferredMissing: () => preferredSourceMissing = true)) {
               if (stale()) return null;
               if (!await candidateHasTarget(candidate)) continue;
               if (stale()) return null;

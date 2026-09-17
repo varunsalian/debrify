@@ -13525,7 +13525,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     try {
       final pinned = fetcher.pinnedDirectCandidates;
       if (pinned != null) {
-        await for (final candidate in pinned(season, episode)) {
+        await for (final candidate in pinned(season, episode, onPreferredMissing: () {
+          if (!request!.isCurrent || !mounted) return;
+          messenger.showSnackBar(const SnackBar(content: Text(
+              'Your previous source is unavailable for this episode. Trying other sources.')));
+        })) {
           if (!request.isCurrent) {
             return EpisodePlaybackOutcome.cancelled;
           }

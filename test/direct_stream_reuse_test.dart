@@ -132,6 +132,19 @@ void main() {
       expect(requested, ['/stream/series/tt123:1:2.json']);
       expect(candidate.directUrl, 'https://cdn.test/episode2');
       expect(candidate.httpHeaders?['Authorization'], 'episode-2');
+      await SeriesSourceService.setSources('tt123', [
+        pin(addon: addon.sourceBindingKey, group: 'missing-group'),
+      ]);
+      var missingNotices = 0;
+      final missing = await fetcher
+          .pinnedDirectCandidates!(
+            1,
+            3,
+            onPreferredMissing: () => missingNotices++,
+          )
+          .toList();
+      expect(missing, isEmpty);
+      expect(missingNotices, 1);
       await TorrentPlaybackService.validatedSourceCommitterForTesting(
         SeriesSource.addonDirectService,
         launch,

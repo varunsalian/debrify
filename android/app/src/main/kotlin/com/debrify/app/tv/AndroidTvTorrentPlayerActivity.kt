@@ -17816,6 +17816,11 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     /** Adopt a full replacement source list from a per-addon fetch response —
      * the same append-only swap [applyMoreTorrentSources] performs. */
     private fun adoptSourceList(map: Map<*, *>?) {
+        if (map?.get("preferredSourceMissing") == true) {
+            android.widget.Toast.makeText(this,
+                "Your previous source is unavailable for this episode. Using another source.",
+                android.widget.Toast.LENGTH_LONG).show()
+        }
         val newSources = (map?.get("stremioSources") as? List<*>) ?: return
         if (newSources.isEmpty()) return
         stremioSources.clear()

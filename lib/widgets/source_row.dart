@@ -47,6 +47,7 @@ class SourceRow extends StatefulWidget {
     this.isSelectionMode = false,
     this.isSelected = false,
     this.isCurrentSource = false,
+    this.notice,
     this.onCopy,
     this.titleMaxLines,
     this.addonText,
@@ -109,6 +110,7 @@ class SourceRow extends StatefulWidget {
 
   /// Persistent playback preference, independent of the remote's focus.
   final bool isCurrentSource;
+  final String? notice;
 
   /// Copy-link affordance. It occupies the existing trailing-action slot
   /// instead of being added beside the chevron, so enabling it does not take
@@ -324,7 +326,22 @@ class _SourceRowState extends State<SourceRow> {
                   color: widget.isSelected ? _accent : _dim2,
                 ),
               ),
-            Expanded(child: _body ??= _buildBody()),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _body ??= _buildBody(),
+                  if (widget.notice != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: Text(
+                        widget.notice!,
+                        style: const TextStyle(color: _cache, fontSize: 12),
+                      ),
+                    ),
+                ],
+              ),
+            ),
             if (widget.addonName != null) ...[
               const SizedBox(width: 12),
               AddonIdentity(
