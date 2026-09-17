@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:debrify/models/advanced_search_selection.dart';
@@ -6,6 +7,7 @@ import 'package:debrify/models/torrent.dart';
 import 'package:debrify/screens/search_screen.dart';
 import 'package:debrify/services/torrent_playback_service.dart';
 import 'package:debrify/services/torrent_service.dart';
+import 'package:debrify/services/series_source_service.dart';
 import 'package:debrify/theme/app_theme.dart';
 import 'package:debrify/theme/app_theme_scope.dart';
 import 'package:debrify/utils/app_storage.dart';
@@ -31,6 +33,101 @@ void main() {
     AppStorage.debugReset();
     storage.deleteSync(recursive: true);
   });
+
+  testWidgets(
+    'selected direct source is revealed and stays marked after navigation',
+    (tester) async {
+      const pin = SeriesSource(
+        torrentHash: '',
+        torrentName: 'Previous episode',
+        debridService: SeriesSource.addonDirectService,
+        debridTorrentId: '',
+        boundAt: 1,
+        addonId: 'addon',
+        addonKey: 'configuration',
+        streamKey: 'preferred',
+        bingeGroup: 'group',
+        streamIndex: 30,
+      );
+      SharedPreferences.setMockInitialValues({
+        'series_source_tt123': jsonEncode([pin.toJson()]),
+      });
+      await tester.runAsync(TorrentService.ensureInitialized);
+      expect((await SeriesSourceService.getSources('tt123')).length, 1);
+      tester.view.physicalSize = const Size(960, 540);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final results = List.generate(
+        40,
+        (i) => Torrent(
+          rowid: i,
+          infohash: 'direct_$i',
+          hasRealInfoHash: false,
+          name: 'Episode source $i',
+          sizeBytes: 1000000,
+          createdUnix: 0,
+          seeders: 0,
+          leechers: 0,
+          completed: 0,
+          scrapedDate: 0,
+          source: 'stremio:Test',
+          streamType: StreamType.directUrl,
+          directUrl: 'https://example.com/episode/$i',
+          stremioAddonId: 'addon',
+          stremioAddonKey: 'configuration',
+          stremioStreamKey: i == 30 ? 'preferred' : 'profile$i',
+          stremioBingeGroup: i >= 29 && i <= 31 ? 'group' : 'group$i',
+          stremioStreamIndex: i,
+        ),
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ThemeData.dark(),
+          home: AppThemeScope(
+            theme: AppThemes.legacy,
+            child: sourcesScreenForTesting(
+              selection: const AdvancedSearchSelection(
+                imdbId: 'tt123',
+                isSeries: true,
+                title: 'Show',
+                season: 1,
+                episode: 2,
+              ),
+              meta: const PlaybackMeta(),
+              search: (_) async => {'torrents': results},
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(FocusManager.instance.primaryFocus?.debugLabel, 'src_30');
+      final selected = find.byWidgetPredicate(
+        (w) => w is SourceRow && w.isCurrentSource,
+      );
+      expect(selected, findsOneWidget);
+      expect(tester.widget<SourceRow>(selected).title, 'Episode source 30');
+      expect(
+        find.byWidgetPredicate(
+          (w) =>
+              w is Icon &&
+              w.icon == Icons.check_circle_rounded &&
+              w.semanticLabel == 'Selected source',
+        ),
+        findsOneWidget,
+      );
+      expect(
+        tester.getRect(selected).overlaps(const Rect.fromLTWH(0, 0, 960, 540)),
+        isTrue,
+      );
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pumpAndSettle();
+      expect(FocusManager.instance.primaryFocus?.debugLabel, 'src_31');
+      expect(selected, findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
 
   testWidgets('D-pad reaches and opens Filter and Sort from the first source', (
     tester,

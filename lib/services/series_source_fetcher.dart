@@ -251,6 +251,15 @@ class SeriesSourceFetcher {
     return merged;
   }
 
+  /// Direct/external addon rows belong to the episode endpoint that returned
+  /// them. Keep torrent packs reusable and legacy rows with unknown scope.
+  static bool visibleForEpisode(Torrent source, int? season, int? episode) {
+    if (source.streamType == StreamType.torrent || season == null || episode == null) return true;
+    final scope = RegExp(r':(\d+):(\d+)$').firstMatch(source.stremioVideoId ?? '');
+    return scope == null ||
+        (int.parse(scope.group(1)!) == season && int.parse(scope.group(2)!) == episode);
+  }
+
   /// Dedupe identity: infohash for torrents, URL for direct streams.
   static String sourceKey(Torrent t) {
     if (t.infohash.isNotEmpty) return 'ih:${t.infohash.toLowerCase()}';

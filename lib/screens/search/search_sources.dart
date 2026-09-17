@@ -70,6 +70,75 @@ class _SourcesScreenState extends State<_SourcesScreen> {
     keepScrollOffset: false,
   );
   List<SeriesSource> _bound = [];
+  Torrent? _selectedDirect;
+  int _selectionFocusRun = 0;
+
+  void _updateSelectedDirect() {
+    _selectedDirect = null;
+    if (_bound.isEmpty || !_bound.first.isAddonDirect) return;
+    final pin = _bound.first;
+    final candidates =
+        _torrents
+            .where((t) => t.isDirectStream && t.stremioAddonKey == pin.addonKey)
+            .toList()
+          ..sort(
+            (a, b) => (a.stremioStreamIndex ?? 0).compareTo(
+              b.stremioStreamIndex ?? 0,
+            ),
+          );
+    _selectedDirect = StremioService.selectPinnedDirectStream(
+      candidates,
+      streamKey: pin.streamKey ?? '',
+      streamIndex: pin.streamIndex ?? 0,
+      bingeGroup: pin.bingeGroup,
+    );
+  }
+
+  // Lazy rows have no Focus context until built. Walk the viewport until the
+  // target mounts, then align precisely using its actual (variable) height.
+  Future<void> _revealSelectedDirect() async {
+    final run = ++_selectionFocusRun;
+    final token = _searchToken;
+    final target = _selectedDirect;
+    if (target == null) return;
+    final index = _visible.indexOf(target);
+    if (index < 0) return;
+    while (mounted &&
+        run == _selectionFocusRun &&
+        token == _searchToken &&
+        !_streamFrozen) {
+      await WidgetsBinding.instance.endOfFrame;
+      if (!mounted ||
+          run != _selectionFocusRun ||
+          token != _searchToken ||
+          _streamFrozen ||
+          _filterFocus.hasFocus ||
+          _pillFocus.hasFocus ||
+          (_cinemaKey.currentState?.hasRailFocus ?? false) ||
+          index >= _nodes.length) {
+        return;
+      }
+      final rowContext = _nodes[index].context;
+      if (rowContext != null && rowContext.mounted) {
+        if (widget.isTelevision) _nodes[index].requestFocus();
+        await Scrollable.ensureVisible(rowContext, alignment: 0.3);
+        return;
+      }
+      if (!_resultsScroll.hasClients) return;
+      final position = _resultsScroll.position;
+      final attached = <int>[
+        for (var i = 0; i < _nodes.length; i++)
+          if (_nodes[i].context != null) i,
+      ];
+      final backwards = attached.isNotEmpty && index < attached.first;
+      final next =
+          (position.pixels + (backwards ? -1 : 1) * position.viewportDimension)
+              .clamp(position.minScrollExtent, position.maxScrollExtent);
+      if (next == position.pixels) return;
+      position.jumpTo(next);
+      WidgetsBinding.instance.ensureVisualUpdate();
+    }
+  }
 
   // --- redesign toolbar state (unused when _redesign is false) ---
   TorrentFilterState _filters = const TorrentFilterState.empty();
@@ -216,7 +285,11 @@ class _SourcesScreenState extends State<_SourcesScreen> {
     // beside the search and rebuilding afterwards used the toolbar's
     // user-interaction path, which froze streaming and parked every later
     // batch behind the "+N new sources" pill.
-    await Future.wait([_loadSourcePriority(), _reloadBound(), _loadAddonText()]);
+    await Future.wait([
+      _loadSourcePriority(),
+      _reloadBound(),
+      _loadAddonText(),
+    ]);
     if (!mounted) return;
     await _runSearch();
   }
@@ -224,7 +297,11 @@ class _SourcesScreenState extends State<_SourcesScreen> {
   Future<void> _loadAddonText() async {
     final value = await StorageService.getUseAddonTextFormatting();
     final logos = await StorageService.getShowAddonLogos();
-    if (mounted) setState(() { _useAddonText = value; _showAddonLogos = logos; });
+    if (mounted)
+      setState(() {
+        _useAddonText = value;
+        _showAddonLogos = logos;
+      });
   }
 
   Future<void> _loadSourcePriority() async {
@@ -326,7 +403,10 @@ class _SourcesScreenState extends State<_SourcesScreen> {
         ? <SeriesSource>[]
         : await SeriesSourceService.getSources(_imdbId);
     if (!mounted) return;
-    setState(() => _bound = bound);
+    setState(() {
+      _bound = bound;
+      _updateSelectedDirect();
+    });
   }
 
   /// Series pack/bind post-filter — ported verbatim from the old Home
@@ -547,6 +627,7 @@ class _SourcesScreenState extends State<_SourcesScreen> {
   /// across the reshuffle (a late engine can insert rows above the D-pad
   /// focus; without this the remote lands on a different torrent).
   void _applyStreamingResults(List<Torrent> torrents) {
+    ++_selectionFocusRun;
     // Identity-preserving refocus only makes sense for USER-placed focus —
     // i.e. after a freeze (adopt-pending / toolbar paths). During live
     // streaming the only focus is the programmatic TV anchor on row 0;
@@ -562,6 +643,7 @@ class _SourcesScreenState extends State<_SourcesScreen> {
       }
     }
     _torrents = torrents;
+    _updateSelectedDirect();
     _visible = _redesign ? _applyToolbar(torrents) : torrents;
     _syncStreamNodes();
     if (mounted) {
@@ -582,12 +664,19 @@ class _SourcesScreenState extends State<_SourcesScreen> {
           if (mounted && idx < _nodes.length) _nodes[idx].requestFocus();
         });
       }
+    } else if (!_streamFrozen && _visible.contains(_selectedDirect)) {
+      unawaited(_revealSelectedDirect());
     } else if (widget.isTelevision && !_streamFrozen) {
       // Live streaming on TV: keep the remote anchored to the TOP row (the
       // best-ranked source right now) — the anchor exists from the first
       // batch instead of waiting for the slowest engine.
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted || _nodes.isEmpty || _streamFrozen) return;
+        if (!mounted ||
+            _nodes.isEmpty ||
+            _streamFrozen ||
+            _visible.contains(_selectedDirect)) {
+          return;
+        }
         if (_filterFocus.hasFocus ||
             _pillFocus.hasFocus ||
             (_cinemaKey.currentState?.hasRailFocus ?? false)) {
@@ -663,7 +752,8 @@ class _SourcesScreenState extends State<_SourcesScreen> {
     if (widget.isTelevision) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
-        if (_nodes.any((n) => n.hasFocus) ||
+        if (_visible.contains(_selectedDirect) ||
+            _nodes.any((n) => n.hasFocus) ||
             _filterFocus.hasFocus ||
             _pillFocus.hasFocus ||
             (_cinemaKey.currentState?.hasRailFocus ?? false)) {
@@ -733,6 +823,7 @@ class _SourcesScreenState extends State<_SourcesScreen> {
   }
 
   void _playNow(Torrent t, int i) {
+    _freezeStreaming();
     unawaited(
       TorrentPlaybackService.activateTorrent(
         context,
@@ -745,7 +836,7 @@ class _SourcesScreenState extends State<_SourcesScreen> {
         sources: _visible,
         sourceIndex: i,
         searchKeyword: widget.selection.title,
-      ),
+      ).then((_) => _reloadBound()),
     );
   }
 
@@ -1503,6 +1594,7 @@ class _SourcesScreenState extends State<_SourcesScreen> {
     final old = List<FocusNode>.from(_nodes);
     _nodes.clear();
     _visible = _applyToolbar(_torrents);
+    _updateSelectedDirect();
     for (var i = 0; i < _visible.length; i++) {
       _nodes.add(FocusNode(debugLabel: 'src_$i'));
     }
@@ -2074,6 +2166,7 @@ class _SourcesScreenState extends State<_SourcesScreen> {
         ? const <FormatTag>[]
         : FormatTagDetector.detect(t.name);
     return SourceRow(
+      isCurrentSource: identical(t, _selectedDirect),
       listIndex: i,
       cinemaLayout: cinema,
       title: t.displayTitle,

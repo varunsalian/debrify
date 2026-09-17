@@ -46,6 +46,7 @@ class SourceRow extends StatefulWidget {
     this.showPlayPill = false,
     this.isSelectionMode = false,
     this.isSelected = false,
+    this.isCurrentSource = false,
     this.onCopy,
     this.titleMaxLines,
     this.addonText,
@@ -105,6 +106,9 @@ class SourceRow extends StatefulWidget {
   /// replaces the play affordance and [isSelected] accents the card.
   final bool isSelectionMode;
   final bool isSelected;
+
+  /// Persistent playback preference, independent of the remote's focus.
+  final bool isCurrentSource;
 
   /// Copy-link affordance. It occupies the existing trailing-action slot
   /// instead of being added beside the chevron, so enabling it does not take
@@ -275,6 +279,8 @@ class _SourceRowState extends State<SourceRow> {
           // has always avoided.
           color: _isFocused && ownCursor
               ? _accent
+              : widget.isCurrentSource
+              ? _cache
               : widget.isSelected
               ? _accent.withValues(alpha: 0.55)
               : Colors.transparent,
@@ -297,6 +303,16 @@ class _SourceRowState extends State<SourceRow> {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
+            if (widget.isCurrentSource)
+              const Padding(
+                padding: EdgeInsets.only(right: 11),
+                child: Icon(
+                  Icons.check_circle_rounded,
+                  size: 21,
+                  color: _cache,
+                  semanticLabel: 'Selected source',
+                ),
+              ),
             if (widget.isSelectionMode)
               Padding(
                 padding: const EdgeInsets.only(right: 11),
@@ -311,8 +327,12 @@ class _SourceRowState extends State<SourceRow> {
             Expanded(child: _body ??= _buildBody()),
             if (widget.addonName != null) ...[
               const SizedBox(width: 12),
-              AddonIdentity(name: widget.addonName!, logo: widget.addonLogo,
-                large: widget.isTelevision, color: _fg),
+              AddonIdentity(
+                name: widget.addonName!,
+                logo: widget.addonLogo,
+                large: widget.isTelevision,
+                color: _fg,
+              ),
             ],
             if (widget.showPlayPill && !widget.isSelectionMode) ...[
               const SizedBox(width: 8),
@@ -410,24 +430,38 @@ class _SourceRowState extends State<SourceRow> {
               padding: const EdgeInsets.only(bottom: 5),
               child: _pill(widget.streamBadge ?? 'Torrent', _tagFg, _tagBg),
             ),
-            Text(widget.addonText!.name, style: TextStyle(
-              color: _fg, fontSize: widget.isTelevision ? 17 : 14,
-              fontWeight: FontWeight.w700, height: 1.35)),
+            Text(
+              widget.addonText!.name,
+              style: TextStyle(
+                color: _fg,
+                fontSize: widget.isTelevision ? 17 : 14,
+                fontWeight: FontWeight.w700,
+                height: 1.35,
+              ),
+            ),
             if (widget.addonText!.description != null) ...[
               const SizedBox(height: 3),
-              Text(widget.addonText!.description!, style: TextStyle(
-                color: _dim, fontSize: widget.isTelevision ? 14 : 12, height: 1.5)),
+              Text(
+                widget.addonText!.description!,
+                style: TextStyle(
+                  color: _dim,
+                  fontSize: widget.isTelevision ? 14 : 12,
+                  height: 1.5,
+                ),
+              ),
             ],
             if (widget.badgeName != null)
-              StreamBadgeStripFor(name: widget.badgeName!,
+              StreamBadgeStripFor(
+                name: widget.badgeName!,
                 description: widget.badgeDescription,
-                height: widget.isTelevision ? 26 : 24),
+                height: widget.isTelevision ? 26 : 24,
+              ),
           ],
         )
       : ValueListenableBuilder(
-    valueListenable: StreamBadgesService.instance.matcher,
-    builder: (_, matcher, __) => _buildBadgeBody(!matcher.isEmpty),
-  );
+          valueListenable: StreamBadgesService.instance.matcher,
+          builder: (_, matcher, __) => _buildBadgeBody(!matcher.isEmpty),
+        );
 
   Widget _buildBadgeBody(bool customBadgesConfigured) {
     final topBadges = <Widget>[

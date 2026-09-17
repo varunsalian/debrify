@@ -1474,11 +1474,11 @@ class StremioService {
     );
   }
 
-  /// Pure matching half of [resolvePinnedDirectStream], exposed for regression
-  /// tests. Profile identity survives episode-number/URL changes; response
+  /// Shared matching half of [resolvePinnedDirectStream], also used to mark
+  /// the selected source in the browser. Profile identity survives episode
+  /// number/URL changes; response
   /// position only disambiguates equal profiles. A missing explicit binge
   /// group, or an unmatched profile without a group, is a miss.
-  @visibleForTesting
   static Torrent? selectPinnedDirectStream(
     List<Torrent> direct, {
     required String streamKey,

@@ -9,6 +9,13 @@ import android.view.View
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import com.debrify.app.R
+
+internal fun sourceVisibleForEpisode(streamType: String, videoId: String?, season: Int?, episode: Int?): Boolean {
+    if (streamType == "torrent" || season == null || episode == null) return true
+    val scope = Regex(":(\\d+):(\\d+)$").find(videoId.orEmpty()) ?: return true
+    return scope.groupValues[1].toIntOrNull() == season && scope.groupValues[2].toIntOrNull() == episode
+}
 
 /** Full-screen, DPAD-driven source picker. Grouping is presentation only: entries
  * retain their original source indexes and their incoming order. */
@@ -113,9 +120,7 @@ class TvSourceBrowserController(
         fun showBuiltIn(configured: Boolean) {
             fun badge(label: String): Map<String, Any> = mapOf(
                 "label" to label,
-                "textColor" to if (current && label == "▮▮▮") {
-                    if (active) 0xFFAB2733.toInt() else 0xFFE23D4C.toInt()
-                } else if (active) Color.BLACK else 0xCCFFFFFF.toInt(),
+                "textColor" to if (active) Color.BLACK else 0xCCFFFFFF.toInt(),
                 "fillColor" to if (active) 0x0F000000 else 0x14FFFFFF,
             )
             builtIn.show(buildList {
@@ -123,7 +128,6 @@ class TvSourceBrowserController(
                 entry.size?.let { add(badge(it)) }
                 if (!entry.direct && entry.seeders > 0) add(badge("${entry.seeders} seeders"))
                 if (entry.direct) add(badge("DIRECT"))
-                if (current) add(badge("▮▮▮"))
             })
         }
     }
@@ -476,6 +480,9 @@ class TvSourceBrowserController(
             slot.active = active
             (row.background as GradientDrawable).setColor(if (active) Color.WHITE else 0x07FFFFFF)
             slot.title.setTextColor(if (active) Color.BLACK else 0xE6FFFFFF.toInt())
+            slot.title.compoundDrawablesRelative[2]?.setTint(
+                if (active) 0xFF16734C.toInt() else 0xFF35C88A.toInt()
+            )
             slot.showBuiltIn(customBadgesConfigured)
         }
         resultsScroll.post {
@@ -512,13 +519,24 @@ class TvSourceBrowserController(
         orientation = LinearLayout.VERTICAL
         minimumHeight = dp(58)
         setPadding(dp(18), dp(11), dp(18), dp(11))
-        background = bg(active, false)
+        background = bg(active, false).apply {
+            setStroke(dp(2), if (current) 0xFF35C88A.toInt() else Color.TRANSPARENT)
+        }
+        isSelected = current
         setOnClickListener { click() }
         val title = TextView(activity).apply {
             text = entry.title
             setTextColor(if (active) Color.BLACK else 0xE6FFFFFF.toInt())
             textSize = 14f
             setTypeface(typeface, 1)
+            if (current) {
+                contentDescription = "${entry.title}, Playing"
+                val marker = activity.getDrawable(R.drawable.ic_source_playing)?.mutate()
+                marker?.setBounds(0, 0, dp(21), dp(21))
+                marker?.setTint(if (active) 0xFF16734C.toInt() else 0xFF35C88A.toInt())
+                compoundDrawablePadding = dp(14)
+                setCompoundDrawablesRelative(null, null, marker, null)
+            }
         }
         addView(title, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
         val builtIn = TvStreamBadgeStrip(activity, chipHeightDp = 22)

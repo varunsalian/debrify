@@ -2462,7 +2462,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 col2Header = findViewById(R.id.unified_col2_header),
                 col3Header = findViewById(R.id.unified_col3_header),
                 preview = findViewById(R.id.unified_preview),
-                callbacks = unifiedMenuCallbacks
+                callbacks = unifiedMenuCallbacks,
+                sectionIds = unifiedSectionIds,
             )
         }
 
@@ -2479,7 +2480,12 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 results = findViewById(R.id.tv_source_browser_results),
                 resultsScroll = findViewById(R.id.tv_source_browser_scroll),
                 callbacks = object : TvSourceBrowserController.Callbacks {
-                    override fun entries(): List<TvSourceBrowserEntry> = stremioSources.map { source ->
+                    override fun entries(): List<TvSourceBrowserEntry> = stremioSources.filter { source ->
+                        val item = payload?.items?.getOrNull(currentIndex)
+                        source.index == currentStremioSourceIndex || sourceVisibleForEpisode(
+                            source.streamType, source.videoId, item?.season, item?.episode
+                        )
+                    }.map { source ->
                         TvSourceBrowserEntry(
                             index = source.index,
                             title = source.displayTitle,
@@ -14409,8 +14415,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private var pendingSeason: Int = 1
     private var pendingEpisode: Int = 1
 
-    // Menu section order — MUST match UnifiedMenuController.sectionIds.
-    private val unifiedSectionIds = listOf("audio", "subs", "sources", "display", "playback")
+    // Passed to the controller so named shortcuts match the visible rows.
+    private val unifiedSectionIds = listOf("audio", "subs", "display", "playback")
 
     private fun mrow(
         title: String, value: String? = null, selected: Boolean = false, accent: Boolean = false,
@@ -14427,11 +14433,6 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         return listOf(
             mrow("Audio"),
             mrow("Subtitles", value = subBadge),
-            mrow(
-                "Sources",
-                value = if (stremioSources.isNotEmpty()) "${stremioSources.size}" else null,
-                enabled = stremioSources.isNotEmpty(),
-            ),
             mrow("Display"),
             mrow("Playback")
         )
@@ -19642,6 +19643,7 @@ private data class StremioSource(
     // 'multiSeasonPack', 'seasonPack', 'singleEpisode', or null (unknown).
     val coverageType: String? = null,
     val badgeDescription: String? = null,
+    val videoId: String? = null,
 ) {
     val isDirectStream: Boolean get() = streamType == "directUrl"
 
@@ -19684,6 +19686,7 @@ private data class StremioSource(
                 quality = parseQuality(name),
                 coverageType = obj.optString("coverage_type").takeIf { it.isNotEmpty() },
                 badgeDescription = sourceBadgeDescription(obj.optString("stream_label"), obj.optString("stream_description")),
+                videoId = obj.optString("stremio_video_id").takeIf { it.isNotEmpty() },
             )
         }
 
@@ -19703,6 +19706,7 @@ private data class StremioSource(
                 quality = parseQuality(name),
                 coverageType = (map["coverage_type"] as? String)?.takeIf { it.isNotEmpty() },
                 badgeDescription = sourceBadgeDescription(map["stream_label"] as? String, map["stream_description"] as? String),
+                videoId = map["stremio_video_id"] as? String,
             )
         }
 

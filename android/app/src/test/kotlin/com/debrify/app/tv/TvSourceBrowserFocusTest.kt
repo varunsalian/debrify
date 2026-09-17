@@ -23,6 +23,16 @@ import java.time.Duration
 @Config(sdk = [28])
 @LooperMode(LooperMode.Mode.PAUSED)
 class TvSourceBrowserFocusTest {
+    @Test fun episodeScopeExcludesOldLinksButKeepsPacksAndUnknownScope() {
+        assertFalse(sourceVisibleForEpisode("directUrl", "tt123:1:1", 1, 3))
+        assertFalse(sourceVisibleForEpisode("externalUrl", "tt123:1:1", 1, 3))
+        assertFalse(sourceVisibleForEpisode("directUrl", "tt123:1:1", 2, 1))
+        assertTrue(sourceVisibleForEpisode("directUrl", "tt123:1:3", 1, 3))
+        assertTrue(sourceVisibleForEpisode("torrent", "tt123:1:1", 1, 3))
+        assertTrue(sourceVisibleForEpisode("directUrl", null, 1, 3))
+        assertTrue(sourceVisibleForEpisode("directUrl", "tt123:1:1", null, null))
+    }
+
     @Test fun dpadAndRailFocusKeepRowsAndImportedArtworkAttached() {
         val lifecycle = Robolectric.buildActivity(Activity::class.java).setup()
         val activity = lifecycle.get()
@@ -42,12 +52,13 @@ class TvSourceBrowserFocusTest {
             "fillColor" to Color.DKGRAY, "textColor" to Color.WHITE,
         ))
         var played = -1
+        var current = 0
         val controller = TvSourceBrowserController(
             activity, root, rail, railScroll, TextView(activity), TextView(activity),
             TextView(activity), TextView(activity), results, resultsScroll,
             object : TvSourceBrowserController.Callbacks {
                 override fun entries() = entries
-                override fun currentIndex() = 0
+                override fun currentIndex() = current
                 override fun isSeries() = false
                 override fun loadMoreMode(): String? = null
                 override fun isLoading(mode: String) = false
@@ -100,10 +111,34 @@ class TvSourceBrowserFocusTest {
                 chips[i].indices.forEach { j -> assertSame(chips[i][j], builtIns[i].getChildAt(j)) }
             }
             assertEquals(0, detachments)
-            val playing = chips[0].filterIsInstance<TextView>().single { it.text == "▮▮▮" }
-            assertEquals(0xFFE23D4C.toInt(), playing.currentTextColor)
+            assertTrue(rows[0].isSelected)
+            assertFalse(rows[1].isSelected)
+            val playing = rows[0].getChildAt(0) as TextView
+            assertNotNull(playing.compoundDrawablesRelative[2])
+            assertEquals("Movie 0, Playing", playing.contentDescription)
+            assertNull((rows[1].getChildAt(0) as TextView).compoundDrawablesRelative[2])
             key(KeyEvent.KEYCODE_DPAD_CENTER)
             assertEquals(1, played)
+            // Picking a candidate alone does not change the playing marker.
+            controller.render()
+            assertTrue(results.getChildAt(0).isSelected)
+            assertFalse(results.getChildAt(1).isSelected)
+            // Reopening lands on the player's committed source, even below
+            // the initial viewport, and a later committed switch moves it.
+            controller.hide()
+            current = 10
+            controller.show()
+            repeat(4) { layout() }
+            val currentRow = results.getChildAt(10) as LinearLayout
+            assertTrue(currentRow.isSelected)
+            assertEquals(Color.BLACK, (currentRow.getChildAt(0) as TextView).currentTextColor)
+            assertTrue(resultsScroll.scrollY > 0)
+            assertTrue(currentRow.top < resultsScroll.scrollY + resultsScroll.height)
+            assertTrue(currentRow.bottom > resultsScroll.scrollY)
+            current = 11
+            controller.render()
+            assertFalse(results.getChildAt(10).isSelected)
+            assertTrue(results.getChildAt(11).isSelected)
         } finally {
             controller.destroy()
             lifecycle.pause().stop().destroy()
