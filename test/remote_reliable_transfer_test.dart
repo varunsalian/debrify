@@ -20,6 +20,7 @@ void main() {
     Future<void> Function(RemoteTransferFile) receive, {
     Duration timeout = const Duration(seconds: 5),
     int receiptLimit = 256,
+    int Function(Map<String, dynamic>)? fileSizeLimit,
   }) async {
     final instance = RemoteReliableTransfer(
       directory: Directory('${root.path}/service-${services.length}'),
@@ -27,6 +28,7 @@ void main() {
       onReceive: receive,
       ioTimeout: timeout,
       receiptMemoryLimit: receiptLimit,
+      fileSizeLimit: fileSizeLimit,
       pollInterval: const Duration(milliseconds: 10),
     );
     services.add(instance);
@@ -44,6 +46,48 @@ void main() {
     services.clear();
     if (await root.exists()) await root.delete(recursive: true);
   });
+
+  test(
+    'per-format limit rejects animation before upload without lowering other limits',
+    () async {
+      var imports = 0;
+      var received = 0;
+      final receiver = await service(
+        (transfer) async {
+          imports++;
+          received += await transfer.file.length();
+        },
+        fileSizeLimit: (metadata) =>
+            metadata['format'] == 'launch-animation-v1' ? 100 : 1000,
+      );
+      final sender = await service((_) async {});
+      final file = await File(
+        '${root.path}/payload',
+      ).writeAsBytes(List.filled(200, 7));
+      await expectLater(
+        sender.send(
+          host: '127.0.0.1',
+          port: receiver.port,
+          sessionId: 'paired',
+          key: key,
+          file: file,
+          metadata: {'format': 'launch-animation-v1'},
+        ),
+        throwsA(isA<RemoteTransferException>()),
+      );
+      expect(imports, 0);
+      await sender.send(
+        host: '127.0.0.1',
+        port: receiver.port,
+        sessionId: 'paired',
+        key: key,
+        file: file,
+        metadata: {'format': 'other'},
+      );
+      expect(imports, 1);
+      expect(received, 200);
+    },
+  );
 
   for (final expires in [false, true]) {
     test(

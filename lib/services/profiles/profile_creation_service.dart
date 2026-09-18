@@ -49,6 +49,7 @@ class ProfileCreationService {
     'detail_theme',
     'parents_guide_style',
     'launch_animation',
+    'imported_launch_animation_v1',
     'launch_ident_palette',
     'ui_sounds',
     'ui_haptics',

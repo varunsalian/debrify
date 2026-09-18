@@ -1,0 +1,140 @@
+{
+  "reports": [
+    {
+      "sample": "hello-landscape",
+      "aspectRatio": 0.5625,
+      "importMs": 18,
+      "loadMs": 2,
+      "frames": 180,
+      "rasterP95Ms": 1.938,
+      "rasterMaxMs": 13.196
+    },
+    {
+      "sample": "hello-landscape",
+      "aspectRatio": 1.7777777777777777,
+      "importMs": 18,
+      "loadMs": 2,
+      "frames": 183,
+      "rasterP95Ms": 1.421,
+      "rasterMaxMs": 5.166
+    },
+    {
+      "sample": "hello-landscape",
+      "aspectRatio": 2.3333333333333335,
+      "importMs": 18,
+      "loadMs": 2,
+      "frames": 178,
+      "rasterP95Ms": 4.557,
+      "rasterMaxMs": 59.741
+    },
+    {
+      "sample": "hello-portrait",
+      "aspectRatio": 0.5625,
+      "importMs": 19,
+      "loadMs": 2,
+      "frames": 184,
+      "rasterP95Ms": 1.559,
+      "rasterMaxMs": 3.879
+    },
+    {
+      "sample": "hello-portrait",
+      "aspectRatio": 1.7777777777777777,
+      "importMs": 19,
+      "loadMs": 2,
+      "frames": 183,
+      "rasterP95Ms": 2.439,
+      "rasterMaxMs": 4.641
+    },
+    {
+      "sample": "hello-portrait",
+      "aspectRatio": 2.3333333333333335,
+      "importMs": 19,
+      "loadMs": 2,
+      "frames": 183,
+      "rasterP95Ms": 2.506,
+      "rasterMaxMs": 5.008
+    },
+    {
+      "sample": "hello-multiple",
+      "aspectRatio": 0.5625,
+      "importMs": 20,
+      "loadMs": 3,
+      "frames": 184,
+      "rasterP95Ms": 3.977,
+      "rasterMaxMs": 5.914
+    },
+    {
+      "sample": "hello-multiple",
+      "aspectRatio": 1.7777777777777777,
+      "importMs": 20,
+      "loadMs": 3,
+      "frames": 183,
+      "rasterP95Ms": 3.25,
+      "rasterMaxMs": 5.917
+    },
+    {
+      "sample": "hello-multiple",
+      "aspectRatio": 2.3333333333333335,
+      "importMs": 20,
+      "loadMs": 3,
+      "frames": 183,
+      "rasterP95Ms": 3.674,
+      "rasterMaxMs": 5.116
+    },
+    {
+      "sample": "hello-image",
+      "aspectRatio": 0.5625,
+      "importMs": 19,
+      "loadMs": 5,
+      "frames": 184,
+      "rasterP95Ms": 3.175,
+      "rasterMaxMs": 5.611
+    },
+    {
+      "sample": "hello-image",
+      "aspectRatio": 1.7777777777777777,
+      "importMs": 19,
+      "loadMs": 5,
+      "frames": 183,
+      "rasterP95Ms": 3.023,
+      "rasterMaxMs": 4.756
+    },
+    {
+      "sample": "hello-image",
+      "aspectRatio": 2.3333333333333335,
+      "importMs": 19,
+      "loadMs": 5,
+      "frames": 183,
+      "rasterP95Ms": 3.415,
+      "rasterMaxMs": 5.381
+    },
+    {
+      "sample": "hello-features",
+      "aspectRatio": 0.5625,
+      "importMs": 17,
+      "loadMs": 3,
+      "frames": 183,
+      "rasterP95Ms": 21.312,
+      "rasterMaxMs": 43.901
+    },
+    {
+      "sample": "hello-features",
+      "aspectRatio": 1.7777777777777777,
+      "importMs": 17,
+      "loadMs": 3,
+      "frames": 183,
+      "rasterP95Ms": 4.142,
+      "rasterMaxMs": 5.552
+    },
+    {
+      "sample": "hello-features",
+      "aspectRatio": 2.3333333333333335,
+      "importMs": 17,
+      "loadMs": 3,
+      "frames": 183,
+      "rasterP95Ms": 3.252,
+      "rasterMaxMs": 5.19
+    }
+  ],
+  "errors": []
+}

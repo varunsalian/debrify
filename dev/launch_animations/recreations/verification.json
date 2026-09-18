@@ -1,0 +1,219 @@
+{
+  "platform": "Android TV emulator emulator-5554, Flutter profile mode",
+  "physicalDeviceQA": "Deferred by user",
+  "packages": {
+    "monogram.lottie": {
+      "bytes": 19619,
+      "sha256": "aa421c61c4cc5580cf0e6f2f755fbfe2a2f7e9a9b40185a79fc685c22013c7a1"
+    },
+    "swiss.lottie": {
+      "bytes": 24400,
+      "sha256": "0f7f544dcf95238ae0309231a6185da494256d0a3d004806f8d9909590e899cc"
+    },
+    "trace.lottie": {
+      "bytes": 30011,
+      "sha256": "6bc420fffd3db132a270646430fe3f7affa94c9121e4e3cdcf064896a44dc593"
+    }
+  },
+  "reports": [
+    {
+      "sample": "monogram-landscape",
+      "aspectRatio": 0.5625,
+      "importMs": 52,
+      "loadMs": 5,
+      "frames": 134,
+      "rssBytes": 213774336,
+      "peakRssBytes": 213774336,
+      "rasterP95Ms": 17.645,
+      "rasterMaxMs": 46.046
+    },
+    {
+      "sample": "monogram-landscape",
+      "aspectRatio": 1.7777777777777777,
+      "importMs": 52,
+      "loadMs": 5,
+      "frames": 135,
+      "rssBytes": 216854528,
+      "peakRssBytes": 218746880,
+      "rasterP95Ms": 3.212,
+      "rasterMaxMs": 8.202
+    },
+    {
+      "sample": "monogram-landscape",
+      "aspectRatio": 2.3333333333333335,
+      "importMs": 52,
+      "loadMs": 5,
+      "frames": 135,
+      "rssBytes": 219635712,
+      "peakRssBytes": 219635712,
+      "rasterP95Ms": 2.238,
+      "rasterMaxMs": 3.473
+    },
+    {
+      "sample": "monogram-portrait",
+      "aspectRatio": 0.5625,
+      "importMs": 21,
+      "loadMs": 6,
+      "frames": 136,
+      "rssBytes": 217739264,
+      "peakRssBytes": 225222656,
+      "rasterP95Ms": 2.527,
+      "rasterMaxMs": 3.983
+    },
+    {
+      "sample": "monogram-portrait",
+      "aspectRatio": 1.7777777777777777,
+      "importMs": 21,
+      "loadMs": 6,
+      "frames": 135,
+      "rssBytes": 218611712,
+      "peakRssBytes": 225222656,
+      "rasterP95Ms": 2.222,
+      "rasterMaxMs": 2.667
+    },
+    {
+      "sample": "monogram-portrait",
+      "aspectRatio": 2.3333333333333335,
+      "importMs": 21,
+      "loadMs": 6,
+      "frames": 135,
+      "rssBytes": 219860992,
+      "peakRssBytes": 225222656,
+      "rasterP95Ms": 2.254,
+      "rasterMaxMs": 2.683
+    },
+    {
+      "sample": "swiss-landscape",
+      "aspectRatio": 0.5625,
+      "importMs": 24,
+      "loadMs": 6,
+      "frames": 112,
+      "rssBytes": 219553792,
+      "peakRssBytes": 225222656,
+      "rasterP95Ms": 2.422,
+      "rasterMaxMs": 7.087
+    },
+    {
+      "sample": "swiss-landscape",
+      "aspectRatio": 1.7777777777777777,
+      "importMs": 24,
+      "loadMs": 6,
+      "frames": 111,
+      "rssBytes": 218345472,
+      "peakRssBytes": 225222656,
+      "rasterP95Ms": 3.77,
+      "rasterMaxMs": 5.674
+    },
+    {
+      "sample": "swiss-landscape",
+      "aspectRatio": 2.3333333333333335,
+      "importMs": 24,
+      "loadMs": 6,
+      "frames": 111,
+      "rssBytes": 221777920,
+      "peakRssBytes": 225222656,
+      "rasterP95Ms": 3.355,
+      "rasterMaxMs": 4.429
+    },
+    {
+      "sample": "swiss-portrait",
+      "aspectRatio": 0.5625,
+      "importMs": 25,
+      "loadMs": 6,
+      "frames": 112,
+      "rssBytes": 223453184,
+      "peakRssBytes": 226615296,
+      "rasterP95Ms": 6.081,
+      "rasterMaxMs": 7.616
+    },
+    {
+      "sample": "swiss-portrait",
+      "aspectRatio": 1.7777777777777777,
+      "importMs": 25,
+      "loadMs": 6,
+      "frames": 111,
+      "rssBytes": 221917184,
+      "peakRssBytes": 226615296,
+      "rasterP95Ms": 5.951,
+      "rasterMaxMs": 7.273
+    },
+    {
+      "sample": "swiss-portrait",
+      "aspectRatio": 2.3333333333333335,
+      "importMs": 25,
+      "loadMs": 6,
+      "frames": 111,
+      "rssBytes": 225030144,
+      "peakRssBytes": 226615296,
+      "rasterP95Ms": 4.078,
+      "rasterMaxMs": 6.134
+    },
+    {
+      "sample": "trace-landscape",
+      "aspectRatio": 0.5625,
+      "importMs": 54,
+      "loadMs": 8,
+      "frames": 148,
+      "rssBytes": 224329728,
+      "peakRssBytes": 226365440,
+      "rasterP95Ms": 3.124,
+      "rasterMaxMs": 5.963
+    },
+    {
+      "sample": "trace-landscape",
+      "aspectRatio": 1.7777777777777777,
+      "importMs": 54,
+      "loadMs": 8,
+      "frames": 147,
+      "rssBytes": 221081600,
+      "peakRssBytes": 227647488,
+      "rasterP95Ms": 4.227,
+      "rasterMaxMs": 5.132
+    },
+    {
+      "sample": "trace-landscape",
+      "aspectRatio": 2.3333333333333335,
+      "importMs": 54,
+      "loadMs": 8,
+      "frames": 147,
+      "rssBytes": 228671488,
+      "peakRssBytes": 228671488,
+      "rasterP95Ms": 4.244,
+      "rasterMaxMs": 5.36
+    },
+    {
+      "sample": "trace-portrait",
+      "aspectRatio": 0.5625,
+      "importMs": 36,
+      "loadMs": 9,
+      "frames": 148,
+      "rssBytes": 219824128,
+      "peakRssBytes": 239427584,
+      "rasterP95Ms": 4.739,
+      "rasterMaxMs": 5.316
+    },
+    {
+      "sample": "trace-portrait",
+      "aspectRatio": 1.7777777777777777,
+      "importMs": 36,
+      "loadMs": 9,
+      "frames": 147,
+      "rssBytes": 226664448,
+      "peakRssBytes": 239427584,
+      "rasterP95Ms": 4.626,
+      "rasterMaxMs": 5.931
+    },
+    {
+      "sample": "trace-portrait",
+      "aspectRatio": 2.3333333333333335,
+      "importMs": 36,
+      "loadMs": 9,
+      "frames": 147,
+      "rssBytes": 232673280,
+      "peakRssBytes": 239427584,
+      "rasterP95Ms": 3.537,
+      "rasterMaxMs": 5.035
+    }
+  ],
+  "errors": []
+}

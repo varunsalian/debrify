@@ -1,4 +1,6 @@
 import '../../theme/app_looks.dart';
+import 'imported_launch_animations.dart';
+import '../../services/launch_animation/launch_animation_library.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -59,12 +61,28 @@ class _LaunchAnimationPageState extends State<LaunchAnimationPage> {
   }
 
   Future<void> _select(LaunchIdent choice) async {
-    if (choice.id == _choice.id) return;
+    if (choice.id == _choice.id &&
+        StorageService.importedLaunchAnimationCached == null) {
+      return;
+    }
     setState(() => _choice = choice);
     // Tell an in-flight Look apply that a human just chose this key, so it
     // does not stamp over the choice. See theme/app_looks.dart.
     LookApplier.noteExternalWrite('launch_animation');
-    await StorageService.setLaunchAnimation(choice.id);
+    try {
+      await StorageService.setLaunchAnimation(choice.id);
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('$error')));
+      }
+    }
+    if (mounted) {
+      setState(
+        () => _choice = launchIdentFor(StorageService.launchAnimationCached),
+      );
+    }
   }
 
   Future<void> _selectPalette(String value) async {
@@ -93,7 +111,8 @@ class _LaunchAnimationPageState extends State<LaunchAnimationPage> {
       // covers desktop and tablet windows and leaves phones stacked.
       body: LayoutBuilder(
         builder: (context, constraints) {
-          final twoPane = PlatformUtil.isAndroidTvCached ||
+          final twoPane =
+              PlatformUtil.isAndroidTvCached ||
               (constraints.maxWidth >= 820 &&
                   constraints.maxWidth > constraints.maxHeight * 1.2);
           return twoPane ? _buildTwoPane() : _buildStacked();
@@ -113,11 +132,12 @@ class _LaunchAnimationPageState extends State<LaunchAnimationPage> {
             children: [
               _header(),
               const SizedBox(height: 18),
-              _LaunchPreview(ident: _choice, palette: _palette),
+              _preview(),
               const SizedBox(height: 18),
               _paletteCard(),
               const SizedBox(height: 14),
               _optionsCard(),
+              _imports(),
               const SizedBox(height: 14),
               _footnote(),
             ],
@@ -146,6 +166,7 @@ class _LaunchAnimationPageState extends State<LaunchAnimationPage> {
                   _paletteCard(),
                   const SizedBox(height: 14),
                   _optionsCard(),
+                  _imports(),
                   const SizedBox(height: 14),
                   _footnote(),
                 ],
@@ -155,22 +176,42 @@ class _LaunchAnimationPageState extends State<LaunchAnimationPage> {
           const SizedBox(width: 24),
           // Pinned preview. Nothing here can take focus, so LEFT/RIGHT keep
           // the DPAD inside the list instead of stranding it on a picture.
-          Expanded(
-            flex: 6,
-            child: Center(
-              child: _LaunchPreview(ident: _choice, palette: _palette),
-            ),
-          ),
+          Expanded(flex: 6, child: Center(child: _preview())),
         ],
       ),
     );
   }
 
+  Widget _imports() => ImportedLaunchAnimations(
+    onSelectionChanged: () {
+      if (mounted) {
+        setState(
+          () => _choice = launchIdentFor(StorageService.launchAnimationCached),
+        );
+      }
+    },
+  );
+
+  Widget _preview() {
+    final id = StorageService.importedLaunchAnimationCached;
+    return id == null
+        ? _LaunchPreview(ident: _choice, palette: _palette)
+        : AspectRatio(
+            aspectRatio: 16 / 9,
+            child: ImportedAnimationPreview(
+              key: ValueKey(
+                '$id:${LaunchAnimationLibrary.instance.revision.value}',
+              ),
+              id: id,
+            ),
+          );
+  }
+
   Widget _header() => const SettingsPageHeader(
-        icon: Icons.rocket_launch_rounded,
-        title: 'Launch Animation',
-        subtitle: 'The ident Debrify plays while it starts',
-      );
+    icon: Icons.rocket_launch_rounded,
+    title: 'Launch Animation',
+    subtitle: 'The ident Debrify plays while it starts',
+  );
 
   /// Whether the ident wears its own colours or the app theme's.
   ///
@@ -181,7 +222,7 @@ class _LaunchAnimationPageState extends State<LaunchAnimationPage> {
     final app = AppThemeScope.of(context);
     final themed = _palette == 'theme';
     return SettingsSection(
-      title: 'Colour',
+      title: 'Built-in animation colour',
       children: [
         SettingsToggleTile(
           icon: Icons.palette_outlined,
@@ -189,10 +230,10 @@ class _LaunchAnimationPageState extends State<LaunchAnimationPage> {
           subtitle: app.isLegacy
               // Honest about doing nothing: legacy IS the ident's own world.
               ? 'Pick an App Theme first — Debrify Classic leaves every ident '
-                  'in its own colours'
+                    'in its own colours'
               : 'The ident\'s room takes ${app.label}\'s colours. Its '
-                  'motion, mark and composition are unchanged, and an ident '
-                  'that would become unreadable keeps its own.',
+                    'motion, mark and composition are unchanged, and an ident '
+                    'that would become unreadable keeps its own.',
           value: themed,
           onChanged: (v) => _selectPalette(v ? 'theme' : 'ident'),
         ),
@@ -201,32 +242,32 @@ class _LaunchAnimationPageState extends State<LaunchAnimationPage> {
   }
 
   Widget _optionsCard() => Focus(
-        focusNode: _firstCardMarker,
-        canRequestFocus: false,
-        skipTraversal: true,
-        child: SettingsSection(
-          title: '',
-          children: [
-            for (final ident in kLaunchIdents) _optionRow(ident),
-          ],
-        ),
-      );
+    focusNode: _firstCardMarker,
+    canRequestFocus: false,
+    skipTraversal: true,
+    child: SettingsSection(
+      title: '',
+      children: [for (final ident in kLaunchIdents) _optionRow(ident)],
+    ),
+  );
 
   Widget _footnote() => Text(
-        'The preview runs the real splash painter on this device\'s quality '
-        'path. Your pick plays on the next launch.',
-        style: TextStyle(
-          fontSize: 12.5,
-          height: 1.45,
-          color: AppThemeScope.of(context).settings.dim,
-        ),
-      );
+    'The preview runs the real splash painter on this device\'s quality '
+    'path. Your pick plays on the next launch.',
+    style: TextStyle(
+      fontSize: 12.5,
+      height: 1.45,
+      color: AppThemeScope.of(context).settings.dim,
+    ),
+  );
 
   /// Radio-style row — a plain [SettingsTile] (the DPAD-proven row) with a
   /// check on the active one.
   Widget _optionRow(LaunchIdent ident) {
     final t = AppThemeScope.of(context).settings;
-    final bool active = _choice.id == ident.id;
+    final bool active =
+        StorageService.importedLaunchAnimationCached == null &&
+        _choice.id == ident.id;
     return SettingsTile(
       icon: active
           ? Icons.radio_button_checked_rounded

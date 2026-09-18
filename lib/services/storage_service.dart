@@ -1802,21 +1802,79 @@ class StorageService {
   /// that never CHOSE move when this changes: an explicit 'collider' is a
   /// stored value and keeps playing Collider.
   static String launchAnimationCached = 'trace';
+  static const importedLaunchAnimationKey = 'imported_launch_animation_v1';
+  static String? importedLaunchAnimationCached;
+  static final Lock _launchSelectionLock = Lock();
+  static int _launchSelectionGeneration = 0;
 
   static Future<String> getLaunchAnimation() async {
     final prefs = await ProfilePreferences.instance();
     final value = prefs.getString(_launchAnimationKey);
+    final imported = prefs.getString(importedLaunchAnimationKey);
+    importedLaunchAnimationCached = _validImportedLaunchId(imported)
+        ? imported
+        : null;
     launchAnimationCached = _launchAnimationValues.contains(value)
         ? value!
         : 'trace';
     return launchAnimationCached;
   }
 
-  static Future<void> setLaunchAnimation(String value) async {
-    final prefs = await ProfilePreferences.instance();
-    final normalized = _launchAnimationValues.contains(value) ? value : 'trace';
-    await prefs.setString(_launchAnimationKey, normalized);
-    launchAnimationCached = normalized;
+  static bool _validImportedLaunchId(String? value) =>
+      value != null && RegExp(r'^[a-f0-9]{32}$').hasMatch(value);
+
+  static Future<void> setLaunchAnimation(String value) => _setLaunchSelection(
+    builtIn: _launchAnimationValues.contains(value) ? value : 'trace',
+  );
+
+  static Future<void> setImportedLaunchAnimation(String id) {
+    if (!_validImportedLaunchId(id)) throw ArgumentError.value(id, 'id');
+    return _setLaunchSelection(imported: id);
+  }
+
+  static Future<void> clearImportedLaunchAnimationIf(String id) =>
+      _setLaunchSelection(clearIf: id);
+
+  static Future<void> _setLaunchSelection({
+    String? builtIn,
+    String? imported,
+    String? clearIf,
+  }) {
+    final scope = ProfileRuntime.scope.value;
+    final generation = clearIf == null
+        ? ++_launchSelectionGeneration
+        : _launchSelectionGeneration;
+    return _launchSelectionLock.synchronized(() async {
+      if (scope != ProfileRuntime.scope.value ||
+          generation != _launchSelectionGeneration) {
+        return;
+      }
+      final prefs = await ProfilePreferences.instance();
+      if (scope != ProfileRuntime.scope.value ||
+          generation != _launchSelectionGeneration) {
+        return;
+      }
+      final previousImport = prefs.getString(importedLaunchAnimationKey);
+      if (clearIf != null && previousImport != clearIf) return;
+      if (builtIn != null &&
+          !await prefs.setString(_launchAnimationKey, builtIn)) {
+        throw StateError('Could not save the launch animation');
+      }
+      // Newer selection writes queue behind this operation and become the
+      // final persisted value. Do not publish this one's stale cache meanwhile.
+      final saved = imported == null
+          ? await prefs.remove(importedLaunchAnimationKey)
+          : await prefs.setString(importedLaunchAnimationKey, imported);
+      if (!saved) {
+        if (scope == ProfileRuntime.scope.value) await getLaunchAnimation();
+        throw StateError('Could not save the launch animation selection');
+      }
+      if (scope == ProfileRuntime.scope.value &&
+          generation == _launchSelectionGeneration) {
+        importedLaunchAnimationCached = imported;
+        if (builtIn != null) launchAnimationCached = builtIn;
+      }
+    });
   }
 
   static const String _launchIdentPaletteKey = 'launch_ident_palette';
@@ -2796,7 +2854,10 @@ class StorageService {
   }
 
   /// Exact series reset; never touches source bindings or unrelated titles.
-  static Future<void> clearSeriesWatchProgress(String imdbId, String title) async {
+  static Future<void> clearSeriesWatchProgress(
+    String imdbId,
+    String title,
+  ) async {
     final id = imdbId.trim().toLowerCase();
     if (id.isEmpty) throw ArgumentError.value(imdbId, 'imdbId');
     final map = await _getPlaybackStateMap();
@@ -2804,8 +2865,10 @@ class StorageService {
       if (raw is! Map) return false;
       final storedId = raw['imdbId']?.toString().trim().toLowerCase();
       return storedId == id ||
-          ((storedId == null || storedId.isEmpty) && raw['type'] == 'series' &&
-           raw['title']?.toString().trim().toLowerCase() == title.trim().toLowerCase());
+          ((storedId == null || storedId.isEmpty) &&
+              raw['type'] == 'series' &&
+              raw['title']?.toString().trim().toLowerCase() ==
+                  title.trim().toLowerCase());
     });
     await _savePlaybackStateMap(map, recordDeletions: true);
     await setSeriesExplicitlyWatched(id, watched: false);
@@ -6461,7 +6524,11 @@ class StorageService {
   }
 
   static Future<void> setHomeAnimationStyle(String value) async {
-    if (!const {'snowy_mountain', 'midnight_rain', 'moonlit_ocean'}.contains(value)) {
+    if (!const {
+      'snowy_mountain',
+      'midnight_rain',
+      'moonlit_ocean',
+    }.contains(value)) {
       throw ArgumentError.value(value);
     }
     final prefs = await ProfilePreferences.instance();
@@ -10475,6 +10542,8 @@ class StorageService {
     iptvStyleCached = kIptvStyleDefault;
     discoverLayoutCached = 'stage';
     launchAnimationCached = 'trace';
+    importedLaunchAnimationCached = null;
+    _launchSelectionGeneration++;
     launchIdentPaletteCached = 'ident';
     tvSidebarStyleCached = 'ghost';
     desktopSidebarStyleCached = 'rail';

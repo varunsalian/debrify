@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'package:debrify/screens/settings/imported_launch_animations.dart';
+import 'package:debrify/services/launch_animation/launch_animation_library.dart';
 
 import 'package:debrify/services/remote_control/remote_constants.dart';
 import 'package:debrify/services/remote_control/remote_control_state.dart';
@@ -15,11 +17,21 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+String animationFlowTitle(String mode) => mode == 'animation_cancel'
+    ? 'animation transfer asks an unpaired receiver to pair and respects cancellation'
+    : 'real UDP pairing recovers a lost $mode without retyping';
+
 void main() {
-  for (final lost in ['request', 'challenge', 'ok', 'legacy_ok']) {
-    testWidgets('real UDP pairing recovers a lost $lost without retyping', (
-      tester,
-    ) async {
+  for (final lost in [
+    'request',
+    'challenge',
+    'ok',
+    'legacy_ok',
+    'animation_cancel',
+  ]) {
+    testWidgets(animationFlowTitle(lost), (tester) async {
+      final animationFlow = lost == 'animation_cancel';
+      InstalledLaunchAnimation? animation;
       late RemoteControlState state;
       late Directory cache;
       late UdpCommandService receiver;
@@ -35,7 +47,7 @@ void main() {
         cache = await Directory.systemTemp.createTemp(
           'remote-pairing-integration-',
         );
-        AppStorage.debugOverride(cache: cache);
+        AppStorage.debugOverride(cache: cache, support: cache);
         final key = await RemoteSessionCrypto.x25519.newKeyPair();
         manager = RemoteSessionManager(
           loadStaticKeyPair: () async => key,
@@ -103,43 +115,74 @@ void main() {
         };
         await receiver.start();
         state.debugCommandPort = receiver.boundPort!;
-      });
-      late BuildContext context;
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Builder(
-            builder: (value) {
-              context = value;
-              return const Scaffold(body: Text('Sender'));
-            },
-          ),
-        ),
-      );
-      var finished = false;
-      RemoteSession? result;
-      Object? failure;
-      await tester.runAsync(() async {
-        unawaited(
-          ensureAuthorizedSession(
-            context,
-            state,
+        if (animationFlow) {
+          animation = await LaunchAnimationLibrary.instance.install(
+            File('dev/launch_animations/samples/hello-landscape.lottie'),
+          );
+          await state.connectToDevice(
             DiscoveredDevice(
               deviceName: 'Receiver',
               ip: '127.0.0.1',
               protocolVersionKnown: false,
             ),
-          ).then(
-            (session) {
-              result = session;
-              finished = true;
-            },
-            onError: (Object error) {
-              failure = error;
-              finished = true;
-            },
-          ),
-        );
+          );
+          for (var i = 0; i < 100 && !state.isConnected; i++) {
+            await Future<void>.delayed(const Duration(milliseconds: 20));
+          }
+          expect(state.isConnected, isTrue);
+        }
       });
+      late BuildContext context;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: animationFlow
+              ? ImportedLaunchDetail(
+                  entry: animation!,
+                  onSelectionChanged: () {},
+                )
+              : Builder(
+                  builder: (value) {
+                    context = value;
+                    return const Scaffold(body: Text('Sender'));
+                  },
+                ),
+        ),
+      );
+      var finished = false;
+      RemoteSession? result;
+      Object? failure;
+      if (animationFlow) {
+        await tester.runAsync(() async {
+          tester
+              .widget<OutlinedButton>(
+                find.widgetWithText(OutlinedButton, 'Send to TV'),
+              )
+              .onPressed!();
+        });
+      } else {
+        await tester.runAsync(() async {
+          unawaited(
+            ensureAuthorizedSession(
+              context,
+              state,
+              DiscoveredDevice(
+                deviceName: 'Receiver',
+                ip: '127.0.0.1',
+                protocolVersionKnown: false,
+              ),
+            ).then(
+              (session) {
+                result = session;
+                finished = true;
+              },
+              onError: (Object error) {
+                failure = error;
+                finished = true;
+              },
+            ),
+          );
+        });
+      }
       Future<void> until(bool Function() ready) async {
         for (var i = 0; i < 350 && !ready(); i++) {
           await tester.runAsync(
@@ -156,6 +199,30 @@ void main() {
         );
         expect(failure, isNull);
         expect(finished, isFalse);
+        if (animationFlow) {
+          final pairingSession = gate.current!.session;
+          await tester.runAsync(() async {
+            tester
+                .widget<TextButton>(find.widgetWithText(TextButton, 'Cancel'))
+                .onPressed!();
+          });
+          await until(() => find.byType(TextField).evaluate().isEmpty);
+          await until(
+            () =>
+                tester
+                    .widget<OutlinedButton>(
+                      find.widgetWithText(OutlinedButton, 'Send to TV'),
+                    )
+                    .onPressed !=
+                null,
+          );
+          expect(pairingSession.authorized, isFalse);
+          expect(
+            find.textContaining('Imported on the receiving device'),
+            findsNothing,
+          );
+          return;
+        }
         await tester.enterText(find.byType(TextField), gate.current!.code);
         await until(() => finished);
         expect(failure, isNull);

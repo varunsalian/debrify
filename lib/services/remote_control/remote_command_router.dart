@@ -12,6 +12,8 @@ import 'package:path/path.dart' as p;
 import '../../utils/app_storage.dart';
 
 import 'remote_constants.dart';
+import '../launch_animation/launch_animation_library.dart';
+import '../launch_animation/launch_package.dart';
 import 'remote_channel_file.dart';
 import '../profiles/local_backup/local_backup_archive.dart';
 import 'remote_control_state.dart';
@@ -1179,6 +1181,7 @@ class RemoteCommandRouter {
         // An avatar is not setup data — it applies immediately below rather
         // than joining the staged import payload.
         command != ConfigCommand.profileAvatar &&
+        command != ConfigCommand.launchAnimation &&
         // Debrify TV channels are repository data, not connection secrets:
         // there is no staging category or restore adapter for them, so this
         // gate used to feed them into a FormatException that was swallowed —
@@ -3431,6 +3434,10 @@ class RemoteCommandRouter {
     _ProfileCommandBinding? profileBinding,
   }) async {
     switch (command) {
+      case ConfigCommand.launchAnimation:
+        await _handleLaunchAnimation(data, context, profileBinding);
+        break;
+
       case ConfigCommand.realDebrid:
         await _handleRealDebridConfig(data);
         break;
@@ -3496,6 +3503,74 @@ class RemoteCommandRouter {
         break;
       default:
         debugPrint('RemoteCommandRouter: Unknown config command: $command');
+    }
+  }
+
+  Future<void> _handleLaunchAnimation(
+    String data,
+    RemoteCommandContext context,
+    _ProfileCommandBinding? binding,
+  ) async {
+    try {
+      if (!context.encrypted ||
+          !context.authorized ||
+          context.launchAnimationArchive == null) {
+        throw const LaunchImportException(
+          'Use a paired animation file transfer.',
+        );
+      }
+      final metadata = jsonDecode(data);
+      if (metadata is! Map ||
+          (metadata['animationId'] != null &&
+              !safeId(metadata['animationId'])) ||
+          (metadata['background'] != null &&
+              !InstalledLaunchAnimation.validBackground(
+                metadata['background'],
+              ))) {
+        throw const LaunchImportException(
+          'Invalid animation transfer metadata.',
+        );
+      }
+      Future<void> authorize() async {
+        if (binding != null &&
+            !await _validateRemoteBinding(
+              context,
+              binding,
+              ProfileFeature.remoteTransfer,
+            )) {
+          throw const LaunchImportException('Transfer authorization expired.');
+        }
+      }
+
+      await authorize();
+      final entry = await LaunchAnimationLibrary.instance.install(
+        context.launchAnimationArchive!,
+        animationId: metadata['animationId'] as String?,
+        background: metadata['background'] as int?,
+        beforeCommit: authorize,
+      );
+      await context.transferReply?.call(
+        ConfigCommand.launchAnimation,
+        jsonEncode({
+          'ok': true,
+          'message':
+              'Animation imported. Preview and select it in Launch Animation settings.',
+        }),
+      );
+      _showSnackBar(
+        'Imported ${entry.name}. Preview and select it in Launch Animation settings.',
+      );
+    } catch (error) {
+      await context.transferReply?.call(
+        ConfigCommand.launchAnimation,
+        jsonEncode({
+          'ok': false,
+          'message': error is LaunchImportException
+              ? error.message
+              : 'Animation import failed.',
+        }),
+      );
+      _showSnackBar('Animation import failed', isError: true);
     }
   }
 

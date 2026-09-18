@@ -1,0 +1,38 @@
+{
+  "reports": [
+    {
+      "sample": "hello-mattes",
+      "aspectRatio": 0.5625,
+      "importMs": 5,
+      "loadMs": 1,
+      "frames": 354,
+      "rssBytes": 154583040,
+      "peakRssBytes": 154583040,
+      "rasterP95Ms": 0.958,
+      "rasterMaxMs": 35.122
+    },
+    {
+      "sample": "hello-mattes",
+      "aspectRatio": 1.7777777777777777,
+      "importMs": 5,
+      "loadMs": 1,
+      "frames": 357,
+      "rssBytes": 163889152,
+      "peakRssBytes": 163889152,
+      "rasterP95Ms": 1.174,
+      "rasterMaxMs": 35.704
+    },
+    {
+      "sample": "hello-mattes",
+      "aspectRatio": 2.3333333333333335,
+      "importMs": 5,
+      "loadMs": 1,
+      "frames": 363,
+      "rssBytes": 158318592,
+      "peakRssBytes": 165625856,
+      "rasterP95Ms": 0.992,
+      "rasterMaxMs": 1.815
+    }
+  ],
+  "errors": []
+}
