@@ -48,6 +48,7 @@ class RemoteReliableTransfer {
     this.onReceiveProgress,
     this.onEvent,
     this.receiptMemoryLimit = 256,
+    this.fileSizeLimit,
     this.maxFileBytes = 16 * 1024 * 1024 * 1024,
     this.ioTimeout = const Duration(seconds: 30),
     this.pollInterval = const Duration(milliseconds: 250),
@@ -69,6 +70,10 @@ class RemoteReliableTransfer {
   final RemoteTransferProgress? onReceiveProgress;
   final void Function(String event, Map<String, Object?> fields)? onEvent;
   final int maxFileBytes;
+  final int Function(Map<String, dynamic> metadata)? fileSizeLimit;
+
+  int _limit(Map<String, dynamic> metadata) =>
+      min(maxFileBytes, fileSizeLimit?.call(metadata) ?? maxFileBytes);
   final int receiptMemoryLimit;
   final Duration ioTimeout;
   final Duration pollInterval;
@@ -147,7 +152,7 @@ class RemoteReliableTransfer {
       throw const RemoteTransferException('Transfer service stopped');
     }
     final length = await file.length();
-    if (length > maxFileBytes) {
+    if (length > _limit(metadata)) {
       throw const RemoteTransferException(
         'Transfer exceeds the disk size limit',
       );
@@ -413,9 +418,11 @@ class RemoteReliableTransfer {
         }
         return;
       }
+      final metadata = Map<String, dynamic>.from(parsed['metadata'] as Map);
+      final requestLimit = _limit(metadata);
       if (request.method == 'GET') {
         final length = parsed['bytes'];
-        if (length is! int || length < 0 || length > maxFileBytes) {
+        if (length is! int || length < 0 || length > requestLimit) {
           await _reply(request, HttpStatus.badRequest);
           return;
         }
@@ -429,9 +436,8 @@ class RemoteReliableTransfer {
       }
       final length = parsed['bytes'] as int;
       final expectedHash = parsed['sha256'] as String;
-      final metadata = parsed['metadata'] as Map<String, dynamic>;
       if (length < 0 ||
-          length > maxFileBytes ||
+          length > requestLimit ||
           offset != (existing?.received ?? 0) ||
           offset > length ||
           !RegExp(r'^[a-f0-9]{64}$').hasMatch(expectedHash) ||
@@ -493,6 +499,11 @@ class RemoteReliableTransfer {
           if (currentKey == null ||
               !_equal(base64Encode(currentKey), base64Encode(key))) {
             throw const RemoteTransferException('Pairing expired');
+          }
+          if (received + plaintext.length > requestLimit) {
+            throw const RemoteTransferException(
+              'Transfer exceeds its size limit',
+            );
           }
           sink.add(plaintext);
           await sink.flush();

@@ -12,6 +12,8 @@ void main() {
     bool live = false,
     bool hideOptions = false,
     bool transitioning = false,
+    VoidCallback? onLiveEdgeAction,
+    bool liveEdgeActionActive = false,
   }) async {
     await tester.binding.setSurfaceSize(const Size(960, 540));
     final scope = FocusScopeNode();
@@ -50,6 +52,8 @@ void main() {
             onShowPlaylist: () {},
             onShowSources: () {},
             onRandom: onRandom,
+            onLiveEdgeAction: onLiveEdgeAction,
+            liveEdgeActionActive: liveEdgeActionActive,
             hideOptions: hideOptions,
             speed: 1,
             aspectMode: AspectMode.contain,
@@ -90,6 +94,26 @@ void main() {
   testWidgets('live playback omits Shuffle', (tester) async {
     await mount(tester, live: true, onRandom: () {});
     expect(find.byIcon(Icons.shuffle_rounded), findsNothing);
+  });
+
+  testWidgets('live playback exposes Start Over and Go Live states', (
+    tester,
+  ) async {
+    var calls = 0;
+    await mount(tester, live: true, onLiveEdgeAction: () => calls++);
+    expect(find.byIcon(Icons.replay_rounded), findsOneWidget);
+    await tester.tap(find.byIcon(Icons.replay_rounded));
+    expect(calls, 1);
+
+    await mount(
+      tester,
+      live: true,
+      liveEdgeActionActive: true,
+      onLiveEdgeAction: () => calls++,
+    );
+    expect(find.byIcon(Icons.live_tv_rounded), findsOneWidget);
+    await tester.tap(find.byIcon(Icons.live_tv_rounded));
+    expect(calls, 2);
   });
 
   testWidgets('hidden options omit Shuffle', (tester) async {

@@ -22,18 +22,7 @@ class M3uParser {
       content = content.substring(1);
     }
     final channels = <IptvChannel>[];
-    final categories = <String>{};
-
-    // Check for M3U header (optional but common). It may declare the
-    // playlist's XMLTV guide via url-tvg= / x-tvg-url=.
-    String? epgUrl;
-
-    String? currentName;
-    String? currentLogo;
-    String? currentGroup;
-    int? currentDuration;
-    Map<String, String> currentAttributes = {};
-    Map<String, String> currentHeaders = {};
+    final parser = _M3uLineParser(channels.add);
 
     // Lazily, never `split('\n').map(trim).toList()`: a 50 MB playlist is
     // ~100k lines, and materializing every one as a fresh trimmed String
@@ -41,84 +30,12 @@ class M3uParser {
     // peak — a real OOM contributor on low-RAM TVs. LineSplitter.split
     // yields one line at a time; consumed lines are collectable
     // immediately, so peak is content + channels.
-    var sawAnyLine = false;
-    var isFirstLine = true;
     for (var line in LineSplitter.split(content)) {
-      line = line.trim();
-      sawAnyLine = true;
-
-      if (isFirstLine) {
-        isFirstLine = false;
-        if (line.startsWith('#EXTM3U')) {
-          epgUrl = _parseHeaderEpgUrl(line);
-          continue;
-        }
-        // No header — fall through and treat it as a normal line.
-      }
-
-      if (line.isEmpty || line.startsWith('#EXTGRP')) {
-        continue;
-      }
-
-      if (line.startsWith('#EXTINF:')) {
-        // Parse EXTINF line: #EXTINF:duration tvg-attributes,Channel Name
-        final parsed = _parseExtInf(line);
-        currentDuration = parsed.duration;
-        currentName = parsed.name;
-        currentLogo = parsed.attributes['tvg-logo'];
-        currentGroup = parsed.attributes['group-title'];
-        currentAttributes = parsed.attributes;
-        // Some playlists declare the channel's headers inline on the EXTINF
-        // line; the #EXTVLCOPT/#EXTHTTP lines below may then add or override.
-        currentHeaders = _headersFromAttributes(parsed.attributes);
-
-        if (currentGroup != null && currentGroup.isNotEmpty) {
-          categories.add(currentGroup);
-        }
-      } else if (line.startsWith('#EXTVLCOPT:')) {
-        _applyVlcOption(line.substring(11), currentHeaders);
-      } else if (line.startsWith('#EXTHTTP:')) {
-        _applyExtHttp(line.substring(9), currentHeaders);
-      } else if (!line.startsWith('#')) {
-        // This is the URL line
-        if (currentName != null && line.isNotEmpty) {
-          // `url|User-Agent=…` entries carry their headers in the URL itself.
-          final (url, urlHeaders) = _splitUrlOptions(line.trim());
-          // Accept playable stream schemes; keep the list curated so
-          // non-playable entries (plugin://, file://, ...) stay filtered out.
-          if (RegExp(
-            r'^(https?|rtmps?|rtsps?|udp|rtp|mms[ht]?|srt)://',
-            caseSensitive: false,
-          ).hasMatch(url)) {
-            channels.add(
-              IptvChannel(
-                name: currentName,
-                url: url,
-                logoUrl: currentLogo,
-                group: currentGroup,
-                duration: currentDuration,
-                attributes: currentAttributes,
-                // Most channels declare none, and a big playlist is tens of
-                // thousands of these — don't hand each one its own empty map.
-                httpHeaders: currentHeaders.isEmpty && urlHeaders.isEmpty
-                    ? const {}
-                    : {...currentHeaders, ...urlHeaders},
-              ),
-            );
-          }
-        }
-
-        // Reset for next entry
-        currentName = null;
-        currentLogo = null;
-        currentGroup = null;
-        currentDuration = null;
-        currentAttributes = {};
-        currentHeaders = {};
-      }
+      parser.add(line);
     }
 
-    if (!sawAnyLine) {
+    final summary = parser.finish();
+    if (!summary.sawAnyLine) {
       return const IptvParseResult(
         channels: [],
         categories: [],
@@ -126,14 +43,25 @@ class M3uParser {
       );
     }
 
-    // Sort categories alphabetically
-    final sortedCategories = categories.toList()..sort();
-
     return IptvParseResult(
       channels: channels,
-      categories: sortedCategories,
-      epgUrl: epgUrl,
+      categories: summary.categories,
+      epgUrl: summary.epgUrl,
     );
+  }
+
+  /// Parses an already decoded line stream without retaining either the
+  /// source text or the emitted channel list. URL-playlist ingestion uses
+  /// this to keep peak memory independent of a playlist's byte size.
+  static Future<M3uStreamParseSummary> parseLines(
+    Stream<String> lines, {
+    required void Function(IptvChannel channel) onChannel,
+  }) async {
+    final parser = _M3uLineParser(onChannel);
+    await for (final line in lines) {
+      parser.add(line);
+    }
+    return parser.finish();
   }
 
   /// XMLTV guide URL from the `#EXTM3U` header: `url-tvg="…"` (also seen as
@@ -352,6 +280,123 @@ class M3uParser {
       name: (name == null || name.isEmpty) ? 'Unknown Channel' : name,
       duration: duration,
       attributes: attributes,
+    );
+  }
+}
+
+/// Metadata left after a streamed M3U parse. Channels are delivered to the
+/// caller one at a time and are deliberately absent from this object.
+class M3uStreamParseSummary {
+  const M3uStreamParseSummary({
+    required this.sawAnyLine,
+    required this.channelCount,
+    required this.categories,
+    required this.epgUrl,
+  });
+
+  final bool sawAnyLine;
+  final int channelCount;
+  final List<String> categories;
+  final String? epgUrl;
+}
+
+/// Shared state machine for the materialized and streamed parser paths. Keep
+/// all dialect handling here so a large URL playlist behaves exactly like a
+/// local-file playlist.
+class _M3uLineParser {
+  _M3uLineParser(this._onChannel);
+
+  final void Function(IptvChannel channel) _onChannel;
+  final Set<String> _categories = <String>{};
+
+  bool _sawAnyLine = false;
+  bool _isFirstLine = true;
+  int _channelCount = 0;
+  String? _epgUrl;
+  String? _currentName;
+  String? _currentLogo;
+  String? _currentGroup;
+  int? _currentDuration;
+  Map<String, String> _currentAttributes = <String, String>{};
+  Map<String, String> _currentHeaders = <String, String>{};
+
+  void add(String rawLine) {
+    var line = rawLine.trim();
+    _sawAnyLine = true;
+
+    if (_isFirstLine) {
+      _isFirstLine = false;
+      if (line.startsWith('\ufeff')) line = line.substring(1);
+      if (line.startsWith('#EXTM3U')) {
+        _epgUrl = M3uParser._parseHeaderEpgUrl(line);
+        return;
+      }
+      // No header — fall through and treat it as a normal line.
+    }
+
+    if (line.isEmpty || line.startsWith('#EXTGRP')) return;
+
+    if (line.startsWith('#EXTINF:')) {
+      final parsed = M3uParser._parseExtInf(line);
+      _currentDuration = parsed.duration;
+      _currentName = parsed.name;
+      _currentLogo = parsed.attributes['tvg-logo'];
+      _currentGroup = parsed.attributes['group-title'];
+      _currentAttributes = parsed.attributes;
+      _currentHeaders = M3uParser._headersFromAttributes(parsed.attributes);
+      if (_currentGroup != null && _currentGroup!.isNotEmpty) {
+        _categories.add(_currentGroup!);
+      }
+      return;
+    }
+    if (line.startsWith('#EXTVLCOPT:')) {
+      M3uParser._applyVlcOption(line.substring(11), _currentHeaders);
+      return;
+    }
+    if (line.startsWith('#EXTHTTP:')) {
+      M3uParser._applyExtHttp(line.substring(9), _currentHeaders);
+      return;
+    }
+    if (line.startsWith('#')) return;
+
+    if (_currentName != null && line.isNotEmpty) {
+      final (url, urlHeaders) = M3uParser._splitUrlOptions(line);
+      if (RegExp(
+        r'^(https?|rtmps?|rtsps?|udp|rtp|mms[ht]?|srt)://',
+        caseSensitive: false,
+      ).hasMatch(url)) {
+        _onChannel(
+          IptvChannel(
+            name: _currentName!,
+            url: url,
+            logoUrl: _currentLogo,
+            group: _currentGroup,
+            duration: _currentDuration,
+            attributes: _currentAttributes,
+            httpHeaders: _currentHeaders.isEmpty && urlHeaders.isEmpty
+                ? const <String, String>{}
+                : <String, String>{..._currentHeaders, ...urlHeaders},
+          ),
+        );
+        _channelCount++;
+      }
+    }
+
+    _currentName = null;
+    _currentLogo = null;
+    _currentGroup = null;
+    _currentDuration = null;
+    _currentAttributes = <String, String>{};
+    _currentHeaders = <String, String>{};
+  }
+
+  M3uStreamParseSummary finish() {
+    final categories = _categories.toList()..sort();
+    return M3uStreamParseSummary(
+      sawAnyLine: _sawAnyLine,
+      channelCount: _channelCount,
+      categories: categories,
+      epgUrl: _epgUrl,
     );
   }
 }

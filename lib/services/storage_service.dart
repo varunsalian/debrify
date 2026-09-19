@@ -28,6 +28,7 @@ import '../models/sidebar_configuration.dart';
 import '../models/stremio_addon.dart';
 import '../models/webdav_item.dart';
 import '../models/android_video_renderer_mode.dart';
+import '../models/content_display_match_mode.dart';
 import '../models/tv_hero_artwork_quality.dart';
 import '../models/tracking_source.dart';
 import '../utils/json_isolate.dart';
@@ -364,7 +365,11 @@ class StorageService {
   static const String _networkConnectPatienceKey = 'network_connect_patience';
   static const String _iptvDecoderModeKey = 'iptv_decoder_mode';
   static const String _networkBufferSizeKey = 'network_buffer_size';
+  static const String _contentDisplayMatchModeKey =
+      'content_display_match_mode';
   static const String _updateAutoCheckEnabledKey = 'update_auto_check_enabled';
+  static const String _updateIncludeAlphaEnabledKey =
+      'update_include_alpha_enabled';
   static const String _updateIgnoredVersionKey = 'update_ignored_version';
 
   // External Player settings
@@ -1609,27 +1614,27 @@ class StorageService {
     'ticket',
   };
 
-  /// Control skin for the NATIVE Android TV player: 'marquee' (editorial
-  /// serif — the default), 'ott' (the Apple TV dock ported to Kotlin),
+  /// Control skin for the NATIVE Android TV player: 'ott' (the Apple TV dock
+  /// ported to Kotlin — the default), 'marquee' (editorial serif),
   /// 'classic' (the legacy Cinema Mode controls), or one of the other
   /// premium dock skins ('frost', 'broadcast', 'pulse', 'ticket'). Android TV only; tvOS runs the
   /// Flutter player and has nothing to choose. Read once per player launch — the native side via
   /// `ProfilePreferenceProjection.getString("tv_player_controls_style")`
   /// (falling back to `flutter.tv_player_controls_style` in
-  /// FlutterSharedPreferences). Unknown or unset coerces to 'marquee' on
+  /// FlutterSharedPreferences). Unknown or unset coerces to 'ott' on
   /// BOTH read and write so the two readers can never disagree about the
   /// default.
   static Future<String> getTvPlayerControlsStyle() async {
     final prefs = await ProfilePreferences.instance();
     final raw = prefs.getString(_tvPlayerControlsStyleKey);
-    return _tvPlayerControlsStyles.contains(raw) ? raw! : 'marquee';
+    return _tvPlayerControlsStyles.contains(raw) ? raw! : 'ott';
   }
 
   static Future<void> setTvPlayerControlsStyle(String style) async {
     final prefs = await ProfilePreferences.instance();
     await prefs.setString(
       _tvPlayerControlsStyleKey,
-      _tvPlayerControlsStyles.contains(style) ? style : 'marquee',
+      _tvPlayerControlsStyles.contains(style) ? style : 'ott',
     );
   }
 
@@ -1799,21 +1804,79 @@ class StorageService {
   /// that never CHOSE move when this changes: an explicit 'collider' is a
   /// stored value and keeps playing Collider.
   static String launchAnimationCached = 'trace';
+  static const importedLaunchAnimationKey = 'imported_launch_animation_v1';
+  static String? importedLaunchAnimationCached;
+  static final Lock _launchSelectionLock = Lock();
+  static int _launchSelectionGeneration = 0;
 
   static Future<String> getLaunchAnimation() async {
     final prefs = await ProfilePreferences.instance();
     final value = prefs.getString(_launchAnimationKey);
+    final imported = prefs.getString(importedLaunchAnimationKey);
+    importedLaunchAnimationCached = _validImportedLaunchId(imported)
+        ? imported
+        : null;
     launchAnimationCached = _launchAnimationValues.contains(value)
         ? value!
         : 'trace';
     return launchAnimationCached;
   }
 
-  static Future<void> setLaunchAnimation(String value) async {
-    final prefs = await ProfilePreferences.instance();
-    final normalized = _launchAnimationValues.contains(value) ? value : 'trace';
-    await prefs.setString(_launchAnimationKey, normalized);
-    launchAnimationCached = normalized;
+  static bool _validImportedLaunchId(String? value) =>
+      value != null && RegExp(r'^[a-f0-9]{32}$').hasMatch(value);
+
+  static Future<void> setLaunchAnimation(String value) => _setLaunchSelection(
+    builtIn: _launchAnimationValues.contains(value) ? value : 'trace',
+  );
+
+  static Future<void> setImportedLaunchAnimation(String id) {
+    if (!_validImportedLaunchId(id)) throw ArgumentError.value(id, 'id');
+    return _setLaunchSelection(imported: id);
+  }
+
+  static Future<void> clearImportedLaunchAnimationIf(String id) =>
+      _setLaunchSelection(clearIf: id);
+
+  static Future<void> _setLaunchSelection({
+    String? builtIn,
+    String? imported,
+    String? clearIf,
+  }) {
+    final scope = ProfileRuntime.scope.value;
+    final generation = clearIf == null
+        ? ++_launchSelectionGeneration
+        : _launchSelectionGeneration;
+    return _launchSelectionLock.synchronized(() async {
+      if (scope != ProfileRuntime.scope.value ||
+          generation != _launchSelectionGeneration) {
+        return;
+      }
+      final prefs = await ProfilePreferences.instance();
+      if (scope != ProfileRuntime.scope.value ||
+          generation != _launchSelectionGeneration) {
+        return;
+      }
+      final previousImport = prefs.getString(importedLaunchAnimationKey);
+      if (clearIf != null && previousImport != clearIf) return;
+      if (builtIn != null &&
+          !await prefs.setString(_launchAnimationKey, builtIn)) {
+        throw StateError('Could not save the launch animation');
+      }
+      // Newer selection writes queue behind this operation and become the
+      // final persisted value. Do not publish this one's stale cache meanwhile.
+      final saved = imported == null
+          ? await prefs.remove(importedLaunchAnimationKey)
+          : await prefs.setString(importedLaunchAnimationKey, imported);
+      if (!saved) {
+        if (scope == ProfileRuntime.scope.value) await getLaunchAnimation();
+        throw StateError('Could not save the launch animation selection');
+      }
+      if (scope == ProfileRuntime.scope.value &&
+          generation == _launchSelectionGeneration) {
+        importedLaunchAnimationCached = imported;
+        if (builtIn != null) launchAnimationCached = builtIn;
+      }
+    });
   }
 
   static const String _launchIdentPaletteKey = 'launch_ident_palette';
@@ -2793,7 +2856,10 @@ class StorageService {
   }
 
   /// Exact series reset; never touches source bindings or unrelated titles.
-  static Future<void> clearSeriesWatchProgress(String imdbId, String title) async {
+  static Future<void> clearSeriesWatchProgress(
+    String imdbId,
+    String title,
+  ) async {
     final id = imdbId.trim().toLowerCase();
     if (id.isEmpty) throw ArgumentError.value(imdbId, 'imdbId');
     final map = await _getPlaybackStateMap();
@@ -2801,8 +2867,10 @@ class StorageService {
       if (raw is! Map) return false;
       final storedId = raw['imdbId']?.toString().trim().toLowerCase();
       return storedId == id ||
-          ((storedId == null || storedId.isEmpty) && raw['type'] == 'series' &&
-           raw['title']?.toString().trim().toLowerCase() == title.trim().toLowerCase());
+          ((storedId == null || storedId.isEmpty) &&
+              raw['type'] == 'series' &&
+              raw['title']?.toString().trim().toLowerCase() ==
+                  title.trim().toLowerCase());
     });
     await _savePlaybackStateMap(map, recordDeletions: true);
     await setSeriesExplicitlyWatched(id, watched: false);
@@ -6458,7 +6526,11 @@ class StorageService {
   }
 
   static Future<void> setHomeAnimationStyle(String value) async {
-    if (!const {'snowy_mountain', 'midnight_rain', 'moonlit_ocean'}.contains(value)) {
+    if (!const {
+      'snowy_mountain',
+      'midnight_rain',
+      'moonlit_ocean',
+    }.contains(value)) {
       throw ArgumentError.value(value);
     }
     final prefs = await ProfilePreferences.instance();
@@ -7051,6 +7123,23 @@ class StorageService {
   static Future<void> setNetworkBufferSize(String value) async {
     final prefs = await ProfilePreferences.instance();
     await prefs.setString(_networkBufferSizeKey, value);
+  }
+
+  /// Television output matching. The default deliberately preserves the
+  /// behavior from before this setting existed instead of silently changing
+  /// display modes for existing profiles.
+  static Future<ContentDisplayMatchMode> getContentDisplayMatchMode() async {
+    final prefs = await ProfilePreferences.instance();
+    return ContentDisplayMatchMode.fromStorage(
+      prefs.getString(_contentDisplayMatchModeKey),
+    );
+  }
+
+  static Future<void> setContentDisplayMatchMode(
+    ContentDisplayMatchMode mode,
+  ) async {
+    final prefs = await ProfilePreferences.instance();
+    await prefs.setString(_contentDisplayMatchModeKey, mode.storageKey);
   }
 
   static int _normalizeLocalCompletionThreshold(int value) {
@@ -9847,6 +9936,16 @@ class StorageService {
     await prefs.setBool(_updateAutoCheckEnabledKey, enabled);
   }
 
+  static Future<bool> getUpdateIncludeAlphaEnabled() async {
+    final prefs = await DevicePreferences.instance();
+    return prefs.getBool(_updateIncludeAlphaEnabledKey) ?? false;
+  }
+
+  static Future<void> setUpdateIncludeAlphaEnabled(bool enabled) async {
+    final prefs = await DevicePreferences.instance();
+    await prefs.setBool(_updateIncludeAlphaEnabledKey, enabled);
+  }
+
   static Future<String?> getIgnoredUpdateVersion() async {
     final prefs = await DevicePreferences.instance();
     final value = prefs.getString(_updateIgnoredVersionKey);
@@ -10455,6 +10554,8 @@ class StorageService {
     iptvStyleCached = kIptvStyleDefault;
     discoverLayoutCached = 'stage';
     launchAnimationCached = 'trace';
+    importedLaunchAnimationCached = null;
+    _launchSelectionGeneration++;
     launchIdentPaletteCached = 'ident';
     tvSidebarStyleCached = 'ghost';
     desktopSidebarStyleCached = 'rail';

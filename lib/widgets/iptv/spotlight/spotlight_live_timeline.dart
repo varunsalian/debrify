@@ -947,6 +947,17 @@ class _SpotlightLiveTimelineState extends State<SpotlightLiveTimeline> {
     final programmeStop = programme.stop.millisecondsSinceEpoch;
     if (programmeStart >= startMs && programmeStop <= endMs) return;
 
+    // A programme longer than the viewport can never satisfy the containment
+    // check above. If it already crosses the visible window, keep it clipped
+    // in place instead of moving a follow-now guide away from the playhead.
+    // Oversized programmes wholly outside the window still recenter below so
+    // deliberate left/right navigation can reveal them.
+    if (programmeStop - programmeStart >= durationMs &&
+        programmeStop > startMs &&
+        programmeStart < endMs) {
+      return;
+    }
+
     final lead = (durationMs * 0.12).round();
     final newStartMs = programmeStart < startMs
         ? programmeStart - lead

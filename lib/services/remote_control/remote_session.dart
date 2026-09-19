@@ -413,6 +413,7 @@ class RemoteCommandContext {
   /// a peer-provided filesystem path.
   final File? profileArchive;
   final File? channelArchive;
+  final File? launchAnimationArchive;
   final Future<bool> Function(String command, String body)? transferReply;
 
   const RemoteCommandContext({
@@ -426,6 +427,7 @@ class RemoteCommandContext {
     this.reject,
     this.profileArchive,
     this.channelArchive,
+    this.launchAnimationArchive,
     this.transferReply,
   });
 

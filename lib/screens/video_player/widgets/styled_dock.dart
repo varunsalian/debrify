@@ -78,6 +78,9 @@ class StyledDock extends StatelessWidget {
   final VoidCallback? onShowIptvChannels;
   final VoidCallback? onShowStremioSources;
   final VoidCallback? onRecord;
+  final VoidCallback? onLiveEdgeAction;
+  final bool liveEdgeActionActive;
+  final bool liveEdgeActionLoading;
   final VoidCallback? onPip;
 
   final bool hasNext;
@@ -167,6 +170,9 @@ class StyledDock extends StatelessWidget {
     this.onShowIptvChannels,
     this.onShowStremioSources,
     this.onRecord,
+    this.onLiveEdgeAction,
+    this.liveEdgeActionActive = false,
+    this.liveEdgeActionLoading = false,
     this.onPip,
     this.hasNext = false,
     this.hasPrevious = false,
@@ -215,6 +221,17 @@ class StyledDock extends StatelessWidget {
   /// least reachable elsewhere.
   List<_Tool> _tools() {
     return [
+      if (onLiveEdgeAction != null)
+        _Tool(
+          liveEdgeActionActive ? Icons.live_tv_rounded : Icons.replay_rounded,
+          liveEdgeActionLoading
+              ? 'Preparing start over…'
+              : liveEdgeActionActive
+              ? 'Go live'
+              : 'Start from beginning',
+          liveEdgeActionLoading ? () {} : onLiveEdgeAction!,
+          active: liveEdgeActionActive,
+        ),
       if (hasRecord && onRecord != null)
         _Tool(
           isRecording

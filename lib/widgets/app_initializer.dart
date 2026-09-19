@@ -5,6 +5,8 @@ import '../theme/app_theme_controller.dart';
 import '../theme/app_surfaces.dart';
 import '../theme/legacy_theme_boundary.dart';
 import 'launch/launch_ident.dart';
+import 'launch/imported_launch_player.dart';
+import '../services/launch_animation/launch_animation_library.dart';
 import 'launch/loading_sweep.dart';
 import '../services/app_migration_service.dart';
 import '../services/main_page_bridge.dart';
@@ -19,7 +21,12 @@ import '../main.dart';
 const Duration _kSpinnerFade = Duration(milliseconds: 170);
 
 class AppInitializer extends StatefulWidget {
-  const AppInitializer({super.key});
+  const AppInitializer({super.key, this.homeBuilder});
+
+  /// Allows startup handoff tests to control Home readiness without starting
+  /// network, media and database services inside a widget test.
+  @visibleForTesting
+  final WidgetBuilder? homeBuilder;
 
   @override
   State<AppInitializer> createState() => _AppInitializerState();
@@ -57,6 +64,10 @@ class _AppInitializerState extends State<AppInitializer>
   Timer? _homeReadyTimeout;
   bool _finishing = false;
   ReceiverLease? _tvReceiverLease;
+  LoadedLaunchAnimation? _importedAnimation;
+  final Completer<void> _launchReady = Completer<void>();
+  bool _loadingImported = false;
+  int _launchLoadGeneration = 0;
 
   @override
   void initState() {
@@ -68,6 +79,7 @@ class _AppInitializerState extends State<AppInitializer>
     // restart path pushes a fresh AppInitializer mid-session.
     AppSurfaceState.instance.publishBootstrap(true);
 
+    _loadingImported = StorageService.importedLaunchAnimationCached != null;
     _ident = launchIdentFor(StorageService.launchAnimationCached);
     // The ident's colours: its own by default, the app theme's when the user
     // opted in.
@@ -126,10 +138,10 @@ class _AppInitializerState extends State<AppInitializer>
       end: 0.0,
     ).animate(CurvedAnimation(parent: _exitController, curve: Curves.easeIn));
 
-    // Kick off the drop-and-bounce reveal on the first frame (nothing to decode
-    // now — the mark and wordmark are drawn as vectors).
+    // Choose the launch player after the first opaque frame. Imported assets
+    // load with a deadline while the rest of initialization runs.
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _revealController.forward();
+      if (mounted) unawaited(_startReveal());
     });
 
     _checkInitializationStatus();
@@ -139,6 +151,9 @@ class _AppInitializerState extends State<AppInitializer>
   void dispose() {
     MainPageBridge.homeBoardReady.removeListener(_onHomeBoardReady);
     _homeReadyTimeout?.cancel();
+    _launchLoadGeneration++;
+    _importedAnimation?.dispose();
+    if (!_launchReady.isCompleted) _launchReady.complete();
     _revealController.dispose();
     _exitController.dispose();
     _idleController.dispose();
@@ -276,6 +291,7 @@ class _AppInitializerState extends State<AppInitializer>
       await Future.delayed(const Duration(milliseconds: 300));
       if (!mounted) return;
       setState(() => _splashDone = true);
+      _releaseImportedAnimation();
       AppSurfaceState.instance.publishBootstrap(false);
       return;
     }
@@ -290,17 +306,62 @@ class _AppInitializerState extends State<AppInitializer>
     if (!mounted) return;
     _idleController.stop();
     setState(() => _splashDone = true);
+    _releaseImportedAnimation();
     AppSurfaceState.instance.publishBootstrap(false);
   }
 
+  void _releaseImportedAnimation() {
+    final animation = _importedAnimation;
+    _importedAnimation = null;
+    // The previous frame's player still owns a drawable until this rebuild
+    // detaches it. Release both compositions and their images afterwards.
+    WidgetsBinding.instance.addPostFrameCallback((_) => animation?.dispose());
+  }
+
+  Future<void> _startReveal() async {
+    final id = StorageService.importedLaunchAnimationCached;
+    final generation = ++_launchLoadGeneration;
+    if (id != null) {
+      setState(() => _loadingImported = true);
+      final loaded = await loadLaunchAnimationForStartup(
+        () => LaunchAnimationLibrary.instance.load(id),
+        isCurrent: () => mounted && generation == _launchLoadGeneration,
+      );
+      if (!mounted || generation != _launchLoadGeneration) return;
+      if (loaded != null) {
+        _importedAnimation = loaded;
+        _revealController.duration = loaded.composition.duration;
+      }
+    }
+    if (!mounted || generation != _launchLoadGeneration) return;
+    setState(() => _loadingImported = false);
+    if (!_launchReady.isCompleted) _launchReady.complete();
+    unawaited(_revealController.forward());
+  }
+
+  void _onImportedPlaybackError(Object error) {
+    if (!mounted || _importedAnimation == null) return;
+    final failed = _importedAnimation!;
+    debugPrint(
+      'Launch animation: playback failed; using settled fallback ($error)',
+    );
+    _revealController.stop(canceled: false);
+    _revealController.value = 1;
+    setState(() => _importedAnimation = null);
+    WidgetsBinding.instance.addPostFrameCallback((_) => failed.dispose());
+  }
+
   Future<void> _waitForReveal() async {
+    await _launchReady.future;
+    if (!mounted) return;
     if (_revealController.isCompleted) return;
     try {
       // forward() continues from the current value; the timeout guards the
       // ticker being cancelled mid-flight (widget disposed) so this await can
       // never hang the init flow.
       await _revealController.forward().timeout(
-        _ident.revealDuration + const Duration(milliseconds: 300),
+        (_revealController.duration ?? _ident.revealDuration) +
+            const Duration(milliseconds: 300),
         onTimeout: () {},
       );
     } catch (_) {}
@@ -343,6 +404,7 @@ class _AppInitializerState extends State<AppInitializer>
       _paintHomeBehindSplash = true;
       _splashDone = true;
     });
+    _releaseImportedAnimation();
     AppSurfaceState.instance.publishBootstrap(false);
     _showPendingPostSetupSnackBarIfNeeded();
   }
@@ -412,7 +474,9 @@ class _AppInitializerState extends State<AppInitializer>
         // without competing with the visible spinner for raster time.
         Opacity(
           opacity: _isAndroidTv && !_paintHomeBehindSplash ? 0 : 1,
-          child: const RepaintBoundary(child: MainPage()),
+          child: RepaintBoundary(
+            child: widget.homeBuilder?.call(context) ?? const MainPage(),
+          ),
         ),
         if (!_splashDone)
           Positioned.fill(
@@ -430,15 +494,24 @@ class _AppInitializerState extends State<AppInitializer>
       // it rasters once while only the animated elements repaint. Opaque on
       // purpose: as an overlay this must fully cover the shell until the exit
       // fade runs.
-      decoration: _palette.backdrop,
+      decoration: _importedAnimation == null
+          ? _palette.backdrop
+          : BoxDecoration(color: Color(_importedAnimation!.background)),
       child: Stack(
         fit: StackFit.expand,
         children: [
           // Boundary so the spinner's 60fps ticks don't re-rasterize the
           // (settled) lockup every frame during the hold-for-home phase.
-          RepaintBoundary(
-            child: CustomPaint(size: Size.infinite, painter: _revealPainter),
-          ),
+          if (_importedAnimation != null)
+            ImportedLaunchPlayer(
+              animation: _importedAnimation!,
+              progress: _revealController,
+              onError: _onImportedPlaybackError,
+            )
+          else if (!_loadingImported)
+            RepaintBoundary(
+              child: CustomPaint(size: Size.infinite, painter: _revealPainter),
+            ),
           Align(
             // Bottom-right corner, well clear of the lockup. Inset further on
             // TV: sets overscan the panel edges, and a status detail this

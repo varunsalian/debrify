@@ -407,6 +407,11 @@ abstract final class SettingsRows {
     title: 'Auto Check for Updates',
     subtitle: 'Notify about new releases on startup',
   );
+  static const includeAlphaUpdates = SettingsRowContent(
+    icon: Icons.science_outlined,
+    title: 'Include Alpha Builds',
+    subtitle: 'Receive alpha and beta updates; alpha may be unstable',
+  );
   // Subtitle is dynamic (update status) — passed per call site.
   static const checkUpdates = SettingsRowContent(
     icon: Icons.system_update_rounded,

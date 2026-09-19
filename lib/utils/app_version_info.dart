@@ -1,5 +1,7 @@
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:yaml/yaml.dart';
 
 /// The app's own version/build, with a safe failure mode.
 ///
@@ -47,7 +49,24 @@ class AppVersionInfo {
     final cached = _cached;
     if (cached != null) return cached;
     try {
-      final info = await PackageInfo.fromPlatform();
+      final platformInfo = await PackageInfo.fromPlatform();
+      final semanticVersion = await _bundledSemanticVersion();
+      final restoredVersion = restoreSanitizedAppleVersion(
+        reportedVersion: platformInfo.version,
+        bundledVersion: semanticVersion,
+      );
+      final info = restoredVersion == platformInfo.version
+          ? platformInfo
+          : PackageInfo(
+              appName: platformInfo.appName,
+              packageName: platformInfo.packageName,
+              version: restoredVersion,
+              buildNumber: platformInfo.buildNumber,
+              buildSignature: platformInfo.buildSignature,
+              installerStore: platformInfo.installerStore,
+              installTime: platformInfo.installTime,
+              updateTime: platformInfo.updateTime,
+            );
       if (info.version.trim().isEmpty || info.buildNumber.trim().isEmpty) {
         throw const FormatException('Package info omitted version/build');
       }
@@ -62,5 +81,42 @@ class AppVersionInfo {
       debugPrint('AppVersionInfo: package info unavailable ($e)');
       return _unknown;
     }
+  }
+
+  static Future<String?> _bundledSemanticVersion() async {
+    try {
+      final pubspec = await rootBundle.loadString('pubspec.yaml');
+      final document = loadYaml(pubspec);
+      final version = document is YamlMap
+          ? document['version']?.toString().split('+').first.trim()
+          : null;
+      return version == null || version.isEmpty ? null : version;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Restores the prerelease label Flutter strips from iOS/macOS bundle
+  /// versions, but only when the bundled source version sanitizes to exactly
+  /// what the platform reported. Explicit `--build-name` overrides therefore
+  /// remain authoritative.
+  @visibleForTesting
+  static String restoreSanitizedAppleVersion({
+    required String reportedVersion,
+    required String? bundledVersion,
+  }) {
+    final source = bundledVersion?.trim().split('+').first;
+    if (source == null || source.isEmpty || source == reportedVersion) {
+      return reportedVersion;
+    }
+    final sanitized = source.replaceAll(RegExp(r'[^\d\.]'), '');
+    final segments = sanitized
+        .split('.')
+        .where((segment) => segment.isNotEmpty)
+        .toList();
+    while (segments.length < 3) {
+      segments.add('0');
+    }
+    return segments.join('.') == reportedVersion ? source : reportedVersion;
   }
 }

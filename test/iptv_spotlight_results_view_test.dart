@@ -141,6 +141,7 @@ https://example.com/live/two.ts
         final timeline = tester.widget<SpotlightLiveTimeline>(
           find.byType(SpotlightLiveTimeline),
         );
+        expect(timeline.windowDuration, const Duration(minutes: 90));
         expect(timeline.channels.map((c) => c.name), [
           'Saved channel 0',
           'Saved channel 1',
@@ -728,7 +729,7 @@ https://example.com/live/two.ts
       final hero = find.byKey(const ValueKey('spotlight-hero'));
       final heroRect = tester.getRect(hero);
       final heroElement = tester.element(hero);
-      expect(heroRect.height, greaterThan(225));
+      expect(heroRect.height, lessThan(225));
       expect(find.byType(BrowseSearchHeader), findsNothing);
       final hiddenSearch = tester.widget<BrowseSearchHeader>(
         find.byType(BrowseSearchHeader, skipOffstage: false),

@@ -14,7 +14,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # In iOS, build-name is used as CFBundleShortVersionString while build-number is used as CFBundleVersion.
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 0.9.4-alpha.1+48
+version: 0.9.5-alpha.1+49
 
 environment:
   sdk: ^3.8.1
@@ -48,6 +48,7 @@ dependencies:
   path_provider: ^2.1.4
   path: ^1.9.0
   archive: ^4.0.7
+  lottie: 3.5.1
   yaml: ^3.1.3
   xml: ^6.5.0
   sqflite: ^2.3.3
@@ -230,6 +231,9 @@ flutter:
     - assets/shaders/moonlit_ocean.frag
 
   assets:
+    # PackageInfo loses prerelease labels in iOS/macOS bundles. Keep the
+    # source version available so update checks can restore full SemVer.
+    - pubspec.yaml
     - assets/app_icon.png
     - assets/app_icon_foreground.png
     - assets/images/profile_gate_lighthouse.png

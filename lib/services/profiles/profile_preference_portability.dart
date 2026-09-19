@@ -219,6 +219,7 @@ abstract final class ProfilePreferencePortability {
   };
 
   static const Set<String> _nonPortableKeys = <String>{
+    'imported_launch_animation_v1',
     // Registry resources are the sole portable copy of connection material.
     'real_debrid_endpoint',
     'webdav_servers_v1',

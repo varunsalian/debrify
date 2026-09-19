@@ -76,7 +76,9 @@ abstract final class LookKeys {
   static final launchAnimation = LookKey(
     id: 'launch_animation',
     label: 'Launch Animation',
-    read: () => StorageService.launchAnimationCached,
+    read: () => StorageService.importedLaunchAnimationCached == null
+        ? StorageService.launchAnimationCached
+        : 'imported:${StorageService.importedLaunchAnimationCached}',
     write: StorageService.setLaunchAnimation,
   );
 
@@ -278,7 +280,8 @@ abstract final class AppLooks {
     AppLook(
       id: 'spotlight',
       label: 'Spotlight',
-      blurb: 'The tvOS idiom — full-bleed art, borderless focus that lifts '
+      blurb:
+          'The tvOS idiom — full-bleed art, borderless focus that lifts '
           'and tilts, and a details page that dissolves into colour.',
       values: {
         'app_theme': 'spotlight',
@@ -307,7 +310,8 @@ abstract final class AppLooks {
     AppLook(
       id: 'console',
       label: 'Console',
-      blurb: 'Squared, monospaced, technical. Everything reads as an instrument.',
+      blurb:
+          'Squared, monospaced, technical. Everything reads as an instrument.',
       values: {
         'app_theme': 'blueprint',
         'detail_page_style': 'console',

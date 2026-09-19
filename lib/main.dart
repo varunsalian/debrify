@@ -2378,11 +2378,13 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
       if (!_allowsProfileFeature(ProfileFeature.appUpdates)) return true;
       final autoEnabled = await StorageService.getUpdateAutoCheckEnabled();
       if (!autoEnabled) return true;
+      final includeAlpha = await StorageService.getUpdateIncludeAlphaEnabled();
       final packageInfo = await AppVersionInfo.get();
       UpdateSummary summary;
       try {
         summary = await UpdateService.checkForUpdates(
           currentVersion: packageInfo.version,
+          includePrereleases: includeAlpha,
         );
       } catch (_) {
         return true;

@@ -1,3 +1,5 @@
+import 'dart:convert' show latin1, utf8;
+import 'dart:io' show Directory, File, FileMode, RandomAccessFile;
 import 'dart:isolate' show TransferableTypedData;
 import 'dart:typed_data' show BytesBuilder, Uint8List;
 
@@ -28,15 +30,29 @@ class IptvService {
   // for distinct URLs.
   static const _maxCachedPlaylists = 3;
 
-  // Refuse to buffer arbitrarily large playlists: a 100MB+ M3U held as bytes
-  // + decoded string + parsed channels at once can OOM a low-RAM TV.
-  static const _maxPlaylistBytes = 50 * 1024 * 1024; // 50 MB
+  // URL playlists up to this size are staged on disk and streamed through the
+  // parser/database worker. The ceiling is still essential: a hostile or
+  // mis-routed endpoint must not fill the device's cache volume indefinitely.
+  static const _maxPlaylistBytes = 250 * 1024 * 1024; // 250 MiB
+
+  // The degraded no-catalog path still has to return a materialized channel
+  // list to the UI isolate, so it keeps the old conservative memory ceiling.
+  static const _maxInMemoryPlaylistBytes = 50 * 1024 * 1024;
+
+  @visibleForTesting
+  static int? debugMaxPlaylistBytesOverride;
+
+  @visibleForTesting
+  static String? debugDownloadDirectoryOverride;
+
+  @visibleForTesting
+  static int get debugMaxPlaylistBytes => _maxPlaylistBytes;
 
   // Hard ceiling on the whole download so a slow-dripping server can't pin
   // the add/loading UI indefinitely (the per-chunk timeout below only catches
   // full stalls). More generous than the old flat 30s so big-but-healthy
   // playlists still succeed.
-  static const _fetchDeadline = Duration(minutes: 2);
+  static const _fetchDeadline = Duration(minutes: 10);
 
   /// Fetch and parse an M3U playlist from URL
   Future<IptvParseResult> fetchPlaylist(
@@ -128,84 +144,126 @@ class IptvService {
       }
 
       final declaredLength = streamed.contentLength;
-      if (declaredLength != null && declaredLength > _maxPlaylistBytes) {
+      final configuredLimit =
+          debugMaxPlaylistBytesOverride ?? _maxPlaylistBytes;
+      final downloadLimit = ingestToDb
+          ? configuredLimit
+          : configuredLimit < _maxInMemoryPlaylistBytes
+          ? configuredLimit
+          : _maxInMemoryPlaylistBytes;
+      if (declaredLength != null && declaredLength > downloadLimit) {
         return IptvParseResult(
           channels: [],
           categories: [],
           error:
               'Playlist is too large (${declaredLength ~/ (1024 * 1024)} MB, '
-              'limit ${_maxPlaylistBytes ~/ (1024 * 1024)} MB)',
+              'limit ${downloadLimit ~/ (1024 * 1024)} MB)',
         );
       }
 
-      // Stream the body so an over-limit (or lying Content-Length) download
-      // aborts early instead of buffering the whole payload.
-      final startedAt = DateTime.now();
-      final builder = BytesBuilder(copy: false);
-      onPhase?.call(
-        IptvLoadPhases.downloading,
-        bytes: 0,
-        totalBytes: declaredLength,
-      );
-      await for (final chunk in streamed.stream.timeout(
-        const Duration(seconds: 60),
-      )) {
-        builder.add(chunk);
-        // Fired per chunk; the page stores it and repaints on its own 1Hz
-        // tick, so this never costs a frame.
+      Directory? stagingDirectory;
+      File? stagingFile;
+      RandomAccessFile? stagingOutput;
+      final builder = ingestToDb ? null : BytesBuilder(copy: false);
+      try {
+        if (ingestToDb) {
+          final root = debugDownloadDirectoryOverride == null
+              ? Directory.systemTemp
+              : Directory(debugDownloadDirectoryOverride!);
+          await root.create(recursive: true);
+          stagingDirectory = await root.createTemp('debrify-iptv-');
+          stagingFile = File('${stagingDirectory.path}/playlist.m3u');
+          stagingOutput = await stagingFile.open(mode: FileMode.write);
+        }
+
+        // Stream with backpressure so a fast network and slow flash cannot
+        // build a second body-sized buffer in IOSink. Content-Length is only
+        // a hint; the running count enforces the same cap on chunked/lying
+        // responses.
+        final startedAt = DateTime.now();
+        var downloadedBytes = 0;
         onPhase?.call(
           IptvLoadPhases.downloading,
-          bytes: builder.length,
+          bytes: 0,
           totalBytes: declaredLength,
         );
-        if (DateTime.now().difference(startedAt) > _fetchDeadline) {
-          return IptvParseResult(
-            channels: [],
-            categories: [],
-            error: 'Playlist download timed out',
+        await for (final chunk in streamed.stream.timeout(
+          const Duration(seconds: 60),
+        )) {
+          if (chunk.length > downloadLimit - downloadedBytes) {
+            return IptvParseResult(
+              channels: const [],
+              categories: const [],
+              error:
+                  'Playlist is too large (over '
+                  '${downloadLimit ~/ (1024 * 1024)} MB)',
+            );
+          }
+          downloadedBytes += chunk.length;
+          if (stagingOutput != null) {
+            await stagingOutput.writeFrom(chunk);
+          } else {
+            builder!.add(chunk);
+          }
+          // Fired per chunk; the page stores it and repaints on its own 1Hz
+          // tick, so this never costs a frame.
+          onPhase?.call(
+            IptvLoadPhases.downloading,
+            bytes: downloadedBytes,
+            totalBytes: declaredLength,
           );
+          if (DateTime.now().difference(startedAt) > _fetchDeadline) {
+            return const IptvParseResult(
+              channels: [],
+              categories: [],
+              error: 'Playlist download timed out',
+            );
+          }
         }
-        if (builder.length > _maxPlaylistBytes) {
-          return IptvParseResult(
-            channels: [],
-            categories: [],
-            error:
-                'Playlist is too large (over '
-                '${_maxPlaylistBytes ~/ (1024 * 1024)} MB)',
+
+        await stagingOutput?.close();
+        stagingOutput = null;
+        onPhase?.call(IptvLoadPhases.processing, bytes: downloadedBytes);
+
+        await beforeIngest();
+        final result = ingestToDb
+            ? await _parseStagedFile(
+                stagingFile!,
+                ingestCatalogKey: IptvCatalogKey.forUrl(url),
+                ingestTarget: ingestTarget,
+                beforeIngest: beforeIngest,
+                numberingSourceKey: numberingSourceKey,
+              )
+            : await _parseBytes(
+                builder!.takeBytes(),
+                ingestTarget: null,
+                beforeIngest: beforeIngest,
+                numberingSourceKey: numberingSourceKey,
+              );
+
+        // An ingested result IS the cache — the rows are on disk and nothing
+        // big should linger on this heap.
+        if (result.ingest == null) {
+          _cache[url] = _CachedPlaylist(
+            result: result,
+            fetchedAt: DateTime.now(),
           );
+          _evictCache();
         }
-      }
 
-      final bytes = builder.takeBytes();
-      onPhase?.call(IptvLoadPhases.processing, bytes: bytes.length);
-
-      await beforeIngest();
-      final result = await _parseBytes(
-        bytes,
-        ingestCatalogKey: ingestToDb ? IptvCatalogKey.forUrl(url) : null,
-        ingestTarget: ingestTarget,
-        beforeIngest: beforeIngest,
-        numberingSourceKey: numberingSourceKey,
-      );
-
-      // An ingested result IS the cache — the rows are on disk and nothing
-      // big should linger on this heap.
-      if (result.ingest == null) {
-        _cache[url] = _CachedPlaylist(
-          result: result,
-          fetchedAt: DateTime.now(),
+        debugPrint(
+          'IptvService: Parsed '
+          '${result.ingest?.channelCount ?? result.channels.length} channels, '
+          '${result.categories.length} categories'
+          '${result.ingest != null ? ' (ingested to catalog DB)' : ''}',
         );
-        _evictCache();
+        return result;
+      } finally {
+        await stagingOutput?.close();
+        if (stagingDirectory != null && await stagingDirectory.exists()) {
+          await stagingDirectory.delete(recursive: true);
+        }
       }
-
-      debugPrint(
-        'IptvService: Parsed '
-        '${result.ingest?.channelCount ?? result.channels.length} channels, '
-        '${result.categories.length} categories'
-        '${result.ingest != null ? ' (ingested to catalog DB)' : ''}',
-      );
-
-      return result;
     } catch (error) {
       debugPrint('IptvService: Error fetching playlist (${error.runtimeType})');
       return IptvParseResult(
@@ -342,6 +400,28 @@ class IptvService {
     return compute(_decodeAndParseM3u, TransferableTypedData.fromList([bytes]));
   }
 
+  /// Parse a URL playlist from its bounded staging file and ingest channels
+  /// incrementally. The file path is the only payload sent to the worker.
+  Future<IptvParseResult> _parseStagedFile(
+    File file, {
+    required String ingestCatalogKey,
+    required IptvCatalogWriteTarget? ingestTarget,
+    required Future<void> Function() beforeIngest,
+    String? numberingSourceKey,
+  }) {
+    final target = ingestTarget!;
+    final job = _M3uFileIngestJob(
+      filePath: file.path,
+      dbPath: target.path,
+      catalogKey: ingestCatalogKey,
+      numberingSourceKey: numberingSourceKey,
+    );
+    return IptvCatalogDb.runWithWriteTarget(target, () async {
+      await beforeIngest();
+      return compute(_parseAndIngestM3uFile, job);
+    });
+  }
+
   /// Bodies at or under this size are parsed inline — isolate spin-up costs
   /// more than the parse itself down there.
   static const _inlineParseBytes = 100 * 1024;
@@ -395,6 +475,97 @@ class _M3uIngestJob {
     required this.catalogKey,
     required this.numberingSourceKey,
   });
+}
+
+class _M3uFileIngestJob {
+  const _M3uFileIngestJob({
+    required this.filePath,
+    required this.dbPath,
+    required this.catalogKey,
+    required this.numberingSourceKey,
+  });
+
+  final String filePath;
+  final String dbPath;
+  final String catalogKey;
+  final String? numberingSourceKey;
+}
+
+/// Worker entry for the bounded URL-playlist path. UTF-8 is attempted first;
+/// malformed legacy files are retried as latin1, matching [M3uParser.decodeBytes]
+/// without ever loading the full file for encoding detection.
+Future<IptvParseResult> _parseAndIngestM3uFile(_M3uFileIngestJob job) async {
+  Stream<String> lines(bool useUtf8) => _boundedM3uLines(
+    File(
+      job.filePath,
+    ).openRead().transform(useUtf8 ? utf8.decoder : latin1.decoder),
+  );
+
+  Future<IptvParseResult> ingest(bool useUtf8) => IptvCatalogDb.ingestM3uLines(
+    dbPath: job.dbPath,
+    catalogKey: job.catalogKey,
+    lines: lines(useUtf8),
+    numberingSourceKey: job.numberingSourceKey,
+  );
+
+  try {
+    return await ingest(true);
+  } on FormatException {
+    return ingest(false);
+  }
+}
+
+/// A normal [LineSplitter] retains input until it sees a line ending. A
+/// malformed 250 MiB response containing one line would therefore recreate a
+/// body-sized allocation inside the worker. Real M3U metadata/URL lines are
+/// tiny; 1 MiB leaves ample token/header headroom while making that worst case
+/// explicit. This recognizes LF, CR and CRLF exactly as [LineSplitter] does,
+/// including a CRLF pair split across source chunks.
+Stream<String> _boundedM3uLines(Stream<String> chunks) async* {
+  const maxLineChars = 1024 * 1024;
+  var pending = '';
+  var swallowLeadingLf = false;
+  await for (final chunk in chunks) {
+    var start = 0;
+    if (swallowLeadingLf && chunk.isNotEmpty) {
+      if (chunk.codeUnitAt(0) == 0x0A) start = 1;
+      swallowLeadingLf = false;
+    }
+    while (start < chunk.length) {
+      final carriageReturn = chunk.indexOf('\r', start);
+      final lineFeed = chunk.indexOf('\n', start);
+      final lineEnd = carriageReturn < 0
+          ? lineFeed
+          : lineFeed < 0
+          ? carriageReturn
+          : carriageReturn < lineFeed
+          ? carriageReturn
+          : lineFeed;
+      if (lineEnd < 0) {
+        final tail = chunk.substring(start);
+        if (pending.length + tail.length > maxLineChars) {
+          throw StateError('M3U line exceeds the 1 MiB safety limit');
+        }
+        pending += tail;
+        break;
+      }
+      final part = chunk.substring(start, lineEnd);
+      if (pending.length + part.length > maxLineChars) {
+        throw StateError('M3U line exceeds the 1 MiB safety limit');
+      }
+      yield pending.isEmpty ? part : '$pending$part';
+      pending = '';
+      start = lineEnd + 1;
+      if (chunk.codeUnitAt(lineEnd) == 0x0D) {
+        if (start < chunk.length) {
+          if (chunk.codeUnitAt(start) == 0x0A) start++;
+        } else {
+          swallowLeadingLf = true;
+        }
+      }
+    }
+  }
+  if (pending.isNotEmpty) yield pending;
 }
 
 /// Worker entry: decode (when bytes were transferred), parse AND ingest in

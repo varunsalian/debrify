@@ -17,6 +17,7 @@ abstract final class ProfileAppearancePreferences {
     'theme_overrides',
     'text_brightness',
     'launch_animation',
+    'imported_launch_animation_v1',
     'launch_ident_palette',
     'tv_ui_scale_percent',
     'tv_low_res_render',

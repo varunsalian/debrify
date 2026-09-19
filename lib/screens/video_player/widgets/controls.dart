@@ -68,6 +68,9 @@ class Controls extends StatelessWidget {
   final bool hasRecord;
   final bool isRecording;
   final VoidCallback? onRecord;
+  final VoidCallback? onLiveEdgeAction;
+  final bool liveEdgeActionActive;
+  final bool liveEdgeActionLoading;
 
   /// Optional panel glued to the top edge of the bottom bar, so the two read
   /// as one surface. Live IPTV puts its channel identity and now/next here:
@@ -159,6 +162,9 @@ class Controls extends StatelessWidget {
     this.hasRecord = false,
     this.isRecording = false,
     this.onRecord,
+    this.onLiveEdgeAction,
+    this.liveEdgeActionActive = false,
+    this.liveEdgeActionLoading = false,
     this.infoPanel,
     this.dockStyle = PlayerDockStyle.classic,
     this.dockPalette = PlayerDockPalette.ultraviolet,
@@ -259,6 +265,9 @@ class Controls extends StatelessWidget {
       onShowIptvChannels: onShowIptvChannels,
       onShowStremioSources: onShowStremioSources,
       onRecord: onRecord,
+      onLiveEdgeAction: onLiveEdgeAction,
+      liveEdgeActionActive: liveEdgeActionActive,
+      liveEdgeActionLoading: liveEdgeActionLoading,
       onPip: onPip,
       hasNext: hasNext,
       hasPrevious: hasPrevious,
@@ -561,6 +570,22 @@ class Controls extends StatelessWidget {
                                   isPrimary: true,
                                   isCompact: true,
                                 ),
+
+                                if (onLiveEdgeAction != null)
+                                  NetflixControlButton(
+                                    icon: liveEdgeActionActive
+                                        ? Icons.live_tv_rounded
+                                        : Icons.replay_rounded,
+                                    label: liveEdgeActionLoading
+                                        ? 'Preparing…'
+                                        : liveEdgeActionActive
+                                        ? 'Go Live'
+                                        : 'Start Over',
+                                    onPressed: liveEdgeActionLoading
+                                        ? () {}
+                                        : onLiveEdgeAction!,
+                                    isCompact: true,
+                                  ),
 
                                 // Next episode button
                                 if (hasNext)

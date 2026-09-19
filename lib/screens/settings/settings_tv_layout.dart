@@ -79,6 +79,8 @@ class SettingsTvLayout extends StatefulWidget {
   final bool checkingUpdates;
   final bool autoUpdateChecksEnabled;
   final ValueChanged<bool> onToggleAutoUpdateChecks;
+  final bool includeAlphaUpdates;
+  final ValueChanged<bool> onToggleIncludeAlphaUpdates;
   final bool tvKeyboardEnabled;
   final ValueChanged<bool> onToggleTvKeyboard;
   // Appearance rows. Labels caption the rows; every picker is its own page.
@@ -193,6 +195,8 @@ class SettingsTvLayout extends StatefulWidget {
     required this.checkingUpdates,
     required this.autoUpdateChecksEnabled,
     required this.onToggleAutoUpdateChecks,
+    required this.includeAlphaUpdates,
+    required this.onToggleIncludeAlphaUpdates,
     required this.tvKeyboardEnabled,
     required this.onToggleTvKeyboard,
     required this.textBrightnessLabel,
@@ -1408,6 +1412,12 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
                   SettingsRows.autoUpdate,
                   value: widget.autoUpdateChecksEnabled,
                   onChanged: widget.onToggleAutoUpdateChecks,
+                  focusNode: _paneNodes[p++],
+                ),
+                SettingsToggleTile.spec(
+                  SettingsRows.includeAlphaUpdates,
+                  value: widget.includeAlphaUpdates,
+                  onChanged: widget.onToggleIncludeAlphaUpdates,
                   focusNode: _paneNodes[p++],
                 ),
                 SettingsTile.spec(

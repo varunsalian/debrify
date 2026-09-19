@@ -700,6 +700,10 @@ class ProfileRestoreCoordinator {
       values,
       includeCredentialEngineSettings: package.mode != 'sanitizedSettings',
     );
+    // Imported launch packages are device-local and never travel in backups.
+    // Even merge restores must clear the old override instead of retaining it.
+    final restoredPreferenceCount = values.length;
+    values[StorageService.importedLaunchAnimationKey] = null;
     final importedSetupComplete = _optionalBool(profileRecord, 'setupComplete');
     final importedLockOnResume = _optionalBool(profileRecord, 'lockOnResume');
     final updateInactivityTimeout = profileRecord.containsKey(
@@ -1109,14 +1113,14 @@ class ProfileRestoreCoordinator {
         }
       }
       LocalValidationDiagnostics.event('profile_restore_finished', {
-        'preferences': values.length,
+        'preferences': restoredPreferenceCount,
         'resources': imported,
         'omissions': omissions.length,
       });
       return ProfileRestoreReport(
         destinationProfileId: destinationProfileId,
         publishedGeneration: publishedProfile.visibleDataGeneration,
-        preferencesApplied: values.length,
+        preferencesApplied: restoredPreferenceCount,
         resourcesImported: imported,
         borrowedResourcesSkipped: borrowedSkipped,
         omissions: omissions,

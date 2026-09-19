@@ -37,8 +37,12 @@ class RemoteMessageType {
 /// outcomes for configuration batches and Debrify TV channels, v5 = complete
 /// profile-graph transfers (including disabled resources, profile-local
 /// settings, lock policy, reference remapping, and bounded compression), v6 =
-/// reliable TCP transfers, v7 = badge transfers including the master switch.
-const int kProtoVersion = 7;
+/// reliable TCP transfers, v7 = badge transfers including the master switch,
+/// v8 = launch animation packages.
+const int kProtoVersion = 8;
+
+/// Portable launch animation file transfers.
+const int kLaunchAnimationProtocolVersion = 8;
 
 /// Reliable, file-backed transfers and receiver receipts over TCP.
 const int kReliableTransferProtocolVersion = 6;
@@ -159,6 +163,7 @@ class TextCommand {
 
 /// Config commands (for sending setup/credentials to TV)
 class ConfigCommand {
+  static const String launchAnimation = 'launch_animation';
   static const String realDebrid = 'real_debrid';
   static const String torbox = 'torbox';
   static const String premiumize = 'premiumize';

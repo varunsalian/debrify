@@ -15,6 +15,7 @@ import 'package:sqlite3/open.dart' as sqlite_open;
 import 'package:sqlite3/sqlite3.dart';
 
 import '../models/iptv_playlist.dart';
+import '../utils/m3u_parser.dart';
 import 'iptv_channel_order.dart';
 import 'webdav_sync/webdav_sync_library_models.dart';
 import 'webdav_sync/webdav_sync_library_mutation.dart';
@@ -1481,6 +1482,189 @@ class IptvCatalogDb {
     }
   }
 
+  /// Parses [lines] and writes channels straight into an unpublished catalog
+  /// generation. Neither the complete source text nor a complete channel
+  /// object list is retained. Completed row chunks may commit safely because
+  /// readers resolve only the generation named by `catalogs`; publication is
+  /// the final transaction below.
+  static Future<IptvParseResult> ingestM3uLines({
+    required String dbPath,
+    required String catalogKey,
+    required Stream<String> lines,
+    String? numberingSourceKey,
+  }) async {
+    final db = _openConnection(dbPath);
+    PreparedStatement? insertChannel;
+    PreparedStatement? insertNumberBase;
+    var transactionOpen = false;
+    var published = false;
+    var generation = 0;
+    final digest = _CatalogDigestAccumulator();
+
+    void begin() {
+      if (transactionOpen) return;
+      db.execute('BEGIN IMMEDIATE');
+      transactionOpen = true;
+    }
+
+    void commit() {
+      if (!transactionOpen) return;
+      db.execute('COMMIT');
+      transactionOpen = false;
+    }
+
+    try {
+      _createSchema(db);
+      // Numbering identities can be numerous for a 250 MB playlist. Force
+      // their temporary table onto disk instead of letting SQLite choose an
+      // in-memory temp store and merely moving the OOM to native memory.
+      db.execute('PRAGMA temp_store=FILE');
+      generation = _nextGeneration(db, catalogKey);
+
+      begin();
+      db.execute(
+        'DELETE FROM channels WHERE catalog_key = ? AND generation >= ?',
+        [catalogKey, generation],
+      );
+      commit();
+
+      db.execute('DROP TABLE IF EXISTS temp.stream_number_bases');
+      db.execute(
+        'CREATE TEMP TABLE stream_number_bases('
+        'position INTEGER PRIMARY KEY, base_identity TEXT NOT NULL)',
+      );
+      insertNumberBase = db.prepare(
+        'INSERT INTO stream_number_bases(position, base_identity) VALUES (?, ?)',
+      );
+      insertChannel = db.prepare('''
+        INSERT INTO channels(
+          catalog_key, generation, position, name, url, logo_url, grp,
+          duration, content_type, attributes_json, http_headers_json,
+          search_key, channel_number, manual_position
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL)
+      ''');
+
+      final summary = await M3uParser.parseLines(
+        lines,
+        onChannel: (channel) {
+          begin();
+          final position = digest.count;
+          insertChannel!.execute([
+            catalogKey,
+            generation,
+            position,
+            channel.name,
+            channel.url,
+            channel.logoUrl,
+            channel.group,
+            channel.duration,
+            channel.contentType,
+            channel.attributes.isEmpty ? null : jsonEncode(channel.attributes),
+            channel.httpHeaders.isEmpty
+                ? null
+                : jsonEncode(channel.httpHeaders),
+            '${channel.name.toLowerCase()}\n'
+                '${channel.group?.toLowerCase() ?? ''}',
+          ]);
+          if (channel.isLive && numberingSourceKey != null) {
+            insertNumberBase!.execute([
+              position,
+              _numberIdentityBase(
+                tvgId: channel.tvgId,
+                name: channel.name,
+                group: channel.group,
+              ),
+            ]);
+          }
+          digest.add(channel);
+          if (digest.count % _ingestChunkRows == 0) commit();
+        },
+      );
+      commit();
+
+      if (!summary.sawAnyLine) {
+        return const IptvParseResult(
+          channels: [],
+          categories: [],
+          error: 'Empty playlist',
+        );
+      }
+      if (digest.count == 0) {
+        return IptvParseResult(
+          channels: const [],
+          categories: summary.categories,
+          epgUrl: summary.epgUrl,
+        );
+      }
+
+      begin();
+      if (numberingSourceKey != null) {
+        _assignStagedChannelNumbers(
+          db,
+          catalogKey: catalogKey,
+          generation: generation,
+          sourceKey: numberingSourceKey,
+        );
+      }
+      _applyStagedM3uManualOrder(
+        db,
+        catalogKey: catalogKey,
+        generation: generation,
+      );
+      final contentDigest = digest.value;
+      db.execute(
+        'INSERT OR REPLACE INTO catalogs'
+        '(catalog_key, generation, channel_count, content_digest, '
+        'categories_json, epg_url, ingested_at) '
+        'VALUES (?, ?, ?, ?, ?, ?, ?)',
+        [
+          catalogKey,
+          generation,
+          digest.count,
+          contentDigest,
+          summary.categories.isEmpty ? null : jsonEncode(summary.categories),
+          summary.epgUrl,
+          DateTime.now().millisecondsSinceEpoch,
+        ],
+      );
+      db.execute(
+        'DELETE FROM channels WHERE catalog_key = ? AND generation < ?',
+        [catalogKey, generation - 1],
+      );
+      commit();
+      published = true;
+
+      return IptvParseResult(
+        channels: const [],
+        categories: summary.categories,
+        epgUrl: summary.epgUrl,
+        ingest: CatalogIngestReceipt(
+          catalogKey: catalogKey,
+          channelCount: digest.count,
+          contentDigest: contentDigest,
+        ),
+      );
+    } catch (_) {
+      if (transactionOpen) {
+        _rollbackQuietly(db);
+        transactionOpen = false;
+      }
+      rethrow;
+    } finally {
+      insertChannel?.dispose();
+      insertNumberBase?.dispose();
+      if (!published && generation > 0) {
+        try {
+          db.execute(
+            'DELETE FROM channels WHERE catalog_key = ? AND generation = ?',
+            [catalogKey, generation],
+          );
+        } catch (_) {}
+      }
+      db.dispose();
+    }
+  }
+
   /// Rows per ingest sub-transaction. Small enough to keep any single
   /// write-lock hold (and the WAL growth per commit) bounded; large enough
   /// that per-transaction overhead stays negligible at 50k rows (~20
@@ -1586,27 +1770,11 @@ class IptvCatalogDb {
   /// "Up to date" (no UI swap at all) and a real refresh — replacing the old
   /// object-identity reconcile, which has no meaning once rows live in SQL.
   static String contentDigest(List<IptvChannel> channels) {
-    // FNV-1a over the identity-bearing fields. Not cryptographic — it only
-    // gates a cosmetic "did anything change" decision.
-    var h1 = 0x811c9dc5;
-    void mix(String s) {
-      for (var i = 0; i < s.length; i++) {
-        h1 = 0x01000193 * (h1 ^ s.codeUnitAt(i)) & 0xFFFFFFFF;
-      }
-      h1 = 0x01000193 * (h1 ^ 0x1f) & 0xFFFFFFFF;
+    final digest = _CatalogDigestAccumulator();
+    for (final channel in channels) {
+      digest.add(channel);
     }
-
-    for (final c in channels) {
-      mix(c.name);
-      mix(c.url);
-      mix(c.logoUrl ?? '');
-      mix(c.group ?? '');
-      mix('${c.duration ?? ''}');
-      mix(c.contentType ?? '');
-      if (c.attributes.isNotEmpty) mix(jsonEncode(c.attributes));
-      if (c.httpHeaders.isNotEmpty) mix(jsonEncode(c.httpHeaders));
-    }
-    return '${channels.length}:${h1.toRadixString(16)}';
+    return digest.value;
   }
 
   static int _nextGeneration(Database db, String catalogKey) {
@@ -1666,14 +1834,22 @@ class IptvCatalogDb {
     required String? group,
     required Map<String, int> occurrences,
   }) {
-    final id = tvgId?.trim();
-    final base = id != null && id.isNotEmpty
-        ? 'tvg:${_normalizeNumberIdentity(id)}'
-        : 'name:${_normalizeNumberIdentity(name)}'
-              '\u001fgroup:${_normalizeNumberIdentity(group ?? '')}';
+    final base = _numberIdentityBase(tvgId: tvgId, name: name, group: group);
     final occurrence = (occurrences[base] ?? 0) + 1;
     occurrences[base] = occurrence;
     return '$base\u001f$occurrence';
+  }
+
+  static String _numberIdentityBase({
+    required String? tvgId,
+    required String name,
+    required String? group,
+  }) {
+    final id = tvgId?.trim();
+    return id != null && id.isNotEmpty
+        ? 'tvg:${_normalizeNumberIdentity(id)}'
+        : 'name:${_normalizeNumberIdentity(name)}'
+              '\u001fgroup:${_normalizeNumberIdentity(group ?? '')}';
   }
 
   /// Resolves the provider's namespace and turns an ordered identity map into
@@ -1757,6 +1933,176 @@ class IptvCatalogDb {
       [sourceKey, identities.length, nextNumber, now, namespaceId],
     );
     return result;
+  }
+
+  /// Assigns stable numbers to a streamed generation without materializing an
+  /// identity map in Dart. [ingestM3uLines] records only the identity base in
+  /// a disk-backed temp table; SQLite adds duplicate occurrence suffixes,
+  /// resolves old assignments, allocates new numbers in provider order, and
+  /// projects them onto the still-unpublished channel rows.
+  static void _assignStagedChannelNumbers(
+    Database db, {
+    required String catalogKey,
+    required int generation,
+    required String sourceKey,
+  }) {
+    db.execute('DROP TABLE IF EXISTS temp.incoming_channel_identities');
+    db.execute(
+      'CREATE TEMP TABLE incoming_channel_identities('
+      'position INTEGER PRIMARY KEY, identity_key TEXT NOT NULL UNIQUE)',
+    );
+    db.execute('''
+      WITH numbered AS (
+        SELECT position,
+               base_identity,
+               ROW_NUMBER() OVER (
+                 PARTITION BY base_identity ORDER BY position
+               ) AS occurrence
+        FROM stream_number_bases
+      )
+      INSERT INTO incoming_channel_identities(position, identity_key)
+      SELECT position,
+             base_identity || char(31) || CAST(occurrence AS TEXT)
+      FROM numbered
+      ORDER BY position
+    ''');
+    final incomingCount =
+        db
+                .select('SELECT COUNT(*) AS c FROM incoming_channel_identities')
+                .first['c']
+            as int;
+    if (incomingCount == 0) return;
+
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final alias = db.select(
+      'SELECT namespace_id FROM channel_number_aliases WHERE source_key = ?',
+      [sourceKey],
+    );
+    final namespaceId = alias.isNotEmpty
+        ? alias.first['namespace_id'] as String
+        : _archivedNamespaceMatchFromIncoming(db, incomingCount) ??
+              'source:$sourceKey:$now';
+
+    db.execute(
+      'INSERT OR IGNORE INTO channel_number_namespaces('
+      'namespace_id, active_source_key, last_channel_count, max_number, '
+      'updated_at) VALUES (?, ?, 0, 0, ?)',
+      [namespaceId, sourceKey, now],
+    );
+    db.execute(
+      'INSERT INTO channel_number_aliases('
+      'source_key, namespace_id, is_active, updated_at) VALUES (?, ?, 1, ?) '
+      'ON CONFLICT(source_key) DO UPDATE SET '
+      'namespace_id = excluded.namespace_id, is_active = 1, '
+      'updated_at = excluded.updated_at',
+      [sourceKey, namespaceId, now],
+    );
+    final namespaceRows = db.select(
+      'SELECT max_number FROM channel_number_namespaces '
+      'WHERE namespace_id = ?',
+      [namespaceId],
+    );
+    final previousMax = namespaceRows.isEmpty
+        ? 0
+        : namespaceRows.first['max_number'] as int;
+
+    db.execute(
+      '''
+      WITH missing AS (
+        SELECT incoming.identity_key, incoming.position
+        FROM incoming_channel_identities incoming
+        LEFT JOIN channel_number_assignments existing
+          ON existing.namespace_id = ?
+         AND existing.identity_key = incoming.identity_key
+        WHERE existing.identity_key IS NULL
+      ), numbered AS (
+        SELECT identity_key,
+               ROW_NUMBER() OVER (ORDER BY position) AS number_offset
+        FROM missing
+      )
+      INSERT INTO channel_number_assignments(
+        namespace_id, identity_key, channel_number, last_seen
+      )
+      SELECT ?, identity_key, ? + number_offset, ?
+      FROM numbered
+    ''',
+      [namespaceId, namespaceId, previousMax, now],
+    );
+    db.execute(
+      'UPDATE channel_number_assignments SET last_seen = ? '
+      'WHERE namespace_id = ? AND identity_key IN '
+      '(SELECT identity_key FROM incoming_channel_identities)',
+      [now, namespaceId],
+    );
+    final maxNumber =
+        db.select(
+              'SELECT COALESCE(MAX(channel_number), 0) AS c '
+              'FROM channel_number_assignments WHERE namespace_id = ?',
+              [namespaceId],
+            ).first['c']
+            as int;
+    db.execute(
+      'UPDATE channel_number_namespaces SET active_source_key = ?, '
+      'last_channel_count = ?, max_number = ?, updated_at = ? '
+      'WHERE namespace_id = ?',
+      [sourceKey, incomingCount, maxNumber, now, namespaceId],
+    );
+    db.execute(
+      '''
+      UPDATE channels
+      SET channel_number = assignments.channel_number
+      FROM incoming_channel_identities incoming
+      JOIN channel_number_assignments assignments
+        ON assignments.namespace_id = ?
+       AND assignments.identity_key = incoming.identity_key
+      WHERE channels.catalog_key = ?
+        AND channels.generation = ?
+        AND channels.position = incoming.position
+    ''',
+      [namespaceId, catalogKey, generation],
+    );
+  }
+
+  /// Re-applies saved M3U channel ordering to streamed rows. M3U identities
+  /// are URL + name, so a SQL window can derive duplicate occurrences without
+  /// retaining one Dart map entry per channel.
+  static void _applyStagedM3uManualOrder(
+    Database db, {
+    required String catalogKey,
+    required int generation,
+  }) {
+    if (db.select(
+      'SELECT 1 FROM channel_manual_orders WHERE catalog_key = ? LIMIT 1',
+      [catalogKey],
+    ).isEmpty) {
+      return;
+    }
+    db.execute(
+      '''
+      WITH ranked AS (
+        SELECT id, grp, url, name,
+               ROW_NUMBER() OVER (
+                 PARTITION BY grp, url, name ORDER BY position
+               ) - 1 AS occurrence
+        FROM channels
+        WHERE catalog_key = ? AND generation = ? AND grp IS NOT NULL
+      ), matched AS (
+        SELECT ranked.id, orders.manual_position
+        FROM ranked
+        JOIN channel_manual_orders orders
+          ON orders.catalog_key = ?
+         AND orders.grp = ranked.grp
+         AND orders.url = ranked.url
+         AND orders.name = ranked.name
+         AND orders.occurrence = ranked.occurrence
+      )
+      UPDATE channels
+      SET manual_position = matched.manual_position
+      FROM matched
+      WHERE channels.id = matched.id
+    ''',
+      [catalogKey, generation, catalogKey],
+    );
   }
 
   /// Rows read per pass by [adoptNumberingFromCatalog]. Big enough that a 50k
@@ -1920,6 +2266,15 @@ class IptvCatalogDb {
     } finally {
       insert.dispose();
     }
+    return _archivedNamespaceMatchFromIncoming(db, incomingIdentities.length);
+  }
+
+  /// Variant used by streamed ingest, where the incoming identities already
+  /// live in the disk-backed temp table and must never be copied into Dart.
+  static String? _archivedNamespaceMatchFromIncoming(
+    Database db,
+    int incoming,
+  ) {
     final candidates = db.select('''
       SELECT a.namespace_id AS namespace_id,
              COUNT(*) AS overlap_count,
@@ -1942,7 +2297,6 @@ class IptvCatalogDb {
     final best = candidates.first;
     final overlap = best['overlap_count'] as int;
     final previous = best['previous_count'] as int;
-    final incoming = incomingIdentities.length;
     final smaller = incoming < previous ? incoming : previous;
     final larger = incoming > previous ? incoming : previous;
     if (overlap < 20 ||
@@ -3651,6 +4005,34 @@ class CatalogGroup {
   /// Null for channels that declared no group (M3U rows without group-title).
   final String? name;
   final int count;
+}
+
+/// Incremental form of [IptvCatalogDb.contentDigest]. Keeping the algorithms
+/// identical makes streamed and materialized refreshes compare equal.
+class _CatalogDigestAccumulator {
+  var _hash = 0x811c9dc5;
+  var count = 0;
+
+  void _mix(String value) {
+    for (var i = 0; i < value.length; i++) {
+      _hash = 0x01000193 * (_hash ^ value.codeUnitAt(i)) & 0xFFFFFFFF;
+    }
+    _hash = 0x01000193 * (_hash ^ 0x1f) & 0xFFFFFFFF;
+  }
+
+  void add(IptvChannel channel) {
+    _mix(channel.name);
+    _mix(channel.url);
+    _mix(channel.logoUrl ?? '');
+    _mix(channel.group ?? '');
+    _mix('${channel.duration ?? ''}');
+    _mix(channel.contentType ?? '');
+    if (channel.attributes.isNotEmpty) _mix(jsonEncode(channel.attributes));
+    if (channel.httpHeaders.isNotEmpty) _mix(jsonEncode(channel.httpHeaders));
+    count++;
+  }
+
+  String get value => '$count:${_hash.toRadixString(16)}';
 }
 
 class EpgGuideInfo {

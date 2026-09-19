@@ -12,6 +12,8 @@ import '../profiles/profile_async_authorization.dart';
 import '../profiles/profile_runtime.dart';
 import 'remote_chunked_send.dart';
 import 'remote_reliable_transfer.dart';
+import '../launch_animation/launch_package.dart';
+import '../launch_animation/launch_animation_library.dart';
 import 'remote_transfer_encoding.dart';
 import 'remote_transfer_activity.dart';
 import 'remote_constants.dart';
@@ -1449,6 +1451,9 @@ class RemoteControlState extends ChangeNotifier {
       final directory = Directory('${cache.path}/remote-transfers');
       final service = RemoteReliableTransfer(
         directory: directory,
+        fileSizeLimit: (metadata) => metadata['format'] == 'launch-animation-v1'
+            ? LaunchLimits.compressedBytes
+            : 16 * 1024 * 1024 * 1024,
         runInRequestScope: (action) {
           final scope = ProfileRuntime.scope.value;
           return scope == null
@@ -1515,10 +1520,16 @@ class RemoteControlState extends ChangeNotifier {
     if (session == null || !session.authorized) {
       throw const RemoteTransferException('Pairing expired');
     }
+    final launch = transfer.metadata['format'] == 'launch-animation-v1';
     final archive = transfer.metadata['format'] == 'profile-archive-v1';
     final channelArchive = transfer.metadata['format'] == 'channel-records-v1';
     final RemoteCommand command;
-    if (archive) {
+    if (launch) {
+      command = RemoteCommand.config(
+        ConfigCommand.launchAnimation,
+        configData: jsonEncode(transfer.metadata),
+      );
+    } else if (archive) {
       final requestId = transfer.metadata['requestId'];
       if (requestId is! String || requestId.isEmpty || requestId.length > 128) {
         throw const RemoteTransferException('Invalid profile transfer receipt');
@@ -1552,12 +1563,15 @@ class RemoteControlState extends ChangeNotifier {
     final context = RemoteCommandContext(
       transferReply: (command, body) async {
         transfer.reportResult(
-          RemoteCommand.config(command, configData: body).toJson(),
+          launch
+              ? Map<String, dynamic>.from(jsonDecode(body))
+              : RemoteCommand.config(command, configData: body).toJson(),
         );
         return true;
       },
       profileArchive: archive ? transfer.file : null,
       channelArchive: channelArchive ? transfer.file : null,
+      launchAnimationArchive: launch ? transfer.file : null,
       encrypted: true,
       authorized: true,
       remembered: _rememberedFingerprints.contains(session.peerFingerprint),
@@ -1590,6 +1604,62 @@ class RemoteControlState extends ChangeNotifier {
         command.data,
         context,
       );
+    }
+  }
+
+  Future<void> sendLaunchAnimation(
+    String targetIp,
+    InstalledLaunchAnimation entry,
+  ) async {
+    final authorization = await ProfileAsyncAuthorization.capture(
+      ProfileFeature.remoteTransfer,
+    );
+    Future<void> send() async {
+      final session = sessionFor(targetIp);
+      if (session == null || !session.authorized) {
+        throw const RemoteTransferException(
+          'Connect and pair with the receiving device first.',
+        );
+      }
+      if (session.peerProtocolVersion < kLaunchAnimationProtocolVersion) {
+        throw const RemoteTransferException(
+          'Update Debrify on the receiving device to support animation transfers.',
+        );
+      }
+      final file = await LaunchAnimationLibrary.instance.originalFile(entry.id);
+      final service = await _ensureReliableTransfer();
+      final result = await service.send(
+        host: targetIp,
+        port: session.peerTransferPort,
+        sessionId: session.sidB64,
+        key: session.sendKey,
+        file: file,
+        metadata: {
+          'format': 'launch-animation-v1',
+          'animationId': entry.animationId,
+          'background': entry.background,
+        },
+        onProgress: transferActivity.progress,
+        authorizationBarrier: () async {
+          await ProfileAsyncAuthorization.currentOutboundBarrier?.call();
+          if (!session.authorized || sessionFor(targetIp) != session) {
+            throw const RemoteTransferException('Pairing expired');
+          }
+          session.lastUsed = DateTime.now();
+        },
+      );
+      if (result?['ok'] != true) {
+        throw RemoteTransferException(
+          result?['message'] as String? ??
+              'The receiving device could not import the animation.',
+        );
+      }
+    }
+
+    if (authorization == null) {
+      await send();
+    } else {
+      await authorization.runIfCurrentAsOutbound(send);
     }
   }
 

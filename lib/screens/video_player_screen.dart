@@ -32,6 +32,7 @@ import '../services/analytics_service.dart';
 import '../services/pip_service.dart';
 import '../services/audio_effect_session_service.dart';
 import '../services/tvos_decode_remedy.dart';
+import '../services/tvos_display_match_service.dart';
 import '../services/android_native_downloader.dart';
 import '../services/desktop_recording_service.dart';
 import '../services/live_recording_service.dart';
@@ -115,6 +116,7 @@ import '../models/stremio_subtitle.dart';
 import '../models/stremio_addon.dart';
 import '../models/torrent.dart';
 import '../models/android_video_renderer_mode.dart';
+import '../models/content_display_match_mode.dart';
 import '../services/series_source_fetcher.dart';
 import '../services/stremio_service.dart';
 import '../services/stremio_subtitle_service.dart';
@@ -437,6 +439,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   /// Preloaded in [_loadPlayerDefaults]; [_createPlayerInstance] is
   /// synchronous and cannot read prefs itself.
   bool _tvosForceSoftwareDecode = false;
+  ContentDisplayMatchMode _contentDisplayMatchMode =
+      ContentDisplayMatchMode.systemDefault;
+  int _tvosDisplayMatchToken = 0;
+  Timer? _tvosDisplayMatchTimer;
+  String? _lastTvosDisplayMatchSignature;
 
   /// Audio-output settings (AUDIO_FIDELITY_PLAN.md), preloaded in
   /// [_loadPlayerDefaults] and applied by [_configurePlayerAudio].
@@ -724,6 +731,13 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   void _performIptvLiveRetune(String source, int attempt) {
     final channel = _currentIptvChannel;
     if (channel == null || !channel.isLive) return;
+    _cancelPendingIptvCatchup(hideFeedback: false);
+    if (_iptvStartOverActive || _iptvStartOverLoading) {
+      setState(() {
+        _iptvStartOverActive = false;
+        _iptvStartOverLoading = false;
+      });
+    }
     _iptvDiag.onRecovery(source, 'retune', 'attempt=$attempt');
     if (StremioIptvService.isStremioChannelUrl(channel.url)) {
       // expectRetune is consumed synchronously by the switch's entry (its
@@ -762,6 +776,114 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   List<IptvChannel>? _iptvChannelsOverride;
   IptvGuideContext? _iptvGuideContextOverride;
   final IptvCatchupRequestGate _iptvCatchupRequests = IptvCatchupRequestGate();
+  bool _iptvStartOverActive = false;
+  bool _iptvStartOverLoading = false;
+
+  bool get _canStartOverCurrentIptv {
+    final channel = _currentIptvChannel;
+    final programme = _iptvZapEpg?.now;
+    return channel != null &&
+        channel.isLive &&
+        programme != null &&
+        programme.airsAt(DateTime.now()) &&
+        IptvEpgService.isStartOverAvailable(channel, programme);
+  }
+
+  VoidCallback? get _iptvLiveEdgeAction =>
+      _iptvStartOverActive || _canStartOverCurrentIptv
+      ? () => unawaited(_toggleIptvStartOver())
+      : null;
+
+  Future<void> _toggleIptvStartOver() async {
+    if (_iptvStartOverLoading) return;
+    if (_iptvStartOverActive) {
+      setState(() => _iptvStartOverActive = false);
+      await _switchToIptvChannel(_currentIptvIndex);
+      return;
+    }
+
+    final channel = _currentIptvChannel;
+    final programme = _iptvZapEpg?.now;
+    if (channel == null ||
+        programme == null ||
+        !programme.airsAt(DateTime.now()) ||
+        !IptvEpgService.isStartOverAvailable(channel, programme)) {
+      return;
+    }
+
+    await _startIptvProgrammeFromBeginning(channel, programme);
+  }
+
+  Future<void> _startIptvProgrammeFromBeginning(
+    IptvChannel channel,
+    EpgProgramme programme,
+  ) async {
+    final requestTicket = _beginIptvCatchupRequest();
+    final switchTicket = _iptvSwitchTicket;
+    setState(() => _iptvStartOverLoading = true);
+    String? url;
+    try {
+      url = await IptvEpgService.instance.catchupUrl(channel.url, programme);
+    } catch (error) {
+      debugPrint('Player: IPTV start-over lookup failed: $error');
+    }
+    if (!_isCurrentIptvCatchupRequest(requestTicket) ||
+        switchTicket != _iptvSwitchTicket ||
+        _currentIptvChannel?.url != channel.url) {
+      return;
+    }
+    if (url == null) {
+      _iptvCatchupRequests.complete(requestTicket);
+      setState(() => _iptvStartOverLoading = false);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Start over is not available')),
+      );
+      return;
+    }
+
+    await _stopRecording(userInitiated: false);
+    if (!_isCurrentIptvCatchupRequest(requestTicket) ||
+        switchTicket != _iptvSwitchTicket ||
+        _currentIptvChannel?.url != channel.url) {
+      return;
+    }
+    _iptvDiag.onTuneStart(channel.name, url, isLive: true);
+    _iptvLiveRecovery.onTuneStarted();
+    try {
+      await _openMedia(
+        mk.Media(url, httpHeaders: channel.playbackHeaders),
+        play: true,
+        liveStream: true,
+        beforeOpen: () {
+          if (!_isCurrentIptvCatchupRequest(requestTicket) ||
+              switchTicket != _iptvSwitchTicket ||
+              _currentIptvChannel?.url != channel.url) {
+            return false;
+          }
+          _iptvCatchupRequests.complete(requestTicket);
+          setState(() {
+            _iptvStartOverLoading = false;
+            _iptvStartOverActive = true;
+          });
+          return true;
+        },
+      );
+    } catch (error) {
+      debugPrint('Player: IPTV start-over failed to open: $error');
+      if (!mounted || switchTicket != _iptvSwitchTicket) return;
+      if (!_iptvStartOverActive &&
+          !_isCurrentIptvCatchupRequest(requestTicket)) {
+        return;
+      }
+      _cancelPendingIptvCatchup(hideFeedback: false);
+      if (_iptvRecoveryEligible()) {
+        setState(() => _iptvStartOverActive = false);
+        await _switchToIptvChannel(_currentIptvIndex, quietRecovery: true);
+      }
+    }
+  }
+
 
   /// The guide may replace the launch window after a source/category/search
   /// request. Playback always reads this effective list so the selected row,
@@ -1050,8 +1172,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   }
 
   void _cancelPendingIptvCatchup({bool hideFeedback = true}) {
-    if (!_iptvCatchupRequests.cancel()) return;
-    if (hideFeedback && mounted) {
+    final canceled = _iptvCatchupRequests.cancel();
+    if (_iptvStartOverLoading && mounted) {
+      setState(() => _iptvStartOverLoading = false);
+    }
+    if (canceled && hideFeedback && mounted) {
       ScaffoldMessenger.maybeOf(context)?.hideCurrentSnackBar();
     }
   }
@@ -3689,9 +3814,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       _decoderProbeParams = null;
       _rendererStartupGuardToken++;
       _rendererStartupValidationGeneration = -1;
+      _resetTvosDisplayMatchForMediaBoundary();
       return;
     }
     _decoderProbeParams = params;
+    _scheduleTvosDisplayMatch(params);
     _scheduleDecoderProbe();
     _scheduleRendererStartupValidation();
     final remedy = _tvosDecodeRemedy;
@@ -3700,6 +3827,95 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       // the ladder's own transitional events are ignored inside it.
       unawaited(remedy.evaluate(params, _decoderProbeGeneration));
     }
+  }
+
+  void _resetTvosDisplayMatchForMediaBoundary() {
+    _tvosDisplayMatchToken++;
+    _tvosDisplayMatchTimer?.cancel();
+    _tvosDisplayMatchTimer = null;
+    _lastTvosDisplayMatchSignature = null;
+    if (!PlatformUtil.isTvOS ||
+        !_contentDisplayMatchMode.requestsMatching) {
+      return;
+    }
+    // AVDisplayManager retains criteria until explicitly replaced. Clear the
+    // outgoing item's request so content with missing/invalid fps metadata can
+    // never inherit the previous refresh rate.
+    unawaited(
+      TvosDisplayMatchService.clear().catchError((Object error) {
+        debugPrint('DisplayMatch: tvOS boundary clear failed: $error');
+      }),
+    );
+  }
+
+  void _scheduleTvosDisplayMatch(mk.VideoParams params) {
+    if (!PlatformUtil.isTvOS || !_contentDisplayMatchMode.requestsMatching) {
+      return;
+    }
+    final width = params.dw ?? params.w ?? 0;
+    final height = params.dh ?? params.h ?? 0;
+    if (width <= 0 || height <= 0) return;
+    final token = ++_tvosDisplayMatchToken;
+    _tvosDisplayMatchTimer?.cancel();
+    _tvosDisplayMatchTimer = Timer(const Duration(milliseconds: 200), () async {
+      if (_screenDisposed || token != _tvosDisplayMatchToken) return;
+      final platform = _player.platform;
+      if (platform is! mk.NativePlayer) return;
+      final selectedTrack = _player.state.track.video;
+      var fps = selectedTrack.fps;
+      if (fps == null || !fps.isFinite || fps <= 0) {
+        for (final property in const ['container-fps', 'estimated-vf-fps']) {
+          try {
+            final candidate = double.tryParse(
+              await platform.getProperty(property),
+            );
+            if (candidate != null && candidate.isFinite && candidate > 0) {
+              fps = candidate;
+              break;
+            }
+          } catch (_) {
+            // Some containers publish only one of the two fps properties.
+          }
+        }
+      }
+      if (_screenDisposed ||
+          token != _tvosDisplayMatchToken ||
+          fps == null ||
+          !fps.isFinite ||
+          fps <= 0) {
+        return;
+      }
+      var codec = selectedTrack.codec;
+      if (codec == null || codec.isEmpty) {
+        try {
+          codec = await platform.getProperty('video-codec');
+        } catch (_) {
+          codec = null;
+        }
+      }
+      if (_screenDisposed || token != _tvosDisplayMatchToken) return;
+      final signature =
+          '${_contentDisplayMatchMode.storageKey}|$width|$height|${fps.toStringAsFixed(4)}|${codec ?? ''}';
+      if (signature == _lastTvosDisplayMatchSignature) return;
+      try {
+        final status = await TvosDisplayMatchService.apply(
+          mode: _contentDisplayMatchMode,
+          width: width,
+          height: height,
+          refreshRate: fps,
+          codec: codec,
+        );
+        if (_screenDisposed || token != _tvosDisplayMatchToken) return;
+        _lastTvosDisplayMatchSignature = signature;
+        debugPrint(
+          'DisplayMatch: tvOS requested ${width}x$height@${fps.toStringAsFixed(3)} '
+          'mode=${_contentDisplayMatchMode.storageKey} '
+          'enabled=${status['matchingEnabled']}',
+        );
+      } catch (error) {
+        debugPrint('DisplayMatch: tvOS request failed: $error');
+      }
+    });
   }
 
   Future<void> _installDecoderObservers(
@@ -4172,6 +4388,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _decoderProbeTimer = null;
     _decoderProbeParams = null;
     _lastDecoderDiagnosticSignature = null;
+    // This is the guaranteed boundary for every playlist item, IPTV zap,
+    // startup candidate, and manual source switch. VideoParams normally emits
+    // an invalid value too, but display correctness must not depend on it.
+    _resetTvosDisplayMatchForMediaBoundary();
     _playbackUiClock.beginMedia();
     _activeSkipSegmentUi.clear();
   }
@@ -4256,6 +4476,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     bool? desiredPlay,
     bool liveStream = false,
     EpisodePlaybackRequest? request,
+    bool Function()? beforeOpen,
   }) async {
     if (request?.isCurrent == false) return;
     // EVERY content open invalidates the outgoing media's resume protection —
@@ -4346,6 +4567,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         debugPrint('Player: subtitle visibility reset failed: $error');
       }
     }
+    // Final synchronous ownership check after all asynchronous setup.
+    if (beforeOpen != null && !beforeOpen()) return;
     if (request != null) {
       await request.commit(() => _player.open(media, play: play));
       return;
@@ -5842,6 +6065,15 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     if (PlatformUtil.isTvOS) {
       _tvosForceSoftwareDecode =
           await StorageService.getTvosForceSoftwareDecode();
+      _contentDisplayMatchMode =
+          await StorageService.getContentDisplayMatchMode();
+      if (!_contentDisplayMatchMode.requestsMatching) {
+        try {
+          await TvosDisplayMatchService.clear();
+        } catch (error) {
+          debugPrint('DisplayMatch: tvOS clear failed: $error');
+        }
+      }
     }
 
     // Audio-output settings, preloaded for [_configurePlayerAudio] — the
@@ -6644,6 +6876,20 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     IptvChannel channel,
     EpgProgramme programme,
   ) async {
+    if (programme.airsAt(DateTime.now())) {
+      final channels = _effectiveIptvChannels;
+      final index = channels?.indexWhere(
+        (candidate) => candidate.url == channel.url,
+      );
+      if (index != null && index >= 0 && index != _currentIptvIndex) {
+        await _switchToIptvChannel(index);
+      }
+      final current = _currentIptvChannel;
+      if (current != null && current.url == channel.url) {
+        await _startIptvProgrammeFromBeginning(current, programme);
+      }
+      return;
+    }
     final requestTicket = _beginIptvCatchupRequest();
     final messenger = ScaffoldMessenger.of(context);
     messenger.showSnackBar(
@@ -6732,6 +6978,17 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     if (!mounted || _iptvErrorsMuted) return;
     final channels = _effectiveIptvChannels;
     if (channels == null) return;
+
+    // mpv reports HTTP rejection on its error stream even when open()
+    // completes normally. An archive failure must return to the live URL
+    // before AUTH classification can bypass the recovery ladder.
+    if (_iptvStartOverActive && _currentIptvChannel?.isLive == true) {
+      if (_iptvRecoveryEligible()) {
+        setState(() => _iptvStartOverActive = false);
+        unawaited(_switchToIptvChannel(_currentIptvIndex, quietRecovery: true));
+      }
+      return;
+    }
 
     // Phase 2: a live channel's error goes to the recovery machine first —
     // the snackbar below is now the SURRENDER voice (via the machine's
@@ -7667,6 +7924,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // _loadPlaylistIndex.
     _resumeWriteGuard.clear();
     setState(() {
+      _iptvStartOverActive = false;
+      _iptvStartOverLoading = false;
       // A quiet recovery re-tune is not a zap: no transition overlay, no
       // zap banner — the reconnect pill is the only narration (plan
       // invariant "retune ≠ zap"; codex round 2, finding 14).
@@ -11072,6 +11331,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   void _pauseForBackground() {
     if (!Platform.isAndroid && !Platform.isIOS) return;
     if (Platform.isIOS && (_isPipActive || _iosPipStarting)) return;
+    // Even paused playback can have a Start Over probe in flight. Cancel
+    // before the playing/transition checks, including recording teardown.
+    _cancelPendingIptvCatchup(hideFeedback: false);
     // A renderer restart has intentionally invalidated the old player and may
     // not have created the replacement yet. Preserve playback intent without
     // requiring either instance to be live at this exact lifecycle callback.
@@ -11085,7 +11347,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // Backgrounding in that window must still arm the flag, or the open lands
     // moments later and plays behind the backgrounded app with the guard in
     // the playing listener disarmed. A user's own pause has neither set.
-    if (!_playerCreated || (!_isPlaying && !_isTransitioning)) return;
+    final openingStartOver = _iptvStartOverActive &&
+        _activeMediaShouldPlay && !_activeMediaUserPaused;
+    if (!_playerCreated ||
+        (!_isPlaying && !_isTransitioning && !openingStartOver)) {
+      return;
+    }
     // A recovery in flight must not re-open streams behind a backgrounded
     // app; the resume path below re-arms recovery when it matters.
     _backgroundedAt = DateTime.now();
@@ -11120,6 +11387,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     final backgroundedAt = _backgroundedAt;
     _backgroundedAt = null;
     if (_currentIptvChannel?.isLive == true &&
+        !_iptvStartOverActive &&
         backgroundedAt != null &&
         DateTime.now().difference(backgroundedAt) >
             const Duration(seconds: 30)) {
@@ -11272,6 +11540,16 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _playerInstanceGeneration++;
     _decoderProbeTimer?.cancel();
     _decoderProbeTimer = null;
+    _tvosDisplayMatchToken++;
+    _tvosDisplayMatchTimer?.cancel();
+    _tvosDisplayMatchTimer = null;
+    if (PlatformUtil.isTvOS && !replacedPip) {
+      unawaited(
+        TvosDisplayMatchService.clear().catchError((Object error) {
+          debugPrint('DisplayMatch: tvOS dispose clear failed: $error');
+        }),
+      );
+    }
     _posSub?.cancel();
     _durSub?.cancel();
     _playbackUiClock.dispose();
@@ -12397,6 +12675,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
               hasRecord: _canRecord,
               isRecording: _recordingActiveNow,
               onRecord: _canRecord ? _toggleRecording : null,
+              onLiveEdgeAction: _iptvLiveEdgeAction,
+              liveEdgeActionActive: _iptvStartOverActive,
+              liveEdgeActionLoading: _iptvStartOverLoading,
             );
           },
         ),
@@ -12629,7 +12910,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       _iptvZapEpgLoading = known == null;
       _iptvZapClock = DateTime.now();
     });
-    if (known == null) unawaited(_loadIptvZapBannerEpg(channel, ticket));
+    // Even with an immediate XMLTV answer, the playing Xtream channel needs
+    // one archive-aware upgrade: XMLTV has titles/times but no has_archive.
+    unawaited(_loadIptvZapBannerEpg(channel, ticket));
     // Zapping from VOD to live with the dock already open gives the panel its
     // first channel here rather than at raise time — start its clock.
     _syncIptvBannerTicker();
@@ -12728,12 +13011,17 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   /// The dock can stay open past the end of the programme it is describing.
   /// Re-ask once the current one has finished rather than leave a listing
   /// that is quietly wrong.
+  DateTime? _iptvArchiveRetryAt;
+
   void _refreshIptvBannerEpgIfEnded() {
     if (_iptvZapEpgLoading) return;
     final channel = _iptvZapChannel;
     final current = _iptvZapEpg?.now;
     if (channel == null || current == null) return;
-    if (current.stop.isAfter(DateTime.now())) return;
+    final retryArchive = !current.hasArchive &&
+        _iptvArchiveRetryAt != null &&
+        !DateTime.now().isBefore(_iptvArchiveRetryAt!);
+    if (current.stop.isAfter(DateTime.now()) && !retryArchive) return;
     final ticket = ++_iptvZapEpgTicket;
     setState(() => _iptvZapEpgLoading = true);
     unawaited(_loadIptvZapBannerEpg(channel, ticket));
@@ -12746,11 +13034,14 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   Future<void> _loadIptvZapBannerEpg(IptvChannel channel, int ticket) async {
     EpgNowNext? result;
     try {
-      result = await IptvEpgService.instance.nowNext(channel.url);
+      result = await IptvEpgService.instance.nowNextWithCatchupMetadata(
+        channel.url,
+      );
     } catch (_) {
       result = null;
     }
     if (!mounted || ticket != _iptvZapEpgTicket) return;
+    _iptvArchiveRetryAt = DateTime.now().add(const Duration(seconds: 60));
     setState(() {
       _iptvZapEpg = result;
       _iptvZapEpgLoading = false;
@@ -14737,6 +15028,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                                   onRecord: _canRecord
                                       ? _toggleRecording
                                       : null,
+                                  onLiveEdgeAction: _iptvLiveEdgeAction,
+                                  liveEdgeActionActive: _iptvStartOverActive,
+                                  liveEdgeActionLoading:
+                                      _iptvStartOverLoading,
                                 ),
                         ),
                       );

@@ -1301,6 +1301,7 @@ void main() {
       'correct horse',
     );
     expect(package.sourceVersion, 3);
+    await StorageService.setImportedLaunchAnimation('a' * 32);
 
     final report =
         await ProfileRestoreCoordinator(
@@ -1316,6 +1317,12 @@ void main() {
     final raw = await SharedPreferences.getInstance();
     final prefix = 'p.$profileId.g.${report.publishedGeneration}.';
     expect(raw.getString('${prefix}theme_mode'), 'restored');
+    expect(
+      raw.containsKey('${prefix}${StorageService.importedLaunchAnimationKey}'),
+      isFalse,
+    );
+    await StorageService.getLaunchAnimation();
+    expect(StorageService.importedLaunchAnimationCached, isNull);
     expect(raw.containsKey('${prefix}tvmaze_cache_episodes_1139'), isFalse);
     expect(raw.containsKey('${prefix}webdav_username'), isFalse);
   });

@@ -1,4 +1,6 @@
 import 'dart:convert';
+import 'launch_animation/launch_package_test.dart' show packageBytes, animation;
+import 'package:debrify/services/launch_animation/launch_animation_library.dart';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -139,6 +141,89 @@ void main() {
     key: key,
     file: file,
     metadata: metadata,
+  );
+
+  test(
+    'older receivers are rejected before opening an animation file',
+    () async {
+      final older = RemoteSession(
+        sid: session.sid,
+        role: session.role,
+        keys: session.keys,
+        peerStaticKey: session.peerStaticKey,
+        peerFingerprint: session.peerFingerprint,
+        peerName: session.peerName,
+        sasCode: session.sasCode,
+        establishedAt: session.establishedAt,
+        peerProtocolVersion: 7,
+      )..authorized = true;
+      state.debugInstallOutboundSession(older, ip: '127.0.0.1');
+      const uninstalled = InstalledLaunchAnimation(
+        id: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+        name: 'Not installed',
+        animationId: 'main',
+        background: 0xff000000,
+        warnings: [],
+      );
+      await expectLater(
+        state.sendLaunchAnimation('127.0.0.1', uninstalled),
+        throwsA(
+          isA<RemoteTransferException>().having(
+            (error) => error.toString(),
+            'message',
+            contains('Update Debrify'),
+          ),
+        ),
+      );
+      expect(await LaunchAnimationLibrary.instance.list(), isEmpty);
+    },
+  );
+
+  test(
+    'animation transfer installs the selected composition without activation',
+    () async {
+      final file = await File('${root.path}/animation.lottie').writeAsBytes(
+        packageBytes(
+          animations: [
+            {'id': 'main'},
+            {'id': 'portrait'},
+          ],
+          extraFiles: {'a/portrait.json': animation()},
+        ),
+      );
+      final result = await send(file, {
+        'format': 'launch-animation-v1',
+        'animationId': 'portrait',
+        'background': 0xff123456,
+      });
+      expect(result?['ok'], isTrue);
+      final entry = (await LaunchAnimationLibrary.instance.list()).single;
+      expect(entry.animationId, 'portrait');
+      expect(entry.background, 0xff123456);
+      await StorageService.getLaunchAnimation();
+      expect(StorageService.importedLaunchAnimationCached, isNull);
+    },
+  );
+
+  test(
+    'animation transfer rejects invalid metadata and locked receiving profiles',
+    () async {
+      final file = await File(
+        '${root.path}/animation.lottie',
+      ).writeAsBytes(packageBytes());
+      expect(
+        (await send(file, {
+          'format': 'launch-animation-v1',
+          'animationId': '../missing',
+        }))?['ok'],
+        isFalse,
+      );
+      expect(await LaunchAnimationLibrary.instance.list(), isEmpty);
+      ProfileRemoteLease.instance.revoke();
+      final rejected = await send(file, {'format': 'launch-animation-v1'});
+      expect(rejected?['ok'], isNot(true));
+      expect(await LaunchAnimationLibrary.instance.list(), isEmpty);
+    },
   );
 
   test(
