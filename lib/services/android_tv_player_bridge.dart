@@ -960,12 +960,15 @@ class AndroidTvPlayerBridge {
           final epgArgs = call.arguments;
           String? epgChannelUrl;
           var includeSchedule = false;
+          var includeCatchupMetadata = false;
           var archiveDisabled = false;
           int? archiveDurationDays;
           if (epgArgs is Map) {
             final raw = epgArgs['channelUrl'];
             if (raw is String) epgChannelUrl = raw;
             includeSchedule = epgArgs['includeSchedule'] == true;
+            includeCatchupMetadata =
+                epgArgs['includeCatchupMetadata'] == true;
             archiveDisabled = epgArgs['archiveDisabled'] == true;
             archiveDurationDays = (epgArgs['archiveDurationDays'] as num?)
                 ?.toInt();
@@ -975,9 +978,11 @@ class AndroidTvPlayerBridge {
             return <String, dynamic>{};
           }
           try {
-            final nowNext = await IptvEpgService.instance.nowNext(
-              epgChannelUrl,
-            );
+            final nowNext = includeCatchupMetadata
+                ? await IptvEpgService.instance.nowNextWithCatchupMetadata(
+                    epgChannelUrl,
+                  )
+                : await IptvEpgService.instance.nowNext(epgChannelUrl);
             return <String, dynamic>{
               if (nowNext.now != null) 'now': nowNext.now!.toBridgeMap(),
               if (nowNext.next != null) 'next': nowNext.next!.toBridgeMap(),
@@ -1027,7 +1032,15 @@ class AndroidTvPlayerBridge {
                       ?.toInt(),
                 );
             EpgProgramme? programme;
+            if (args['startOver'] == true) {
+              final current = await IptvEpgService.instance
+                  .nowNextWithCatchupMetadata(channelUrl);
+              if (current.now?.start.millisecondsSinceEpoch == startMs) {
+                programme = current.now;
+              }
+            }
             for (final item in schedule) {
+              if (programme != null) break;
               if (item.start.millisecondsSinceEpoch == startMs) {
                 programme = item;
                 break;
@@ -1035,7 +1048,7 @@ class AndroidTvPlayerBridge {
             }
             if (programme == null ||
                 !programme.hasArchive ||
-                !programme.stop.isBefore(DateTime.now())) {
+                programme.start.isAfter(DateTime.now())) {
               return null;
             }
             final url = await IptvEpgService.instance.catchupUrl(
@@ -1052,17 +1065,20 @@ class AndroidTvPlayerBridge {
                 }
               });
             }
-            await StorageService.recordIptvWatch(
-              url,
-              channelName: programme.title,
-              logoUrl: args['logoUrl'] as String?,
-              group: args['channelName'] as String?,
-              playlistId: args['playlistId'] as String?,
-              httpHeaders: headers.isEmpty ? null : headers,
-            );
-            final resumePositions = await StorageService.getIptvResumePositions(
-              [url],
-            );
+            final startOver = args['startOver'] == true;
+            if (!startOver) {
+              await StorageService.recordIptvWatch(
+                url,
+                channelName: programme.title,
+                logoUrl: args['logoUrl'] as String?,
+                group: args['channelName'] as String?,
+                playlistId: args['playlistId'] as String?,
+                httpHeaders: headers.isEmpty ? null : headers,
+              );
+            }
+            final resumePositions = startOver
+                ? const <String, int>{}
+                : await StorageService.getIptvResumePositions([url]);
             return <String, dynamic>{
               'url': url,
               'title': programme.title,

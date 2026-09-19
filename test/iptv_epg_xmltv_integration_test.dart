@@ -133,7 +133,9 @@ void main() {
                   'start': rawPanelTime(
                     start.add(slot * i).add(const Duration(hours: 2)),
                   ),
-                if (i == 0) 'has_archive': 1,
+                // Include whichever half-hour slot contains now so the
+                // archive-aware now/next path can prove it donates metadata.
+                if (i <= 2) 'has_archive': 1,
               },
           ];
           request.response.write(jsonEncode({'epg_listings': rows}));
@@ -186,11 +188,16 @@ void main() {
     final before = IptvEpgService.instance.peekNowNext(ch.url);
     expect(before?.now, isNotNull);
 
+    final enriched = await IptvEpgService.instance
+        .nowNextWithCatchupMetadata(ch.url);
+    expect(enriched.now?.title, before!.now!.title);
+    expect(enriched.now?.hasArchive, isTrue);
+
     // The visible schedule stays on the same XMLTV timeline as the card even
     // though the provider's data table is shifted by two hours.
     final schedule = await IptvEpgService.instance.schedule(ch.url);
     final scheduleNow = schedule.firstWhere((p) => p.airsAt(DateTime.now()));
-    expect(scheduleNow.title, before!.now!.title);
+    expect(scheduleNow.title, before.now!.title);
     expect(scheduleNow.start, before.now!.start);
 
     // Catch-up metadata still rides on the matching XMLTV row, including the

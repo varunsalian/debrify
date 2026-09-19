@@ -129,6 +129,62 @@ void main() {
       expect(result.next?.title, 'Next Show');
     });
 
+    test('start-over requests the full scheduled programme duration', () async {
+      final now = DateTime.now();
+      final programme = EpgProgramme(
+        title: 'Current Show',
+        description: '',
+        start: now.subtract(const Duration(minutes: 30)),
+        stop: now.add(const Duration(minutes: 30)),
+        hasArchive: true,
+      );
+
+      final url = await IptvEpgService.instance.catchupUrl(
+        channelUrl(117),
+        programme,
+      );
+
+      expect(url, isNotNull);
+      expect(Uri.parse(url!).pathSegments, contains('60'));
+    });
+
+    test('archive enrichment preserves short EPG times across panel shifts', () async {
+      final rows = listingsAroundNow();
+      dataTableListings = [
+        for (final row in rows)
+          {
+            ...row,
+            'start_timestamp': '${int.parse(row['start_timestamp'] as String) + 7200}',
+            'stop_timestamp': '${int.parse(row['stop_timestamp'] as String) + 7200}',
+            'has_archive': 1,
+          },
+      ];
+      final basic = await IptvEpgService.instance.nowNext(channelUrl(118));
+      final enriched = await IptvEpgService.instance
+          .nowNextWithCatchupMetadata(channelUrl(118));
+      expect(enriched.now?.title, basic.now?.title);
+      expect(enriched.now?.start, basic.now?.start);
+      expect(enriched.next?.start, basic.next?.start);
+      expect(enriched.now?.hasArchive, isTrue);
+      expect(enriched.now?.replayStart,
+          basic.now!.start.add(const Duration(hours: 2)));
+    });
+
+    test('archive enrichment recovers after a temporary table failure', () async {
+      final url = channelUrl(119);
+      failingActions = {'get_simple_data_table', 'get_simple_date_table'};
+      final first = await IptvEpgService.instance.nowNextWithCatchupMetadata(url);
+      expect(first.now?.title, 'Current Show');
+      expect(first.now?.hasArchive, isFalse);
+      failingActions = {};
+      dataTableListings = [
+        for (final row in listingsAroundNow()) {...row, 'has_archive': 1},
+      ];
+      final retried = await IptvEpgService.instance.nowNextWithCatchupMetadata(url);
+      expect(retried.now?.start, first.now?.start);
+      expect(retried.now?.hasArchive, isTrue);
+    });
+
     test('map-shaped epg_listings (PHP assoc-array panels) parse fine',
         () async {
       listingsAsMap = true;
@@ -512,7 +568,7 @@ void main() {
       );
     });
 
-    test('still airing → unavailable', () {
+    test('still airing is start-over only, not finished catch-up', () {
       final airing = EpgProgramme(
         title: 'T',
         description: '',
@@ -521,6 +577,19 @@ void main() {
         hasArchive: true,
       );
       expect(IptvEpgService.isCatchupAvailable(channel(), airing), isFalse);
+      expect(IptvEpgService.isStartOverAvailable(channel(), airing), isTrue);
+    });
+
+    test('future programme → unavailable', () {
+      final future = EpgProgramme(
+        title: 'T',
+        description: '',
+        start: now.add(const Duration(minutes: 30)),
+        stop: now.add(const Duration(minutes: 90)),
+        hasArchive: true,
+      );
+      expect(IptvEpgService.isCatchupAvailable(channel(), future), isFalse);
+      expect(IptvEpgService.isStartOverAvailable(channel(), future), isFalse);
     });
 
     test('channel explicitly archive-off → unavailable', () {

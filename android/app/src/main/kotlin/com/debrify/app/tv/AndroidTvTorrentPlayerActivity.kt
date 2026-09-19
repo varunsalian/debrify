@@ -189,6 +189,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private var iptvNextButton: AppCompatButton? = null
     private var iptvGuideButton: AppCompatButton? = null
     private var iptvJumpButton: AppCompatButton? = null
+    private var iptvStartOverButton: AppCompatButton? = null
     private var iptvRecordButton: AppCompatButton? = null
     // Tees the live progressive stream to a MediaStore file while playing.
     private val iptvRecordingController by lazy { IptvRecordingController(this) }
@@ -408,7 +409,15 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
      *  prepare joins the live edge, never a stale position. */
     private fun performIptvLiveRetune(source: String, attempt: Int) {
         val entry = iptvChannels.getOrNull(currentIptvIndex)?.takeIf { it.isLive } ?: return
-        val url = currentIptvStreamUrl ?: entry.url
+        // A start-over URL is a finite archive segment. Recovery from its EOF
+        // must join the channel's real live URL, not reopen the old segment.
+        val url = if (iptvStartOverActive) entry.url else currentIptvStreamUrl ?: entry.url
+        if (iptvStartOverActive || iptvStartOverLoading) {
+            iptvStartOverActive = false
+            iptvStartOverLoading = false
+            iptvCatchupToken++
+            updateIptvStartOverButton(entry)
+        }
         iptvTuneDiagnostics.onRecovery(source, "retune", "attempt=$attempt")
         // Video-stall attempt 1 was a plain re-tune (transient wedges heal
         // on a codec reset). Still frozen: drop the aggressive TS join flags
@@ -837,6 +846,9 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private var isIptvMode = false
     private var iptvChannels = mutableListOf<IptvChannelEntry>()
     private var currentIptvIndex = 0
+    private var iptvStartOverActive = false
+    private var iptvStartOverLoading = false
+    private var iptvCatchupToken = 0
 
     // Xtream series audio memory: the `<playlistId>::<seriesId>` key the Flutter
     // store uses, and the language resolved from it at launch. A native audio
@@ -1820,6 +1832,22 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             // failure to channel B — e.g. force-HLS-poisoning B's URL for the
             // whole session, or restarting A's stream under B's identity.
             val isLiveIptvError = isIptvMode && player?.playerError != null
+            if (isLiveIptvError && iptvStartOverActive) {
+                // The legacy timeshift.php endpoint may serve HLS without
+                // an extension. Try its format correction before returning live.
+                if (iptvLiveRecoveryEligible() && retryIptvAsHlsIfUnrecognized(error)) return
+                val entry = iptvChannels.getOrNull(currentIptvIndex)
+                if (entry != null && entry.isLive) {
+                    cancelPendingIptvCatchupRequest()
+                    // Archive rejection must not enter the live AUTH ladder.
+                    if (iptvLiveRecoveryEligible()) {
+                        iptvStartOverActive = false
+                        updateIptvStartOverButton(entry)
+                        beginIptvPlayback(entry)
+                    }
+                    return
+                }
+            }
 
             // A twin trial owns every error on its `.ts` URL — an HLS-only
             // panel can answer it with anything (404, playlist text the TS
@@ -4211,6 +4239,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         iptvPrevButton = prevButton
         iptvGuideButton = playlistButton
         iptvJumpButton = playerView.findViewById(R.id.iptv_jump_channel_button)
+        iptvStartOverButton = playerView.findViewById(R.id.iptv_start_over_button)
         iptvRecordButton = playerView.findViewById(R.id.iptv_record_button)
         playerView.findViewById<LinearLayout>(R.id.debrify_controls_buttons)?.let { dock ->
             if (originalControlDockOrder.isEmpty()) {
@@ -4321,6 +4350,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         applyAppleTvAnimation(prevButton)
         applyAppleTvAnimation(randomButton)
         applyAppleTvAnimation(iptvJumpButton)
+        applyAppleTvAnimation(iptvStartOverButton)
 
         val extendTimerOnFocus = View.OnFocusChangeListener { _, hasFocus ->
             if (hasFocus && controlsMenuVisible) {
@@ -4353,6 +4383,12 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             showIptvChannelJumpDialog()
         }
         iptvJumpButton?.onFocusChangeListener = extendTimerOnFocus
+
+        iptvStartOverButton?.setOnClickListener {
+            hideControlsMenu()
+            toggleIptvStartOver()
+        }
+        iptvStartOverButton?.onFocusChangeListener = extendTimerOnFocus
 
         audioButton?.setOnClickListener {
             if (USE_UNIFIED_MENU && unifiedMenu != null) {
@@ -4448,6 +4484,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             applyAppleTvAnimation(prevButton)
             applyAppleTvAnimation(randomButton)
             applyAppleTvAnimation(iptvJumpButton)
+            applyAppleTvAnimation(iptvStartOverButton)
             applyAppleTvAnimation(iptvRecordButton)
             applyAppleTvAnimation(ottSourcesButton)
             applyAppleTvAnimation(playerView.findViewById(R.id.ott_seek_back_button))
@@ -8995,6 +9032,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         iptvPrevButton,
         iptvNextButton,
         iptvJumpButton,
+        iptvStartOverButton,
         iptvRecordButton,
         playerView.findViewById<AppCompatButton>(R.id.debrify_playlist_button),
     )
@@ -9543,6 +9581,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         nightModeButton?.visibility = View.VISIBLE
         iptvJumpButton?.visibility = if (live) View.VISIBLE else View.GONE
         iptvGuideButton?.visibility = if (live) View.VISIBLE else View.GONE
+        updateIptvStartOverButton(entry)
         // Visibility follows the ACTIVE recorder: the engine records pre-Q
         // once storage is granted (and shows the button so it CAN be
         // granted); the tee remains Q+-only.
@@ -9567,7 +9606,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     }
 
     /** Live IPTV uses a balanced dock:
-     *  Audio · Subs · Aspect | CH- · Play/Pause · CH+ | Guide · Jump · Record · Night.
+     *  Audio · Subs · Aspect | CH- · Play/Pause · Start Over · CH+ |
+     *  Guide · Jump · Record · Night.
      *  Record is present only for progressive streams (disabled for HLS). The
      *  XML order remains the standard cinema/VOD order; only the live
      *  presentation is rearranged, so movies and episodes keep their old UX. */
@@ -9582,6 +9622,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             playerView.findViewById<View>(R.id.debrify_controls_left_divider),
             iptvPrevButton,
             pauseButton,
+            iptvStartOverButton,
             iptvNextButton,
             playerView.findViewById<View>(R.id.debrify_controls_right_divider),
             iptvGuideButton,
@@ -9628,6 +9669,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             iptvNextButton,
             iptvGuideButton,
             iptvJumpButton,
+            iptvStartOverButton,
             iptvRecordButton,
         )
         standardButtons.forEach {
@@ -10887,18 +10929,40 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         if (!entry.isLive || entry.epgLoading) return
         val stale = entry.epgLoaded && entry.epgNowStopMs > 0 &&
             entry.epgNowStopMs < System.currentTimeMillis()
-        if (entry.epgLoaded && !stale) return
+        val needsCatchupMetadata = entry.isCurrent && !entry.epgCatchupMetadataLoaded
+        if (entry.epgLoaded && !stale && !needsCatchupMetadata) return
         if (!entry.url.startsWith("http")) return // stremio-tv:// keys etc.
 
         entry.epgLoading = true
-        requestIptvEpg(entry, includeSchedule = false) { result ->
+        val requestedCatchupMetadata = entry.isCurrent
+        requestIptvEpg(
+            entry,
+            includeSchedule = false,
+            includeCatchupMetadata = requestedCatchupMetadata,
+        ) { result ->
             entry.epgLoading = false
             entry.epgLoaded = true
+            // A cheap now/next answer carries no panel archive fields and
+            // overwrites epgNowHasArchive below. Invalidate the enrichment
+            // marker with it so returning to this channel (including after
+            // the programme advances) requests metadata for the new NOW row.
+            entry.epgCatchupMetadataLoaded = requestedCatchupMetadata
             val now = result?.get("now") as? Map<*, *>
             entry.epgNowTitle =
                 (now?.get("title") as? String)?.takeIf { it.isNotBlank() }
             entry.epgNowStartMs = (now?.get("startMs") as? Number)?.toLong() ?: 0L
             entry.epgNowStopMs = (now?.get("stopMs") as? Number)?.toLong() ?: 0L
+            entry.epgNowHasArchive = now?.get("hasArchive") == true
+            if (requestedCatchupMetadata && !entry.epgNowHasArchive) {
+                // A recovered panel may publish archive metadata before the
+                // current programme ends. Retry at a bounded cadence.
+                iptvBrowseHandler.postDelayed({
+                    entry.epgCatchupMetadataLoaded = false
+                    if (entry.isCurrent && !isFinishing && !isDestroyed) {
+                        ensureIptvChannelEpg(entry)
+                    }
+                }, 60_000L)
+            }
             val next = result?.get("next") as? Map<*, *>
             entry.epgNextTitle =
                 (next?.get("title") as? String)?.takeIf { it.isNotBlank() }
@@ -10923,10 +10987,15 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             iptvChannelAdapter?.notifyEpgFor(entry)
             if (entry.isCurrent) {
                 updateIptvGuideEpgHeader()
+                updateIptvStartOverButton(entry)
                 // A visible zap banner for this channel paints the fresh data.
                 if (iptvZapBanner?.visibility == View.VISIBLE) {
                     paintIptvZapBannerEpg(entry)
                 }
+                // It may have become current while a cheap row request was
+                // in flight. Follow that answer with the one archive-aware
+                // upgrade instead of falsely marking metadata complete.
+                if (!requestedCatchupMetadata) ensureIptvChannelEpg(entry)
             }
         }
     }
@@ -11115,14 +11184,94 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         iptvEpgAdapter?.updatePrograms(emptyList())
     }
 
+    private fun currentIptvStartOverProgramme(entry: IptvChannelEntry): IptvEpgProgram? {
+        val now = System.currentTimeMillis()
+        if (!entry.isLive ||
+            entry.tvArchive == "0" ||
+            !entry.epgNowHasArchive ||
+            entry.epgNowStartMs <= 0L ||
+            now !in entry.epgNowStartMs until entry.epgNowStopMs
+        ) return null
+        return IptvEpgProgram(
+            title = entry.epgNowTitle ?: entry.name,
+            description = null,
+            startMs = entry.epgNowStartMs,
+            stopMs = entry.epgNowStopMs,
+            hasArchive = true,
+        )
+    }
+
+    private fun updateIptvStartOverButton(entry: IptvChannelEntry? =
+        iptvChannels.getOrNull(currentIptvIndex)
+    ) {
+        val button = iptvStartOverButton ?: return
+        val available = entry != null &&
+            (iptvStartOverActive || currentIptvStartOverProgramme(entry) != null)
+        button.visibility = if (available) View.VISIBLE else View.GONE
+        button.isEnabled = available && !iptvStartOverLoading
+        button.text = when {
+            iptvStartOverLoading -> "Preparing…"
+            iptvStartOverActive -> "Go Live"
+            else -> "Start Over"
+        }
+        button.contentDescription = when {
+            iptvStartOverLoading -> "Preparing start over"
+            iptvStartOverActive -> "Return to live channel"
+            else -> "Start programme from beginning"
+        }
+    }
+
+    private fun toggleIptvStartOver() {
+        if (iptvStartOverLoading) return
+        val entry = iptvChannels.getOrNull(currentIptvIndex) ?: return
+        if (iptvStartOverActive) {
+            iptvCatchupToken++
+            iptvStartOverActive = false
+            updateIptvStartOverButton(entry)
+            resetSubtitleState()
+            beginIptvPlayback(entry)
+            return
+        }
+        val programme = currentIptvStartOverProgramme(entry) ?: return
+        requestIptvCatchup(entry, programme, fromControls = true)
+    }
+
+    private fun cancelPendingIptvCatchupRequest() {
+        iptvCatchupToken++
+        if (!iptvStartOverLoading) return
+        iptvStartOverLoading = false
+        updateIptvStartOverButton()
+    }
+
     private fun requestIptvCatchup(
         channelEntry: IptvChannelEntry,
         programme: IptvEpgProgram,
+        fromControls: Boolean = false,
     ) {
-        if (!programme.hasArchive || programme.stopMs >= System.currentTimeMillis()) return
+        val now = System.currentTimeMillis()
+        if (!programme.hasArchive || programme.startMs > now) return
+        val airing = now < programme.stopMs
         val channel = MainActivity.getAndroidTvPlayerChannel() ?: return
-        val token = iptvEpgToken
-        Toast.makeText(this, "Preparing replay…", Toast.LENGTH_SHORT).show()
+        val token = ++iptvCatchupToken
+        val scheduleToken = iptvEpgToken
+        if (airing) {
+            iptvStartOverLoading = true
+            updateIptvStartOverButton(channelEntry)
+        }
+        Toast.makeText(
+            this,
+            if (airing) "Preparing start over…" else "Preparing replay…",
+            Toast.LENGTH_SHORT,
+        ).show()
+        fun requestStillRelevant(): Boolean {
+            val relevant = token == iptvCatchupToken &&
+                (fromControls || (iptvGuideVisible && scheduleToken == iptvEpgToken))
+            if (!relevant && token == iptvCatchupToken && airing) {
+                iptvStartOverLoading = false
+                updateIptvStartOverButton()
+            }
+            return relevant
+        }
         channel.invokeMethod(
             "requestIptvCatchup",
             mapOf(
@@ -11134,18 +11283,42 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 "httpHeaders" to channelEntry.httpHeaders,
                 "archiveDisabled" to (channelEntry.tvArchive == "0"),
                 "archiveDurationDays" to channelEntry.tvArchiveDuration,
+                "startOver" to airing,
             ),
             object : io.flutter.plugin.common.MethodChannel.Result {
                 override fun success(result: Any?) {
-                    if (token != iptvEpgToken || !iptvGuideVisible) return
+                    if (!requestStillRelevant()) return
                     val response = result as? Map<*, *>
                     val url = response?.get("url") as? String
                     if (url.isNullOrEmpty()) {
+                        iptvStartOverLoading = false
+                        updateIptvStartOverButton()
                         Toast.makeText(
                             this@AndroidTvTorrentPlayerActivity,
                             "Replay is not available",
                             Toast.LENGTH_SHORT,
                         ).show()
+                        return
+                    }
+                    if (airing) {
+                        commitIptvAllCategorySearch()
+                        hideIptvGuide()
+                        val current = iptvChannels.getOrNull(currentIptvIndex)
+                        if (current?.url != channelEntry.url) {
+                            switchToIptvChannel(channelEntry)
+                        }
+                        val selected = iptvChannels.getOrNull(currentIptvIndex)
+                        if (selected == null || selected.url != channelEntry.url) {
+                            iptvStartOverLoading = false
+                            updateIptvStartOverButton()
+                            return
+                        }
+                        iptvStartOverLoading = false
+                        iptvStartOverActive = true
+                        resetSubtitleState()
+                        setIptvMediaItem(selected, url)
+                        titleView.text = selected.displayName
+                        updateIptvStartOverButton(selected)
                         return
                     }
                     checkpointCurrentIptvPosition()
@@ -11181,7 +11354,9 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 }
 
                 override fun error(code: String, message: String?, details: Any?) {
-                    if (token != iptvEpgToken) return
+                    if (!requestStillRelevant()) return
+                    iptvStartOverLoading = false
+                    updateIptvStartOverButton()
                     Toast.makeText(
                         this@AndroidTvTorrentPlayerActivity,
                         message ?: "Replay is not available",
@@ -11190,7 +11365,9 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 }
 
                 override fun notImplemented() {
-                    if (token == iptvEpgToken) {
+                    if (requestStillRelevant()) {
+                        iptvStartOverLoading = false
+                        updateIptvStartOverButton()
                         Toast.makeText(
                             this@AndroidTvTorrentPlayerActivity,
                             "Replay is not available",
@@ -11223,6 +11400,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private fun requestIptvEpg(
         entry: IptvChannelEntry,
         includeSchedule: Boolean,
+        includeCatchupMetadata: Boolean = entry.isCurrent,
         callback: (Map<*, *>?) -> Unit,
     ) {
         // Deliver exactly once, and ALWAYS: a MethodChannel whose engine died
@@ -11248,6 +11426,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             val args = hashMapOf<String, Any?>(
                 "channelUrl" to entry.url,
                 "includeSchedule" to includeSchedule,
+                "includeCatchupMetadata" to includeCatchupMetadata,
                 "archiveDisabled" to (entry.tvArchive == "0"),
                 "archiveDurationDays" to entry.tvArchiveDuration,
             )
@@ -12007,6 +12186,9 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         checkpointOutgoing: Boolean = true,
     ) {
         android.util.Log.d("AndroidTvPlayer", "switchToIptvChannel: ${entry.name} (index=${entry.index})")
+        iptvCatchupToken++
+        iptvStartOverActive = false
+        iptvStartOverLoading = false
         val previousPlaying = iptvChannels.getOrNull(currentIptvIndex)
         // Bank the outgoing channel's position BEFORE currentIptvIndex moves,
         // or zapping back to a half-watched movie would rewind it to wherever
@@ -13800,6 +13982,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         to.epgNowTitle = from.epgNowTitle
         to.epgNowStartMs = from.epgNowStartMs
         to.epgNowStopMs = from.epgNowStopMs
+        to.epgNowHasArchive = from.epgNowHasArchive
+        to.epgCatchupMetadataLoaded = from.epgCatchupMetadataLoaded
         to.epgNextTitle = from.epgNextTitle
         to.epgNextStartMs = from.epgNextStartMs
         // Claim "loaded" only when nothing is already on its way; an in-flight
@@ -18671,6 +18855,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             if (liveEntry != null && restoreParkedIptvTwinIfNeeded()) {
                 // Restored and started by setIptvMediaItem.
             } else if (liveEntry != null &&
+                !iptvStartOverActive &&
                 iptvStoppedAtRealtime > 0L &&
                 awayMs > IPTV_LIVE_REJOIN_AFTER_MS
             ) {
@@ -18685,6 +18870,10 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     }
 
     override fun onStop() {
+        // A MethodChannel result may arrive after Home. Invalidate it before
+        // pausing so it cannot call setIptvMediaItem and restart background
+        // playback underneath this lifecycle stop.
+        cancelPendingIptvCatchupRequest()
         recordPlaybackLifecycle("activity_stop")
         sendPlaybackActivityState(false)
         // Checkpoint before teardown or background process eviction. Keep the
@@ -18820,6 +19009,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        cancelPendingIptvCatchupRequest()
         displayModeController?.clear()
         displayModeController = null
         mediaPreparationScope.cancel()
@@ -20986,6 +21176,8 @@ private data class IptvChannelEntry(
     var epgNowTitle: String? = null,
     var epgNowStartMs: Long = 0L,
     var epgNowStopMs: Long = 0L,
+    var epgNowHasArchive: Boolean = false,
+    var epgCatchupMetadataLoaded: Boolean = false,
     var epgNextTitle: String? = null,
     var epgNextStartMs: Long = 0L,
     var epgLoaded: Boolean = false,
@@ -21431,7 +21623,7 @@ private class IptvEpgAdapter(
         val airing = program.startMs <= nowMs && nowMs < program.stopMs
         val elapsed = nowMs - program.startMs
         val duration = (program.stopMs - program.startMs).coerceAtLeast(1L)
-        val replayable = program.hasArchive && program.stopMs < nowMs
+        val replayable = program.hasArchive && program.startMs <= nowMs
 
         holder.time.text = android.text.format.DateFormat
             .getTimeFormat(holder.itemView.context)
@@ -21440,7 +21632,7 @@ private class IptvEpgAdapter(
         holder.description.text = program.description
         holder.description.visibility =
             if (program.description.isNullOrBlank()) View.GONE else View.VISIBLE
-        holder.now.text = if (airing) "NOW" else "REPLAY"
+        holder.now.text = if (airing && replayable) "START OVER" else if (airing) "NOW" else "REPLAY"
         holder.now.visibility = if (airing || replayable) View.VISIBLE else View.GONE
         // Styled only: the airing row wears the quiet selected tint (and a
         // recycled holder explicitly clears it). Classic never sets it.

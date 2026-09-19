@@ -49,6 +49,9 @@ class TvControls extends StatefulWidget {
     this.onShowIptvChannels,
     this.onNextChannel,
     this.onPreviousChannel,
+    this.onLiveEdgeAction,
+    this.liveEdgeActionActive = false,
+    this.liveEdgeActionLoading = false,
     this.hasRecord = false,
     this.isRecording = false,
     this.onRecord,
@@ -122,6 +125,9 @@ class TvControls extends StatefulWidget {
   final VoidCallback? onShowIptvChannels;
   final VoidCallback? onNextChannel;
   final VoidCallback? onPreviousChannel;
+  final VoidCallback? onLiveEdgeAction;
+  final bool liveEdgeActionActive;
+  final bool liveEdgeActionLoading;
   final bool hasRecord;
   final bool isRecording;
   final VoidCallback? onRecord;
@@ -387,6 +393,18 @@ class _TvControlsState extends State<TvControls> {
         widget.onPlayPause,
         primary: true,
         node: widget.playPauseFocusNode,
+      );
+      add(
+        widget.liveEdgeActionActive
+            ? Icons.live_tv_rounded
+            : Icons.replay_rounded,
+        widget.liveEdgeActionLoading
+            ? 'Preparing start over…'
+            : widget.liveEdgeActionActive
+            ? 'Go live'
+            : 'Start from beginning',
+        widget.onLiveEdgeAction,
+        active: widget.liveEdgeActionActive,
       );
       add(
         Icons.skip_next_rounded,

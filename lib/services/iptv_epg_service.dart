@@ -619,15 +619,31 @@ class IptvEpgService {
   /// like XtreamCodesService does for live URL forms.
   final Map<String, _CatchupForm> _catchupFormCache = {};
 
-  /// Whether [programme] on [channel] can be replayed from the panel's
-  /// archive: the panel recorded it (`has_archive`), it has finished airing,
+  /// Whether a finished [programme] on [channel] can be replayed from the
+  /// panel archive. Current programmes deliberately do not qualify: guide
+  /// rows use this predicate alongside Record, and those actions must remain
+  /// mutually exclusive.
+  static bool isCatchupAvailable(IptvChannel channel, EpgProgramme programme) =>
+      programme.stop.isBefore(DateTime.now()) &&
+      _hasCatchupAccess(channel, programme);
+
+  /// Whether the currently airing [programme] can start from its beginning.
+  /// Kept separate from [isCatchupAvailable] so a NOW row still activates its
+  /// advertised Record action instead of silently preferring replay.
+  static bool isStartOverAvailable(
+    IptvChannel channel,
+    EpgProgramme programme,
+  ) =>
+      programme.airsAt(DateTime.now()) && _hasCatchupAccess(channel, programme);
+
+  /// Shared archive requirements: the panel recorded it (`has_archive`),
   /// the channel isn't explicitly archive-off, it still sits inside the
   /// channel's archive window, and the URL carries Xtream credentials.
   /// XMLTV programmes never qualify (hasArchive is always false there).
-  static bool isCatchupAvailable(IptvChannel channel, EpgProgramme programme) {
+  static bool _hasCatchupAccess(IptvChannel channel, EpgProgramme programme) {
     if (!programme.hasArchive) return false;
     final now = DateTime.now();
-    if (!programme.stop.isBefore(now)) return false; // airing or future
+    if (programme.start.isAfter(now)) return false; // future
     // Explicit deny only — favorites-rebuilt channels carry no attributes,
     // and the per-programme flag is the more precise signal anyway.
     if (channel.attributes['tv_archive'] == '0') return false;
@@ -671,6 +687,10 @@ class IptvEpgService {
     if (ref == null) return null;
 
     final start = catchupStart(programme);
+    // Start-over must cover the programme's full scheduled window. Limiting
+    // this to the portion archived at request time creates a finite segment;
+    // when it ends, live has advanced by the same amount and recovery skips
+    // everything between the old live edge and the new one.
     // Round the duration UP — inMinutes truncation would shave up to 59s
     // off the end of the replay.
     final minutes =
@@ -841,6 +861,31 @@ class IptvEpgService {
     });
     _nowNextInFlight[channelUrl] = future;
     return future;
+  }
+
+  /// Now/next enriched with the panel-only archive fields needed by Start
+  /// Over. Normal row painting stays on the cheap [nowNext] path; player
+  /// controls call this only for the channel that is actually playing.
+  Future<EpgNowNext> nowNextWithCatchupMetadata(String channelUrl) async {
+    final basic = await nowNext(channelUrl);
+    if (_parseXtreamUrl(channelUrl) == null || basic.now?.hasArchive == true) {
+      return basic;
+    }
+    List<EpgProgramme> merged;
+    try {
+      merged = _mergePanelMetadataIntoXmltv(
+        [if (basic.now != null) basic.now!, if (basic.next != null) basic.next!],
+        await schedule(channelUrl),
+      );
+    } catch (_) {
+      // Archive metadata is an enhancement. Keep valid XMLTV now/next data
+      // visible when the panel schedule endpoint is temporarily unavailable.
+      return basic;
+    }
+    return EpgNowNext(
+      now: basic.now == null ? null : merged.first,
+      next: basic.next == null ? null : merged.last,
+    );
   }
 
   /// Fetch (or serve cached) the day schedule for a channel, sorted by start
