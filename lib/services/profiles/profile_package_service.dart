@@ -17,6 +17,13 @@ import 'profile_scope.dart';
 import 'portable_profile_package.dart';
 import 'sanitized_profile_preferences.dart';
 
+/// The registry changed after the sync export's identity plan was captured.
+/// Callers may rebuild the plan and retry; other export errors must propagate.
+final class ProfileGraphIdentityChanged extends StateError {
+  ProfileGraphIdentityChanged(String label)
+    : super('WebDAV sync $label identity projection is incomplete');
+}
+
 final class ProfileGraphPackageExport {
   const ProfileGraphPackageExport({
     required this.package,
@@ -348,6 +355,7 @@ class ProfilePackageService {
     includeDatabases: includeDatabases,
     includePreferences: includePreferences,
     excludeAppearance: true,
+    requireIdentityProjection: true,
     profileIdProjection: profileIdProjection,
     resourceIdProjection: resourceIdProjection,
     fileSinks: fileSinks,
@@ -360,6 +368,7 @@ class ProfilePackageService {
     required bool includeDatabases,
     required bool includePreferences,
     bool excludeAppearance = false,
+    bool requireIdentityProjection = false,
     Map<String, String> profileIdProjection = const <String, String>{},
     Map<String, String> resourceIdProjection = const <String, String>{},
     ProfilePackageFileSinks? fileSinks,
@@ -381,6 +390,7 @@ class ProfilePackageService {
       localId: (profile) => profile.id,
       projection: profileIdProjection,
       label: 'profile',
+      requiredProjection: requireIdentityProjection,
     );
     final profileBackupIds = <String, String>{};
     final profileRecords = <Map<String, dynamic>>[];
@@ -496,6 +506,7 @@ class ProfilePackageService {
       localId: (resource) => resource.id,
       projection: resourceIdProjection,
       label: 'resource',
+      requiredProjection: requireIdentityProjection,
     );
     for (var index = 0; index < allResources.length; index++) {
       final resource = allResources[index];
@@ -596,14 +607,13 @@ class ProfilePackageService {
     required String Function(T value) localId,
     required Map<String, String> projection,
     required String label,
+    bool requiredProjection = false,
   }) {
     if (projection.isEmpty && values.isEmpty) return;
     if (projection.length != values.length ||
         values.any((value) => !projection.containsKey(localId(value)))) {
-      if (projection.isNotEmpty) {
-        throw StateError(
-          'WebDAV sync $label identity projection is incomplete',
-        );
+      if (requiredProjection || projection.isNotEmpty) {
+        throw ProfileGraphIdentityChanged(label);
       }
       return;
     }

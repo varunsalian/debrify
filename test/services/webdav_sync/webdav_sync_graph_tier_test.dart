@@ -1,10 +1,13 @@
 import 'dart:io';
+import 'dart:convert';
 
 import 'package:debrify/services/transfer/streaming_encrypted_file.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_snapshot_models.dart';
 import 'dart:typed_data';
 
 import 'package:debrify/models/profiles/profile_policy.dart';
+import 'package:debrify/models/profiles/connection_resource.dart';
+import 'package:debrify/services/profiles/profile_bootstrap.dart';
 import 'package:debrify/models/webdav_item.dart';
 import 'package:debrify/services/profiles/connection_resource_service.dart';
 import 'package:debrify/services/profiles/device_key_provider.dart';
@@ -28,6 +31,7 @@ import 'package:debrify/services/webdav_sync/webdav_sync_hot_merge.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_hot_models.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_manifest_publisher.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_models.dart';
+import 'package:debrify/services/webdav_sync/webdav_sync_local_adapter.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_transport.dart';
 import 'package:debrify/utils/app_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -38,6 +42,35 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 const _digest =
     '1111111111111111111111111111111111111111111111111111111111111111';
 final _now = DateTime.utc(2026, 9, 2);
+
+class _UnusedLocalAdapter extends Fake implements WebDavSyncLocalAdapter {}
+
+class _InterceptedPackageService extends ProfilePackageService {
+  _InterceptedPackageService(ProfilePackageService source, this.onExport)
+    : super(registry: source.registry, resources: source.resources);
+
+  final Future<void> Function(Map<String, String>) onExport;
+
+  @override
+  Future<ProfileGraphPackageExport> exportAllProfilesForSync({
+    required ProfileAuthorizationContext context,
+    required Map<String, String> profileIdProjection,
+    required Map<String, String> resourceIdProjection,
+    required bool includeDatabases,
+    required bool includePreferences,
+    ProfilePackageFileSinks? fileSinks,
+  }) async {
+    await onExport(profileIdProjection);
+    return super.exportAllProfilesForSync(
+      context: context,
+      profileIdProjection: profileIdProjection,
+      resourceIdProjection: resourceIdProjection,
+      includeDatabases: includeDatabases,
+      includePreferences: includePreferences,
+      fileSinks: fileSinks,
+    );
+  }
+}
 
 class _NamesTransport extends Fake
     implements WebDavSyncActivationTransport, WebDavSyncDeviceNameTransport {
@@ -110,6 +143,7 @@ void main() {
     registry = await ProfileRegistry.open(
       path: p.join(support.path, 'profiles.db'),
     );
+    ProfileBootstrap.debugInstallRegistry(registry);
     final admin = await registry.createProfile(
       name: 'Admin',
       role: UserProfileRole.admin,
@@ -210,6 +244,7 @@ void main() {
   });
 
   tearDown(() async {
+    ProfileBootstrap.debugInstallRegistry(null);
     ProfileRuntime.debugReset();
     DeviceKeyProvider.debugReset();
     AppStorage.debugReset();
@@ -406,6 +441,251 @@ void main() {
       );
       expect(report.disposition, WebDavSyncGraphTierDisposition.unchanged);
       expect(events, isEmpty);
+    },
+  );
+
+  test('seed retries identity drift once, retaining existing IDs', () async {
+    var attempts = 0;
+    final stop = StateError('stop after verifying refreshed plan');
+    final service = _InterceptedPackageService(graphBuilder.packageService, (
+      maps,
+    ) async {
+      attempts++;
+      expect(maps[localProfileId], 'profile-circle');
+      if (attempts == 1) {
+        // Simulate a stale extra identity in the first inventory/export window.
+        throw ProfileGraphIdentityChanged('resource');
+      }
+      expect(
+        maps,
+        states.state.circleToLocalProfiles!.map(
+          (key, value) => MapEntry(value, key),
+        ),
+      );
+      throw stop;
+    });
+    final source = DefaultWebDavSyncSeedSource(
+      graphBuilder: WebDavSyncGraphBuilder(service),
+      stateRepository: states,
+      localAdapter: _UnusedLocalAdapter(),
+    );
+    await expectLater(
+      source.prepare(
+        namespaceId: binding.namespaceId,
+        deviceId: snapshot.namespace.deviceId,
+        authorization: authorization,
+        localNowMs: 1,
+        serverNowMs: 1,
+        clockOffsetMs: 0,
+      ),
+      throwsA(same(stop)),
+    );
+    expect(attempts, 2);
+  });
+
+  for (final deleting in [false, true]) {
+    test(
+      deleting
+          ? 'seed retains deletion identity and publishes its tombstone'
+          : 'seed recovers from actual resource creation during export',
+      () async {
+        // Another profile's registry mutation must not revoke the Admin's
+        // authorization; same-profile revocation should still fail closed.
+        final owner = await registry.createProfile(
+          name: 'Resource owner',
+          role: UserProfileRole.member,
+          actingProfileId: authorization.profileId,
+          actingAuthorizationRevision: authorization.authorizationRevision,
+          actingSessionEpoch: authorization.sessionEpoch,
+        );
+        authorization = await ProfileAuthorizationContext.capture(registry);
+        var nextId = 0;
+        Future<ConnectionResource> create() async {
+          final resource = ConnectionResource(
+            id: 'test-resource-${nextId++}',
+            type: ConnectionResourceType.realDebrid,
+            label: 'Test',
+            ownerProfileId: owner.id,
+            publicConfig: const {'schemaVersion': 1},
+            authorizationRevision: 1,
+            enabled: true,
+          );
+          final sealed = await DeviceKeyProvider.cipher.seal(
+            utf8.encode('{"apiKey":"test"}'),
+            associatedData: ConnectionResourceService.associatedDataForSecret(
+              resourceId: resource.id,
+              type: resource.type,
+              ownerProfileId: owner.id,
+              publicSchemaVersion: 1,
+              payloadVersion: 1,
+            ),
+          );
+          await registry.insertResource(
+            resource: resource,
+            sealedSecretPayload: sealed,
+            secretPayloadVersion: 1,
+            ownerPermissions: ResourcePermission.use.bit,
+          );
+          return resource;
+        }
+
+        final existing = await create();
+        states.state = states.state.copyWith(
+          circleToLocalResources: {'resource-circle': existing.id},
+        );
+        final adapter = ProfileWebDavSyncLocalAdapter(registry);
+        if (deleting) {
+          await registry.deleteOwnedResource(
+            resourceId: existing.id,
+            ownerProfileId: owner.id,
+            revokeBorrowers: true,
+          );
+          await adapter.drainRegistryTombstoneOutbox();
+          authorization = await ProfileAuthorizationContext.capture(registry);
+        }
+        var attempts = 0;
+        ConnectionResource? added;
+        final source = DefaultWebDavSyncSeedSource(
+          graphBuilder: WebDavSyncGraphBuilder(
+            _InterceptedPackageService(graphBuilder.packageService, (_) async {
+              attempts++;
+              if (attempts == 1 && !deleting) added = await create();
+            }),
+          ),
+          stateRepository: states,
+          localAdapter: adapter,
+        );
+        final now = DateTime.now().millisecondsSinceEpoch;
+        final seed = await source.prepare(
+          namespaceId: binding.namespaceId,
+          deviceId: snapshot.namespace.deviceId,
+          authorization: authorization,
+          localNowMs: now,
+          serverNowMs: now,
+          clockOffsetMs: 0,
+        );
+        try {
+          expect(attempts, deleting ? 1 : 2);
+          expect(
+            seed.retainedIdentityMaps.circleToLocalResources['resource-circle'],
+            existing.id,
+          );
+          expect(
+            states.state.circleToLocalResources!['resource-circle'],
+            existing.id,
+          );
+          if (deleting) {
+            expect(seed.identityMaps.circleToLocalResources, isEmpty);
+            expect(seed.resourceMap, isEmpty);
+            expect(
+              seed
+                  .circleResources!
+                  .resources['resource-circle']!
+                  .metadata
+                  .value,
+              isNull,
+            );
+          } else {
+            expect(
+              seed.identityMaps.localToCircleResources,
+              contains(added!.id),
+            );
+            expect(seed.resourceMap.length, 2);
+          }
+          await seed.beforeRootCommit();
+        } finally {
+          await seed.dispose();
+        }
+      },
+    );
+  }
+
+  test(
+    'retained deleted identities do not trigger repeated publication',
+    () async {
+      states.state = states.state.copyWith(
+        circleToLocalResources: {'deleted-circle': 'deleted-local'},
+      );
+      final report = await tier().maintain(
+        authorization: authorization,
+        runBootstrapMaintenance: false,
+      );
+      expect(report.disposition, WebDavSyncGraphTierDisposition.unchanged);
+      expect(events, ['scan']);
+    },
+  );
+
+  for (final mismatch in [true, false]) {
+    test(
+      'seed bounds retries for ${mismatch ? 'identity drift' : 'other errors'}',
+      () async {
+        var attempts = 0;
+        final error = mismatch
+            ? ProfileGraphIdentityChanged('resource')
+            : StateError('disk failure');
+        final source = DefaultWebDavSyncSeedSource(
+          graphBuilder: WebDavSyncGraphBuilder(
+            _InterceptedPackageService(graphBuilder.packageService, (_) async {
+              attempts++;
+              throw error;
+            }),
+          ),
+          stateRepository: states,
+          localAdapter: _UnusedLocalAdapter(),
+        );
+        await expectLater(
+          source.prepare(
+            namespaceId: binding.namespaceId,
+            deviceId: snapshot.namespace.deviceId,
+            authorization: authorization,
+            localNowMs: 1,
+            serverNowMs: 1,
+            clockOffsetMs: 0,
+          ),
+          throwsA(same(error)),
+        );
+        expect(attempts, mismatch ? 2 : 1);
+      },
+    );
+  }
+
+  test('maintenance delegates stale projection to fresh publication', () async {
+    graphBuilder = WebDavSyncGraphBuilder(
+      _InterceptedPackageService(graphBuilder.packageService, (_) async {
+        throw ProfileGraphIdentityChanged('resource');
+      }),
+    );
+    final report = await tier().maintain(authorization: authorization);
+    expect(report.disposition, WebDavSyncGraphTierDisposition.localPublished);
+    expect(events, ['scan', 'publish']);
+  });
+
+  test('sync rejects an empty projection for a nonempty registry', () async {
+    await expectLater(
+      graphBuilder.packageService.exportAllProfilesForSync(
+        context: authorization,
+        profileIdProjection: const {},
+        resourceIdProjection: const {},
+        includeDatabases: false,
+        includePreferences: false,
+      ),
+      throwsA(isA<ProfileGraphIdentityChanged>()),
+    );
+  });
+
+  test(
+    'removed resource identities produce the retryable export error',
+    () async {
+      await expectLater(
+        graphBuilder.packageService.exportAllProfilesForSync(
+          context: authorization,
+          profileIdProjection: {localProfileId: 'profile-circle'},
+          resourceIdProjection: const {'removed-resource': 'resource-circle'},
+          includeDatabases: false,
+          includePreferences: false,
+        ),
+        throwsA(isA<ProfileGraphIdentityChanged>()),
+      );
     },
   );
 
