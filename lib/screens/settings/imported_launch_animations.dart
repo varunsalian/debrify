@@ -149,31 +149,6 @@ class _ImportedLaunchAnimationsState extends State<ImportedLaunchAnimations> {
     await _load();
   }
 
-  Future<void> _delete(InstalledLaunchAnimation entry) => _run(() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Delete ${entry.name}?'),
-        content: const Text(
-          'This removes the animation from this device. Profiles using it will use their built-in animation.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true) return;
-    await _library.delete(entry.id);
-    await StorageService.clearImportedLaunchAnimationIf(entry.id);
-    if (mounted) widget.onSelectionChanged();
-  });
   @override
   Widget build(BuildContext context) => SettingsSection(
     title: 'Imported animations',
@@ -226,7 +201,7 @@ class _ImportedLaunchAnimationsState extends State<ImportedLaunchAnimations> {
             if (confirmed == true) await _library.resetDamagedIndex();
           }),
         ),
-      for (final entry in _entries) ...[
+      for (final entry in _entries)
         SettingsTile(
           icon: StorageService.importedLaunchAnimationCached == entry.id
               ? Icons.check_circle
@@ -237,15 +212,6 @@ class _ImportedLaunchAnimationsState extends State<ImportedLaunchAnimations> {
             if (!_busy) unawaited(_preview(entry));
           },
         ),
-        SettingsTile(
-          icon: Icons.delete_outline,
-          title: 'Delete ${entry.name}',
-          subtitle: 'Remove from this device',
-          onTap: () async {
-            if (!_busy) unawaited(_delete(entry));
-          },
-        ),
-      ],
     ],
   );
 }
@@ -326,6 +292,14 @@ class _ImportedLaunchDetailState extends State<ImportedLaunchDetail> {
                   OutlinedButton(
                     onPressed: _saving ? null : _send,
                     child: const Text('Send to TV'),
+                  ),
+                  OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Theme.of(context).colorScheme.error,
+                    ),
+                    onPressed: _saving ? null : _remove,
+                    icon: const Icon(Icons.delete_outline),
+                    label: const Text('Remove animation'),
                   ),
                   FilledButton(
                     onPressed: !_ready || _saving ? null : _use,
@@ -444,6 +418,46 @@ class _ImportedLaunchDetailState extends State<ImportedLaunchDetail> {
         throw StateError('Profile changed. Select the animation again.');
       }
       await StorageService.setImportedLaunchAnimation(widget.entry.id);
+      if (mounted) {
+        widget.onSelectionChanged();
+        Navigator.pop(context);
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('$error')));
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  Future<void> _remove() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Remove ${widget.entry.name}?'),
+        content: const Text(
+          'This removes the animation from this device. Profiles using it will use their built-in animation.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Remove'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() => _saving = true);
+    try {
+      await LaunchAnimationLibrary.instance.delete(widget.entry.id);
+      await StorageService.clearImportedLaunchAnimationIf(widget.entry.id);
       if (mounted) {
         widget.onSelectionChanged();
         Navigator.pop(context);

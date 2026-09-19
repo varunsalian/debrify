@@ -36,6 +36,7 @@ void main() {
           home: ImportedLaunchDetail(entry: entry, onSelectionChanged: () {}),
         ),
       );
+      expect(find.text('Remove animation'), findsOneWidget);
       expect(
         tester
             .widget<FilledButton>(
@@ -44,6 +45,11 @@ void main() {
             .onPressed,
         isNull,
       );
+      await tester.tap(find.text('Remove animation'));
+      await tester.pump();
+      expect(find.text('Remove ${entry.name}?'), findsOneWidget);
+      await tester.tap(find.text('Cancel'));
+      await tester.pump();
       for (
         var attempt = 0;
         attempt < 40 && find.byType(ImportedLaunchPlayer).evaluate().isEmpty;
