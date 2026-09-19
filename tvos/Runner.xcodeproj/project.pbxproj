@@ -567,6 +567,7 @@
 					"@executable_path/Frameworks",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = "com.varunsalian.debrifytv$(DEBRIFY_BUNDLE_SUFFIX)";
+				OTHER_LDFLAGS = "$(inherited) -Wl,-needed_framework,AVKit";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "appletvsimulator appletvos";
 				SWIFT_OBJC_BRIDGING_HEADER = "Runner/Runner-Bridging-Header.h";
@@ -656,6 +657,7 @@
 					"@executable_path/Frameworks",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = "com.varunsalian.debrifytv$(DEBRIFY_BUNDLE_SUFFIX)";
+				OTHER_LDFLAGS = "$(inherited) -Wl,-needed_framework,AVKit";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "appletvsimulator appletvos";
 				SWIFT_OBJC_BRIDGING_HEADER = "Runner/Runner-Bridging-Header.h";
@@ -739,6 +741,7 @@
 					"@executable_path/Frameworks",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = "com.varunsalian.debrifytv$(DEBRIFY_BUNDLE_SUFFIX)";
+				OTHER_LDFLAGS = "$(inherited) -Wl,-needed_framework,AVKit";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "appletvsimulator appletvos";
 				SWIFT_OBJC_BRIDGING_HEADER = "Runner/Runner-Bridging-Header.h";

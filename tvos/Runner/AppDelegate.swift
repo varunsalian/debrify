@@ -727,13 +727,28 @@ class AppDelegate: FlutterAppDelegate {
             name: "debrify/tvos_display_match",
             binaryMessenger: flutterViewController.binaryMessenger)
         displayMatchChannel.setMethodCallHandler { [weak self] call, result in
+            guard call.method == "clear" || call.method == "apply" else {
+                result(FlutterMethodNotImplemented)
+                return
+            }
             guard let self, let window = self.window else {
                 result(FlutterError(code: "display_unavailable", message: nil, details: nil))
                 return
             }
+            // AVKit supplies this UIWindow category. An Objective-C missing
+            // selector abort cannot be caught by Dart's PlatformException handler.
+            guard window.responds(to: #selector(getter: UIWindow.avDisplayManager)) else {
+                NSLog("[DisplayMatch] display manager unavailable; skipping")
+                result(FlutterError(
+                    code: "display_unavailable",
+                    message: "Display matching is unavailable on this window.",
+                    details: nil))
+                return
+            }
+            let displayManager = window.avDisplayManager
             switch call.method {
             case "clear":
-                window.avDisplayManager.preferredDisplayCriteria = nil
+                displayManager.preferredDisplayCriteria = nil
                 NSLog("[DisplayMatch] cleared")
                 result(nil)
             case "apply":
@@ -785,7 +800,7 @@ class AppDelegate: FlutterAppDelegate {
                         details: status))
                     return
                 }
-                window.avDisplayManager.preferredDisplayCriteria = AVDisplayCriteria(
+                displayManager.preferredDisplayCriteria = AVDisplayCriteria(
                     refreshRate: refreshRate,
                     formatDescription: description)
                 NSLog(
@@ -796,10 +811,10 @@ class AppDelegate: FlutterAppDelegate {
                     sourceWidth,
                     sourceHeight,
                     matchResolution.description,
-                    window.avDisplayManager.isDisplayCriteriaMatchingEnabled.description)
+                    displayManager.isDisplayCriteriaMatchingEnabled.description)
                 result([
-                    "matchingEnabled": window.avDisplayManager.isDisplayCriteriaMatchingEnabled,
-                    "switchInProgress": window.avDisplayManager.isDisplayModeSwitchInProgress,
+                    "matchingEnabled": displayManager.isDisplayCriteriaMatchingEnabled,
+                    "switchInProgress": displayManager.isDisplayModeSwitchInProgress,
                 ])
             default:
                 result(FlutterMethodNotImplemented)
