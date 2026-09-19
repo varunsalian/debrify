@@ -1,4 +1,6 @@
+import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data' show Endian;
 
 class SubtitleCue {
   final int startMs;
@@ -18,8 +20,7 @@ class SubtitleCueParser {
     if (!file.existsSync()) return [];
 
     final bytes = await file.readAsBytes();
-
-    final content = String.fromCharCodes(bytes);
+    final content = _decodeContent(bytes);
 
     final lower = filePath.toLowerCase();
     if (lower.endsWith('.srt')) {
@@ -32,11 +33,59 @@ class SubtitleCueParser {
     return _parseSrt(content);
   }
 
+  /// Subtitle downloads stay as raw bytes so libmpv can perform its own
+  /// charset detection. This parser must decode those bytes independently for
+  /// the sync picker and auto-sync services. Prefer Unicode encodings, then
+  /// retain the old one-byte mapping for legacy files that are not UTF-8.
+  static String _decodeContent(List<int> bytes) {
+    if (bytes.isEmpty) return '';
+
+    if (_startsWith(bytes, const [0xEF, 0xBB, 0xBF])) {
+      return utf8.decode(bytes.sublist(3), allowMalformed: true);
+    }
+    if (_startsWith(bytes, const [0xFF, 0xFE])) {
+      return _decodeUtf16(bytes, 2, Endian.little);
+    }
+    if (_startsWith(bytes, const [0xFE, 0xFF])) {
+      return _decodeUtf16(bytes, 2, Endian.big);
+    }
+
+    try {
+      return utf8.decode(bytes);
+    } on FormatException {
+      // Preserve compatibility with legacy ISO-8859-1-style subtitle files.
+      // This is also equivalent to the previous String.fromCharCodes(bytes)
+      // behavior, but only after the common Unicode formats are ruled out.
+      return latin1.decode(bytes);
+    }
+  }
+
+  static bool _startsWith(List<int> bytes, List<int> prefix) {
+    if (bytes.length < prefix.length) return false;
+    for (var i = 0; i < prefix.length; i++) {
+      if (bytes[i] != prefix[i]) return false;
+    }
+    return true;
+  }
+
+  static String _decodeUtf16(List<int> bytes, int offset, Endian endian) {
+    final codeUnits = <int>[];
+    for (var i = offset; i + 1 < bytes.length; i += 2) {
+      codeUnits.add(
+        endian == Endian.little
+            ? bytes[i] | (bytes[i + 1] << 8)
+            : (bytes[i] << 8) | bytes[i + 1],
+      );
+    }
+    if ((bytes.length - offset).isOdd) {
+      codeUnits.add(0xFFFD);
+    }
+    return String.fromCharCodes(codeUnits);
+  }
+
   static List<SubtitleCue> _parseSrt(String content) {
     final cues = <SubtitleCue>[];
-    final blocks = content
-        .replaceAll('\r\n', '\n')
-        .split(RegExp(r'\n\s*\n'));
+    final blocks = content.replaceAll('\r\n', '\n').split(RegExp(r'\n\s*\n'));
 
     for (final block in blocks) {
       final lines = block.trim().split('\n');
@@ -81,7 +130,9 @@ class SubtitleCueParser {
 
     // Skip the WEBVTT header
     final headerEnd = normalized.indexOf('\n\n');
-    final body = headerEnd >= 0 ? normalized.substring(headerEnd + 2) : normalized;
+    final body = headerEnd >= 0
+        ? normalized.substring(headerEnd + 2)
+        : normalized;
 
     final blocks = body.split(RegExp(r'\n\s*\n'));
 
@@ -157,7 +208,9 @@ class SubtitleCueParser {
       }
 
       if (!trimmed.toLowerCase().startsWith('dialogue:')) continue;
-      if (textFieldIndex < 0 || startFieldIndex < 0 || endFieldIndex < 0) continue;
+      if (textFieldIndex < 0 || startFieldIndex < 0 || endFieldIndex < 0) {
+        continue;
+      }
 
       final afterDialogue = trimmed.substring(trimmed.indexOf(':') + 1);
       // Split only up to textFieldIndex commas — text field may contain commas
@@ -238,7 +291,9 @@ class SubtitleCueParser {
       final m = int.parse(parts[1]);
       final secParts = parts[2].split('.');
       final s = int.parse(secParts[0]);
-      final cs = secParts.length > 1 ? int.parse(secParts[1].padRight(2, '0').substring(0, 2)) : 0;
+      final cs = secParts.length > 1
+          ? int.parse(secParts[1].padRight(2, '0').substring(0, 2))
+          : 0;
       return h * 3600000 + m * 60000 + s * 1000 + cs * 10;
     } catch (_) {
       return -1;
