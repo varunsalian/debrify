@@ -1614,27 +1614,27 @@ class StorageService {
     'ticket',
   };
 
-  /// Control skin for the NATIVE Android TV player: 'marquee' (editorial
-  /// serif — the default), 'ott' (the Apple TV dock ported to Kotlin),
+  /// Control skin for the NATIVE Android TV player: 'ott' (the Apple TV dock
+  /// ported to Kotlin — the default), 'marquee' (editorial serif),
   /// 'classic' (the legacy Cinema Mode controls), or one of the other
   /// premium dock skins ('frost', 'broadcast', 'pulse', 'ticket'). Android TV only; tvOS runs the
   /// Flutter player and has nothing to choose. Read once per player launch — the native side via
   /// `ProfilePreferenceProjection.getString("tv_player_controls_style")`
   /// (falling back to `flutter.tv_player_controls_style` in
-  /// FlutterSharedPreferences). Unknown or unset coerces to 'marquee' on
+  /// FlutterSharedPreferences). Unknown or unset coerces to 'ott' on
   /// BOTH read and write so the two readers can never disagree about the
   /// default.
   static Future<String> getTvPlayerControlsStyle() async {
     final prefs = await ProfilePreferences.instance();
     final raw = prefs.getString(_tvPlayerControlsStyleKey);
-    return _tvPlayerControlsStyles.contains(raw) ? raw! : 'marquee';
+    return _tvPlayerControlsStyles.contains(raw) ? raw! : 'ott';
   }
 
   static Future<void> setTvPlayerControlsStyle(String style) async {
     final prefs = await ProfilePreferences.instance();
     await prefs.setString(
       _tvPlayerControlsStyleKey,
-      _tvPlayerControlsStyles.contains(style) ? style : 'marquee',
+      _tvPlayerControlsStyles.contains(style) ? style : 'ott',
     );
   }
 

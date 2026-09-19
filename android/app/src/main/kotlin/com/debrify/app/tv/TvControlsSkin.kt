@@ -25,7 +25,7 @@ package com.debrify.app.tv
  *  - PULSE     — accent-glow bar and focus rings in the app indigo.
  *  - TICKET    — single opaque band with the progress line on its top edge.
  *
- * Unknown raw values resolve to MARQUEE — the Dart setter coerces on write too,
+ * Unknown raw values resolve to OTT — the Dart setter coerces on write too,
  * so the two readers can never disagree about the default.
  */
 enum class TvControlsSkin {
@@ -38,10 +38,11 @@ enum class TvControlsSkin {
             "classic" -> CLASSIC
             "ott" -> OTT
             "frost" -> FROST
+            "marquee" -> MARQUEE
             "broadcast" -> BROADCAST
             "pulse" -> PULSE
             "ticket" -> TICKET
-            else -> MARQUEE
+            else -> OTT
         }
     }
 }

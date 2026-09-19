@@ -57,7 +57,7 @@ String tvPlayerControlsStyleLabel(String style) {
   for (final c in kTvPlayerControlsStyleChoices) {
     if (c.value == style) return c.label;
   }
-  return 'Marquee';
+  return 'OTT';
 }
 
 /// Native TV player control-skin picker (`tv_player_controls_style`).
@@ -76,7 +76,7 @@ class TvPlayerControlsStylePage extends StatefulWidget {
 
 class _TvPlayerControlsStylePageState extends State<TvPlayerControlsStylePage> {
   bool _loading = true;
-  String _style = 'marquee';
+  String _style = 'ott';
 
   /// Non-focusable marker around the options card; used on TV to hand entry
   /// focus to its first focusable descendant (the first option row).
