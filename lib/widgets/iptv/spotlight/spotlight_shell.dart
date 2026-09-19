@@ -99,7 +99,11 @@ class SpotlightShell extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Expanded(
-                  flex: 5,
+                  // The guide benefits more from vertical space than the
+                  // programme hero: this adds roughly one full channel row
+                  // on a 540p logical TV canvas while the hero's dense mode
+                  // keeps its preview, title and metadata legible.
+                  flex: 4,
                   child: KeyedSubtree(
                     key: const ValueKey<String>('spotlight-hero-slot'),
                     child: heroSlot,
@@ -109,7 +113,7 @@ class SpotlightShell extends StatelessWidget {
                 _topControls(),
                 const SizedBox(height: 8),
                 Expanded(
-                  flex: 5,
+                  flex: 6,
                   child: KeyedSubtree(
                     key: const ValueKey<String>('spotlight-content-slot'),
                     child: contentSlot,
@@ -338,7 +342,7 @@ class SpotlightShell extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Expanded(
-            flex: 5,
+            flex: 4,
             child: KeyedSubtree(
               key: const ValueKey<String>('spotlight-hero-slot'),
               child: heroSlot,
@@ -348,7 +352,7 @@ class SpotlightShell extends StatelessWidget {
           _topControls(),
           const SizedBox(height: 8),
           Expanded(
-            flex: 5,
+            flex: 6,
             child: KeyedSubtree(
               key: const ValueKey<String>('spotlight-content-slot'),
               child: contentSlot,

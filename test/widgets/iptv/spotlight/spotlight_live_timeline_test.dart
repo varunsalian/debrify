@@ -1357,6 +1357,43 @@ void main() {
   });
 
   testWidgets(
+    'selecting an oversized current programme keeps the now window anchored',
+    (tester) async {
+      final now = DateTime(2030, 1, 1, 8, 45);
+      final channel = _channel('News', 'news-url');
+      final longProgramme = _programme(
+        'Morning show',
+        DateTime(2030, 1, 1, 7),
+        const Duration(hours: 2),
+      );
+      final selections = <SpotlightTimelineSelection>[];
+
+      await tester.pumpWidget(
+        _host(
+          channels: [channel],
+          autofocus: true,
+          now: () => now,
+          windowDuration: const Duration(minutes: 90),
+          loader: (_) async => [longProgramme],
+          onSelection: selections.add,
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 375));
+      await tester.pump();
+
+      expect(find.text('08:30'), findsOneWidget);
+      expect(find.byKey(const ValueKey('spotlight-jump-to-now')), findsNothing);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+      await tester.pump();
+
+      expect(selections.last.programme, same(longProgramme));
+      expect(find.text('08:30'), findsOneWidget);
+      expect(find.byKey(const ValueKey('spotlight-jump-to-now')), findsNothing);
+    },
+  );
+
+  testWidgets(
     'controller hands focus to a channel and identity stays playable',
     (tester) async {
       final controller = IptvSpotlightTimelineController();
@@ -1429,6 +1466,7 @@ Widget _host({
   bool autofocus = false,
   DateTime Function() now = DateTime.now,
   DateTime? initialWindowStart,
+  Duration windowDuration = const Duration(hours: 4),
   IptvSpotlightTimelineController? controller,
   SpotlightChannelActivate? onChannel,
   SpotlightProgrammeActivate? onProgramme,
@@ -1453,6 +1491,7 @@ Widget _host({
             autofocus: autofocus,
             now: now,
             initialWindowStart: initialWindowStart,
+            windowDuration: windowDuration,
             controller: controller,
             scheduleLoader: loader,
             onChannelActivate: onChannel ?? (_) {},

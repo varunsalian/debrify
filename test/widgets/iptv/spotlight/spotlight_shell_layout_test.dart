@@ -106,8 +106,15 @@ void main() {
 
       final previewSize = tester.getSize(preview);
       final hero = find.byKey(const ValueKey<String>('spotlight-hero'));
+      final content = find.byKey(
+        const ValueKey<String>('spotlight-content-slot'),
+      );
       expect(previewSize.width / previewSize.height, closeTo(16 / 9, 0.001));
       expect(previewSize.height, closeTo(tester.getSize(hero).height, 0.01));
+      expect(
+        tester.getSize(content).height / tester.getSize(hero).height,
+        closeTo(1.5, 0.01),
+      );
       expect(
         tester.getTopRight(preview).dx,
         closeTo(tester.getTopRight(hero).dx, 0.01),
@@ -145,6 +152,14 @@ void main() {
       expect(
         find.byKey(const ValueKey<String>('native-preview-probe')),
         findsOneWidget,
+      );
+      final hero = find.byKey(const ValueKey<String>('spotlight-hero-slot'));
+      final content = find.byKey(
+        const ValueKey<String>('spotlight-content-slot'),
+      );
+      expect(
+        tester.getSize(content).height / tester.getSize(hero).height,
+        closeTo(1.5, 0.01),
       );
 
       await tester.tap(

@@ -6446,7 +6446,9 @@ class IptvResultsViewState extends State<IptvResultsView>
           ),
           onChannelActivate: (entry) => unawaited(_playChannel(entry.channel)),
           onProgrammeActivate: _activateSpotlightProgramme,
-          windowDuration: const Duration(hours: 3),
+          // Keep short programmes readable on a television: the preceding
+          // half-hour ruler interval plus the following hour.
+          windowDuration: const Duration(minutes: 90),
           height: constraints.maxHeight,
           identityWidth: mode == IptvSpotlightLayoutMode.wide ? 300 : 260,
           dense: true,
