@@ -368,6 +368,8 @@ class StorageService {
   static const String _contentDisplayMatchModeKey =
       'content_display_match_mode';
   static const String _updateAutoCheckEnabledKey = 'update_auto_check_enabled';
+  static const String _updateIncludeAlphaEnabledKey =
+      'update_include_alpha_enabled';
   static const String _updateIgnoredVersionKey = 'update_ignored_version';
 
   // External Player settings
@@ -9932,6 +9934,16 @@ class StorageService {
   static Future<void> setUpdateAutoCheckEnabled(bool enabled) async {
     final prefs = await DevicePreferences.instance();
     await prefs.setBool(_updateAutoCheckEnabledKey, enabled);
+  }
+
+  static Future<bool> getUpdateIncludeAlphaEnabled() async {
+    final prefs = await DevicePreferences.instance();
+    return prefs.getBool(_updateIncludeAlphaEnabledKey) ?? false;
+  }
+
+  static Future<void> setUpdateIncludeAlphaEnabled(bool enabled) async {
+    final prefs = await DevicePreferences.instance();
+    await prefs.setBool(_updateIncludeAlphaEnabledKey, enabled);
   }
 
   static Future<String?> getIgnoredUpdateVersion() async {

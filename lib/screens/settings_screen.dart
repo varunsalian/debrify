@@ -263,6 +263,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   StreamSubscription<Map<String, dynamic>>? _updateDownloadSub;
   String? _updateDownloadTaskId;
   bool _autoUpdateChecksEnabled = true;
+  bool _includeAlphaUpdates = false;
   bool _diagnosticExportVisible = false;
   bool _exportingDiagnostics = false;
   bool _tvKeyboardEnabled = true;
@@ -625,6 +626,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
         () => StorageService.getIptvPlaylists(forSettings: true),
         [],
       ),
+      summaries.read(
+        'Alpha updates',
+        () => StorageService.getUpdateIncludeAlphaEnabled(),
+        false,
+      ),
     ]);
 
     if (!mounted || ProfileRuntime.scope.value != startingScope) return;
@@ -677,6 +683,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final diagnosticExportVisible = results[41] as bool;
     final pendingCredentialTypes = results[42] as Set<ConnectionResourceType>;
     final configuredIptvPlaylists = results[43] as List;
+    final includeAlphaUpdates = results[44] as bool;
 
     // Set initial state from cached data
     // Use cached account info if available
@@ -894,6 +901,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
     _loading = false;
     _autoUpdateChecksEnabled = autoCheckEnabled;
+    _includeAlphaUpdates = includeAlphaUpdates;
     _tvKeyboardEnabled = tvKeyboardEnabled;
     _tvUiScalePercent = tvUiScalePercent;
     _tvRenderQuality = tvRenderQuality;
@@ -1316,6 +1324,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       checkingUpdates: _checkingUpdates,
       autoUpdateChecksEnabled: _autoUpdateChecksEnabled,
       onToggleAutoUpdateChecks: _toggleAutoUpdateChecks,
+      includeAlphaUpdates: _includeAlphaUpdates,
+      onToggleIncludeAlphaUpdates: _toggleIncludeAlphaUpdates,
       tvKeyboardEnabled: _tvKeyboardEnabled,
       onToggleTvKeyboard: _toggleTvKeyboard,
       textBrightnessLabel: textBrightnessLabel(_textBrightness),
@@ -1438,6 +1448,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       checkingUpdates: _checkingUpdates,
       autoUpdateChecksEnabled: _autoUpdateChecksEnabled,
       onToggleAutoUpdateChecks: _toggleAutoUpdateChecks,
+      includeAlphaUpdates: _includeAlphaUpdates,
+      onToggleIncludeAlphaUpdates: _toggleIncludeAlphaUpdates,
       tvKeyboardEnabled: _tvKeyboardEnabled,
       onToggleTvKeyboard: _toggleTvKeyboard,
       showSupportDonation: _supportDonation.hasProviders,
@@ -2807,6 +2819,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
         keywords: const ['notify', 'releases', 'startup'],
         toggleValue: () => _autoUpdateChecksEnabled,
         onToggle: _toggleAutoUpdateChecks,
+      ),
+      SettingsSearchEntry(
+        icon: SettingsRows.includeAlphaUpdates.icon,
+        title: SettingsRows.includeAlphaUpdates.title,
+        subtitle: SettingsRows.includeAlphaUpdates.subtitle,
+        category: 'About',
+        keywords: const ['alpha', 'beta', 'prerelease', 'experimental'],
+        toggleValue: () => _includeAlphaUpdates,
+        onToggle: _toggleIncludeAlphaUpdates,
       ),
       nav(
         SettingsRows.checkUpdates,
@@ -6642,6 +6663,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _checkForAppUpdates() async {
+    if (!await _ensureProfileFeature(ProfileFeature.appUpdates)) return;
+    if (!mounted) return;
     if (_checkingUpdates) return;
     if (_currentVersionName.isEmpty) return;
     await StorageService.setIgnoredUpdateVersion(null);
@@ -6654,6 +6677,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     try {
       final summary = await UpdateService.checkForUpdates(
         currentVersion: _currentVersionName,
+        includePrereleases: _includeAlphaUpdates,
       );
       if (!mounted) return;
       setState(() {
@@ -6844,10 +6868,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _toggleAutoUpdateChecks(bool enabled) async {
+    if (!await _ensureProfileFeature(ProfileFeature.appUpdates)) return;
+    if (!mounted) return;
     setState(() {
       _autoUpdateChecksEnabled = enabled;
     });
     await StorageService.setUpdateAutoCheckEnabled(enabled);
+  }
+
+  Future<void> _toggleIncludeAlphaUpdates(bool enabled) async {
+    if (!await _ensureProfileFeature(ProfileFeature.appUpdates)) return;
+    if (!mounted) return;
+    setState(() {
+      _includeAlphaUpdates = enabled;
+      _updateSubtitle = enabled
+          ? 'Check for alpha and beta builds'
+          : 'Check for beta updates';
+    });
+    await StorageService.setUpdateIncludeAlphaEnabled(enabled);
   }
 
   Future<void> _toggleTvKeyboard(bool enabled) async {
@@ -7528,6 +7566,8 @@ class _SettingsLayout extends StatelessWidget {
   final bool checkingUpdates;
   final bool autoUpdateChecksEnabled;
   final ValueChanged<bool> onToggleAutoUpdateChecks;
+  final bool includeAlphaUpdates;
+  final ValueChanged<bool> onToggleIncludeAlphaUpdates;
   final bool tvKeyboardEnabled;
   final ValueChanged<bool> onToggleTvKeyboard;
   final bool showSupportDonation;
@@ -7623,6 +7663,8 @@ class _SettingsLayout extends StatelessWidget {
     required this.checkingUpdates,
     required this.autoUpdateChecksEnabled,
     required this.onToggleAutoUpdateChecks,
+    required this.includeAlphaUpdates,
+    required this.onToggleIncludeAlphaUpdates,
     required this.tvKeyboardEnabled,
     required this.onToggleTvKeyboard,
     required this.showSupportDonation,
@@ -8100,6 +8142,11 @@ class _SettingsLayout extends StatelessWidget {
                   value: autoUpdateChecksEnabled,
                   onChanged: onToggleAutoUpdateChecks,
                 ),
+                SettingsToggleTile.spec(
+                  SettingsRows.includeAlphaUpdates,
+                  value: includeAlphaUpdates,
+                  onChanged: onToggleIncludeAlphaUpdates,
+                ),
                 SettingsTile.spec(
                   SettingsRows.checkUpdates,
                   subtitle: updateSubtitle,
@@ -8504,6 +8551,11 @@ class _SettingsLayout extends StatelessWidget {
                       SettingsRows.autoUpdate,
                       value: autoUpdateChecksEnabled,
                       onChanged: onToggleAutoUpdateChecks,
+                    ),
+                    SettingsToggleTile.spec(
+                      SettingsRows.includeAlphaUpdates,
+                      value: includeAlphaUpdates,
+                      onChanged: onToggleIncludeAlphaUpdates,
                     ),
                     SettingsTile.spec(
                       SettingsRows.checkUpdates,

@@ -231,6 +231,9 @@ flutter:
     - assets/shaders/moonlit_ocean.frag
 
   assets:
+    # PackageInfo loses prerelease labels in iOS/macOS bundles. Keep the
+    # source version available so update checks can restore full SemVer.
+    - pubspec.yaml
     - assets/app_icon.png
     - assets/app_icon_foreground.png
     - assets/images/profile_gate_lighthouse.png

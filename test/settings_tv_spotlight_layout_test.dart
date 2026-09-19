@@ -62,6 +62,8 @@ SettingsTvLayout _layout(
   checkingUpdates: false,
   autoUpdateChecksEnabled: true,
   onToggleAutoUpdateChecks: _toggleNoop,
+  includeAlphaUpdates: false,
+  onToggleIncludeAlphaUpdates: _toggleNoop,
   tvKeyboardEnabled: true,
   onToggleTvKeyboard: _toggleNoop,
   textBrightnessLabel: 'Bright',
@@ -359,6 +361,37 @@ void main() {
     expect(
       FocusManager.instance.primaryFocus?.debugLabel,
       'settings-tv-pane-2',
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('alpha update opt-in is reachable in the About pane', (
+    tester,
+  ) async {
+    final entry = FocusNode(debugLabel: 'settings-test-entry-alpha-updates');
+    addTearDown(entry.dispose);
+    await _pumpTv(tester, const Size(960, 540), entry);
+
+    entry.requestFocus();
+    await tester.pump();
+    for (var index = 0; index < 15; index++) {
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pump();
+    }
+    expect(
+      FocusManager.instance.primaryFocus?.debugLabel,
+      'settings-tv-rail-15',
+    );
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pump();
+
+    expect(find.text('Include Alpha Builds'), findsOneWidget);
+    expect(
+      FocusManager.instance.primaryFocus?.debugLabel,
+      'settings-tv-pane-1',
     );
     expect(tester.takeException(), isNull);
   });

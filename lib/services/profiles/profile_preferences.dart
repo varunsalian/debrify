@@ -884,6 +884,7 @@ class DevicePreferences {
     'remote_tv_device_name',
     'remote_last_device',
     'update_auto_check_enabled',
+    'update_include_alpha_enabled',
     'update_ignored_version',
     'support_remote_config_cache_v1',
     'dismissed_donation_campaign_ids_v1',
