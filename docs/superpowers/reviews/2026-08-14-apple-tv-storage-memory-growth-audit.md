@@ -381,7 +381,8 @@ introduced in `fc24700a`.
    artwork, and Top Shelf as one device budget rather than isolated counters.
 5. **Bound channel imports and archive expansion.** Close the remaining direct
    RAM-amplification path.
-6. **Measure the bounded large paths.** M3U 50 MB, Xtream 100 MB, XMLTV 300 MB,
+6. **Measure the bounded large paths.** M3U 250 MB (disk-staged streaming),
+   Xtream 100 MB, XMLTV 300 MB,
    a catalog refresh during video playback, cache purge, and restore/profile
    switch on the oldest supported Apple TV.
 

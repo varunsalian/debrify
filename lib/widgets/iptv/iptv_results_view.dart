@@ -357,9 +357,9 @@ class IptvResultsViewState extends State<IptvResultsView>
   /// at present — tens of seconds on a big panel), so without this any
   /// re-entry in that window (Stremio addons-changed listener, a settings
   /// return, refreshPlaylists) started a SECOND full pipeline. The first was
-  /// never cancelled — only its result discarded by ticket — so both kept
-  /// buffering up to 50 MB of HTTP body and both held a full parse isolate:
-  /// ~200 MB of transient heap, an OOM on a 1 GB box.
+  /// never cancelled — only its result discarded by ticket. URL M3Us are now
+  /// disk-staged and streamed, but duplicate pipelines would still duplicate
+  /// the network transfer, staging space, parse worker and SQLite generation.
   int? _inFlightLoadTicket;
   bool _isLoadingMore = false;
   DateTime? _lastProgressiveApply;
