@@ -6,7 +6,7 @@ import '../utils/tv_keys.dart';
 /// Shows a picker dialog for adding a new bound source.
 ///
 /// Options:
-/// - Torrent Search (IMDb) — always shown, in SEARCH section
+/// - Stremio Addons & IPTV — always shown, in SEARCH section
 /// - Keyword Search — shown if [onKeywordSearch] is non-null
 /// - Local File / Folder (only if [onLocal] is non-null, in LOCAL section)
 /// - Disabled Local File / Folder (only if [localDisabledReason] is non-null)
@@ -85,9 +85,9 @@ Future<void> showAddSourcePickerDialog(
                         _SourceOption(
                           icon: Icons.search_rounded,
                           iconColor: const Color(0xFFFBBF24),
-                          label: 'Torrent Search (IMDb)',
+                          label: 'Stremio Addons & IPTV',
                           subtitle:
-                              'Exact match via IMDb · Stremio addons + IMDb-capable scrapers',
+                              'Exact IMDb match · includes downloaded IPTV catalogs',
                           autofocus: true,
                           onTap: () {
                             Navigator.of(dialogContext).pop();
