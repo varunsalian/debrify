@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
+
 import 'package:crypto/crypto.dart';
+import 'package:flutter/foundation.dart' show visibleForTesting;
 
 import '../models/advanced_search_selection.dart';
 import '../models/iptv_playlist.dart';
@@ -48,6 +50,152 @@ class IptvSourceSearch {
     RegExp(r'(?<!\d)(\d{1,2})[xX](\d{1,3})(?!\d)'),
     RegExp(r'\b[Ss]eason\s*(\d{1,2})\s*[Ee]pisode\s*(\d{1,3})\b'),
   ];
+  static const _audioLanguageTokens = <String, String>{
+    'EN': 'en',
+    'ENG': 'en',
+    'ENGLISH': 'en',
+    'ES': 'es',
+    'SPA': 'es',
+    'SPANISH': 'es',
+    'ESPAÑA': 'es',
+    'ESPANA': 'es',
+    'LATINO': 'es',
+    'FR': 'fr',
+    'FRE': 'fr',
+    'FRENCH': 'fr',
+    'FRANCE': 'fr',
+    'FRANCAIS': 'fr',
+    'FRANÇAIS': 'fr',
+    'DE': 'de',
+    'GER': 'de',
+    'GERMAN': 'de',
+    'GERMANY': 'de',
+    'DEUTSCH': 'de',
+    'IT': 'it',
+    'ITA': 'it',
+    'ITALIAN': 'it',
+    'ITALY': 'it',
+    'ITALIANO': 'it',
+    'PT': 'pt',
+    'POR': 'pt',
+    'PORTUGUESE': 'pt',
+    'PORTUGAL': 'pt',
+    'BR': 'pt',
+    'BRAZIL': 'pt',
+    'BRASIL': 'pt',
+    'RU': 'ru',
+    'RUS': 'ru',
+    'RUSSIAN': 'ru',
+    'RUSSAIN': 'ru',
+    'RUSSIA': 'ru',
+    'JA': 'ja',
+    'JP': 'ja',
+    'JPN': 'ja',
+    'JAPANESE': 'ja',
+    'JAPAN': 'ja',
+    'KO': 'ko',
+    'KR': 'ko',
+    'KOR': 'ko',
+    'KOREAN': 'ko',
+    'KOREA': 'ko',
+    'ZH': 'zh',
+    'CN': 'zh',
+    'CHI': 'zh',
+    'CHINESE': 'zh',
+    'CHINA': 'zh',
+    'AR': 'ar',
+    'ARA': 'ar',
+    'ARABIC': 'ar',
+    'HI': 'hi',
+    'HIN': 'hi',
+    'HINDI': 'hi',
+    'TE': 'te',
+    'TEL': 'te',
+    'TELUGU': 'te',
+    'NL': 'nl',
+    'DUT': 'nl',
+    'DUTCH': 'nl',
+    'NETHERLANDS': 'nl',
+    'PL': 'pl',
+    'POL': 'pl',
+    'POLISH': 'pl',
+    'POLSKA': 'pl',
+    'TR': 'tr',
+    'TUR': 'tr',
+    'TURKISH': 'tr',
+    'TURKSIH': 'tr',
+    'SV': 'sv',
+    'SE': 'sv',
+    'SWE': 'sv',
+    'SWEDISH': 'sv',
+    'SVENSK': 'sv',
+    'SVENSKA': 'sv',
+    'DA': 'da',
+    'DK': 'da',
+    'DAN': 'da',
+    'DANISH': 'da',
+    'DANSK': 'da',
+    'NO': 'no',
+    'NOR': 'no',
+    'NORWEGIAN': 'no',
+    'NORSK': 'no',
+    'FI': 'fi',
+    'FIN': 'fi',
+    'FINNISH': 'fi',
+    'SUOMI': 'fi',
+    // These are not currently selectable in Playback settings, but must still
+    // rank as an explicit other language instead of unknown/provider-branded.
+    'AL': 'sq',
+    'ALBANIAN': 'sq',
+    'BG': 'bg',
+    'BULGARIAN': 'bg',
+    'EL': 'el',
+    'GR': 'el',
+    'GREEK': 'el',
+    'RO': 'ro',
+    'ROMANIAN': 'ro',
+    'HU': 'hu',
+    'HUNGARIAN': 'hu',
+    'CS': 'cs',
+    'CZ': 'cs',
+    'CZECH': 'cs',
+    'HE': 'he',
+    'IL': 'he',
+    'HEBREW': 'he',
+    'FA': 'fa',
+    'IR': 'fa',
+    'PERSIAN': 'fa',
+    'UR': 'ur',
+    'PK': 'ur',
+    'URDU': 'ur',
+    'TH': 'th',
+    'THAI': 'th',
+    'VI': 'vi',
+    'VIETNAMESE': 'vi',
+    'ID': 'id',
+    'INDONESIAN': 'id',
+  };
+  static const _qualityPrefixTokens = <String>{
+    '4K',
+    '8K',
+    'HD',
+    'FHD',
+    'UHD',
+    'HDR',
+    'DV',
+    'TOP',
+  };
+  static const _subtitleTokens = <String>{
+    'SUB',
+    'SUBS',
+    'SUBBED',
+    'MULTISUB',
+    'MULTISUBS',
+  };
+  static final _providerPrefix = RegExp(
+    r'^([A-Z0-9+]{2,8}(?:-[A-Z0-9+]{1,8}){0,3})\s*(?:-|:|\|)\s+',
+    caseSensitive: false,
+  );
 
   static bool owns(Torrent source) => source.source.startsWith('iptv:');
 
@@ -87,6 +235,111 @@ class IptvSourceSearch {
       'iptv:${playlist.id.toLowerCase()}';
 
   static String normalize(String title) => IptvTitle.comparisonKey(title);
+
+  static List<String> _languageWords(String value) => value
+      .toUpperCase()
+      .split(RegExp(r'[^\p{L}\p{N}]+', unicode: true))
+      .where((word) => word.isNotEmpty)
+      .toList();
+
+  static Set<String> _languagesFromWords(
+    List<String> words, {
+    bool allowShortCodes = true,
+  }) {
+    final languages = <String>{};
+    for (var i = 0; i < words.length; i++) {
+      if (!allowShortCodes && words[i].length <= 3) continue;
+      final language = _audioLanguageTokens[words[i]];
+      if (language == null) continue;
+      // "SUB EN" / "EN SUBS" describes subtitle availability, not audio.
+      final adjacentSubtitle =
+          (i > 0 && _subtitleTokens.contains(words[i - 1])) ||
+          (i + 1 < words.length && _subtitleTokens.contains(words[i + 1]));
+      if (!adjacentSubtitle) languages.add(language);
+    }
+    return languages;
+  }
+
+  static ({Set<String> languages, bool multiAudio}) _audioHints(
+    IptvChannel channel,
+  ) {
+    final groupWords = _languageWords(channel.group ?? '');
+    // Strong 8K (and most Xtream panels) put the category language first.
+    // Long names are safe anywhere; ambiguous short codes such as IT and NO
+    // are only interpreted in that provider-style leading label.
+    final groupLeadWords = groupWords
+        .skipWhile(_qualityPrefixTokens.contains)
+        .take(2)
+        .toList();
+    final groupLanguages = {
+      ..._languagesFromWords(groupLeadWords),
+      ..._languagesFromWords(groupWords, allowShortCodes: false),
+    };
+    final prefix = _providerPrefix.firstMatch(channel.name.trim());
+    final prefixWords = prefix == null
+        ? const <String>[]
+        : prefix
+              .group(1)!
+              .toUpperCase()
+              .split('-')
+              .where((word) => !_qualityPrefixTokens.contains(word))
+              .toList();
+    // Providers commonly use locale-prefixed subtitle rows such as AR-SUBS.
+    // Treat those as unknown audio unless the category independently names an
+    // audio language.
+    final prefixLanguages = prefixWords.any(_subtitleTokens.contains)
+        ? const <String>{}
+        : _languagesFromWords(prefixWords);
+    final allWords = [...prefixWords, ...groupWords];
+    final hasSubtitleMarker = allWords.any(_subtitleTokens.contains);
+    final multiAudio =
+        !hasSubtitleMarker &&
+        (allWords.contains('MULTI') ||
+            allWords.contains('MULTIAUDIO') ||
+            (allWords.contains('DUAL') && allWords.contains('AUDIO')));
+    return (
+      languages: {...groupLanguages, ...prefixLanguages},
+      multiAudio: multiAudio,
+    );
+  }
+
+  /// Stable catalog preference tier. This never filters a provider row; it
+  /// only puts the most likely audio-language rendition first.
+  @visibleForTesting
+  static int catalogAudioPreferenceTier(
+    IptvChannel channel, {
+    String? preferredLanguage,
+  }) {
+    final preferred = preferredLanguage?.trim().toLowerCase();
+    final target = preferred == null || preferred.isEmpty ? 'en' : preferred;
+    final hints = _audioHints(channel);
+    if (hints.languages.contains(target)) return 0;
+    if (hints.multiAudio) return 1;
+    if (target != 'en' && hints.languages.contains('en')) return 2;
+    if (hints.languages.isEmpty) return target == 'en' ? 2 : 3;
+    return target == 'en' ? 3 : 4;
+  }
+
+  static List<IptvChannel> _orderByAudioPreference(
+    List<IptvChannel> channels,
+    String preferredLanguage,
+  ) {
+    final indexed = channels.indexed.toList();
+    indexed.sort((a, b) {
+      final tier =
+          catalogAudioPreferenceTier(
+            a.$2,
+            preferredLanguage: preferredLanguage,
+          ).compareTo(
+            catalogAudioPreferenceTier(
+              b.$2,
+              preferredLanguage: preferredLanguage,
+            ),
+          );
+      return tier != 0 ? tier : a.$1.compareTo(b.$1);
+    });
+    return indexed.map((entry) => entry.$2).toList();
+  }
 
   static ({int season, int episode, int start})? _episodeOf(String value) {
     for (final pattern in _episodePatterns) {
@@ -254,6 +507,11 @@ class IptvSourceSearch {
     final stopwatch = Stopwatch()..start();
     final scope = ProfileRuntime.scope.value;
     try {
+      final savedAudioLanguage = await StorageService.getDefaultAudioLanguage();
+      final preferredAudioLanguage =
+          savedAudioLanguage?.trim().toLowerCase().isNotEmpty == true
+          ? savedAudioLanguage!.trim().toLowerCase()
+          : 'en';
       final capability = await ProfileAsyncAuthorization.capture(
         ProfileFeature.iptv,
       );
@@ -300,6 +558,7 @@ class IptvSourceSearch {
               playlist,
               selection,
               shouldContinue,
+              preferredAudioLanguage: preferredAudioLanguage,
               deferXtreamSeriesEpisodes: deferXtreamSeriesEpisodes,
             );
             if (ProfileRuntime.scope.value != scope ||
@@ -404,6 +663,7 @@ class IptvSourceSearch {
     AdvancedSearchSelection selection,
     bool Function()? shouldContinue, {
     String? desiredEntryKey,
+    String preferredAudioLanguage = 'en',
     bool deferXtreamSeriesEpisodes = false,
   }) async {
     final key = keyFor(playlist);
@@ -536,12 +796,16 @@ class IptvSourceSearch {
         candidateCount: candidates.length,
         fallbackScan: fallbackScan,
       );
+      final orderedCandidates = _orderByAudioPreference(
+        candidates,
+        preferredAudioLanguage,
+      );
       final torrents = <Torrent>[];
       final emittedSeriesKeys = <String>{};
       var lookupFailures = 0;
       // One lookup at a time bounds provider traffic without silently dropping
       // language/quality variants after the first three series entries.
-      for (final candidate in candidates) {
+      for (final candidate in orderedCandidates) {
         if (shouldContinue?.call() == false) {
           return result('Search canceled.', const [], true);
         }

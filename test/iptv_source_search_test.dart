@@ -170,6 +170,182 @@ void main() {
   });
 
   test(
+    'catalog defaults to English without dropping fallback variants',
+    () async {
+      ingest('vod', [
+        IptvChannel(
+          name: 'DE - Dune (2021)',
+          url: 'https://panel.test/movie/de.mp4',
+          group: 'DE - FILME 1940/2024',
+          contentType: 'vod',
+        ),
+        IptvChannel(
+          name: 'OSN - Dune (2021)',
+          url: 'https://panel.test/movie/osn.mp4',
+          group: 'OSN+ MOVIES',
+          contentType: 'vod',
+        ),
+        IptvChannel(
+          name: 'MRVL - Dune (2021)',
+          url: 'https://panel.test/movie/multi.mp4',
+          group: 'MARVEL MOVIES 3840P (MULTI)',
+          contentType: 'vod',
+        ),
+        IptvChannel(
+          name: 'EN - Dune (2021)',
+          url: 'https://panel.test/movie/en.mp4',
+          group: 'EN - ACTION',
+          contentType: 'vod',
+        ),
+        IptvChannel(
+          name: 'FR - Dune (2021)',
+          url: 'https://panel.test/movie/fr.mp4',
+          group: 'FR - FILM',
+          contentType: 'vod',
+        ),
+      ]);
+
+      final sources = (await IptvSourceSearch.search(movie)).single.torrents;
+
+      expect(sources.map((source) => source.name), [
+        'EN - Dune (2021)',
+        'MRVL - Dune (2021)',
+        'OSN - Dune (2021)',
+        'DE - Dune (2021)',
+        'FR - Dune (2021)',
+      ]);
+    },
+  );
+
+  test(
+    'catalog respects the Playback audio language with safe fallbacks',
+    () async {
+      await StorageService.setDefaultAudioLanguage('de');
+      ingest('vod', [
+        IptvChannel(
+          name: 'FR - Dune (2021)',
+          url: 'https://panel.test/movie/fr.mp4',
+          group: 'FR - FILM',
+          contentType: 'vod',
+        ),
+        IptvChannel(
+          name: 'OSN - Dune (2021)',
+          url: 'https://panel.test/movie/osn.mp4',
+          group: 'OSN+ MOVIES',
+          contentType: 'vod',
+        ),
+        IptvChannel(
+          name: 'EN - Dune (2021)',
+          url: 'https://panel.test/movie/en.mp4',
+          group: 'EN - ACTION',
+          contentType: 'vod',
+        ),
+        IptvChannel(
+          name: 'MRVL - Dune (2021)',
+          url: 'https://panel.test/movie/multi.mp4',
+          group: 'MARVEL MOVIES 3840P (MULTI)',
+          contentType: 'vod',
+        ),
+        IptvChannel(
+          name: '4K-DE - Dune (2021)',
+          url: 'https://panel.test/movie/de.mp4',
+          group: 'DE - FILME ⁴ᴷ ³⁸⁴⁰ᴾ',
+          contentType: 'vod',
+        ),
+      ]);
+
+      final sources = (await IptvSourceSearch.search(movie)).single.torrents;
+
+      expect(sources.map((source) => source.name), [
+        '4K-DE - Dune (2021)',
+        'MRVL - Dune (2021)',
+        'EN - Dune (2021)',
+        'OSN - Dune (2021)',
+        'FR - Dune (2021)',
+      ]);
+    },
+  );
+
+  test('subtitle labels are not mistaken for an audio language', () {
+    expect(
+      IptvSourceSearch.catalogAudioPreferenceTier(
+        IptvChannel(
+          name: 'AR-SUBS - Dune (2021)',
+          url: 'https://panel.test/movie/ar-subs.mp4',
+          group: 'TOP MOVIES BLURAY (MULTI-SUBS)',
+        ),
+        preferredLanguage: 'ar',
+      ),
+      3,
+    );
+    expect(
+      IptvSourceSearch.catalogAudioPreferenceTier(
+        IptvChannel(
+          name: 'AR - Dune (2021)',
+          url: 'https://panel.test/movie/ar.mp4',
+          group: 'AR - MOVIES',
+        ),
+        preferredLanguage: 'ar',
+      ),
+      0,
+    );
+    expect(
+      IptvSourceSearch.catalogAudioPreferenceTier(
+        IptvChannel(
+          name: 'Festival - Dune (2021)',
+          url: 'https://panel.test/movie/en-subs.mp4',
+          group: 'ENGLISH SUB',
+        ),
+        preferredLanguage: 'en',
+      ),
+      2,
+    );
+  });
+
+  test('deferred series descriptors use the same language ladder', () async {
+    ingest('series', [
+      IptvChannel(
+        name: 'FR - Show',
+        url: 'series:fr',
+        group: 'FRANCE SÉRIES',
+        contentType: 'series',
+        attributes: const {'series_id': 'fr'},
+      ),
+      IptvChannel(
+        name: 'EN - Show',
+        url: 'series:en',
+        group: 'ENGLISH SERIES',
+        contentType: 'series',
+        attributes: const {'series_id': 'en'},
+      ),
+      IptvChannel(
+        name: 'OSN - Show',
+        url: 'series:osn',
+        group: 'OSN+ SERIES 4K',
+        contentType: 'series',
+        attributes: const {'series_id': 'osn'},
+      ),
+    ]);
+
+    final sources = (await IptvSourceSearch.search(
+      const AdvancedSearchSelection(
+        imdbId: 'tt2',
+        isSeries: true,
+        title: 'Show',
+        season: 1,
+        episode: 1,
+      ),
+      deferXtreamSeriesEpisodes: true,
+    )).single.torrents;
+
+    expect(sources.map((source) => source.name), [
+      'EN - Show',
+      'OSN - Show',
+      'FR - Show',
+    ]);
+  });
+
+  test(
     'Quick Play respects direct-link mode and rejects ambiguous movies',
     () async {
       ingest('vod', [
