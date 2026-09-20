@@ -1742,7 +1742,7 @@ void main() {
   );
 
   test(
-    'single-profile backup preserves an owned disabled connection',
+    'single-profile backup reseals a disabled connection for a different device key',
     () async {
       const sourceId = 'disabled-single-profile-resource';
       const type = ConnectionResourceType.reddit;
@@ -1796,10 +1796,14 @@ void main() {
           );
       expect(package.resources.single['disabled'], isTrue);
 
+      final receiverKey = List<int>.generate(32, (i) => i);
+      final receiverCipher = MemoryDeviceSecretCipher(receiverKey);
+      await receiverCipher.initialize();
+
       final report =
           await ProfileRestoreCoordinator(
             registry: registry,
-            cipher: cipher,
+            cipher: receiverCipher,
           ).restore(
             package: package,
             destinationProfileId: profileId,
@@ -1819,7 +1823,11 @@ void main() {
         isNot(contains(imported.id)),
       );
       expect(
-        await service.revealOwnedSecretForProfileBackup(
+        // A new cipher instance models reloading the receiving device key.
+        await ConnectionResourceService(
+          registry: registry,
+          cipher: MemoryDeviceSecretCipher(receiverKey),
+        ).revealOwnedSecretForProfileBackup(
           context: await ProfileAuthorizationContext.capture(registry),
           resourceId: imported.id,
         ),
