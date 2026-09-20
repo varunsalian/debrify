@@ -90,7 +90,7 @@ class SourcePriority {
   static String keyForSource(String source, {Map<String, String>? aliases}) {
     final s = source.trim().toLowerCase();
     if (s.isEmpty) return '';
-    if (s.startsWith('stremio:')) return s;
+    if (s.startsWith('stremio:') || s.startsWith('iptv:')) return s;
     return aliases?[s] ?? 'engine:$s';
   }
 

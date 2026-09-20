@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'iptv_source_search.dart';
 import 'source_selection_diagnostics.dart';
 import 'dart:convert';
 import 'dart:io';
@@ -229,6 +230,15 @@ class TorrentPlaybackService {
   }) async {
     logSourceSelection('manual_pick', source: torrent, index: sourceIndex,
         season: meta?.season, episode: meta?.episode);
+    try {
+      await IptvSourceSearch.authorize(torrent);
+    } catch (_) {
+      if (context.mounted) {
+        _snack(context, 'IPTV connection changed. Search sources again.');
+      }
+      return;
+    }
+    if (!context.mounted) return;
     // Direct-URL addon streams bypass debrid entirely. Content metadata and
     // the in-player Sources switcher ride along (matching Home's
     // _playDirectStream) so series streams get Continue Watching, subtitles,
@@ -2342,6 +2352,11 @@ class TorrentPlaybackService {
   static Future<List<PlaylistEntry>?> resolveRecoverySource(
     Torrent source, {required String? provider, int? season, int? episode}
   ) async {
+    try {
+      await IptvSourceSearch.authorize(source);
+    } catch (_) {
+      return null;
+    }
     if (source.streamType == StreamType.directUrl) {
       if (source.directUrl?.isNotEmpty != true) return null;
       return [PlaylistEntry(url: source.directUrl!, title: source.displayTitle,
@@ -4981,6 +4996,11 @@ class TorrentPlaybackService {
   static Future<List<PlaylistEntry>?> Function(Torrent)
   _lazyProviderResolver() {
     return (Torrent t) async {
+      try {
+        await IptvSourceSearch.authorize(t);
+      } catch (_) {
+        return null;
+      }
       if (t.streamType == StreamType.directUrl &&
           (t.directUrl?.isNotEmpty ?? false)) {
         return [
@@ -5534,6 +5554,11 @@ class TorrentPlaybackService {
     String provider,
   ) {
     return (Torrent t) async {
+      try {
+        await IptvSourceSearch.authorize(t);
+      } catch (_) {
+        return null;
+      }
       if (t.streamType == StreamType.directUrl &&
           (t.directUrl?.isNotEmpty ?? false)) {
         return [
@@ -5740,6 +5765,15 @@ class TorrentPlaybackService {
     BuildContext context,
     Torrent torrent,
   ) async {
+    try {
+      await IptvSourceSearch.authorize(torrent);
+    } catch (_) {
+      if (context.mounted) {
+        _snack(context, 'IPTV connection changed. Search sources again.');
+      }
+      return;
+    }
+    if (!context.mounted) return;
     final raw = torrent.directUrl ?? '';
     if (raw.isEmpty) {
       _snack(context, 'No stream URL available.');
@@ -5748,6 +5782,7 @@ class TorrentPlaybackService {
     _snack(context, 'Resolving download URL…');
     final resolved = await _resolveDownloadUrl(raw);
     try {
+      await IptvSourceSearch.authorize(torrent);
       await DownloadService.instance.enqueueDownload(
         url: resolved,
         fileName: torrent.displayTitle,

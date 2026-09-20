@@ -1,6 +1,7 @@
 import '../utils/show_shuffle.dart';
 import 'failed_saved_source.dart';
 import 'torrent_playback_service.dart';
+import 'iptv_source_search.dart';
 import 'startup_recovery_sources.dart';
 import 'dart:async';
 import 'source_selection_diagnostics.dart';
@@ -2294,6 +2295,11 @@ class VideoPlayerLauncher {
           debugPrint(
             'VideoPlayerLauncher: resolving source playlist $sourceIndex: ${torrent.displayTitle}',
           );
+          try {
+            await IptvSourceSearch.authorize(torrent);
+          } catch (_) {
+            return null;
+          }
           if (automaticRecovery && !await recoveryPreflight.allows(torrent,
               enabled: validateRecoveryDirectLinks)) return null;
           final playlistEntries = automaticRecovery
