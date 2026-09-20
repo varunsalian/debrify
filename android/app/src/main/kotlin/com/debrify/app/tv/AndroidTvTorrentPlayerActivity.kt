@@ -190,6 +190,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private var iptvGuideButton: AppCompatButton? = null
     private var iptvJumpButton: AppCompatButton? = null
     private var iptvStartOverButton: AppCompatButton? = null
+    private var iptvStartOverSeekButton: AppCompatButton? = null
     private var iptvRecordButton: AppCompatButton? = null
     // Tees the live progressive stream to a MediaStore file while playing.
     private val iptvRecordingController by lazy { IptvRecordingController(this) }
@@ -252,6 +253,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private var ottShowName: String? = null
     private var cinemaProgressTrackWidth: Int = 0
     private var cinemaSeekMode: Boolean = false  // True when actively seeking via progress bar
+    private var cinemaSeekWasPlaying: Boolean = false
     private var cinemaProgressAnimator: ValueAnimator? = null
     private var cinemaLastAnimatedProgress: Float = 0f
 
@@ -415,8 +417,9 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         if (iptvStartOverActive || iptvStartOverLoading) {
             iptvStartOverActive = false
             iptvStartOverLoading = false
+            iptvStartOverTimelineVisible = false
             iptvCatchupToken++
-            updateIptvStartOverButton(entry)
+            updateIptvControlPresentation(entry)
         }
         iptvTuneDiagnostics.onRecovery(source, "retune", "attempt=$attempt")
         // Video-stall attempt 1 was a plain re-tune (transient wedges heal
@@ -848,6 +851,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private var currentIptvIndex = 0
     private var iptvStartOverActive = false
     private var iptvStartOverLoading = false
+    private var iptvStartOverTimelineVisible = false
     private var iptvCatchupToken = 0
 
     // Xtream series audio memory: the `<playlistId>::<seriesId>` key the Flutter
@@ -1842,7 +1846,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                     // Archive rejection must not enter the live AUTH ladder.
                     if (iptvLiveRecoveryEligible()) {
                         iptvStartOverActive = false
-                        updateIptvStartOverButton(entry)
+                        iptvStartOverTimelineVisible = false
+                        updateIptvControlPresentation(entry)
                         beginIptvPlayback(entry)
                     }
                     return
@@ -4240,6 +4245,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         iptvGuideButton = playlistButton
         iptvJumpButton = playerView.findViewById(R.id.iptv_jump_channel_button)
         iptvStartOverButton = playerView.findViewById(R.id.iptv_start_over_button)
+        iptvStartOverSeekButton =
+            playerView.findViewById(R.id.iptv_start_over_seek_button)
         iptvRecordButton = playerView.findViewById(R.id.iptv_record_button)
         playerView.findViewById<LinearLayout>(R.id.debrify_controls_buttons)?.let { dock ->
             if (originalControlDockOrder.isEmpty()) {
@@ -4351,6 +4358,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         applyAppleTvAnimation(randomButton)
         applyAppleTvAnimation(iptvJumpButton)
         applyAppleTvAnimation(iptvStartOverButton)
+        applyAppleTvAnimation(iptvStartOverSeekButton)
 
         val extendTimerOnFocus = View.OnFocusChangeListener { _, hasFocus ->
             if (hasFocus && controlsMenuVisible) {
@@ -4389,6 +4397,11 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             toggleIptvStartOver()
         }
         iptvStartOverButton?.onFocusChangeListener = extendTimerOnFocus
+
+        iptvStartOverSeekButton?.setOnClickListener {
+            showIptvStartOverTimeline()
+        }
+        iptvStartOverSeekButton?.onFocusChangeListener = extendTimerOnFocus
 
         audioButton?.setOnClickListener {
             if (USE_UNIFIED_MENU && unifiedMenu != null) {
@@ -7698,9 +7711,11 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             return
         }
 
-        // Pause playback during seeking
-        val wasPlaying = player?.isPlaying == true
-        if (wasPlaying) {
+        // Preserve the user's playback intent. `isPlaying` can briefly be
+        // false while buffering even though playWhenReady is true, so retain
+        // the latter and only resume if seeking actually interrupted playback.
+        cinemaSeekWasPlaying = player?.playWhenReady == true
+        if (cinemaSeekWasPlaying) {
             player?.pause()
         }
 
@@ -7785,8 +7800,9 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             debrifyTimeCurrent?.setTextColor(Color.WHITE)
         }
 
-        // Resume playback
-        player?.play()
+        val shouldResume = cinemaSeekWasPlaying
+        cinemaSeekWasPlaying = false
+        if (shouldResume) player?.play()
     }
 
     private fun confirmCinemaSeek() {
@@ -9033,6 +9049,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         iptvNextButton,
         iptvJumpButton,
         iptvStartOverButton,
+        iptvStartOverSeekButton,
         iptvRecordButton,
         playerView.findViewById<AppCompatButton>(R.id.debrify_playlist_button),
     )
@@ -9564,6 +9581,9 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private fun updateIptvControlPresentation(entry: IptvChannelEntry?) {
         val live = entry?.isLive != false
         val vodVisibility = if (live) View.GONE else View.VISIBLE
+        val archiveTimelineVisibility = if (
+            !live || (iptvStartOverActive && iptvStartOverTimelineVisible)
+        ) View.VISIBLE else View.GONE
         if (live) {
             arrangeLiveIptvControlDock()
             // Styled only: a VOD trip restored every cinema drawable, and
@@ -9574,14 +9594,15 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             restoreCinemaIptvControlStyle()
             if (guideTokens != null) restoreCinemaDockIconTints()
         }
-        cinemaProgressContainer?.visibility = vodVisibility
-        debrifyTimeCurrent?.visibility = vodVisibility
-        debrifyTimeTotal?.visibility = vodVisibility
+        cinemaProgressContainer?.visibility = archiveTimelineVisibility
+        debrifyTimeCurrent?.visibility = archiveTimelineVisibility
+        debrifyTimeTotal?.visibility = archiveTimelineVisibility
         speedButton?.visibility = vodVisibility
         nightModeButton?.visibility = View.VISIBLE
         iptvJumpButton?.visibility = if (live) View.VISIBLE else View.GONE
         iptvGuideButton?.visibility = if (live) View.VISIBLE else View.GONE
         updateIptvStartOverButton(entry)
+        updateIptvStartOverSeekButton()
         // Visibility follows the ACTIVE recorder: the engine records pre-Q
         // once storage is granted (and shows the button so it CAN be
         // granted); the tee remains Q+-only.
@@ -9597,6 +9618,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         if (!live && iptvGuideVisible) hideIptvGuide()
         if (live) {
             cinemaSeekMode = false
+            cinemaSeekWasPlaying = false
             cinemaProgressThumb?.visibility = View.INVISIBLE
             cinemaSpeedIndicator?.visibility = View.GONE
             if (currentFocus == cinemaProgressContainer) {
@@ -9606,7 +9628,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     }
 
     /** Live IPTV uses a balanced dock:
-     *  Audio · Subs · Aspect | CH- · Play/Pause · Start Over · CH+ |
+     *  Audio · Subs · Aspect | CH- · Play/Pause · Start Over · Seek · CH+ |
      *  Guide · Jump · Record · Night.
      *  Record is present only for progressive streams (disabled for HLS). The
      *  XML order remains the standard cinema/VOD order; only the live
@@ -9623,6 +9645,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             iptvPrevButton,
             pauseButton,
             iptvStartOverButton,
+            iptvStartOverSeekButton,
             iptvNextButton,
             playerView.findViewById<View>(R.id.debrify_controls_right_divider),
             iptvGuideButton,
@@ -9670,6 +9693,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             iptvGuideButton,
             iptvJumpButton,
             iptvStartOverButton,
+            iptvStartOverSeekButton,
             iptvRecordButton,
         )
         standardButtons.forEach {
@@ -11223,6 +11247,35 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             iptvStartOverActive -> "Return to live channel"
             else -> "Start programme from beginning"
         }
+        updateIptvStartOverSeekButton()
+    }
+
+    private fun updateIptvStartOverSeekButton() {
+        val button = iptvStartOverSeekButton ?: return
+        button.visibility = if (iptvStartOverActive) View.VISIBLE else View.GONE
+        button.isEnabled = iptvStartOverActive && !iptvStartOverLoading
+        button.text = if (iptvStartOverTimelineVisible) "Hide Timeline" else "Seek"
+        button.contentDescription = if (iptvStartOverTimelineVisible) {
+            "Hide start over timeline"
+        } else {
+            "Show start over timeline"
+        }
+    }
+
+    private fun showIptvStartOverTimeline() {
+        if (!iptvStartOverActive) return
+        val duration = player?.duration ?: 0L
+        if (duration <= 0L) {
+            Toast.makeText(this, "Timeline is still loading", Toast.LENGTH_SHORT).show()
+            return
+        }
+        iptvStartOverTimelineVisible = !iptvStartOverTimelineVisible
+        updateIptvControlPresentation(iptvChannels.getOrNull(currentIptvIndex))
+        if (iptvStartOverTimelineVisible) {
+            showControlsAndFocusProgressBar()
+        } else {
+            iptvStartOverSeekButton?.requestFocus()
+        }
     }
 
     private fun toggleIptvStartOver() {
@@ -11231,7 +11284,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         if (iptvStartOverActive) {
             iptvCatchupToken++
             iptvStartOverActive = false
-            updateIptvStartOverButton(entry)
+            iptvStartOverTimelineVisible = false
+            updateIptvControlPresentation(entry)
             resetSubtitleState()
             beginIptvPlayback(entry)
             return
@@ -11320,6 +11374,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                         }
                         iptvStartOverLoading = false
                         iptvStartOverActive = true
+                        iptvStartOverTimelineVisible = false
                         resetSubtitleState()
                         setIptvMediaItem(selected, url)
                         titleView.text = selected.displayName
@@ -12194,6 +12249,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         iptvCatchupToken++
         iptvStartOverActive = false
         iptvStartOverLoading = false
+        iptvStartOverTimelineVisible = false
         val previousPlaying = iptvChannels.getOrNull(currentIptvIndex)
         // Bank the outgoing channel's position BEFORE currentIptvIndex moves,
         // or zapping back to a half-watched movie would rewind it to wherever

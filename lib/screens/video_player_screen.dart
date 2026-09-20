@@ -570,11 +570,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   /// the focused control is excluded from the tree.
   final FocusNode _tvRootFocus = FocusNode(debugLabel: 'tvPlayerRoot');
 
-  /// True when there is genuinely nothing to seek: a live channel's
-  /// position/duration is just the HLS rolling window. Mirrors the signal the
-  /// bar itself uses, so the keys and the UI can never disagree.
+  /// True when there is genuinely nothing to seek: a live channel's ordinary
+  /// position/duration is just the HLS rolling window. Start Over may expose
+  /// its finite archive timeline explicitly. Mirrors the signal the bar uses,
+  /// so the keys and the UI can never disagree.
   bool get _tvNoTimeline =>
-      _iptvZapBannerOwnsIdentity ||
+      (_iptvZapBannerOwnsIdentity && !_iptvStartOverTimelineVisible) ||
       widget.hideSeekbar ||
       _duration <= Duration.zero;
 
@@ -736,6 +737,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       setState(() {
         _iptvStartOverActive = false;
         _iptvStartOverLoading = false;
+        _iptvStartOverTimelineRequested = false;
       });
     }
     _iptvDiag.onRecovery(source, 'retune', 'attempt=$attempt');
@@ -778,6 +780,32 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   final IptvCatchupRequestGate _iptvCatchupRequests = IptvCatchupRequestGate();
   bool _iptvStartOverActive = false;
   bool _iptvStartOverLoading = false;
+  bool _iptvStartOverTimelineRequested = false;
+
+  bool get _iptvStartOverTimelineVisible =>
+      _iptvStartOverActive &&
+      _iptvStartOverTimelineRequested &&
+      _duration > Duration.zero;
+
+  void _toggleIptvStartOverTimeline() {
+    if (!_iptvStartOverActive) return;
+    if (_duration <= Duration.zero) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Timeline is still loading')),
+      );
+      return;
+    }
+    final reveal = !_iptvStartOverTimelineRequested;
+    setState(() => _iptvStartOverTimelineRequested = reveal);
+    if (reveal && PlatformUtil.isTelevision) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _iptvStartOverTimelineVisible) {
+          _tvProgressFocus.requestFocus();
+        }
+      });
+    }
+    _scheduleAutoHide();
+  }
 
   bool get _canStartOverCurrentIptv {
     final channel = _currentIptvChannel;
@@ -797,7 +825,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   Future<void> _toggleIptvStartOver() async {
     if (_iptvStartOverLoading) return;
     if (_iptvStartOverActive) {
-      setState(() => _iptvStartOverActive = false);
+      setState(() {
+        _iptvStartOverActive = false;
+        _iptvStartOverTimelineRequested = false;
+      });
       await _switchToIptvChannel(_currentIptvIndex);
       return;
     }
@@ -865,6 +896,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           setState(() {
             _iptvStartOverLoading = false;
             _iptvStartOverActive = true;
+            _iptvStartOverTimelineRequested = false;
           });
           return true;
         },
@@ -878,7 +910,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       }
       _cancelPendingIptvCatchup(hideFeedback: false);
       if (_iptvRecoveryEligible()) {
-        setState(() => _iptvStartOverActive = false);
+        setState(() {
+          _iptvStartOverActive = false;
+          _iptvStartOverTimelineRequested = false;
+        });
         await _switchToIptvChannel(_currentIptvIndex, quietRecovery: true);
       }
     }
@@ -6989,7 +7024,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // before AUTH classification can bypass the recovery ladder.
     if (_iptvStartOverActive && _currentIptvChannel?.isLive == true) {
       if (_iptvRecoveryEligible()) {
-        setState(() => _iptvStartOverActive = false);
+        setState(() {
+          _iptvStartOverActive = false;
+          _iptvStartOverTimelineRequested = false;
+        });
         unawaited(_switchToIptvChannel(_currentIptvIndex, quietRecovery: true));
       }
       return;
@@ -7931,6 +7969,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     setState(() {
       _iptvStartOverActive = false;
       _iptvStartOverLoading = false;
+      _iptvStartOverTimelineRequested = false;
       // A quiet recovery re-tune is not a zap: no transition overlay, no
       // zap banner — the reconnect pill is the only narration (plan
       // invariant "retune ≠ zap"; codex round 2, finding 14).
@@ -12695,6 +12734,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
               onLiveEdgeAction: _iptvLiveEdgeAction,
               liveEdgeActionActive: _iptvStartOverActive,
               liveEdgeActionLoading: _iptvStartOverLoading,
+              onToggleStartOverTimeline: _iptvStartOverActive
+                  ? _toggleIptvStartOverTimeline
+                  : null,
+              startOverTimelineVisible: _iptvStartOverTimelineVisible,
             );
           },
         ),
@@ -15069,7 +15112,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                                   // zapping to on-demand brings it straight back.
                                   hideSeekbar:
                                       widget.hideSeekbar ||
-                                      _iptvZapBannerOwnsIdentity,
+                                      (_iptvZapBannerOwnsIdentity &&
+                                          !_iptvStartOverTimelineVisible),
                                   // Same call the native dock makes for live.
                                   hideSpeed: _iptvZapBannerOwnsIdentity,
                                   // Shuffle picks from _activePlaylist, which an
@@ -15113,6 +15157,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                                   onLiveEdgeAction: _iptvLiveEdgeAction,
                                   liveEdgeActionActive: _iptvStartOverActive,
                                   liveEdgeActionLoading: _iptvStartOverLoading,
+                                  onToggleStartOverTimeline:
+                                      _iptvStartOverActive
+                                      ? _toggleIptvStartOverTimeline
+                                      : null,
+                                  startOverTimelineVisible:
+                                      _iptvStartOverTimelineVisible,
                                 ),
                         ),
                       );

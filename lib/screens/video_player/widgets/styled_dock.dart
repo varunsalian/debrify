@@ -11,7 +11,6 @@
 /// See `dev/design/plans/PLAYER_DOCK_STYLES_PLAN.md` §3.
 library;
 
-
 import 'package:flutter/material.dart';
 
 import 'package:flutter/foundation.dart' show ValueListenable;
@@ -81,6 +80,8 @@ class StyledDock extends StatelessWidget {
   final VoidCallback? onLiveEdgeAction;
   final bool liveEdgeActionActive;
   final bool liveEdgeActionLoading;
+  final VoidCallback? onToggleStartOverTimeline;
+  final bool startOverTimelineVisible;
   final VoidCallback? onPip;
 
   final bool hasNext;
@@ -173,6 +174,8 @@ class StyledDock extends StatelessWidget {
     this.onLiveEdgeAction,
     this.liveEdgeActionActive = false,
     this.liveEdgeActionLoading = false,
+    this.onToggleStartOverTimeline,
+    this.startOverTimelineVisible = false,
     this.onPip,
     this.hasNext = false,
     this.hasPrevious = false,
@@ -231,6 +234,13 @@ class StyledDock extends StatelessWidget {
               : 'Start from beginning',
           liveEdgeActionLoading ? () {} : onLiveEdgeAction!,
           active: liveEdgeActionActive,
+        ),
+      if (liveEdgeActionActive && onToggleStartOverTimeline != null)
+        _Tool(
+          Icons.timeline_rounded,
+          startOverTimelineVisible ? 'Hide timeline' : 'Seek',
+          onToggleStartOverTimeline!,
+          active: startOverTimelineVisible,
         ),
       if (hasRecord && onRecord != null)
         _Tool(

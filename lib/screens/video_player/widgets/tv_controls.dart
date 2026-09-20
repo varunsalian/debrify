@@ -52,6 +52,8 @@ class TvControls extends StatefulWidget {
     this.onLiveEdgeAction,
     this.liveEdgeActionActive = false,
     this.liveEdgeActionLoading = false,
+    this.onToggleStartOverTimeline,
+    this.startOverTimelineVisible = false,
     this.hasRecord = false,
     this.isRecording = false,
     this.onRecord,
@@ -80,9 +82,10 @@ class TvControls extends StatefulWidget {
   final ValueListenable<PlaybackUiClockValue> clock;
   final bool isPlaying;
 
-  /// Live streams have nothing to seek and no meaningful speed, so the bar
-  /// drops progress and speed and swaps prev/next for channel zapping — the
-  /// same shape the native player's live dock takes.
+  /// Live streams normally have nothing to seek and no meaningful speed, so
+  /// the bar drops progress and speed and swaps prev/next for channel zapping.
+  /// Start Over is the narrow exception: its finite archive timeline can be
+  /// revealed explicitly by the viewer.
   final bool isLive;
 
   /// A source switch or IPTV zap is in flight. The bar stays on screen but
@@ -128,6 +131,8 @@ class TvControls extends StatefulWidget {
   final VoidCallback? onLiveEdgeAction;
   final bool liveEdgeActionActive;
   final bool liveEdgeActionLoading;
+  final VoidCallback? onToggleStartOverTimeline;
+  final bool startOverTimelineVisible;
   final bool hasRecord;
   final bool isRecording;
   final VoidCallback? onRecord;
@@ -406,6 +411,14 @@ class _TvControlsState extends State<TvControls> {
         widget.onLiveEdgeAction,
         active: widget.liveEdgeActionActive,
       );
+      if (widget.liveEdgeActionActive) {
+        add(
+          Icons.timeline_rounded,
+          widget.startOverTimelineVisible ? 'Hide timeline' : 'Seek',
+          widget.onToggleStartOverTimeline,
+          active: widget.startOverTimelineVisible,
+        );
+      }
       add(
         Icons.skip_next_rounded,
         'Channel +',
