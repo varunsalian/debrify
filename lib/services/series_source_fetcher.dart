@@ -281,6 +281,14 @@ class SeriesSourceFetcher {
         season == null ||
         episode == null)
       return true;
+    final episodeIdentity = RegExp(
+      r'^S(\d+)E(\d+)$',
+      caseSensitive: false,
+    ).firstMatch(source.episodeIdentifier ?? '');
+    if (episodeIdentity != null) {
+      return int.parse(episodeIdentity.group(1)!) == season &&
+          int.parse(episodeIdentity.group(2)!) == episode;
+    }
     final scope = RegExp(
       r':(\d+):(\d+)$',
     ).firstMatch(source.stremioVideoId ?? '');
@@ -288,6 +296,20 @@ class SeriesSourceFetcher {
         (int.parse(scope.group(1)!) == season &&
             int.parse(scope.group(2)!) == episode);
   }
+
+  /// Drops direct rows that are explicitly scoped to another episode.
+  ///
+  /// Episode transitions may replace the source list because the old direct
+  /// URLs cannot play the new episode. Torrent packs and legacy unscoped rows
+  /// remain reusable; same-episode alternatives remain available for failover.
+  static List<Torrent> retainForEpisode(
+    List<Torrent> sources,
+    int season,
+    int episode,
+  ) => [
+    for (final source in sources)
+      if (visibleForEpisode(source, season, episode)) source,
+  ];
 
   /// Dedupe identity: infohash for torrents, URL for direct streams.
   static String sourceKey(Torrent t) {

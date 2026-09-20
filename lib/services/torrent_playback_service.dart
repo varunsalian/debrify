@@ -604,9 +604,12 @@ class TorrentPlaybackService {
       // IPv4 playback). These URLs must be opened first by the real player;
       // its startup gate owns failure detection and candidate failover.
       if (!shouldPreflightDirectStream(t)) {
+        final bypassReason = IptvSourceSearch.owns(t)
+            ? 'iptv_player_validation'
+            : 'ip_bound_addon';
         debugPrint(
           '[StartupFailover] event=preflight_bypass platform=flutter '
-          'reason=ip_bound_addon addon=${t.stremioAddonId ?? '-'}',
+          'reason=$bypassReason addon=${t.stremioAddonId ?? '-'}',
         );
         return true;
       }
@@ -1684,6 +1687,15 @@ class TorrentPlaybackService {
         activeRules.sourcePriority.first.startsWith('iptv:');
     if (packRouteAllowed && activeRules.preferSeriesPacks) {
       if (iptvFirst) {
+        final prioritizedPlaylistId = activeRules.sourcePriority.first
+            .substring('iptv:'.length);
+        logIptvSourceEvent(
+          'quick_play_priority_probe_started',
+          playlistId: prioritizedPlaylistId,
+          catalogType: 'series',
+          season: season,
+          episode: episode,
+        );
         final matches = await searchIptvForQuickPlay(
           imdbId,
           meta.title ?? label,
@@ -1701,6 +1713,15 @@ class TorrentPlaybackService {
           rules: activeRules,
           ladder: ladder,
         );
+        logIptvSourceEvent(
+          'quick_play_priority_probe_candidates',
+          playlistId: prioritizedPlaylistId,
+          catalogType: 'series',
+          season: season,
+          episode: episode,
+          resultCount: prioritized.length,
+          outcome: prioritized.isEmpty ? 'no_match' : 'matched',
+        );
         for (final source in prioritized.take(
           directValidationBudgetForRules(activeRules),
         )) {
@@ -1709,14 +1730,32 @@ class TorrentPlaybackService {
             await IptvSourceSearch.authorize(source);
             final alive =
                 !activeRules.validateDirectLinks ||
+                !shouldPreflightDirectStream(source) ||
                 await StreamUrlValidator.isPlayableVideoUrl(
                   source.directUrl!,
                   minBytes: 10 * 1024 * 1024,
                   lenient: true,
                   headers: source.httpHeaders,
                 );
-            if (!alive) continue;
+            if (!alive) {
+              logIptvSourceEvent(
+                'quick_play_candidate_rejected',
+                source: source,
+                stage: 'preflight',
+                outcome: 'unplayable',
+                season: season,
+                episode: episode,
+              );
+              continue;
+            }
             if (cancel.cancelled || !context.mounted) return;
+            logIptvSourceEvent(
+              'quick_play_candidate_selected',
+              source: source,
+              outcome: 'priority_winner',
+              season: season,
+              episode: episode,
+            );
             await playBest(
               context,
               [source],
@@ -1730,8 +1769,17 @@ class TorrentPlaybackService {
               seriesFetcher: seriesFetcherFor(meta: meta, provider: provider),
             );
             return;
-          } catch (_) {
+          } catch (error) {
             // Revoked or unusable IPTV must not disable the preferred pack route.
+            logIptvSourceEvent(
+              'quick_play_candidate_rejected',
+              source: source,
+              stage: 'authorization_or_probe',
+              outcome: 'failed',
+              season: season,
+              episode: episode,
+              error: error,
+            );
           }
         }
       }
@@ -2067,16 +2115,17 @@ class TorrentPlaybackService {
 
   /// Whether a direct stream may safely be touched by Dart before the player.
   ///
-  /// Keep this policy on source provenance as well as hostname: AIOStreams
-  /// commonly returns a provider/CDN URL whose final host no longer contains
-  /// "aiostreams", while the addon id/source still identifies the link as an
-  /// IP-bound proxy result.
+  /// IPTV providers commonly reject HEAD while serving the same URL to a real
+  /// media client. Let the decoder-backed startup gate validate those streams.
+  /// Keep the AIOStreams policy on source provenance as well as hostname: its
+  /// final CDN host may no longer identify the link as an IP-bound proxy.
   static bool shouldPreflightDirectStream(Torrent torrent) {
-    return !StartupStreamPolicy.isAioStreams(
-      addonId: torrent.stremioAddonId,
-      sourceName: torrent.source,
-      url: torrent.directUrl,
-    );
+    return !IptvSourceSearch.owns(torrent) &&
+        !StartupStreamPolicy.isAioStreams(
+          addonId: torrent.stremioAddonId,
+          sourceName: torrent.source,
+          url: torrent.directUrl,
+        );
   }
 
   /// Whether direct-addon rows should be attempted before torrent acquisition.
@@ -2335,10 +2384,28 @@ class TorrentPlaybackService {
   }) async {
     if (!rules.allowDirectLinks ||
         !allowsAddonSearch(rules) ||
-        !id.startsWith('tt'))
+        !id.startsWith('tt')) {
+      logIptvSourceEvent(
+        'quick_play_search_skipped',
+        catalogType: isMovie ? 'vod' : 'series',
+        season: season,
+        episode: episode,
+        outcome: !rules.allowDirectLinks
+            ? 'direct_links_disabled'
+            : (!allowsAddonSearch(rules) ? 'source_mode_excluded' : 'non_imdb'),
+      );
       return [];
+    }
+    final stopwatch = Stopwatch()..start();
+    logIptvSourceEvent(
+      'quick_play_search_started',
+      catalogType: isMovie ? 'vod' : 'series',
+      season: season,
+      episode: episode,
+    );
     final scope = ProfileRuntime.scope.value;
     var expired = false;
+    var timedOut = false;
     final completed = <IptvSourceResult>[];
     final results =
         await IptvSourceSearch.search(
@@ -2361,16 +2428,29 @@ class TorrentPlaybackService {
           discoveryTimeout,
           onTimeout: () {
             expired = true;
+            timedOut = true;
             return List<IptvSourceResult>.of(completed);
           },
         );
     expired = true;
-    if (ProfileRuntime.scope.value != scope || (isCancelled?.call() ?? false))
+    if (ProfileRuntime.scope.value != scope || (isCancelled?.call() ?? false)) {
+      logIptvSourceEvent(
+        'quick_play_search_completed',
+        catalogType: isMovie ? 'vod' : 'series',
+        season: season,
+        episode: episode,
+        outcome: ProfileRuntime.scope.value != scope
+            ? 'profile_changed'
+            : 'cancelled',
+        timedOut: timedOut,
+        elapsedMs: stopwatch.elapsedMilliseconds,
+      );
       return [];
+    }
     final expectedYear = RegExp(r'^\d{4}').stringMatch(year ?? '');
     // Broad yearless matches remain in manual Sources. Automatic movie picks
     // require an explicit release-year tag to avoid silently choosing a remake.
-    return [
+    final filtered = [
       for (final result in results)
         for (final source in result.torrents)
           if (!isMovie ||
@@ -2380,6 +2460,22 @@ class TorrentPlaybackService {
                   ).hasMatch(source.name)))
             source,
     ];
+    logIptvSourceEvent(
+      'quick_play_search_completed',
+      catalogType: isMovie ? 'vod' : 'series',
+      season: season,
+      episode: episode,
+      outcome: filtered.isEmpty ? 'no_match' : 'matched',
+      playlistCount: results.length,
+      candidateCount: results.fold<int>(
+        0,
+        (count, result) => count + result.torrents.length,
+      ),
+      resultCount: filtered.length,
+      timedOut: timedOut,
+      elapsedMs: stopwatch.elapsedMilliseconds,
+    );
+    return filtered;
   }
 
   /// Combined engine, addon and IPTV search, followed by provider ordering
@@ -4219,6 +4315,14 @@ class TorrentPlaybackService {
       if (source.isIptvDirect) {
         fallbackHint =
             'Saved IPTV source is unavailable. Falling back to search.';
+        logIptvSourceEvent(
+          'bound_playback_started',
+          playlistId: source.iptvPlaylistId,
+          entryKey: source.iptvEntryKey,
+          catalogType: source.iptvCatalogType,
+          season: meta.season,
+          episode: meta.episode,
+        );
         try {
           final fresh = await IptvSourceSearch.resolvePinned(
             source,
@@ -4246,12 +4350,29 @@ class TorrentPlaybackService {
                 headers: fresh.httpHeaders,
               );
             }
-            if (!alive) continue;
+            if (!alive) {
+              logIptvSourceEvent(
+                'bound_playback_rejected',
+                source: fresh,
+                stage: 'preflight',
+                outcome: 'unplayable',
+                season: meta.season,
+                episode: meta.episode,
+              );
+              continue;
+            }
             overlay.setStage(PlayLoadStage.starting);
             if (!context.mounted) {
               closeLoading();
               return false;
             }
+            logIptvSourceEvent(
+              'bound_playback_launching',
+              source: fresh,
+              outcome: 'resolved',
+              season: meta.season,
+              episode: meta.episode,
+            );
             await _launch(
               context,
               _Resolved(
@@ -4822,32 +4943,75 @@ class TorrentPlaybackService {
     required String imdbId,
     required bool isMovie,
   }) async {
+    logIptvSourceEvent(
+      'manual_pin_started',
+      source: torrent,
+      catalogType: isMovie ? 'vod' : 'series',
+    );
     if (imdbId.isEmpty) {
+      logIptvSourceEvent(
+        'manual_pin_completed',
+        source: torrent,
+        outcome: 'imdb_missing',
+      );
       _snack(context, 'No IMDb match — can\'t pin a source.');
       return false;
     }
     try {
       await IptvSourceSearch.authorize(torrent);
-    } catch (_) {
+    } catch (error) {
+      logIptvSourceEvent(
+        'manual_pin_completed',
+        source: torrent,
+        outcome: 'authorization_rejected',
+        error: error,
+      );
       if (context.mounted) {
         _snack(context, 'IPTV connection changed. Search sources again.');
       }
       return false;
     }
-    if (!context.mounted) return false;
+    if (!context.mounted) {
+      logIptvSourceEvent(
+        'manual_pin_completed',
+        source: torrent,
+        outcome: 'view_closed',
+      );
+      return false;
+    }
     final source = _durableBindingForSource(
       torrent,
       SeriesSource.iptvDirectService,
     );
     if (source == null || !source.isIptvDirect) {
+      logIptvSourceEvent(
+        'manual_pin_completed',
+        source: torrent,
+        outcome: 'provenance_missing',
+      );
       _snack(context, 'This IPTV source cannot be refreshed from its catalog.');
       return false;
     }
-    if (isMovie) {
-      await SeriesSourceService.setSources(imdbId, [source]);
-    } else {
-      await SeriesSourceService.addSource(imdbId, source);
+    try {
+      if (isMovie) {
+        await SeriesSourceService.setSources(imdbId, [source]);
+      } else {
+        await SeriesSourceService.addSource(imdbId, source);
+      }
+    } catch (error) {
+      logIptvSourceEvent(
+        'manual_pin_completed',
+        source: torrent,
+        outcome: 'storage_failed',
+        error: error,
+      );
+      rethrow;
     }
+    logIptvSourceEvent(
+      'manual_pin_completed',
+      source: torrent,
+      outcome: 'saved',
+    );
     if (context.mounted) {
       _snack(
         context,
@@ -5495,9 +5659,26 @@ class TorrentPlaybackService {
     }
     final source = _durableBindingForSource(winner, provider);
     if (source == null) return;
+    final isIptv = IptvSourceSearch.owns(winner);
     try {
       await SeriesSourceService.setSources(meta.imdbId!, [source]);
-    } catch (_) {}
+      if (isIptv) {
+        logIptvSourceEvent(
+          'automatic_pin_completed',
+          source: winner,
+          outcome: 'saved',
+        );
+      }
+    } catch (error) {
+      if (isIptv) {
+        logIptvSourceEvent(
+          'automatic_pin_completed',
+          source: winner,
+          outcome: 'storage_failed',
+          error: error,
+        );
+      }
+    }
   }
 
   /// Series counterpart of [_autoBindMovieOnPlay] (on by default via the
@@ -5544,8 +5725,20 @@ class TorrentPlaybackService {
     }
     final source = _durableBindingForSource(winner, provider);
     if (source == null) return;
+    final isIptv = IptvSourceSearch.owns(winner);
     try {
-      if (!await StorageService.getSeriesAutoPinOnPlay()) return;
+      if (!await StorageService.getSeriesAutoPinOnPlay()) {
+        if (isIptv) {
+          logIptvSourceEvent(
+            'automatic_pin_completed',
+            source: winner,
+            outcome: 'disabled',
+            season: meta.season,
+            episode: meta.episode,
+          );
+        }
+        return;
+      }
       final imdbId = meta.imdbId!;
       final list = List<SeriesSource>.from(
         await SeriesSourceService.getSources(imdbId),
@@ -5591,7 +5784,27 @@ class TorrentPlaybackService {
       }
       list.insert(0, source);
       await SeriesSourceService.setSources(imdbId, list);
-    } catch (_) {}
+      if (isIptv) {
+        logIptvSourceEvent(
+          'automatic_pin_completed',
+          source: winner,
+          outcome: 'saved',
+          season: meta.season,
+          episode: meta.episode,
+        );
+      }
+    } catch (error) {
+      if (isIptv) {
+        logIptvSourceEvent(
+          'automatic_pin_completed',
+          source: winner,
+          outcome: 'storage_failed',
+          season: meta.season,
+          episode: meta.episode,
+          error: error,
+        );
+      }
+    }
   }
 
   /// Converts an eligible playback source into its durable binding. Automatic
@@ -6213,18 +6426,35 @@ class TorrentPlaybackService {
     }
     final source = _durableBindingForSource(switched, provider);
     if (source == null) return;
+    final isIptv = IptvSourceSearch.owns(switched);
     try {
       final imdbId = meta.imdbId!;
       final existing = await SeriesSourceService.getSources(imdbId);
       if (isMovie) {
         // Single bound source — replace it with the chosen one.
         await SeriesSourceService.setSources(imdbId, [source]);
+        if (isIptv) {
+          logIptvSourceEvent(
+            'source_switch_pin_completed',
+            source: switched,
+            outcome: 'saved',
+          );
+        }
         return;
       }
       // A switch after an unpersistable initial row can be the first bind. The
       // existing series auto-pin preference still owns that opt-in boundary;
       // once a list exists, a successful switch keeps it in sync regardless.
       if (existing.isEmpty && !await StorageService.getSeriesAutoPinOnPlay()) {
+        if (isIptv) {
+          logIptvSourceEvent(
+            'source_switch_pin_completed',
+            source: switched,
+            outcome: 'disabled',
+            season: meta.season,
+            episode: meta.episode,
+          );
+        }
         return;
       }
       // Series: promote the winner but retain the previous primary and every
@@ -6240,7 +6470,27 @@ class TorrentPlaybackService {
         );
       list.insert(0, source);
       await SeriesSourceService.setSources(imdbId, list);
-    } catch (_) {}
+      if (isIptv) {
+        logIptvSourceEvent(
+          'source_switch_pin_completed',
+          source: switched,
+          outcome: 'saved',
+          season: meta.season,
+          episode: meta.episode,
+        );
+      }
+    } catch (error) {
+      if (isIptv) {
+        logIptvSourceEvent(
+          'source_switch_pin_completed',
+          source: switched,
+          outcome: 'storage_failed',
+          season: meta.season,
+          episode: meta.episode,
+          error: error,
+        );
+      }
+    }
   }
 
   /// Download a direct/external addon stream to device (parity with the old

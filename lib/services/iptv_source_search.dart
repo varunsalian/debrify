@@ -12,6 +12,7 @@ import 'iptv_catalog_key.dart';
 import 'profiles/profile_async_authorization.dart';
 import 'profiles/profile_runtime.dart';
 import 'series_source_service.dart';
+import 'source_selection_diagnostics.dart';
 import 'storage_service.dart';
 import 'xtream_codes_service.dart';
 
@@ -38,8 +39,25 @@ class IptvSourceSearch {
   static Future<void> authorize(Torrent source) async {
     if (!owns(source)) return;
     final check = _authorizations[source];
-    if (check == null) throw StateError('Search this IPTV source again');
-    await check();
+    if (check == null) {
+      logIptvSourceEvent(
+        'authorization_rejected',
+        source: source,
+        outcome: 'missing_ticket',
+      );
+      throw StateError('Search this IPTV source again');
+    }
+    try {
+      await check();
+    } catch (error) {
+      logIptvSourceEvent(
+        'authorization_rejected',
+        source: source,
+        outcome: 'capability_changed',
+        error: error,
+      );
+      rethrow;
+    }
   }
 
   static String keyFor(IptvPlaylist playlist) =>
@@ -209,6 +227,7 @@ class IptvSourceSearch {
     bool Function()? shouldContinue,
   }) async {
     if (selection.isNonImdb) return const [];
+    final stopwatch = Stopwatch()..start();
     final scope = ProfileRuntime.scope.value;
     try {
       final capability = await ProfileAsyncAuthorization.capture(
@@ -217,14 +236,39 @@ class IptvSourceSearch {
       final playlists = await StorageService.getIptvPlaylists(
         forSettings: false,
       );
-      if (!playlists.any(_eligiblePlaylist)) {
+      final eligibleCount = playlists.where(_eligiblePlaylist).length;
+      logIptvSourceEvent(
+        'discovery_started',
+        catalogType: selection.isSeries ? 'series' : 'vod',
+        season: selection.season,
+        episode: selection.episode,
+        playlistCount: eligibleCount,
+      );
+      if (eligibleCount == 0) {
+        logIptvSourceEvent(
+          'discovery_completed',
+          catalogType: selection.isSeries ? 'series' : 'vod',
+          outcome: 'no_providers',
+          playlistCount: 0,
+          resultCount: 0,
+          elapsedMs: stopwatch.elapsedMilliseconds,
+        );
         return const [];
       }
       await IptvCatalogDb.open();
       final results = <IptvSourceResult>[];
       // Small batches bound episode-info traffic on devices with many providers.
       for (var start = 0; start < playlists.length; start += 3) {
-        if (shouldContinue?.call() == false) return const [];
+        if (shouldContinue?.call() == false) {
+          logIptvSourceEvent(
+            'discovery_completed',
+            catalogType: selection.isSeries ? 'series' : 'vod',
+            outcome: 'cancelled',
+            playlistCount: eligibleCount,
+            elapsedMs: stopwatch.elapsedMilliseconds,
+          );
+          return const [];
+        }
         final batch = playlists.skip(start).take(3).where(_eligiblePlaylist);
         await Future.wait(
           batch.map((playlist) async {
@@ -239,9 +283,47 @@ class IptvSourceSearch {
           }),
         );
       }
-      return ProfileRuntime.scope.value == scope ? results : const [];
-    } catch (_) {
+      if (shouldContinue?.call() == false) {
+        logIptvSourceEvent(
+          'discovery_completed',
+          catalogType: selection.isSeries ? 'series' : 'vod',
+          outcome: 'cancelled',
+          playlistCount: eligibleCount,
+          elapsedMs: stopwatch.elapsedMilliseconds,
+        );
+        return const [];
+      }
+      if (ProfileRuntime.scope.value != scope) {
+        logIptvSourceEvent(
+          'discovery_completed',
+          catalogType: selection.isSeries ? 'series' : 'vod',
+          outcome: 'profile_changed',
+          playlistCount: eligibleCount,
+          elapsedMs: stopwatch.elapsedMilliseconds,
+        );
+        return const [];
+      }
+      logIptvSourceEvent(
+        'discovery_completed',
+        catalogType: selection.isSeries ? 'series' : 'vod',
+        outcome: 'complete',
+        playlistCount: eligibleCount,
+        resultCount: results.fold<int>(
+          0,
+          (count, result) => count + result.torrents.length,
+        ),
+        elapsedMs: stopwatch.elapsedMilliseconds,
+      );
+      return results;
+    } catch (error) {
       // IPTV permission/vault failures must not break torrent/addon discovery.
+      logIptvSourceEvent(
+        'discovery_completed',
+        catalogType: selection.isSeries ? 'series' : 'vod',
+        outcome: 'failed',
+        elapsedMs: stopwatch.elapsedMilliseconds,
+        error: error,
+      );
       return const [];
     }
   }
@@ -295,6 +377,9 @@ class IptvSourceSearch {
     String? desiredEntryKey,
   }) async {
     final key = keyFor(playlist);
+    final providerKind = playlist.isXtreamCodes ? 'xtream' : 'm3u';
+    final catalogType = selection.isSeries ? 'series' : 'vod';
+    final stopwatch = Stopwatch()..start();
     IptvSourceResult result(
       String message, [
       List<Torrent> torrents = const [],
@@ -302,21 +387,49 @@ class IptvSourceSearch {
     try {
       final scope = ProfileRuntime.scope.value;
       final current = await _currentPlaylist(playlist.id);
-      if (current == null) return result('IPTV source unavailable.');
+      if (current == null) {
+        logIptvSourceEvent(
+          'playlist_search_completed',
+          playlistId: playlist.id,
+          catalogType: catalogType,
+          providerKind: providerKind,
+          outcome: 'connection_unavailable',
+          elapsedMs: stopwatch.elapsedMilliseconds,
+        );
+        return result('IPTV source unavailable.');
+      }
       final check = current.check;
 
-      final type = selection.isSeries ? 'series' : 'vod';
       final snapshot = IptvCatalogDb.snapshot(
-        IptvCatalogKey.forPlaylist(playlist, type)!,
+        IptvCatalogKey.forPlaylist(playlist, catalogType)!,
       );
       if (snapshot == null) {
+        logIptvSourceEvent(
+          'playlist_search_completed',
+          playlistId: playlist.id,
+          catalogType: catalogType,
+          providerKind: providerKind,
+          outcome: 'catalog_missing',
+          elapsedMs: stopwatch.elapsedMilliseconds,
+        );
         return result(
           'Catalog not loaded. Open IPTV → ${playlist.name} → ${selection.isSeries ? 'Series' : 'Movies'} once to download it.',
         );
       }
       final words = normalize(selection.title).split(' ')
         ..sort((a, b) => b.length.compareTo(a.length));
-      if (words.first.isEmpty) return result('No matching sources.');
+      if (words.first.isEmpty) {
+        logIptvSourceEvent(
+          'playlist_search_completed',
+          playlistId: playlist.id,
+          catalogType: catalogType,
+          providerKind: providerKind,
+          outcome: 'empty_query',
+          resultCount: 0,
+          elapsedMs: stopwatch.elapsedMilliseconds,
+        );
+        return result('No matching sources.');
+      }
       final candidates = <IptvChannel>[];
       bool accepts(IptvChannel channel, {required bool requireTitle}) {
         if (desiredEntryKey != null &&
@@ -371,12 +484,22 @@ class IptvSourceSearch {
       // A durable pin owns a provider ID. Providers may rename/localize the
       // display title between catalog refreshes, so fall back to the stable ID
       // instead of invalidating an otherwise unchanged pin.
-      if (candidates.isEmpty && desiredEntryKey != null) {
+      final fallbackScan = candidates.isEmpty && desiredEntryKey != null;
+      if (fallbackScan) {
         await collect(search: null, requireTitle: false);
       }
+      logIptvSourceEvent(
+        'catalog_candidates_collected',
+        playlistId: playlist.id,
+        entryKey: desiredEntryKey,
+        catalogType: catalogType,
+        providerKind: providerKind,
+        candidateCount: candidates.length,
+        fallbackScan: fallbackScan,
+      );
       final torrents = <Torrent>[];
       final emittedSeriesKeys = <String>{};
-      var lookupFailed = false;
+      var lookupFailures = 0;
       // One lookup at a time bounds provider traffic without silently dropping
       // language/quality variants after the first three series entries.
       for (final candidate in candidates) {
@@ -416,7 +539,7 @@ class IptvSourceSearch {
                 )
                 .timeout(const Duration(seconds: 12));
             if (info == null) {
-              lookupFailed = true;
+              lookupFailures++;
               continue;
             }
             final episodes = info.episodes.where(
@@ -426,8 +549,18 @@ class IptvSourceSearch {
             );
             if (episodes.isEmpty) continue;
             url = episodes.first.url;
-          } catch (_) {
-            lookupFailed = true;
+          } catch (error) {
+            lookupFailures++;
+            logIptvSourceEvent(
+              'episode_lookup_failed',
+              playlistId: playlist.id,
+              entryKey: entryKey,
+              catalogType: catalogType,
+              providerKind: providerKind,
+              season: selection.season,
+              episode: selection.episode,
+              error: error,
+            );
             continue;
           }
         } else if (selection.isSeries && playlist.isXtreamCodes) {
@@ -461,7 +594,7 @@ class IptvSourceSearch {
           hasRealInfoHash: false,
           addonDisplayName: playlist.name,
           iptvPlaylistId: playlist.id,
-          iptvCatalogType: type,
+          iptvCatalogType: catalogType,
           iptvEntryKey: entryKey,
           coverageType: selection.isSeries && selection.season != null
               ? 'singleEpisode'
@@ -475,15 +608,40 @@ class IptvSourceSearch {
         torrents.add(torrent);
       }
       await check();
+      logIptvSourceEvent(
+        'playlist_search_completed',
+        playlistId: playlist.id,
+        entryKey: desiredEntryKey,
+        catalogType: catalogType,
+        providerKind: providerKind,
+        outcome: torrents.isEmpty
+            ? (lookupFailures > 0 ? 'lookup_failed' : 'no_match')
+            : 'matched',
+        candidateCount: candidates.length,
+        resultCount: torrents.length,
+        failedCount: lookupFailures,
+        fallbackScan: fallbackScan,
+        elapsedMs: stopwatch.elapsedMilliseconds,
+      );
       return result(
         torrents.isEmpty
-            ? (lookupFailed
+            ? (lookupFailures > 0
                   ? 'Episode lookup failed. Try searching again.'
                   : 'No matching sources.')
-            : '${torrents.length} matching sources${lookupFailed ? ' · Some episode lookups failed. Try searching again.' : ''}',
+            : '${torrents.length} matching sources${lookupFailures > 0 ? ' · Some episode lookups failed. Try searching again.' : ''}',
         torrents,
       );
-    } catch (_) {
+    } catch (error) {
+      logIptvSourceEvent(
+        'playlist_search_completed',
+        playlistId: playlist.id,
+        entryKey: desiredEntryKey,
+        catalogType: catalogType,
+        providerKind: providerKind,
+        outcome: 'failed',
+        elapsedMs: stopwatch.elapsedMilliseconds,
+        error: error,
+      );
       return result('IPTV source unavailable. Try searching again.');
     }
   }
@@ -500,11 +658,40 @@ class IptvSourceSearch {
   }) async {
     if (!source.isIptvDirect) return null;
     final isSeries = source.iptvCatalogType == 'series';
-    if (isSeries && (season == null || episode == null)) return null;
+    final stopwatch = Stopwatch()..start();
+    logIptvSourceEvent(
+      'pin_resolution_started',
+      playlistId: source.iptvPlaylistId,
+      entryKey: source.iptvEntryKey,
+      catalogType: source.iptvCatalogType,
+      season: season,
+      episode: episode,
+    );
+    if (isSeries && (season == null || episode == null)) {
+      logIptvSourceEvent(
+        'pin_resolution_completed',
+        playlistId: source.iptvPlaylistId,
+        entryKey: source.iptvEntryKey,
+        catalogType: source.iptvCatalogType,
+        outcome: 'episode_missing',
+        elapsedMs: stopwatch.elapsedMilliseconds,
+      );
+      return null;
+    }
     try {
       await IptvCatalogDb.open();
       final current = await _currentPlaylist(source.iptvPlaylistId!);
-      if (current == null) return null;
+      if (current == null) {
+        logIptvSourceEvent(
+          'pin_resolution_completed',
+          playlistId: source.iptvPlaylistId,
+          entryKey: source.iptvEntryKey,
+          catalogType: source.iptvCatalogType,
+          outcome: 'connection_unavailable',
+          elapsedMs: stopwatch.elapsedMilliseconds,
+        );
+        return null;
+      }
       final result = await _playlist(
         current.playlist,
         AdvancedSearchSelection(
@@ -519,11 +706,39 @@ class IptvSourceSearch {
         desiredEntryKey: source.iptvEntryKey,
       );
       for (final candidate in result.torrents) {
-        if (candidate.iptvEntryKey == source.iptvEntryKey) return candidate;
+        if (candidate.iptvEntryKey == source.iptvEntryKey) {
+          logIptvSourceEvent(
+            'pin_resolution_completed',
+            source: candidate,
+            outcome: 'resolved',
+            season: season,
+            episode: episode,
+            elapsedMs: stopwatch.elapsedMilliseconds,
+          );
+          return candidate;
+        }
       }
-    } catch (_) {
+    } catch (error) {
       // Saved-source resolution is fail-soft; normal search remains fallback.
+      logIptvSourceEvent(
+        'pin_resolution_completed',
+        playlistId: source.iptvPlaylistId,
+        entryKey: source.iptvEntryKey,
+        catalogType: source.iptvCatalogType,
+        outcome: 'failed',
+        elapsedMs: stopwatch.elapsedMilliseconds,
+        error: error,
+      );
+      return null;
     }
+    logIptvSourceEvent(
+      'pin_resolution_completed',
+      playlistId: source.iptvPlaylistId,
+      entryKey: source.iptvEntryKey,
+      catalogType: source.iptvCatalogType,
+      outcome: 'no_match',
+      elapsedMs: stopwatch.elapsedMilliseconds,
+    );
     return null;
   }
 }
