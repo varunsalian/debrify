@@ -296,6 +296,33 @@ void main() {
   );
 
   test(
+    'custom episode protocol id is sent to every compatible addon',
+    () async {
+      final origin = addon('onepace');
+      final fallback = addon('fallback');
+      install([origin, fallback]);
+      final paths = <String, String>{};
+      service.debugStreamHttpClientFactory = () => MockClient((request) async {
+        paths[request.url.host] = Uri.decodeComponent(request.url.path);
+        return response('https://cdn.test/${request.url.host}');
+      });
+
+      final result = await service.searchStreams(
+        type: 'series',
+        imdbId: 'tt0388629',
+        season: 1,
+        episode: 1,
+        originAddonKey: origin.sourceBindingKey,
+        originVideoId: 'RO_1',
+      );
+
+      expect(paths['onepace.test'], '/stream/series/RO_1.json');
+      expect(paths['fallback.test'], '/stream/series/RO_1.json');
+      expect(result['torrents'], hasLength(2));
+    },
+  );
+
+  test(
     'concurrent pinned lookup and ordinary search share addon request',
     () async {
       final a = addon('one');

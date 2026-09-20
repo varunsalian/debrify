@@ -173,6 +173,7 @@ class MetadataEpisodeService {
       firstAired: original.firstAired,
       runtime: original.runtime,
       playbackUrl: original.playbackUrl,
+      stremioVideoId: original.stremioVideoId,
     );
   }
 }

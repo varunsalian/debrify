@@ -49,6 +49,8 @@ SeriesSource pin({
   String profile = '1080p',
   int index = 0,
   String addon = 'addon-config',
+  String? catalogId,
+  String? catalogKey,
 }) => SeriesSource(
   torrentHash: '',
   torrentName: 'Show',
@@ -57,6 +59,8 @@ SeriesSource pin({
   boundAt: 1,
   addonId: 'test',
   addonKey: addon,
+  addonCatalogId: catalogId,
+  addonCatalogKey: catalogKey,
   streamKey: profile,
   bingeGroup: group,
   streamIndex: index,
@@ -71,6 +75,50 @@ void main() {
   tearDown(() {
     StreamUrlValidator.clientFactory = http.Client.new;
   });
+
+  test(
+    'custom playback cannot read, overwrite or evict canonical cached links',
+    () async {
+      await ResolvedPlaybackLinkCache.save(
+        id: 'tt123',
+        type: 'series',
+        season: 1,
+        episode: 1,
+        source: stream(),
+      );
+      final custom = pin(catalogId: 'edit', catalogKey: 'origin-config');
+      Future<Torrent?> read(SeriesSource source) =>
+          ResolvedPlaybackLinkCache.get(
+            id: 'tt123',
+            type: 'series',
+            season: 1,
+            episode: 1,
+            pin: source,
+          );
+      expect(await read(custom), isNull);
+      await TorrentPlaybackService.validatedSourceCommitterForTesting(
+        'rd',
+        const PlaybackMeta(
+          imdbId: 'tt123',
+          contentType: 'series',
+          season: 1,
+          episode: 1,
+          stremioCatalogId: 'edit',
+          stremioAddonKey: 'origin-config',
+          stremioVideoId: 'EDIT_1',
+        ),
+      )(stream(url: 'https://cdn.test/custom.mp4'));
+      await ResolvedPlaybackLinkCache.remove(
+        id: 'tt123',
+        type: 'series',
+        season: 1,
+        episode: 1,
+        pin: custom,
+      );
+      expect((await read(pin()))?.directUrl, 'https://cdn.test/episode.mp4');
+      expect(await read(custom), isNull);
+    },
+  );
 
   test(
     'next episode queries the pinned addon and caches the actual episode identity',

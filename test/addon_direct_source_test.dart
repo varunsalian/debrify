@@ -110,6 +110,27 @@ void main() {
     expect(at(9).streamIndex, 9);
   });
 
+  test('custom catalog pins do not collide with canonical series pins', () {
+    SeriesSource source(String? catalogId) => SeriesSource(
+      torrentHash: '',
+      torrentName: 'Series stream',
+      debridService: SeriesSource.addonDirectService,
+      debridTorrentId: '',
+      boundAt: 1,
+      addonId: 'test.addon',
+      addonKey: 'opaque-addon-key',
+      addonCatalogId: catalogId,
+      streamKey: 'quality-profile',
+      streamIndex: 0,
+    );
+
+    expect(source(null).bindingKey, isNot(source('onepace').bindingKey));
+    expect(
+      source('onepace').bindingKey,
+      isNot(source('another-edit').bindingKey),
+    );
+  });
+
   test('stream profile survives URL, episode, hash, and size changes', () {
     final first = StremioStream.fromJson({
       'name': 'Provider 1080p',
@@ -131,6 +152,131 @@ void main() {
     }, 'Test');
 
     expect(next.streamKey, first.streamKey);
+  });
+
+  test('custom direct commits and switches preserve canonical pins', () async {
+    const imdbId = 'tt1000091';
+    const canonical = SeriesSource(
+      torrentHash: '',
+      torrentName: 'Canonical pin',
+      debridService: SeriesSource.addonDirectService,
+      debridTorrentId: '',
+      boundAt: 1,
+      addonId: 'test.addon',
+      addonKey: 'addon-key',
+      streamKey: 'profile',
+    );
+    await SeriesSourceService.setSources(imdbId, [canonical]);
+    final commit = TorrentPlaybackService.validatedSourceCommitterForTesting(
+      'rd',
+      const PlaybackMeta(
+        imdbId: imdbId,
+        contentType: 'series',
+        season: 1,
+        episode: 1,
+        stremioAddonKey: 'catalog-key',
+        stremioCatalogId: 'fan-edit',
+        stremioVideoId: 'RO_1',
+      ),
+    );
+    for (final index in [1, 2]) {
+      await commit(
+        direct(url: 'https://signed.test/$index', key: 'profile', index: index),
+      );
+      final pins = await SeriesSourceService.getSources(imdbId);
+      expect(pins, hasLength(2));
+      expect(pins.first.addonCatalogId, 'fan-edit');
+      expect(pins.last.bindingKey, canonical.bindingKey);
+    }
+  });
+
+  test('custom torrent pins retain scope through commits and JSON', () async {
+    const imdbId = 'tt1000092';
+    const hash = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+    const canonical = SeriesSource(
+      torrentHash: hash,
+      torrentName: 'Canonical torrent',
+      debridService: 'rd',
+      debridTorrentId: '',
+      boundAt: 1,
+    );
+    await SeriesSourceService.setSources(imdbId, [canonical]);
+    final commit = TorrentPlaybackService.validatedSourceCommitterForTesting(
+      'rd',
+      const PlaybackMeta(
+        imdbId: imdbId,
+        contentType: 'series',
+        season: 1,
+        episode: 1,
+        stremioAddonKey: 'catalog-key',
+        stremioCatalogId: 'fan-edit',
+        stremioVideoId: 'RO_1',
+      ),
+    );
+    for (var i = 0; i < 2; i++) {
+      await commit(torrentSource(name: 'Fan.Edit.S01E01', hash: hash));
+      final pins = await SeriesSourceService.getSources(imdbId);
+      expect(pins, hasLength(2));
+      expect(pins.first.addonCatalogId, 'fan-edit');
+      expect(pins.first.bindingKey, isNot(canonical.bindingKey));
+      expect(pins.last.bindingKey, 'hash:$hash');
+      expect(
+        SeriesSource.fromJson(pins.first.toJson()).addonCatalogId,
+        'fan-edit',
+      );
+    }
+  });
+
+  test('same catalog id from different origins keeps separate pins', () async {
+    const id = 'tt1000093';
+    for (final origin in ['origin-A', 'origin-B']) {
+      final commit = TorrentPlaybackService.validatedSourceCommitterForTesting(
+        'rd',
+        PlaybackMeta(
+          imdbId: id,
+          contentType: 'series',
+          season: 1,
+          episode: 1,
+          stremioCatalogId: 'shared-parent',
+          stremioAddonKey: origin,
+          stremioVideoId: 'E1',
+        ),
+      );
+      await commit(
+        direct(
+          url: 'https://cdn.test/$origin',
+          key: 'shared-profile',
+          index: 0,
+        ),
+      );
+      await commit(
+        torrentSource(
+          name: 'Edit.S01E01',
+          hash: 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+        ),
+      );
+    }
+    final pins = await SeriesSourceService.getSources(id);
+    expect(pins, hasLength(4));
+    expect(pins.map((pin) => pin.bindingKey).toSet(), hasLength(4));
+    for (final pin in pins) {
+      final restored = SeriesSource.fromJson(pin.toJson());
+      expect(
+        restored.matchesCatalogScope(
+          catalogId: 'shared-parent',
+          catalogKey: pin.addonCatalogKey,
+        ),
+        isTrue,
+      );
+      expect(
+        restored.matchesCatalogScope(
+          catalogId: 'shared-parent',
+          catalogKey: 'other',
+        ),
+        isFalse,
+      );
+      expect(restored.matchesCatalogScope(), isFalse);
+    }
   });
 
   test('conversion carries refresh provenance without changing direct URL', () {
@@ -162,6 +308,7 @@ void main() {
       boundAt: 1,
       addonId: 'test.addon',
       addonKey: 'opaque-addon-key',
+      addonCatalogId: 'onepace',
       streamKey: 'quality-profile',
       streamIndex: 2,
     );
@@ -170,6 +317,7 @@ void main() {
 
     expect(restored.isAddonDirect, isTrue);
     expect(restored.bindingKey, source.bindingKey);
+    expect(restored.addonCatalogId, 'onepace');
     expect(json.toString(), isNot(contains('https://')));
 
     await SeriesSourceService.addSource('tt1234567', source);

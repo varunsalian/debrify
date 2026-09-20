@@ -179,6 +179,12 @@ class AndroidTvPlayerBridge {
   // grown source list; null/throw keeps native on its old finish fallback.
   static Future<Map<String, dynamic>?> Function(int season, int episode)?
   _episodeFetchProvider;
+  static Future<({int season, int episode})?> Function(
+    int season,
+    int episode,
+    int direction,
+  )?
+  _adjacentEpisodeProvider;
   static Future<Map<String, dynamic>?> Function(List<String>)?
   _stremioTvGuideDataProvider;
   static Future<Map<String, dynamic>?> Function(String)?
@@ -791,17 +797,26 @@ class AndroidTvPlayerBridge {
               final currentSeason = episodeFetchArgs['currentSeason'] as int?;
               final currentEpisode = episodeFetchArgs['currentEpisode'] as int?;
               final direction = episodeFetchArgs['direction'] as int? ?? 1;
-              if (direction == 1 &&
-                  imdbId != null &&
-                  currentSeason != null &&
-                  currentEpisode != null) {
-                final next = await NextEpisodeService.findNextEpisode(
-                  imdbId,
+              if (currentSeason != null && currentEpisode != null) {
+                final adjacent = await _adjacentEpisodeProvider?.call(
                   currentSeason,
                   currentEpisode,
+                  direction,
                 );
-                fetchSeason = next?.season;
-                fetchEpisode = next?.episode;
+                fetchSeason = adjacent?.season;
+                fetchEpisode = adjacent?.episode;
+                if ((fetchSeason == null || fetchEpisode == null) &&
+                    _adjacentEpisodeProvider == null &&
+                    direction == 1 &&
+                    imdbId != null) {
+                  final next = await NextEpisodeService.findNextEpisode(
+                    imdbId,
+                    currentSeason,
+                    currentEpisode,
+                  );
+                  fetchSeason = next?.season;
+                  fetchEpisode = next?.episode;
+                }
               }
             }
             if (fetchSeason == null || fetchEpisode == null) return null;
@@ -874,6 +889,7 @@ class AndroidTvPlayerBridge {
           _moreSourcesProvider = null;
           _addonSourcesProvider = null;
           _episodeFetchProvider = null;
+          _adjacentEpisodeProvider = null;
           _stremioTvGuideDataProvider = null;
           _stremioTvChannelSwitchProvider = null;
           _stremioTvNextProvider = null;
@@ -1752,6 +1768,12 @@ class AndroidTvPlayerBridge {
     onRequestAddonSources,
     Future<Map<String, dynamic>?> Function(int season, int episode)?
     onRequestEpisodeFetch,
+    Future<({int season, int episode})?> Function(
+      int season,
+      int episode,
+      int direction,
+    )?
+    onResolveAdjacentEpisode,
     Future<Map<String, dynamic>?> Function(List<String>)?
     onRequestStremioTvGuideData,
     Future<Map<String, dynamic>?> Function(String)?
@@ -1808,6 +1830,7 @@ class AndroidTvPlayerBridge {
     _moreSourcesProvider = onRequestMoreSources;
     _addonSourcesProvider = onRequestAddonSources;
     _episodeFetchProvider = onRequestEpisodeFetch;
+    _adjacentEpisodeProvider = onResolveAdjacentEpisode;
     _stremioTvGuideDataProvider = onRequestStremioTvGuideData;
     _stremioTvChannelSwitchProvider = onRequestStremioTvChannelSwitch;
     _stremioTvNextProvider = onRequestStremioTvNext;
@@ -1898,6 +1921,7 @@ class AndroidTvPlayerBridge {
       _moreSourcesProvider = null;
       _addonSourcesProvider = null;
       _episodeFetchProvider = null;
+      _adjacentEpisodeProvider = null;
       _stremioTvGuideDataProvider = null;
       _stremioTvChannelSwitchProvider = null;
       _stremioTvNextProvider = null;

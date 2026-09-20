@@ -530,9 +530,19 @@ class _SourcesScreenState extends State<_SourcesScreen> {
   }
 
   Future<void> _reloadBound() async {
-    final bound = _imdbId.isEmpty
+    final allBound = _imdbId.isEmpty
         ? <SeriesSource>[]
         : await SeriesSourceService.getSources(_imdbId);
+    final catalogId = widget.selection.hasStremioEpisodeIdentity
+        ? widget.selection.stremioCatalogId
+        : null;
+    final bound = allBound
+        .where((source) => source.matchesCatalogScope(
+          catalogId: catalogId,
+          catalogKey: widget.selection.hasStremioEpisodeIdentity
+              ? widget.selection.stremioAddonKey : null,
+        ))
+        .toList();
     Torrent? cached;
     if (widget.selection.isSeries &&
         widget.selection.season != null &&
@@ -706,7 +716,25 @@ class _SourcesScreenState extends State<_SourcesScreen> {
       // non-standard content types by contentType). Previously this path was
       // torrent-only, so addon direct links never appeared in the Search tab's
       // Sources list even though Home showed them.
-      final iptvSearch = !_keywordMode && widget.searchOverride == null
+      var originVideoId = sel.stremioVideoId?.trim();
+      if (sel.hasStremioEpisodeIdentity &&
+          originVideoId?.isNotEmpty != true &&
+          sel.season != null &&
+          sel.episode != null) {
+        originVideoId = await StremioService.instance
+            .resolveSeriesEpisodeVideoId(
+              addonKey: sel.stremioAddonKey!,
+              addonId: sel.stremioAddonId,
+              catalogId: sel.stremioCatalogId!,
+              season: sel.season!,
+              episode: sel.episode!,
+            );
+        if (!mounted || token != _searchToken) return;
+      }
+      final iptvSearch =
+          !_keywordMode &&
+              widget.searchOverride == null &&
+              !sel.hasStremioEpisodeIdentity
           ? IptvSourceSearch.search(
               sel,
               deferXtreamSeriesEpisodes: true,
@@ -722,7 +750,14 @@ class _SourcesScreenState extends State<_SourcesScreen> {
               },
             )
           : null;
-      final res = widget.searchOverride != null
+      final customEpisodeUnavailable =
+          sel.hasStremioEpisodeIdentity && originVideoId?.isNotEmpty != true;
+      final res = customEpisodeUnavailable
+          ? <String, dynamic>{
+              'torrents': <Torrent>[],
+              'addonStatuses': <AddonSearchStatus>[],
+            }
+          : widget.searchOverride != null
           ? await widget.searchOverride!(onBatch)
           : _keywordMode
           ? await TorrentService.searchAllEngines(
@@ -743,6 +778,8 @@ class _SourcesScreenState extends State<_SourcesScreen> {
                   : null,
               onBatch: onBatch,
               preserveSourceOrder: true,
+              originAddonKey: sel.stremioAddonKey,
+              originVideoId: originVideoId,
             );
       final iptv = iptvSearch == null ? <IptvSourceResult>[] : await iptvSearch;
       if (!mounted || token != _searchToken) return;
@@ -1148,12 +1185,16 @@ class _SourcesScreenState extends State<_SourcesScreen> {
               t,
               imdbId: _imdbId,
               isMovie: _isMovie,
+              addonCatalogId: widget.selection.stremioCatalogId,
+              addonCatalogKey: widget.selection.stremioAddonKey,
             )
           : await TorrentPlaybackService.bindSource(
               context,
               t,
               imdbId: _imdbId,
               isMovie: _isMovie,
+              addonCatalogId: widget.selection.stremioCatalogId,
+              addonCatalogKey: widget.selection.stremioAddonKey,
             );
       if (!mounted) return;
       if (ok) {
@@ -1655,6 +1696,27 @@ class _SourcesScreenState extends State<_SourcesScreen> {
     setState(() => _retryingAddons.add(status.addonId));
     try {
       final sel = _effectiveSelection;
+      var originVideoId = sel.stremioVideoId?.trim();
+      if (sel.hasStremioEpisodeIdentity &&
+          originVideoId?.isNotEmpty != true &&
+          sel.season != null &&
+          sel.episode != null) {
+        originVideoId = await StremioService.instance
+            .resolveSeriesEpisodeVideoId(
+              addonKey: sel.stremioAddonKey!,
+              addonId: sel.stremioAddonId,
+              catalogId: sel.stremioCatalogId!,
+              season: sel.season!,
+              episode: sel.episode!,
+            );
+      }
+      if (sel.hasStremioEpisodeIdentity &&
+          originVideoId?.isNotEmpty != true) {
+        if (mounted && token == _searchToken) {
+          setState(() => _retryingAddons.remove(status.addonId));
+        }
+        return;
+      }
       final batch = await StremioService.instance.retryAddonStreams(
         addonId: status.addonId,
         type: sel.contentType ?? (sel.isSeries ? 'series' : 'movie'),
@@ -1663,6 +1725,7 @@ class _SourcesScreenState extends State<_SourcesScreen> {
         episode: sel.episode,
         timeout: StremioService.manualRetryTimeout,
         preserveOrder: true,
+        originVideoId: originVideoId,
       );
       if (!mounted || token != _searchToken) return;
       setState(() {

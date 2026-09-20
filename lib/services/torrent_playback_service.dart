@@ -80,6 +80,10 @@ class PlaybackMeta {
   final String? posterUrl;
   final String? year;
   final String? addonId; // originating Stremio addon (resume / next-episode)
+  final String? stremioAddonId;
+  final String? stremioAddonKey;
+  final String? stremioCatalogId;
+  final String? stremioVideoId;
   final double? traktProgressPercent; // Trakt watch position, if known
   // Play came from a Trakt row → scrobble to Trakt instead of saving a local
   // Continue Watching entry (mirrors Home passing selection.traktSource).
@@ -109,6 +113,10 @@ class PlaybackMeta {
     this.posterUrl,
     this.year,
     this.addonId,
+    this.stremioAddonId,
+    this.stremioAddonKey,
+    this.stremioCatalogId,
+    this.stremioVideoId,
     this.traktProgressPercent,
     this.traktScrobble = false,
     this.simklProgressPercent,
@@ -129,6 +137,10 @@ class PlaybackMeta {
     this.posterUrl,
     this.year,
     this.addonId,
+    this.stremioAddonId,
+    this.stremioAddonKey,
+    this.stremioCatalogId,
+    this.stremioVideoId,
     this.traktProgressPercent,
     this.traktScrobble = false,
     this.simklProgressPercent,
@@ -137,6 +149,10 @@ class PlaybackMeta {
     this.mdblistScrobble = false,
     this.art,
   }) : resumePolicy = PlaybackResumePolicy.catalogCanonical;
+
+  bool get hasStremioEpisodeIdentity =>
+      stremioAddonKey?.trim().isNotEmpty == true &&
+      stremioCatalogId?.trim().isNotEmpty == true;
 }
 
 /// Isolated "add a chosen torrent to debrid → do the configured post-torrent
@@ -1510,7 +1526,9 @@ class TorrentPlaybackService {
     if (!skipBound) {
       late final List<SeriesSource> bound;
       try {
-        bound = await SeriesSourceService.getSources(imdbId);
+        bound = (await SeriesSourceService.getSources(imdbId))
+            .where((source) => _bindingMatchesMeta(source, meta))
+            .toList();
       } catch (_) {
         resolving.dismiss();
         rethrow;
@@ -1549,6 +1567,26 @@ class TorrentPlaybackService {
     // separate notion of pin eligibility, which a title-level count could not
     // have answered for a series pinned only as single episodes.
     if (handedToPicker()) return;
+
+    // A custom Stremio episode ID describes content that IMDb torrent/IPTV
+    // sources cannot safely substitute (for example, a fan edit). Query its
+    // protocol ID directly before provider selection, regardless of the
+    // ordinary torrent-vs-addon preference for canonical titles.
+    if (meta.hasStremioEpisodeIdentity) {
+      resolving.dismiss();
+      await _playAddonStream(
+        context,
+        imdbId,
+        isMovie: isMovie,
+        season: season,
+        episode: episode,
+        meta: meta,
+        label: label,
+        rules: rules,
+        forceAddonOnly: true,
+      );
+      return;
+    }
 
     // Addon-leading, exact-episode routes search addons before asking the user
     // to choose a debrid provider. Direct addon links need no provider at all;
@@ -1746,6 +1784,7 @@ class TorrentPlaybackService {
 
     final packRouteAllowed =
         !isMovie &&
+        !meta.hasStremioEpisodeIdentity &&
         season != null &&
         episode != null &&
         provider != 'pikpak' &&
@@ -1892,6 +1931,7 @@ class TorrentPlaybackService {
         episode: episode,
         provider: provider,
         rules: activeRules,
+        originMeta: meta,
         isCancelled: () => cancel.cancelled,
         onResults: (n) =>
             overlay.setStage(PlayLoadStage.searching, sourceCount: n),
@@ -2698,6 +2738,31 @@ class TorrentPlaybackService {
 
   /// Combined engine, addon and IPTV search, followed by provider ordering
   /// at the caller. IPTV does not participate in torrent-only pack searches.
+  static Future<String?> _originEpisodeVideoId(
+    PlaybackMeta? meta,
+    int? season,
+    int? episode,
+  ) async {
+    if (meta == null ||
+        !meta.hasStremioEpisodeIdentity ||
+        season == null ||
+        episode == null) {
+      return null;
+    }
+    if (season == meta.season &&
+        episode == meta.episode &&
+        meta.stremioVideoId?.trim().isNotEmpty == true) {
+      return meta.stremioVideoId!.trim();
+    }
+    return StremioService.instance.resolveSeriesEpisodeVideoId(
+      addonKey: meta.stremioAddonKey!,
+      addonId: meta.stremioAddonId,
+      catalogId: meta.stremioCatalogId!,
+      season: season,
+      episode: episode,
+    );
+  }
+
   static Future<List<Torrent>> searchCuratedSources({
     required String imdbId,
     required String label,
@@ -2709,9 +2774,20 @@ class TorrentPlaybackService {
     QuickPlayRules? rules,
     bool Function()? isCancelled,
     void Function(int count)? onResults,
+    PlaybackMeta? originMeta,
   }) async {
-    final activeRules =
+    final configuredRules =
         rules ?? QuickPlayRules.debrifyDefault(isMovie: isMovie);
+    // A custom Stremio episode ID is the authoritative identity for fan edits
+    // and other non-Cinemeta catalogs. Torrent engines cannot represent that
+    // identity, so recovery must not let a torrents-only profile skip the
+    // originating/compatible stream addons.
+    final activeRules = originMeta?.hasStremioEpisodeIdentity == true
+        ? configuredRules.copyWith(
+            sourceMode: QuickPlaySourceMode.addonsOnly,
+            preserveLegacyCombinedPackSearch: false,
+          )
+        : configuredRules;
     final engineTimeout = activeRules.searchTimeoutSeconds == 0
         ? null
         : Duration(seconds: activeRules.searchTimeoutSeconds);
@@ -2720,6 +2796,10 @@ class TorrentPlaybackService {
         : Duration(seconds: activeRules.addonTimeoutSeconds);
 
     Future<List<Torrent>> engines() async {
+      if (!imdbId.startsWith('tt') ||
+          originMeta?.hasStremioEpisodeIdentity == true) {
+        return const <Torrent>[];
+      }
       final res = await TorrentService.searchByImdb(
         imdbId,
         isMovie: isMovie,
@@ -2755,6 +2835,15 @@ class TorrentPlaybackService {
       // their labels are quality descriptions rather than titles, so engine
       // title curation must not be applied to them.
       try {
+        final originVideoId = await _originEpisodeVideoId(
+          originMeta,
+          season,
+          episode,
+        );
+        if (originMeta?.hasStremioEpisodeIdentity == true &&
+            originVideoId == null) {
+          return const <Torrent>[];
+        }
         final addonRes = await TorrentService.searchStremioAddonsOnly(
           imdbId: imdbId,
           isMovie: isMovie,
@@ -2762,19 +2851,22 @@ class TorrentPlaybackService {
           episode: episode,
           timeout: addonTimeout,
           preserveOrder: activeRules.ranking == QuickPlayRanking.exactOrder,
+          originAddonKey: originMeta?.stremioAddonKey,
+          originVideoId: originVideoId,
         );
         final found = <Torrent>[
           ...(addonRes['torrents'] as List).cast<Torrent>(),
-          ...await searchIptvForQuickPlay(
-            imdbId,
-            label,
-            year,
-            isMovie,
-            season,
-            episode,
-            activeRules,
-            isCancelled,
-          ),
+          if (originMeta?.hasStremioEpisodeIdentity != true)
+            ...await searchIptvForQuickPlay(
+              imdbId,
+              label,
+              year,
+              isMovie,
+              season,
+              episode,
+              activeRules,
+              isCancelled,
+            ),
         ];
         final allowed = activeRules.allowDirectLinks
             ? found
@@ -2813,14 +2905,19 @@ class TorrentPlaybackService {
     PlaybackMeta meta,
     String? provider,
   ) => (mode, season, episode) async {
+    final contentId = meta.imdbId ?? meta.stremioCatalogId;
+    if (contentId == null || contentId.isEmpty) return null;
     final isMovie = meta.contentType == 'movie';
     final rules = await StorageService.getQuickPlayRules(isMovie: isMovie);
     final prov = await _effectiveFetchProvider(provider);
     if (rules.sourcePriority.isNotEmpty) await warmSourceAliases();
     if (mode == SeriesSourceFetcher.modePacks) {
+      if (!contentId.startsWith('tt') || meta.hasStremioEpisodeIdentity) {
+        return const <Torrent>[];
+      }
       if (prov == null || prov == 'pikpak') return null;
       return searchSeriesPackSources(
-        imdbId: meta.imdbId!,
+        imdbId: contentId,
         label: meta.title ?? '',
         season: season,
         provider: prov,
@@ -2831,7 +2928,7 @@ class TorrentPlaybackService {
     }
     if (prov != null) {
       return searchCuratedSources(
-        imdbId: meta.imdbId!,
+        imdbId: contentId,
         label: meta.title ?? '',
         isMovie: isMovie,
         year: meta.year,
@@ -2839,11 +2936,17 @@ class TorrentPlaybackService {
         episode: isMovie ? null : episode,
         provider: prov,
         rules: rules,
+        originMeta: meta,
       );
     }
-    if (!allowsAddonSearch(rules) || !rules.allowDirectLinks) return [];
+    if ((!allowsAddonSearch(rules) && !meta.hasStremioEpisodeIdentity) ||
+        !rules.allowDirectLinks) {
+      return [];
+    }
+    final originVideoId = await _originEpisodeVideoId(meta, season, episode);
+    if (meta.hasStremioEpisodeIdentity && originVideoId == null) return null;
     final result = await TorrentService.searchStremioAddonsOnly(
-      imdbId: meta.imdbId!,
+      imdbId: contentId,
       isMovie: isMovie,
       season: isMovie ? null : season,
       episode: isMovie ? null : episode,
@@ -2851,6 +2954,8 @@ class TorrentPlaybackService {
           ? null
           : Duration(seconds: rules.addonTimeoutSeconds),
       preserveOrder: rules.ranking == QuickPlayRanking.exactOrder,
+      originAddonKey: meta.stremioAddonKey,
+      originVideoId: originVideoId,
     );
     final list = (result['torrents'] as List)
         .cast<Torrent>()
@@ -2860,18 +2965,20 @@ class TorrentPlaybackService {
               (t.directUrl?.isNotEmpty ?? false),
         )
         .toList();
-    list.addAll(
-      await searchIptvForQuickPlay(
-        meta.imdbId!,
-        meta.title ?? '',
-        meta.year,
-        isMovie,
-        season,
-        episode,
-        rules,
-        null,
-      ),
-    );
+    if (!meta.hasStremioEpisodeIdentity) {
+      list.addAll(
+        await searchIptvForQuickPlay(
+          contentId,
+          meta.title ?? '',
+          meta.year,
+          isMovie,
+          season,
+          episode,
+          rules,
+          null,
+        ),
+      );
+    }
     return list.isEmpty &&
             ((result['addonErrors'] as Map?)?.isNotEmpty ?? false)
         ? null
@@ -2971,12 +3078,12 @@ class TorrentPlaybackService {
     bool episodesFetched = false,
     Future<List<Torrent>>? initialEpisodeSearch,
   }) {
-    final imdbId = meta?.imdbId;
+    final imdbId = meta?.imdbId ?? meta?.stremioCatalogId;
     final season = meta?.season;
     final episode = meta?.episode;
     if (meta == null ||
         imdbId == null ||
-        !imdbId.startsWith('tt') ||
+        (!imdbId.startsWith('tt') && !meta.hasStremioEpisodeIdentity) ||
         meta.contentType == 'movie' ||
         season == null ||
         episode == null) {
@@ -2991,12 +3098,39 @@ class TorrentPlaybackService {
 
     return SeriesSourceFetcher(
       searchForRecovery: _recoverySearch(meta, provider),
+      loadCustomEpisodeInventory: meta.hasStremioEpisodeIdentity
+          ? () => StremioService.instance.customSeriesEpisodeInventory(
+              addonKey: meta.stremioAddonKey!,
+              addonId: meta.stremioAddonId,
+              catalogId: meta.stremioCatalogId!,
+            )
+          : null,
+      resolveAdjacentEpisode: meta.hasStremioEpisodeIdentity
+          ? (s, e, direction) async {
+              final target = await StremioService.instance
+                  .resolveAdjacentSeriesEpisode(
+                    addonKey: meta.stremioAddonKey!,
+                    addonId: meta.stremioAddonId,
+                    catalogId: meta.stremioCatalogId!,
+                    season: s,
+                    episode: e,
+                    direction: direction,
+                  );
+              return target == null
+                  ? null
+                  : (season: target.season, episode: target.episode);
+            }
+          : null,
       season: season,
       episode: episode,
       pinnedDirectCandidates: (s, e, {onPreferredMissing}) async* {
+        final originVideoId = await _originEpisodeVideoId(meta, s, e);
+        if (meta.hasStremioEpisodeIdentity && originVideoId == null) return;
         final List<SeriesSource> pins;
         try {
-          pins = await SeriesSourceService.getSources(imdbId);
+          pins = (await SeriesSourceService.getSources(imdbId))
+              .where((source) => _bindingMatchesMeta(source, meta))
+              .toList();
         } catch (_) {
           return; // Persistence failure must not prevent ordinary search.
         }
@@ -3018,6 +3152,8 @@ class TorrentPlaybackService {
                     streamKey: pin.streamKey ?? '',
                     streamIndex: pin.streamIndex ?? 0,
                     bingeGroup: pin.bingeGroup,
+                    originCatalogId: pin.addonCatalogId,
+                    originVideoId: originVideoId,
                     type: 'series',
                     contentId: imdbId,
                     season: s,
@@ -3037,7 +3173,9 @@ class TorrentPlaybackService {
       prepareNextDirectEpisode: (s, e, source) async {
         final scope = ProfileRuntime.scope.value;
         if (scope != initialSearchScope) return;
-        final pins = await SeriesSourceService.getSources(imdbId);
+        final pins = (await SeriesSourceService.getSources(imdbId))
+            .where((pin) => _bindingMatchesMeta(pin, meta))
+            .toList();
         // Preserve primary torrent-pack precedence and prepare only the active
         // preferred direct identity, never a speculative replacement pin.
         if (pins.isEmpty ||
@@ -3047,8 +3185,33 @@ class TorrentPlaybackService {
               candidateBingeGroup: source.stremioBingeGroup,
             ))
           return;
-        final next = await NextEpisodeService.findNextEpisode(imdbId, s, e);
+        final ({int season, int episode})? next;
+        if (meta.hasStremioEpisodeIdentity) {
+          final target = await StremioService.instance
+              .resolveAdjacentSeriesEpisode(
+                addonKey: meta.stremioAddonKey!,
+                addonId: meta.stremioAddonId,
+                catalogId: meta.stremioCatalogId!,
+                season: s,
+                episode: e,
+                direction: 1,
+              );
+          next = target == null
+              ? null
+              : (season: target.season, episode: target.episode);
+        } else {
+          final target = await NextEpisodeService.findNextEpisode(imdbId, s, e);
+          next = target == null
+              ? null
+              : (season: target.season, episode: target.episode);
+        }
         if (next == null || ProfileRuntime.scope.value != scope) return;
+        final originVideoId = await _originEpisodeVideoId(
+          meta,
+          next.season,
+          next.episode,
+        );
+        if (meta.hasStremioEpisodeIdentity && originVideoId == null) return;
         final pin = pins.first;
         await StremioService.instance.resolvePinnedDirectStream(
           addonId: pin.addonId!,
@@ -3056,6 +3219,8 @@ class TorrentPlaybackService {
           streamKey: pin.streamKey ?? '',
           streamIndex: pin.streamIndex ?? 0,
           bingeGroup: pin.bingeGroup,
+          originCatalogId: pin.addonCatalogId,
+          originVideoId: originVideoId,
           type: 'series',
           contentId: imdbId,
           season: next.season,
@@ -3099,6 +3264,9 @@ class TorrentPlaybackService {
       // season-pack playlist auto-advances inside one player session, so the
       // launch episode captured above is only the fallback.
       searchPacks: (s, e) async {
+        if (!imdbId.startsWith('tt') || meta.hasStremioEpisodeIdentity) {
+          return const <Torrent>[];
+        }
         final prov = await effectiveProvider();
         if (prov == null) return null;
         final rules = await StorageService.getQuickPlayRules(isMovie: false);
@@ -3141,12 +3309,18 @@ class TorrentPlaybackService {
             // provider. Keep that contract when Next crosses a one-entry
             // playlist: query the episode-scoped addon endpoints and retain
             // only links this provider-free resolver can actually open.
-            if (!allowsAddonSearch(rules) || !rules.allowDirectLinks) {
+            if ((!allowsAddonSearch(rules) &&
+                    !meta.hasStremioEpisodeIdentity) ||
+                !rules.allowDirectLinks) {
               return const <Torrent>[];
             }
             final addonTimeout = rules.addonTimeoutSeconds == 15
                 ? null
                 : Duration(seconds: rules.addonTimeoutSeconds);
+            final originVideoId = await _originEpisodeVideoId(meta, s, e);
+            if (meta.hasStremioEpisodeIdentity && originVideoId == null) {
+              return null; // Retryable metadata failure; never query IMDb here.
+            }
             final result = await TorrentService.searchStremioAddonsOnly(
               imdbId: imdbId,
               isMovie: false,
@@ -3154,23 +3328,27 @@ class TorrentPlaybackService {
               episode: e,
               timeout: addonTimeout,
               preserveOrder: rules.ranking == QuickPlayRanking.exactOrder,
+              originAddonKey: meta.stremioAddonKey,
+              originVideoId: originVideoId,
             );
             list = (result['torrents'] as List).cast<Torrent>().where((t) {
               return t.streamType == StreamType.directUrl &&
                   (t.directUrl?.isNotEmpty ?? false);
             }).toList();
-            list.addAll(
-              await searchIptvForQuickPlay(
-                imdbId,
-                label,
-                meta.year,
-                false,
-                s,
-                e,
-                rules,
-                null,
-              ),
-            );
+            if (!meta.hasStremioEpisodeIdentity) {
+              list.addAll(
+                await searchIptvForQuickPlay(
+                  imdbId,
+                  label,
+                  meta.year,
+                  false,
+                  s,
+                  e,
+                  rules,
+                  null,
+                ),
+              );
+            }
             if (list.isEmpty &&
                 ((result['addonErrors'] as Map?)?.isNotEmpty ?? false)) {
               // Addon failures are reported in-band. Keep the fetch retryable
@@ -3187,6 +3365,7 @@ class TorrentPlaybackService {
               episode: e,
               provider: prov,
               rules: rules,
+              originMeta: meta,
             );
           }
           return orderCandidatesForRules(
@@ -3204,20 +3383,31 @@ class TorrentPlaybackService {
             in await StremioService.instance.applicableStreamingAddons(
               type: 'series',
               contentId: imdbId,
+              originAddonKey: meta.stremioAddonKey,
+              originVideoId: await _originEpisodeVideoId(meta, season, episode),
             ))
           if (!SourcePriority.isRecommendationOnlyAddon(addon.id))
             SourceAddonRef(addon.id, addon.name),
       ],
-      listEngines: _sourceEngineListing,
-      fetchEngine: (engineId, s, e) => _fetchOneEngine(
-        engineId,
-        imdbId: imdbId,
-        isMovie: false,
-        season: s,
-        episode: e,
-      ),
+      listEngines: imdbId.startsWith('tt') && !meta.hasStremioEpisodeIdentity
+          ? _sourceEngineListing
+          : () async => const <SourceEngineRef>[],
+      fetchEngine: (engineId, s, e) =>
+          imdbId.startsWith('tt') && !meta.hasStremioEpisodeIdentity
+          ? _fetchOneEngine(
+              engineId,
+              imdbId: imdbId,
+              isMovie: false,
+              season: s,
+              episode: e,
+            )
+          : Future<List<Torrent>?>.value(const <Torrent>[]),
       fetchAddonEpisodes: (addonId, s, e) async {
         try {
+          final originVideoId = await _originEpisodeVideoId(meta, s, e);
+          if (meta.hasStremioEpisodeIdentity && originVideoId == null) {
+            return null;
+          }
           return await StremioService.instance.retryAddonStreams(
             addonId: addonId,
             type: 'series',
@@ -3225,6 +3415,7 @@ class TorrentPlaybackService {
             season: s,
             episode: e,
             timeout: StremioService.manualRetryTimeout,
+            originVideoId: originVideoId,
           );
         } catch (_) {
           // Null = fetch failed; the sheet keeps the Fetch row for a retry.
@@ -3232,6 +3423,9 @@ class TorrentPlaybackService {
         }
       },
       fetchAddonPacks: (addonId, s) async {
+        if (!imdbId.startsWith('tt') || meta.hasStremioEpisodeIdentity) {
+          return const <Torrent>[];
+        }
         try {
           return await StremioService.instance.fetchAddonSeasonPacks(
             addonId: addonId,
@@ -3579,6 +3773,14 @@ class TorrentPlaybackService {
         ? null
         : Duration(seconds: rules.searchTimeoutSeconds);
     final exactAddonOrder = rules.ranking == QuickPlayRanking.exactOrder;
+    final originVideoId = await _originEpisodeVideoId(meta, season, episode);
+    if (meta.hasStremioEpisodeIdentity && originVideoId == null) {
+      closeLoading();
+      if (context.mounted) {
+        _snack(context, 'This episode is not available from its catalog.');
+      }
+      return true;
+    }
     final earlyScope = ProfileRuntime.scope.value;
     final early = Completer<Map<String, dynamic>>();
     final earlyLadder = await loadLadder(includeSize: isMovie, rules: rules);
@@ -3586,6 +3788,7 @@ class TorrentPlaybackService {
     // An exact-order addon-only pass can decide as soon as its FIRST provider
     // answers. Global-quality and torrent-preferred searches need all results.
     if (!isMovie &&
+        !meta.hasStremioEpisodeIdentity &&
         id.startsWith('tt') &&
         season != null &&
         episode != null &&
@@ -3652,6 +3855,8 @@ class TorrentPlaybackService {
             timeout: addonTimeout,
             preserveOrder: exactAddonOrder,
             onBatch: leadingAddon == null ? null : onDirectBatch,
+            originAddonKey: meta.stremioAddonKey,
+            originVideoId: originVideoId,
           );
         case QuickPlaySourceMode.torrentsOnly:
           return TorrentService.searchByImdb(
@@ -3672,6 +3877,8 @@ class TorrentPlaybackService {
             engineTimeout: engineTimeout,
             stremioTimeout: addonTimeout,
             preserveSourceOrder: exactAddonOrder,
+            originAddonKey: meta.stremioAddonKey,
+            originVideoId: originVideoId,
           );
         case QuickPlaySourceMode.torrentsThenAddons:
         case QuickPlaySourceMode.addonsThenTorrents:
@@ -3680,24 +3887,29 @@ class TorrentPlaybackService {
     }
 
     Future<Map<String, dynamic>> search() async {
-      final iptv = searchIptvForQuickPlay(
-        id,
-        meta.title ?? label,
-        meta.year,
-        isMovie,
-        season,
-        episode,
-        rules,
-        () => cancel.cancelled,
-      );
+      final iptv = meta.hasStremioEpisodeIdentity
+          ? Future.value(const <Torrent>[])
+          : searchIptvForQuickPlay(
+              id,
+              meta.title ?? label,
+              meta.year,
+              isMovie,
+              season,
+              episode,
+              rules,
+              () => cancel.cancelled,
+            );
       final torrents = <Torrent>[];
       final engineErrors = <String, String>{};
       final addonErrors = <String, String>{};
-      for (final stage in addonStreamSearchPlan(
-        rules,
-        noProvider: noProvider,
-        forceAddonOnly: forceAddonOnly,
-      )) {
+      final stages = meta.hasStremioEpisodeIdentity
+          ? const [QuickPlaySourceMode.addonsOnly]
+          : addonStreamSearchPlan(
+              rules,
+              noProvider: noProvider,
+              forceAddonOnly: forceAddonOnly,
+            );
+      for (final stage in stages) {
         final result = await query(stage);
         final stageTorrents = (result['torrents'] as List).cast<Torrent>();
         torrents.addAll(stageTorrents);
@@ -3931,6 +4143,17 @@ class TorrentPlaybackService {
   /// bindings created in Home replay here and vice-versa.
   static String _providerFromStored(String stored) =>
       stored == 'rd' ? 'debrid' : stored;
+
+  static bool _bindingMatchesMeta(SeriesSource source, PlaybackMeta meta) {
+    final catalogId = meta.hasStremioEpisodeIdentity
+        ? meta.stremioCatalogId
+        : null;
+    return source.matchesCatalogScope(
+      catalogId: catalogId,
+      catalogKey: meta.hasStremioEpisodeIdentity ? meta.stremioAddonKey : null,
+    );
+  }
+
   static String storedProviderKey(String provider) =>
       provider == 'debrid' ? 'rd' : provider;
 
@@ -4686,18 +4909,30 @@ class TorrentPlaybackService {
         fallbackHint =
             'Saved direct source is unavailable. Falling back to search.';
         try {
-          Future<Torrent?> refresh() =>
-              StremioService.instance.resolvePinnedDirectStream(
-                addonId: source.addonId!,
-                addonKey: source.addonKey!,
-                streamKey: source.streamKey ?? '',
-                bingeGroup: source.bingeGroup,
-                streamIndex: source.streamIndex ?? 0,
-                type: meta.contentType == 'movie' ? 'movie' : 'series',
-                contentId: imdbId,
-                season: meta.season,
-                episode: meta.episode,
-              );
+          Future<Torrent?> refresh() async {
+            final originVideoId = await _originEpisodeVideoId(
+              meta,
+              meta.season,
+              meta.episode,
+            );
+            if (meta.hasStremioEpisodeIdentity && originVideoId == null) {
+              return null;
+            }
+            return StremioService.instance.resolvePinnedDirectStream(
+              addonId: source.addonId!,
+              addonKey: source.addonKey!,
+              streamKey: source.streamKey ?? '',
+              bingeGroup: source.bingeGroup,
+              originCatalogId: source.addonCatalogId,
+              originVideoId: originVideoId,
+              streamIndex: source.streamIndex ?? 0,
+              type: meta.contentType == 'movie' ? 'movie' : 'series',
+              contentId: imdbId,
+              season: meta.season,
+              episode: meta.episode,
+            );
+          }
+
           final installed = await StremioService.instance.getAddons();
           final cacheAllowed = installed.any(
             (addon) =>
@@ -5081,6 +5316,8 @@ class TorrentPlaybackService {
     Torrent torrent, {
     required String imdbId,
     required bool isMovie,
+    String? addonCatalogId,
+    String? addonCatalogKey,
   }) async {
     if (imdbId.isEmpty) {
       _snack(context, 'No IMDb match — can\'t pin a source.');
@@ -5138,6 +5375,8 @@ class TorrentPlaybackService {
       debridService: storedProviderKey(provider),
       debridTorrentId: '',
       boundAt: DateTime.now().millisecondsSinceEpoch,
+      addonCatalogId: addonCatalogId,
+      addonCatalogKey: addonCatalogKey,
     );
     if (isMovie) {
       await SeriesSourceService.setSources(imdbId, [source]);
@@ -5156,6 +5395,8 @@ class TorrentPlaybackService {
     Torrent torrent, {
     required String imdbId,
     required bool isMovie,
+    String? addonCatalogId,
+    String? addonCatalogKey,
   }) async {
     if (imdbId.isEmpty) {
       _snack(context, 'No IMDb match — can\'t pin a source.');
@@ -5164,6 +5405,8 @@ class TorrentPlaybackService {
     final source = _durableBindingForSource(
       torrent,
       SeriesSource.addonDirectService,
+      addonCatalogId: addonCatalogId,
+      addonCatalogKey: addonCatalogKey,
     );
     if (source == null || !source.isAddonDirect) {
       _snack(context, 'This direct stream cannot be refreshed by its addon.');
@@ -5723,7 +5966,9 @@ class TorrentPlaybackService {
       );
       return;
     }
-    final bound = await SeriesSourceService.getSources(imdbId);
+    final bound = (await SeriesSourceService.getSources(imdbId))
+        .where((source) => _bindingMatchesMeta(source, meta))
+        .toList();
     if (!context.mounted) return;
     if (bound.isNotEmpty && meta.season != null && meta.episode != null) {
       final played = await _playViaBound(
@@ -5962,8 +6207,7 @@ class TorrentPlaybackService {
     // gate and skip whole-series/no-episode plays.
     if (meta == null ||
         meta.contentType == 'movie' ||
-        meta.imdbId == null ||
-        meta.imdbId!.isEmpty ||
+        (meta.imdbId ?? meta.stremioCatalogId)?.isEmpty != false ||
         meta.season == null ||
         meta.episode == null ||
         winner == null ||
@@ -5973,7 +6217,12 @@ class TorrentPlaybackService {
         (winner.streamType == StreamType.torrent && provider == 'pikpak')) {
       return;
     }
-    final source = _durableBindingForSource(winner, provider);
+    final source = _durableBindingForSource(
+      winner,
+      provider,
+      addonCatalogId: meta.stremioCatalogId,
+      addonCatalogKey: meta.stremioAddonKey,
+    );
     if (source == null) return;
     final isIptv = IptvSourceSearch.owns(winner);
     try {
@@ -5989,7 +6238,7 @@ class TorrentPlaybackService {
         }
         return;
       }
-      final imdbId = meta.imdbId!;
+      final imdbId = meta.imdbId ?? meta.stremioCatalogId!;
       final list = List<SeriesSource>.from(
         await SeriesSourceService.getSources(imdbId),
       );
@@ -5998,6 +6247,8 @@ class TorrentPlaybackService {
             s.bindingKey == source.bindingKey ||
             (s.isAddonDirect &&
                 source.isAddonDirect &&
+                s.addonCatalogId == source.addonCatalogId &&
+                s.addonCatalogKey == source.addonCatalogKey &&
                 s.addonKey == source.addonKey &&
                 s.streamKey == source.streamKey),
       );
@@ -6019,7 +6270,12 @@ class TorrentPlaybackService {
         if (_singleEpisodeOf(source.torrentName) != null) {
           final singles =
               list
-                  .where((s) => _singleEpisodeOf(s.torrentName) != null)
+                  .where(
+                    (s) =>
+                        s.addonCatalogId == source.addonCatalogId &&
+                        s.addonCatalogKey == source.addonCatalogKey &&
+                        _singleEpisodeOf(s.torrentName) != null,
+                  )
                   .toList()
                 ..sort((a, b) => a.boundAt.compareTo(b.boundAt));
           final overflow = singles.length + 1 - _maxAutoBoundSingles;
@@ -6063,8 +6319,10 @@ class TorrentPlaybackService {
   /// arbitrary/external links and local rows cannot be auto-bound.
   static SeriesSource? _durableBindingForSource(
     Torrent source,
-    String provider,
-  ) {
+    String provider, {
+    String? addonCatalogId,
+    String? addonCatalogKey,
+  }) {
     final now = DateTime.now().millisecondsSinceEpoch;
     if (source.streamType == StreamType.directUrl) {
       if (IptvSourceSearch.owns(source)) {
@@ -6109,6 +6367,8 @@ class TorrentPlaybackService {
         boundAt: now,
         addonId: addonId,
         addonKey: addonKey,
+        addonCatalogId: addonCatalogId,
+        addonCatalogKey: addonCatalogKey,
         streamKey: streamKey,
         bingeGroup: source.stremioBingeGroup,
         streamIndex: source.stremioStreamIndex ?? 0,
@@ -6127,6 +6387,8 @@ class TorrentPlaybackService {
       debridService: storedProviderKey(provider),
       debridTorrentId: '',
       boundAt: now,
+      addonCatalogId: addonCatalogId,
+      addonCatalogKey: addonCatalogKey,
     );
   }
 
@@ -6621,6 +6883,7 @@ class TorrentPlaybackService {
     PlaybackMeta? meta,
     Torrent source,
   ) async {
+    if (meta?.hasStremioEpisodeIdentity == true) return;
     if (meta?.imdbId == null || source.streamType != StreamType.directUrl)
       return;
     // The player can advance while its launch callback retains old metadata.
@@ -6664,8 +6927,7 @@ class TorrentPlaybackService {
     String provider,
   ) async {
     if (meta == null ||
-        meta.imdbId == null ||
-        meta.imdbId!.isEmpty ||
+        (meta.imdbId ?? meta.stremioCatalogId)?.isEmpty != false ||
         switched.streamType == StreamType.externalUrl) {
       return;
     }
@@ -6679,11 +6941,16 @@ class TorrentPlaybackService {
                 provider == 'pikpak'))) {
       return;
     }
-    final source = _durableBindingForSource(switched, provider);
+    final source = _durableBindingForSource(
+      switched,
+      provider,
+      addonCatalogId: meta.stremioCatalogId,
+      addonCatalogKey: meta.stremioAddonKey,
+    );
     if (source == null) return;
     final isIptv = IptvSourceSearch.owns(switched);
     try {
-      final imdbId = meta.imdbId!;
+      final imdbId = meta.imdbId ?? meta.stremioCatalogId!;
       final existing = await SeriesSourceService.getSources(imdbId);
       if (isMovie) {
         // Single bound source — replace it with the chosen one.
@@ -6720,6 +6987,8 @@ class TorrentPlaybackService {
               s.bindingKey == source.bindingKey ||
               (s.isAddonDirect &&
                   source.isAddonDirect &&
+                  s.addonCatalogId == source.addonCatalogId &&
+                  s.addonCatalogKey == source.addonCatalogKey &&
                   s.addonKey == source.addonKey &&
                   s.streamKey == source.streamKey),
         );

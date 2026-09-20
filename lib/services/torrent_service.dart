@@ -445,6 +445,8 @@ class TorrentService {
     Duration? engineTimeout,
     SearchBatchCallback? onBatch,
     bool preserveSourceOrder = false,
+    String? originAddonKey,
+    String? originVideoId,
   }) async {
     final capability = await ProfileAsyncAuthorization.capture(
       ProfileFeature.torrentSearch,
@@ -459,7 +461,9 @@ class TorrentService {
     final List<Future<Map<String, dynamic>>> searchFutures = [];
 
     // Traditional engine search only for movie/series (IMDB content)
-    if (!isNonImdbContent) {
+    if (!isNonImdbContent &&
+        imdbId.startsWith('tt') &&
+        originVideoId?.trim().isNotEmpty != true) {
       searchFutures.add(
         searchByImdb(
           imdbId,
@@ -487,6 +491,8 @@ class TorrentService {
           contentType: contentType,
           timeout: stremioTimeout,
           preserveOrder: preserveSourceOrder,
+          originAddonKey: originAddonKey,
+          originVideoId: originVideoId,
           onBatch: onBatch,
         ).then((result) {
           // Whole-series smart pack probing remains an aggregate batch.
@@ -607,6 +613,8 @@ class TorrentService {
     Duration? timeout,
     bool preserveOrder = false,
     SearchBatchCallback? onBatch,
+    String? originAddonKey,
+    String? originVideoId,
   }) async {
     final capability = await ProfileAsyncAuthorization.capture(
       ProfileFeature.torrentSearch,
@@ -621,6 +629,8 @@ class TorrentService {
       timeout: timeout,
       preserveOrder: preserveOrder,
       onBatch: onBatch,
+      originAddonKey: originAddonKey,
+      originVideoId: originVideoId,
     );
     await capability?.runIfCurrent(() async {});
     return result;
@@ -637,6 +647,8 @@ class TorrentService {
     Duration? timeout,
     bool preserveOrder = false,
     SearchBatchCallback? onBatch,
+    String? originAddonKey,
+    String? originVideoId,
   }) async {
     try {
       final stremioService = StremioService.instance;
@@ -661,6 +673,8 @@ class TorrentService {
         timeout: timeout,
         preserveOrder: preserveOrder,
         onBatch: onBatch,
+        originAddonKey: originAddonKey,
+        originVideoId: originVideoId,
       );
 
       return {

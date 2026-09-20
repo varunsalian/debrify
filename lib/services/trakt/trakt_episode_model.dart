@@ -22,6 +22,11 @@ class TraktEpisode {
   /// their stream through the search/debrid flow instead.
   final String? playbackUrl;
 
+  /// The exact `videos[].id` returned by a Stremio series meta endpoint.
+  /// Null for Trakt/TMDB/Xtream episodes. Custom Stremio addons are not
+  /// required to use Cinemeta's `<id>:<season>:<episode>` convention.
+  final String? stremioVideoId;
+
   TraktEpisode({
     required this.season,
     required this.number,
@@ -33,6 +38,7 @@ class TraktEpisode {
     this.imdbId,
     this.thumbnailUrl,
     this.playbackUrl,
+    this.stremioVideoId,
   });
 
   /// Display title like "E01 - Pilot" or "E01" if no meaningful title.

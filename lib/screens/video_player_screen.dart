@@ -5491,23 +5491,31 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       isActive: requestIsCurrent,
     );
     try {
-      await (_episodeMetadataReady ??= _preloadEpisodeInfo());
-      if (!request.isCurrent) return true;
-      if (_seriesPlaylist == null) {
-        final synthetic = _buildSyntheticGuide();
-        if (synthetic != null && synthetic.$1.fullTvmazeEpisodes.isEmpty) {
-          await synthetic.$1.fetchEpisodeInfo(
-            playlistItem: _constructPlaylistItemData(),
-            imdbId: _currentSeriesImdbId,
-          );
+      final customInventory =
+          widget.seriesSourceFetcher?.loadCustomEpisodeInventory;
+      final List<Map<String, dynamic>> full;
+      if (customInventory != null) {
+        full = await customInventory();
+      } else {
+        await (_episodeMetadataReady ??= _preloadEpisodeInfo());
+        if (!request.isCurrent) return true;
+        if (_seriesPlaylist == null) {
+          final synthetic = _buildSyntheticGuide();
+          if (synthetic != null && synthetic.$1.fullTvmazeEpisodes.isEmpty) {
+            await synthetic.$1.fetchEpisodeInfo(
+              playlistItem: _constructPlaylistItemData(),
+              imdbId: _currentSeriesImdbId,
+            );
+          }
         }
+        if (!request.isCurrent) return true;
+        full = _seriesPlaylist?.fullTvmazeEpisodes.isNotEmpty == true
+            ? _seriesPlaylist!.fullTvmazeEpisodes
+            : (_syntheticGuidePlaylist?.fullTvmazeEpisodes ??
+                  const <Map<String, dynamic>>[]);
       }
       if (!request.isCurrent) return true;
-      final full = _seriesPlaylist?.fullTvmazeEpisodes.isNotEmpty == true
-          ? _seriesPlaylist!.fullTvmazeEpisodes
-          : (_syntheticGuidePlaylist?.fullTvmazeEpisodes ??
-                const <Map<String, dynamic>>[]);
-      if (full.isEmpty) return false;
+      if (full.isEmpty && customInventory == null) return false;
       final eligible = full
           .where((m) => isShuffleEpisodeEligible(m))
           .map((m) => (m['season'] as int, m['number'] as int))
@@ -5698,6 +5706,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   /// Check if there's a next episode available
   bool _hasNextEpisode() {
     if (_findNextEpisodeIndex() != -1) return true;
+    if (_canFetchEpisodes) {
+      final se = _traktSeasonEpisode();
+      if (se.season != null && se.episode != null) return true;
+    }
     // Series content may have a next episode discoverable via Stremio metadata.
     // Requires episode info from widget params or a parsed series playlist.
     if (widget.requestMagicNext == null &&
@@ -5717,7 +5729,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     if (_canFetchEpisodes) {
       final se = _traktSeasonEpisode();
       if (se.season != null && se.episode != null) {
-        return _adjacentEpisode(se.season!, se.episode!, -1) != null;
+        return _adjacentEpisode(se.season!, se.episode!, -1) != null ||
+            (widget.seriesSourceFetcher?.resolveAdjacentEpisode != null &&
+                (se.season! > 1 || se.episode! > 1));
       }
     }
     return false;
@@ -5897,7 +5911,14 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     final se = _traktSeasonEpisode();
     if (se.season == null || se.episode == null) return false;
     var next = _adjacentEpisode(se.season!, se.episode!, 1);
-    if (next == null && widget.contentImdbId != null) {
+    if (next == null) {
+      final resolved = await widget.seriesSourceFetcher?.resolveAdjacentEpisode
+          ?.call(se.season!, se.episode!, 1);
+      if (resolved != null) next = (resolved.season, resolved.episode);
+    }
+    if (next == null &&
+        widget.seriesSourceFetcher?.resolveAdjacentEpisode == null &&
+        widget.contentImdbId != null) {
       final episode = await NextEpisodeService.findNextEpisode(
         widget.contentImdbId!,
         se.season!,
@@ -5919,7 +5940,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // Already popping to hand off the next episode — a second trigger (manual
     // Next racing end-of-video auto-advance) must not run again.
     if (_seriesNextDispatched) return true;
-    if (widget.contentType != 'series' || widget.contentImdbId == null) {
+    if (widget.contentType != 'series' ||
+        widget.contentImdbId == null ||
+        widget.seriesSourceFetcher?.resolveAdjacentEpisode != null) {
       return false;
     }
 
@@ -9943,9 +9966,16 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       // Beyond the pack's start: fetch the previous episode in-player.
       if (_canFetchEpisodes) {
         final se = _traktSeasonEpisode();
-        final prev = (se.season != null && se.episode != null)
+        var prev = (se.season != null && se.episode != null)
             ? _adjacentEpisode(se.season!, se.episode!, -1)
             : null;
+        if (prev == null && se.season != null && se.episode != null) {
+          final resolved = await widget
+              .seriesSourceFetcher
+              ?.resolveAdjacentEpisode
+              ?.call(se.season!, se.episode!, -1);
+          if (resolved != null) prev = (resolved.season, resolved.episode);
+        }
         if (prev != null) {
           await _fetchAndPlayEpisode(prev.$1, prev.$2);
           return;
@@ -14172,6 +14202,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   /// The episode adjacent to (season, episode) in the show's full TVMaze
   /// list (specials excluded); null when unknown or out of range.
   (int, int)? _adjacentEpisode(int season, int episode, int direction) {
+    // Custom catalogs own their episode order, even after TVMaze fills the guide.
+    if (widget.seriesSourceFetcher?.resolveAdjacentEpisode != null) return null;
     final full = _seriesPlaylist?.fullTvmazeEpisodes.isNotEmpty == true
         ? _seriesPlaylist!.fullTvmazeEpisodes
         : (_syntheticGuidePlaylist?.fullTvmazeEpisodes ??

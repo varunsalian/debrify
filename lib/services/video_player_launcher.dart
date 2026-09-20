@@ -3176,6 +3176,13 @@ class VideoPlayerLauncher {
           await StorageService.getUseAddonTextFormatting();
       payloadMap['showAddonLogos'] = await StorageService.getShowAddonLogos();
       payloadMap['initialContinuousShuffle'] = args.initialContinuousShuffle;
+      final customInventory = seriesFetcher?.loadCustomEpisodeInventory;
+      if (customInventory != null) {
+        final episodes = await customInventory();
+        payloadMap['customShuffleEpisodes'] = episodes
+            .where((episode) => isShuffleEpisodeEligible(episode))
+            .toList();
+      }
       if (args.stremioTvChannels != null &&
           args.stremioTvChannels!.isNotEmpty) {
         payloadMap['stremioTvGuide'] = {
@@ -3342,6 +3349,7 @@ class VideoPlayerLauncher {
         },
         onRequestAddonSources: addonSourcesProviderForTv,
         onRequestEpisodeFetch: episodeFetchProviderForTv,
+        onResolveAdjacentEpisode: seriesFetcher?.resolveAdjacentEpisode,
         onRequestStremioTvGuideData: args.stremioTvGuideDataProvider,
         onRequestStremioTvChannelSwitch: channelSwitchForTv,
         onRequestStremioTvNext: stremioTvNextForTv,
@@ -4818,6 +4826,7 @@ class _AndroidTvPlaybackPayload {
   final List<Map<String, dynamic>>? stremioSources;
   final int? stremioCurrentSourceIndex;
   final bool hasPlaylistResolver;
+  final bool hasAdjacentEpisodeResolver;
   final bool startupTryNextOnFailure;
   final int startupMaxAttempts;
   final String? startupResolverProvider;
@@ -4865,6 +4874,7 @@ class _AndroidTvPlaybackPayload {
     this.stremioSources,
     this.stremioCurrentSourceIndex,
     this.hasPlaylistResolver = false,
+    this.hasAdjacentEpisodeResolver = false,
     this.startupTryNextOnFailure = false,
     this.startupMaxAttempts = 1,
     this.startupResolverProvider,
@@ -4924,6 +4934,7 @@ class _AndroidTvPlaybackPayload {
       if (stremioCurrentSourceIndex != null)
         'stremioCurrentSourceIndex': stremioCurrentSourceIndex,
       if (hasPlaylistResolver) 'hasPlaylistResolver': true,
+      if (hasAdjacentEpisodeResolver) 'hasAdjacentEpisodeResolver': true,
       if (stremioSources != null && stremioSources!.isNotEmpty) ...{
         'startupTryNextOnFailure': startupTryNextOnFailure,
         'startupMaxAttempts': startupMaxAttempts.clamp(1, 10),
@@ -5537,6 +5548,8 @@ class _AndroidTvPlaybackPayloadBuilder {
       stremioSources: args.stremioSources?.map((t) => t.toJson()).toList(),
       stremioCurrentSourceIndex: args.stremioCurrentSourceIndex,
       hasPlaylistResolver: args.resolveSourceToPlaylist != null,
+      hasAdjacentEpisodeResolver:
+          args.seriesSourceFetcher?.resolveAdjacentEpisode != null,
       startupTryNextOnFailure: startupRules?.tryNextOnFailure ?? false,
       startupMaxAttempts: startupRules?.maxAttempts ?? 1,
       startupResolverProvider: args.startupResolverProvider,

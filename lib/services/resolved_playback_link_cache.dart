@@ -128,6 +128,8 @@ class ResolvedPlaybackLinkCache {
     int? episode,
     required SeriesSource pin,
   }) async {
+    // Custom episode links must be resolved using the originating catalog.
+    if (pin.addonCatalogId != null || pin.addonCatalogKey != null) return null;
     try {
       final prefs = await ProfilePreferences.instance();
       final entries = await _read(prefs);
@@ -162,6 +164,7 @@ class ResolvedPlaybackLinkCache {
     int? episode,
     required SeriesSource pin,
   }) async {
+    if (pin.addonCatalogId != null || pin.addonCatalogKey != null) return;
     final prefs = await ProfilePreferences.instance();
     await _lock.synchronized(() async {
       final entries = await _read(prefs);
