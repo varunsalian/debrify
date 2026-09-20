@@ -11188,9 +11188,13 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         val now = System.currentTimeMillis()
         if (!entry.isLive ||
             entry.tvArchive == "0" ||
-            !entry.epgNowHasArchive ||
+            (!entry.epgNowHasArchive && entry.tvArchive != "1") ||
             entry.epgNowStartMs <= 0L ||
             now !in entry.epgNowStartMs until entry.epgNowStopMs
+        ) return null
+        val archiveDays = entry.tvArchiveDuration ?: 0
+        if (archiveDays > 0 &&
+            entry.epgNowStartMs < now - archiveDays.toLong() * 86_400_000L
         ) return null
         return IptvEpgProgram(
             title = entry.epgNowTitle ?: entry.name,
@@ -11282,6 +11286,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 "playlistId" to channelEntry.sourceId,
                 "httpHeaders" to channelEntry.httpHeaders,
                 "archiveDisabled" to (channelEntry.tvArchive == "0"),
+                "archiveEnabled" to (channelEntry.tvArchive == "1"),
                 "archiveDurationDays" to channelEntry.tvArchiveDuration,
                 "startOver" to airing,
             ),
