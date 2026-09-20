@@ -240,8 +240,10 @@ final class WebDavSyncOwnManifestPublisher implements WebDavSyncSeedPublisher {
       await _stateRepository.update(
         namespace.id,
         (current) => current.copyWith(
-          circleToLocalProfiles: material.identityMaps.circleToLocalProfiles,
-          circleToLocalResources: material.identityMaps.circleToLocalResources,
+          circleToLocalProfiles:
+              material.retainedIdentityMaps.circleToLocalProfiles,
+          circleToLocalResources:
+              material.retainedIdentityMaps.circleToLocalResources,
           clock: clockDecision.state,
           profiles: material.profileStatesForCommit(current.profiles),
           circleProfilesBaseline: material.circleProfiles,

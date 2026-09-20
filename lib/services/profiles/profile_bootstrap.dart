@@ -7,9 +7,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../models/profiles/profile_policy.dart';
 import '../../models/profiles/user_profile.dart';
 import '../../utils/app_storage.dart';
+import '../webdav_sync/webdav_sync_binding_store.dart';
 import 'profile_preference_budget.dart';
 import 'profile_preferences.dart';
 import 'native_profile_projection.dart';
+import 'connection_resource_service.dart';
 import 'device_key_provider.dart';
 import 'tvos_profile_recovery_store.dart';
 import 'profile_migration_service.dart';
@@ -131,7 +133,14 @@ class ProfileBootstrap {
     final device = await DevicePreferences.instance();
     final committedOnce = device.getBool('profiles_committed_once_v1') ?? false;
     final hasAuthority = registryCommitted || tvOsRecovery != null;
+    final hasWebDavCredentials = await _hasWebDavCredentialState(device);
     if (committedOnce && !hasAuthority) {
+      // A WebDAV store is usable authority even without profiles.db. Prove its
+      // old vault before showing registry recovery; Recovery Admin may create
+      // a registry, but must never mint K2 over credentials that depend on K1.
+      if (hasWebDavCredentials) {
+        await _initializeDeviceVault(allowCreate: false);
+      }
       throw const ProfileBootstrapRecoveryRequired(
         'Committed profile authority is missing; restore or recover the registry',
       );
@@ -144,7 +153,15 @@ class ProfileBootstrap {
       return;
     }
 
-    await DeviceKeyProvider.initialize();
+    // A registry file, committed marker, or WebDAV credential store may
+    // already depend on the device key. Never mint K2 over any of them.
+    await _initializeDeviceVault(
+      allowCreate:
+          !hasRegistry &&
+          !committedOnce &&
+          !hasWebDavCredentials &&
+          tvOsRecovery == null,
+    );
 
     ProfileRegistry opened;
     try {
@@ -160,6 +177,21 @@ class ProfileBootstrap {
       // Keychain; profiles.db is merely a purgeable cache projection.
       await ProfileRegistry.discardDefaultCacheProjection();
       opened = await ProfileRegistry.open();
+    }
+    try {
+      await _completeNativeVaultMigrationAudit(opened);
+    } on DeviceVaultException catch (error) {
+      await opened.close();
+      throw ProfileBootstrapRecoveryRequired(
+        'The existing device vault key cannot open stored credentials',
+        cause: error,
+      );
+    } on _DeviceVaultInventoryException catch (error) {
+      await opened.close();
+      throw ProfileBootstrapRecoveryRequired(
+        'Stored credential metadata is unreadable',
+        cause: error.cause,
+      );
     }
     _registry = opened;
     _installAuthorityCallback(opened);
@@ -242,6 +274,109 @@ class ProfileBootstrap {
     }
 
     await _createOrMigrateInitialAdmin(opened, legacyPreferences);
+  }
+
+  static Future<void> _completeNativeVaultMigrationAudit(
+    ProfileRegistry opened,
+  ) async {
+    if (!DeviceKeyProvider.requiresMigrationAudit) return;
+    var attemptedEnvelope = false;
+    var successfulAuthentications = 0;
+    DeviceVaultException? firstVaultFailure;
+    Object? firstEnvelopeFailure;
+    Object? firstInventoryFailure;
+    try {
+      await opened.visitSealedResourceSecretsForVaultAudit((sealed) async {
+        attemptedEnvelope = true;
+        try {
+          // Authentication is the proof. Payload decoding is deliberately left
+          // to the resource service so unrelated legacy JSON damage is not
+          // misclassified as loss of the device key.
+          await DeviceKeyProvider.cipher.open(
+            sealed.envelope,
+            associatedData: ConnectionResourceService.associatedDataForSecret(
+              resourceId: sealed.resourceId,
+              type: sealed.type,
+              ownerProfileId: sealed.ownerProfileId,
+              publicSchemaVersion: sealed.publicSchemaVersion,
+              payloadVersion: sealed.payloadVersion,
+            ),
+          );
+          successfulAuthentications++;
+        } on DeviceVaultException catch (error) {
+          firstVaultFailure ??= error;
+        } catch (error) {
+          firstEnvelopeFailure ??= error;
+        }
+      });
+    } catch (error) {
+      firstInventoryFailure ??= error;
+    }
+    try {
+      final webDavStore = WebDavSyncBindingStore();
+      final webDav = await webDavStore.loadForDeviceVaultMigration();
+      for (final binding in webDav.bindings.values) {
+        attemptedEnvelope = true;
+        try {
+          await webDavStore.authenticateForDeviceVaultMigration(binding);
+          successfulAuthentications++;
+        } on DeviceVaultException catch (error) {
+          firstVaultFailure ??= error;
+        } catch (error) {
+          firstEnvelopeFailure ??= error;
+        }
+      }
+    } catch (error) {
+      firstInventoryFailure ??= error;
+    }
+    final vaultFailure = firstVaultFailure;
+    if (attemptedEnvelope && vaultFailure != null) {
+      throw DeviceVaultException(
+        failure: DeviceVaultFailure.unreadable,
+        operation: 'migrationAudit',
+        diagnostic: vaultFailure.diagnostic,
+      );
+    }
+    // One successful AEAD open proves the alias itself is still K1. Do not
+    // turn an unrelated corrupt row or stale WebDAV document into a global
+    // vault-loss recovery when healthy encrypted state has already proved the
+    // key. The owning service will continue to handle that damaged record.
+    if (successfulAuthentications == 0) {
+      final metadataFailure = firstInventoryFailure ?? firstEnvelopeFailure;
+      if (metadataFailure != null) {
+        throw _DeviceVaultInventoryException(metadataFailure);
+      }
+    }
+    await DeviceKeyProvider.commitMigrationAudit();
+  }
+
+  static Future<void> _initializeDeviceVault({
+    required bool allowCreate,
+  }) async {
+    try {
+      await DeviceKeyProvider.initialize(allowCreate: allowCreate);
+    } on DeviceVaultException catch (error) {
+      throw ProfileBootstrapRecoveryRequired(
+        'The device vault is unavailable',
+        cause: error,
+      );
+    }
+  }
+
+  static Future<bool> _hasWebDavCredentialState(
+    DevicePreferences device,
+  ) async {
+    final encoded = device.getString(WebDavSyncBindingStore.storageKey);
+    if (encoded == null || encoded.isEmpty) return false;
+    try {
+      return (await WebDavSyncBindingStore().loadForDeviceVaultMigration())
+          .bindings
+          .isNotEmpty;
+    } catch (_) {
+      // Unknown state might still contain an envelope. Fail closed until the
+      // controlled metadata-recovery path can inspect or remove it.
+      return true;
+    }
   }
 
   static void _installAuthorityCallback(ProfileRegistry opened) {
@@ -480,7 +615,20 @@ class ProfileBootstrap {
     TvOsProfileRecoveryStore.checkpointCallback = null;
     if (openedBeforeFailure != null) await openedBeforeFailure.close();
 
-    await DeviceKeyProvider.initialize();
+    final recoveryDevice = await DevicePreferences.instance();
+    final recoveryRegistryExists =
+        await ProfileRegistry.defaultRegistryExists();
+    final recoveryCommittedOnce =
+        recoveryDevice.getBool('profiles_committed_once_v1') ?? false;
+    final recoveryHasWebDavCredentials = await _hasWebDavCredentialState(
+      recoveryDevice,
+    );
+    await DeviceKeyProvider.initialize(
+      allowCreate:
+          !recoveryRegistryExists &&
+          !recoveryCommittedOnce &&
+          !recoveryHasWebDavCredentials,
+    );
     if (DeviceKeyProvider.isLinux && !DeviceKeyProvider.isUnlocked) {
       final passphrase = linuxVaultPassphrase;
       if (passphrase == null || passphrase.isEmpty) {
@@ -664,8 +812,17 @@ class ProfileBootstrapRecoveryRequired implements Exception {
 
   const ProfileBootstrapRecoveryRequired(this.message, {this.cause});
 
+  DeviceVaultException? get deviceVaultFailure =>
+      cause is DeviceVaultException ? cause! as DeviceVaultException : null;
+
   @override
   String toString() => message;
+}
+
+final class _DeviceVaultInventoryException implements Exception {
+  const _DeviceVaultInventoryException(this.cause);
+
+  final Object cause;
 }
 
 class _LinuxPendingBootstrap {

@@ -731,7 +731,7 @@ class _PriorityRowState extends State<_PriorityRow> {
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          widget.provider.isEngine ? 'Torrent engine' : 'Addon',
+                          widget.provider.isIptv ? 'IPTV playlist' : widget.provider.isEngine ? 'Torrent engine' : 'Addon',
                           style: TextStyle(color: t.dim, fontSize: 11),
                         ),
                       ],

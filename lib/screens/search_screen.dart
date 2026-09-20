@@ -4,6 +4,7 @@ import '../widgets/recoverable_network_image.dart';
 import '../models/metadata_card_artwork.dart';
 import '../models/hero_metadata_presentation.dart';
 import '../services/profiles/profile_runtime.dart';
+import '../services/iptv_source_search.dart';
 import 'metadata_explore_page.dart';
 import '../widgets/metadata_presentation_mixin.dart';
 import '../models/metadata_preferences.dart';
@@ -14276,6 +14277,9 @@ class _SearchScreenState extends State<SearchScreen>
       case SeriesSource.addonDirectService:
         serviceColor = const Color(0xFFA78BFA);
         serviceLabel = 'Direct addon';
+      case SeriesSource.iptvDirectService:
+        serviceColor = const Color(0xFFEF4444);
+        serviceLabel = 'IPTV';
       default:
         serviceColor = Colors.white54;
         serviceLabel = source.debridService;

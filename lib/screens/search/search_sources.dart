@@ -59,6 +59,7 @@ class _SourcesScreenState extends State<_SourcesScreen> {
   bool _loading = true;
   String? _error;
   List<Torrent> _torrents = [];
+  List<IptvSourceResult> _iptvSources = [];
 
   /// The rows actually rendered — [_torrents] after the redesign toolbar's
   /// source-group filter, quality/rip/language filter, and sort are applied.
@@ -116,6 +117,22 @@ class _SourcesScreenState extends State<_SourcesScreen> {
 
   void _updateSelectedDirect() {
     _selectedDirect = null;
+    if (_bound.isNotEmpty && _bound.first.isIptvDirect) {
+      final pin = _bound.first;
+      for (final candidate in _torrents) {
+        if (IptvSourceSearch.owns(candidate) &&
+            candidate.iptvPlaylistId == pin.iptvPlaylistId &&
+            candidate.iptvCatalogType == pin.iptvCatalogType &&
+            candidate.iptvEntryKey == pin.iptvEntryKey) {
+          _selectedDirect = candidate;
+          break;
+        }
+      }
+      _logPickerSelection('match', {
+        'reason': _selectedDirect == null ? 'iptv_entry_not_found' : 'matched',
+      });
+      return;
+    }
     if (_bound.isEmpty || !_bound.first.isAddonDirect) {
       _logPickerSelection('match', {
         'reason': _bound.isEmpty ? 'no_saved_source' : 'primary_not_direct',
@@ -356,6 +373,13 @@ class _SourcesScreenState extends State<_SourcesScreen> {
   bool get _isMovie => !widget.selection.isSeries;
   SeriesSource? _bindingFor(Torrent torrent) {
     for (final source in _bound) {
+      if (IptvSourceSearch.owns(torrent) &&
+          source.isIptvDirect &&
+          source.iptvPlaylistId == torrent.iptvPlaylistId &&
+          source.iptvCatalogType == torrent.iptvCatalogType &&
+          source.iptvEntryKey == torrent.iptvEntryKey) {
+        return source;
+      }
       if (torrent.isDirectStream &&
           source.matchesAddonDirect(
             candidateAddonKey: torrent.stremioAddonKey,
@@ -560,7 +584,11 @@ class _SourcesScreenState extends State<_SourcesScreen> {
     // season/series pack. Movies are single files, so they're left alone.
     if (sel.isSeries && sel.episode == null) {
       filtered = filtered
-          .where((torrent) => torrent.streamType == StreamType.torrent)
+          .where(
+            (torrent) =>
+                torrent.streamType == StreamType.torrent ||
+                (widget.bindMode && IptvSourceSearch.owns(torrent)),
+          )
           .toList(growable: false);
     }
 
@@ -633,6 +661,7 @@ class _SourcesScreenState extends State<_SourcesScreen> {
         _loading = true;
         _error = null;
         _addonStatuses = const [];
+        _iptvSources = [];
         _retryingAddons.clear();
       });
     }
@@ -640,6 +669,10 @@ class _SourcesScreenState extends State<_SourcesScreen> {
       n.dispose();
     }
     _nodes.clear();
+    // An IPTV status can expose the body before the first non-empty batch.
+    // Never retain rows whose focus nodes were just disposed.
+    _torrents = [];
+    _visible = [];
     try {
       final sel = _effectiveSelection;
       // Streaming: each engine's batch lands as soon as THAT engine finishes,
@@ -673,6 +706,22 @@ class _SourcesScreenState extends State<_SourcesScreen> {
       // non-standard content types by contentType). Previously this path was
       // torrent-only, so addon direct links never appeared in the Search tab's
       // Sources list even though Home showed them.
+      final iptvSearch = !_keywordMode && widget.searchOverride == null
+          ? IptvSourceSearch.search(
+              sel,
+              deferXtreamSeriesEpisodes: true,
+              shouldContinue: () =>
+                  mounted && token == _searchToken && _searching,
+              onResult: (result) {
+                if (!mounted || token != _searchToken || !_searching) return;
+                setState(() {
+                  _iptvSources = [..._iptvSources, result];
+                  _loading = false;
+                });
+                onBatch(result.key, result.torrents);
+              },
+            )
+          : null;
       final res = widget.searchOverride != null
           ? await widget.searchOverride!(onBatch)
           : _keywordMode
@@ -695,7 +744,13 @@ class _SourcesScreenState extends State<_SourcesScreen> {
               onBatch: onBatch,
               preserveSourceOrder: true,
             );
+      final iptv = iptvSearch == null ? <IptvSourceResult>[] : await iptvSearch;
       if (!mounted || token != _searchToken) return;
+      _iptvSources = iptv;
+      final combinedTorrents = <Torrent>[
+        ...(res['torrents'] as List).cast<Torrent>(),
+        for (final source in iptv) ...source.torrents,
+      ];
       _searching = false;
       // Keyword search runs engines only — no addon statuses to show.
       // The strip follows the user's Addon Priority order when one is set.
@@ -709,7 +764,7 @@ class _SourcesScreenState extends State<_SourcesScreen> {
         (status) => status.sourceKey,
         _sourcePriority,
       );
-      _presentStreaming((res['torrents'] as List).cast<Torrent>(), token);
+      _presentStreaming(combinedTorrents, token);
       _finishSearch(token);
     } catch (e) {
       if (!mounted || token != _searchToken) return;
@@ -1030,7 +1085,39 @@ class _SourcesScreenState extends State<_SourcesScreen> {
     );
   }
 
+  bool _hasDeferredEpisodeTarget(Torrent torrent) =>
+      torrent.seasonNumber != null &&
+      RegExp(
+        r'^S\d+E\d+$',
+        caseSensitive: false,
+      ).hasMatch(torrent.episodeIdentifier ?? '');
+
+  bool _canCopySource(Torrent torrent) =>
+      torrent.copyLink != null ||
+      (IptvSourceSearch.isDeferredXtreamSeries(torrent) &&
+          _hasDeferredEpisodeTarget(torrent));
+
   Future<void> _copySourceLink(Torrent torrent) async {
+    if (IptvSourceSearch.isDeferredXtreamSeries(torrent)) {
+      if (!_hasDeferredEpisodeTarget(torrent)) {
+        _snack('Choose an episode before copying its IPTV link.');
+        return;
+      }
+      _snack('Finding this IPTV episode…');
+      final resolution = await IptvSourceSearch.resolveXtreamSeriesEpisode(
+        torrent,
+      );
+      if (!mounted) return;
+      if (resolution.source == null) {
+        _snack(
+          resolution.status == IptvEpisodeResolutionStatus.missing
+              ? '${torrent.episodeIdentifier ?? 'This episode'} is not available in this IPTV series.'
+              : 'Could not check this IPTV series. Try again.',
+        );
+        return;
+      }
+      torrent = resolution.source!;
+    }
     final link = torrent.copyLink;
     if (link == null) {
       _snack('No link available for this source.');
@@ -1048,7 +1135,14 @@ class _SourcesScreenState extends State<_SourcesScreen> {
     if (_pinning) return; // guard concurrent binds (double-tap on TV)
     _pinning = true;
     try {
-      final ok = t.isDirectStream
+      final ok = IptvSourceSearch.owns(t)
+          ? await TorrentPlaybackService.bindIptvSource(
+              context,
+              t,
+              imdbId: _imdbId,
+              isMovie: _isMovie,
+            )
+          : t.isDirectStream
           ? await TorrentPlaybackService.bindDirectSource(
               context,
               t,
@@ -1147,7 +1241,7 @@ class _SourcesScreenState extends State<_SourcesScreen> {
                 }
               },
             ),
-            if (t.copyLink != null)
+            if (_canCopySource(t))
               ListTile(
                 leading: const Icon(
                   Icons.copy_rounded,
@@ -1207,6 +1301,8 @@ class _SourcesScreenState extends State<_SourcesScreen> {
                 subtitle: Text(
                   binding != null
                       ? 'Stop refreshing this stream for playback'
+                      : IptvSourceSearch.owns(t)
+                      ? 'Resolve it from this IPTV catalog when played'
                       : 'Re-fetch a fresh link from this addon when played',
                   style: TextStyle(color: app.fade(app.core.tx, 0.5)),
                 ),
@@ -1367,10 +1463,13 @@ class _SourcesScreenState extends State<_SourcesScreen> {
         aliases: _sourceAliases,
       );
       counts[key] = (counts[key] ?? 0) + 1;
-      names.putIfAbsent(key, () => _prettySource(t.source));
+      names.putIfAbsent(key, () => _providerLabel(t.source));
     }
     for (final status in _addonStatuses) {
       names.putIfAbsent(status.sourceKey, () => status.name);
+    }
+    for (final source in _iptvSources) {
+      names[source.key] = 'IPTV · ${source.name}';
     }
     final keys = SourcePriority.orderBy(
       names.keys.toList()..sort(),
@@ -1432,8 +1531,10 @@ class _SourcesScreenState extends State<_SourcesScreen> {
                   if (_redesign &&
                       (_torrents.isNotEmpty ||
                           _seasonChipVisible ||
+                          _iptvSources.isNotEmpty ||
                           _hasRetryableAddon))
                     _redesignToolbar(scheme, showProviders: !cinema),
+                  if (_iptvSources.isNotEmpty) _iptvSourceStatus(scheme),
                   if (_searching && !cinema) _searchingStrip(),
                   Expanded(
                     child: Stack(
@@ -1494,7 +1595,7 @@ class _SourcesScreenState extends State<_SourcesScreen> {
                                             }
                                           },
                                           onLongPress: () => _showRowMenu(t, i),
-                                          onCopyMagnet: t.copyLink == null
+                                          onCopyMagnet: !_canCopySource(t)
                                               ? null
                                               : () => unawaited(
                                                   _copySourceLink(t),
@@ -1807,6 +1908,7 @@ class _SourcesScreenState extends State<_SourcesScreen> {
     final sourceByKey = <String, String>{
       for (final source in sources.toList()..sort())
         SourcePriority.keyForSource(source, aliases: _sourceAliases): source,
+      for (final source in _iptvSources) source.key: source.key,
     };
     final retryByKey = <String, AddonSearchStatus>{
       for (final status in _addonStatuses)
@@ -1926,7 +2028,7 @@ class _SourcesScreenState extends State<_SourcesScreen> {
                         _rebuildVisible();
                       },
                       child: Text(
-                        _prettySource(source),
+                        _providerLabel(source),
                         style: TextStyle(
                           color: _sourceFilter == key ? app.inkOn(accent) : dim,
                           fontSize: 12.5,
@@ -2292,9 +2394,46 @@ class _SourcesScreenState extends State<_SourcesScreen> {
     _rebuildVisible();
   }
 
+  String _providerLabel(String s) {
+    for (final source in _iptvSources) {
+      if (source.key == s) return 'IPTV · ${source.name}';
+    }
+    return _prettySource(s);
+  }
+
   static String _prettySource(String s) {
     final v = s.startsWith('stremio:') ? s.substring(8) : s;
     return v.isEmpty ? s : v[0].toUpperCase() + v.substring(1);
+  }
+
+  Widget _iptvSourceStatus(ColorScheme scheme) {
+    final sources = _iptvSources;
+    if (sources.isEmpty) return const SizedBox.shrink();
+    return SizedBox(
+      height: 76,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+        itemCount: sources.length,
+        separatorBuilder: (_, _) => const SizedBox(width: 8),
+        itemBuilder: (context, index) {
+          final source = sources[index];
+          return SizedBox(
+            width: 330,
+            child: OutlinedButton(
+              onPressed: () => _selectCinemaProvider(
+                _sourceFilter == source.key ? null : source.key,
+              ),
+              child: Text(
+                'IPTV · ${source.name}\n${source.message}',
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          );
+        },
+      ),
+    );
   }
 
   static String _sortLabel(String v) => switch (v) {
@@ -2378,7 +2517,7 @@ class _SourcesScreenState extends State<_SourcesScreen> {
           : t.isDirectStream
           ? 'Direct'
           : null,
-      onCopy: t.copyLink == null ? null : () => unawaited(_copySourceLink(t)),
+      onCopy: !_canCopySource(t) ? null : () => unawaited(_copySourceLink(t)),
       onTap: () {
         if (widget.bindMode) {
           unawaited(_pin(t));

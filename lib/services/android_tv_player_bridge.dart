@@ -11,6 +11,7 @@ import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:flutter/material.dart' show debugPrint;
 
 import '../utils/format_tag_detector.dart';
+import '../models/iptv_playlist.dart';
 import '../utils/stream_badge_appearance.dart';
 import '../utils/movie_parser.dart';
 import '../utils/series_parser.dart';
@@ -1046,9 +1047,23 @@ class AndroidTvPlayerBridge {
                 break;
               }
             }
+            final replayChannel = IptvChannel(
+              name: '',
+              url: channelUrl,
+              attributes: {
+                if (args['archiveDisabled'] == true)
+                  'tv_archive': '0'
+                else if (args['archiveEnabled'] == true)
+                  'tv_archive': '1',
+                if (args['archiveDurationDays'] is num)
+                  'tv_archive_duration':
+                      (args['archiveDurationDays'] as num).toInt().toString(),
+              },
+            );
             if (programme == null ||
-                !programme.hasArchive ||
-                programme.start.isAfter(DateTime.now())) {
+                !(args['startOver'] == true
+                    ? IptvEpgService.isStartOverAvailable(replayChannel, programme)
+                    : IptvEpgService.isCatchupAvailable(replayChannel, programme))) {
               return null;
             }
             final url = await IptvEpgService.instance.catchupUrl(

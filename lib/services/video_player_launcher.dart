@@ -1,6 +1,7 @@
 import '../utils/show_shuffle.dart';
 import 'failed_saved_source.dart';
 import 'torrent_playback_service.dart';
+import 'iptv_source_search.dart';
 import 'startup_recovery_sources.dart';
 import 'dart:async';
 import 'source_selection_diagnostics.dart';
@@ -2277,7 +2278,10 @@ class VideoPlayerLauncher {
         shouldProbe: TorrentPlaybackService.shouldPreflightDirectStream,
       );
       var validateRecoveryDirectLinks = true;
-      Future<List<Map<String, dynamic>>?> Function(int, {bool automaticRecovery})?
+      Future<List<Map<String, dynamic>>?> Function(
+        int, {
+        bool automaticRecovery,
+      })?
       sourcePlaylistResolverForTv;
       if (currentStremioSources.isNotEmpty && resolveSourceToPlaylist != null) {
         sourcePlaylistResolverForTv = (int sourceIndex, {bool automaticRecovery = false}) async {
@@ -2294,13 +2298,28 @@ class VideoPlayerLauncher {
           debugPrint(
             'VideoPlayerLauncher: resolving source playlist $sourceIndex: ${torrent.displayTitle}',
           );
-          if (automaticRecovery && !await recoveryPreflight.allows(torrent,
-              enabled: validateRecoveryDirectLinks)) return null;
+          try {
+            await IptvSourceSearch.authorize(torrent);
+          } catch (_) {
+            return null;
+          }
+          if (automaticRecovery &&
+              !await recoveryPreflight.allows(
+                torrent,
+                enabled: validateRecoveryDirectLinks,
+              ))
+            return null;
           final playlistEntries = automaticRecovery
-              ? await TorrentPlaybackService.resolveRecoverySource(torrent,
+              ? await TorrentPlaybackService.resolveRecoverySource(
+                  torrent,
                   provider: args.startupResolverProvider,
-                  season: args.contentType == 'series' ? args.contentSeason : null,
-                  episode: args.contentType == 'series' ? args.contentEpisode : null)
+                  season: args.contentType == 'series'
+                      ? args.contentSeason
+                      : null,
+                  episode: args.contentType == 'series'
+                      ? args.contentEpisode
+                      : null,
+                )
               : await resolveSourceToPlaylist(torrent);
           if (playlistEntries == null || playlistEntries.isEmpty) return null;
 
@@ -2529,7 +2548,9 @@ class VideoPlayerLauncher {
               if (trackerPercent != null)
                 'traktProgressPercent': trackerPercent,
               'watched': resolvedLocal.watched,
-              'allowLocalProgressDisplay': trackingPolicy.progressFrom(TrackingSource.local),
+              'allowLocalProgressDisplay': trackingPolicy.progressFrom(
+                TrackingSource.local,
+              ),
             });
           }
           debugPrint(
@@ -2559,12 +2580,17 @@ class VideoPlayerLauncher {
 
       final sourceCommit = args.onStremioSourceCommitted;
       final sourceCommitterForTv = (int sourceIndex) async {
-          if (sourceIndex < 0 || sourceIndex >= currentStremioSources.length) {
-            return;
-          }
-          logSourceSelection('player_source_committed',
-              source: currentStremioSources[sourceIndex], index: sourceIndex, player: 'exo');
-          if (sourceCommit != null) await sourceCommit(currentStremioSources[sourceIndex]);
+        if (sourceIndex < 0 || sourceIndex >= currentStremioSources.length) {
+          return;
+        }
+        logSourceSelection(
+          'player_source_committed',
+          source: currentStremioSources[sourceIndex],
+          index: sourceIndex,
+          player: 'exo',
+        );
+        if (sourceCommit != null)
+          await sourceCommit(currentStremioSources[sourceIndex]);
       };
 
       // "Load more sources" for the series source tabs: run the missing
@@ -2588,7 +2614,9 @@ class VideoPlayerLauncher {
               var fetchMode = mode;
               String? recoveryNextMode;
               final recoveryRules = automaticRecovery
-                  ? await StorageService.getQuickPlayRules(isMovie: seriesFetcher.isMovie)
+                  ? await StorageService.getQuickPlayRules(
+                      isMovie: seriesFetcher.isMovie,
+                    )
                   : null;
               if (recoveryRules != null) {
                 final stages = StartupRecoverySources.stages(
@@ -2616,9 +2644,14 @@ class VideoPlayerLauncher {
               if (fetched == null && !automaticRecovery) return null;
               var automatic = fetched ?? <Torrent>[];
               if (recoveryRules != null) {
-                final ladder = await TorrentPlaybackService.loadLadder(includeSize: seriesFetcher.isMovie, rules: recoveryRules);
+                final ladder = await TorrentPlaybackService.loadLadder(
+                  includeSize: seriesFetcher.isMovie,
+                  rules: recoveryRules,
+                );
                 automatic = await TorrentPlaybackService.prepareRecoverySources(
-                  automatic, rules: recoveryRules, ladder: ladder,
+                  automatic,
+                  rules: recoveryRules,
+                  ladder: ladder,
                   provider: args.startupResolverProvider,
                 );
               }
@@ -2817,18 +2850,35 @@ class VideoPlayerLauncher {
 
           var preferredSourceMissing = false;
           Future<Map<String, dynamic>?> winWith(int i) async {
-            logSourceSelection('next_episode_candidate', source: currentStremioSources[i],
-                index: i, season: season, episode: episode, player: 'exo');
+            final selectedSource = currentStremioSources[i];
+            logSourceSelection(
+              'next_episode_candidate',
+              source: selectedSource,
+              index: i,
+              season: season,
+              episode: episode,
+              player: 'exo',
+            );
             final items = await resolvePlaylistForTv(i);
             if (stale() || items == null || items.length < 2) {
-              logSourceSelection('next_episode_candidate_rejected', index: i,
-                  season: season, episode: episode, player: 'exo',
-                  reason: stale() ? 'superseded' : 'no_playlist');
+              logSourceSelection(
+                'next_episode_candidate_rejected',
+                index: i,
+                season: season,
+                episode: episode,
+                player: 'exo',
+                reason: stale() ? 'superseded' : 'no_playlist',
+              );
               return null;
             }
-            logSourceSelection('next_episode_candidate_resolved',
-                source: currentStremioSources[i], index: i,
-                season: season, episode: episode, player: 'exo');
+            logSourceSelection(
+              'next_episode_candidate_resolved',
+              source: selectedSource,
+              index: i,
+              season: season,
+              episode: episode,
+              player: 'exo',
+            );
             // items[0] is the '__meta__' map; stamp the target identity onto
             // a lone stream so native lands on the right episode. The generic
             // source resolver cannot know the requested identity, so hydrate
@@ -2927,11 +2977,32 @@ class VideoPlayerLauncher {
               row['updatedAt'] =
                   (localState?['updatedAt'] as num?)?.toInt() ?? 0;
               row['watched'] = resolvedLocal.watched;
-              row['allowLocalProgressDisplay'] = trackingPolicy.progressFrom(TrackingSource.local);
+              row['allowLocalProgressDisplay'] = trackingPolicy.progressFrom(
+                TrackingSource.local,
+              );
               items[1] = row;
             }
+            final retained = SeriesSourceFetcher.retainForEpisode(
+              currentStremioSources,
+              season,
+              episode,
+            );
+            var retainedIndex = retained.indexWhere(
+              (source) => identical(source, selectedSource),
+            );
+            retainedIndex = retainedIndex >= 0
+                ? retainedIndex
+                : retained.indexWhere(
+                    (source) =>
+                        SeriesSourceFetcher.sourceKey(source) ==
+                        SeriesSourceFetcher.sourceKey(selectedSource),
+                  );
+            if (retainedIndex < 0) return null;
+            currentStremioSources = retained;
+            // A late load-more/fetch response belongs to the previous episode.
+            stremioSourcesGeneration++;
             return {
-              'sourceIndex': i,
+              'sourceIndex': retainedIndex,
               'preferredSourceMissing': preferredSourceMissing,
               'items': items,
               'targetSeason': season,
@@ -2944,8 +3015,11 @@ class VideoPlayerLauncher {
 
           final pinned = seriesFetcher.pinnedDirectCandidates;
           if (pinned != null) {
-            await for (final candidate in pinned(season, episode,
-                onPreferredMissing: () => preferredSourceMissing = true)) {
+            await for (final candidate in pinned(
+              season,
+              episode,
+              onPreferredMissing: () => preferredSourceMissing = true,
+            )) {
               if (stale()) return null;
               if (!await candidateHasTarget(candidate)) continue;
               if (stale()) return null;
@@ -3096,8 +3170,10 @@ class VideoPlayerLauncher {
 
       // Build payload with Stremio TV guide data
       final payloadMap = result.payload.toMap();
-      payloadMap['startupHasRemainingSavedSources'] = args.startupHasRemainingSavedSources;
-      payloadMap['useAddonTextFormatting'] = await StorageService.getUseAddonTextFormatting();
+      payloadMap['startupHasRemainingSavedSources'] =
+          args.startupHasRemainingSavedSources;
+      payloadMap['useAddonTextFormatting'] =
+          await StorageService.getUseAddonTextFormatting();
       payloadMap['showAddonLogos'] = await StorageService.getShowAddonLogos();
       payloadMap['initialContinuousShuffle'] = args.initialContinuousShuffle;
       if (args.stremioTvChannels != null &&
@@ -3249,8 +3325,10 @@ class VideoPlayerLauncher {
             : null,
         onResolveStremioSource: stremioSourceResolverForTv,
         onResolveSourcePlaylist: sourcePlaylistResolverForTv,
-        onResolveStartupSourcePlaylist: sourcePlaylistResolverForTv == null ? null
-            : (index) => sourcePlaylistResolverForTv!(index, automaticRecovery: true),
+        onResolveStartupSourcePlaylist: sourcePlaylistResolverForTv == null
+            ? null
+            : (index) =>
+                  sourcePlaylistResolverForTv!(index, automaticRecovery: true),
         onCommitStremioSource: sourceCommitterForTv,
         onStartupSourcesExhausted: args.onStartupSourcesExhausted,
         onRequestMoreSources: moreSourcesProviderForTv,
@@ -3704,7 +3782,9 @@ class VideoPlayerLauncher {
               // Explicit local completion differs from tracker 100%: remote
               // completion yields to a local partial during an active rewatch.
               'watched': localState.watched,
-              'allowLocalProgressDisplay': trackingPolicy.progressFrom(TrackingSource.local),
+              'allowLocalProgressDisplay': trackingPolicy.progressFrom(
+                TrackingSource.local,
+              ),
             };
           }
 
@@ -5343,7 +5423,9 @@ class _AndroidTvPlaybackPayloadBuilder {
           resumeId: resumeId,
           provider: entry.provider,
           watched: resolvedLocal.watched,
-          allowLocalProgressDisplay: trackingPolicy.progressFrom(TrackingSource.local),
+          allowLocalProgressDisplay: trackingPolicy.progressFrom(
+            TrackingSource.local,
+          ),
           traktProgressPercent: episodeKey != null
               ? furthestEpisodeTrackerPercent([
                   trackingPolicy.guideProgressFrom(

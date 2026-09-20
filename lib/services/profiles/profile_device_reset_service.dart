@@ -47,19 +47,67 @@ class ProfileDeviceResetService {
     }
     final registryExists = await ProfileRegistry.defaultRegistryExists();
     final stage = journal['stage']! as String;
+    final unopenableAuthority = journal['unopenableAuthority'] == true;
     if (registryExists &&
+        !unopenableAuthority &&
         const <String>{'prepared', 'workDrained'}.contains(stage)) {
       return false;
     }
+    // The native bypass is deliberately process-local. Re-establish it for
+    // every unfinished unopenable-vault reset, including a restart after the
+    // workDrained journal write but before native authorities were cleared.
+    if (unopenableAuthority && stage != 'deviceAuthoritiesCleared') {
+      final token = journal['nativeResetToken'];
+      if (Platform.isAndroid && (token is! String || token.isEmpty)) {
+        throw const FormatException('Device reset authorization is missing');
+      }
+      await NativeProfileProjection.beginUnopenableDeviceReset(
+        token is String ? token : null,
+      );
+    }
     if (stage == 'prepared') {
-      if (!ProfileRuntime.isInMaintenance) ProfileRuntime.enterMaintenance();
+      _enterMaintenanceIfAvailable();
       ProfileRemoteLease.instance.revoke();
       await _drainDeviceWork();
       await _writeJournal('workDrained');
     }
-    await _finishPrivateCleanup();
+    if (unopenableAuthority && stage == 'deviceAuthoritiesCleared') {
+      await _finishAfterDeviceAuthoritiesCleared();
+    } else {
+      await _finishPrivateCleanup(
+        journalDeviceAuthoritiesCleared: unopenableAuthority,
+      );
+    }
     await _deleteJournal();
     return true;
+  }
+
+  /// Last-resort reset entered only from the startup recovery surface after
+  /// the device vault failed before the registry could be opened. It preserves
+  /// the same restart-safe ordering as an authorized reset, but cannot require
+  /// an authorization context whose encrypted authority is unavailable.
+  static Future<void> resetUnopenableDevice() async {
+    final nativeResetToken =
+        await NativeProfileProjection.authorizeUnopenableDeviceReset();
+    await _writeJournal('prepared', <String, Object?>{
+      'unopenableAuthority': true,
+      if (nativeResetToken != null) 'nativeResetToken': nativeResetToken,
+    });
+    await NativeProfileProjection.beginUnopenableDeviceReset(nativeResetToken);
+    _enterMaintenanceIfAvailable();
+    ProfileRemoteLease.instance.revoke();
+    await _drainDeviceWork();
+    await _writeJournal('workDrained');
+    await _finishPrivateCleanup(journalDeviceAuthoritiesCleared: true);
+    await _deleteJournal();
+  }
+
+  static void _enterMaintenanceIfAvailable() {
+    if (ProfileRuntime.isInitialized &&
+        ProfileRuntime.isProfileCommitted &&
+        !ProfileRuntime.isInMaintenance) {
+      ProfileRuntime.enterMaintenance();
+    }
   }
 
   static Future<void> reset({
@@ -241,13 +289,25 @@ class ProfileDeviceResetService {
     }
   }
 
-  static Future<void> _finishPrivateCleanup() async {
+  static Future<void> _finishPrivateCleanup({
+    bool journalDeviceAuthoritiesCleared = false,
+  }) async {
     await _clearProfileFilesAndPreferences();
     await TvosTopShelfService.instance.clear();
     await PendingExternalActionStore.clear();
     await TvOsProfileRecoveryStore.clear();
     await RemotePairingStore.resetDeviceIdentity();
     await NativeProfileProjection.clearDeviceAuthorities();
+    if (journalDeviceAuthoritiesCleared) {
+      // From this point the Android process-local bypass and its native
+      // authority are gone. Persist that boundary before destroying the
+      // recovery token so a crash can resume without trying to redeem it.
+      await _writeJournal('deviceAuthoritiesCleared');
+    }
+    await _finishAfterDeviceAuthoritiesCleared();
+  }
+
+  static Future<void> _finishAfterDeviceAuthoritiesCleared() async {
     await DeviceKeyProvider.destroy();
     await _deleteRegistryFiles();
   }
@@ -328,6 +388,10 @@ class ProfileDeviceResetService {
         'sequence': nextSequence,
         'updatedAtMs': DateTime.now().millisecondsSinceEpoch,
         'publicMediaRetained': true,
+        if (previous?['unopenableAuthority'] == true)
+          'unopenableAuthority': true,
+        if (previous?['nativeResetToken'] is String)
+          'nativeResetToken': previous!['nativeResetToken'],
         ...payload,
       }),
       flush: true,

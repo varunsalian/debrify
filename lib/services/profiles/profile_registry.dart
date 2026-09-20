@@ -2660,6 +2660,65 @@ class ProfileRegistry {
     return rows.map(_decodeResource).toList(growable: false);
   }
 
+  /// Complete device-key inventory used only by the one-time native canary
+  /// migration. Includes disabled live resources and unpublished restore
+  /// staging rows so no credential encrypted by an older key is skipped.
+  Future<void> visitSealedResourceSecretsForVaultAudit(
+    Future<void> Function(SealedResourceSecretRecord sealed) visitor,
+  ) async {
+    for (final resource in await listAllResourcesIncludingDisabled()) {
+      final sealed = await getSealedResourceSecret(
+        resource.id,
+        includeDisabled: true,
+      );
+      if (sealed != null) await visitor(sealed);
+    }
+    // Fetch one staging row at a time. IPTV envelopes can be tens of MB after
+    // chunk reassembly, so retaining the complete audit inventory can exhaust
+    // memory on TV hardware before authentication even begins.
+    for (var offset = 0; ; offset++) {
+      final rows = await _db.query(
+        'profile_restore_resources',
+        columns: const <String>[
+          'restore_id',
+          'backup_id',
+          'resource_id',
+          'type',
+          'owner_profile_id',
+          'public_config_json',
+          'sealed_secret_payload',
+          'secret_payload_version',
+        ],
+        orderBy: 'restore_id, backup_id',
+        limit: 1,
+        offset: offset,
+      );
+      if (rows.isEmpty) break;
+      final row = rows.single;
+      final publicConfig = Map<String, dynamic>.from(
+        jsonDecode(row['public_config_json']! as String) as Map,
+      );
+      await visitor(
+        SealedResourceSecretRecord(
+          resourceId: row['resource_id']! as String,
+          type: ConnectionResourceType.values.byName(row['type']! as String),
+          ownerProfileId: row['owner_profile_id']! as String,
+          publicSchemaVersion: publicConfig['schemaVersion']! as int,
+          payloadVersion: row['secret_payload_version']! as int,
+          envelope: await _loadEnvelope(
+            _db,
+            'restore_secret_chunks',
+            <String, Object?>{
+              'restore_id': row['restore_id'],
+              'backup_id': row['backup_id'],
+            },
+            row['sealed_secret_payload']! as String,
+          ),
+        ),
+      );
+    }
+  }
+
   /// Every resource a profile owns, INCLUDING disabled ones.
   ///
   /// [listAllResources] hides disabled rows, but the delete-time owned-resource

@@ -634,14 +634,25 @@ class IptvEpgService {
     IptvChannel channel,
     EpgProgramme programme,
   ) =>
-      programme.airsAt(DateTime.now()) && _hasCatchupAccess(channel, programme);
+      programme.airsAt(DateTime.now()) &&
+      _hasCatchupAccess(channel, programme, allowChannelArchive: true);
 
-  /// Shared archive requirements: the panel recorded it (`has_archive`),
+  /// Shared archive requirements: programme archive or, for start-over only,
+  /// channel archive capability,
   /// the channel isn't explicitly archive-off, it still sits inside the
   /// channel's archive window, and the URL carries Xtream credentials.
-  /// XMLTV programmes never qualify (hasArchive is always false there).
-  static bool _hasCatchupAccess(IptvChannel channel, EpgProgramme programme) {
-    if (!programme.hasArchive) return false;
+  /// Channel capability also permits current XMLTV rows without archive flags.
+  static bool _hasCatchupAccess(
+    IptvChannel channel,
+    EpgProgramme programme, {
+    bool allowChannelArchive = false,
+  }) {
+    // Some panels only mark completed programmes archived. Their channel
+    // capability is sufficient to attempt start-over on the current row.
+    if (!programme.hasArchive &&
+        !(allowChannelArchive && channel.attributes['tv_archive'] == '1')) {
+      return false;
+    }
     final now = DateTime.now();
     if (programme.start.isAfter(now)) return false; // future
     // Explicit deny only — favorites-rebuilt channels carry no attributes,

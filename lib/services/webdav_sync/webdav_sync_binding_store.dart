@@ -65,7 +65,16 @@ final class WebDavSyncBindingStore {
 
   Future<WebDavSyncStoreSnapshot> load() => _load();
 
-  Future<WebDavSyncStoreSnapshot> _load({bool writeLocked = false}) async {
+  /// Parses device-owned sync state without running compatibility rewrites.
+  /// Startup uses this while proving a pre-canary device key so failed
+  /// authentication cannot mutate the only remaining recovery material.
+  Future<WebDavSyncStoreSnapshot> loadForDeviceVaultMigration() =>
+      _load(allowMigration: false);
+
+  Future<WebDavSyncStoreSnapshot> _load({
+    bool writeLocked = false,
+    bool allowMigration = true,
+  }) async {
     final device = await DevicePreferences.instance();
     final encoded = device.getString(_storageKey);
     if (encoded == null || encoded.isEmpty) {
@@ -85,9 +94,11 @@ final class WebDavSyncBindingStore {
       final marker = entry.value.markerBytes;
       return marker != null && raw['markerBytes'] != base64Encode(marker);
     });
-    if (hasLegacyPin) {
+    if (hasLegacyPin && allowMigration) {
       if (!writeLocked) {
-        return _writeLock.synchronized(() => _load(writeLocked: true));
+        return _writeLock.synchronized(
+          () => _load(writeLocked: true, allowMigration: true),
+        );
       }
       // Serialize with all other store writes so migration cannot restore stale
       // bindings. fromJson has already removed the assembled authority secret.
@@ -753,6 +764,19 @@ final class WebDavSyncBindingStore {
       username: decoded['username'] as String,
       password: decoded['password'] as String,
       syncPassphrase: decoded['syncPassphrase'] as String,
+    );
+  }
+
+  /// Authenticates an existing envelope during the one-time native canary
+  /// migration without interpreting its payload. This keeps unrelated legacy
+  /// JSON damage from being mistaken for replacement of the device key.
+  Future<void> authenticateForDeviceVaultMigration(
+    WebDavSyncBinding binding,
+  ) async {
+    _requireVault();
+    await DeviceKeyProvider.cipher.open(
+      binding.sealedSecrets,
+      associatedData: _secretsAad(binding.id),
     );
   }
 

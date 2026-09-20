@@ -11,6 +11,7 @@ import 'webdav_sync/webdav_sync_tombstones.dart';
 class SeriesSource {
   static const String localService = 'local';
   static const String addonDirectService = 'stremio_direct';
+  static const String iptvDirectService = 'iptv_direct';
   static const String localKindMovieFile = 'movie_file';
   static const String localKindSeriesFolder = 'series_folder';
   static const String cloudKindFile = 'file';
@@ -37,6 +38,9 @@ class SeriesSource {
   final String? streamKey;
   final String? bingeGroup;
   final int? streamIndex;
+  final String? iptvPlaylistId;
+  final String? iptvCatalogType;
+  final String? iptvEntryKey;
 
   const SeriesSource({
     required this.torrentHash,
@@ -55,6 +59,9 @@ class SeriesSource {
     this.streamKey,
     this.bingeGroup,
     this.streamIndex,
+    this.iptvPlaylistId,
+    this.iptvCatalogType,
+    this.iptvEntryKey,
   });
 
   bool get isLocal => debridService == localService;
@@ -69,6 +76,11 @@ class SeriesSource {
       debridService == addonDirectService &&
       (addonId?.trim().isNotEmpty ?? false) &&
       (addonKey?.trim().isNotEmpty ?? false);
+  bool get isIptvDirect =>
+      debridService == iptvDirectService &&
+      (iptvPlaylistId?.trim().isNotEmpty ?? false) &&
+      (iptvCatalogType?.trim().isNotEmpty ?? false) &&
+      (iptvEntryKey?.trim().isNotEmpty ?? false);
 
   /// Stable identity used for dedupe, reorder keys, and removal. Existing
   /// hash-backed bindings retain their exact behavior; only hashless cloud
@@ -92,6 +104,9 @@ class SeriesSource {
       // [streamKey] is the real identity: a URL-free stream profile (see
       // StremioStream.streamKey), so it survives signed/expiring links.
       return 'direct:${addonKey!.trim()}:${streamKey?.trim() ?? ''}';
+    }
+    if (isIptvDirect) {
+      return 'iptv:${iptvPlaylistId!.trim()}:${iptvCatalogType!.trim()}:${iptvEntryKey!.trim()}';
     }
     return 'cloud:$debridService:${cloudSourceKind ?? ''}:${debridTorrentId.trim()}';
   }
@@ -141,6 +156,9 @@ class SeriesSource {
     if (streamKey != null) 'streamKey': streamKey,
     if (bingeGroup != null) 'bingeGroup': bingeGroup,
     if (streamIndex != null) 'streamIndex': streamIndex,
+    if (iptvPlaylistId != null) 'iptvPlaylistId': iptvPlaylistId,
+    if (iptvCatalogType != null) 'iptvCatalogType': iptvCatalogType,
+    if (iptvEntryKey != null) 'iptvEntryKey': iptvEntryKey,
   };
 
   factory SeriesSource.fromJson(Map<String, dynamic> json) => SeriesSource(
@@ -160,6 +178,9 @@ class SeriesSource {
     streamKey: json['streamKey'] as String?,
     bingeGroup: json['bingeGroup'] as String?,
     streamIndex: json['streamIndex'] as int?,
+    iptvPlaylistId: json['iptvPlaylistId'] as String?,
+    iptvCatalogType: json['iptvCatalogType'] as String?,
+    iptvEntryKey: json['iptvEntryKey'] as String?,
   );
 }
 

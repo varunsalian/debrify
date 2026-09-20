@@ -873,7 +873,7 @@ void main() {
       );
     });
 
-    test('AIOStreams direct links bypass the destructive HEAD preflight', () {
+    test('player-validated direct links bypass destructive HEAD preflight', () {
       expect(
         TorrentPlaybackService.shouldPreflightDirectStream(
           _torrent(
@@ -900,6 +900,16 @@ void main() {
             'provider proxy',
             type: StreamType.directUrl,
             directUrl: 'https://aiostreams.elfhosted.com/api/v1/debrid/link',
+          ),
+        ),
+        isFalse,
+      );
+      expect(
+        TorrentPlaybackService.shouldPreflightDirectStream(
+          _torrent(
+            'IPTV stream',
+            type: StreamType.directUrl,
+            source: 'iptv:provider-id',
           ),
         ),
         isFalse,

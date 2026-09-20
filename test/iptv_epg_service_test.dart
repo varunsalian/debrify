@@ -580,6 +580,56 @@ void main() {
       expect(IptvEpgService.isStartOverAvailable(channel(), airing), isTrue);
     });
 
+    test('channel capability enables current rows without programme flags', () {
+      final airing = EpgProgramme(
+        title: 'XMLTV or unflagged panel row',
+        description: '',
+        start: now.subtract(const Duration(minutes: 30)),
+        stop: now.add(const Duration(minutes: 30)),
+        hasArchive: false,
+      );
+      final enabled = channel(attributes: const {'tv_archive': '1'});
+      expect(IptvEpgService.isStartOverAvailable(enabled, airing), isTrue);
+      expect(IptvEpgService.isCatchupAvailable(enabled, airing), isFalse);
+      expect(IptvEpgService.isStartOverAvailable(channel(), airing), isFalse);
+      expect(
+        IptvEpgService.isStartOverAvailable(
+          channel(attributes: const {'tv_archive': '0'}), airing,
+        ),
+        isFalse,
+      );
+      expect(
+        IptvEpgService.isCatchupAvailable(enabled, finished(hasArchive: false)),
+        isFalse,
+      );
+      expect(IptvEpgService.isStartOverAvailable(enabled, finished()), isFalse);
+    });
+
+    test('channel capability preserves archive window and URL constraints', () {
+      final airing = EpgProgramme(
+        title: 'T',
+        description: '',
+        start: now.subtract(const Duration(days: 2)),
+        stop: now.add(const Duration(minutes: 30)),
+        hasArchive: false,
+      );
+      expect(
+        IptvEpgService.isStartOverAvailable(
+          channel(attributes: const {
+            'tv_archive': '1', 'tv_archive_duration': '1',
+          }), airing,
+        ),
+        isFalse,
+      );
+      expect(
+        IptvEpgService.isStartOverAvailable(
+          IptvChannel(name: 'X', url: 'https://cdn.example.com/stream.m3u8',
+            attributes: const {'tv_archive': '1'}), airing,
+        ),
+        isFalse,
+      );
+    });
+
     test('future programme → unavailable', () {
       final future = EpgProgramme(
         title: 'T',

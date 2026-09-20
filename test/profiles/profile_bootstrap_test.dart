@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:debrify/models/profiles/profile_policy.dart';
+import 'package:debrify/models/profiles/connection_resource.dart';
+import 'package:debrify/services/profiles/connection_resource_service.dart';
 import 'package:debrify/services/profiles/device_key_provider.dart';
 import 'package:debrify/services/profiles/native_profile_projection.dart';
 import 'package:debrify/services/profiles/profile_bootstrap.dart';
@@ -9,13 +11,17 @@ import 'package:debrify/services/profiles/profile_preference_budget.dart';
 import 'package:debrify/services/profiles/profile_preferences.dart';
 import 'package:debrify/services/profiles/profile_registry.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
+import 'package:debrify/services/webdav_sync/webdav_sync_binding_store.dart';
 import 'package:debrify/utils/app_storage.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+  const deviceSecretChannel = MethodChannel('debrify/device_secret');
   late Directory temporaryDirectory;
   late Directory documents;
   late Directory support;
@@ -49,9 +55,405 @@ void main() {
     await ProfileBootstrap.close();
     ProfileRuntime.debugReset();
     DeviceKeyProvider.debugReset();
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(deviceSecretChannel, null);
     AppStorage.debugReset();
     await temporaryDirectory.delete(recursive: true);
   });
+
+  test(
+    'existing registry forbids native key replacement and routes loss to recovery',
+    () async {
+      final registry = await ProfileRegistry.open();
+      final admin = await registry.createProfile(
+        name: 'Admin',
+        role: UserProfileRole.admin,
+      );
+      await registry.commitBootstrap(
+        activeProfileId: admin.id,
+        migratedLegacyInstall: false,
+      );
+      await registry.close();
+
+      DeviceKeyProvider.debugLinuxOverride = false;
+      MethodCall? received;
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(deviceSecretChannel, (call) async {
+            received = call;
+            throw PlatformException(
+              code: 'device_secret_missing',
+              message:
+                  'initialize:DeviceSecretMissingException:DeviceSecretMissingException',
+            );
+          });
+
+      await expectLater(
+        ProfileBootstrap.initialize(),
+        throwsA(
+          isA<ProfileBootstrapRecoveryRequired>().having(
+            (error) => error.deviceVaultFailure?.failure,
+            'device vault failure',
+            DeviceVaultFailure.missing,
+          ),
+        ),
+      );
+      expect(received?.method, 'initialize');
+      expect(received?.arguments, <String, Object>{'allowCreate': false});
+      expect(ProfileRuntime.isInitialized, isFalse);
+    },
+  );
+
+  test('missing registry recovery never replaces a WebDAV device key', () async {
+    SharedPreferences.setMockInitialValues(<String, Object>{
+      'profiles_committed_once_v1': true,
+      WebDavSyncBindingStore.storageKey: '{"existing":"sealed-state"}',
+    });
+    DeviceKeyProvider.debugLinuxOverride = false;
+    final received = <MethodCall>[];
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(deviceSecretChannel, (call) async {
+          received.add(call);
+          throw PlatformException(
+            code: 'device_secret_missing',
+            message:
+                'initialize:DeviceSecretMissingException:DeviceSecretMissingException',
+          );
+        });
+
+    await expectLater(
+      ProfileBootstrap.initialize(),
+      throwsA(
+        isA<ProfileBootstrapRecoveryRequired>().having(
+          (error) => error.deviceVaultFailure?.failure,
+          'device vault failure',
+          DeviceVaultFailure.missing,
+        ),
+      ),
+    );
+
+    expect(received.single.method, 'initialize');
+    expect(received.single.arguments, <String, Object>{'allowCreate': false});
+    expect(await ProfileRegistry.defaultRegistryExists(), isFalse);
+
+    await expectLater(
+      ProfileBootstrap.initializeRecoveryAuthority(),
+      throwsA(
+        isA<DeviceVaultException>().having(
+          (error) => error.failure,
+          'device vault failure',
+          DeviceVaultFailure.missing,
+        ),
+      ),
+    );
+    expect(received, hasLength(2));
+    expect(received.last.arguments, <String, Object>{'allowCreate': false});
+  });
+
+  test('empty WebDAV state does not block a fresh device key', () async {
+    SharedPreferences.setMockInitialValues(<String, Object>{
+      WebDavSyncBindingStore.storageKey:
+          '{"version":1,"bindings":{},"namespaces":{}}',
+    });
+    DeviceKeyProvider.debugLinuxOverride = false;
+    MethodCall? initializeCall;
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(deviceSecretChannel, (call) async {
+          if (call.method == 'initialize') {
+            initializeCall = call;
+            return 'ready';
+          }
+          return null;
+        });
+
+    await ProfileBootstrap.initialize();
+
+    expect(initializeCall?.arguments, <String, Object>{'allowCreate': true});
+    expect(ProfileRuntime.isProfileCommitted, isTrue);
+  });
+
+  test('malformed audit metadata routes to controlled recovery', () async {
+    final registry = await ProfileRegistry.open();
+    final admin = await registry.createProfile(
+      name: 'Admin',
+      role: UserProfileRole.admin,
+    );
+    await registry.commitBootstrap(
+      activeProfileId: admin.id,
+      migratedLegacyInstall: false,
+    );
+    await registry.close();
+    SharedPreferences.setMockInitialValues(<String, Object>{
+      WebDavSyncBindingStore.storageKey: '{',
+    });
+    DeviceKeyProvider.debugLinuxOverride = false;
+    var committedCanary = false;
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(deviceSecretChannel, (call) async {
+          if (call.method == 'initialize') {
+            return 'migration_audit_required';
+          }
+          if (call.method == 'commitMigrationAudit') {
+            committedCanary = true;
+            return true;
+          }
+          return null;
+        });
+
+    await expectLater(
+      ProfileBootstrap.initialize(),
+      throwsA(
+        isA<ProfileBootstrapRecoveryRequired>()
+            .having(
+              (error) => error.message,
+              'message',
+              'Stored credential metadata is unreadable',
+            )
+            .having(
+              (error) => error.deviceVaultFailure,
+              'device vault failure',
+              isNull,
+            ),
+      ),
+    );
+
+    expect(committedCanary, isFalse);
+    expect(ProfileRuntime.isInitialized, isFalse);
+  });
+
+  test('malformed envelope is not misclassified as device-key loss', () async {
+    final registry = await ProfileRegistry.open();
+    final admin = await registry.createProfile(
+      name: 'Admin',
+      role: UserProfileRole.admin,
+    );
+    await registry.commitBootstrap(
+      activeProfileId: admin.id,
+      migratedLegacyInstall: false,
+    );
+    await registry.insertResource(
+      resource: ConnectionResource(
+        id: 'resource-corrupt-envelope',
+        type: ConnectionResourceType.stremioAddon,
+        label: 'Corrupt addon',
+        ownerProfileId: admin.id,
+        publicConfig: const <String, dynamic>{'schemaVersion': 1},
+        publicSchemaVersion: 1,
+        authorizationRevision: 1,
+        enabled: true,
+      ),
+      sealedSecretPayload: 'not-a-native-envelope',
+      secretPayloadVersion: ConnectionResourceService.secretPayloadVersion,
+      ownerPermissions: ResourcePermission.values.fold<int>(
+        0,
+        (mask, permission) => mask | permission.bit,
+      ),
+    );
+    await registry.close();
+
+    DeviceKeyProvider.debugLinuxOverride = false;
+    var nativeOpenCalled = false;
+    var committedCanary = false;
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(deviceSecretChannel, (call) async {
+          switch (call.method) {
+            case 'initialize':
+              return 'migration_audit_required';
+            case 'open':
+              nativeOpenCalled = true;
+              return base64Encode(<int>[1]);
+            case 'commitMigrationAudit':
+              committedCanary = true;
+              return true;
+          }
+          return null;
+        });
+
+    await expectLater(
+      ProfileBootstrap.initialize(),
+      throwsA(
+        isA<ProfileBootstrapRecoveryRequired>()
+            .having(
+              (error) => error.message,
+              'message',
+              'Stored credential metadata is unreadable',
+            )
+            .having(
+              (error) => error.deviceVaultFailure,
+              'device vault failure',
+              isNull,
+            ),
+      ),
+    );
+
+    expect(nativeOpenCalled, isFalse);
+    expect(committedCanary, isFalse);
+    expect(ProfileRuntime.isInitialized, isFalse);
+  });
+
+  test(
+    'one valid envelope proves the key despite unrelated metadata damage',
+    () async {
+      final registry = await ProfileRegistry.open();
+      final admin = await registry.createProfile(
+        name: 'Admin',
+        role: UserProfileRole.admin,
+      );
+      await registry.commitBootstrap(
+        activeProfileId: admin.id,
+        migratedLegacyInstall: false,
+      );
+      await registry.insertResource(
+        resource: ConnectionResource(
+          id: 'resource-valid-proof',
+          type: ConnectionResourceType.stremioAddon,
+          label: 'Valid addon',
+          ownerProfileId: admin.id,
+          publicConfig: const <String, dynamic>{'schemaVersion': 1},
+          publicSchemaVersion: 1,
+          authorizationRevision: 1,
+          enabled: false,
+        ),
+        sealedSecretPayload: 'native1:valid-proof',
+        secretPayloadVersion: ConnectionResourceService.secretPayloadVersion,
+        ownerPermissions: ResourcePermission.values.fold<int>(
+          0,
+          (mask, permission) => mask | permission.bit,
+        ),
+      );
+      await registry.close();
+      SharedPreferences.setMockInitialValues(<String, Object>{
+        WebDavSyncBindingStore.storageKey: '{',
+      });
+
+      DeviceKeyProvider.debugLinuxOverride = false;
+      var committedCanary = false;
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(deviceSecretChannel, (call) async {
+            switch (call.method) {
+              case 'initialize':
+                return 'migration_audit_required';
+              case 'open':
+                return base64Encode(utf8.encode('{}'));
+              case 'commitMigrationAudit':
+                committedCanary = true;
+                return true;
+            }
+            return null;
+          });
+
+      await ProfileBootstrap.initialize();
+
+      expect(committedCanary, isTrue);
+      expect(ProfileRuntime.isProfileCommitted, isTrue);
+    },
+  );
+
+  test(
+    'pre-canary alias rejects mixed old-key and replacement-key envelopes',
+    () async {
+      final registry = await ProfileRegistry.open();
+      final admin = await registry.createProfile(
+        name: 'Admin',
+        role: UserProfileRole.admin,
+      );
+      await registry.commitBootstrap(
+        activeProfileId: admin.id,
+        migratedLegacyInstall: false,
+      );
+      const resourceId = 'resource-existing-webdav';
+      const resource = ConnectionResource(
+        id: resourceId,
+        type: ConnectionResourceType.webDav,
+        label: 'Existing WebDAV',
+        ownerProfileId: 'placeholder',
+        publicConfig: <String, dynamic>{
+          'schemaVersion': 1,
+          'endpoint': 'https://example.invalid',
+        },
+        publicSchemaVersion: 1,
+        authorizationRevision: 1,
+        enabled: false,
+      );
+      final actualResource = ConnectionResource(
+        id: resource.id,
+        type: resource.type,
+        label: resource.label,
+        ownerProfileId: admin.id,
+        publicConfig: resource.publicConfig,
+        publicSchemaVersion: resource.publicSchemaVersion,
+        authorizationRevision: resource.authorizationRevision,
+        enabled: resource.enabled,
+      );
+      await registry.insertResource(
+        resource: actualResource,
+        sealedSecretPayload: 'native1:old-key-envelope',
+        secretPayloadVersion: ConnectionResourceService.secretPayloadVersion,
+        ownerPermissions: ResourcePermission.values.fold<int>(
+          0,
+          (mask, permission) => mask | permission.bit,
+        ),
+      );
+      const replacementResourceId = 'resource-new-key-addon';
+      final replacementResource = ConnectionResource(
+        id: replacementResourceId,
+        type: ConnectionResourceType.stremioAddon,
+        label: 'Replacement-key addon',
+        ownerProfileId: admin.id,
+        publicConfig: const <String, dynamic>{'schemaVersion': 1},
+        publicSchemaVersion: 1,
+        authorizationRevision: 1,
+        enabled: true,
+      );
+      await registry.insertResource(
+        resource: replacementResource,
+        sealedSecretPayload: 'native1:replacement-key-envelope',
+        secretPayloadVersion: ConnectionResourceService.secretPayloadVersion,
+        ownerPermissions: ResourcePermission.values.fold<int>(
+          0,
+          (mask, permission) => mask | permission.bit,
+        ),
+      );
+      await registry.close();
+
+      DeviceKeyProvider.debugLinuxOverride = false;
+      var committedCanary = false;
+      var openCalls = 0;
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(deviceSecretChannel, (call) async {
+            switch (call.method) {
+              case 'initialize':
+                return 'migration_audit_required';
+              case 'open':
+                openCalls++;
+                if (openCalls == 1) {
+                  throw PlatformException(
+                    code: 'device_secret_failed',
+                    message: 'open:AEADBadTagException:AEADBadTagException',
+                  );
+                }
+                return base64Encode(<int>[1]);
+              case 'commitMigrationAudit':
+                committedCanary = true;
+                return true;
+            }
+            return null;
+          });
+
+      await expectLater(
+        ProfileBootstrap.initialize(),
+        throwsA(
+          isA<ProfileBootstrapRecoveryRequired>().having(
+            (error) => error.deviceVaultFailure?.failure,
+            'device vault failure',
+            DeviceVaultFailure.unreadable,
+          ),
+        ),
+      );
+      expect(openCalls, 2);
+      expect(committedCanary, isFalse);
+      expect(ProfileRuntime.isInitialized, isFalse);
+    },
+  );
 
   test(
     'committed registry stays authoritative when rollout flags are off',

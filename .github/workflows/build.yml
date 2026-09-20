@@ -483,6 +483,17 @@ jobs:
         export XCODE_XCCONFIG_FILE="$RUNNER_TEMP/unsigned.xcconfig"
         flutter-tvos build tvos --release --dart-define-from-file="${{ runner.temp }}/debrify-build-config.json"
 
+    - name: Verify tvOS display-matching framework linkage
+      run: |
+        set -euo pipefail
+        # UIWindow.avDisplayManager is supplied by an AVKit Objective-C category.
+        # A successful compile alone does not ensure that category is loaded.
+        linked_frameworks="$(otool -L build/tvos/Release-appletvos/Runner.app/Runner)"
+        if ! grep -Fq '/AVKit.framework/AVKit ' <<< "$linked_frameworks"; then
+          echo "::error::Runner does not link AVKit; display matching can crash playback"
+          exit 1
+        fi
+
     # Same reason as the iOS job: an unsigned Mach-O reserves no __LINKEDIT
     # room for a signature, so Sideloadly/atvloadly abort in ldid before they
     # can re-sign with the user's own Apple ID.

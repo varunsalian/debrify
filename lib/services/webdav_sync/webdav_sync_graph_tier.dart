@@ -2,6 +2,7 @@ import 'dart:math';
 
 import '../../models/profiles/profile_policy.dart';
 import '../profiles/profile_authorization.dart';
+import '../profiles/profile_package_service.dart';
 import '../webdav_protocol_client.dart';
 import 'webdav_sync_adoption.dart';
 import 'webdav_sync_binding_store.dart';
@@ -156,10 +157,26 @@ final class WebDavSyncGraphTier {
         disposition: WebDavSyncGraphTierDisposition.skipped,
       );
     }
-    final maps = _requireMaps(state);
+    final retainedMaps = _requireMaps(state);
     final registry = _graphBuilder.packageService.registry;
     final profiles = await registry.listProfiles(includeDisabled: true);
     final resources = await registry.listAllResourcesIncludingDisabled();
+    final profileIds = profiles.map((profile) => profile.id).toSet();
+    final resourceIds = resources.map((resource) => resource.id).toSet();
+    // Durable mappings also contain deleted identities for tombstones. Only
+    // live rows belong in snapshots and manifest completeness comparisons.
+    final maps = WebDavSyncIdentityMaps(
+      circleToLocalProfiles: Map.fromEntries(
+        retainedMaps.circleToLocalProfiles.entries.where(
+          (entry) => profileIds.contains(entry.value),
+        ),
+      ),
+      circleToLocalResources: Map.fromEntries(
+        retainedMaps.circleToLocalResources.entries.where(
+          (entry) => resourceIds.contains(entry.value),
+        ),
+      ),
+    );
     final identitiesChanged =
         !_sameSet(
           profiles.map((profile) => profile.id),
@@ -235,11 +252,24 @@ final class WebDavSyncGraphTier {
       );
     }
     if (bootstrapDue) {
-      final bootstrap = await _graphBuilder.build(
-        kind: WebDavSyncGraphKind.bootstrap,
-        authorization: authorization,
-        identityMaps: maps,
-      );
+      final WebDavSyncPreparedGraph bootstrap;
+      try {
+        bootstrap = await _graphBuilder.build(
+          kind: WebDavSyncGraphKind.bootstrap,
+          authorization: authorization,
+          identityMaps: maps,
+        );
+      } on ProfileGraphIdentityChanged {
+        // Publication obtains a fresh registry inventory and identity plan.
+        // The failed archive is disposed by the graph builder.
+        await _publisher.publish(
+          bindingId: active.id,
+          authorization: authorization,
+        );
+        return const WebDavSyncGraphTierReport(
+          disposition: WebDavSyncGraphTierDisposition.localPublished,
+        );
+      }
       try {
         final publishedBootstrap = ownManifest!.section(
           WebDavSyncGraphKind.bootstrap.logicalName,

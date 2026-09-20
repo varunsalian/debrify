@@ -134,6 +134,55 @@ void main() {
     diagnostic: diagnostic,
   );
 
+  test(
+    'initialization and republish retain deleted identities outside the snapshot',
+    () async {
+      seeds.retainedMaps = WebDavSyncIdentityMaps(
+        circleToLocalProfiles: {
+          ...seeds.maps.circleToLocalProfiles,
+          'deleted-profile-circle': 'deleted-profile-local',
+        },
+        circleToLocalResources: const {
+          'deleted-resource-circle': 'deleted-resource-local',
+        },
+      );
+      await initializer().initialize(
+        bindingId: binding.id,
+        authorization: authorization,
+      );
+      expect(
+        states.state.circleToLocalProfiles,
+        seeds.retainedMaps!.circleToLocalProfiles,
+      );
+      expect(
+        states.state.circleToLocalResources,
+        seeds.retainedMaps!.circleToLocalResources,
+      );
+      final publisher = WebDavSyncOwnManifestPublisher(
+        bindingStore: bindingStore,
+        stateRepository: states,
+        seedSource: seeds,
+        transportFactory: ({required binding, required secrets}) => transport,
+        clock: () => DateTime.utc(2026, 9, 1),
+      );
+      final published = await publisher.publish(
+        bindingId: binding.id,
+        authorization: authorization,
+      );
+      expect(
+        states.state.circleToLocalProfiles,
+        seeds.retainedMaps!.circleToLocalProfiles,
+      );
+      expect(
+        states.state.circleToLocalResources,
+        seeds.retainedMaps!.circleToLocalResources,
+      );
+      expect(published.manifest.resourceMap, isEmpty);
+      expect(published.manifest.profileMap.values, ['profile-circle']);
+      expect(published.manifest.section('hot/deleted-profile-circle'), isNull);
+    },
+  );
+
   for (final republish in [false, true]) {
     for (final overflow in [false, true]) {
       test(
@@ -1265,6 +1314,7 @@ WebDavSyncManifest _manifest({
 );
 
 final class _FakeSeedSource implements WebDavSyncSeedSource {
+  WebDavSyncIdentityMaps? retainedMaps;
   List<String>? events;
   bool guardPreferences = false;
   Map<String, WebDavSyncProfileEngineState> profileStates = {};
@@ -1302,6 +1352,7 @@ final class _FakeSeedSource implements WebDavSyncSeedSource {
       ProfilePreferenceMutationToken? mutationToken,
     ) async => WebDavSyncSeedMaterial(
       identityMaps: maps,
+      retainedIdentityMaps: retainedMaps,
       profileMap: const <String, String>{'profile-0': 'profile-circle'},
       resourceMap: const <String, String>{},
       sections: List<WebDavSyncSeedSection>.unmodifiable(

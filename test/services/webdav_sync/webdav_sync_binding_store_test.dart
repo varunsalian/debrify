@@ -39,6 +39,24 @@ void main() {
     ProfilePreferenceBudget.debugReset();
   });
 
+  test('vault migration authenticates existing WebDAV credentials', () async {
+    final binding = await store.stageBinding(
+      location: WebDavSyncFolderLocation.fromConfig(_config, 'Sync'),
+      config: _config,
+      syncPassphrase: 'circle-secret',
+    );
+    await store.authenticateForDeviceVaultMigration(binding);
+
+    DeviceKeyProvider.debugInstallCipher(
+      MemoryDeviceSecretCipher(List<int>.generate(32, (index) => index + 1)),
+    );
+
+    await expectLater(
+      store.authenticateForDeviceVaultMigration(binding),
+      throwsA(anything),
+    );
+  });
+
   test(
     'remote removal discards credentials and gives a fresh login identity',
     () async {
@@ -128,6 +146,31 @@ void main() {
       expect(prefs.getString(WebDavSyncBindingStore.storageKey), rewritten);
     },
   );
+
+  test('vault migration load never rewrites a legacy authority pin', () async {
+    final authority = WebDavSyncAuthorityFile(
+      markerBytes: Uint8List.fromList([1, 2, 3]),
+      syncPassphrase: 'legacy-circle-secret',
+    ).encode();
+    final prefs = await SharedPreferences.getInstance();
+    final encoded = jsonEncode({
+      'version': 1,
+      'bindings': {},
+      'namespaces': {
+        'circle:legacy': {
+          'id': 'circle:legacy',
+          'deviceId': 'device-legacy',
+          'markerBytes': base64Encode(authority),
+        },
+      },
+    });
+    await prefs.setString(WebDavSyncBindingStore.storageKey, encoded);
+
+    final loaded = await store.loadForDeviceVaultMigration();
+
+    expect(loaded.namespaces['circle:legacy'], isNotNull);
+    expect(prefs.getString(WebDavSyncBindingStore.storageKey), encoded);
+  });
 
   test(
     'cycle pin checks accept both shapes but reject different authority content',

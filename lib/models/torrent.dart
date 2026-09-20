@@ -40,6 +40,13 @@ class Torrent {
   final String? stremioStreamKey;
   final int? stremioStreamIndex;
 
+  // IPTV provenance for refreshing a pinned VOD URL. These fields contain
+  // only saved-playlist and catalog identities; credentials and playback URLs
+  // are deliberately never part of the durable descriptor.
+  final String? iptvPlaylistId;
+  final String? iptvCatalogType;
+  final String? iptvEntryKey;
+
   // Coverage detection fields
   final String?
   coverageType; // 'completeSeries', 'multiSeasonPack', 'seasonPack', 'singleEpisode'
@@ -83,6 +90,9 @@ class Torrent {
     this.stremioAddonKey,
     this.stremioStreamKey,
     this.stremioStreamIndex,
+    this.iptvPlaylistId,
+    this.iptvCatalogType,
+    this.iptvEntryKey,
     this.coverageType,
     this.startSeason,
     this.endSeason,
@@ -197,6 +207,9 @@ class Torrent {
       stremioAddonKey: json['stremio_addon_key'] as String?,
       stremioStreamKey: json['stremio_stream_key'] as String?,
       stremioStreamIndex: json['stremio_stream_index'] as int?,
+      iptvPlaylistId: json['iptv_playlist_id'] as String?,
+      iptvCatalogType: json['iptv_catalog_type'] as String?,
+      iptvEntryKey: json['iptv_entry_key'] as String?,
       coverageType: json['coverage_type']?.toString(),
       startSeason: json['start_season'] as int?,
       endSeason: json['end_season'] as int?,
@@ -237,6 +250,9 @@ class Torrent {
       if (stremioStreamKey != null) 'stremio_stream_key': stremioStreamKey,
       if (stremioStreamIndex != null)
         'stremio_stream_index': stremioStreamIndex,
+      if (iptvPlaylistId != null) 'iptv_playlist_id': iptvPlaylistId,
+      if (iptvCatalogType != null) 'iptv_catalog_type': iptvCatalogType,
+      if (iptvEntryKey != null) 'iptv_entry_key': iptvEntryKey,
       if (coverageType != null) 'coverage_type': coverageType,
       if (startSeason != null) 'start_season': startSeason,
       if (endSeason != null) 'end_season': endSeason,

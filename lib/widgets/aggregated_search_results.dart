@@ -1128,6 +1128,9 @@ class AggregatedSearchResultsState extends State<AggregatedSearchResults> {
       case SeriesSource.addonDirectService:
         serviceColor = const Color(0xFFA78BFA);
         serviceLabel = 'Direct addon';
+      case SeriesSource.iptvDirectService:
+        serviceColor = const Color(0xFFEF4444);
+        serviceLabel = 'IPTV';
       default:
         serviceColor = Colors.white54;
         serviceLabel = source.debridService;

@@ -570,11 +570,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   /// the focused control is excluded from the tree.
   final FocusNode _tvRootFocus = FocusNode(debugLabel: 'tvPlayerRoot');
 
-  /// True when there is genuinely nothing to seek: a live channel's
-  /// position/duration is just the HLS rolling window. Mirrors the signal the
-  /// bar itself uses, so the keys and the UI can never disagree.
+  /// True when there is genuinely nothing to seek: a live channel's ordinary
+  /// position/duration is just the HLS rolling window. Start Over may expose
+  /// its finite archive timeline explicitly. Mirrors the signal the bar uses,
+  /// so the keys and the UI can never disagree.
   bool get _tvNoTimeline =>
-      _iptvZapBannerOwnsIdentity ||
+      (_iptvZapBannerOwnsIdentity && !_iptvStartOverTimelineVisible) ||
       widget.hideSeekbar ||
       _duration <= Duration.zero;
 
@@ -736,6 +737,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       setState(() {
         _iptvStartOverActive = false;
         _iptvStartOverLoading = false;
+        _iptvStartOverTimelineRequested = false;
       });
     }
     _iptvDiag.onRecovery(source, 'retune', 'attempt=$attempt');
@@ -778,6 +780,32 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   final IptvCatchupRequestGate _iptvCatchupRequests = IptvCatchupRequestGate();
   bool _iptvStartOverActive = false;
   bool _iptvStartOverLoading = false;
+  bool _iptvStartOverTimelineRequested = false;
+
+  bool get _iptvStartOverTimelineVisible =>
+      _iptvStartOverActive &&
+      _iptvStartOverTimelineRequested &&
+      _duration > Duration.zero;
+
+  void _toggleIptvStartOverTimeline() {
+    if (!_iptvStartOverActive) return;
+    if (_duration <= Duration.zero) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Timeline is still loading')),
+      );
+      return;
+    }
+    final reveal = !_iptvStartOverTimelineRequested;
+    setState(() => _iptvStartOverTimelineRequested = reveal);
+    if (reveal && PlatformUtil.isTelevision) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _iptvStartOverTimelineVisible) {
+          _tvProgressFocus.requestFocus();
+        }
+      });
+    }
+    _scheduleAutoHide();
+  }
 
   bool get _canStartOverCurrentIptv {
     final channel = _currentIptvChannel;
@@ -797,7 +825,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   Future<void> _toggleIptvStartOver() async {
     if (_iptvStartOverLoading) return;
     if (_iptvStartOverActive) {
-      setState(() => _iptvStartOverActive = false);
+      setState(() {
+        _iptvStartOverActive = false;
+        _iptvStartOverTimelineRequested = false;
+      });
       await _switchToIptvChannel(_currentIptvIndex);
       return;
     }
@@ -865,6 +896,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           setState(() {
             _iptvStartOverLoading = false;
             _iptvStartOverActive = true;
+            _iptvStartOverTimelineRequested = false;
           });
           return true;
         },
@@ -878,12 +910,14 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       }
       _cancelPendingIptvCatchup(hideFeedback: false);
       if (_iptvRecoveryEligible()) {
-        setState(() => _iptvStartOverActive = false);
+        setState(() {
+          _iptvStartOverActive = false;
+          _iptvStartOverTimelineRequested = false;
+        });
         await _switchToIptvChannel(_currentIptvIndex, quietRecovery: true);
       }
     }
   }
-
 
   /// The guide may replace the launch window after a source/category/search
   /// request. Playback always reads this effective list so the selected row,
@@ -3834,8 +3868,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _tvosDisplayMatchTimer?.cancel();
     _tvosDisplayMatchTimer = null;
     _lastTvosDisplayMatchSignature = null;
-    if (!PlatformUtil.isTvOS ||
-        !_contentDisplayMatchMode.requestsMatching) {
+    if (!PlatformUtil.isTvOS || !_contentDisplayMatchMode.requestsMatching) {
       return;
     }
     // AVDisplayManager retains criteria until explicitly replaced. Clear the
@@ -5855,7 +5888,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     if (_episodeFetchInProgress) return true;
     final identity = _playlistIdentityToken;
     final navigation = _episodeNavigationGeneration;
-    bool stale() => !mounted || identity != _playlistIdentityToken ||
+    bool stale() =>
+        !mounted ||
+        identity != _playlistIdentityToken ||
         navigation != _episodeNavigationGeneration ||
         (autoAdvance && _sleepStopLatched);
     if (stale()) return true;
@@ -5864,12 +5899,17 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     var next = _adjacentEpisode(se.season!, se.episode!, 1);
     if (next == null && widget.contentImdbId != null) {
       final episode = await NextEpisodeService.findNextEpisode(
-        widget.contentImdbId!, se.season!, se.episode!);
+        widget.contentImdbId!,
+        se.season!,
+        se.episode!,
+      );
       if (episode != null) next = (episode.season, episode.episode);
     }
     if (stale()) return true;
     if (next == null) return false;
-    debugPrint('Player: Next episode S${next.$1}E${next.$2} in-player autoAdvance=$autoAdvance');
+    debugPrint(
+      'Player: Next episode S${next.$1}E${next.$2} in-player autoAdvance=$autoAdvance',
+    );
     await _fetchAndPlayEpisode(next.$1, next.$2, autoAdvance: autoAdvance);
     return true;
   }
@@ -6984,7 +7024,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // before AUTH classification can bypass the recovery ladder.
     if (_iptvStartOverActive && _currentIptvChannel?.isLive == true) {
       if (_iptvRecoveryEligible()) {
-        setState(() => _iptvStartOverActive = false);
+        setState(() {
+          _iptvStartOverActive = false;
+          _iptvStartOverTimelineRequested = false;
+        });
         unawaited(_switchToIptvChannel(_currentIptvIndex, quietRecovery: true));
       }
       return;
@@ -7926,6 +7969,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     setState(() {
       _iptvStartOverActive = false;
       _iptvStartOverLoading = false;
+      _iptvStartOverTimelineRequested = false;
       // A quiet recovery re-tune is not a zap: no transition overlay, no
       // zap banner — the reconnect pill is the only narration (plan
       // invariant "retune ≠ zap"; codex round 2, finding 14).
@@ -8725,8 +8769,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   }
 
   Future<void> _commitValidatedStremioSource(Torrent? source) async {
-    logSourceSelection('player_source_committed', source: source,
-        index: _currentSourceIndex, player: 'mpv');
+    logSourceSelection(
+      'player_source_committed',
+      source: source,
+      index: _currentSourceIndex,
+      player: 'mpv',
+    );
     final commit = widget.onStremioSourceCommitted;
     if (source == null || commit == null) return;
     try {
@@ -9292,8 +9340,14 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       unawaited(_commitValidatedStremioSource(source));
     } catch (e) {
       debugPrint('Player: manual Stremio source rejected (${e.runtimeType})');
-      logSourceSelection('player_switch_rejected', source: source, index: index,
-          previousIndex: previousSourceIndex, player: 'mpv', reason: 'validation_failed');
+      logSourceSelection(
+        'player_switch_rejected',
+        source: source,
+        index: index,
+        previousIndex: previousSourceIndex,
+        player: 'mpv',
+        reason: 'validation_failed',
+      );
       // The candidate player is stopped by the validator. Restore the known
       // working stream when possible, but never validate/fail over to another
       // row: this was an explicit user selection.
@@ -11347,8 +11401,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // Backgrounding in that window must still arm the flag, or the open lands
     // moments later and plays behind the backgrounded app with the guard in
     // the playing listener disarmed. A user's own pause has neither set.
-    final openingStartOver = _iptvStartOverActive &&
-        _activeMediaShouldPlay && !_activeMediaUserPaused;
+    final openingStartOver =
+        _iptvStartOverActive &&
+        _activeMediaShouldPlay &&
+        !_activeMediaUserPaused;
     if (!_playerCreated ||
         (!_isPlaying && !_isTransitioning && !openingStartOver)) {
       return;
@@ -12678,6 +12734,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
               onLiveEdgeAction: _iptvLiveEdgeAction,
               liveEdgeActionActive: _iptvStartOverActive,
               liveEdgeActionLoading: _iptvStartOverLoading,
+              onToggleStartOverTimeline: _iptvStartOverActive
+                  ? _toggleIptvStartOverTimeline
+                  : null,
+              startOverTimelineVisible: _iptvStartOverTimelineVisible,
             );
           },
         ),
@@ -13018,7 +13078,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     final channel = _iptvZapChannel;
     final current = _iptvZapEpg?.now;
     if (channel == null || current == null) return;
-    final retryArchive = !current.hasArchive &&
+    final retryArchive =
+        !current.hasArchive &&
         _iptvArchiveRetryAt != null &&
         !DateTime.now().isBefore(_iptvArchiveRetryAt!);
     if (current.stop.isAfter(DateTime.now()) && !retryArchive) return;
@@ -13828,11 +13889,20 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     try {
       final pinned = fetcher.pinnedDirectCandidates;
       if (pinned != null) {
-        await for (final candidate in pinned(season, episode, onPreferredMissing: () {
-          if (!request!.isCurrent || !mounted) return;
-          messenger.showSnackBar(const SnackBar(content: Text(
-              'Your previous source is unavailable for this episode. Trying other sources.')));
-        })) {
+        await for (final candidate in pinned(
+          season,
+          episode,
+          onPreferredMissing: () {
+            if (!request!.isCurrent || !mounted) return;
+            messenger.showSnackBar(
+              const SnackBar(
+                content: Text(
+                  'Your previous source is unavailable for this episode. Trying other sources.',
+                ),
+              ),
+            );
+          },
+        )) {
           if (!request.isCurrent) {
             return EpisodePlaybackOutcome.cancelled;
           }
@@ -13995,8 +14065,14 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     int? shuffleGeneration,
     bool autoAdvance = false,
   }) async {
-    logSourceSelection('next_episode_candidate', source: t, index: sourceIndex,
-        season: season, episode: episode, player: 'mpv');
+    logSourceSelection(
+      'next_episode_candidate',
+      source: t,
+      index: sourceIndex,
+      season: season,
+      episode: episode,
+      player: 'mpv',
+    );
     if (!await widget.seriesSourceFetcher!.allowsCandidate(t)) {
       return EpisodePlaybackOutcome.unavailable;
     }
@@ -14009,8 +14085,15 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     }
     if (!request.isCurrent) return EpisodePlaybackOutcome.cancelled;
     if (playlist == null || playlist.isEmpty) {
-      logSourceSelection('next_episode_candidate_rejected', source: t, index: sourceIndex,
-          season: season, episode: episode, player: 'mpv', reason: 'no_playlist');
+      logSourceSelection(
+        'next_episode_candidate_rejected',
+        source: t,
+        index: sourceIndex,
+        season: season,
+        episode: episode,
+        player: 'mpv',
+        reason: 'no_playlist',
+      );
       return EpisodePlaybackOutcome.unavailable;
     }
     if (playlist.length == 1) {
@@ -14051,8 +14134,38 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         request: request,
       ),
     );
-    logSourceSelection('next_episode_candidate_outcome', source: t, index: sourceIndex,
-        season: season, episode: episode, player: 'mpv', reason: outcome.name);
+    if (outcome == EpisodePlaybackOutcome.committed &&
+        mounted &&
+        request.isCurrent) {
+      final retained = SeriesSourceFetcher.retainForEpisode(
+        _effectiveSources ?? const <Torrent>[],
+        season,
+        episode,
+      );
+      var retainedIndex = retained.indexWhere((source) => identical(source, t));
+      retainedIndex = retainedIndex >= 0
+          ? retainedIndex
+          : retained.indexWhere(
+              (source) =>
+                  SeriesSourceFetcher.sourceKey(source) ==
+                  SeriesSourceFetcher.sourceKey(t),
+            );
+      if (retainedIndex >= 0) {
+        setState(() {
+          _augmentedSources = retained;
+          _currentSourceIndex = retainedIndex;
+        });
+      }
+    }
+    logSourceSelection(
+      'next_episode_candidate_outcome',
+      source: t,
+      index: sourceIndex,
+      season: season,
+      episode: episode,
+      player: 'mpv',
+      reason: outcome.name,
+    );
     return outcome;
   }
 
@@ -14769,18 +14882,30 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                 // Above the gesture layer: startup hides normal controls, but
                 // leaving the player must remain available while links resolve.
                 if (_startupGateActive && !_startupGateOverlayHidden)
-                  Positioned.fill(child: inPip
-                    // PiP must not reveal candidates before validation succeeds.
-                    // No controls, focus, or gestures in the compact shield.
-                    ? const AbsorbPointer(child: ColoredBox(color: Colors.black))
-                    : PlaybackStartupView(
-                    title: widget.contentTitle ?? widget.title,
-                    episode: widget.contentType == 'series' && widget.contentSeason != null && widget.contentEpisode != null
-                        ? 'Season ${widget.contentSeason} · Episode ${widget.contentEpisode}' : null,
-                    details: _startupGateMessage,
-                    retrying: _startupGateMessage.startsWith('Stream unavailable'),
-                    onBack: widget.hideBackButton ? null : () => Navigator.of(context).maybePop(),
-                  )),
+                  Positioned.fill(
+                    child: inPip
+                        // PiP must not reveal candidates before validation succeeds.
+                        // No controls, focus, or gestures in the compact shield.
+                        ? const AbsorbPointer(
+                            child: ColoredBox(color: Colors.black),
+                          )
+                        : PlaybackStartupView(
+                            title: widget.contentTitle ?? widget.title,
+                            episode:
+                                widget.contentType == 'series' &&
+                                    widget.contentSeason != null &&
+                                    widget.contentEpisode != null
+                                ? 'Season ${widget.contentSeason} · Episode ${widget.contentEpisode}'
+                                : null,
+                            details: _startupGateMessage,
+                            retrying: _startupGateMessage.startsWith(
+                              'Stream unavailable',
+                            ),
+                            onBack: widget.hideBackButton
+                                ? null
+                                : () => Navigator.of(context).maybePop(),
+                          ),
+                  ),
                 // Controls overlay (shown only when ready)
                 if (isReady &&
                     !inPip &&
@@ -14987,7 +15112,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                                   // zapping to on-demand brings it straight back.
                                   hideSeekbar:
                                       widget.hideSeekbar ||
-                                      _iptvZapBannerOwnsIdentity,
+                                      (_iptvZapBannerOwnsIdentity &&
+                                          !_iptvStartOverTimelineVisible),
                                   // Same call the native dock makes for live.
                                   hideSpeed: _iptvZapBannerOwnsIdentity,
                                   // Shuffle picks from _activePlaylist, which an
@@ -15030,8 +15156,13 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                                       : null,
                                   onLiveEdgeAction: _iptvLiveEdgeAction,
                                   liveEdgeActionActive: _iptvStartOverActive,
-                                  liveEdgeActionLoading:
-                                      _iptvStartOverLoading,
+                                  liveEdgeActionLoading: _iptvStartOverLoading,
+                                  onToggleStartOverTimeline:
+                                      _iptvStartOverActive
+                                      ? _toggleIptvStartOverTimeline
+                                      : null,
+                                  startOverTimelineVisible:
+                                      _iptvStartOverTimelineVisible,
                                 ),
                         ),
                       );

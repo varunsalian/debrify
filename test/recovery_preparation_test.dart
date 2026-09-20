@@ -151,33 +151,41 @@ void main() {
     },
   );
 
-  test(
-    'disabled validation and AIOStreams retain their preflight bypass',
-    () async {
-      final preflight = RecoveryDirectPreflight(
-        budget: 5,
-        isMovie: true,
-        shouldProbe: TorrentPlaybackService.shouldPreflightDirectStream,
-        probe: (_, {minBytes = 0, lenient = false, headers}) async =>
-            throw StateError('must not probe'),
-      );
-      expect(
-        await preflight.allows(
-          row('AIO', url: 'https://cdn/test', addon: 'com.aiostreams'),
-          enabled: true,
+  test('disabled validation, AIOStreams, and IPTV bypass preflight', () async {
+    final preflight = RecoveryDirectPreflight(
+      budget: 5,
+      isMovie: true,
+      shouldProbe: TorrentPlaybackService.shouldPreflightDirectStream,
+      probe: (_, {minBytes = 0, lenient = false, headers}) async =>
+          throw StateError('must not probe'),
+    );
+    expect(
+      await preflight.allows(
+        row('AIO', url: 'https://cdn/test', addon: 'com.aiostreams'),
+        enabled: true,
+      ),
+      isTrue,
+    );
+    expect(
+      await preflight.allows(
+        row(
+          'IPTV',
+          source: 'iptv:provider-id',
+          url: 'https://iptv.test/episode',
         ),
-        isTrue,
-      );
-      expect(
-        await preflight.allows(
-          row('Off', url: 'https://cdn/other'),
-          enabled: false,
-        ),
-        isTrue,
-      );
-      expect(preflight.budget, 5);
-    },
-  );
+        enabled: true,
+      ),
+      isTrue,
+    );
+    expect(
+      await preflight.allows(
+        row('Off', url: 'https://cdn/other'),
+        enabled: false,
+      ),
+      isTrue,
+    );
+    expect(preflight.budget, 5);
+  });
 
   test(
     'not-ready acquisition cleanup targets the correct provider and id',

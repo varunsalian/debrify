@@ -14,6 +14,9 @@ void main() {
     bool transitioning = false,
     VoidCallback? onLiveEdgeAction,
     bool liveEdgeActionActive = false,
+    VoidCallback? onToggleStartOverTimeline,
+    bool startOverTimelineVisible = false,
+    bool progressFocusable = false,
   }) async {
     await tester.binding.setSurfaceSize(const Size(960, 540));
     final scope = FocusScopeNode();
@@ -41,7 +44,7 @@ void main() {
             scopeNode: scope,
             playPauseFocusNode: play,
             progressFocusNode: progress,
-            progressFocusable: false,
+            progressFocusable: progressFocusable,
             onPlayPause: () {},
             onShowTracks: () {},
             onSpeed: () {},
@@ -54,6 +57,8 @@ void main() {
             onRandom: onRandom,
             onLiveEdgeAction: onLiveEdgeAction,
             liveEdgeActionActive: liveEdgeActionActive,
+            onToggleStartOverTimeline: onToggleStartOverTimeline,
+            startOverTimelineVisible: startOverTimelineVisible,
             hideOptions: hideOptions,
             speed: 1,
             aspectMode: AspectMode.contain,
@@ -114,6 +119,31 @@ void main() {
     expect(find.byIcon(Icons.live_tv_rounded), findsOneWidget);
     await tester.tap(find.byIcon(Icons.live_tv_rounded));
     expect(calls, 2);
+  });
+
+  testWidgets('start-over playback exposes the archive timeline action', (
+    tester,
+  ) async {
+    var calls = 0;
+    await mount(
+      tester,
+      live: true,
+      liveEdgeActionActive: true,
+      onLiveEdgeAction: () {},
+      onToggleStartOverTimeline: () => calls++,
+    );
+    expect(find.byIcon(Icons.timeline_rounded), findsOneWidget);
+    await tester.tap(find.byIcon(Icons.timeline_rounded));
+    expect(calls, 1);
+
+    await mount(
+      tester,
+      live: true,
+      liveEdgeActionActive: false,
+      onLiveEdgeAction: () {},
+      onToggleStartOverTimeline: () => calls++,
+    );
+    expect(find.byIcon(Icons.timeline_rounded), findsNothing);
   });
 
   testWidgets('hidden options omit Shuffle', (tester) async {

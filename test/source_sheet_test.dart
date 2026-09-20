@@ -60,88 +60,178 @@ class _HostState extends State<_Host> {
 }
 
 void main() {
-  testWidgets('pinned provider can fetch all results without losing its source', (tester) async {
-    SharedPreferences.setMockInitialValues({});
-    var calls = 0;
-    final pinned = _source(name: 'Pinned direct', source: 'stremio:comet',
-      type: StreamType.directUrl, hash: '');
-    await tester.pumpWidget(_Host(initial: [pinned], fetcher: SeriesSourceFetcher(
-      season: 1, episode: 2,
-      searchPacks: (_, _) async => [], searchEpisodes: (_, _) async => [],
-      listAddons: () async => const [SourceAddonRef('comet-id', 'Comet')],
-      fetchAddonEpisodes: (_, _, _) async {
-        calls++;
-        return [pinned, _source(name: 'Alternative direct', source: 'stremio:comet',
-          type: StreamType.directUrl, hash: '')];
-      },
-    )));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Comet'));
-    await tester.pumpAndSettle();
-    expect(find.text('Fetch all results'), findsOneWidget);
-    await tester.tap(find.text('Fetch all results'));
-    await tester.pumpAndSettle();
-    expect(calls, 1);
-    expect(find.text('Pinned direct'), findsOneWidget);
-    expect(find.text('Alternative direct'), findsOneWidget);
-    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
-    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
-    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
-    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
-    await tester.pumpAndSettle();
-    expect(calls, 2, reason: 'Fetch all results is also reachable by remote');
-    expect(tester.takeException(), isNull);
-  });
-  testWidgets('episode picker excludes old direct links and retains original indexes', (tester) async {
-    SharedPreferences.setMockInitialValues({});
-    Torrent scoped(String name, int episode, StreamType type) => Torrent.fromJson({
-      ..._source(name: name, source: 'stremio:test', type: type, hash: name).toJson(),
-      'stremio_video_id': 'tt123:1:$episode',
+  testWidgets(
+    'pinned provider can fetch all results without losing its source',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      var calls = 0;
+      final pinned = _source(
+        name: 'Pinned direct',
+        source: 'stremio:comet',
+        type: StreamType.directUrl,
+        hash: '',
+      );
+      await tester.pumpWidget(
+        _Host(
+          initial: [pinned],
+          fetcher: SeriesSourceFetcher(
+            season: 1,
+            episode: 2,
+            searchPacks: (_, _) async => [],
+            searchEpisodes: (_, _) async => [],
+            listAddons: () async => const [SourceAddonRef('comet-id', 'Comet')],
+            fetchAddonEpisodes: (_, _, _) async {
+              calls++;
+              return [
+                pinned,
+                _source(
+                  name: 'Alternative direct',
+                  source: 'stremio:comet',
+                  type: StreamType.directUrl,
+                  hash: '',
+                ),
+              ];
+            },
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Comet'));
+      await tester.pumpAndSettle();
+      expect(find.text('Fetch all results'), findsOneWidget);
+      await tester.tap(find.text('Fetch all results'));
+      await tester.pumpAndSettle();
+      expect(calls, 1);
+      expect(find.text('Pinned direct'), findsOneWidget);
+      expect(find.text('Alternative direct'), findsOneWidget);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pumpAndSettle();
+      expect(calls, 2, reason: 'Fetch all results is also reachable by remote');
+      expect(tester.takeException(), isNull);
+    },
+  );
+  testWidgets(
+    'episode picker excludes old direct links and retains original indexes',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      Torrent scoped(String name, int episode, StreamType type) =>
+          Torrent.fromJson({
+            ..._source(
+              name: name,
+              source: 'stremio:test',
+              type: type,
+              hash: name,
+            ).toJson(),
+            'stremio_video_id': 'tt123:1:$episode',
+          });
+      final sources = [
+        scoped('Old direct', 1, StreamType.directUrl),
+        scoped('Old error', 1, StreamType.externalUrl),
+        scoped('Reusable pack', 1, StreamType.torrent),
+        scoped('Current direct', 3, StreamType.directUrl),
+        scoped('Alternative', 3, StreamType.directUrl),
+      ];
+      int? picked;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: SourceSheet(
+            sources: sources,
+            currentSourceIndex: 3,
+            currentSeason: 1,
+            currentEpisode: 3,
+            resolveSource: (_) async => 'https://example.test/video',
+            onSourceSelected: (index, _) => picked = index,
+            onClose: () {},
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Old direct'), findsNothing);
+      expect(find.text('Old error'), findsNothing);
+      expect(find.text('Reusable pack'), findsOneWidget);
+      expect(find.text('Current direct'), findsOneWidget);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pump();
+      expect(picked, 4);
+      expect(SeriesSourceFetcher.visibleForEpisode(sources[0], 1, 1), isTrue);
+      expect(SeriesSourceFetcher.visibleForEpisode(sources[0], 2, 1), isFalse);
+      expect(
+        SeriesSourceFetcher.visibleForEpisode(sources[0], null, null),
+        isTrue,
+      );
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
+
+  test('episode transition removes old IPTV rows but keeps alternatives', () {
+    Torrent iptv(String name, int episode) => Torrent.fromJson({
+      ..._source(
+        name: name,
+        source: 'iptv:provider',
+        type: StreamType.directUrl,
+        hash: name,
+      ).toJson(),
+      'coverage_type': 'singleEpisode',
+      'season_number': 1,
+      'episode_identifier': 'S1E$episode',
     });
-    final sources = [
-      scoped('Old direct', 1, StreamType.directUrl),
-      scoped('Old error', 1, StreamType.externalUrl),
-      scoped('Reusable pack', 1, StreamType.torrent),
-      scoped('Current direct', 3, StreamType.directUrl),
-      scoped('Alternative', 3, StreamType.directUrl),
-    ];
-    int? picked;
-    await tester.pumpWidget(MaterialApp(home: SourceSheet(
-      sources: sources, currentSourceIndex: 3, currentSeason: 1, currentEpisode: 3,
-      resolveSource: (_) async => 'https://example.test/video',
-      onSourceSelected: (index, _) => picked = index, onClose: () {},
-    )));
-    await tester.pumpAndSettle();
-    expect(find.text('Old direct'), findsNothing);
-    expect(find.text('Old error'), findsNothing);
-    expect(find.text('Reusable pack'), findsOneWidget);
-    expect(find.text('Current direct'), findsOneWidget);
-    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
-    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
-    await tester.pump();
-    expect(picked, 4);
-    expect(SeriesSourceFetcher.visibleForEpisode(sources[0], 1, 1), isTrue);
-    expect(SeriesSourceFetcher.visibleForEpisode(sources[0], 2, 1), isFalse);
-    expect(SeriesSourceFetcher.visibleForEpisode(sources[0], null, null), isTrue);
-    await tester.pumpWidget(const SizedBox());
+    final old = iptv('Old episode', 1);
+    final current = iptv('Current rendition', 2);
+    final alternative = iptv('Current alternative', 2);
+    final pack = _source(
+      name: 'Reusable pack',
+      source: 'engine',
+      coverage: 'seasonPack',
+    );
+
+    final retained = SeriesSourceFetcher.retainForEpisode(
+      [old, pack, current, alternative],
+      1,
+      2,
+    );
+
+    expect(retained, [pack, current, alternative]);
+    expect(SeriesSourceFetcher.visibleForEpisode(old, 1, 1), isTrue);
+    expect(SeriesSourceFetcher.visibleForEpisode(old, 1, 2), isFalse);
   });
 
-  testWidgets('opens on a distant playing source with variable-height cards', (tester) async {
+  testWidgets('opens on a distant playing source with variable-height cards', (
+    tester,
+  ) async {
     SharedPreferences.setMockInitialValues({});
-    final sources = List.generate(45, (i) => _source(
-      name: 'Source $i ${List.filled(18 + i % 5, 'extended release details').join(' ')}',
-      source: 'stremio:test', type: StreamType.directUrl, hash: 'direct$i',
-    ));
+    final sources = List.generate(
+      45,
+      (i) => _source(
+        name:
+            'Source $i ${List.filled(18 + i % 5, 'extended release details').join(' ')}',
+        source: 'stremio:test',
+        type: StreamType.directUrl,
+        hash: 'direct$i',
+      ),
+    );
     int? picked;
-    await tester.pumpWidget(MaterialApp(home: SourceSheet(
-      sources: sources, currentSourceIndex: 35,
-      resolveSource: (_) async => 'https://example.test/video',
-      onSourceSelected: (index, _) => picked = index, onClose: () {},
-    )));
+    await tester.pumpWidget(
+      MaterialApp(
+        home: SourceSheet(
+          sources: sources,
+          currentSourceIndex: 35,
+          resolveSource: (_) async => 'https://example.test/video',
+          onSourceSelected: (index, _) => picked = index,
+          onClose: () {},
+        ),
+      ),
+    );
     await tester.pumpAndSettle();
     final title = find.text(sources[35].displayTitle);
     expect(title, findsOneWidget);
-    expect(tester.getRect(title).overlaps(const Rect.fromLTWH(0, 0, 800, 600)), isTrue);
+    expect(
+      tester.getRect(title).overlaps(const Rect.fromLTWH(0, 0, 800, 600)),
+      isTrue,
+    );
     expect(find.byIcon(Icons.check_circle_rounded), findsOneWidget);
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
     await tester.pumpAndSettle();
@@ -152,81 +242,129 @@ void main() {
     await tester.pumpWidget(const SizedBox());
   });
 
-  testWidgets('playing marker follows committed index and survives a failed resolution', (tester) async {
-    SharedPreferences.setMockInitialValues({});
-    final sources = [
-      _source(name: 'First', source: 'stremio:test'),
-      _source(name: 'Second', source: 'stremio:test'),
-    ];
-    Widget sheet(int current) => MaterialApp(home: SourceSheet(
-      sources: sources, currentSourceIndex: current,
-      resolveSource: (_) async => null,
-      onSourceSelected: (_, _) => fail('Failed source must not be selected'),
-      onClose: () {},
-    ));
-    Finder markedCard() => find.ancestor(
-      of: find.byIcon(Icons.check_circle_rounded),
-      matching: find.byType(AnimatedContainer),
-    ).first;
-    await tester.pumpWidget(sheet(0));
-    await tester.pumpAndSettle();
-    expect(find.descendant(of: markedCard(), matching: find.text('First')), findsOneWidget);
-    await tester.tap(find.text('Second'));
-    await tester.pump();
-    await tester.pump(const Duration(seconds: 3));
-    await tester.pumpAndSettle();
-    expect(find.descendant(of: markedCard(), matching: find.text('First')), findsOneWidget);
-    await tester.pumpWidget(sheet(1));
-    await tester.pumpAndSettle();
-    expect(find.descendant(of: markedCard(), matching: find.text('Second')), findsOneWidget);
-    await tester.pumpWidget(const SizedBox());
-  });
+  testWidgets(
+    'playing marker follows committed index and survives a failed resolution',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final sources = [
+        _source(name: 'First', source: 'stremio:test'),
+        _source(name: 'Second', source: 'stremio:test'),
+      ];
+      Widget sheet(int current) => MaterialApp(
+        home: SourceSheet(
+          sources: sources,
+          currentSourceIndex: current,
+          resolveSource: (_) async => null,
+          onSourceSelected: (_, _) =>
+              fail('Failed source must not be selected'),
+          onClose: () {},
+        ),
+      );
+      Finder markedCard() => find
+          .ancestor(
+            of: find.byIcon(Icons.check_circle_rounded),
+            matching: find.byType(AnimatedContainer),
+          )
+          .first;
+      await tester.pumpWidget(sheet(0));
+      await tester.pumpAndSettle();
+      expect(
+        find.descendant(of: markedCard(), matching: find.text('First')),
+        findsOneWidget,
+      );
+      await tester.tap(find.text('Second'));
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 3));
+      await tester.pumpAndSettle();
+      expect(
+        find.descendant(of: markedCard(), matching: find.text('First')),
+        findsOneWidget,
+      );
+      await tester.pumpWidget(sheet(1));
+      await tester.pumpAndSettle();
+      expect(
+        find.descendant(of: markedCard(), matching: find.text('Second')),
+        findsOneWidget,
+      );
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
 
   for (final type in StreamType.values) {
-  testWidgets('original format retains transport in player picker: ${type.name}', (tester) async {
-    SharedPreferences.setMockInitialValues({});
-    final base = _source(name: 'Parsed filename', source: 'stremio:aiostreams', type: type);
-    final saved = base.toJson();
-    saved['stream_label'] = '⚡ AIOStreams';
-    saved['stream_original_title'] = 'Original title';
-    saved['stream_description'] = 'Movie name\n💾 12 GB\nEnglish';
-    final torrent = Torrent.fromJson(saved);
-    expect(Torrent.fromJson(torrent.toJson()).addonPresentation,
-        (name: '⚡ AIOStreams', description: 'Movie name\n💾 12 GB\nEnglish'));
-    await tester.runAsync(() => StorageService.setUseAddonTextFormatting(true));
-    try {
-      await tester.pumpWidget(MaterialApp(home: SourceSheet(
-        sources: [torrent], currentSourceIndex: 0,
-        resolveSource: (_) async => 'https://example.test/resolved',
-        onSourceSelected: (_, _) {}, onClose: () {},
-      )));
-      await tester.pumpAndSettle();
-      expect(find.text('⚡ AIOStreams'), findsOneWidget);
-      expect(find.text('Movie name\n💾 12 GB\nEnglish'), findsOneWidget);
-      expect(find.text('Parsed filename'), findsNothing);
-      expect(find.text(switch (type) {
-        StreamType.torrent => 'TORRENT',
-        StreamType.directUrl => 'DIRECT',
-        StreamType.externalUrl => 'EXTERNAL',
-      }), findsOneWidget);
-      expect(tester.takeException(), isNull);
-    } finally {
-      await tester.runAsync(() => StorageService.setUseAddonTextFormatting(false));
-    }
-  });
-
+    testWidgets(
+      'original format retains transport in player picker: ${type.name}',
+      (tester) async {
+        SharedPreferences.setMockInitialValues({});
+        final base = _source(
+          name: 'Parsed filename',
+          source: 'stremio:aiostreams',
+          type: type,
+        );
+        final saved = base.toJson();
+        saved['stream_label'] = '⚡ AIOStreams';
+        saved['stream_original_title'] = 'Original title';
+        saved['stream_description'] = 'Movie name\n💾 12 GB\nEnglish';
+        final torrent = Torrent.fromJson(saved);
+        expect(Torrent.fromJson(torrent.toJson()).addonPresentation, (
+          name: '⚡ AIOStreams',
+          description: 'Movie name\n💾 12 GB\nEnglish',
+        ));
+        await tester.runAsync(
+          () => StorageService.setUseAddonTextFormatting(true),
+        );
+        try {
+          await tester.pumpWidget(
+            MaterialApp(
+              home: SourceSheet(
+                sources: [torrent],
+                currentSourceIndex: 0,
+                resolveSource: (_) async => 'https://example.test/resolved',
+                onSourceSelected: (_, _) {},
+                onClose: () {},
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+          expect(find.text('⚡ AIOStreams'), findsOneWidget);
+          expect(find.text('Movie name\n💾 12 GB\nEnglish'), findsOneWidget);
+          expect(find.text('Parsed filename'), findsNothing);
+          expect(
+            find.text(switch (type) {
+              StreamType.torrent => 'TORRENT',
+              StreamType.directUrl => 'DIRECT',
+              StreamType.externalUrl => 'EXTERNAL',
+            }),
+            findsOneWidget,
+          );
+          expect(tester.takeException(), isNull);
+        } finally {
+          await tester.runAsync(
+            () => StorageService.setUseAddonTextFormatting(false),
+          );
+        }
+      },
+    );
   }
 
-  test('original text falls back and avoids duplicate labels for old saves', () {
-    final saved = _source(name: 'Filename', source: 'addon').toJson();
-    expect(Torrent.fromJson(saved).addonPresentation, isNull);
-    saved['stream_label'] = 'Same';
-    saved['stream_description'] = 'Same';
-    expect(Torrent.fromJson(saved).addonPresentation, (name: 'Same', description: null));
-    saved.remove('stream_label');
-    saved['stream_original_title'] = 'Heading';
-    expect(Torrent.fromJson(saved).addonPresentation, (name: 'Heading', description: 'Same'));
-  });
+  test(
+    'original text falls back and avoids duplicate labels for old saves',
+    () {
+      final saved = _source(name: 'Filename', source: 'addon').toJson();
+      expect(Torrent.fromJson(saved).addonPresentation, isNull);
+      saved['stream_label'] = 'Same';
+      saved['stream_description'] = 'Same';
+      expect(Torrent.fromJson(saved).addonPresentation, (
+        name: 'Same',
+        description: null,
+      ));
+      saved.remove('stream_label');
+      saved['stream_original_title'] = 'Heading';
+      expect(Torrent.fromJson(saved).addonPresentation, (
+        name: 'Heading',
+        description: 'Same',
+      ));
+    },
+  );
 
   testWidgets('shows the complete source name across multiple lines', (
     tester,

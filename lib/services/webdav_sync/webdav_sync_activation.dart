@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'package:synchronized/synchronized.dart';
 
 import '../profiles/profile_authorization.dart';
+import '../profiles/profile_package_service.dart';
 import '../profiles/profile_preferences.dart';
 import '../webdav_protocol_client.dart';
 import 'webdav_sync_binding_store.dart';
@@ -43,6 +44,7 @@ final class WebDavSyncSeedSection {
 final class WebDavSyncSeedMaterial {
   const WebDavSyncSeedMaterial({
     required this.identityMaps,
+    WebDavSyncIdentityMaps? retainedIdentityMaps,
     required this.profileMap,
     required this.resourceMap,
     required this.sections,
@@ -54,9 +56,13 @@ final class WebDavSyncSeedMaterial {
         const <String, Map<String, WebDavSyncTombstone>>{},
     this.circleProfiles,
     this.circleResources,
-  });
+  }) : retainedIdentityMaps = retainedIdentityMaps ?? identityMaps;
 
   final WebDavSyncIdentityMaps identityMaps;
+
+  /// Includes deleted SQL identities needed to project pending tombstones.
+  /// Export and per-profile sections use [identityMaps], which contains live rows.
+  final WebDavSyncIdentityMaps retainedIdentityMaps;
   final Map<String, String> profileMap;
   final Map<String, String> resourceMap;
   final List<WebDavSyncSeedSection> sections;
@@ -178,20 +184,31 @@ final class DefaultWebDavSyncSeedSource implements WebDavSyncSeedSource {
     if ((circleId == null) != (circleKey == null)) {
       throw ArgumentError('WebDAV sync circle seed context is incomplete');
     }
-    final mutationToken = await ProfilePreferences.captureMutationToken();
-    return _prepare(
-      namespaceId: namespaceId,
-      deviceId: deviceId,
-      authorization: authorization,
-      localNowMs: localNowMs,
-      serverNowMs: serverNowMs,
-      clockOffsetMs: clockOffsetMs,
-      circleId: circleId,
-      circleKey: circleKey,
-      mutationToken: mutationToken,
-      reuseBootstrap: reuseBootstrap,
-      preparedBootstrap: preparedBootstrap,
-    );
+    Future<WebDavSyncSeedMaterial> attempt({bool retry = false}) async {
+      final mutationToken = await ProfilePreferences.captureMutationToken();
+      return _prepare(
+        namespaceId: namespaceId,
+        deviceId: deviceId,
+        authorization: authorization,
+        localNowMs: localNowMs,
+        serverNowMs: serverNowMs,
+        clockOffsetMs: clockOffsetMs,
+        circleId: circleId,
+        circleKey: circleKey,
+        mutationToken: mutationToken,
+        reuseBootstrap: reuseBootstrap,
+        // A failed export cannot donate a snapshot to the refreshed plan.
+        preparedBootstrap: retry ? null : preparedBootstrap,
+      );
+    }
+
+    try {
+      return await attempt();
+    } on ProfileGraphIdentityChanged {
+      // Re-read the registry and persisted mappings. Existing identities are
+      // retained by the planner; a second mismatch is left for a later cycle.
+      return attempt(retry: true);
+    }
   }
 
   Future<WebDavSyncSeedMaterial> _prepare({
@@ -211,17 +228,25 @@ final class DefaultWebDavSyncSeedSource implements WebDavSyncSeedSource {
     final registry = _graphBuilder.packageService.registry;
     final profiles = await registry.listProfiles(includeDisabled: true);
     final resources = await registry.listAllResourcesIncludingDisabled();
+    final retained = WebDavSyncGraphIdentityPlanner.ensureIncludingCircleIds(
+      localProfileIds: profiles.map((profile) => profile.id),
+      localResourceIds: resources.map((resource) => resource.id),
+      liveCircleProfileIds: const [],
+      liveCircleResourceIds: const [],
+      currentCircleToLocalProfiles: state.circleToLocalProfiles,
+      currentCircleToLocalResources: state.circleToLocalResources,
+    ).maps;
     final plan = WebDavSyncGraphIdentityPlanner.ensure(
       localProfileIds: profiles.map((profile) => profile.id),
       localResourceIds: resources.map((resource) => resource.id),
-      currentCircleToLocalProfiles: state.circleToLocalProfiles,
-      currentCircleToLocalResources: state.circleToLocalResources,
+      currentCircleToLocalProfiles: retained.circleToLocalProfiles,
+      currentCircleToLocalResources: retained.circleToLocalResources,
     );
     state = await _stateRepository.update(
       namespaceId,
       (current) => current.copyWith(
-        circleToLocalProfiles: plan.maps.circleToLocalProfiles,
-        circleToLocalResources: plan.maps.circleToLocalResources,
+        circleToLocalProfiles: retained.circleToLocalProfiles,
+        circleToLocalResources: retained.circleToLocalResources,
       ),
     );
     final bootstrap = reuseBootstrap != null
@@ -266,7 +291,7 @@ final class DefaultWebDavSyncSeedSource implements WebDavSyncSeedSource {
                 .buildCircleState(
                   session,
                   WebDavSyncCircleBuildRequest(
-                    identityMaps: plan.maps,
+                    identityMaps: retained,
                     deviceId: deviceId,
                     circleId: circleId,
                     circleKey: circleKey,
@@ -291,7 +316,7 @@ final class DefaultWebDavSyncSeedSource implements WebDavSyncSeedSource {
               deviceId: deviceId,
               rawPreferences: local.rawPreferences,
               portablePreferences: local.portablePreferences,
-              identityMaps: plan.maps,
+              identityMaps: retained,
               localNowMs: 0,
               clockOffsetMs: 0,
               serverNowMs: 0,
@@ -324,7 +349,7 @@ final class DefaultWebDavSyncSeedSource implements WebDavSyncSeedSource {
           .buildCircleState(
             session,
             WebDavSyncCircleBuildRequest(
-              identityMaps: plan.maps,
+              identityMaps: retained,
               deviceId: deviceId,
               circleId: circleId,
               circleKey: circleKey,
@@ -366,7 +391,7 @@ final class DefaultWebDavSyncSeedSource implements WebDavSyncSeedSource {
             deviceId: deviceId,
             rawPreferences: local.rawPreferences,
             portablePreferences: local.portablePreferences,
-            identityMaps: plan.maps,
+            identityMaps: retained,
             localNowMs: localNowMs,
             clockOffsetMs: clockOffsetMs,
             serverNowMs: serverNowMs,
@@ -376,7 +401,7 @@ final class DefaultWebDavSyncSeedSource implements WebDavSyncSeedSource {
         );
         final tombstones = _publishableTombstones(
           prior.tombstones,
-          identityMaps: plan.maps,
+          identityMaps: retained,
           currentRecordKeys: built.document.watchState.records.keys.toSet(),
           deviceId: deviceId,
           clockOffsetMs: clockOffsetMs,
@@ -386,8 +411,8 @@ final class DefaultWebDavSyncSeedSource implements WebDavSyncSeedSource {
           circleProfileId: mapping.key,
           items: tombstones,
         );
-        plan.maps.assertContainsNoLocalIds(built.document.toJson());
-        plan.maps.assertContainsNoLocalIds(tombstoneDocument.toJson());
+        retained.assertContainsNoLocalIds(built.document.toJson());
+        retained.assertContainsNoLocalIds(tombstoneDocument.toJson());
         sections.add(
           WebDavSyncSeedSection(
             name: 'tombstones/${mapping.key}',
@@ -431,6 +456,7 @@ final class DefaultWebDavSyncSeedSource implements WebDavSyncSeedSource {
       _requireCompleteSeedSections(plan.maps, sections);
       return WebDavSyncSeedMaterial(
         identityMaps: plan.maps,
+        retainedIdentityMaps: retained,
         profileMap: reuseBootstrap?.profileMap ?? bootstrap!.profileMap,
         resourceMap: reuseBootstrap?.resourceMap ?? bootstrap!.resourceMap,
         sections: List<WebDavSyncSeedSection>.unmodifiable(sections),
@@ -959,8 +985,9 @@ final class WebDavSyncNewRootInitializer {
     await _stateRepository.update(
       namespace.id,
       (current) => current.copyWith(
-        circleToLocalProfiles: seed.identityMaps.circleToLocalProfiles,
-        circleToLocalResources: seed.identityMaps.circleToLocalResources,
+        circleToLocalProfiles: seed.retainedIdentityMaps.circleToLocalProfiles,
+        circleToLocalResources:
+            seed.retainedIdentityMaps.circleToLocalResources,
         clock: clock,
         profiles: seed.profileStatesForCommit(current.profiles),
         currentDeviceIds: <String>{namespace.deviceId},

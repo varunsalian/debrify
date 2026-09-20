@@ -71,6 +71,8 @@ class Controls extends StatelessWidget {
   final VoidCallback? onLiveEdgeAction;
   final bool liveEdgeActionActive;
   final bool liveEdgeActionLoading;
+  final VoidCallback? onToggleStartOverTimeline;
+  final bool startOverTimelineVisible;
 
   /// Optional panel glued to the top edge of the bottom bar, so the two read
   /// as one surface. Live IPTV puts its channel identity and now/next here:
@@ -165,6 +167,8 @@ class Controls extends StatelessWidget {
     this.onLiveEdgeAction,
     this.liveEdgeActionActive = false,
     this.liveEdgeActionLoading = false,
+    this.onToggleStartOverTimeline,
+    this.startOverTimelineVisible = false,
     this.infoPanel,
     this.dockStyle = PlayerDockStyle.classic,
     this.dockPalette = PlayerDockPalette.ultraviolet,
@@ -268,6 +272,8 @@ class Controls extends StatelessWidget {
       onLiveEdgeAction: onLiveEdgeAction,
       liveEdgeActionActive: liveEdgeActionActive,
       liveEdgeActionLoading: liveEdgeActionLoading,
+      onToggleStartOverTimeline: onToggleStartOverTimeline,
+      startOverTimelineVisible: startOverTimelineVisible,
       onPip: onPip,
       hasNext: hasNext,
       hasPrevious: hasPrevious,
@@ -327,7 +333,10 @@ class Controls extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.black.withValues(alpha: 0.7),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.2), width: 1),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.2),
+          width: 1,
+        ),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -584,6 +593,17 @@ class Controls extends StatelessWidget {
                                     onPressed: liveEdgeActionLoading
                                         ? () {}
                                         : onLiveEdgeAction!,
+                                    isCompact: true,
+                                  ),
+
+                                if (liveEdgeActionActive &&
+                                    onToggleStartOverTimeline != null)
+                                  NetflixControlButton(
+                                    icon: Icons.timeline_rounded,
+                                    label: startOverTimelineVisible
+                                        ? 'Hide Timeline'
+                                        : 'Seek',
+                                    onPressed: onToggleStartOverTimeline!,
                                     isCompact: true,
                                   ),
 
