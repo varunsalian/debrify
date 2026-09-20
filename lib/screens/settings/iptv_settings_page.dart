@@ -24,6 +24,7 @@ import '../../services/profiles/profile_async_authorization.dart';
 import '../../services/profiles/profile_authorization.dart';
 import '../../services/profiles/profile_bootstrap.dart';
 import '../../services/profiles/profile_collection_resource_facade.dart';
+import '../../services/profiles/profile_runtime.dart';
 import '../../services/webdav_sync/webdav_sync_library_models.dart';
 import '../../widgets/iptv/iptv_list_name_dialog.dart';
 import 'iptv_category_order_page.dart';
@@ -1265,6 +1266,8 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
   Future<void> _refreshPlaylistForProfile(IptvPlaylist playlist) async {
     if (playlist.isLocalFile) return;
     if (_refreshingIds.contains(playlist.id)) return;
+    final startingScope = ProfileRuntime.scope.value;
+    bool isCurrent() => ProfileRuntime.scope.value == startingScope;
 
     setState(() => _refreshingIds.add(playlist.id));
     _showSnackBar('Refreshing "${playlist.name}"…', isError: false);
@@ -1283,6 +1286,8 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
     // panel. Maintenance that interleaves during the download re-checks its
     // preconditions inside the gate, per the runExclusive contract.
     IptvParseResult result;
+    final refreshedSections = <String>[];
+    final failedSections = <String>[];
     try {
       if (playlist.isXtreamCodes) {
         XtreamCodesService.instance.clearCache(playlist.serverUrl);
@@ -1301,7 +1306,39 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
           numberingSourceKey: playlist.id,
           connectionResourceId: playlist.connectionResourceId,
           connectionResourceRevision: playlist.connectionResourceRevision,
+          isCurrent: isCurrent,
         );
+        void recordSection(String label, IptvParseResult section) {
+          if (section.hasError) {
+            failedSections.add(label);
+          } else {
+            final count =
+                section.ingest?.channelCount ?? section.channels.length;
+            refreshedSections.add('$count $label');
+          }
+        }
+
+        recordSection('live channels', result);
+        // Fetch sequentially to avoid downloading multiple large catalogs at
+        // once on low-memory TVs. A failed section must not skip the others.
+        for (final section in [
+          ('movies', XtreamCodesService.instance.fetchVodStreams),
+          ('series', XtreamCodesService.instance.fetchSeriesStreams),
+        ]) {
+          try {
+            final refreshed = await section.$2(
+              playlist.serverUrl!,
+              playlist.username ?? '',
+              playlist.password ?? '',
+              connectionResourceId: playlist.connectionResourceId,
+              connectionResourceRevision: playlist.connectionResourceRevision,
+              isCurrent: isCurrent,
+            );
+            recordSection(section.$1, refreshed);
+          } catch (_) {
+            failedSections.add(section.$1);
+          }
+        }
       } else {
         IptvService.instance.clearCache(playlist.url);
         await IptvCatalogDb.runExclusive(
@@ -1326,7 +1363,19 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
     if (!mounted) return;
     setState(() => _refreshingIds.remove(playlist.id));
 
-    if (result.hasError) {
+    if (playlist.isXtreamCodes &&
+        (refreshedSections.isNotEmpty || failedSections.isNotEmpty)) {
+      final updated = refreshedSections.isEmpty
+          ? ''
+          : 'Updated ${refreshedSections.join(', ')}. ';
+      final failed = failedSections.isEmpty
+          ? ''
+          : 'Failed to refresh ${failedSections.join(', ')}; try again.';
+      _showSnackBar(
+        '"${playlist.name}" — $updated$failed',
+        isError: failedSections.isNotEmpty,
+      );
+    } else if (result.hasError) {
       _showSnackBar('Failed to refresh "${playlist.name}": ${result.error}');
     } else {
       final suffix = result.warning != null ? ' (${result.warning})' : '';
