@@ -64,6 +64,9 @@ class IptvSourceSearch {
       final playlists = await StorageService.getIptvPlaylists(
         forSettings: false,
       );
+      if (!playlists.any((p) => p.isXtreamCodes && !p.credentialsRedacted)) {
+        return const [];
+      }
       await IptvCatalogDb.open();
       final results = <IptvSourceResult>[];
       // Small batches bound episode-info traffic on devices with many providers.

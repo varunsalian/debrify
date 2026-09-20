@@ -2,6 +2,8 @@ import '../models/indexer_manager_config.dart';
 import '../models/torrent.dart';
 import 'stremio_service.dart';
 import 'torrent_service.dart';
+import 'storage_service.dart';
+import 'iptv_source_search.dart';
 
 /// One row of the Quick Play "Addon Priority" list: a place results come
 /// from — a torrent search engine or a Stremio addon. Users see one flat
@@ -10,6 +12,7 @@ class SourceProviderRef {
   final String key; // 'engine:<id>' or 'stremio:<name>', lowercase
   final String name; // display name
   final bool isEngine;
+  bool get isIptv => key.startsWith('iptv:');
 
   const SourceProviderRef({
     required this.key,
@@ -208,6 +211,21 @@ class SourcePriority {
         final key = 'stremio:${a.name.trim().toLowerCase()}';
         if (seen.add(key)) {
           refs.add(SourceProviderRef(key: key, name: a.name, isEngine: false));
+        }
+      }
+    } catch (_) {}
+    try {
+      final playlists = await StorageService.getIptvPlaylists(
+        forSettings: false,
+      );
+      for (final playlist in playlists.where(
+        (p) => p.isXtreamCodes && !p.credentialsRedacted,
+      )) {
+        final key = IptvSourceSearch.keyFor(playlist);
+        if (seen.add(key)) {
+          refs.add(
+            SourceProviderRef(key: key, name: playlist.name, isEngine: false),
+          );
         }
       }
     } catch (_) {}

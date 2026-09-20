@@ -1,9 +1,11 @@
 import 'dart:convert';
+import 'dart:async';
 import 'dart:io';
 
 import 'package:debrify/models/advanced_search_selection.dart';
 import 'package:debrify/models/iptv_playlist.dart';
 import 'package:debrify/models/torrent.dart';
+import 'package:debrify/models/quick_play_rules.dart';
 import 'package:debrify/services/iptv_catalog_db.dart';
 import 'package:debrify/services/iptv_catalog_key.dart';
 import 'package:debrify/services/iptv_source_search.dart';
@@ -60,6 +62,47 @@ void main() {
     channels: channels,
   );
 
+  test('automatic IPTV deadline stops subsequent episode lookups', () async {
+    ingest('series', [
+      for (final id in ['deadline1', 'deadline2'])
+        IptvChannel(
+          name: 'Show',
+          url: 'series:$id',
+          contentType: 'series',
+          attributes: {'series_id': id},
+        ),
+    ]);
+    final pending = Completer<http.Response>();
+    var requests = 0;
+    await http.runWithClient(
+      () async {
+        final watch = Stopwatch()..start();
+        final result = await TorrentPlaybackService.searchIptvForQuickPlay(
+          'tt2',
+          'Show',
+          '2011',
+          false,
+          1,
+          1,
+          QuickPlayRules.debrifyDefault(
+            isMovie: false,
+          ).copyWith(addonTimeoutSeconds: 5),
+          null,
+        );
+        expect(result, isEmpty);
+        expect(watch.elapsed, lessThan(const Duration(seconds: 8)));
+        expect(requests, 1);
+        pending.complete(http.Response('{}', 200));
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+        expect(requests, 1);
+      },
+      () => MockClient((_) {
+        requests++;
+        return pending.future;
+      }),
+    );
+  });
+
   test(
     'matches title and year conservatively without erasing numeric titles',
     () {
@@ -112,6 +155,134 @@ void main() {
     ingest('vod', []);
     final result = await IptvSourceSearch.search(movie);
     expect(result.single.message, 'No matching sources.');
+  });
+
+  test(
+    'Quick Play respects direct-link mode and rejects ambiguous movies',
+    () async {
+      ingest('vod', [
+        for (final title in ['Dune (2021)', 'Dune', 'Dune (1984)'])
+          IptvChannel(
+            name: title,
+            url: 'https://panel.test/movie/${Uri.encodeComponent(title)}.mp4',
+            contentType: 'vod',
+          ),
+      ]);
+      final rules = QuickPlayRules.debrifyDefault(isMovie: true);
+      Future<List<Torrent>> search(QuickPlayRules r) =>
+          TorrentPlaybackService.searchIptvForQuickPlay(
+            'tt1',
+            'Dune',
+            '2021',
+            true,
+            null,
+            null,
+            r,
+            null,
+          );
+      expect((await search(rules)).single.name, 'Dune (2021)');
+      expect(await search(rules.copyWith(allowDirectLinks: false)), isEmpty);
+      expect(
+        await search(
+          rules.copyWith(sourceMode: QuickPlaySourceMode.torrentsOnly),
+        ),
+        isEmpty,
+      );
+      final sources = await search(rules);
+      final addon = Torrent.fromJson({
+        ...sources.single.toJson(),
+        'source': 'stremio:Test',
+        'infohash': 'addon-test',
+      });
+      expect(
+        TorrentPlaybackService.orderCandidatesForRules(
+          [addon, ...sources],
+          rules: rules.copyWith(
+            sourcePriority: ['iptv:playlist-a', 'stremio:test'],
+          ),
+        ).first.source,
+        'iptv:playlist-a',
+      );
+      expect(
+        TorrentPlaybackService.orderCandidatesForRules(
+          [addon, ...sources],
+          rules: rules.copyWith(
+            sourcePriority: ['stremio:test', 'iptv:playlist-a'],
+          ),
+        ).first.source,
+        'stremio:test',
+      );
+      expect(
+        TorrentPlaybackService.orderCandidatesForRules([
+          ...sources.reversed,
+          ...sources,
+        ], rules: rules.copyWith(sourcePriority: ['iptv:playlist-a'])),
+        hasLength(1),
+      );
+    },
+  );
+
+  test('Quick Play playlist discovery includes missing catalogs', () async {
+    final providers = await SourcePriority.providers();
+    final iptv = providers.where((p) => p.isIptv).single;
+    expect(iptv.name, 'My TV');
+    expect(iptv.key, 'iptv:playlist-a');
+    expect(
+      await TorrentPlaybackService.searchIptvForQuickPlay(
+        'tt1',
+        'Dune',
+        '2021',
+        true,
+        null,
+        null,
+        QuickPlayRules.debrifyDefault(isMovie: true),
+        null,
+      ),
+      isEmpty,
+    );
+  });
+
+  test('Quick Play resolves each next episode from the IPTV series', () async {
+    ingest('series', [
+      IptvChannel(
+        name: 'EN - Show (2011) (US)',
+        url: 'series:901',
+        contentType: 'series',
+        attributes: {'series_id': '901'},
+      ),
+    ]);
+    await http.runWithClient(
+      () async {
+        final rules = QuickPlayRules.debrifyDefault(isMovie: false);
+        for (final episode in [1, 2]) {
+          final sources = await TorrentPlaybackService.searchIptvForQuickPlay(
+            'tt2',
+            'Show',
+            '2011',
+            false,
+            1,
+            episode,
+            rules,
+            null,
+          );
+          expect(sources.single.directUrl, endsWith('/episode$episode.mp4'));
+          await IptvSourceSearch.authorize(sources.single);
+        }
+      },
+      () => MockClient(
+        (request) async => http.Response(
+          jsonEncode({
+            'episodes': {
+              '1': [
+                {'id': 'episode1', 'episode_num': 1},
+                {'id': 'episode2', 'episode_num': 2},
+              ],
+            },
+          }),
+          200,
+        ),
+      ),
+    );
   });
 
   test(
