@@ -236,6 +236,34 @@ class TorrentPlaybackService {
       season: meta?.season,
       episode: meta?.episode,
     );
+    if (IptvSourceSearch.isDeferredXtreamSeries(torrent)) {
+      final resolution = await IptvSourceSearch.resolveXtreamSeriesEpisode(
+        torrent,
+        season: meta?.season,
+        episode: meta?.episode,
+      );
+      if (!context.mounted) return;
+      if (resolution.source == null) {
+        final target = meta?.season == null || meta?.episode == null
+            ? 'This episode'
+            : 'S${meta!.season.toString().padLeft(2, '0')}E${meta.episode.toString().padLeft(2, '0')}';
+        _snack(
+          context,
+          resolution.status == IptvEpisodeResolutionStatus.missing
+              ? '$target is not available in this IPTV series.'
+              : 'Could not check this IPTV series. Try again.',
+        );
+        return;
+      }
+      final resolved = resolution.source!;
+      if (sources != null && sources.isNotEmpty) {
+        final updated = List<Torrent>.from(sources);
+        final index = sourceIndex.clamp(0, updated.length - 1);
+        updated[index] = resolved;
+        sources = updated;
+      }
+      torrent = resolved;
+    }
     try {
       await IptvSourceSearch.authorize(torrent);
     } catch (_) {
@@ -582,11 +610,54 @@ class TorrentPlaybackService {
         : StreamUrlValidator.minContentBytes;
     final deadDirectUrls = <String>{};
     var validationBudget = directValidationBudgetForRules(rules);
-    Future<bool> directLooksAlive(Torrent t) async {
+    final lazyIptvResolutions = <String, Future<IptvEpisodeResolution>>{};
+    final lazyIptvDeadline = DateTime.now().add(iptvQuickPlaySearchTimeout);
+    Future<Torrent?> resolveDirect(Torrent t) async {
+      if (!IptvSourceSearch.isDeferredXtreamSeries(t)) return t;
+      final resolution = await lazyIptvResolutions.putIfAbsent(t.infohash, () {
+        final remaining = lazyIptvDeadline.difference(DateTime.now());
+        if (remaining <= Duration.zero) {
+          return Future.value(
+            const IptvEpisodeResolution(
+              IptvEpisodeResolutionStatus.unavailable,
+            ),
+          );
+        }
+        return IptvSourceSearch.resolveXtreamSeriesEpisode(
+          t,
+          season: meta?.season,
+          episode: meta?.episode,
+        ).timeout(
+          remaining,
+          onTimeout: () => const IptvEpisodeResolution(
+            IptvEpisodeResolutionStatus.unavailable,
+          ),
+        );
+      });
+      final resolved = resolution.source;
+      if (resolved == null) {
+        logIptvSourceEvent(
+          'quick_play_candidate_rejected',
+          source: t,
+          stage: 'episode_resolution',
+          outcome: resolution.status.name,
+          season: meta?.season,
+          episode: meta?.episode,
+        );
+        return null;
+      }
+      final index = torrents.indexOf(t);
+      if (index >= 0) torrents[index] = resolved;
+      return resolved;
+    }
+
+    Future<Torrent?> directLooksAlive(Torrent candidate) async {
+      final t = await resolveDirect(candidate);
+      if (t == null) return null;
       try {
         await IptvSourceSearch.authorize(t);
       } catch (_) {
-        return false;
+        return null;
       }
       logSourceSelection(
         'quick_play_direct_candidate',
@@ -595,8 +666,8 @@ class TorrentPlaybackService {
         season: meta?.season,
         episode: meta?.episode,
       );
-      if (rules?.validateDirectLinks == false) return true;
-      if (!validatableVod) return true;
+      if (rules?.validateDirectLinks == false) return t;
+      if (!validatableVod) return t;
       // AIOStreams/debrid proxy URLs can be single-use or bind themselves to
       // the address family of the first request. Probing one through Dart's
       // HTTP stack and then opening it through media-kit/ExoPlayer can turn a
@@ -611,7 +682,7 @@ class TorrentPlaybackService {
           '[StartupFailover] event=preflight_bypass platform=flutter '
           'reason=$bypassReason addon=${t.stremioAddonId ?? '-'}',
         );
-        return true;
+        return t;
       }
       final url = t.directUrl!;
       if (deadDirectUrls.contains(_directValidationKey(t))) {
@@ -619,14 +690,14 @@ class TorrentPlaybackService {
           '[StartupFailover] event=preflight_result platform=flutter '
           'ok=false reason=known_dead',
         );
-        return false;
+        return null;
       }
       if (validationBudget <= 0) {
         debugPrint(
           '[StartupFailover] event=preflight_bypass platform=flutter '
           'reason=budget_exhausted',
         );
-        return true; // budget spent — trust it
+        return t; // budget spent — trust it
       }
       validationBudget--;
       debugPrint(
@@ -655,7 +726,7 @@ class TorrentPlaybackService {
         deadDirectUrls.add(_directValidationKey(t));
         ov?.setNote('Skipped a dead stream link — trying the next source…');
       }
-      return alive;
+      return alive ? t : null;
     }
 
     // Walks every direct stream in (tier-ordered) list order and plays the
@@ -663,14 +734,13 @@ class TorrentPlaybackService {
     // user cancelled mid-walk); false when no direct stream survived.
     Future<bool> playFirstAliveDirect() async {
       for (final t in torrents) {
-        final isDirect =
-            t.streamType == StreamType.directUrl &&
-            (t.directUrl?.isNotEmpty ?? false);
+        final isDirect = _isDirectCandidate(t);
         if (!isDirect) continue;
         if (cancelled()) return true; // overlay dismissed by the Cancel tap
-        if (await directLooksAlive(t)) {
+        final playable = await directLooksAlive(t);
+        if (playable != null) {
           if (cancelled()) return true;
-          await playDirect(t);
+          await playDirect(playable);
           return true;
         }
       }
@@ -701,16 +771,15 @@ class TorrentPlaybackService {
         final source = exactSources[candidateIndex];
         if (cancelled()) break;
         if (source.streamType == StreamType.externalUrl) continue;
-        final isDirect =
-            source.streamType == StreamType.directUrl &&
-            (source.directUrl?.isNotEmpty ?? false);
+        final isDirect = _isDirectCandidate(source);
         final isTorrent = _hasAcquisition(source);
         if (!isDirect && !isTorrent) continue;
 
         if (isDirect) {
-          if (await directLooksAlive(source)) {
+          final playable = await directLooksAlive(source);
+          if (playable != null) {
             if (cancelled()) return;
-            await playDirect(source);
+            await playDirect(playable);
             return;
           }
           continue;
@@ -869,9 +938,10 @@ class TorrentPlaybackService {
       var direct = selectDirect(selectable, ladder).$1;
       while (direct != null) {
         if (cancelled()) return; // e.g. Cancel during a caller's await
-        if (await directLooksAlive(direct)) {
+        final playable = await directLooksAlive(direct);
+        if (playable != null) {
           if (cancelled()) return;
-          await playDirect(direct);
+          await playDirect(playable);
           return;
         }
         final dead = direct;
@@ -891,8 +961,7 @@ class TorrentPlaybackService {
         ) &&
         !torrents.any(
           (t) =>
-              t.streamType == StreamType.directUrl &&
-              (t.directUrl?.isNotEmpty ?? false) &&
+              _isDirectCandidate(t) &&
               !deadDirectUrls.contains(_directValidationKey(t)),
         )) {
       if (ov != null) closeLoading();
@@ -1056,6 +1125,11 @@ class TorrentPlaybackService {
   /// occupies a strictly better tier, so a full-match torrent beats a
   /// relaxed-tier direct link, but unplayable tier-0 noise can't suppress
   /// the instant play. Null/inactive ladder ⇒ legacy first-direct-wins.
+  static bool _isDirectCandidate(Torrent torrent) =>
+      (torrent.streamType == StreamType.directUrl &&
+          (torrent.directUrl?.isNotEmpty ?? false)) ||
+      IptvSourceSearch.isDeferredXtreamSeries(torrent);
+
   @visibleForTesting
   static (Torrent?, Torrent?) selectDirect(
     List<Torrent> torrents,
@@ -1064,9 +1138,7 @@ class TorrentPlaybackService {
     final tiered = ladder != null && ladder.isActive;
     int? bestPlayableTier;
     for (final t in torrents) {
-      final isDirect =
-          t.streamType == StreamType.directUrl &&
-          (t.directUrl?.isNotEmpty ?? false);
+      final isDirect = _isDirectCandidate(t);
       final isProbeable =
           t.streamType != StreamType.externalUrl && _hasAcquisition(t);
       if (!isDirect && !isProbeable) continue;
@@ -1722,11 +1794,32 @@ class TorrentPlaybackService {
           resultCount: prioritized.length,
           outcome: prioritized.isEmpty ? 'no_match' : 'matched',
         );
-        for (final source in prioritized.take(
+        final iptvPriorityDeadline = DateTime.now().add(
+          iptvQuickPlaySearchTimeout,
+        );
+        for (final descriptor in prioritized.take(
           directValidationBudgetForRules(activeRules),
         )) {
           if (cancel.cancelled || !context.mounted) return;
           try {
+            var source = descriptor;
+            if (IptvSourceSearch.isDeferredXtreamSeries(source)) {
+              final remaining = iptvPriorityDeadline.difference(DateTime.now());
+              if (remaining <= Duration.zero) break;
+              final resolution =
+                  await IptvSourceSearch.resolveXtreamSeriesEpisode(
+                    source,
+                    season: season,
+                    episode: episode,
+                  ).timeout(
+                    remaining,
+                    onTimeout: () => const IptvEpisodeResolution(
+                      IptvEpisodeResolutionStatus.unavailable,
+                    ),
+                  );
+              if (resolution.source == null) continue;
+              source = resolution.source!;
+            }
             await IptvSourceSearch.authorize(source);
             final alive =
                 !activeRules.validateDirectLinks ||
@@ -1773,7 +1866,7 @@ class TorrentPlaybackService {
             // Revoked or unusable IPTV must not disable the preferred pack route.
             logIptvSourceEvent(
               'quick_play_candidate_rejected',
-              source: source,
+              source: descriptor,
               stage: 'authorization_or_probe',
               outcome: 'failed',
               season: season,
@@ -1814,10 +1907,35 @@ class TorrentPlaybackService {
       closeLoading();
       return;
     }
-    if (torrents.isEmpty) {
+    // Apply the same Addon Priority/filter ordering that [playBest] will use
+    // before probing lazy IPTV rows. Otherwise catalog order can make a slow
+    // lower-priority playlist consume the deadline ahead of the user's first
+    // choice.
+    torrents = orderCandidatesForRules(
+      torrents,
+      rules: activeRules,
+      ladder: ladder,
+    );
+    if (packRouteAllowed &&
+        !activeRules.preferSeriesPacks &&
+        torrents.any(IptvSourceSearch.isDeferredXtreamSeries)) {
+      torrents = await confirmDeferredIptvAvailability(
+        torrents,
+        season: season,
+        episode: episode,
+        isCancelled: () => cancel.cancelled,
+      );
+      if (cancel.cancelled) return;
+      if (!context.mounted) {
+        closeLoading();
+        return;
+      }
+    }
+    if (!torrents.any(isAutoPlayableCandidate)) {
       // Episode-first route (Prefer season packs off): packs are the
       // FALLBACK when the episode search comes up dry, so a show that only
-      // exists as packs still plays.
+      // exists as packs still plays. Deferred IPTV title matches count only
+      // after one of them resolves the requested episode.
       if (packRouteAllowed && !activeRules.preferSeriesPacks) {
         final packed = await tryPackRoute();
         if (packed != false) return;
@@ -1827,14 +1945,9 @@ class TorrentPlaybackService {
       return;
     }
 
-    // Rank by filter strictness (stable — curation's relevance order survives
-    // within each tier) and narrate the outcome on the loader. The pack-top
-    // safety (§3.4b.3) lives inside playBest, AFTER its final re-sorts.
-    torrents = orderCandidatesForRules(
-      torrents,
-      rules: activeRules,
-      ladder: ladder,
-    );
+    // The list was ranked before lazy IPTV probing so the fallback gate and
+    // automatic playback agree on which provider comes first. [playBest]
+    // performs its own final defensive ordering before selection.
     if (torrents.isEmpty) {
       closeLoading();
       _snack(context, 'No sources match your Quick Play rules for "$label".');
@@ -2148,10 +2261,114 @@ class TorrentPlaybackService {
   /// auto-play search, so they must not suppress the engine fallback.
   @visibleForTesting
   static bool isAutoPlayableCandidate(Torrent torrent) =>
-      (torrent.streamType == StreamType.directUrl &&
-          (torrent.directUrl?.isNotEmpty ?? false)) ||
+      _isDirectCandidate(torrent) ||
       (torrent.streamType != StreamType.externalUrl &&
           _hasAcquisition(torrent));
+
+  /// A deferred Xtream row proves only that the provider has a matching
+  /// series title, not that it has the requested episode. At a fallback
+  /// boundary, resolve rows in priority order until one real episode exists.
+  /// Failed rows are removed so their placeholder identity cannot suppress an
+  /// existing torrent/pack fallback. Ordinary playable candidates keep the
+  /// fully lazy path unchanged.
+  @visibleForTesting
+  static Future<List<Torrent>> confirmDeferredIptvAvailability(
+    List<Torrent> sources, {
+    int? season,
+    int? episode,
+    bool Function()? isCancelled,
+    Duration timeout = iptvQuickPlaySearchTimeout,
+    Future<IptvEpisodeResolution> Function(
+      Torrent source, {
+      int? season,
+      int? episode,
+    })?
+    resolver,
+  }) async {
+    if (sources.any(
+      (source) =>
+          isAutoPlayableCandidate(source) &&
+          !IptvSourceSearch.isDeferredXtreamSeries(source),
+    )) {
+      return sources;
+    }
+    final pending = sources
+        .where(IptvSourceSearch.isDeferredXtreamSeries)
+        .toList();
+    if (pending.isEmpty) return sources;
+
+    final remaining = List<Torrent>.of(sources);
+    final resolve = resolver ?? IptvSourceSearch.resolveXtreamSeriesEpisode;
+    final deadline = DateTime.now().add(timeout);
+    logIptvSourceEvent(
+      'quick_play_fallback_gate_started',
+      catalogType: 'series',
+      season: season,
+      episode: episode,
+      candidateCount: pending.length,
+    );
+    for (final descriptor in pending) {
+      if (isCancelled?.call() ?? false) return remaining;
+      final timeLeft = deadline.difference(DateTime.now());
+      if (timeLeft <= Duration.zero) break;
+      IptvEpisodeResolution resolution;
+      try {
+        resolution = await resolve(descriptor, season: season, episode: episode)
+            .timeout(
+              timeLeft,
+              onTimeout: () => const IptvEpisodeResolution(
+                IptvEpisodeResolutionStatus.unavailable,
+              ),
+            );
+      } catch (error) {
+        resolution = const IptvEpisodeResolution(
+          IptvEpisodeResolutionStatus.unavailable,
+        );
+        logIptvSourceEvent(
+          'quick_play_fallback_gate_candidate',
+          source: descriptor,
+          stage: 'episode_resolution',
+          outcome: 'unavailable',
+          season: season,
+          episode: episode,
+          error: error,
+        );
+      }
+      final resolved = resolution.source;
+      final index = remaining.indexOf(descriptor);
+      if (resolved != null) {
+        if (index >= 0) remaining[index] = resolved;
+        logIptvSourceEvent(
+          'quick_play_fallback_gate_completed',
+          source: resolved,
+          outcome: 'playable',
+          season: season,
+          episode: episode,
+        );
+        return remaining;
+      }
+      if (index >= 0) remaining.removeAt(index);
+      logIptvSourceEvent(
+        'quick_play_fallback_gate_candidate',
+        source: descriptor,
+        stage: 'episode_resolution',
+        outcome: resolution.status.name,
+        season: season,
+        episode: episode,
+      );
+    }
+    // A timeout is inconclusive for the provider, but still cannot count as a
+    // playable result for this attempt. Remove any descriptors not reached.
+    remaining.removeWhere(IptvSourceSearch.isDeferredXtreamSeries);
+    logIptvSourceEvent(
+      'quick_play_fallback_gate_completed',
+      catalogType: 'series',
+      outcome: 'no_playable_episode',
+      season: season,
+      episode: episode,
+    );
+    return remaining;
+  }
 
   /// An explicit addon-only profile can search before opening the provider
   /// picker. Mixed modes must include engines and addons before applying the
@@ -2417,6 +2634,7 @@ class TorrentPlaybackService {
             season: season,
             episode: episode,
           ),
+          deferXtreamSeriesEpisodes: true,
           shouldContinue: () =>
               !expired &&
               ProfileRuntime.scope.value == scope &&
@@ -2692,6 +2910,15 @@ class TorrentPlaybackService {
     int? season,
     int? episode,
   }) async {
+    if (IptvSourceSearch.isDeferredXtreamSeries(source)) {
+      final resolution = await IptvSourceSearch.resolveXtreamSeriesEpisode(
+        source,
+        season: season,
+        episode: episode,
+      );
+      if (resolution.source == null) return null;
+      source = resolution.source!;
+    }
     try {
       await IptvSourceSearch.authorize(source);
     } catch (_) {
@@ -2844,6 +3071,10 @@ class TorrentPlaybackService {
         } catch (_) {
           return false;
         }
+        // Xtream rows intentionally have no episode URL until selected. The
+        // source resolver performs the one-row episode lookup and is the
+        // authoritative validation step for these descriptors.
+        if (IptvSourceSearch.isDeferredXtreamSeries(source)) return true;
         if (source.streamType != StreamType.directUrl) return true;
         final url = source.directUrl;
         if (url == null || url.isEmpty) return false;
@@ -3281,11 +3512,12 @@ class TorrentPlaybackService {
         prefersTorrentCandidates(rules)) {
       return null;
     }
-    final candidates = orderCandidatesForRules(
-      batch,
-      rules: rules,
-      ladder: ladder,
-    ).where(isAutoPlayableCandidate);
+    final candidates =
+        orderCandidatesForRules(batch, rules: rules, ladder: ladder).where(
+          (source) =>
+              isAutoPlayableCandidate(source) &&
+              !IptvSourceSearch.isDeferredXtreamSeries(source),
+        );
     if (candidates.isEmpty ||
         candidates.first.streamType != StreamType.directUrl) {
       return null;
@@ -3658,9 +3890,22 @@ class TorrentPlaybackService {
       return true;
     }
     torrents = orderCandidatesForRules(torrents, rules: rules, ladder: ladder);
-    if (fallbackWhenEmpty && !torrents.any(isAutoPlayableCandidate)) {
-      closeLoading();
-      return false;
+    if (fallbackWhenEmpty) {
+      torrents = await confirmDeferredIptvAvailability(
+        torrents,
+        season: season,
+        episode: episode,
+        isCancelled: () => cancel.cancelled,
+      );
+      if (cancel.cancelled) return true;
+      if (!context.mounted) {
+        closeLoading();
+        return true;
+      }
+      if (!torrents.any(isAutoPlayableCandidate)) {
+        closeLoading();
+        return false;
+      }
     }
     _applyLadderNote(overlay, ladder, torrents);
     // playBest plays a direct addon stream instantly (no provider needed); if
@@ -5617,6 +5862,11 @@ class TorrentPlaybackService {
   static Future<List<PlaylistEntry>?> Function(Torrent)
   _lazyProviderResolver() {
     return (Torrent t) async {
+      if (IptvSourceSearch.isDeferredXtreamSeries(t)) {
+        final resolution = await IptvSourceSearch.resolveXtreamSeriesEpisode(t);
+        if (resolution.source == null) return null;
+        t = resolution.source!;
+      }
       try {
         await IptvSourceSearch.authorize(t);
       } catch (_) {
@@ -6247,6 +6497,11 @@ class TorrentPlaybackService {
     String provider,
   ) {
     return (Torrent t) async {
+      if (IptvSourceSearch.isDeferredXtreamSeries(t)) {
+        final resolution = await IptvSourceSearch.resolveXtreamSeriesEpisode(t);
+        if (resolution.source == null) return null;
+        t = resolution.source!;
+      }
       try {
         await IptvSourceSearch.authorize(t);
       } catch (_) {
@@ -6501,6 +6756,25 @@ class TorrentPlaybackService {
     BuildContext context,
     Torrent torrent,
   ) async {
+    if (IptvSourceSearch.isDeferredXtreamSeries(torrent)) {
+      if (context.mounted) {
+        _snack(context, 'Finding this IPTV episode…');
+      }
+      final resolution = await IptvSourceSearch.resolveXtreamSeriesEpisode(
+        torrent,
+      );
+      if (!context.mounted) return;
+      if (resolution.source == null) {
+        _snack(
+          context,
+          resolution.status == IptvEpisodeResolutionStatus.missing
+              ? '${torrent.episodeIdentifier ?? 'This episode'} is not available in this IPTV series.'
+              : 'Could not check this IPTV series. Try again.',
+        );
+        return;
+      }
+      torrent = resolution.source!;
+    }
     try {
       await IptvSourceSearch.authorize(torrent);
     } catch (_) {

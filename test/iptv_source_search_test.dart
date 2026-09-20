@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:async';
 import 'dart:io';
 
 import 'package:debrify/models/advanced_search_selection.dart';
@@ -11,6 +10,7 @@ import 'package:debrify/services/iptv_catalog_key.dart';
 import 'package:debrify/services/iptv_source_search.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/secret_vault.dart';
+import 'package:debrify/services/series_source_fetcher.dart';
 import 'package:debrify/services/series_source_service.dart';
 import 'package:debrify/services/source_priority.dart';
 import 'package:debrify/services/storage_service.dart';
@@ -64,7 +64,7 @@ void main() {
     channels: channels,
   );
 
-  test('automatic IPTV deadline stops subsequent episode lookups', () async {
+  test('automatic IPTV discovery defers all Xtream episode lookups', () async {
     expect(
       TorrentPlaybackService.iptvQuickPlaySearchTimeout,
       const Duration(minutes: 1),
@@ -78,7 +78,6 @@ void main() {
           attributes: {'series_id': id},
         ),
     ]);
-    final pending = Completer<http.Response>();
     var requests = 0;
     await http.runWithClient(
       () async {
@@ -96,16 +95,22 @@ void main() {
           null,
           discoveryTimeout: const Duration(seconds: 1),
         );
-        expect(result, isEmpty);
-        expect(watch.elapsed, lessThan(const Duration(seconds: 4)));
-        expect(requests, 1);
-        pending.complete(http.Response('{}', 200));
-        await Future<void>.delayed(const Duration(milliseconds: 100));
-        expect(requests, 1);
+        expect(result, hasLength(2));
+        expect(result.every(IptvSourceSearch.isDeferredXtreamSeries), isTrue);
+        expect(
+          result.every(TorrentPlaybackService.isAutoPlayableCandidate),
+          isTrue,
+        );
+        expect(
+          TorrentPlaybackService.selectDirect(result, null).$1,
+          same(result.first),
+        );
+        expect(watch.elapsed, lessThan(const Duration(seconds: 1)));
+        expect(requests, 0);
       },
       () => MockClient((_) {
         requests++;
-        return pending.future;
+        return Future.value(http.Response('{}', 200));
       }),
     );
   });
@@ -249,7 +254,7 @@ void main() {
     );
   });
 
-  test('Quick Play resolves each next episode from the IPTV series', () async {
+  test('Quick Play resolves only the attempted IPTV series row', () async {
     ingest('series', [
       IptvChannel(
         name: 'EN - Show (2011) (US)',
@@ -258,6 +263,7 @@ void main() {
         attributes: {'series_id': '901'},
       ),
     ]);
+    final descriptors = <Torrent>[];
     await http.runWithClient(
       () async {
         final rules = QuickPlayRules.debrifyDefault(isMovie: false);
@@ -272,8 +278,18 @@ void main() {
             rules,
             null,
           );
-          expect(sources.single.directUrl, endsWith('/episode$episode.mp4'));
-          await IptvSourceSearch.authorize(sources.single);
+          final descriptor = sources.single;
+          descriptors.add(descriptor);
+          expect(descriptor.directUrl, isEmpty);
+          final resolution = await IptvSourceSearch.resolveXtreamSeriesEpisode(
+            descriptor,
+          );
+          expect(resolution.status, IptvEpisodeResolutionStatus.resolved);
+          expect(
+            resolution.source?.directUrl,
+            endsWith('/episode$episode.mp4'),
+          );
+          await IptvSourceSearch.authorize(resolution.source!);
         }
       },
       () => MockClient(
@@ -289,6 +305,170 @@ void main() {
           200,
         ),
       ),
+    );
+    expect(descriptors.map((source) => source.infohash).toSet(), hasLength(2));
+    expect(
+      SeriesSourceFetcher.mergeSources([descriptors.first], [descriptors.last]),
+      hasLength(2),
+    );
+  });
+
+  test('lazy Xtream resolution reports a missing episode', () async {
+    ingest('series', [
+      IptvChannel(
+        name: 'Show',
+        url: 'series:missing-901',
+        contentType: 'series',
+        attributes: const {'series_id': 'missing-901'},
+      ),
+    ]);
+    final descriptor = (await IptvSourceSearch.search(
+      const AdvancedSearchSelection(
+        imdbId: 'tt2',
+        isSeries: true,
+        title: 'Show',
+        season: 1,
+        episode: 2,
+      ),
+      deferXtreamSeriesEpisodes: true,
+    )).single.torrents.single;
+    final resolution = await http.runWithClient(
+      () => IptvSourceSearch.resolveXtreamSeriesEpisode(descriptor),
+      () => MockClient(
+        (_) async => http.Response(
+          jsonEncode({
+            'episodes': {
+              '1': [
+                {'id': 'episode1', 'episode_num': 1},
+              ],
+            },
+          }),
+          200,
+        ),
+      ),
+    );
+    expect(resolution.status, IptvEpisodeResolutionStatus.missing);
+    expect(resolution.source, isNull);
+  });
+
+  test('lazy Xtream resolution keeps provider failures retryable', () async {
+    ingest('series', [
+      IptvChannel(
+        name: 'Show',
+        url: 'series:failed-901',
+        contentType: 'series',
+        attributes: const {'series_id': 'failed-901'},
+      ),
+    ]);
+    final descriptor = (await IptvSourceSearch.search(
+      const AdvancedSearchSelection(
+        imdbId: 'tt2',
+        isSeries: true,
+        title: 'Show',
+        season: 1,
+        episode: 2,
+      ),
+      deferXtreamSeriesEpisodes: true,
+    )).single.torrents.single;
+    final resolution = await http.runWithClient(
+      () => IptvSourceSearch.resolveXtreamSeriesEpisode(descriptor),
+      () => MockClient((_) async => http.Response('{}', 503)),
+    );
+    expect(resolution.status, IptvEpisodeResolutionStatus.unavailable);
+    expect(resolution.source, isNull);
+  });
+
+  test('failed lazy IPTV rows do not suppress automatic fallbacks', () async {
+    ingest('series', [
+      for (final id in ['missing-1', 'missing-2'])
+        IptvChannel(
+          name: 'Show',
+          url: 'series:$id',
+          contentType: 'series',
+          attributes: {'series_id': id},
+        ),
+    ]);
+    final descriptors = (await IptvSourceSearch.search(
+      const AdvancedSearchSelection(
+        imdbId: 'tt2',
+        isSeries: true,
+        title: 'Show',
+        season: 1,
+        episode: 2,
+      ),
+      deferXtreamSeriesEpisodes: true,
+    )).single.torrents;
+    var attempts = 0;
+    final available =
+        await TorrentPlaybackService.confirmDeferredIptvAvailability(
+          descriptors,
+          season: 1,
+          episode: 2,
+          resolver: (source, {season, episode}) async {
+            attempts++;
+            return const IptvEpisodeResolution(
+              IptvEpisodeResolutionStatus.missing,
+            );
+          },
+        );
+
+    expect(attempts, 2);
+    expect(available, isEmpty);
+    expect(
+      available.any(TorrentPlaybackService.isAutoPlayableCandidate),
+      isFalse,
+    );
+  });
+
+  test('fallback gate stops after the first real IPTV episode', () async {
+    ingest('series', [
+      for (final id in ['missing-1', 'playable-2', 'unchecked-3'])
+        IptvChannel(
+          name: 'Show',
+          url: 'series:$id',
+          contentType: 'series',
+          attributes: {'series_id': id},
+        ),
+    ]);
+    final descriptors = (await IptvSourceSearch.search(
+      const AdvancedSearchSelection(
+        imdbId: 'tt2',
+        isSeries: true,
+        title: 'Show',
+        season: 1,
+        episode: 2,
+      ),
+      deferXtreamSeriesEpisodes: true,
+    )).single.torrents;
+    final attempted = <String>[];
+    final available =
+        await TorrentPlaybackService.confirmDeferredIptvAvailability(
+          descriptors,
+          season: 1,
+          episode: 2,
+          resolver: (source, {season, episode}) async {
+            attempted.add(source.iptvEntryKey!);
+            if (source.iptvEntryKey == 'series:missing-1') {
+              return const IptvEpisodeResolution(
+                IptvEpisodeResolutionStatus.missing,
+              );
+            }
+            final json = source.toJson();
+            json['direct_url'] = 'https://panel.test/episode-2.mp4';
+            return IptvEpisodeResolution(
+              IptvEpisodeResolutionStatus.resolved,
+              Torrent.fromJson(json),
+            );
+          },
+        );
+
+    expect(attempted, ['series:missing-1', 'series:playable-2']);
+    expect(available, hasLength(2));
+    expect(available.first.directUrl, 'https://panel.test/episode-2.mp4');
+    expect(
+      available.last.iptvEntryKey,
+      'series:unchecked-3',
+      reason: 'lower-priority rows must remain lazy after a playable match',
     );
   });
 

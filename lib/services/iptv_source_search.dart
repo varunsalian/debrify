@@ -17,11 +17,27 @@ import 'storage_service.dart';
 import 'xtream_codes_service.dart';
 
 class IptvSourceResult {
-  const IptvSourceResult(this.key, this.name, this.message, this.torrents);
+  const IptvSourceResult(
+    this.key,
+    this.name,
+    this.message,
+    this.torrents, {
+    this.retryableFailure = false,
+  });
   final String key;
   final String name;
   final String message;
   final List<Torrent> torrents;
+  final bool retryableFailure;
+}
+
+enum IptvEpisodeResolutionStatus { resolved, missing, unavailable }
+
+class IptvEpisodeResolution {
+  const IptvEpisodeResolution(this.status, [this.source]);
+
+  final IptvEpisodeResolutionStatus status;
+  final Torrent? source;
 }
 
 /// Manual source discovery only. Never fetches or refreshes whole catalogs.
@@ -34,6 +50,13 @@ class IptvSourceSearch {
   ];
 
   static bool owns(Torrent source) => source.source.startsWith('iptv:');
+
+  static bool isDeferredXtreamSeries(Torrent source) =>
+      owns(source) &&
+      source.iptvCatalogType == 'series' &&
+      (source.iptvEntryKey?.startsWith('series:') ?? false) &&
+      source.streamType == StreamType.directUrl &&
+      (source.directUrl?.isEmpty ?? true);
 
   /// These short-lived URLs must not outlive their profile/resource capability.
   static Future<void> authorize(Torrent source) async {
@@ -225,6 +248,7 @@ class IptvSourceSearch {
     AdvancedSearchSelection selection, {
     void Function(IptvSourceResult)? onResult,
     bool Function()? shouldContinue,
+    bool deferXtreamSeriesEpisodes = false,
   }) async {
     if (selection.isNonImdb) return const [];
     final stopwatch = Stopwatch()..start();
@@ -272,7 +296,12 @@ class IptvSourceSearch {
         final batch = playlists.skip(start).take(3).where(_eligiblePlaylist);
         await Future.wait(
           batch.map((playlist) async {
-            final result = await _playlist(playlist, selection, shouldContinue);
+            final result = await _playlist(
+              playlist,
+              selection,
+              shouldContinue,
+              deferXtreamSeriesEpisodes: deferXtreamSeriesEpisodes,
+            );
             if (ProfileRuntime.scope.value != scope ||
                 shouldContinue?.call() == false) {
               return;
@@ -375,6 +404,7 @@ class IptvSourceSearch {
     AdvancedSearchSelection selection,
     bool Function()? shouldContinue, {
     String? desiredEntryKey,
+    bool deferXtreamSeriesEpisodes = false,
   }) async {
     final key = keyFor(playlist);
     final providerKind = playlist.isXtreamCodes ? 'xtream' : 'm3u';
@@ -383,7 +413,14 @@ class IptvSourceSearch {
     IptvSourceResult result(
       String message, [
       List<Torrent> torrents = const [],
-    ]) => IptvSourceResult(key, playlist.name, message, torrents);
+      bool retryableFailure = false,
+    ]) => IptvSourceResult(
+      key,
+      playlist.name,
+      message,
+      torrents,
+      retryableFailure: retryableFailure,
+    );
     try {
       final scope = ProfileRuntime.scope.value;
       final current = await _currentPlaylist(playlist.id);
@@ -396,7 +433,7 @@ class IptvSourceSearch {
           outcome: 'connection_unavailable',
           elapsedMs: stopwatch.elapsedMilliseconds,
         );
-        return result('IPTV source unavailable.');
+        return result('IPTV source unavailable.', const [], true);
       }
       final check = current.check;
 
@@ -414,6 +451,8 @@ class IptvSourceSearch {
         );
         return result(
           'Catalog not loaded. Open IPTV → ${playlist.name} → ${selection.isSeries ? 'Series' : 'Movies'} once to download it.',
+          const [],
+          true,
         );
       }
       final words = normalize(selection.title).split(' ')
@@ -503,9 +542,11 @@ class IptvSourceSearch {
       // One lookup at a time bounds provider traffic without silently dropping
       // language/quality variants after the first three series entries.
       for (final candidate in candidates) {
-        if (shouldContinue?.call() == false) return result('Search canceled.');
+        if (shouldContinue?.call() == false) {
+          return result('Search canceled.', const [], true);
+        }
         if (ProfileRuntime.scope.value != scope) {
-          return result('Search canceled.');
+          return result('Search canceled.', const [], true);
         }
         final entryKey = _channelEntryKey(
           playlist,
@@ -514,8 +555,8 @@ class IptvSourceSearch {
         );
         if (desiredEntryKey != null && entryKey != desiredEntryKey) continue;
         if (selection.isSeries &&
-            selection.season == null &&
-            selection.episode == null &&
+            ((playlist.isXtreamCodes && deferXtreamSeriesEpisodes) ||
+                (selection.season == null && selection.episode == null)) &&
             !emittedSeriesKeys.add(entryKey)) {
           continue;
         }
@@ -523,7 +564,8 @@ class IptvSourceSearch {
         if (selection.isSeries &&
             playlist.isXtreamCodes &&
             selection.season != null &&
-            selection.episode != null) {
+            selection.episode != null &&
+            !deferXtreamSeriesEpisodes) {
           try {
             final id = candidate.attributes['series_id'];
             if (id == null) continue;
@@ -565,6 +607,8 @@ class IptvSourceSearch {
           }
         } else if (selection.isSeries && playlist.isXtreamCodes) {
           // Bind-mode whole-series rows carry only durable catalog identity.
+          // Episode searches may use the same lightweight descriptor so the
+          // provider is contacted only if this row is actually attempted.
           url = '';
         }
         if (url.isNotEmpty) {
@@ -578,8 +622,17 @@ class IptvSourceSearch {
         final torrent = Torrent(
           rowid: 0,
           // Stable, playlist-scoped identity without exposing URL credentials.
+          // Deferred Xtream rows have no URL yet, so their requested episode
+          // must participate in identity or adjacent episode fetches collapse
+          // into the stale descriptor retained by SeriesSourceFetcher.
           infohash:
-              'iptv_${sha256.convert(utf8.encode(jsonEncode([key, entryKey, url, candidate.playbackHeaders])))}',
+              'iptv_${sha256.convert(utf8.encode(jsonEncode([
+                key,
+                entryKey,
+                url,
+                candidate.playbackHeaders,
+                if (selection.isSeries && playlist.isXtreamCodes && deferXtreamSeriesEpisodes && selection.season != null && selection.episode != null) ...[selection.season, selection.episode],
+              ])))}',
           name: candidate.name,
           sizeBytes: 0,
           createdUnix: 0,
@@ -630,6 +683,7 @@ class IptvSourceSearch {
                   : 'No matching sources.')
             : '${torrents.length} matching sources${lookupFailures > 0 ? ' · Some episode lookups failed. Try searching again.' : ''}',
         torrents,
+        torrents.isEmpty && lookupFailures > 0,
       );
     } catch (error) {
       logIptvSourceEvent(
@@ -642,7 +696,89 @@ class IptvSourceSearch {
         elapsedMs: stopwatch.elapsedMilliseconds,
         error: error,
       );
-      return result('IPTV source unavailable. Try searching again.');
+      return result(
+        'IPTV source unavailable. Try searching again.',
+        const [],
+        true,
+      );
+    }
+  }
+
+  /// Resolve one lightweight Xtream series row for its requested episode.
+  /// Manual selection can distinguish a genuinely absent episode from a
+  /// provider/connection failure; automatic playback treats both as a signal
+  /// to continue with the next candidate.
+  static Future<IptvEpisodeResolution> resolveXtreamSeriesEpisode(
+    Torrent descriptor, {
+    int? season,
+    int? episode,
+  }) async {
+    if (!isDeferredXtreamSeries(descriptor)) {
+      return IptvEpisodeResolution(
+        descriptor.directUrl?.isNotEmpty == true
+            ? IptvEpisodeResolutionStatus.resolved
+            : IptvEpisodeResolutionStatus.unavailable,
+        descriptor.directUrl?.isNotEmpty == true ? descriptor : null,
+      );
+    }
+    season ??= descriptor.seasonNumber;
+    final encodedEpisode = descriptor.episodeIdentifier == null
+        ? null
+        : RegExp(r'[Ee](\d+)').firstMatch(descriptor.episodeIdentifier!);
+    episode ??= encodedEpisode == null
+        ? null
+        : int.tryParse(encodedEpisode.group(1)!);
+    if (season == null || episode == null) {
+      return const IptvEpisodeResolution(
+        IptvEpisodeResolutionStatus.unavailable,
+      );
+    }
+    try {
+      await authorize(descriptor);
+      await IptvCatalogDb.open();
+      final current = await _currentPlaylist(descriptor.iptvPlaylistId!);
+      if (current == null || !current.playlist.isXtreamCodes) {
+        return const IptvEpisodeResolution(
+          IptvEpisodeResolutionStatus.unavailable,
+        );
+      }
+      final result = await _playlist(
+        current.playlist,
+        AdvancedSearchSelection(
+          imdbId: 'iptv-lazy',
+          isSeries: true,
+          title: descriptor.name,
+          season: season,
+          episode: episode,
+        ),
+        null,
+        desiredEntryKey: descriptor.iptvEntryKey,
+      );
+      final resolved = result.torrents
+          .where((source) => source.iptvEntryKey == descriptor.iptvEntryKey)
+          .firstOrNull;
+      if (resolved != null) {
+        return IptvEpisodeResolution(
+          IptvEpisodeResolutionStatus.resolved,
+          resolved,
+        );
+      }
+      return IptvEpisodeResolution(
+        result.retryableFailure
+            ? IptvEpisodeResolutionStatus.unavailable
+            : IptvEpisodeResolutionStatus.missing,
+      );
+    } catch (error) {
+      logIptvSourceEvent(
+        'episode_descriptor_resolution_failed',
+        source: descriptor,
+        season: season,
+        episode: episode,
+        error: error,
+      );
+      return const IptvEpisodeResolution(
+        IptvEpisodeResolutionStatus.unavailable,
+      );
     }
   }
 

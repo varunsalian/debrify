@@ -706,11 +706,12 @@ class _SourcesScreenState extends State<_SourcesScreen> {
       // non-standard content types by contentType). Previously this path was
       // torrent-only, so addon direct links never appeared in the Search tab's
       // Sources list even though Home showed them.
-      final iptvSearch =
-          !_keywordMode && widget.searchOverride == null
+      final iptvSearch = !_keywordMode && widget.searchOverride == null
           ? IptvSourceSearch.search(
               sel,
-              shouldContinue: () => mounted && token == _searchToken && _searching,
+              deferXtreamSeriesEpisodes: true,
+              shouldContinue: () =>
+                  mounted && token == _searchToken && _searching,
               onResult: (result) {
                 if (!mounted || token != _searchToken || !_searching) return;
                 setState(() {
@@ -1084,7 +1085,39 @@ class _SourcesScreenState extends State<_SourcesScreen> {
     );
   }
 
+  bool _hasDeferredEpisodeTarget(Torrent torrent) =>
+      torrent.seasonNumber != null &&
+      RegExp(
+        r'^S\d+E\d+$',
+        caseSensitive: false,
+      ).hasMatch(torrent.episodeIdentifier ?? '');
+
+  bool _canCopySource(Torrent torrent) =>
+      torrent.copyLink != null ||
+      (IptvSourceSearch.isDeferredXtreamSeries(torrent) &&
+          _hasDeferredEpisodeTarget(torrent));
+
   Future<void> _copySourceLink(Torrent torrent) async {
+    if (IptvSourceSearch.isDeferredXtreamSeries(torrent)) {
+      if (!_hasDeferredEpisodeTarget(torrent)) {
+        _snack('Choose an episode before copying its IPTV link.');
+        return;
+      }
+      _snack('Finding this IPTV episode…');
+      final resolution = await IptvSourceSearch.resolveXtreamSeriesEpisode(
+        torrent,
+      );
+      if (!mounted) return;
+      if (resolution.source == null) {
+        _snack(
+          resolution.status == IptvEpisodeResolutionStatus.missing
+              ? '${torrent.episodeIdentifier ?? 'This episode'} is not available in this IPTV series.'
+              : 'Could not check this IPTV series. Try again.',
+        );
+        return;
+      }
+      torrent = resolution.source!;
+    }
     final link = torrent.copyLink;
     if (link == null) {
       _snack('No link available for this source.');
@@ -1208,7 +1241,7 @@ class _SourcesScreenState extends State<_SourcesScreen> {
                 }
               },
             ),
-            if (t.copyLink != null)
+            if (_canCopySource(t))
               ListTile(
                 leading: const Icon(
                   Icons.copy_rounded,
@@ -1562,7 +1595,7 @@ class _SourcesScreenState extends State<_SourcesScreen> {
                                             }
                                           },
                                           onLongPress: () => _showRowMenu(t, i),
-                                          onCopyMagnet: t.copyLink == null
+                                          onCopyMagnet: !_canCopySource(t)
                                               ? null
                                               : () => unawaited(
                                                   _copySourceLink(t),
@@ -2484,7 +2517,7 @@ class _SourcesScreenState extends State<_SourcesScreen> {
           : t.isDirectStream
           ? 'Direct'
           : null,
-      onCopy: t.copyLink == null ? null : () => unawaited(_copySourceLink(t)),
+      onCopy: !_canCopySource(t) ? null : () => unawaited(_copySourceLink(t)),
       onTap: () {
         if (widget.bindMode) {
           unawaited(_pin(t));
