@@ -309,4 +309,30 @@ class NativeProfileProjection {
     }
     await clear();
   }
+
+  /// Requests a one-purpose native capability after the vault has itself
+  /// reported a missing/unreadable key. The token is journaled so a reset can
+  /// resume after process death; each process must explicitly redeem it before
+  /// receiving the process-local permission to drain every profile's jobs.
+  static Future<String?> authorizeUnopenableDeviceReset() async {
+    if (!Platform.isAndroid) return null;
+    final token = await _privacyChannel.invokeMethod<String>(
+      'authorizeUnopenableDeviceReset',
+    );
+    if (token == null || token.isEmpty) {
+      throw StateError('Android device reset was not authorized');
+    }
+    return token;
+  }
+
+  static Future<void> beginUnopenableDeviceReset(String? token) async {
+    if (!Platform.isAndroid) return;
+    if (await _privacyChannel.invokeMethod<bool>(
+          'beginUnopenableDeviceReset',
+          <String, Object?>{'token': token},
+        ) !=
+        true) {
+      throw StateError('Could not enter Android device-reset scope');
+    }
+  }
 }

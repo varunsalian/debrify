@@ -22,12 +22,14 @@ class ProfileRecoveryScreen extends StatefulWidget {
   final Future<void> Function() onRecovered;
   final Future<void> Function() onResetComplete;
   final bool forceTvSafeInput;
+  final DeviceVaultFailure? deviceVaultFailure;
 
   const ProfileRecoveryScreen({
     super.key,
     required this.onRecovered,
     required this.onResetComplete,
     this.forceTvSafeInput = false,
+    this.deviceVaultFailure,
   });
 
   @override
@@ -37,6 +39,10 @@ class ProfileRecoveryScreen extends StatefulWidget {
 class _ProfileRecoveryScreenState extends State<ProfileRecoveryScreen> {
   bool _busy = false;
   String? _status;
+
+  bool get _hasDeviceVaultFailure => widget.deviceVaultFailure != null;
+  bool get _deviceVaultRequiresReset =>
+      widget.deviceVaultFailure?.requiresReset ?? false;
 
   Future<String?> _promptSecret(String title, String message) async {
     final controller = TextEditingController();
@@ -227,6 +233,11 @@ class _ProfileRecoveryScreenState extends State<ProfileRecoveryScreen> {
     );
     if (confirmed != true) return;
     await _run(() async {
+      if (_deviceVaultRequiresReset) {
+        await ProfileDeviceResetService.resetUnopenableDevice();
+        await widget.onResetComplete();
+        return 'Private app data erased.';
+      }
       final linuxPassphrase = await _linuxVaultPassphrase();
       if (Platform.isLinux &&
           !DeviceKeyProvider.isUnlocked &&
@@ -266,35 +277,56 @@ class _ProfileRecoveryScreenState extends State<ProfileRecoveryScreen> {
                   style: Theme.of(context).textTheme.headlineSmall,
                 ),
                 const SizedBox(height: 12),
-                const Text(
-                  'Debrify could not safely open the committed profile registry. Legacy data will not be mounted. A damaged registry is moved aside when you begin recovery, so it remains available for diagnostics.',
+                Text(
+                  _deviceVaultRequiresReset
+                      ? 'Debrify cannot open the secure device vault. Existing credentials, addons, and sync bindings will not be mounted. Restart the device once; if the problem continues, erase private app data and reconnect this device.'
+                      : _hasDeviceVaultFailure
+                      ? 'The secure device vault is temporarily unavailable. Your profiles, credentials, addons, and sync bindings have not been changed. Close Debrify, restart the device, and try again.'
+                      : 'Debrify could not safely open the committed profile registry. Legacy data will not be mounted. A damaged registry is moved aside when you begin recovery, so it remains available for diagnostics.',
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 28),
-                if (!PlatformUtil.isTvOS)
+                if (!_hasDeviceVaultFailure && !PlatformUtil.isTvOS)
                   FilledButton.icon(
                     onPressed: _busy ? null : _restoreBackup,
                     autofocus: widget.forceTvSafeInput,
                     icon: const Icon(Icons.restore),
                     label: const Text('Restore a backup'),
                   ),
-                const SizedBox(height: 10),
-                OutlinedButton.icon(
-                  onPressed: _busy ? null : _continueWithRecoveryAdmin,
-                  autofocus: widget.forceTvSafeInput && PlatformUtil.isTvOS,
-                  icon: const Icon(Icons.admin_panel_settings_outlined),
-                  label: Text(
-                    PlatformUtil.isTvOS
-                        ? 'Start Recovery Admin for Remote restore'
-                        : 'Continue with a new Recovery Admin',
+                if (!_hasDeviceVaultFailure) ...[
+                  const SizedBox(height: 10),
+                  OutlinedButton.icon(
+                    onPressed: _busy ? null : _continueWithRecoveryAdmin,
+                    autofocus: widget.forceTvSafeInput && PlatformUtil.isTvOS,
+                    icon: const Icon(Icons.admin_panel_settings_outlined),
+                    label: Text(
+                      PlatformUtil.isTvOS
+                          ? 'Start Recovery Admin for Remote restore'
+                          : 'Continue with a new Recovery Admin',
+                    ),
                   ),
-                ),
-                const SizedBox(height: 10),
-                TextButton.icon(
-                  onPressed: _busy ? null : _reset,
-                  icon: const Icon(Icons.delete_forever_outlined),
-                  label: const Text('Erase private app data'),
-                ),
+                ],
+                if (widget.deviceVaultFailure == DeviceVaultFailure.unavailable)
+                  FilledButton.icon(
+                    onPressed: _busy ? null : widget.onResetComplete,
+                    autofocus: widget.forceTvSafeInput,
+                    icon: const Icon(Icons.close),
+                    label: const Text('Close Debrify'),
+                  )
+                else ...[
+                  const SizedBox(height: 10),
+                  TextButton.icon(
+                    onPressed: _busy ? null : _reset,
+                    icon: const Icon(Icons.delete_forever_outlined),
+                    autofocus:
+                        _deviceVaultRequiresReset && widget.forceTvSafeInput,
+                    label: Text(
+                      _deviceVaultRequiresReset
+                          ? 'Erase private data and reconnect'
+                          : 'Erase private app data',
+                    ),
+                  ),
+                ],
                 if (_busy) ...[
                   const SizedBox(height: 20),
                   const Center(child: CircularProgressIndicator()),

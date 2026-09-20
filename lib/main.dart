@@ -381,7 +381,7 @@ Future<void> _mainUnchecked(List<String> launchArguments) async {
         event: 'scratch_cleanup_deferred',
       );
     });
-  } on ProfileBootstrapRecoveryRequired {
+  } on ProfileBootstrapRecoveryRequired catch (error) {
     runApp(
       MaterialApp(
         debugShowCheckedModeBanner: false,
@@ -391,6 +391,7 @@ Future<void> _mainUnchecked(List<String> launchArguments) async {
           onRecovered: _resumeAfterProfileRecovery,
           onResetComplete: _terminateAfterDeviceReset,
           forceTvSafeInput: recoveryNeedsTvSafeInput,
+          deviceVaultFailure: error.deviceVaultFailure?.failure,
         ),
       ),
     );

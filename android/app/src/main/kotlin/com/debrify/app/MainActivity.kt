@@ -42,6 +42,11 @@ class MainActivity : FlutterActivity() {
 	private val REQUEST_PICK_DOWNLOAD_DIR = 51423
 	private var pendingDirPickResult: MethodChannel.Result? = null
     private var localSourceAccess: com.debrify.app.storage.LocalSourceAccess? = null
+    // Process-local and enabled only by the journaled, user-confirmed recovery
+    // reset. This lets that reset drain every owner's native work even when the
+    // last projected profile was a child and the encrypted registry cannot be
+    // opened to establish a normal Admin authorization context.
+    private var unopenableDeviceResetInProgress = false
 
 	// ── TV voice dictation (in-app SpeechRecognizer) ────────────────────────
 	// Deliberately NOT the ACTION_RECOGNIZE_SPEECH activity: that hands the
@@ -1275,6 +1280,7 @@ class MainActivity : FlutterActivity() {
     }
 
     private fun activeMayManageProfiles(): Boolean {
+        if (unopenableDeviceResetInProgress) return true
         val active = com.debrify.app.profiles.ProfilePreferenceProjection
             .activeJobContext(this)
         return com.debrify.app.profiles.ProfilePreferenceProjection
@@ -1298,12 +1304,33 @@ class MainActivity : FlutterActivity() {
 		super.configureFlutterEngine(flutterEngine)
         localSourceAccess?.dispose()
         localSourceAccess = com.debrify.app.storage.LocalSourceAccess(this, flutterEngine.dartExecutor.binaryMessenger)
-		com.debrify.app.security.DeviceSecretCipherPlugin.register(flutterEngine)
+		com.debrify.app.security.DeviceSecretCipherPlugin.register(this, flutterEngine)
 		MethodChannel(
 			flutterEngine.dartExecutor.binaryMessenger,
 			"com.debrify.app/profile_privacy",
 		).setMethodCallHandler { call, result ->
 			when (call.method) {
+				"authorizeUnopenableDeviceReset" -> {
+					try {
+						result.success(
+							com.debrify.app.security.DeviceSecretCipherPlugin
+								.issueResetAuthorization(this),
+						)
+					} catch (_: Exception) {
+						result.error("device_reset_not_authorized", null, null)
+					}
+				}
+				"beginUnopenableDeviceReset" -> {
+					val token = call.argument<String>("token")
+					if (!com.debrify.app.security.DeviceSecretCipherPlugin
+							.validateResetAuthorization(this, token)
+					) {
+						result.error("device_reset_not_authorized", null, null)
+						return@setMethodCallHandler
+					}
+					unopenableDeviceResetInProgress = true
+					result.success(true)
+				}
 				"setSensitive" -> {
 					val sensitive = call.argument<Boolean>("sensitive") == true
 					val protectOnBackground =
@@ -1373,6 +1400,11 @@ class MainActivity : FlutterActivity() {
 						MODE_PRIVATE,
 					).edit().clear().commit()
 					if (cleared) {
+						// Native work authority is gone, so end the process-local
+						// bypass now. Keep the durable recovery token until the
+						// following device-vault destroy succeeds; an interrupted
+						// reset can then redeem it again after process death.
+						unopenableDeviceResetInProgress = false
 						result.success(true)
 					} else {
 						result.error("native_profile_migration_reset_failed", null, null)

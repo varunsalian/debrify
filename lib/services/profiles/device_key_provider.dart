@@ -16,6 +16,7 @@ class DeviceKeyProvider {
   static const String linuxStateKey = 'profiles_linux_wrapped_key_v1';
   static DeviceSecretCipher? _cipher;
   static bool _initialized = false;
+  static bool _requiresMigrationAudit = false;
   static Future<void>? _initializing;
   @visibleForTesting
   static bool? debugLinuxOverride;
@@ -24,17 +25,18 @@ class DeviceKeyProvider {
 
   static bool get isInitialized => _initialized;
   static bool get isUnlocked => _cipher != null;
+  static bool get requiresMigrationAudit => _requiresMigrationAudit;
   static DeviceSecretCipher get cipher =>
       _cipher ?? (throw StateError('Device vault is locked'));
 
-  static Future<void> initialize() {
+  static Future<void> initialize({bool allowCreate = true}) {
     if (_initialized) return Future.value();
-    return _initializing ??= _initialize().whenComplete(
-      () => _initializing = null,
-    );
+    return _initializing ??= _initialize(
+      allowCreate: allowCreate,
+    ).whenComplete(() => _initializing = null);
   }
 
-  static Future<void> _initialize() async {
+  static Future<void> _initialize({required bool allowCreate}) async {
     await removeScopedLinuxVaultCopies();
     if (isLinux) {
       final source = (await SharedPreferences.getInstance()).getString(
@@ -59,10 +61,23 @@ class DeviceKeyProvider {
       _initialized = true;
       return;
     }
-    final platform = PlatformDeviceSecretCipher();
+    final platform = PlatformDeviceSecretCipher(allowCreate: allowCreate);
     await platform.initialize();
     _cipher = platform;
+    _requiresMigrationAudit = platform.requiresMigrationAudit;
     _initialized = true;
+  }
+
+  /// Commits the native canary only after bootstrap has authenticated the
+  /// pre-canary key against existing encrypted device state.
+  static Future<void> commitMigrationAudit() async {
+    if (!_requiresMigrationAudit) return;
+    final platform = _cipher;
+    if (platform is! PlatformDeviceSecretCipher) {
+      throw StateError('Native device vault is unavailable');
+    }
+    await platform.commitMigrationAudit();
+    _requiresMigrationAudit = false;
   }
 
   /// Repair older migrations that copied this device-only secret into profile
@@ -179,6 +194,7 @@ class DeviceKeyProvider {
     }
     _cipher = null;
     _initialized = false;
+    _requiresMigrationAudit = false;
   }
 
   @visibleForTesting
@@ -186,6 +202,7 @@ class DeviceKeyProvider {
     _initializing = null;
     _cipher = null;
     _initialized = false;
+    _requiresMigrationAudit = false;
     debugLinuxOverride = null;
   }
 
@@ -193,6 +210,7 @@ class DeviceKeyProvider {
   static void debugInstallCipher(DeviceSecretCipher cipher) {
     _cipher = cipher;
     _initialized = true;
+    _requiresMigrationAudit = false;
   }
 }
 
@@ -202,19 +220,105 @@ abstract interface class DeviceSecretCipher {
   Future<List<int>> open(String envelope, {required List<int> associatedData});
 }
 
+enum DeviceVaultFailure { missing, unreadable, unavailable }
+
+extension DeviceVaultFailureRecovery on DeviceVaultFailure {
+  bool get requiresReset =>
+      this == DeviceVaultFailure.missing ||
+      this == DeviceVaultFailure.unreadable;
+}
+
+/// A privacy-safe classification of a native device-vault failure. Native
+/// diagnostics contain class names only; secret-bearing exception messages,
+/// envelopes, plaintext, and associated data never cross the channel.
+class DeviceVaultException implements Exception {
+  final DeviceVaultFailure failure;
+  final String operation;
+  final String? diagnostic;
+
+  const DeviceVaultException({
+    required this.failure,
+    required this.operation,
+    this.diagnostic,
+  });
+
+  bool get requiresReset => failure.requiresReset;
+
+  factory DeviceVaultException.fromPlatform(
+    PlatformException error,
+    String operation,
+  ) {
+    final failure = switch (error.code) {
+      'device_secret_missing' => DeviceVaultFailure.missing,
+      'device_secret_unreadable' => DeviceVaultFailure.unreadable,
+      _ => DeviceVaultFailure.unavailable,
+    };
+    return DeviceVaultException(
+      failure: failure,
+      operation: operation,
+      diagnostic: error.message,
+    );
+  }
+
+  @override
+  String toString() {
+    final detail = diagnostic;
+    return 'DeviceVaultException(${failure.name}, $operation'
+        '${detail == null || detail.isEmpty ? '' : ', $detail'})';
+  }
+}
+
 /// Hardware/OS-backed implementation. The key never crosses the method
 /// channel: native code performs authenticated encryption and returns only an
 /// opaque envelope. Linux intentionally requires the passphrase provider.
 class PlatformDeviceSecretCipher implements DeviceSecretCipher {
   static const MethodChannel _channel = MethodChannel('debrify/device_secret');
+  final bool allowCreate;
+  bool _requiresMigrationAudit = false;
+
+  bool get requiresMigrationAudit => _requiresMigrationAudit;
+
+  PlatformDeviceSecretCipher({this.allowCreate = true});
+
+  static Future<T?> _invoke<T>(
+    String method, [
+    Map<String, Object>? arguments,
+  ]) async {
+    try {
+      return await _channel.invokeMethod<T>(method, arguments);
+    } on PlatformException catch (error, stackTrace) {
+      Error.throwWithStackTrace(
+        DeviceVaultException.fromPlatform(error, method),
+        stackTrace,
+      );
+    }
+  }
 
   @override
   Future<void> initialize() async {
     if (DeviceKeyProvider.isLinux) {
       throw StateError('Linux device vault requires an unlocked passphrase');
     }
-    final ready = await _channel.invokeMethod<bool>('initialize');
-    if (ready != true) throw StateError('Device secret store is unavailable');
+    final status = await _invoke<Object>('initialize', <String, Object>{
+      'allowCreate': allowCreate,
+    });
+    // Accept true for compatibility with test doubles and any engine that was
+    // already attached during a hot restart of the migration build.
+    if (status == true || status == 'ready') return;
+    if (status == 'migration_audit_required') {
+      _requiresMigrationAudit = true;
+      return;
+    }
+    throw StateError('Device secret store is unavailable');
+  }
+
+  Future<void> commitMigrationAudit() async {
+    if (!_requiresMigrationAudit) return;
+    final committed = await _invoke<bool>('commitMigrationAudit');
+    if (committed != true) {
+      throw StateError('Device secret migration audit was not committed');
+    }
+    _requiresMigrationAudit = false;
   }
 
   @override
@@ -222,7 +326,7 @@ class PlatformDeviceSecretCipher implements DeviceSecretCipher {
     List<int> plaintext, {
     required List<int> associatedData,
   }) async {
-    final value = await _channel.invokeMethod<String>('seal', <String, Object>{
+    final value = await _invoke<String>('seal', <String, Object>{
       'plaintext': base64Encode(plaintext),
       'associatedData': base64Encode(associatedData),
     });
@@ -238,7 +342,7 @@ class PlatformDeviceSecretCipher implements DeviceSecretCipher {
     if (!envelope.startsWith('native1:')) {
       throw const FormatException('Unsupported device secret envelope');
     }
-    final value = await _channel.invokeMethod<String>('open', <String, Object>{
+    final value = await _invoke<String>('open', <String, Object>{
       'envelope': envelope.substring('native1:'.length),
       'associatedData': base64Encode(associatedData),
     });

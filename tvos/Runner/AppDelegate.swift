@@ -6,6 +6,11 @@ import AVKit
 import CryptoKit
 import Security
 
+private enum DeviceSecretError: Error {
+    case missing
+    case unreadable
+}
+
 private final class TvOsDeviceSecretCipher {
     private let service = "com.varunsalian.debrifytv.profile-device-secret"
     private let account = "device-key-v1"
@@ -16,19 +21,27 @@ private final class TvOsDeviceSecretCipher {
             guard let self else { result(FlutterError(code: "unavailable", message: nil, details: nil)); return }
             do {
                 switch call.method {
-                case "initialize": _ = try self.key(); result(true)
+                case "initialize":
+                    let args = call.arguments as? [String: Any]
+                    let allowCreate = args?["allowCreate"] as? Bool ?? true
+                    _ = try self.key(allowCreate: allowCreate)
+                    result(true)
                 case "seal":
                     let (input, aad) = try self.arguments(call)
-                    let box = try AES.GCM.seal(input, using: try self.key(), authenticating: aad)
+                    let box = try AES.GCM.seal(input, using: try self.key(allowCreate: false), authenticating: aad)
                     guard let combined = box.combined else { throw NSError(domain: "DeviceSecret", code: 2) }
                     result(combined.base64EncodedString())
                 case "open":
                     let (input, aad) = try self.arguments(call, payloadName: "envelope")
                     let box = try AES.GCM.SealedBox(combined: input)
-                    result(try AES.GCM.open(box, using: try self.key(), authenticating: aad).base64EncodedString())
+                    result(try AES.GCM.open(box, using: try self.key(allowCreate: false), authenticating: aad).base64EncodedString())
                 case "destroy": try self.destroy(); result(nil)
                 default: result(FlutterMethodNotImplemented)
                 }
+            } catch DeviceSecretError.missing {
+                result(FlutterError(code: "device_secret_missing", message: nil, details: nil))
+            } catch DeviceSecretError.unreadable {
+                result(FlutterError(code: "device_secret_unreadable", message: nil, details: nil))
             } catch {
                 result(FlutterError(code: "device_secret_failed", message: error.localizedDescription, details: nil))
             }
@@ -60,7 +73,7 @@ private final class TvOsDeviceSecretCipher {
         return (input, aad)
     }
 
-    private func key() throws -> SymmetricKey {
+    private func key(allowCreate: Bool) throws -> SymmetricKey {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
@@ -71,10 +84,14 @@ private final class TvOsDeviceSecretCipher {
         ]
         var item: CFTypeRef?
         let status = SecItemCopyMatching(query as CFDictionary, &item)
-        if status == errSecSuccess, let data = item as? Data, data.count == 32 {
+        if status == errSecSuccess {
+            guard let data = item as? Data, data.count == 32 else {
+                throw DeviceSecretError.unreadable
+            }
             return SymmetricKey(data: data)
         }
         guard status == errSecItemNotFound else { throw NSError(domain: NSOSStatusErrorDomain, code: Int(status)) }
+        guard allowCreate else { throw DeviceSecretError.missing }
         var bytes = Data(count: 32)
         let randomStatus = bytes.withUnsafeMutableBytes { SecRandomCopyBytes(kSecRandomDefault, 32, $0.baseAddress!) }
         guard randomStatus == errSecSuccess else { throw NSError(domain: NSOSStatusErrorDomain, code: Int(randomStatus)) }

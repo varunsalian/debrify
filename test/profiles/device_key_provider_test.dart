@@ -1,9 +1,11 @@
 import 'package:debrify/services/profiles/device_key_provider.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  const deviceSecretChannel = MethodChannel('debrify/device_secret');
   void restart() {
     DeviceKeyProvider.debugReset();
     DeviceKeyProvider.debugLinuxOverride = true;
@@ -13,7 +15,74 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     restart();
   });
-  tearDown(DeviceKeyProvider.debugReset);
+  tearDown(() {
+    DeviceKeyProvider.debugReset();
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(deviceSecretChannel, null);
+  });
+
+  test('existing native vault initialization forbids key creation', () async {
+    DeviceKeyProvider.debugLinuxOverride = false;
+    MethodCall? received;
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(deviceSecretChannel, (call) async {
+          received = call;
+          return true;
+        });
+
+    await DeviceKeyProvider.initialize(allowCreate: false);
+
+    expect(received?.method, 'initialize');
+    expect(received?.arguments, <String, Object>{'allowCreate': false});
+    expect(DeviceKeyProvider.isInitialized, isTrue);
+  });
+
+  test('missing native key is classified without replacing it', () async {
+    DeviceKeyProvider.debugLinuxOverride = false;
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(deviceSecretChannel, (call) async {
+          throw PlatformException(
+            code: 'device_secret_missing',
+            message:
+                'initialize:DeviceSecretMissingException:DeviceSecretMissingException',
+          );
+        });
+
+    await expectLater(
+      DeviceKeyProvider.initialize(allowCreate: false),
+      throwsA(
+        isA<DeviceVaultException>()
+            .having(
+              (error) => error.failure,
+              'failure',
+              DeviceVaultFailure.missing,
+            )
+            .having((error) => error.requiresReset, 'requiresReset', isTrue),
+      ),
+    );
+    expect(DeviceKeyProvider.isInitialized, isFalse);
+    expect(DeviceKeyProvider.isUnlocked, isFalse);
+  });
+
+  test('pre-canary native vault waits for the resource audit', () async {
+    DeviceKeyProvider.debugLinuxOverride = false;
+    final methods = <String>[];
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(deviceSecretChannel, (call) async {
+          methods.add(call.method);
+          if (call.method == 'initialize') return 'migration_audit_required';
+          if (call.method == 'commitMigrationAudit') return true;
+          return null;
+        });
+
+    await DeviceKeyProvider.initialize(allowCreate: false);
+    expect(DeviceKeyProvider.requiresMigrationAudit, isTrue);
+
+    await DeviceKeyProvider.commitMigrationAudit();
+
+    expect(DeviceKeyProvider.requiresMigrationAudit, isFalse);
+    expect(methods, <String>['initialize', 'commitMigrationAudit']);
+  });
 
   test('fresh Linux vault opens automatically across launches', () async {
     await Future.wait([
