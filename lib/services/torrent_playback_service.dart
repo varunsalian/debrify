@@ -229,8 +229,13 @@ class TorrentPlaybackService {
     int sourceIndex = 0,
     String searchKeyword = '',
   }) async {
-    logSourceSelection('manual_pick', source: torrent, index: sourceIndex,
-        season: meta?.season, episode: meta?.episode);
+    logSourceSelection(
+      'manual_pick',
+      source: torrent,
+      index: sourceIndex,
+      season: meta?.season,
+      episode: meta?.episode,
+    );
     try {
       await IptvSourceSearch.authorize(torrent);
     } catch (_) {
@@ -500,8 +505,13 @@ class TorrentPlaybackService {
     // [provider] when the caller resolved one (torrent chain); otherwise it
     // stays on the bound-sources → addon-stream path this play came from.
     Future<void> playDirect(Torrent direct) async {
-      logSourceSelection('quick_play_direct_selected', source: direct,
-          index: torrents.indexOf(direct), season: meta?.season, episode: meta?.episode);
+      logSourceSelection(
+        'quick_play_direct_selected',
+        source: direct,
+        index: torrents.indexOf(direct),
+        season: meta?.season,
+        episode: meta?.episode,
+      );
       // The loader (when one is up) stays through the launch prep; the
       // launcher dismisses it the moment the player takes the screen, and
       // guarantees the dismissal on failure so it can never linger. The
@@ -573,9 +583,18 @@ class TorrentPlaybackService {
     final deadDirectUrls = <String>{};
     var validationBudget = directValidationBudgetForRules(rules);
     Future<bool> directLooksAlive(Torrent t) async {
-      try { await IptvSourceSearch.authorize(t); } catch (_) { return false; }
-      logSourceSelection('quick_play_direct_candidate', source: t,
-          index: torrents.indexOf(t), season: meta?.season, episode: meta?.episode);
+      try {
+        await IptvSourceSearch.authorize(t);
+      } catch (_) {
+        return false;
+      }
+      logSourceSelection(
+        'quick_play_direct_candidate',
+        source: t,
+        index: torrents.indexOf(t),
+        season: meta?.season,
+        episode: meta?.episode,
+      );
       if (rules?.validateDirectLinks == false) return true;
       if (!validatableVod) return true;
       // AIOStreams/debrid proxy URLs can be single-use or bind themselves to
@@ -620,8 +639,11 @@ class TorrentPlaybackService {
         lenient: true,
         headers: t.httpHeaders,
       );
-      logSourceSelection('quick_play_direct_preflight', source: t,
-          reason: alive ? 'accepted_for_player_validation' : 'rejected');
+      logSourceSelection(
+        'quick_play_direct_preflight',
+        source: t,
+        reason: alive ? 'accepted_for_player_validation' : 'rejected',
+      );
       debugPrint(
         '[StartupFailover] event=preflight_result platform=flutter '
         'ok=$alive remainingBudget=$validationBudget',
@@ -1159,13 +1181,21 @@ class TorrentPlaybackService {
     );
     for (final t in candidates.take(maxAttempts)) {
       if (cancelled()) return (null, null);
-      logSourceSelection('quick_play_probe', source: t,
-          season: season, episode: episode);
+      logSourceSelection(
+        'quick_play_probe',
+        source: t,
+        season: season,
+        episode: episode,
+      );
       onCandidate?.call(t);
       try {
         final magnet = await _magnetFor(t);
         if (magnet == null) {
-          logSourceSelection('quick_play_probe_rejected', source: t, reason: 'no_acquisition');
+          logSourceSelection(
+            'quick_play_probe_rejected',
+            source: t,
+            reason: 'no_acquisition',
+          );
           continue;
         }
         if (cancelled()) return (null, null);
@@ -1179,8 +1209,13 @@ class TorrentPlaybackService {
           if (season != null &&
               episode != null &&
               !_resolvedHasEpisode(r, season, episode)) {
-            logSourceSelection('quick_play_probe_rejected', source: t,
-                season: season, episode: episode, reason: 'episode_not_in_pack');
+            logSourceSelection(
+              'quick_play_probe_rejected',
+              source: t,
+              season: season,
+              episode: episode,
+              reason: 'episode_not_in_pack',
+            );
             // Delete the fresh RD/PikPak entry this probe created so skips
             // don't pile up orphans (TorBox/AllDebrid dedup the add; Premiumize
             // adds nothing), matching _playViaBound's cleanup.
@@ -1199,20 +1234,40 @@ class TorrentPlaybackService {
             }
             continue;
           }
-          logSourceSelection('quick_play_probe_resolved', source: t,
-              season: season, episode: episode);
+          logSourceSelection(
+            'quick_play_probe_resolved',
+            source: t,
+            season: season,
+            episode: episode,
+          );
           return (r, t);
         }
-        logSourceSelection('quick_play_probe_rejected', source: t, reason: 'no_play_url');
+        logSourceSelection(
+          'quick_play_probe_rejected',
+          source: t,
+          reason: 'no_play_url',
+        );
       } on TorrentNotCachedException catch (e) {
-        logSourceSelection('quick_play_probe_rejected', source: t, reason: 'not_cached');
+        logSourceSelection(
+          'quick_play_probe_rejected',
+          source: t,
+          reason: 'not_cached',
+        );
         // Probed torrent is downloading — remove it so RD stays clean.
         await cleanupFailedAutomaticAcquisition(e);
       } on AllDebridTorrentNotReadyException catch (e) {
-        logSourceSelection('quick_play_probe_rejected', source: t, reason: 'not_ready');
+        logSourceSelection(
+          'quick_play_probe_rejected',
+          source: t,
+          reason: 'not_ready',
+        );
         await cleanupFailedAutomaticAcquisition(e);
       } catch (_) {
-        logSourceSelection('quick_play_probe_rejected', source: t, reason: 'provider_error');
+        logSourceSelection(
+          'quick_play_probe_rejected',
+          source: t,
+          reason: 'provider_error',
+        );
         // _TorboxNotCached / _PremiumizeNotCached / transient — try next.
       }
     }
@@ -1222,15 +1277,22 @@ class TorrentPlaybackService {
   /// Delete only the acquisition identified by the provider's not-ready error.
   /// A failed cleanup must not prevent trying another playable source.
   @visibleForTesting
-  static Future<void> cleanupFailedAutomaticAcquisition(Object error, {
+  static Future<void> cleanupFailedAutomaticAcquisition(
+    Object error, {
     Future<void> Function(String, String)? deleteRealDebrid,
     Future<void> Function(String, String)? deleteAllDebrid,
   }) async {
     try {
       if (error is TorrentNotCachedException) {
-        await (deleteRealDebrid ?? DebridService.deleteTorrent)(error.apiKey, error.torrentId);
+        await (deleteRealDebrid ?? DebridService.deleteTorrent)(
+          error.apiKey,
+          error.torrentId,
+        );
       } else if (error is AllDebridTorrentNotReadyException) {
-        await (deleteAllDebrid ?? AllDebridService.deleteMagnet)(error.apiKey, error.magnetId);
+        await (deleteAllDebrid ?? AllDebridService.deleteMagnet)(
+          error.apiKey,
+          error.magnetId,
+        );
       }
     } catch (_) {}
   }
@@ -1259,8 +1321,14 @@ class TorrentPlaybackService {
     // post-failure recovery keep their existing no-prompt contract for free.
     VoidCallback? openSourcePicker,
   }) async {
-    logSourceSelection('play_selection_start', season: season, episode: episode,
-        reason: skipBoundSources ? 'recovery_skip_saved' : 'saved_then_quick_play');
+    logSourceSelection(
+      'play_selection_start',
+      season: season,
+      episode: episode,
+      reason: skipBoundSources
+          ? 'recovery_skip_saved'
+          : 'saved_then_quick_play',
+    );
     final label = meta.title ?? '';
     if (imdbId.isEmpty) {
       _snack(context, 'No IMDb match to find sources for "$label".');
@@ -1609,28 +1677,58 @@ class TorrentPlaybackService {
         !_recentlyNoPack(imdbId, season, provider, activeRules) &&
         activeRules.packPreference != QuickPlayPackPreference.exactEpisodeOnly;
 
-    final iptvFirst = activeRules.allowDirectLinks && allowsAddonSearch(activeRules) &&
-        activeRules.sourcePriority.isNotEmpty && activeRules.sourcePriority.first.startsWith('iptv:');
+    final iptvFirst =
+        activeRules.allowDirectLinks &&
+        allowsAddonSearch(activeRules) &&
+        activeRules.sourcePriority.isNotEmpty &&
+        activeRules.sourcePriority.first.startsWith('iptv:');
     if (packRouteAllowed && activeRules.preferSeriesPacks) {
       if (iptvFirst) {
-        final matches = await searchIptvForQuickPlay(imdbId, meta.title ?? label,
-            meta.year, isMovie, season, episode, activeRules, () => cancel.cancelled);
-        final prioritized = orderCandidatesForRules(matches.where((t) =>
-            t.source == activeRules.sourcePriority.first).toList(),
-            rules: activeRules, ladder: ladder);
-        for (final source in prioritized.take(directValidationBudgetForRules(activeRules))) {
+        final matches = await searchIptvForQuickPlay(
+          imdbId,
+          meta.title ?? label,
+          meta.year,
+          isMovie,
+          season,
+          episode,
+          activeRules,
+          () => cancel.cancelled,
+        );
+        final prioritized = orderCandidatesForRules(
+          matches
+              .where((t) => t.source == activeRules.sourcePriority.first)
+              .toList(),
+          rules: activeRules,
+          ladder: ladder,
+        );
+        for (final source in prioritized.take(
+          directValidationBudgetForRules(activeRules),
+        )) {
           if (cancel.cancelled || !context.mounted) return;
           try {
             await IptvSourceSearch.authorize(source);
-            final alive = !activeRules.validateDirectLinks ||
-                await StreamUrlValidator.isPlayableVideoUrl(source.directUrl!,
-                    minBytes: 10 * 1024 * 1024, lenient: true, headers: source.httpHeaders);
+            final alive =
+                !activeRules.validateDirectLinks ||
+                await StreamUrlValidator.isPlayableVideoUrl(
+                  source.directUrl!,
+                  minBytes: 10 * 1024 * 1024,
+                  lenient: true,
+                  headers: source.httpHeaders,
+                );
             if (!alive) continue;
             if (cancel.cancelled || !context.mounted) return;
-            await playBest(context, [source], provider: provider, title: label,
-                meta: meta, overlay: overlay, isCancelled: () => cancel.cancelled,
-                ladder: ladder, rules: activeRules.copyWith(validateDirectLinks: false),
-                seriesFetcher: seriesFetcherFor(meta: meta, provider: provider));
+            await playBest(
+              context,
+              [source],
+              provider: provider,
+              title: label,
+              meta: meta,
+              overlay: overlay,
+              isCancelled: () => cancel.cancelled,
+              ladder: ladder,
+              rules: activeRules.copyWith(validateDirectLinks: false),
+              seriesFetcher: seriesFetcherFor(meta: meta, provider: provider),
+            );
             return;
           } catch (_) {
             // Revoked or unusable IPTV must not disable the preferred pack route.
@@ -2219,32 +2317,69 @@ class TorrentPlaybackService {
     };
   }
 
+  static const iptvQuickPlaySearchTimeout = Duration(minutes: 1);
+
   /// Cached IPTV candidates for automatic playback and episode advancement.
   /// Direct-link and source-mode restrictions apply before any catalog lookup.
   @visibleForTesting
   static Future<List<Torrent>> searchIptvForQuickPlay(
-    String id, String title, String? year, bool isMovie, int? season,
-    int? episode, QuickPlayRules rules, bool Function()? isCancelled,
-  ) async {
-    if (!rules.allowDirectLinks || !allowsAddonSearch(rules) || !id.startsWith('tt')) return [];
+    String id,
+    String title,
+    String? year,
+    bool isMovie,
+    int? season,
+    int? episode,
+    QuickPlayRules rules,
+    bool Function()? isCancelled, {
+    @visibleForTesting Duration discoveryTimeout = iptvQuickPlaySearchTimeout,
+  }) async {
+    if (!rules.allowDirectLinks ||
+        !allowsAddonSearch(rules) ||
+        !id.startsWith('tt'))
+      return [];
     final scope = ProfileRuntime.scope.value;
     var expired = false;
     final completed = <IptvSourceResult>[];
-    final results = await IptvSourceSearch.search(
-      AdvancedSearchSelection(imdbId: id, title: title, year: year,
-          isSeries: !isMovie, season: season, episode: episode),
-      shouldContinue: () => !expired && ProfileRuntime.scope.value == scope && !(isCancelled?.call() ?? false),
-      onResult: (result) { if (!expired) completed.add(result); },
-    ).timeout(Duration(seconds: rules.addonTimeoutSeconds > 0 ? rules.addonTimeoutSeconds : 15),
-      onTimeout: () { expired = true; return List<IptvSourceResult>.of(completed); });
+    final results =
+        await IptvSourceSearch.search(
+          AdvancedSearchSelection(
+            imdbId: id,
+            title: title,
+            year: year,
+            isSeries: !isMovie,
+            season: season,
+            episode: episode,
+          ),
+          shouldContinue: () =>
+              !expired &&
+              ProfileRuntime.scope.value == scope &&
+              !(isCancelled?.call() ?? false),
+          onResult: (result) {
+            if (!expired) completed.add(result);
+          },
+        ).timeout(
+          discoveryTimeout,
+          onTimeout: () {
+            expired = true;
+            return List<IptvSourceResult>.of(completed);
+          },
+        );
     expired = true;
-    if (ProfileRuntime.scope.value != scope || (isCancelled?.call() ?? false)) return [];
+    if (ProfileRuntime.scope.value != scope || (isCancelled?.call() ?? false))
+      return [];
     final expectedYear = RegExp(r'^\d{4}').stringMatch(year ?? '');
     // Broad yearless matches remain in manual Sources. Automatic movie picks
     // require an explicit release-year tag to avoid silently choosing a remake.
-    return [for (final result in results) for (final source in result.torrents)
-      if (!isMovie || (expectedYear != null &&
-          RegExp('(?:[\\[(]$expectedYear[\\])]|\\s$expectedYear(?:\\s|\$))').hasMatch(source.name))) source];
+    return [
+      for (final result in results)
+        for (final source in result.torrents)
+          if (!isMovie ||
+              (expectedYear != null &&
+                  RegExp(
+                    '(?:[\\[(]$expectedYear[\\])]|\\s$expectedYear(?:\\s|\$))',
+                  ).hasMatch(source.name)))
+            source,
+    ];
   }
 
   /// Combined engine, addon and IPTV search, followed by provider ordering
@@ -2316,7 +2451,16 @@ class TorrentPlaybackService {
         );
         final found = <Torrent>[
           ...(addonRes['torrents'] as List).cast<Torrent>(),
-          ...await searchIptvForQuickPlay(imdbId, label, year, isMovie, season, episode, activeRules, isCancelled),
+          ...await searchIptvForQuickPlay(
+            imdbId,
+            label,
+            year,
+            isMovie,
+            season,
+            episode,
+            activeRules,
+            isCancelled,
+          ),
         ];
         final allowed = activeRules.allowDirectLinks
             ? found
@@ -2352,7 +2496,8 @@ class TorrentPlaybackService {
   /// Recovery uses the same searches, but keeps representations until strict
   /// rules have been applied. Manual drawer deduplication is intentionally later.
   static Future<List<Torrent>?> Function(String, int, int) _recoverySearch(
-    PlaybackMeta meta, String? provider,
+    PlaybackMeta meta,
+    String? provider,
   ) => (mode, season, episode) async {
     final isMovie = meta.contentType == 'movie';
     final rules = await StorageService.getQuickPlayRules(isMovie: isMovie);
@@ -2361,34 +2506,62 @@ class TorrentPlaybackService {
     if (mode == SeriesSourceFetcher.modePacks) {
       if (prov == null || prov == 'pikpak') return null;
       return searchSeriesPackSources(
-        imdbId: meta.imdbId!, label: meta.title ?? '', season: season,
-        provider: prov, rules: rules,
+        imdbId: meta.imdbId!,
+        label: meta.title ?? '',
+        season: season,
+        provider: prov,
+        rules: rules,
         ladder: await loadLadder(includeSize: false, rules: rules),
         preserveRepresentations: true,
       );
     }
     if (prov != null) {
       return searchCuratedSources(
-        imdbId: meta.imdbId!, label: meta.title ?? '', isMovie: isMovie,
+        imdbId: meta.imdbId!,
+        label: meta.title ?? '',
+        isMovie: isMovie,
         year: meta.year,
-        season: isMovie ? null : season, episode: isMovie ? null : episode,
-        provider: prov, rules: rules,
+        season: isMovie ? null : season,
+        episode: isMovie ? null : episode,
+        provider: prov,
+        rules: rules,
       );
     }
     if (!allowsAddonSearch(rules) || !rules.allowDirectLinks) return [];
     final result = await TorrentService.searchStremioAddonsOnly(
-      imdbId: meta.imdbId!, isMovie: isMovie,
-      season: isMovie ? null : season, episode: isMovie ? null : episode,
-      timeout: rules.addonTimeoutSeconds == 15 ? null : Duration(seconds: rules.addonTimeoutSeconds),
+      imdbId: meta.imdbId!,
+      isMovie: isMovie,
+      season: isMovie ? null : season,
+      episode: isMovie ? null : episode,
+      timeout: rules.addonTimeoutSeconds == 15
+          ? null
+          : Duration(seconds: rules.addonTimeoutSeconds),
       preserveOrder: rules.ranking == QuickPlayRanking.exactOrder,
     );
-    final list = (result['torrents'] as List).cast<Torrent>().where(
-      (t) => t.streamType == StreamType.directUrl && (t.directUrl?.isNotEmpty ?? false),
-    ).toList();
-    list.addAll(await searchIptvForQuickPlay(meta.imdbId!, meta.title ?? '', meta.year,
-        isMovie, season, episode, rules, null));
-    return list.isEmpty && ((result['addonErrors'] as Map?)?.isNotEmpty ?? false)
-        ? null : list;
+    final list = (result['torrents'] as List)
+        .cast<Torrent>()
+        .where(
+          (t) =>
+              t.streamType == StreamType.directUrl &&
+              (t.directUrl?.isNotEmpty ?? false),
+        )
+        .toList();
+    list.addAll(
+      await searchIptvForQuickPlay(
+        meta.imdbId!,
+        meta.title ?? '',
+        meta.year,
+        isMovie,
+        season,
+        episode,
+        rules,
+        null,
+      ),
+    );
+    return list.isEmpty &&
+            ((result['addonErrors'] as Map?)?.isNotEmpty ?? false)
+        ? null
+        : list;
   };
 
   /// Shared automatic preparation: strict eligibility BEFORE dedupe, then the
@@ -2402,18 +2575,27 @@ class TorrentPlaybackService {
   }) async {
     final ordered = orderCandidatesForRules(raw, rules: rules, ladder: ladder);
     if (provider != 'torbox' && provider != 'premiumize') return ordered;
-    var torrents = ordered.where((t) => t.streamType == StreamType.torrent).toList();
+    var torrents = ordered
+        .where((t) => t.streamType == StreamType.torrent)
+        .toList();
     if (torrents.isEmpty) return ordered;
     torrents = await (cacheCheck ?? _cacheFirst)(provider!, torrents);
-    torrents = orderCacheCheckedCandidatesForRules(torrents, rules: rules, ladder: ladder);
+    torrents = orderCacheCheckedCandidatesForRules(
+      torrents,
+      rules: rules,
+      ladder: ladder,
+    );
     return mergePreparedTorrentOrder(ordered, torrents);
   }
 
   /// One native recovery attempt, using Quick Play's exact-episode validation
   /// and RD/AllDebrid acquisition cleanup. Native owns the overall retry cap.
   static Future<List<PlaylistEntry>?> resolveRecoverySource(
-    Torrent source, {required String? provider, int? season, int? episode}
-  ) async {
+    Torrent source, {
+    required String? provider,
+    int? season,
+    int? episode,
+  }) async {
     try {
       await IptvSourceSearch.authorize(source);
     } catch (_) {
@@ -2421,20 +2603,34 @@ class TorrentPlaybackService {
     }
     if (source.streamType == StreamType.directUrl) {
       if (source.directUrl?.isNotEmpty != true) return null;
-      return [PlaylistEntry(url: source.directUrl!, title: source.displayTitle,
-        httpHeaders: source.httpHeaders ?? const {})];
+      return [
+        PlaylistEntry(
+          url: source.directUrl!,
+          title: source.displayTitle,
+          httpHeaders: source.httpHeaders ?? const {},
+        ),
+      ];
     }
     if (provider == null) return null;
-    final (resolved, _) = await _probeCandidates(provider, [source],
-      season: season, episode: episode,
-      rules: QuickPlayRules.debrifyDefault(isMovie: season == null)
-          .copyWith(tryNextOnFailure: false, maxAttempts: 1),
+    final (resolved, _) = await _probeCandidates(
+      provider,
+      [source],
+      season: season,
+      episode: episode,
+      rules: QuickPlayRules.debrifyDefault(
+        isMovie: season == null,
+      ).copyWith(tryNextOnFailure: false, maxAttempts: 1),
     );
     if (resolved == null) return null;
     if (resolved.playlist?.isNotEmpty == true) return resolved.playlist;
     if (resolved.playUrl?.isNotEmpty != true) return null;
-    return [PlaylistEntry(url: resolved.playUrl!, title: resolved.title,
-      httpHeaders: resolved.httpHeaders ?? const {})];
+    return [
+      PlaylistEntry(
+        url: resolved.playUrl!,
+        title: resolved.title,
+        httpHeaders: resolved.httpHeaders ?? const {},
+      ),
+    ];
   }
 
   /// Builds the [SeriesSourceFetcher] a series play hands to the player: the
@@ -2483,20 +2679,27 @@ class TorrentPlaybackService {
         }
         for (final pin in pins) {
           // Existing pack handling retains precedence for a primary pack.
-          if (!pin.isAddonDirect) break;
+          if (!pin.isAddonDirect && !pin.isIptvDirect) break;
           try {
-            final fresh = await StremioService.instance
-                .resolvePinnedDirectStream(
-                  addonId: pin.addonId!,
-                  addonKey: pin.addonKey!,
-                  streamKey: pin.streamKey ?? '',
-                  streamIndex: pin.streamIndex ?? 0,
-                  bingeGroup: pin.bingeGroup,
-                  type: 'series',
-                  contentId: imdbId,
-                  season: s,
-                  episode: e,
-                );
+            final fresh = pin.isIptvDirect
+                ? await IptvSourceSearch.resolvePinned(
+                    pin,
+                    title: meta.title ?? label,
+                    year: meta.year,
+                    season: s,
+                    episode: e,
+                  )
+                : await StremioService.instance.resolvePinnedDirectStream(
+                    addonId: pin.addonId!,
+                    addonKey: pin.addonKey!,
+                    streamKey: pin.streamKey ?? '',
+                    streamIndex: pin.streamIndex ?? 0,
+                    bingeGroup: pin.bingeGroup,
+                    type: 'series',
+                    contentId: imdbId,
+                    season: s,
+                    episode: e,
+                  );
             if (fresh != null) {
               yield fresh;
             } else if (identical(pin, pins.first)) {
@@ -2540,7 +2743,11 @@ class TorrentPlaybackService {
       packsFetched: packsFetched,
       episodesFetched: episodesFetched,
       validateCandidate: (source) async {
-        try { await IptvSourceSearch.authorize(source); } catch (_) { return false; }
+        try {
+          await IptvSourceSearch.authorize(source);
+        } catch (_) {
+          return false;
+        }
         if (source.streamType != StreamType.directUrl) return true;
         final url = source.directUrl;
         if (url == null || url.isEmpty) return false;
@@ -2625,7 +2832,18 @@ class TorrentPlaybackService {
               return t.streamType == StreamType.directUrl &&
                   (t.directUrl?.isNotEmpty ?? false);
             }).toList();
-            list.addAll(await searchIptvForQuickPlay(imdbId, label, meta.year, false, s, e, rules, null));
+            list.addAll(
+              await searchIptvForQuickPlay(
+                imdbId,
+                label,
+                meta.year,
+                false,
+                s,
+                e,
+                rules,
+                null,
+              ),
+            );
             if (list.isEmpty &&
                 ((result['addonErrors'] as Map?)?.isNotEmpty ?? false)) {
               // Addon failures are reported in-band. Keep the fetch retryable
@@ -2709,6 +2927,7 @@ class TorrentPlaybackService {
     if (provider != null &&
         provider != SeriesSource.localService &&
         provider != SeriesSource.addonDirectService &&
+        provider != SeriesSource.iptvDirectService &&
         provider != 'stream') {
       return provider;
     }
@@ -3133,7 +3352,16 @@ class TorrentPlaybackService {
     }
 
     Future<Map<String, dynamic>> search() async {
-      final iptv = searchIptvForQuickPlay(id, meta.title ?? label, meta.year, isMovie, season, episode, rules, () => cancel.cancelled);
+      final iptv = searchIptvForQuickPlay(
+        id,
+        meta.title ?? label,
+        meta.year,
+        isMovie,
+        season,
+        episode,
+        rules,
+        () => cancel.cancelled,
+      );
       final torrents = <Torrent>[];
       final engineErrors = <String, String>{};
       final addonErrors = <String, String>{};
@@ -3376,6 +3604,7 @@ class TorrentPlaybackService {
       'pikpak',
       SeriesSource.localService,
       SeriesSource.addonDirectService,
+      SeriesSource.iptvDirectService,
     };
     return supported.contains(stored);
   }
@@ -3987,15 +4216,107 @@ class TorrentPlaybackService {
         return true; // Cancel already dismissed the overlay.
       }
 
+      if (source.isIptvDirect) {
+        fallbackHint =
+            'Saved IPTV source is unavailable. Falling back to search.';
+        try {
+          final fresh = await IptvSourceSearch.resolvePinned(
+            source,
+            title: meta.title ?? label,
+            year: meta.year,
+            season: meta.season,
+            episode: meta.episode,
+          );
+          if (cancel.cancelled) return true;
+          final freshUrl = fresh?.directUrl;
+          if (fresh != null && freshUrl != null && freshUrl.isNotEmpty) {
+            final rules = await StorageService.getQuickPlayRules(
+              isMovie: meta.contentType == 'movie',
+            );
+            if (cancel.cancelled) return true;
+            var alive = true;
+            if (rules.validateDirectLinks &&
+                shouldPreflightDirectStream(fresh)) {
+              alive = await StreamUrlValidator.isPlayableVideoUrl(
+                freshUrl,
+                minBytes: meta.contentType == 'series'
+                    ? 10 * 1024 * 1024
+                    : StreamUrlValidator.minContentBytes,
+                lenient: true,
+                headers: fresh.httpHeaders,
+              );
+            }
+            if (!alive) continue;
+            overlay.setStage(PlayLoadStage.starting);
+            if (!context.mounted) {
+              closeLoading();
+              return false;
+            }
+            await _launch(
+              context,
+              _Resolved(
+                title: fresh.displayTitle,
+                playUrl: freshUrl,
+                downloadUrls: [freshUrl],
+                fileName: fresh.displayTitle,
+                httpHeaders: fresh.httpHeaders,
+              ),
+              fresh.displayTitle,
+              provider: SeriesSource.iptvDirectService,
+              recoveryProvider: preferredProvider,
+              startupHasRemainingSavedSources: remainingSources.isNotEmpty,
+              meta: meta,
+              sources: [fresh],
+              sourceIndex: 0,
+              seriesFetcher:
+                  seriesFetcherFor(meta: meta, provider: preferredProvider) ??
+                  movieFetcherFor(meta: meta, provider: preferredProvider),
+              overlay: overlay,
+              startupFailoverEnabled: true,
+              onStartupSourcesExhausted: () async {
+                await FailedSavedSource.cleanup(
+                  removePin: () =>
+                      SeriesSourceService.removeSourceEntry(imdbId, source),
+                );
+                if (!context.mounted) return;
+                await _recoverAfterBoundStartupFailure(
+                  context,
+                  imdbId,
+                  remainingSources,
+                  label: label,
+                  meta: meta,
+                  preferredProvider: preferredProvider,
+                );
+              },
+            );
+            return true;
+          }
+        } catch (_) {
+          // A stale/temporarily unavailable catalog falls through to other
+          // pins and normal search without deleting the durable descriptor.
+        }
+        if (!context.mounted) {
+          closeLoading();
+          return false;
+        }
+        continue;
+      }
+
       // Addon-direct pins store provenance, never the expiring URL. Resolve
       // the current movie/episode endpoint now and launch the freshly returned
       // link. A rejected playable link is unpinned and evicted from the cache;
       // recovery moves to the remaining pins, then a fresh search. There is no
       // persistent blacklist: fresh search/manual selection may find it again.
       if (source.isAddonDirect) {
-        logSourceSelection('saved_direct_attempt', index: sourcePosition,
-            season: meta.season, episode: meta.episode,
-            reason: source.bingeGroup?.isNotEmpty == true ? 'binge_group' : 'stream_identity');
+        logSourceSelection(
+          'saved_direct_attempt',
+          index: sourcePosition,
+          season: meta.season,
+          episode: meta.episode,
+          reason: source.bingeGroup?.isNotEmpty == true
+              ? 'binge_group'
+              : 'stream_identity',
+        );
         fallbackHint =
             'Saved direct source is unavailable. Falling back to search.';
         try {
@@ -4029,9 +4350,17 @@ class TorrentPlaybackService {
                 );
           var usingCache = cached != null;
           var fresh = cached ?? await refresh();
-          logSourceSelection('saved_direct_resolved', source: fresh,
-              season: meta.season, episode: meta.episode,
-              reason: fresh == null ? 'no_match' : usingCache ? 'cached_link' : 'addon_refresh');
+          logSourceSelection(
+            'saved_direct_resolved',
+            source: fresh,
+            season: meta.season,
+            episode: meta.episode,
+            reason: fresh == null
+                ? 'no_match'
+                : usingCache
+                ? 'cached_link'
+                : 'addon_refresh',
+          );
           if (cancel.cancelled) return true;
           var freshUrl = fresh?.directUrl;
           if (fresh != null && freshUrl != null && freshUrl.isNotEmpty) {
@@ -4077,8 +4406,11 @@ class TorrentPlaybackService {
               if (!alive) {
                 await SeriesSourceService.removeSourceEntry(imdbId, source);
                 await ResolvedPlaybackLinkCache.remove(
-                  id: imdbId, type: meta.contentType ?? 'series',
-                  season: meta.season, episode: meta.episode, pin: source,
+                  id: imdbId,
+                  type: meta.contentType ?? 'series',
+                  season: meta.season,
+                  episode: meta.episode,
+                  pin: source,
                 );
                 continue;
               }
@@ -4111,7 +4443,8 @@ class TorrentPlaybackService {
               startupFailoverEnabled: true,
               onStartupSourcesExhausted: () async {
                 await FailedSavedSource.cleanup(
-                  removePin: () => SeriesSourceService.removeSourceEntry(imdbId, source),
+                  removePin: () =>
+                      SeriesSourceService.removeSourceEntry(imdbId, source),
                   removeCache: () => ResolvedPlaybackLinkCache.remove(
                     id: imdbId,
                     type: meta.contentType ?? 'series',
@@ -4182,15 +4515,16 @@ class TorrentPlaybackService {
             startupFailoverEnabled: true,
             onStartupSourcesExhausted: () async {
               await FailedSavedSource.cleanup(
-                removePin: () => SeriesSourceService.removeSourceEntry(imdbId, source),
+                removePin: () =>
+                    SeriesSourceService.removeSourceEntry(imdbId, source),
               );
               await _recoverAfterBoundStartupFailure(
-              context,
-              imdbId,
-              remainingSources,
-              label: label,
-              meta: meta,
-              preferredProvider: preferredProvider,
+                context,
+                imdbId,
+                remainingSources,
+                label: label,
+                meta: meta,
+                preferredProvider: preferredProvider,
               );
             },
           );
@@ -4306,15 +4640,16 @@ class TorrentPlaybackService {
           startupFailoverEnabled: true,
           onStartupSourcesExhausted: () async {
             await FailedSavedSource.cleanup(
-              removePin: () => SeriesSourceService.removeSourceEntry(imdbId, source),
+              removePin: () =>
+                  SeriesSourceService.removeSourceEntry(imdbId, source),
             );
             await _recoverAfterBoundStartupFailure(
-            context,
-            imdbId,
-            remainingSources,
-            label: label,
-            meta: meta,
-            preferredProvider: preferredProvider,
+              context,
+              imdbId,
+              remainingSources,
+              label: label,
+              meta: meta,
+              preferredProvider: preferredProvider,
             );
           },
         );
@@ -4475,6 +4810,51 @@ class TorrentPlaybackService {
     }
     if (context.mounted) {
       _snack(context, 'Direct source pinned for fresh-link playback.');
+    }
+    return true;
+  }
+
+  /// Pin an IPTV movie or whole series by its secret-free catalog identity.
+  /// Playback always resolves the current URL from the saved connection.
+  static Future<bool> bindIptvSource(
+    BuildContext context,
+    Torrent torrent, {
+    required String imdbId,
+    required bool isMovie,
+  }) async {
+    if (imdbId.isEmpty) {
+      _snack(context, 'No IMDb match — can\'t pin a source.');
+      return false;
+    }
+    try {
+      await IptvSourceSearch.authorize(torrent);
+    } catch (_) {
+      if (context.mounted) {
+        _snack(context, 'IPTV connection changed. Search sources again.');
+      }
+      return false;
+    }
+    if (!context.mounted) return false;
+    final source = _durableBindingForSource(
+      torrent,
+      SeriesSource.iptvDirectService,
+    );
+    if (source == null || !source.isIptvDirect) {
+      _snack(context, 'This IPTV source cannot be refreshed from its catalog.');
+      return false;
+    }
+    if (isMovie) {
+      await SeriesSourceService.setSources(imdbId, [source]);
+    } else {
+      await SeriesSourceService.addSource(imdbId, source);
+    }
+    if (context.mounted) {
+      _snack(
+        context,
+        isMovie
+            ? 'IPTV movie source pinned.'
+            : 'IPTV series source pinned for every episode.',
+      );
     }
     return true;
   }
@@ -4916,7 +5296,11 @@ class TorrentPlaybackService {
     required PlaybackMeta meta,
     String? provider,
   }) async {
-    logSourceSelection('next_episode_start', season: meta.season, episode: meta.episode);
+    logSourceSelection(
+      'next_episode_start',
+      season: meta.season,
+      episode: meta.episode,
+    );
     final label = meta.title ?? '';
     if (provider != null) {
       await playFromSelection(
@@ -5055,6 +5439,11 @@ class TorrentPlaybackService {
     if (configured.isEmpty) return null;
     return def ?? configured.first;
   }
+
+  static bool _isNonDebridLaunchProvider(String provider) =>
+      provider == SeriesSource.localService ||
+      provider == SeriesSource.addonDirectService ||
+      provider == SeriesSource.iptvDirectService;
 
   /// In-player Sources-switcher resolver for launches that didn't go through a
   /// debrid provider (direct addon streams). Direct streams resolve without
@@ -5215,6 +5604,29 @@ class TorrentPlaybackService {
   ) {
     final now = DateTime.now().millisecondsSinceEpoch;
     if (source.streamType == StreamType.directUrl) {
+      if (IptvSourceSearch.owns(source)) {
+        final playlistId = source.iptvPlaylistId;
+        final catalogType = source.iptvCatalogType;
+        final entryKey = source.iptvEntryKey;
+        if (playlistId == null ||
+            playlistId.isEmpty ||
+            catalogType == null ||
+            catalogType.isEmpty ||
+            entryKey == null ||
+            entryKey.isEmpty) {
+          return null;
+        }
+        return SeriesSource(
+          torrentHash: '',
+          torrentName: source.name,
+          debridService: SeriesSource.iptvDirectService,
+          debridTorrentId: '',
+          boundAt: now,
+          iptvPlaylistId: playlistId,
+          iptvCatalogType: catalogType,
+          iptvEntryKey: entryKey,
+        );
+      }
       final addonId = source.stremioAddonId;
       final addonKey = source.stremioAddonKey;
       final streamKey = source.stremioStreamKey;
@@ -5242,7 +5654,8 @@ class TorrentPlaybackService {
     if (source.streamType != StreamType.torrent ||
         source.infohash.isEmpty ||
         provider == SeriesSource.localService ||
-        provider == SeriesSource.addonDirectService) {
+        provider == SeriesSource.addonDirectService ||
+        provider == SeriesSource.iptvDirectService) {
       return null;
     }
     return SeriesSource(
@@ -5289,9 +5702,16 @@ class TorrentPlaybackService {
           (sources != null && sourceIndex >= 0 && sourceIndex < sources.length)
           ? sources[sourceIndex]
           : null;
-      logSourceSelection('launch_candidate', source: winner, index: sourceIndex,
-          season: meta?.season, episode: meta?.episode,
-          reason: startupFailoverEnabled ? 'automatic_with_fallback' : 'explicit_or_saved');
+      logSourceSelection(
+        'launch_candidate',
+        source: winner,
+        index: sourceIndex,
+        season: meta?.season,
+        episode: meta?.episode,
+        reason: startupFailoverEnabled
+            ? 'automatic_with_fallback'
+            : 'explicit_or_saved',
+      );
       String? subtitleLine;
       if (r.hasPlaylist) {
         subtitleLine = '${r.playlist!.length} files';
@@ -5328,9 +5748,7 @@ class TorrentPlaybackService {
       // Snapshot the provider used for any fetched torrent candidates. Native
       // startup must know it before recovery so PikPak's acquisition cap also
       // applies when the initial saved source is a direct link.
-      final resolverProvider =
-          provider == SeriesSource.localService ||
-              provider == SeriesSource.addonDirectService
+      final resolverProvider = _isNonDebridLaunchProvider(provider)
           ? recoveryProvider ?? await _defaultConfiguredProvider()
           : provider;
       if (!context.mounted) return;
@@ -5357,9 +5775,7 @@ class TorrentPlaybackService {
             : null,
         startupFailoverEnabled: startupFailoverEnabled,
         startupResolverProvider: resolverProvider,
-        onStremioSourceCommitted:
-            provider == SeriesSource.localService ||
-                provider == SeriesSource.addonDirectService
+        onStremioSourceCommitted: _isNonDebridLaunchProvider(provider)
             ? _lazySourceCommitter(meta, preferredProvider: resolverProvider)
             : _validatedLaunchCommitter(provider, meta),
         onStartupSourcesExhausted: onStartupSourcesExhausted,
@@ -5375,11 +5791,7 @@ class TorrentPlaybackService {
       final nextEpisodeHandler = _nextEpisodeHandlerFor(
         context,
         meta,
-        provider:
-            provider == SeriesSource.localService ||
-                provider == SeriesSource.addonDirectService
-            ? null
-            : provider,
+        provider: _isNonDebridLaunchProvider(provider) ? null : provider,
       );
       loaderHandedToLauncher = overlay != null;
       await VideoPlayerLauncher.push(
@@ -5667,13 +6079,18 @@ class TorrentPlaybackService {
         initialCommitPending = false;
       }
       final commit = tail.then((_) async {
-        logSourceSelection('validated_source', source: t,
-            season: meta?.season, episode: meta?.episode,
-            reason: isInitial ? 'initial_playback' : 'player_switch');
+        logSourceSelection(
+          'validated_source',
+          source: t,
+          season: meta?.season,
+          episode: meta?.episode,
+          reason: isInitial ? 'initial_playback' : 'player_switch',
+        );
         await _cacheValidatedDirect(meta, t);
         var bindingProvider = provider;
         if (t.streamType == StreamType.torrent &&
-            bindingProvider == SeriesSource.addonDirectService) {
+            (bindingProvider == SeriesSource.addonDirectService ||
+                bindingProvider == SeriesSource.iptvDirectService)) {
           bindingProvider =
               await _defaultConfiguredProvider() ?? bindingProvider;
         }
@@ -5713,7 +6130,8 @@ class TorrentPlaybackService {
           await _rebindOnSourceSwitch(meta, t, SeriesSource.addonDirectService);
           return;
         }
-        final provider = preferredProvider ?? await _defaultConfiguredProvider();
+        final provider =
+            preferredProvider ?? await _defaultConfiguredProvider();
         if (provider == null) return;
         await _rebindOnSourceSwitch(meta, t, provider);
       });
@@ -7202,6 +7620,8 @@ class TorrentPlaybackService {
         return 'On-device';
       case SeriesSource.addonDirectService:
         return 'Direct addon';
+      case SeriesSource.iptvDirectService:
+        return 'IPTV';
       case 'stream':
         return 'Stream';
       default:
@@ -7228,6 +7648,8 @@ class TorrentPlaybackService {
         return 'TV';
       case SeriesSource.addonDirectService:
         return 'DL';
+      case SeriesSource.iptvDirectService:
+        return 'TV';
       default:
         return provider.isEmpty ? '·' : provider.substring(0, 1).toUpperCase();
     }

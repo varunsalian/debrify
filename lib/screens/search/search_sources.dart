@@ -117,6 +117,22 @@ class _SourcesScreenState extends State<_SourcesScreen> {
 
   void _updateSelectedDirect() {
     _selectedDirect = null;
+    if (_bound.isNotEmpty && _bound.first.isIptvDirect) {
+      final pin = _bound.first;
+      for (final candidate in _torrents) {
+        if (IptvSourceSearch.owns(candidate) &&
+            candidate.iptvPlaylistId == pin.iptvPlaylistId &&
+            candidate.iptvCatalogType == pin.iptvCatalogType &&
+            candidate.iptvEntryKey == pin.iptvEntryKey) {
+          _selectedDirect = candidate;
+          break;
+        }
+      }
+      _logPickerSelection('match', {
+        'reason': _selectedDirect == null ? 'iptv_entry_not_found' : 'matched',
+      });
+      return;
+    }
     if (_bound.isEmpty || !_bound.first.isAddonDirect) {
       _logPickerSelection('match', {
         'reason': _bound.isEmpty ? 'no_saved_source' : 'primary_not_direct',
@@ -357,6 +373,13 @@ class _SourcesScreenState extends State<_SourcesScreen> {
   bool get _isMovie => !widget.selection.isSeries;
   SeriesSource? _bindingFor(Torrent torrent) {
     for (final source in _bound) {
+      if (IptvSourceSearch.owns(torrent) &&
+          source.isIptvDirect &&
+          source.iptvPlaylistId == torrent.iptvPlaylistId &&
+          source.iptvCatalogType == torrent.iptvCatalogType &&
+          source.iptvEntryKey == torrent.iptvEntryKey) {
+        return source;
+      }
       if (torrent.isDirectStream &&
           source.matchesAddonDirect(
             candidateAddonKey: torrent.stremioAddonKey,
@@ -561,7 +584,11 @@ class _SourcesScreenState extends State<_SourcesScreen> {
     // season/series pack. Movies are single files, so they're left alone.
     if (sel.isSeries && sel.episode == null) {
       filtered = filtered
-          .where((torrent) => torrent.streamType == StreamType.torrent)
+          .where(
+            (torrent) =>
+                torrent.streamType == StreamType.torrent ||
+                (widget.bindMode && IptvSourceSearch.owns(torrent)),
+          )
           .toList(growable: false);
     }
 
@@ -680,7 +707,7 @@ class _SourcesScreenState extends State<_SourcesScreen> {
       // torrent-only, so addon direct links never appeared in the Search tab's
       // Sources list even though Home showed them.
       final iptvSearch =
-          !_keywordMode && widget.searchOverride == null && !widget.bindMode
+          !_keywordMode && widget.searchOverride == null
           ? IptvSourceSearch.search(
               sel,
               shouldContinue: () => mounted && token == _searchToken && _searching,
@@ -1068,12 +1095,6 @@ class _SourcesScreenState extends State<_SourcesScreen> {
   }
 
   Future<void> _pin(Torrent t) async {
-    if (IptvSourceSearch.owns(t)) {
-      _snack(
-        'IPTV sources are searched per movie or episode and cannot be pinned.',
-      );
-      return;
-    }
     if (t.isExternalStream) {
       _snack("External links can't be pinned as a playback source.");
       return;
@@ -1081,7 +1102,14 @@ class _SourcesScreenState extends State<_SourcesScreen> {
     if (_pinning) return; // guard concurrent binds (double-tap on TV)
     _pinning = true;
     try {
-      final ok = t.isDirectStream
+      final ok = IptvSourceSearch.owns(t)
+          ? await TorrentPlaybackService.bindIptvSource(
+              context,
+              t,
+              imdbId: _imdbId,
+              isMovie: _isMovie,
+            )
+          : t.isDirectStream
           ? await TorrentPlaybackService.bindDirectSource(
               context,
               t,
@@ -1240,6 +1268,8 @@ class _SourcesScreenState extends State<_SourcesScreen> {
                 subtitle: Text(
                   binding != null
                       ? 'Stop refreshing this stream for playback'
+                      : IptvSourceSearch.owns(t)
+                      ? 'Resolve it from this IPTV catalog when played'
                       : 'Re-fetch a fresh link from this addon when played',
                   style: TextStyle(color: app.fade(app.core.tx, 0.5)),
                 ),

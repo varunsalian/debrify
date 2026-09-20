@@ -219,7 +219,11 @@ class SourcePriority {
         forSettings: false,
       );
       for (final playlist in playlists.where(
-        (p) => p.isXtreamCodes && !p.credentialsRedacted,
+        (p) =>
+            !p.credentialsRedacted &&
+            !p.isVirtual &&
+            !p.isLocalFile &&
+            (p.isXtreamCodes || p.url.isNotEmpty),
       )) {
         final key = IptvSourceSearch.keyFor(playlist);
         if (seen.add(key)) {

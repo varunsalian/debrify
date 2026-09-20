@@ -215,11 +215,17 @@ final class WebDavSyncIdentityMaps {
     return rewritten;
   }
 
-  String seriesBindingToWire(String key) =>
-      _rewriteSeriesBinding(key, localResourceBindingToCircle);
+  String seriesBindingToWire(String key) => _rewriteSeriesBinding(
+    key,
+    directReplacements: localResourceBindingToCircle,
+    iptvReplacements: localToCircleResources,
+  );
 
-  String seriesBindingToLocal(String key) =>
-      _rewriteSeriesBinding(key, circleResourceBindingToLocal);
+  String seriesBindingToLocal(String key) => _rewriteSeriesBinding(
+    key,
+    directReplacements: circleResourceBindingToLocal,
+    iptvReplacements: circleToLocalResources,
+  );
 
   void assertContainsNoLocalIds(Object? value) {
     // Inspect the JSON-shaped object directly. Serializing the complete graph
@@ -314,18 +320,30 @@ final class WebDavSyncIdentityMaps {
       sha256.convert(utf8.encode(value)).toString();
 
   static String _rewriteSeriesBinding(
-    String value,
-    Map<String, String> replacements,
-  ) {
-    const prefix = 'direct:';
-    if (!value.startsWith(prefix)) return value;
-    final separator = value.indexOf(':', prefix.length);
-    if (separator < 0) return value;
-    final binding = value.substring(prefix.length, separator);
-    final replacement = replacements[binding];
-    return replacement == null
-        ? value
-        : '$prefix$replacement${value.substring(separator)}';
+    String value, {
+    required Map<String, String> directReplacements,
+    required Map<String, String> iptvReplacements,
+  }) {
+    const directPrefix = 'direct:';
+    if (value.startsWith(directPrefix)) {
+      final separator = value.indexOf(':', directPrefix.length);
+      if (separator < 0) return value;
+      final binding = value.substring(directPrefix.length, separator);
+      final replacement = directReplacements[binding];
+      return replacement == null
+          ? value
+          : '$directPrefix$replacement${value.substring(separator)}';
+    }
+    const iptvPrefix = 'iptv:';
+    if (value.startsWith(iptvPrefix)) {
+      for (final entry in iptvReplacements.entries) {
+        final localPrefix = '$iptvPrefix${entry.key}:';
+        if (value.startsWith(localPrefix)) {
+          return '$iptvPrefix${entry.value}:${value.substring(localPrefix.length)}';
+        }
+      }
+    }
+    return value;
   }
 
   static Object? _rewrite(Object? value, _IdentityReplacements replacements) {
@@ -1702,6 +1720,11 @@ abstract final class WebDavSyncHotMerge {
     }
     if (service == 'stremio_direct') {
       return 'direct:${source['addonKey'] ?? ''}:${source['streamKey'] ?? ''}';
+    }
+    if (service == 'iptv_direct') {
+      return 'iptv:${source['iptvPlaylistId'] ?? ''}:'
+          '${source['iptvCatalogType'] ?? ''}:'
+          '${source['iptvEntryKey'] ?? ''}';
     }
     return 'cloud:$service:${source['cloudSourceKind'] ?? ''}:'
         '${source['debridTorrentId'] ?? ''}';

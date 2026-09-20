@@ -11,6 +11,7 @@ import 'iptv_catalog_db.dart';
 import 'iptv_catalog_key.dart';
 import 'profiles/profile_async_authorization.dart';
 import 'profiles/profile_runtime.dart';
+import 'series_source_service.dart';
 import 'storage_service.dart';
 import 'xtream_codes_service.dart';
 
@@ -25,6 +26,11 @@ class IptvSourceResult {
 /// Manual source discovery only. Never fetches or refreshes whole catalogs.
 class IptvSourceSearch {
   static final _authorizations = Expando<Future<void> Function()>();
+  static final _episodePatterns = <RegExp>[
+    RegExp(r'(?<!\d)[Ss](\d{1,2})[\s._-]*[Ee](?:[Pp])?(\d{1,3})(?!\d)'),
+    RegExp(r'(?<!\d)(\d{1,2})[xX](\d{1,3})(?!\d)'),
+    RegExp(r'\b[Ss]eason\s*(\d{1,2})\s*[Ee]pisode\s*(\d{1,3})\b'),
+  ];
 
   static bool owns(Torrent source) => source.source.startsWith('iptv:');
 
@@ -40,6 +46,153 @@ class IptvSourceSearch {
       'iptv:${playlist.id.toLowerCase()}';
 
   static String normalize(String title) => IptvTitle.comparisonKey(title);
+
+  static ({int season, int episode, int start})? _episodeOf(String value) {
+    for (final pattern in _episodePatterns) {
+      final match = pattern.firstMatch(value);
+      if (match == null) continue;
+      final season = int.tryParse(match.group(1)!);
+      final episode = int.tryParse(match.group(2)!);
+      if (season != null && episode != null) {
+        return (season: season, episode: episode, start: match.start);
+      }
+    }
+    return null;
+  }
+
+  static ({int season, int episode, int start})? _episodeOfChannel(
+    IptvChannel channel,
+  ) {
+    final named = _episodeOf(channel.name);
+    if (named != null) return named;
+    const seasonKeys = ['season', 'season-number', 'season_number'];
+    const episodeKeys = ['episode', 'episode-number', 'episode_number'];
+    int? firstInt(List<String> keys) {
+      for (final key in keys) {
+        final value = int.tryParse(channel.attributes[key] ?? '');
+        if (value != null) return value;
+      }
+      return null;
+    }
+
+    final season = firstInt(seasonKeys);
+    final episode = firstInt(episodeKeys);
+    return season == null || episode == null
+        ? null
+        : (season: season, episode: episode, start: -1);
+  }
+
+  static String _genericSeriesStem(IptvChannel channel) {
+    final episode = _episodeOf(channel.name);
+    if (episode != null) {
+      final stem = channel.name.substring(0, episode.start).trim();
+      if (stem.isNotEmpty) return stem;
+    }
+    for (final key in const [
+      'series-name',
+      'series_name',
+      'series-title',
+      'series_title',
+      'show-title',
+      'show_title',
+    ]) {
+      final value = channel.attributes[key]?.trim();
+      if (value != null && value.isNotEmpty) return value;
+    }
+    return channel.group?.trim() ?? '';
+  }
+
+  static bool _genericSeriesMatches(
+    IptvChannel channel,
+    AdvancedSearchSelection selection,
+  ) {
+    final parsed = _episodeOfChannel(channel);
+    if (parsed == null) return false;
+    if (selection.season != null && parsed.season != selection.season) {
+      return false;
+    }
+    if (selection.episode != null && parsed.episode != selection.episode) {
+      return false;
+    }
+    final stem = _genericSeriesStem(channel);
+    return matches(stem, selection.title, selection.year) ||
+        (channel.group != null &&
+            matches(channel.group!, selection.title, selection.year));
+  }
+
+  static String _opaqueKey(List<Object?> parts) =>
+      sha256.convert(utf8.encode(jsonEncode(parts))).toString();
+
+  static String _genericStreamHint(String url) {
+    final uri = Uri.tryParse(url);
+    final lastPathSegment = uri == null || uri.pathSegments.isEmpty
+        ? ''
+        : uri.pathSegments.last;
+    // Queries and preceding path components commonly carry rotating tokens or
+    // username/password pairs. The final stream/file id is the useful stable
+    // discriminator, and only its digest enters the synced pin.
+    return _opaqueKey([lastPathSegment]);
+  }
+
+  /// Best-effort identity for one generic-M3U rendition of a series. The
+  /// title/group pair identifies the show; this discriminator keeps two
+  /// language/quality feeds of that show separate when the playlist exposes a
+  /// stable series attribute or route. Query strings and all but the first
+  /// path segment are excluded because they commonly contain credentials.
+  static String _genericSeriesVariantHint(IptvChannel channel) {
+    final attributes = <String, String>{};
+    for (final key in const [
+      'series-id',
+      'series_id',
+      'series-key',
+      'series_key',
+      'language',
+      'lang',
+      'quality',
+      'resolution',
+    ]) {
+      final value = channel.attributes[key]?.trim();
+      if (value != null && value.isNotEmpty) attributes[key] = value;
+    }
+    final uri = Uri.tryParse(channel.url);
+    final host = uri?.host.toLowerCase() ?? '';
+    final route = uri == null || uri.pathSegments.length < 2
+        ? ''
+        : uri.pathSegments.first.toLowerCase();
+    final fileName = uri == null || uri.pathSegments.isEmpty
+        ? ''
+        : uri.pathSegments.last;
+    final episode = _episodeOf(fileName);
+    final filePrefix = episode == null
+        ? ''
+        : normalize(fileName.substring(0, episode.start));
+    return _opaqueKey([host, route, filePrefix, attributes]);
+  }
+
+  static String _channelEntryKey(
+    IptvPlaylist playlist,
+    IptvChannel channel, {
+    required bool series,
+  }) {
+    if (playlist.isXtreamCodes) {
+      final id = channel.attributes[series ? 'series_id' : 'stream_id'];
+      if (id != null && id.isNotEmpty) {
+        return '${series ? 'series' : 'vod'}:$id';
+      }
+    }
+    if (series) {
+      return 'm3u-series:${_opaqueKey([normalize(_genericSeriesStem(channel)), normalize(channel.group ?? ''), _genericSeriesVariantHint(channel)])}';
+    }
+    final attributes = channel.attributes.entries.toList()
+      ..sort((a, b) => a.key.compareTo(b.key));
+    return 'm3u-vod:${_opaqueKey([
+      normalize(channel.name),
+      normalize(channel.group ?? ''),
+      channel.duration,
+      _genericStreamHint(channel.url),
+      {for (final entry in attributes) entry.key: entry.value},
+    ])}';
+  }
 
   static bool matches(String candidate, String title, String? year) {
     final firstYear = RegExp(r'^(\d{4})(?:\D|$)').firstMatch(year ?? '');
@@ -64,7 +217,7 @@ class IptvSourceSearch {
       final playlists = await StorageService.getIptvPlaylists(
         forSettings: false,
       );
-      if (!playlists.any((p) => p.isXtreamCodes && !p.credentialsRedacted)) {
+      if (!playlists.any(_eligiblePlaylist)) {
         return const [];
       }
       await IptvCatalogDb.open();
@@ -72,10 +225,7 @@ class IptvSourceSearch {
       // Small batches bound episode-info traffic on devices with many providers.
       for (var start = 0; start < playlists.length; start += 3) {
         if (shouldContinue?.call() == false) return const [];
-        final batch = playlists
-            .skip(start)
-            .take(3)
-            .where((p) => p.isXtreamCodes && !p.credentialsRedacted);
+        final batch = playlists.skip(start).take(3).where(_eligiblePlaylist);
         await Future.wait(
           batch.map((playlist) async {
             final result = await _playlist(playlist, selection, shouldContinue);
@@ -96,11 +246,54 @@ class IptvSourceSearch {
     }
   }
 
+  static bool _eligiblePlaylist(IptvPlaylist playlist) =>
+      !playlist.credentialsRedacted &&
+      !playlist.isVirtual &&
+      !playlist.isLocalFile &&
+      (playlist.isXtreamCodes || playlist.url.isNotEmpty);
+
+  static Future<({IptvPlaylist playlist, Future<void> Function() check})?>
+  _currentPlaylist(String playlistId) async {
+    final playlists = await StorageService.getIptvPlaylists(forSettings: false);
+    final matches = playlists.where(
+      (playlist) => playlist.id == playlistId && _eligiblePlaylist(playlist),
+    );
+    if (matches.isEmpty) return null;
+    final playlist = matches.first;
+    final scope = ProfileRuntime.scope.value;
+    final capability = await ProfileAsyncAuthorization.capture(
+      ProfileFeature.iptv,
+      resourceId: playlist.connectionResourceId,
+      resourceAuthorizationRevision: playlist.connectionResourceRevision,
+    );
+    Future<void> check() async {
+      if (ProfileRuntime.scope.value != scope) {
+        throw StateError('Profile changed');
+      }
+      if (capability != null) await capability.run(() async {});
+      final current = await StorageService.getIptvPlaylists(forSettings: false);
+      final unchanged = current.any((candidate) {
+        if (candidate.id != playlist.id || candidate.credentialsRedacted) {
+          return false;
+        }
+        return playlist.isXtreamCodes
+            ? candidate.serverUrl == playlist.serverUrl &&
+                  candidate.username == playlist.username &&
+                  candidate.password == playlist.password
+            : candidate.url == playlist.url;
+      });
+      if (!unchanged) throw StateError('IPTV connection changed');
+    }
+
+    return (playlist: playlist, check: check);
+  }
+
   static Future<IptvSourceResult> _playlist(
     IptvPlaylist playlist,
     AdvancedSearchSelection selection,
-    bool Function()? shouldContinue,
-  ) async {
+    bool Function()? shouldContinue, {
+    String? desiredEntryKey,
+  }) async {
     final key = keyFor(playlist);
     IptvSourceResult result(
       String message, [
@@ -108,29 +301,9 @@ class IptvSourceSearch {
     ]) => IptvSourceResult(key, playlist.name, message, torrents);
     try {
       final scope = ProfileRuntime.scope.value;
-      final capability = await ProfileAsyncAuthorization.capture(
-        ProfileFeature.iptv,
-        resourceId: playlist.connectionResourceId,
-        resourceAuthorizationRevision: playlist.connectionResourceRevision,
-      );
-      Future<void> check() async {
-        if (ProfileRuntime.scope.value != scope) {
-          throw StateError('Profile changed');
-        }
-        if (capability != null) await capability.run(() async {});
-        final current = await StorageService.getIptvPlaylists(
-          forSettings: false,
-        );
-        if (!current.any(
-          (p) =>
-              p.id == playlist.id &&
-              p.serverUrl == playlist.serverUrl &&
-              p.username == playlist.username &&
-              p.password == playlist.password,
-        )) {
-          throw StateError('IPTV connection changed');
-        }
-      }
+      final current = await _currentPlaylist(playlist.id);
+      if (current == null) return result('IPTV source unavailable.');
+      final check = current.check;
 
       final type = selection.isSeries ? 'series' : 'vod';
       final snapshot = IptvCatalogDb.snapshot(
@@ -141,33 +314,68 @@ class IptvSourceSearch {
           'Catalog not loaded. Open IPTV → ${playlist.name} → ${selection.isSeries ? 'Series' : 'Movies'} once to download it.',
         );
       }
-      if (selection.isSeries &&
-          (selection.season == null || selection.episode == null)) {
-        return result('Select a specific episode to search this playlist.');
-      }
       final words = normalize(selection.title).split(' ')
         ..sort((a, b) => b.length.compareTo(a.length));
       if (words.first.isEmpty) return result('No matching sources.');
       final candidates = <IptvChannel>[];
-      // Read bounded pages; hidden IPTV categories remain hidden here too.
-      for (var offset = 0; ; offset += 200) {
-        final page = snapshot.page(
-          offset: offset,
-          limit: 200,
-          search: words.first,
-          live: false,
-        );
-        candidates.addAll(
-          page.where((c) => matches(c.name, selection.title, selection.year)),
-        );
-        if (page.length < 200) break;
-        await Future<void>.delayed(Duration.zero);
-        if (ProfileRuntime.scope.value != scope ||
-            shouldContinue?.call() == false) {
-          throw StateError('Profile changed');
+      bool accepts(IptvChannel channel, {required bool requireTitle}) {
+        if (desiredEntryKey != null &&
+            _channelEntryKey(playlist, channel, series: selection.isSeries) !=
+                desiredEntryKey) {
+          return false;
+        }
+        if (selection.isSeries && !playlist.isXtreamCodes) {
+          final parsed = _episodeOfChannel(channel);
+          if (parsed == null ||
+              (selection.season != null && parsed.season != selection.season) ||
+              (selection.episode != null &&
+                  parsed.episode != selection.episode)) {
+            return false;
+          }
+          return !requireTitle || _genericSeriesMatches(channel, selection);
+        }
+        return !requireTitle ||
+            matches(channel.name, selection.title, selection.year);
+      }
+
+      Future<void> collect({
+        required String? search,
+        required bool requireTitle,
+      }) async {
+        // Read bounded pages; hidden IPTV categories remain hidden here too.
+        for (var offset = 0; ; offset += 200) {
+          final page = snapshot.page(
+            offset: offset,
+            limit: 200,
+            search: search,
+            // Generic M3U providers often mark VOD rows EXTINF:-1 just like
+            // live channels. Exact metadata/episode matching below is the safer
+            // discriminator; Xtream has a real content-type catalog.
+            live: playlist.isXtreamCodes ? false : null,
+          );
+          candidates.addAll(
+            page.where(
+              (channel) => accepts(channel, requireTitle: requireTitle),
+            ),
+          );
+          if (page.length < 200) break;
+          await Future<void>.delayed(Duration.zero);
+          if (ProfileRuntime.scope.value != scope ||
+              shouldContinue?.call() == false) {
+            throw StateError('Profile changed');
+          }
         }
       }
+
+      await collect(search: words.first, requireTitle: true);
+      // A durable pin owns a provider ID. Providers may rename/localize the
+      // display title between catalog refreshes, so fall back to the stable ID
+      // instead of invalidating an otherwise unchanged pin.
+      if (candidates.isEmpty && desiredEntryKey != null) {
+        await collect(search: null, requireTitle: false);
+      }
       final torrents = <Torrent>[];
+      final emittedSeriesKeys = <String>{};
       var lookupFailed = false;
       // One lookup at a time bounds provider traffic without silently dropping
       // language/quality variants after the first three series entries.
@@ -176,8 +384,23 @@ class IptvSourceSearch {
         if (ProfileRuntime.scope.value != scope) {
           return result('Search canceled.');
         }
+        final entryKey = _channelEntryKey(
+          playlist,
+          candidate,
+          series: selection.isSeries,
+        );
+        if (desiredEntryKey != null && entryKey != desiredEntryKey) continue;
+        if (selection.isSeries &&
+            selection.season == null &&
+            selection.episode == null &&
+            !emittedSeriesKeys.add(entryKey)) {
+          continue;
+        }
         var url = candidate.url;
-        if (selection.isSeries) {
+        if (selection.isSeries &&
+            playlist.isXtreamCodes &&
+            selection.season != null &&
+            selection.episode != null) {
           try {
             final id = candidate.attributes['series_id'];
             if (id == null) continue;
@@ -207,18 +430,23 @@ class IptvSourceSearch {
             lookupFailed = true;
             continue;
           }
+        } else if (selection.isSeries && playlist.isXtreamCodes) {
+          // Bind-mode whole-series rows carry only durable catalog identity.
+          url = '';
         }
-        final uri = Uri.tryParse(url);
-        if (uri == null ||
-            !{'http', 'https'}.contains(uri.scheme) ||
-            uri.host.isEmpty) {
-          continue;
+        if (url.isNotEmpty) {
+          final uri = Uri.tryParse(url);
+          if (uri == null ||
+              !{'http', 'https'}.contains(uri.scheme) ||
+              uri.host.isEmpty) {
+            continue;
+          }
         }
         final torrent = Torrent(
           rowid: 0,
           // Stable, playlist-scoped identity without exposing URL credentials.
           infohash:
-              'iptv_${sha256.convert(utf8.encode(jsonEncode([key, url, candidate.playbackHeaders])))}',
+              'iptv_${sha256.convert(utf8.encode(jsonEncode([key, entryKey, url, candidate.playbackHeaders])))}',
           name: candidate.name,
           sizeBytes: 0,
           createdUnix: 0,
@@ -232,9 +460,14 @@ class IptvSourceSearch {
           httpHeaders: candidate.playbackHeaders,
           hasRealInfoHash: false,
           addonDisplayName: playlist.name,
-          coverageType: selection.isSeries ? 'singleEpisode' : null,
+          iptvPlaylistId: playlist.id,
+          iptvCatalogType: type,
+          iptvEntryKey: entryKey,
+          coverageType: selection.isSeries && selection.season != null
+              ? 'singleEpisode'
+              : null,
           seasonNumber: selection.season,
-          episodeIdentifier: selection.isSeries
+          episodeIdentifier: selection.isSeries && selection.season != null
               ? 'S${selection.season}E${selection.episode}'
               : null,
         );
@@ -253,5 +486,44 @@ class IptvSourceSearch {
     } catch (_) {
       return result('IPTV source unavailable. Try searching again.');
     }
+  }
+
+  /// Resolve a durable IPTV pin against the currently saved connection and
+  /// current cached catalog. The pin never stores a provider URL or password;
+  /// this produces a normal, short-lived authorized [Torrent] for the players.
+  static Future<Torrent?> resolvePinned(
+    SeriesSource source, {
+    required String title,
+    String? year,
+    int? season,
+    int? episode,
+  }) async {
+    if (!source.isIptvDirect) return null;
+    final isSeries = source.iptvCatalogType == 'series';
+    if (isSeries && (season == null || episode == null)) return null;
+    try {
+      await IptvCatalogDb.open();
+      final current = await _currentPlaylist(source.iptvPlaylistId!);
+      if (current == null) return null;
+      final result = await _playlist(
+        current.playlist,
+        AdvancedSearchSelection(
+          imdbId: 'iptv-pin',
+          isSeries: isSeries,
+          title: title,
+          year: year,
+          season: season,
+          episode: episode,
+        ),
+        null,
+        desiredEntryKey: source.iptvEntryKey,
+      );
+      for (final candidate in result.torrents) {
+        if (candidate.iptvEntryKey == source.iptvEntryKey) return candidate;
+      }
+    } catch (_) {
+      // Saved-source resolution is fail-soft; normal search remains fallback.
+    }
+    return null;
   }
 }

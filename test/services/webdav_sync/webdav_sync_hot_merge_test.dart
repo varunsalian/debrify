@@ -999,24 +999,37 @@ void main() {
   });
 
   test('all collection layouts and migration checkpoint survive sync', () {
-    for (final style in ['spotlight', 'grid', 'gallery', 'filmstrip', 'journal']) {
+    for (final style in [
+      'spotlight',
+      'grid',
+      'gallery',
+      'filmstrip',
+      'journal',
+    ]) {
       final built = _buildWithPreferences(maps, 'device-a', {
         'tv_collection_list_style': style,
         'tv_collection_spotlight_alpha_migrated_v1': true,
       }, now: 100);
       final merged = WebDavSyncHotMerge.merge(
-        local: _document(device: 'device-b', scalarTime: 50,
-            scalars: {'tv_collection_list_style': 'spotlight'}),
+        local: _document(
+          device: 'device-b',
+          scalarTime: 50,
+          scalars: {'tv_collection_list_style': 'spotlight'},
+        ),
         peers: [built.document],
         tombstoneDocuments: const [],
         nowMs: 200,
       ).document;
       final values = WebDavSyncHotMerge.materializePreferences(
-        document: merged, identityMaps: maps);
+        document: merged,
+        identityMaps: maps,
+      );
       expect(values['tv_collection_list_style'], style);
       expect(values['tv_collection_spotlight_alpha_migrated_v1'], true);
-      expect(ProfileAppearancePreferences.keys,
-          isNot(contains('tv_collection_list_style')));
+      expect(
+        ProfileAppearancePreferences.keys,
+        isNot(contains('tv_collection_list_style')),
+      );
       expect(ProfileAppearancePreferences.keys, contains('tv_home_style'));
     }
   });
@@ -1027,17 +1040,24 @@ void main() {
         'home_hide_card_titles_and_ratings': hidden,
       }, now: 100);
       final merged = WebDavSyncHotMerge.merge(
-        local: _document(device: 'device-b', scalarTime: 50,
-            scalars: {'home_hide_card_titles_and_ratings': !hidden}),
+        local: _document(
+          device: 'device-b',
+          scalarTime: 50,
+          scalars: {'home_hide_card_titles_and_ratings': !hidden},
+        ),
         peers: [built.document],
         tombstoneDocuments: const [],
         nowMs: 200,
       ).document;
       final values = WebDavSyncHotMerge.materializePreferences(
-        document: merged, identityMaps: maps);
+        document: merged,
+        identityMaps: maps,
+      );
       expect(values['home_hide_card_titles_and_ratings'], hidden);
-      expect(ProfileAppearancePreferences.keys,
-          isNot(contains('home_hide_card_titles_and_ratings')));
+      expect(
+        ProfileAppearancePreferences.keys,
+        isNot(contains('home_hide_card_titles_and_ratings')),
+      );
     }
   });
 
@@ -1053,14 +1073,19 @@ void main() {
         for (final key in keys) key: enabled,
       }, now: 100);
       final merged = WebDavSyncHotMerge.merge(
-        local: _document(device: 'device-b', scalarTime: 50,
-            scalars: {for (final key in keys) key: !enabled}),
+        local: _document(
+          device: 'device-b',
+          scalarTime: 50,
+          scalars: {for (final key in keys) key: !enabled},
+        ),
         peers: [built.document],
         tombstoneDocuments: const [],
         nowMs: 200,
       ).document;
       final values = WebDavSyncHotMerge.materializePreferences(
-        document: merged, identityMaps: maps);
+        document: merged,
+        identityMaps: maps,
+      );
       for (final key in keys) {
         expect(values[key], enabled, reason: key);
         expect(WebDavSyncScheduler.admitsLocalChangeKey(key), isTrue);
@@ -1612,6 +1637,88 @@ void main() {
     expect(
       WebDavSyncRecordKey.decodePart(projected.split('/').last),
       'direct:${digest('resource-circle')}:stream-profile',
+    );
+  });
+
+  test('IPTV pins keep distinct circle-mapped catalog identities', () {
+    final mapsA = WebDavSyncIdentityMaps(
+      circleToLocalProfiles: const <String, String>{
+        'profile-circle': 'local-profile-a',
+      },
+      circleToLocalResources: const <String, String>{
+        'resource-circle': 'local-iptv-resource-a',
+      },
+    );
+    final mapsB = WebDavSyncIdentityMaps(
+      circleToLocalProfiles: const <String, String>{
+        'profile-circle': 'local-profile-b',
+      },
+      circleToLocalResources: const <String, String>{
+        'resource-circle': 'local-iptv-resource-b',
+      },
+    );
+    Map<String, Object?> preferences(String playlistId) => <String, Object?>{
+      '${WebDavSyncHotMerge.seriesSourcePrefix}tt123': jsonEncode(<Object>[
+        for (final entryKey in const ['series:10', 'series:20'])
+          <String, Object?>{
+            'torrentHash': '',
+            'torrentName': 'IPTV series $entryKey',
+            'debridService': 'iptv_direct',
+            'debridTorrentId': '',
+            'boundAt': entryKey == 'series:10' ? 100 : 200,
+            'iptvPlaylistId': playlistId,
+            'iptvCatalogType': 'series',
+            'iptvEntryKey': entryKey,
+          },
+      ]),
+    };
+
+    final first = _buildWithPreferences(
+      mapsA,
+      'device-a',
+      preferences('local-iptv-resource-a'),
+      now: 200,
+    );
+    final second = _buildWithPreferences(
+      mapsB,
+      'device-b',
+      preferences('local-iptv-resource-b'),
+      now: 200,
+    );
+    expect(first.document.watchState.records, hasLength(2));
+    expect(
+      first.document.watchState.records.keys,
+      second.document.watchState.records.keys,
+    );
+
+    final materialized = WebDavSyncHotMerge.materializePreferences(
+      document: first.document,
+      identityMaps: mapsB,
+    );
+    final sources =
+        jsonDecode(
+              materialized['${WebDavSyncHotMerge.seriesSourcePrefix}tt123']!
+                  as String,
+            )
+            as List;
+    expect(sources, hasLength(2));
+    expect(
+      sources
+          .map((value) => (value as Map<String, dynamic>)['iptvPlaylistId'])
+          .toSet(),
+      {'local-iptv-resource-b'},
+    );
+
+    final projected = WebDavSyncRecordKey.projectLocalTombstoneKey(
+      WebDavSyncRecordKey.source(
+        'tt123',
+        'iptv:local-iptv-resource-a:series:series:20',
+      ),
+      mapsA,
+    )!;
+    expect(
+      WebDavSyncRecordKey.decodePart(projected.split('/').last),
+      'iptv:resource-circle:series:series:20',
     );
   });
 
