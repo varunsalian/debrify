@@ -694,13 +694,17 @@ class IptvCatalogDb {
     IptvCatalogWriteTarget target,
     Future<T> Function() action,
   ) => runExclusive(() async {
+    validateWriteTarget(target);
+    return action();
+  });
+
+  static void validateWriteTarget(IptvCatalogWriteTarget target) {
     if (_db == null ||
         target._revision != _writeRevision ||
         target.path != _path) {
       throw StateError('IPTV catalog changed while downloading');
     }
-    return action();
-  });
+  }
 
   /// Prepares and opens the catalog database. Idempotent and shared across
   /// concurrent callers.
@@ -1492,6 +1496,30 @@ class IptvCatalogDb {
     required String catalogKey,
     required Stream<String> lines,
     String? numberingSourceKey,
+  }) => ingestIncremental(
+    dbPath: dbPath,
+    catalogKey: catalogKey,
+    numberingSourceKey: numberingSourceKey,
+    produce: (emit) async {
+      final summary = await M3uParser.parseLines(lines, onChannel: emit);
+      return IptvParseResult(
+        channels: const [],
+        categories: summary.categories,
+        epgUrl: summary.epgUrl,
+        error: summary.sawAnyLine ? null : 'Empty playlist',
+      );
+    },
+  );
+
+  /// Consume one channel at a time. The producer must finish successfully
+  /// before any staged rows become visible to readers.
+  static Future<IptvParseResult> ingestIncremental({
+    required String dbPath,
+    required String catalogKey,
+    required Future<IptvParseResult> Function(void Function(IptvChannel) emit)
+    produce,
+    String? numberingSourceKey,
+    Future<void> Function()? beforePublish,
   }) async {
     final db = _openConnection(dbPath);
     PreparedStatement? insertChannel;
@@ -1544,51 +1572,40 @@ class IptvCatalogDb {
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL)
       ''');
 
-      final summary = await M3uParser.parseLines(
-        lines,
-        onChannel: (channel) {
-          begin();
-          final position = digest.count;
-          insertChannel!.execute([
-            catalogKey,
-            generation,
+      final summary = await produce((channel) {
+        begin();
+        final position = digest.count;
+        insertChannel!.execute([
+          catalogKey,
+          generation,
+          position,
+          channel.name,
+          channel.url,
+          channel.logoUrl,
+          channel.group,
+          channel.duration,
+          channel.contentType,
+          channel.attributes.isEmpty ? null : jsonEncode(channel.attributes),
+          channel.httpHeaders.isEmpty ? null : jsonEncode(channel.httpHeaders),
+          '${channel.name.toLowerCase()}\n'
+              '${channel.group?.toLowerCase() ?? ''}',
+        ]);
+        if (channel.isLive && numberingSourceKey != null) {
+          insertNumberBase!.execute([
             position,
-            channel.name,
-            channel.url,
-            channel.logoUrl,
-            channel.group,
-            channel.duration,
-            channel.contentType,
-            channel.attributes.isEmpty ? null : jsonEncode(channel.attributes),
-            channel.httpHeaders.isEmpty
-                ? null
-                : jsonEncode(channel.httpHeaders),
-            '${channel.name.toLowerCase()}\n'
-                '${channel.group?.toLowerCase() ?? ''}',
+            _numberIdentityBase(
+              tvgId: channel.tvgId,
+              name: channel.name,
+              group: channel.group,
+            ),
           ]);
-          if (channel.isLive && numberingSourceKey != null) {
-            insertNumberBase!.execute([
-              position,
-              _numberIdentityBase(
-                tvgId: channel.tvgId,
-                name: channel.name,
-                group: channel.group,
-              ),
-            ]);
-          }
-          digest.add(channel);
-          if (digest.count % _ingestChunkRows == 0) commit();
-        },
-      );
+        }
+        digest.add(channel);
+        if (digest.count % _ingestChunkRows == 0) commit();
+      });
       commit();
 
-      if (!summary.sawAnyLine) {
-        return const IptvParseResult(
-          channels: [],
-          categories: [],
-          error: 'Empty playlist',
-        );
-      }
+      if (summary.hasError) return summary;
       if (digest.count == 0) {
         return IptvParseResult(
           channels: const [],
@@ -1611,6 +1628,7 @@ class IptvCatalogDb {
         catalogKey: catalogKey,
         generation: generation,
       );
+      await beforePublish?.call();
       final contentDigest = digest.value;
       db.execute(
         'INSERT OR REPLACE INTO catalogs'
@@ -1638,6 +1656,7 @@ class IptvCatalogDb {
         channels: const [],
         categories: summary.categories,
         epgUrl: summary.epgUrl,
+        warning: summary.warning,
         ingest: CatalogIngestReceipt(
           catalogKey: catalogKey,
           channelCount: digest.count,

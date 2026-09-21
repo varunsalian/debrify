@@ -9,6 +9,7 @@ import '../../models/iptv_playlist.dart';
 import '../../models/profiles/profile_policy.dart';
 import '../../services/iptv_catalog_key.dart';
 import '../../services/iptv_catalog_db.dart';
+import '../../services/iptv_catalog_refresh_service.dart';
 import '../../services/iptv_service.dart';
 import '../../services/xtream_codes_service.dart';
 import '../../services/storage_service.dart';
@@ -197,6 +198,27 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
   // real stream, so users with tight connection limits can keep the stage's
   // artwork/details while preventing it from tuning.
   bool _channelPreviewEnabled = true;
+  int _autoRefreshHours = 24;
+
+  Future<void> _pickAutoRefresh() => _runProfileAction(() async {
+    final startingScope = ProfileRuntime.scope.value;
+    final hours = await showDialog<int>(
+      context: context,
+      builder: (_) => IptvAutoRefreshDialog(intervalHours: _autoRefreshHours),
+    );
+    if (hours == null ||
+        !mounted ||
+        ProfileRuntime.scope.value != startingScope) {
+      return;
+    }
+    await _runProfileAction(() async {
+      if (!mounted || ProfileRuntime.scope.value != startingScope) return;
+      await IptvCatalogRefreshService.setIntervalHours(hours);
+      if (!mounted || ProfileRuntime.scope.value != startingScope) return;
+      setState(() => _autoRefreshHours = hours);
+      unawaited(IptvCatalogRefreshService.instance.refreshDue());
+    });
+  });
 
   Future<void> _runProfileAction(Future<void> Function() body) async {
     final authorization = await ProfileAsyncAuthorization.capture(
@@ -630,6 +652,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
   }
 
   Future<void> _loadSettings() async {
+    final startingScope = ProfileRuntime.scope.value;
     // The wide layout reports per-source counts and freshness straight from
     // the catalog. Opening once here keeps every row's read synchronous —
     // a DPAD move must never await.
@@ -650,6 +673,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
         await StorageService.getIptvChannelPreviewEnabled();
     final iptvStyle = await StorageService.getIptvStyle();
     final playerGuideStyle = await StorageService.getIptvPlayerGuideStyle();
+    final autoRefreshHours = await IptvCatalogRefreshService.getIntervalHours();
     final engineSupported =
         !kIsWeb &&
         Platform.isAndroid &&
@@ -667,7 +691,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
         ? await LiveRecordingService.isIgnoringBatteryOptimizations()
         : null;
 
-    if (!mounted) return;
+    if (!mounted || ProfileRuntime.scope.value != startingScope) return;
 
     setState(() {
       _playlists = playlists;
@@ -681,6 +705,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
       _channelPreviewEnabled = channelPreviewEnabled;
       _iptvStyle = iptvStyle;
       _playerGuideStyle = playerGuideStyle;
+      _autoRefreshHours = autoRefreshHours;
       _recordingSectionVisible = engineSupported || desktopSched;
       _engineToggleVisible = engineSupported;
       _recordingEngineOn = recordingEngineOn;
@@ -808,6 +833,8 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
       _isAdding = false;
     });
     _ensureFocusNodes();
+
+    unawaited(IptvCatalogRefreshService.instance.refreshDue());
 
     _showSnackBar(
       // DB-catalog mode returns an ingest receipt with empty channels — the
@@ -1054,6 +1081,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
       _isXcAdding = false;
     });
     _ensureFocusNodes();
+    unawaited(IptvCatalogRefreshService.instance.refreshDue());
 
     // Build status message
     String statusMsg = 'Added Xtream Codes login';
@@ -1257,14 +1285,13 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
     );
   }
 
-  /// Re-fetch a URL or Xtream Codes playlist from its source, clearing the
-  /// cache first so updated channels are picked up. Local-file playlists are
+  /// Re-fetch a URL or Xtream Codes playlist from its source. Local files are
   /// static snapshots and cannot be refreshed.
   Future<void> _refreshPlaylist(IptvPlaylist playlist) =>
       _runProfileAction(() => _refreshPlaylistForProfile(playlist));
 
   Future<void> _refreshPlaylistForProfile(IptvPlaylist playlist) async {
-    if (playlist.isLocalFile) return;
+    if (playlist.isLocalFile || playlist.connectionReadOnly) return;
     if (_refreshingIds.contains(playlist.id)) return;
     final startingScope = ProfileRuntime.scope.value;
     bool isCurrent() => ProfileRuntime.scope.value == startingScope;
@@ -1272,96 +1299,37 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
     setState(() => _refreshingIds.add(playlist.id));
     _showSnackBar('Refreshing "${playlist.name}"…', isError: false);
 
-    // Drop the disk snapshots too: Refresh doubles as the user's escape
-    // hatch from a stale catalog (expired login, provider emptied a
-    // category) — without a snapshot the IPTV page falls back to a real
-    // blocking fetch on next open, so a genuinely dead source finally shows
-    // its error instead of ghost rows served from disk.
-    //
-    // Whole-catalog work (the delete here, the parse+ingest inside the
-    // fetch) runs behind the process-wide catalog gate — but the NETWORK
-    // download deliberately does not. Wrapping the whole refresh used to
-    // hold the gate for up to the fetch timeout, queueing every other
-    // catalog job (page maintenance, EPG scans, deletions) behind one slow
-    // panel. Maintenance that interleaves during the download re-checks its
-    // preconditions inside the gate, per the runExclusive contract.
-    IptvParseResult result;
+    IptvParseResult result = IptvParseResult(channels: [], categories: []);
     final refreshedSections = <String>[];
     final failedSections = <String>[];
-    try {
-      if (playlist.isXtreamCodes) {
-        XtreamCodesService.instance.clearCache(playlist.serverUrl);
-        await IptvCatalogDb.runExclusive(
-          () => IptvCatalogDb.removeCatalogsByKeys(
-            IptvCatalogKey.allForXtream(
-              playlist.serverUrl!,
-              playlist.username ?? '',
-            ),
-          ),
+    // Keep the previous snapshot until its replacement succeeds. Fetch in
+    // sequence for low-memory TVs; a failed section must not skip the others.
+    final sections = playlist.isXtreamCodes
+        ? [('live', 'live channels'), ('vod', 'movies'), ('series', 'series')]
+        : [('live', 'channels')];
+    for (final section in sections) {
+      if (!isCurrent()) break;
+      try {
+        result = await IptvCatalogRefreshService.instance.refreshCatalog(
+          playlist,
+          section.$1,
+          force: true,
+          priority: true,
         );
-        result = await XtreamCodesService.instance.fetchLiveStreams(
-          playlist.serverUrl!,
-          playlist.username ?? '',
-          playlist.password ?? '',
-          numberingSourceKey: playlist.id,
-          connectionResourceId: playlist.connectionResourceId,
-          connectionResourceRevision: playlist.connectionResourceRevision,
-          isCurrent: isCurrent,
-        );
-        void recordSection(String label, IptvParseResult section) {
-          if (section.hasError) {
-            failedSections.add(label);
-          } else {
-            final count =
-                section.ingest?.channelCount ?? section.channels.length;
-            refreshedSections.add('$count $label');
-          }
-        }
-
-        recordSection('live channels', result);
-        // Fetch sequentially to avoid downloading multiple large catalogs at
-        // once on low-memory TVs. A failed section must not skip the others.
-        for (final section in [
-          ('movies', XtreamCodesService.instance.fetchVodStreams),
-          ('series', XtreamCodesService.instance.fetchSeriesStreams),
-        ]) {
-          try {
-            final refreshed = await section.$2(
-              playlist.serverUrl!,
-              playlist.username ?? '',
-              playlist.password ?? '',
-              connectionResourceId: playlist.connectionResourceId,
-              connectionResourceRevision: playlist.connectionResourceRevision,
-              isCurrent: isCurrent,
-            );
-            recordSection(section.$1, refreshed);
-          } catch (_) {
-            failedSections.add(section.$1);
-          }
-        }
-      } else {
-        IptvService.instance.clearCache(playlist.url);
-        await IptvCatalogDb.runExclusive(
-          () => IptvCatalogDb.removeCatalogsByKeys([
-            IptvCatalogKey.forUrl(playlist.url),
-          ]),
-        );
-        result = await IptvService.instance.fetchPlaylist(
-          playlist.url,
-          forceRefresh: true,
-          numberingSourceKey: playlist.id,
-          connectionResourceId: playlist.connectionResourceId,
-          connectionResourceRevision: playlist.connectionResourceRevision,
-        );
+      } catch (e) {
+        result = IptvParseResult(channels: [], categories: [], error: '$e');
       }
-    } catch (e) {
-      // A throw from the catalog delete (corrupt DB, locked file) used to be
-      // an unhandled async error with the row stuck on its spinner.
-      result = IptvParseResult(channels: [], categories: [], error: '$e');
+      if (result.hasError) {
+        failedSections.add(section.$2);
+      } else {
+        final count = result.ingest?.channelCount ?? result.channels.length;
+        refreshedSections.add('$count ${section.$2}');
+      }
     }
 
     if (!mounted) return;
     setState(() => _refreshingIds.remove(playlist.id));
+    if (!isCurrent()) return;
 
     if (playlist.isXtreamCodes &&
         (refreshedSections.isNotEmpty || failedSections.isNotEmpty)) {
@@ -2160,6 +2128,8 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
       playlists: _playlists,
       defaultPlaylistId: _defaultPlaylistId,
       refreshingIds: _refreshingIds,
+      autoRefreshHours: _autoRefreshHours,
+      onPickAutoRefresh: _pickAutoRefresh,
       customLists: _customLists,
       startupEnabled: _startupEnabled,
       startupMode: _startupMode,
@@ -2283,6 +2253,13 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
                   : '${_playlists.length} '
                         '${_playlists.length == 1 ? 'source' : 'sources'}',
               onTap: () async => _enterPhoneSection(_PhoneSection.sources),
+            ),
+            SettingsTile(
+              icon: Icons.update_rounded,
+              title: 'Auto-refresh',
+              subtitle:
+                  '${iptvAutoRefreshLabel(_autoRefreshHours)} · All sources in this profile',
+              onTap: _pickAutoRefresh,
             ),
             SettingsTile(
               icon: Icons.video_library_rounded,

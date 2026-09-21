@@ -419,17 +419,15 @@ void main() {
 
     key.currentState!.focusRail();
     await tester.pump();
-    // Walk past the end: source, Add, Channel lists, Startup, Continue
-    // watching, Player guide (last, with no recorder in this harness),
-    // then extra.
+    // Walk past every destination, including the final Auto-refresh entry.
     for (var i = 0; i < 9; i++) {
       await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
       await tester.pump();
     }
 
-    // Still on Player guide — not flung sideways into the pane, where OK
-    // would have picked a style by accident.
-    expect(find.text('Cinema Glass'), findsOneWidget);
+    // Still on Auto-refresh rather than flung sideways into its pane.
+    expect(find.text('All sources in this profile'), findsOneWidget);
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'iptv-2p-rail-7');
     expect(cwToggles, isEmpty);
     expect(startupToggles, isEmpty);
   });

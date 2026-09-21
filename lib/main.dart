@@ -45,6 +45,7 @@ import 'services/discover_prefs.dart';
 import 'services/hide_watched_prefs.dart';
 import 'services/stream_badges_service.dart';
 import 'services/iptv_catalog_db.dart';
+import 'services/iptv_catalog_refresh_service.dart';
 import 'services/profiles/local_backup/local_backup_archive.dart'
     show LocalBackupScratch;
 import 'services/profiles/profile_bootstrap.dart';
@@ -783,6 +784,7 @@ Future<void> _continueApplicationStartup() async {
   // the DB ready.
   WidgetsBinding.instance.addPostFrameCallback((_) {
     unawaited(_prewarmIptvCatalogDb());
+    IptvCatalogRefreshService.instance.start();
   });
 
   if (!kIsWeb && (Platform.isWindows || Platform.isLinux)) {
