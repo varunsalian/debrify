@@ -86,6 +86,38 @@ void main() {
     });
 
     test(
+      'renames one configured addon without changing its identity',
+      () async {
+        final payload = jsonEncode({
+          'addons': [
+            {
+              'manifest': {
+                'id': 'org.example.streams',
+                'name': 'AIOStreams',
+                'resources': ['stream'],
+                'types': ['movie'],
+              },
+              'transportUrl': 'https://example.com/main/manifest.json',
+            },
+          ],
+        });
+        await StremioService.instance.importAddonsFromJson(payload);
+        final before = (await StremioService.instance.getAddons()).single;
+
+        await StremioService.instance.setAddonAlias(
+          before.storageKey,
+          'AIOStreams Main',
+        );
+        final after = (await StremioService.instance.getAddons()).single;
+
+        expect(after.id, before.id);
+        expect(after.manifestUrl, before.manifestUrl);
+        expect(after.displayName, 'AIOStreams Main');
+        expect(after.sourceKey, before.sourceKey);
+      },
+    );
+
+    test(
       'skips duplicate base URL when manifest URL was already added',
       () async {
         final manualStylePayload = jsonEncode({

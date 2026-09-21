@@ -18120,8 +18120,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
      * torrent magnets (probePacks). Only then does the lazy season-pack probe
      * run as a SECOND call, so direct links render the moment they arrive. */
     private fun requestAddonTorrentSources(groupId: String) {
-        // Every addon sharing this group's name — same-named addons collapse
-        // into one group (results only carry the name), so the fetch asks all.
+        // Configuration-specific group ids keep separately configured copies
+        // of the same manifest independently fetchable.
         val addonIds = sourceAddons.filter { it.sourceKey == groupId }.map { it.id }
         if (addonIds.isEmpty()) return
         if (addonFetchState[groupId] == "fetching") return

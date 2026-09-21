@@ -129,7 +129,7 @@ class _DiscoverSettingsPageState extends State<DiscoverSettingsPage> {
           options.add(
             SettingsSelectOption(
               'a:${addon.id}',
-              addon.name,
+              addon.displayName,
               'Always open this Stremio add-on',
             ),
           );

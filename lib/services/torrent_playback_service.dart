@@ -21,6 +21,7 @@ import '../models/premiumize_file.dart';
 import '../models/profiles/profile_policy.dart';
 import '../models/quick_play_rules.dart';
 import '../models/rd_torrent.dart';
+import '../models/stremio_addon.dart';
 import '../models/torbox_file.dart';
 import '../models/torbox_web_download.dart';
 import '../models/torrent.dart';
@@ -2198,8 +2199,8 @@ class TorrentPlaybackService {
     ];
   }
 
-  /// Indexer-manager engines stamp results with their display name; this maps
-  /// it back to the engine id for the Addon Priority list. The async flows
+  /// Maps legacy/display source identities back to stable priority entries.
+  /// The async flows
   /// AWAIT [warmSourceAliases] before ordering (a sync getter alone would
   /// leave the first playback after startup alias-less, silently ignoring an
   /// indexer-manager row's position in the priority list).
@@ -2217,7 +2218,7 @@ class TorrentPlaybackService {
   static Future<void> warmSourceAliases() {
     final inFlight = _sourceAliasWarmup;
     if (inFlight != null) return inFlight;
-    final run = SourcePriority.engineAliases()
+    final run = SourcePriority.sourceAliases()
         .then((m) {
           _cachedSourceAliases = m;
         })
@@ -3387,7 +3388,12 @@ class TorrentPlaybackService {
               originVideoId: await _originEpisodeVideoId(meta, season, episode),
             ))
           if (!SourcePriority.isRecommendationOnlyAddon(addon.id))
-            SourceAddonRef(addon.id, addon.name),
+            SourceAddonRef(
+              addon.id,
+              addon.displayName,
+              addonKey: addon.sourceBindingKey,
+              resultSourceKey: addon.sourceKey,
+            ),
       ],
       listEngines: imdbId.startsWith('tt') && !meta.hasStremioEpisodeIdentity
           ? _sourceEngineListing
@@ -3507,7 +3513,12 @@ class TorrentPlaybackService {
               contentId: imdbId,
             ))
           if (!SourcePriority.isRecommendationOnlyAddon(addon.id))
-            SourceAddonRef(addon.id, addon.name),
+            SourceAddonRef(
+              addon.id,
+              addon.displayName,
+              addonKey: addon.sourceBindingKey,
+              resultSourceKey: addon.sourceKey,
+            ),
       ],
       listEngines: _sourceEngineListing,
       fetchEngine: (engineId, _, __) =>
@@ -3734,6 +3745,40 @@ class TorrentPlaybackService {
     rules: rules,
   );
 
+  /// Returns the configuration-specific key whose completed batch may launch
+  /// before the rest of an exact-order addon search. A legacy name priority
+  /// cannot distinguish duplicate configurations, so retain the old behavior
+  /// of waiting for the full search until the user saves an explicit order.
+  @visibleForTesting
+  static String? leadingDirectAddonKey(
+    List<StremioAddon> addons,
+    List<String> priority,
+  ) {
+    if (addons.isEmpty) return null;
+    final aliases = <String, String>{
+      for (final addon in addons) addon.sourceKey: addon.legacySourceKey,
+    };
+    final ordered = SourcePriority.orderBy(
+      addons,
+      (addon) => addon.sourceKey,
+      priority,
+      aliases: aliases,
+    );
+    final first = ordered.first;
+    if (ordered.where((addon) => addon.sourceKey == first.sourceKey).length !=
+        1) {
+      return null;
+    }
+    final duplicateLegacyName = ordered
+        .where((addon) => addon.legacySourceKey == first.legacySourceKey)
+        .length >
+        1;
+    if (duplicateLegacyName && !priority.contains(first.sourceKey)) {
+      return null;
+    }
+    return first.sourceKey;
+  }
+
   static Future<bool> _playAddonStream(
     BuildContext context,
     String id, {
@@ -3805,20 +3850,7 @@ class TorrentPlaybackService {
           type: 'series',
           contentId: id,
         );
-        final ordered = SourcePriority.orderBy(
-          addons,
-          (addon) => 'stremio:${addon.name}'.toLowerCase(),
-          rules.sourcePriority,
-        );
-        if (ordered.isNotEmpty) {
-          final key = 'stremio:${ordered.first.name}'.toLowerCase();
-          if (ordered
-                  .where((a) => 'stremio:${a.name}'.toLowerCase() == key)
-                  .length ==
-              1) {
-            leadingAddon = key;
-          }
-        }
+        leadingAddon = leadingDirectAddonKey(addons, rules.sourcePriority);
       } catch (_) {
         // Optional fast path: ordinary search still owns errors/retries.
       }
@@ -4034,8 +4066,9 @@ class TorrentPlaybackService {
       closeLoading();
       return true;
     }
-    // Addon errors ride along keyed 'stremio:<addon name>' (timeouts and
-    // upstream 5xx land here, not as a thrown exception). The two searches
+    // Addon errors ride along keyed by configuration-specific source id
+    // (timeouts and upstream 5xx land here, not as a thrown exception). The
+    // two searches
     // surface them under different keys: searchByImdbWithStremio folds addon +
     // engine errors together under 'engineErrors', while the noProvider path's
     // searchStremioAddonsOnly returns them raw under 'addonErrors'. Read both,
@@ -4050,6 +4083,22 @@ class TorrentPlaybackService {
         for (final e in all.entries)
           if (e.key.startsWith('stremio:')) e.key: e.value,
       };
+    }
+
+    String failedAddonNamesOf(
+      Map<String, dynamic> r,
+      Map<String, String> errors,
+    ) {
+      final statuses =
+          r['addonStatuses'] as List<AddonSearchStatus>? ?? const [];
+      final names = <String>[
+        for (final status in statuses)
+          if (errors.containsKey(status.sourceKey)) status.name,
+      ];
+      if (names.isNotEmpty) return names.join(', ');
+      return errors.keys
+          .map((key) => key.replaceFirst('stremio:', ''))
+          .join(', ');
     }
 
     var torrents = (res['torrents'] as List).cast<Torrent>();
@@ -4076,9 +4125,7 @@ class TorrentPlaybackService {
       // An errored addon means "didn't respond", not "has no stream" — say
       // so, since a retry will usually succeed.
       if (errors.isNotEmpty) {
-        final failed = errors.keys
-            .map((k) => k.replaceFirst('stremio:', ''))
-            .join(', ');
+        final failed = failedAddonNamesOf(res, errors);
         _snack(context, '$failed didn\'t respond for "$label" — try again.');
       } else {
         // noProvider: addons searched fine and returned nothing directly

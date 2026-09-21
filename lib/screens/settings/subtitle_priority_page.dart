@@ -39,7 +39,7 @@ class _SubtitlePriorityPageState extends State<SubtitlePriorityPage> {
       if (!mounted) return;
       for (final a in addons) {
         _names[SubtitleSourcePriority.addon(a.portableConfigurationKey)] =
-            a.name;
+            a.displayName;
       }
       _saved = order;
       _order = SubtitleSourcePriority.effective(

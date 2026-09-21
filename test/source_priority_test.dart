@@ -80,6 +80,24 @@ void main() {
       expect(out.map((t) => t.name).toList(), ['c1', 'a1', 'b1', 'a2']);
     });
 
+    test('legacy addon-name priority orders new configuration keys', () {
+      final main = _t('main', 'stremio:config-main');
+      final backup = _t('backup', 'stremio:config-backup');
+      final engine = _t('engine', 'engineA');
+      final aliases = {
+        'stremio:config-main': 'stremio:aiostreams',
+        'stremio:config-backup': 'stremio:aiostreams',
+      };
+
+      final out = SourcePriority.order(
+        [engine, main, backup],
+        const ['stremio:aiostreams', 'engine:enginea'],
+        aliases: aliases,
+      );
+
+      expect(out.map((torrent) => torrent.name), ['main', 'backup', 'engine']);
+    });
+
     test('source order keeps provider order and first-priority duplicate', () {
       final sharedHash = 'f' * 40;
       final input = [

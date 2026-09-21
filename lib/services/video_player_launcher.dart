@@ -3232,7 +3232,7 @@ class VideoPlayerLauncher {
               },
             for (final addon in addons)
               {
-                'id': addon.id,
+                'id': addon.requestKey,
                 'name': addon.name,
                 'sourceKey': addon.sourceKey,
               },

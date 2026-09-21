@@ -13200,7 +13200,7 @@ class _SearchScreenState extends State<SearchScreen>
                       controlAffinity: ListTileControlAffinity.leading,
                       value: selected.contains(e.key),
                       title: Text(
-                        e.key,
+                        _kwSourceLabel(e.key),
                         style: TextStyle(fontSize: 13, color: scheme.onSurface),
                       ),
                       secondary: Text(
@@ -17131,7 +17131,7 @@ class _SearchScreenState extends State<SearchScreen>
           for (final source in _kwSourceList)
             CinemaSourceProvider(
               id: source,
-              label: _SourcesScreenState._prettySource(source),
+              label: _kwSourceLabel(source),
               count: counts[source] ?? 0,
             ),
         ],
@@ -17265,17 +17265,20 @@ class _SearchScreenState extends State<SearchScreen>
   /// row — same grammar as the Sources screen's rows (shared SourceRow look).
   static String _kwRowSubtitle(Torrent t) {
     final parts = <String>[];
+    final sourceLabel = t.addonDisplayName?.trim().isNotEmpty == true
+        ? t.addonDisplayName!.trim()
+        : t.source;
     if (t.isDirectStream || t.isExternalStream) {
       if (t.sizeBytes > 0) {
         parts.add(_SourcesScreenState._fmtSize(t.sizeBytes));
       }
-      if (t.source.isNotEmpty) parts.add(t.source.toUpperCase());
+      if (sourceLabel.isNotEmpty) parts.add(sourceLabel.toUpperCase());
       return parts.join(' · ');
     }
     if (t.sizeBytes > 0) parts.add(_SourcesScreenState._fmtSize(t.sizeBytes));
     if (t.seeders > 0) parts.add('↑ ${t.seeders}');
     if (t.leechers > 0) parts.add('↓ ${t.leechers}');
-    if (t.source.isNotEmpty) parts.add(t.source.toUpperCase());
+    if (sourceLabel.isNotEmpty) parts.add(sourceLabel.toUpperCase());
     final date = _SourcesScreenState._fmtDate(t.createdUnix);
     if (date != null) parts.add(date);
     return parts.join(' · ');
@@ -17285,6 +17288,15 @@ class _SearchScreenState extends State<SearchScreen>
   static String _kwPrettySource(String s) {
     final v = s.startsWith('stremio:') ? s.substring(8) : s;
     return v.isEmpty ? s : v[0].toUpperCase() + v.substring(1);
+  }
+
+  String _kwSourceLabel(String source) {
+    for (final torrent in _kwFullSet) {
+      if (_kwSourceOf(torrent) != source) continue;
+      final label = torrent.addonDisplayName?.trim();
+      if (label != null && label.isNotEmpty) return label;
+    }
+    return _kwPrettySource(source);
   }
 
   /// Horizontal source tabs (All / per-source with counts) above the toolbar —
@@ -17387,7 +17399,7 @@ class _SearchScreenState extends State<SearchScreen>
             for (var i = 0; i < sources.length; i++)
               tab(
                 i + 1,
-                '${_kwPrettySource(sources[i])} · ${counts[sources[i]] ?? 0}',
+                '${_kwSourceLabel(sources[i])} · ${counts[sources[i]] ?? 0}',
                 _kwSourceTab == sources[i],
                 () => _setKwSourceTab(sources[i]),
               ),
@@ -18613,7 +18625,10 @@ class _SearchScreenState extends State<SearchScreen>
             (_isMdblistAuthenticated || _discSource == _discMdblist))
           const StremioDropdownOption(_discMdblist, 'MDBList'),
         for (final a in _discAddons)
-          StremioDropdownOption('$_discAddonPrefix${a.id}', a.name),
+          StremioDropdownOption(
+            '$_discAddonPrefix${a.id}',
+            a.displayName,
+          ),
       ],
       onSelected: _selectDiscoverSource,
     );
@@ -19631,7 +19646,7 @@ class _SearchScreenState extends State<SearchScreen>
           ? 'MDBList'
           : 'Simkl';
     }
-    return section.addon.name;
+    return section.addon.displayName;
   }
 
   /// Applies the Home presentation preference only to catalog/source

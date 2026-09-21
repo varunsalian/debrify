@@ -215,7 +215,7 @@ class _SpotlightHeroSourcePageState extends State<SpotlightHeroSourcePage> {
                     ],
                     for (final entry in tree) ...[
                       SettingsSection(
-                        title: entry.addon.name,
+                        title: entry.addon.displayName,
                         children: [
                           for (final c in entry.catalogs)
                             _catalogRow(entry.addon, c),

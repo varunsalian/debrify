@@ -1527,7 +1527,7 @@ class _StageState extends State<_Stage> with TickerProviderStateMixin {
                 ),
               ),
               child: Text(
-                channel.addon.name.toUpperCase(),
+                channel.addon.displayName.toUpperCase(),
                 style: TextStyle(
                   color: app.core.tx.withValues(alpha: 0.50),
                   fontSize: 10,

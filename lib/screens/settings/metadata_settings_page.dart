@@ -139,7 +139,7 @@ class _MetadataSettingsPageState extends State<MetadataSettingsPage> {
                 category != MetadataCategory.episodeArtwork) ||
             addon.types.contains('series'))
           '${MetadataPreferences.addonPrefix}${StremioService.metadataProviderValue(addon)}':
-              addon.name,
+              addon.displayName,
   };
 
   Future<String?> _choose(

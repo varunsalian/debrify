@@ -23,11 +23,12 @@ import '../models/profiles/profile_policy.dart';
 /// count maps alone lose zero-count addons once counts are rebuilt from the
 /// final rows).
 ///
-/// [sourceKey] matches `Torrent.source` (`stremio:<name>` lowercased);
+/// [sourceKey] matches `Torrent.source` and identifies one configured addon;
 /// [count] is the addon's RAW stream count before cross-addon dedupe, so
 /// "returned something that deduped away" still reads as activity.
 class AddonSearchStatus {
   final String addonId;
+  final String? addonKey;
   final String name;
   final String sourceKey;
   final int count;
@@ -35,6 +36,7 @@ class AddonSearchStatus {
 
   const AddonSearchStatus({
     required this.addonId,
+    this.addonKey,
     required this.name,
     required this.sourceKey,
     required this.count,
@@ -42,9 +44,11 @@ class AddonSearchStatus {
   });
 
   bool get failed => error != null;
+  String get requestKey => addonKey ?? addonId;
 
   AddonSearchStatus withResult(int count) => AddonSearchStatus(
     addonId: addonId,
+    addonKey: addonKey,
     name: name,
     sourceKey: sourceKey,
     count: count,
@@ -585,9 +589,9 @@ class StremioService {
             for (final addon in addons)
               ResourceCollectionItem(
                 type: ConnectionResourceType.stremioAddon,
-                label: addon.name,
+                label: addon.displayName,
                 publicConfig: <String, dynamic>{
-                  'addonName': addon.name,
+                  'addonName': addon.displayName,
                   'contentKinds': addon.types,
                 },
                 secretConfig: addon.toJson(),
@@ -932,6 +936,35 @@ class StremioService {
     await _saveAddons(addons, initiatingAuthorization: authorization);
   }
 
+  /// Sets a presentation-only alias for one installed configuration. The
+  /// manifest name and configuration identity remain unchanged.
+  Future<void> setAddonAlias(String addonKey, String? alias) async {
+    final authorization = await ProfileAsyncAuthorization.capture(
+      ProfileFeature.addonsAndEngines,
+    );
+    final normalized = alias?.trim();
+    if (normalized != null && normalized.length > 60) {
+      throw ArgumentError.value(
+        alias,
+        'alias',
+        'Must be 60 characters or fewer',
+      );
+    }
+    final addons = await getAddonsForManagement();
+    final index = addons.indexWhere((addon) => addon.storageKey == addonKey);
+    if (index < 0) {
+      throw ArgumentError.value(addonKey, 'addonKey', 'Addon was not found');
+    }
+    if (!addons[index].canManage) {
+      throw const ResourceAuthorizationException(
+        'A shared addon can only be renamed by its owner',
+      );
+    }
+    final effective = normalized == addons[index].name ? null : normalized;
+    addons[index] = addons[index].withUserAlias(effective);
+    await _saveAddons(addons, initiatingAuthorization: authorization);
+  }
+
   /// Refresh an addon's manifest
   Future<StremioAddon?> refreshAddon(String manifestUrl) async {
     final authorization = await ProfileAsyncAuthorization.capture(
@@ -954,6 +987,7 @@ class StremioService {
         // A fresh manifest has no connection-resource metadata, and dropping
         // it would make _saveAddons treat this as a new resource.
         addons[index] = newManifest.copyWith(
+          userAlias: old.userAlias,
           enabled: old.enabled,
           addedAt: old.addedAt,
           connectionResourceId: old.connectionResourceId,
@@ -1008,6 +1042,7 @@ class StremioService {
         // Keep the existing connection resource as the replacement source.
         // This is essential for disabled addons and shared resource handling.
         addons[i] = fresh.copyWith(
+          userAlias: old.userAlias,
           enabled: old.enabled,
           addedAt: old.addedAt,
           connectionResourceId: old.connectionResourceId,
@@ -1253,8 +1288,8 @@ class StremioService {
     // Higher cap than the default: this is the press-Play hot path and stream
     // responses are small.
     final allStreams = await mapWithConcurrency(applicableAddons, (addon) {
-      // Use stremio: prefix and lowercase to match Torrent model (which lowercases source)
-      final sourceKey = 'stremio:${addon.name}'.toLowerCase();
+      // Configuration identity keeps same-manifest installations separate.
+      final sourceKey = addon.sourceKey;
       final addonStreamId = originVideoId?.trim().isNotEmpty == true
           ? originVideoId!.trim()
           : streamId;
@@ -1372,13 +1407,7 @@ class StremioService {
     required int season,
     Duration? timeout,
   }) async {
-    StremioAddon? addon;
-    for (final candidate in await getStreamingAddons()) {
-      if (candidate.id == addonId) {
-        addon = candidate;
-        break;
-      }
-    }
+    final addon = await _streamingAddonForRequestKey(addonId);
     if (addon == null) return const <Torrent>[];
     final results = await Future.wait([
       _fetchStreamsFromAddon(
@@ -1412,10 +1441,11 @@ class StremioService {
       for (final addon in applicableAddons)
         AddonSearchStatus(
           addonId: addon.id,
-          name: addon.name,
-          sourceKey: 'stremio:${addon.name}'.toLowerCase(),
-          count: addonCounts['stremio:${addon.name}'.toLowerCase()] ?? 0,
-          error: addonErrors['stremio:${addon.name}'.toLowerCase()],
+          addonKey: addon.sourceBindingKey,
+          name: addon.displayName,
+          sourceKey: addon.sourceKey,
+          count: addonCounts[addon.sourceKey] ?? 0,
+          error: addonErrors[addon.sourceKey],
         ),
     ];
     return result;
@@ -1437,13 +1467,7 @@ class StremioService {
     bool preserveOrder = false,
     String? originVideoId,
   }) async {
-    StremioAddon? addon;
-    for (final candidate in await getStreamingAddons()) {
-      if (candidate.id == addonId) {
-        addon = candidate;
-        break;
-      }
-    }
+    final addon = await _streamingAddonForRequestKey(addonId);
     if (addon == null) return const <Torrent>[];
     final streamId = originVideoId?.trim().isNotEmpty == true
         ? originVideoId!.trim()
@@ -1456,6 +1480,23 @@ class StremioService {
       episodeRequest: season != null && episode != null,
     );
     return _convertToTorrents(streams, preserveOrder: preserveOrder);
+  }
+
+  Future<StremioAddon?> _streamingAddonForRequestKey(String key) async {
+    final addons = await getStreamingAddons();
+    final exact = addons
+        .where(
+          (addon) => addon.sourceBindingKey == key || addon.sourceKey == key,
+        )
+        .toList(growable: false);
+    if (exact.length == 1) return exact.single;
+
+    // Compatibility for callers created before configuration keys were
+    // exposed. An id fallback is safe only when it is unambiguous.
+    final byManifestId = addons
+        .where((addon) => addon.id == key)
+        .toList(growable: false);
+    return byManifestId.length == 1 ? byManifestId.single : null;
   }
 
   /// Re-fetch the addon behind a pinned direct stream and select the fresh URL
@@ -1599,7 +1640,7 @@ class StremioService {
     // Step 1: Try bare IMDB ID first (bounded fan-out, same cap as
     // searchStreams — this is also on the press-Play hot path)
     final initialResults = await mapWithConcurrency(applicableAddons, (addon) {
-      final sourceKey = 'stremio:${addon.name}'.toLowerCase();
+      final sourceKey = addon.sourceKey;
       return _fetchStreamsFromAddon(addon, 'series', imdbId, timeout: timeout)
           .then((streams) {
             addonCounts[sourceKey] = streams.length;
@@ -1692,7 +1733,7 @@ class StremioService {
           streamId,
           timeout: timeout,
         ).catchError((_) {
-          final sourceKey = 'stremio:${probe.addon.name}'.toLowerCase();
+          final sourceKey = probe.addon.sourceKey;
           addonErrors[sourceKey] = 'Stream source failed';
           debugPrint('StremioService: Season probe failed');
           return <StremioStream>[];
@@ -2024,10 +2065,11 @@ class StremioService {
           .map(
             (entry) => StremioStream.fromJson(
               entry.value as Map<String, dynamic>,
-              addon.name,
+              addon.displayName,
               addonLogo: addon.logo,
               addonId: addon.id,
               addonKey: addon.sourceBindingKey,
+              resultSourceKey: addon.sourceKey,
               streamIndex: entry.key,
               videoId: streamId,
             ),
@@ -2436,7 +2478,9 @@ class StremioService {
           leechers: 0,
           completed: 0,
           scrapedDate: 0,
-          source: 'stremio:${stream.source}',
+          source: stream.resultSourceKey?.isNotEmpty == true
+              ? stream.resultSourceKey
+              : 'stremio:${stream.source}',
           streamType: variant.streamType,
           directUrl: variant.directUrl,
           httpHeaders:

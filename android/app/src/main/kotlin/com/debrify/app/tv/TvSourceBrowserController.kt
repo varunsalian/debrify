@@ -397,18 +397,20 @@ class TvSourceBrowserController(
         val all = callbacks.entries()
         val lists = linkedMapOf<String, MutableList<TvSourceBrowserEntry>>()
         val labels = linkedMapOf<String, String>()
+        val addonLabels = callbacks.placeholderGroups().toMap()
         all.forEach { entry ->
             val raw = entry.source?.trim().orEmpty()
             val id = if (raw.isEmpty()) "_other" else raw.lowercase()
             lists.getOrPut(id) { mutableListOf() }.add(entry)
-            labels.putIfAbsent(id, sourceLabel(raw))
+            val entryLabel = entry.addonName?.trim()?.takeIf { it.isNotEmpty() }
+            labels.putIfAbsent(id, entryLabel ?: addonLabels[id] ?: sourceLabel(raw))
         }
         groups = buildList {
             add(Group("all", "All sources", all))
             lists.forEach { (id, entries) -> add(Group(id, labels[id] ?: "Other sources", entries)) }
             // Applicable addons with nothing yet — same group id their fetched
             // rows will use, so the placeholder becomes the real group.
-            callbacks.placeholderGroups().forEach { (id, label) ->
+            addonLabels.forEach { (id, label) ->
                 if (!lists.containsKey(id)) add(Group(id, label, emptyList()))
             }
         }

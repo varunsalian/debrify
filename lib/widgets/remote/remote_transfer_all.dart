@@ -436,7 +436,7 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
         items.add(
           _TransferItem(
             key: 'addon:${addon.connectionResourceId ?? addon.id}',
-            label: 'Addon · ${addon.name}',
+            label: 'Addon · ${addon.displayName}',
             icon: Icons.extension,
             color: const Color(0xFF6366F1),
           ),

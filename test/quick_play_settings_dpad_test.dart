@@ -48,21 +48,25 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  StremioAddon testAddon(String name) => StremioAddon(
+    id: 'test.${name.toLowerCase()}',
+    name: name,
+    manifestUrl: 'https://$name.test/manifest.json',
+    baseUrl: 'https://$name.test',
+    types: const ['movie', 'series'],
+    resources: const ['stream'],
+  );
+
   void seedAddons() {
     SharedPreferences.setMockInitialValues({
       'stremio_addons_v1': jsonEncode([
-        for (final name in ['Alpha', 'Beta', 'Gamma'])
-          StremioAddon(
-            id: 'test.${name.toLowerCase()}',
-            name: name,
-            manifestUrl: 'https://$name.test/manifest.json',
-            baseUrl: 'https://$name.test',
-            types: const ['movie', 'series'],
-            resources: const ['stream'],
-          ).toJson(),
+        for (final name in ['Alpha', 'Beta', 'Gamma']) testAddon(name).toJson(),
       ]),
     });
   }
+
+  String rowFocus(String name) =>
+      'quick-play-priority-${testAddon(name).sourceKey}';
 
   String focusLabel() =>
       FocusManager.instance.primaryFocus?.debugLabel ?? '<none>';
@@ -87,18 +91,18 @@ void main() {
     await down(tester);
     expect(focusLabel(), 'quick-play-max-attempts');
     await down(tester);
-    expect(focusLabel(), 'quick-play-priority-stremio:alpha');
+    expect(focusLabel(), rowFocus('Alpha'));
     await down(tester);
-    expect(focusLabel(), 'quick-play-priority-stremio:beta');
+    expect(focusLabel(), rowFocus('Beta'));
     await down(tester);
-    expect(focusLabel(), 'quick-play-priority-stremio:gamma');
+    expect(focusLabel(), rowFocus('Gamma'));
     await down(tester);
     expect(focusLabel(), 'quick-play-reset');
 
     // And back UP re-enters the list from below.
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
     await tester.pumpAndSettle();
-    expect(focusLabel(), 'quick-play-priority-stremio:gamma');
+    expect(focusLabel(), rowFocus('Gamma'));
     expect(tester.takeException(), isNull);
   });
 
@@ -117,21 +121,21 @@ void main() {
     // While picked, RIGHT must not let focus wander off the row.
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
     await tester.pumpAndSettle();
-    expect(focusLabel(), 'quick-play-priority-stremio:beta');
+    expect(focusLabel(), rowFocus('Beta'));
 
     // UP moves Beta above Alpha; focus follows the moved row.
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
     await tester.pumpAndSettle();
-    expect(focusLabel(), 'quick-play-priority-stremio:beta');
+    expect(focusLabel(), rowFocus('Beta'));
 
     await ok(tester); // drop
     expect(find.text('Moving…'), findsNothing);
 
     final rules = await StorageService.getQuickPlayRules(isMovie: true);
     expect(rules.sourcePriority, [
-      'stremio:beta',
-      'stremio:alpha',
-      'stremio:gamma',
+      testAddon('Beta').sourceKey,
+      testAddon('Alpha').sourceKey,
+      testAddon('Gamma').sourceKey,
     ]);
     expect(tester.takeException(), isNull);
   });

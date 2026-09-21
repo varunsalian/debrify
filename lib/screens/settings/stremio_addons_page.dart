@@ -363,7 +363,7 @@ class _StremioAddonsPageContentState extends State<StremioAddonsPageContent> {
     if (refreshed == null) {
       messenger.showSnackBar(
         SnackBar(
-          content: Text('Failed to update ${addon.name}'),
+          content: Text('Failed to update ${addon.displayName}'),
           backgroundColor: Colors.red,
         ),
       );
@@ -372,11 +372,11 @@ class _StremioAddonsPageContentState extends State<StremioAddonsPageContent> {
       final to = refreshed.version;
       final detail = (from != null && to != null) ? ' (v$from → v$to)' : '';
       messenger.showSnackBar(
-        SnackBar(content: Text('${addon.name} updated$detail')),
+        SnackBar(content: Text('${addon.displayName} updated$detail')),
       );
     } else {
       messenger.showSnackBar(
-        SnackBar(content: Text('${addon.name} is already up to date')),
+        SnackBar(content: Text('${addon.displayName} is already up to date')),
       );
     }
   }
@@ -439,10 +439,10 @@ class _StremioAddonsPageContentState extends State<StremioAddonsPageContent> {
         title: const Text('Remove Addon'),
         content: Text(
           isShared
-              ? '"${addon.name}" is shared with $borrowerCount other '
+              ? '"${addon.displayName}" is shared with $borrowerCount other '
                     'profile${borrowerCount == 1 ? '' : 's'}. Removing it '
                     'will also remove it from those shared profiles.'
-              : 'Remove "${addon.name}" from your addons?',
+              : 'Remove "${addon.displayName}" from your addons?',
         ),
         actions: [
           TextButton(
@@ -468,7 +468,7 @@ class _StremioAddonsPageContentState extends State<StremioAddonsPageContent> {
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('${addon.name} removed')));
+        ).showSnackBar(SnackBar(content: Text('${addon.displayName} removed')));
       }
     } catch (e) {
       if (mounted) {
@@ -486,7 +486,7 @@ class _StremioAddonsPageContentState extends State<StremioAddonsPageContent> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text(addon.name),
+        title: Text(addon.displayName),
         content: SingleChildScrollView(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -1425,7 +1425,7 @@ class _StremioAddonsPageState extends State<StremioAddonsPage> {
     if (refreshed == null) {
       messenger.showSnackBar(
         SnackBar(
-          content: Text('Failed to update ${addon.name}'),
+          content: Text('Failed to update ${addon.displayName}'),
           backgroundColor: Colors.red,
         ),
       );
@@ -1434,11 +1434,11 @@ class _StremioAddonsPageState extends State<StremioAddonsPage> {
       final to = refreshed.version;
       final detail = (from != null && to != null) ? ' (v$from → v$to)' : '';
       messenger.showSnackBar(
-        SnackBar(content: Text('${addon.name} updated$detail')),
+        SnackBar(content: Text('${addon.displayName} updated$detail')),
       );
     } else {
       messenger.showSnackBar(
-        SnackBar(content: Text('${addon.name} is already up to date')),
+        SnackBar(content: Text('${addon.displayName} is already up to date')),
       );
     }
   }
@@ -1501,10 +1501,10 @@ class _StremioAddonsPageState extends State<StremioAddonsPage> {
         title: const Text('Remove Addon'),
         content: Text(
           isShared
-              ? '"${addon.name}" is shared with $borrowerCount other '
+              ? '"${addon.displayName}" is shared with $borrowerCount other '
                     'profile${borrowerCount == 1 ? '' : 's'}. Removing it '
                     'will also remove it from those shared profiles.'
-              : 'Remove "${addon.name}" from your addons?',
+              : 'Remove "${addon.displayName}" from your addons?',
         ),
         actions: [
           TextButton(
@@ -1532,7 +1532,7 @@ class _StremioAddonsPageState extends State<StremioAddonsPage> {
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('${addon.name} removed')));
+        ).showSnackBar(SnackBar(content: Text('${addon.displayName} removed')));
       }
     } catch (e) {
       if (mounted) {
@@ -1550,7 +1550,7 @@ class _StremioAddonsPageState extends State<StremioAddonsPage> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text(addon.name),
+        title: Text(addon.displayName),
         content: SingleChildScrollView(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -2137,7 +2137,7 @@ class _AddonTileState extends State<_AddonTile> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            widget.addon.name,
+                            widget.addon.displayName,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: theme.textTheme.titleSmall?.copyWith(
@@ -2313,7 +2313,7 @@ class _AddonOptionsSheetState extends State<_AddonOptionsSheet> {
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(
-                      widget.addon.name,
+                      widget.addon.displayName,
                       style: theme.textTheme.titleMedium?.copyWith(
                         fontWeight: FontWeight.bold,
                       ),

@@ -858,24 +858,30 @@ class RemoteConfigExportState extends State<RemoteConfigExport> {
       );
 
       for (final addon in extraAddons) {
-        await sendSelected(true, addon.name, RemoteAction.addon, () async {
-          final current = await StremioService.instance.getAddons(
-            forRemoteTransfer: true,
-          );
-          final matches = current.where(
-            (candidate) =>
-                candidate.connectionResourceId == addon.connectionResourceId &&
-                candidate.connectionResourceRevision ==
-                    addon.connectionResourceRevision &&
-                candidate.manifestUrl == addon.manifestUrl,
-          );
-          if (matches.isEmpty) return false;
-          return state.sendAddonCommandToDevice(
-            AddonCommand.install,
-            targetIp,
-            manifestUrl: transferData(matches.first.manifestUrl),
-          );
-        });
+        await sendSelected(
+          true,
+          addon.displayName,
+          RemoteAction.addon,
+          () async {
+            final current = await StremioService.instance.getAddons(
+              forRemoteTransfer: true,
+            );
+            final matches = current.where(
+              (candidate) =>
+                  candidate.connectionResourceId ==
+                      addon.connectionResourceId &&
+                  candidate.connectionResourceRevision ==
+                      addon.connectionResourceRevision &&
+                  candidate.manifestUrl == addon.manifestUrl,
+            );
+            if (matches.isEmpty) return false;
+            return state.sendAddonCommandToDevice(
+              AddonCommand.install,
+              targetIp,
+              manifestUrl: transferData(matches.first.manifestUrl),
+            );
+          },
+        );
       }
 
       // A selected batch is acknowledged as one unit. Never apply only the

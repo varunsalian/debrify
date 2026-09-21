@@ -137,7 +137,20 @@ class _QuickPlaySettingsPageState extends State<QuickPlaySettingsPage> {
     final out = <SourceProviderRef>[];
     for (final key in stored) {
       final p = byKey.remove(key);
-      if (p != null) out.add(p);
+      if (p != null) {
+        out.add(p);
+        continue;
+      }
+      // Older builds keyed Stremio priority by manifest name. Preserve that
+      // slot for every matching configuration, in install order; the next
+      // explicit reorder persists the new stable keys.
+      final legacyMatches = byKey.values
+          .where((provider) => provider.legacyKeys.contains(key))
+          .toList(growable: false);
+      for (final provider in legacyMatches) {
+        byKey.remove(provider.key);
+        out.add(provider);
+      }
     }
     out.addAll(byKey.values);
     return out;

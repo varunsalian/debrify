@@ -49,12 +49,27 @@ typedef AdjacentEpisodeResolver =
 class SourceAddonRef {
   final String id;
   final String name;
-  const SourceAddonRef(this.id, this.name);
+  final String? addonKey;
+  final String? resultSourceKey;
+  const SourceAddonRef(
+    this.id,
+    this.name, {
+    this.addonKey,
+    this.resultSourceKey,
+  });
 
   /// Matches `Torrent.source` for this addon's converted results — the
   /// sheets' group id, so a placeholder group and the addon's fetched rows
   /// land in the same bucket.
-  String get sourceKey => 'stremio:$name'.toLowerCase();
+  String get sourceKey => resultSourceKey?.isNotEmpty == true
+      ? resultSourceKey!
+      : addonKey?.isNotEmpty == true
+      ? 'stremio:$addonKey'
+      : 'stremio:$name'.toLowerCase();
+
+  /// Exact configuration key for a targeted fetch. The manifest id remains a
+  /// compatibility fallback for older/test callers with no configuration key.
+  String get requestKey => addonKey ?? id;
 }
 
 class SourceEngineRef {

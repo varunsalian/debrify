@@ -9,15 +9,17 @@ import 'iptv_source_search.dart';
 /// from — a torrent search engine or a Stremio addon. Users see one flat
 /// list; the distinction only matters for key normalization.
 class SourceProviderRef {
-  final String key; // 'engine:<id>' or 'stremio:<name>', lowercase
+  final String key; // 'engine:<id>' or configuration-specific addon/IPTV key
   final String name; // display name
   final bool isEngine;
+  final Set<String> legacyKeys;
   bool get isIptv => key.startsWith('iptv:');
 
   const SourceProviderRef({
     required this.key,
     required this.name,
     required this.isEngine,
+    this.legacyKeys = const <String>{},
   });
 }
 
@@ -113,10 +115,13 @@ class SourcePriority {
     const unlisted = 1 << 20;
     final indexed = List.generate(torrents.length, (i) => i);
     indexed.sort((a, b) {
-      final ra =
-          rank[keyForSource(torrents[a].source, aliases: aliases)] ?? unlisted;
-      final rb =
-          rank[keyForSource(torrents[b].source, aliases: aliases)] ?? unlisted;
+      int sourceRank(Torrent torrent) {
+        final key = keyForSource(torrent.source, aliases: aliases);
+        return rank[key] ?? rank[aliases?[key]] ?? unlisted;
+      }
+
+      final ra = sourceRank(torrents[a]);
+      final rb = sourceRank(torrents[b]);
       if (ra != rb) return ra - rb;
       return a - b; // stable: preserve incoming order within a provider
     });
@@ -155,8 +160,9 @@ class SourcePriority {
   static List<T> orderBy<T>(
     List<T> values,
     String Function(T) keyOf,
-    List<String> priority,
-  ) {
+    List<String> priority, {
+    Map<String, String>? aliases,
+  }) {
     if (priority.isEmpty || values.length < 2) return values;
     final rank = <String, int>{
       for (var i = 0; i < priority.length; i++) priority[i]: i,
@@ -164,8 +170,10 @@ class SourcePriority {
     const unlisted = 1 << 20;
     final indexed = List.generate(values.length, (i) => i);
     indexed.sort((a, b) {
-      final ra = rank[keyOf(values[a])] ?? unlisted;
-      final rb = rank[keyOf(values[b])] ?? unlisted;
+      final aKey = keyOf(values[a]);
+      final bKey = keyOf(values[b]);
+      final ra = rank[aKey] ?? rank[aliases?[aKey]] ?? unlisted;
+      final rb = rank[bKey] ?? rank[aliases?[bKey]] ?? unlisted;
       if (ra != rb) return ra - rb;
       return a - b;
     });
@@ -174,7 +182,7 @@ class SourcePriority {
 
   /// Indexer-manager engines stamp results with their display name instead of
   /// their engine id; this maps `display name` → `engine:engineId`.
-  static Future<Map<String, String>> engineAliases() async {
+  static Future<Map<String, String>> sourceAliases() async {
     final aliases = <String, String>{};
     try {
       final engines = await TorrentService.getAvailableEngines();
@@ -185,8 +193,17 @@ class SourcePriority {
         }
       }
     } catch (_) {}
+    try {
+      final addons = await StremioService.instance.getStreamingAddons();
+      for (final addon in addons) {
+        aliases[addon.sourceKey] = addon.legacySourceKey;
+      }
+    } catch (_) {}
     return aliases;
   }
+
+  /// Backwards-compatible name for callers that only need alias warming.
+  static Future<Map<String, String>> engineAliases() => sourceAliases();
 
   /// Every provider a priority list can order, in shipped-default order:
   /// engines (registry order), then streaming addons (install order).
@@ -208,9 +225,16 @@ class SourcePriority {
       final addons = await StremioService.instance.getStreamingAddons();
       for (final a in addons) {
         if (isRecommendationOnlyAddon(a.id)) continue;
-        final key = 'stremio:${a.name.trim().toLowerCase()}';
+        final key = a.sourceKey;
         if (seen.add(key)) {
-          refs.add(SourceProviderRef(key: key, name: a.name, isEngine: false));
+          refs.add(
+            SourceProviderRef(
+              key: key,
+              name: a.displayName,
+              isEngine: false,
+              legacyKeys: {a.legacySourceKey},
+            ),
+          );
         }
       }
     } catch (_) {}

@@ -173,6 +173,40 @@ void main() {
     expect(fetcher.episodesFetched, isTrue);
   });
 
+  test('early direct uses exact addon configuration priority keys', () {
+    final primary = StremioAddon(
+      id: 'com.test.aio',
+      name: 'AIOStreams',
+      manifestUrl: 'https://primary.test/secret/manifest.json',
+      baseUrl: 'https://primary.test/secret',
+      types: const ['series'],
+      resources: const ['stream'],
+    );
+    final backup = StremioAddon(
+      id: 'com.test.aio',
+      name: 'AIOStreams',
+      manifestUrl: 'https://backup.test/secret/manifest.json',
+      baseUrl: 'https://backup.test/secret',
+      types: const ['series'],
+      resources: const ['stream'],
+    );
+
+    expect(
+      TorrentPlaybackService.leadingDirectAddonKey(
+        [primary, backup],
+        [backup.sourceKey, primary.sourceKey],
+      ),
+      backup.sourceKey,
+    );
+    expect(
+      TorrentPlaybackService.leadingDirectAddonKey(
+        [primary, backup],
+        [primary.legacySourceKey],
+      ),
+      isNull,
+    );
+  });
+
   test(
     'prepared episode is consumed once with its headers and identity',
     () async {
@@ -259,10 +293,41 @@ void main() {
     expect(await resolve(), isNull);
   });
 
+  test('targeted retry selects the exact same-manifest configuration', () async {
+    final main = addon('main').copyWith(
+      id: 'org.example.aio',
+      name: 'AIOStreams',
+    ).withUserAlias('AIOStreams Main');
+    final backup = addon('backup').copyWith(
+      id: 'org.example.aio',
+      name: 'AIOStreams',
+    ).withUserAlias('AIOStreams Backup');
+    install([main, backup]);
+    final hosts = <String>[];
+    service.debugStreamHttpClientFactory = () => MockClient((request) async {
+      hosts.add(request.url.host);
+      return response('https://cdn.test/backup');
+    });
+
+    final results = await service.retryAddonStreams(
+      addonId: backup.sourceBindingKey,
+      type: 'series',
+      imdbId: 'tt123',
+      season: 1,
+      episode: 2,
+    );
+
+    expect(hosts, ['backup.test']);
+    expect(results.single.source, backup.sourceKey);
+    expect(results.single.addonDisplayName, 'AIOStreams Backup');
+  });
+
   test(
     'search UI receives fast addon before slow one; final order is unchanged',
     () async {
-      install([addon('slow'), addon('fast')]);
+      final slowAddon = addon('slow');
+      final fastAddon = addon('fast');
+      install([slowAddon, fastAddon]);
       final slow = Completer<http.Response>();
       final first = Completer<void>();
       final batches = <String>[];
@@ -284,10 +349,10 @@ void main() {
         },
       );
       await first.future.timeout(const Duration(seconds: 5));
-      expect(batches, ['stremio:fast']);
+      expect(batches, [fastAddon.sourceKey]);
       slow.complete(response('https://cdn.test/slow'));
       final result = await search;
-      expect(batches, ['stremio:fast', 'stremio:slow']);
+      expect(batches, [fastAddon.sourceKey, slowAddon.sourceKey]);
       expect((result['torrents'] as List<Torrent>).map((t) => t.directUrl), [
         'https://cdn.test/slow',
         'https://cdn.test/fast',

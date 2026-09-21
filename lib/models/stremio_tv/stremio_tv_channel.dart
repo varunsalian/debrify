@@ -65,7 +65,7 @@ class StremioTvChannel {
   }) {
     final baseId = '${addon.id}:${catalog.id}:${catalog.type}';
     final id = genre != null ? '$baseId:$genre' : baseId;
-    final baseName = '${addon.name}: ${catalog.name}';
+    final baseName = '${addon.displayName}: ${catalog.name}';
     final displayName = genre != null ? '$baseName - $genre' : baseName;
 
     return StremioTvChannel(

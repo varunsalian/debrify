@@ -139,7 +139,7 @@ class StremioIptvService {
         if (addon.supportsStreams && _tvCatalogs(addon).isNotEmpty)
           IptvPlaylist(
             id: '$playlistIdPrefix${addon.id}',
-            name: addon.name,
+            name: addon.displayName,
             url: '$playlistUrlScheme${Uri.encodeComponent(addon.id)}',
             addedAt: addon.addedAt,
           ),
@@ -416,7 +416,7 @@ class StremioIptvService {
           reason: streams.isEmpty
               ? StremioResolveFailure.noStreams
               : StremioResolveFailure.noDirectStreams,
-          addonName: addon.name,
+          addonName: addon.displayName,
         );
       } else {
         _lastFailure.remove(channelKey);

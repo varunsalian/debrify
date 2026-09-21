@@ -90,7 +90,7 @@ class StremioSubtitleService {
       futures.add(
         _fetchSubtitlesFromAddon(addon, type, subtitleId).catchError((error) {
           debugPrint('StremioSubtitleService: ${addon.name} error: $error');
-          failedAddons.add(addon.name);
+          failedAddons.add(addon.displayName);
           return <StremioSubtitle>[];
         }),
       );
@@ -144,7 +144,7 @@ class StremioSubtitleService {
       for (final a in addons)
         AddonSubtitleSlot(
           addonId: a.id,
-          addonName: a.name,
+          addonName: a.displayName,
           configurationKey: a.portableConfigurationKey,
           status: AddonSubtitleStatus.loading,
         ),
@@ -210,7 +210,7 @@ class StremioSubtitleService {
       final subs = await _fetchSubtitlesFromAddon(addon, type, subtitleId);
       return AddonSubtitleSlot(
         addonId: addon.id,
-        addonName: addon.name,
+        addonName: addon.displayName,
         configurationKey: addon.portableConfigurationKey,
         status: AddonSubtitleStatus.ok,
         subtitles: subs,
@@ -218,7 +218,7 @@ class StremioSubtitleService {
     } catch (e) {
       return AddonSubtitleSlot(
         addonId: addon.id,
-        addonName: addon.name,
+        addonName: addon.displayName,
         configurationKey: addon.portableConfigurationKey,
         status: AddonSubtitleStatus.failed,
         error: '$e',
@@ -306,7 +306,10 @@ class StremioSubtitleService {
     final subtitles = subtitlesRaw
         .map(
           (s) =>
-              StremioSubtitle.fromJson(s as Map<String, dynamic>, addon.name),
+              StremioSubtitle.fromJson(
+                s as Map<String, dynamic>,
+                addon.displayName,
+              ),
         )
         .where((s) => s.url.isNotEmpty)
         .toList();

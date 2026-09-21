@@ -2582,6 +2582,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
     return _channels.where((ch) {
       final q = _searchQuery;
       return ch.displayName.toLowerCase().contains(q) ||
+          ch.addon.displayName.toLowerCase().contains(q) ||
           ch.addon.name.toLowerCase().contains(q) ||
           ch.catalog.name.toLowerCase().contains(q) ||
           (ch.genre?.toLowerCase().contains(q) ?? false) ||
