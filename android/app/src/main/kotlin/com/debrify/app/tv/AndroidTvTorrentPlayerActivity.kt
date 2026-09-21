@@ -1486,6 +1486,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private val playbackListener = object : Player.Listener {
         override fun onEvents(player: Player, events: Player.Events) {
             if (isFinishing || isDestroyed) return
+            sendPlaybackMaintenanceState()
             if (events.contains(Player.EVENT_TRACKS_CHANGED) ||
                 events.contains(Player.EVENT_PLAYBACK_STATE_CHANGED)) {
                 if (player.playbackState == Player.STATE_READY) {
@@ -16824,12 +16825,23 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         deliverProgress(map)
     }
 
+    private fun sendPlaybackMaintenanceState() {
+        MainActivity.getAndroidTvPlayerChannel()?.invokeMethod(
+            "torrentPlaybackMaintenanceState",
+            mapOf(
+                "sourcePersistenceSessionId" to sourcePersistenceSessionId,
+                "ready" to (player?.isPlaying == true && player?.playbackState == Player.STATE_READY),
+            ),
+        )
+    }
+
     private fun sendPlaybackActivityState(active: Boolean) {
         try {
             MainActivity.getAndroidTvPlayerChannel()?.invokeMethod(
                 "torrentPlaybackActivityState",
                 mapOf("sourcePersistenceSessionId" to sourcePersistenceSessionId, "active" to active),
             )
+            if (active) sendPlaybackMaintenanceState()
         } catch (error: RuntimeException) {
             DiagnosticFileLog.recordError(
                 source = "android_tv_player", event = "activity_state_delivery_failed", throwable = error,

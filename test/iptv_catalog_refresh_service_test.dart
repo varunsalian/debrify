@@ -138,6 +138,8 @@ void main() {
   });
 
   tearDown(() async {
+    service.didChangeAppLifecycleState(AppLifecycleState.resumed);
+    PlayerVisibility.settleDuration = const Duration(seconds: 30);
     PlayerVisibility.closed(player);
     if (held != null && !held!.isCompleted) held!.complete();
     await Future.wait(outstanding).timeout(const Duration(seconds: 10));
@@ -289,6 +291,50 @@ void main() {
       expect(service.revision.value, revision + 1);
     },
   );
+
+  test('active automatic download finishes when playback starts', () async {
+    service.start();
+    holdAction = 'get_vod_streams';
+    held = Completer<void>();
+    arrived = Completer<void>();
+    final pending = refresh(xtream, 'vod', force: false);
+    await arrived!.future.timeout(const Duration(seconds: 5));
+    PlayerVisibility.opened(player);
+    held!.complete();
+    final result = await pending.timeout(const Duration(seconds: 5));
+    expect(result.hasError, isFalse, reason: result.error);
+    expect(result.ingest?.channelCount, 1);
+    expect(PlayerVisibility.visible.value, isTrue);
+  });
+
+  test('stable native playback allows queue while Flutter is paused', () async {
+    service.start();
+    PlayerVisibility.settleDuration = const Duration(milliseconds: 100);
+    PlayerVisibility.opened(player, native: true);
+    service.didChangeAppLifecycleState(AppLifecycleState.paused);
+    final pending = refresh(xtream, 'vod', force: false);
+    await Future<void>.delayed(const Duration(milliseconds: 150));
+    expect(requests, isEmpty);
+    PlayerVisibility.playbackState(player, ready: true);
+    final result = await pending.timeout(const Duration(seconds: 5));
+    expect(result.hasError, isFalse, reason: result.error);
+    expect(result.ingest?.channelCount, 1);
+  });
+
+  test('stable Flutter playback starts work only while foregrounded', () async {
+    service.start();
+    PlayerVisibility.settleDuration = const Duration(milliseconds: 100);
+    PlayerVisibility.opened(player);
+    service.didChangeAppLifecycleState(AppLifecycleState.paused);
+    final pending = refresh(xtream, 'vod', force: false);
+    PlayerVisibility.playbackState(player, ready: true);
+    await Future<void>.delayed(const Duration(milliseconds: 250));
+    expect(requests, isEmpty);
+    service.didChangeAppLifecycleState(AppLifecycleState.resumed);
+    final result = await pending.timeout(const Duration(seconds: 5));
+    expect(result.hasError, isFalse, reason: result.error);
+    expect(result.ingest?.channelCount, 1);
+  });
 
   test('Xtream and M3U catalogs share a serialized queue', () async {
     holdAction = 'get_vod_streams';

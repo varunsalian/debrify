@@ -143,7 +143,7 @@ class AndroidTvPlayerBridge {
   static Future<void> _progressDrain = Future<void>.value();
   static Object _beginNativePlayback() {
     final owner = ProfileLockController.instance.beginNativePlayback();
-    PlayerVisibility.opened(owner);
+    PlayerVisibility.opened(owner, native: true);
     return owner;
   }
 
@@ -454,6 +454,18 @@ class AndroidTvPlayerBridge {
             }
           }
           return null;
+        case 'torrentPlaybackMaintenanceState':
+          final state = call.arguments;
+          final owner = _nativePlaybackLockOwner;
+          if (state is! Map ||
+              owner == null ||
+              _sourcePersistenceSession == null ||
+              state['sourcePersistenceSessionId'] !=
+                  _sourcePersistenceSession!.id) {
+            return false;
+          }
+          PlayerVisibility.playbackState(owner, ready: state['ready'] == true);
+          return true;
         case 'torrentPlaybackActivityState':
           final state = call.arguments;
           final sessionId = _sourcePersistenceSession?.id;

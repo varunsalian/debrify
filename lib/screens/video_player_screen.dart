@@ -3631,6 +3631,14 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       _handleDecoderProbeParams(params);
     });
     _rendererStartupErrorSub = player.stream.error.listen((error) {
+      // mpv also emits nonfatal decoder/stream log errors here. Re-evaluate
+      // actual state; healthy playback may not emit another state event.
+      if (isCurrent()) {
+        PlayerVisibility.playbackState(
+          this,
+          ready: player.state.playing && !player.state.buffering,
+        );
+      }
       if (!isCurrent() ||
           !AndroidRendererStartupFallback.isRendererFailure(error)) {
         return;
@@ -3695,6 +3703,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     });
     _playSub = player.stream.playing.listen((p) {
       if (!isCurrent()) return;
+      PlayerVisibility.playbackState(this, ready: p && !player.state.buffering);
       if (p && _pausedByLifecycle && !_isPipActive) {
         unawaited(player.pause());
         return;
@@ -3768,11 +3777,18 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     });
     _completedSub = player.stream.completed.listen((done) {
       if (done && isCurrent()) {
+        PlayerVisibility.playbackState(this, ready: false);
         _iptvDiag.onPlaybackEnded(_position);
         _onPlaybackEnded();
       }
     });
     _bufferingSub = player.stream.buffering.listen((isBuffering) {
+      if (isCurrent()) {
+        PlayerVisibility.playbackState(
+          this,
+          ready: !isBuffering && player.state.playing,
+        );
+      }
       if (isCurrent()) _iptvDiag.onBuffering(isBuffering, _position);
       if (!isCurrent() || !_isReady || _isTransitioning) return;
       if (isBuffering) {
@@ -4602,6 +4618,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     }
     // Final synchronous ownership check after all asynchronous setup.
     if (beforeOpen != null && !beforeOpen()) return;
+    PlayerVisibility.playbackState(this, ready: false);
     if (request != null) {
       await request.commit(() => _player.open(media, play: play));
       return;

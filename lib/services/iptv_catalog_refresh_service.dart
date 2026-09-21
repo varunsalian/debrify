@@ -52,13 +52,13 @@ class IptvCatalogRefreshService with WidgetsBindingObserver {
     _started = true;
     WidgetsBinding.instance.addObserver(this);
     ProfileRuntime.scope.addListener(_scopeChanged);
-    PlayerVisibility.visible.addListener(_playerChanged);
+    PlayerVisibility.refreshAllowed.addListener(_playerChanged);
     // Let first paint, startup navigation and profile activation settle.
     _launchTimer = Timer(const Duration(seconds: 15), () {
       unawaited(refreshDue());
     });
     _timer = Timer.periodic(const Duration(minutes: 5), (_) {
-      if (_foreground) unawaited(refreshDue());
+      if (_canSchedule) unawaited(refreshDue());
     });
   }
 
@@ -72,8 +72,14 @@ class IptvCatalogRefreshService with WidgetsBindingObserver {
   }
 
   void _playerChanged() {
-    if (!PlayerVisibility.visible.value) unawaited(_pump());
+    if (PlayerVisibility.refreshAllowed.value) {
+      unawaited(refreshDue());
+      unawaited(_pump());
+    }
   }
+
+  // A native player Activity backgrounds Flutter, but is still foreground UI.
+  bool get _canSchedule => _foreground || PlayerVisibility.nativeVisible;
 
   void dispose() {
     _timer?.cancel();
@@ -81,7 +87,7 @@ class IptvCatalogRefreshService with WidgetsBindingObserver {
     if (_started) {
       WidgetsBinding.instance.removeObserver(this);
       ProfileRuntime.scope.removeListener(_scopeChanged);
-      PlayerVisibility.visible.removeListener(_playerChanged);
+      PlayerVisibility.refreshAllowed.removeListener(_playerChanged);
     }
     _started = false;
   }
@@ -97,7 +103,7 @@ class IptvCatalogRefreshService with WidgetsBindingObserver {
 
   /// A due check is cheap: only catalog metadata is read, never channel lists.
   Future<void> refreshDue() async {
-    if (kIsWeb || _checking || (_started && !_foreground)) return;
+    if (kIsWeb || _checking || (_started && !_canSchedule)) return;
     _checking = true;
     final scope = ProfileRuntime.scope.value;
     try {
@@ -162,9 +168,7 @@ class IptvCatalogRefreshService with WidgetsBindingObserver {
       }
       late final _CatalogRefreshJob job;
       job = _CatalogRefreshJob(id, () async {
-        bool current() =>
-            scope == ProfileRuntime.scope.value &&
-            (job.force || !PlayerVisibility.visible.value);
+        bool current() => scope == ProfileRuntime.scope.value;
         Future<IptvParseResult> perform() async {
           if (!current()) return _failure('Profile changed');
           final hours = await getIntervalHours();
@@ -267,7 +271,8 @@ class IptvCatalogRefreshService with WidgetsBindingObserver {
     try {
       while (_pending.isNotEmpty) {
         if (_pending.first.automatic &&
-            ((_started && !_foreground) || PlayerVisibility.visible.value)) {
+            ((_started && !_canSchedule) ||
+                !PlayerVisibility.refreshAllowed.value)) {
           break;
         }
         final job = _pending.removeAt(0);
