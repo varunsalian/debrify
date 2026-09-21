@@ -25,6 +25,27 @@ void main() {
     expect(MetadataPreferencesService.revision.value, initial + 1);
   });
 
+  test('synced detail-section switches refresh the synchronous renderer cache',
+      () async {
+    SharedPreferences.setMockInitialValues({
+      'detail_show_where_to_watch': false,
+    });
+    StorageService.resetProfileCaches();
+    expect(
+      StorageService.detailPageSectionVisibilityCached.whereToWatch,
+      isTrue,
+    );
+
+    await refresher.refresh({
+      'detail_show_where_to_watch',
+    }, authorizationBarrier: () {});
+
+    expect(
+      StorageService.detailPageSectionVisibilityCached.whereToWatch,
+      isFalse,
+    );
+  });
+
   test(
     'metadata invalidation respects the active-profile authorization barrier',
     () async {

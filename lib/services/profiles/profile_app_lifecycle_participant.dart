@@ -176,6 +176,7 @@ class ProfileAppLifecycleParticipant implements ProfileLifecycleParticipant {
         StorageService.getLaunchAnimation(),
         StorageService.getLaunchIdentPalette(),
         StorageService.getDetailPageStyle(),
+        StorageService.getDetailPageSectionVisibility(),
         StorageService.getDetailTheme(),
         StorageService.getParentsGuideStyle(),
       ]);

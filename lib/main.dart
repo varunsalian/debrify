@@ -715,6 +715,7 @@ Future<void> _continueApplicationStartup() async {
   // block startup.
   try {
     await StorageService.getDetailPageStyle();
+    await StorageService.getDetailPageSectionVisibility();
   } catch (_) {}
   // And the details THEME, for the same reason — the page resolves both in its
   // first build, so a stored choice must be readable before the first frame.

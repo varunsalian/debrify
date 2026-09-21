@@ -1,4 +1,5 @@
 import 'package:debrify/models/metadata_preferences.dart';
+import 'package:debrify/models/detail_page_section_visibility.dart';
 import 'package:debrify/services/metadata_explore_service.dart';
 import 'package:debrify/widgets/detail/showcase_availability.dart';
 import 'package:debrify/widgets/detail/showcase_parts.dart';
@@ -133,8 +134,76 @@ void main() {
         const MetadataExploreData(providerLink: 'https://evil.test/'),
         MetadataPreferences(features: {MetadataFeature.availability}),
       );
+      expect(rows.single.title, 'Where to watch · US');
       expect(rows.single.entries.single.name, contains('No availability'));
       expect(rows.single.entries.single.link, isNull);
+    },
+  );
+  test(
+    'detail visibility independently gates watch, rent, buy and link rows',
+    () {
+      const allKinds = MetadataExploreData(
+        providers: {
+          'flatrate': [{'provider_name': 'Subscription provider'}],
+          'rent': [{'provider_name': 'Rental provider'}],
+          'buy': [{'provider_name': 'Store provider'}],
+        },
+        providerLink: 'https://www.themoviedb.org/movie/1/watch',
+      );
+      final prefs = MetadataPreferences(
+        features: {MetadataFeature.availability},
+      );
+
+      final rentOnly = showcaseAvailabilityRows(
+        allKinds,
+        prefs,
+        visibility: const DetailPageSectionVisibility(
+          whereToWatch: false,
+          buy: false,
+          availabilityLink: false,
+        ),
+      );
+      expect(rentOnly.map((row) => row.key), ['watch-rent']);
+      expect(rentOnly.single.title, 'Rent');
+
+      final buyAndLink = showcaseAvailabilityRows(
+        allKinds,
+        prefs,
+        visibility: const DetailPageSectionVisibility(
+          whereToWatch: false,
+          rent: false,
+        ),
+      );
+      expect(buyAndLink.map((row) => row.key), [
+        'watch-buy',
+        'watch-attribution',
+      ]);
+
+      final linkOnly = showcaseAvailabilityRows(
+        allKinds,
+        prefs,
+        visibility: const DetailPageSectionVisibility(
+          whereToWatch: false,
+          rent: false,
+          buy: false,
+        ),
+      );
+      expect(linkOnly.single.title, 'Availability via JustWatch · TMDB');
+      expect(linkOnly.single.entries.single.name, 'Check availability on TMDB');
+
+      expect(
+        showcaseAvailabilityRows(
+          allKinds,
+          prefs,
+          visibility: const DetailPageSectionVisibility(
+            whereToWatch: false,
+            rent: false,
+            buy: false,
+            availabilityLink: false,
+          ),
+        ),
+        isEmpty,
+      );
     },
   );
   for (final compact in [true, false]) {
