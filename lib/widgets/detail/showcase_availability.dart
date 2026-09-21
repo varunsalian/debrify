@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../models/metadata_preferences.dart';
+import '../../models/detail_page_section_visibility.dart';
 import '../../services/debrify_image_cache.dart';
 import '../../services/metadata_details_service.dart';
 import '../../services/metadata_explore_service.dart';
@@ -41,10 +42,12 @@ List<ShowcaseAvailabilityRow> showcaseAvailabilityRows(
   MetadataExploreData? data,
   MetadataPreferences? prefs, {
   bool failed = false,
+  DetailPageSectionVisibility visibility = DetailPageSectionVisibility.defaults,
 }) {
   if (prefs == null) return [];
   final companies = prefs.features.contains(MetadataFeature.companies);
-  final availability = prefs.features.contains(MetadataFeature.availability);
+  final availability = prefs.features.contains(MetadataFeature.availability) &&
+      visibility.showsAnyAvailability;
   if (!companies && !availability) return [];
   if (failed) {
     return [
@@ -93,6 +96,7 @@ List<ShowcaseAvailabilityRow> showcaseAvailabilityRows(
       'rent': 'Rent',
       'buy': 'Buy',
     }.entries) {
+      if (!visibility.showsAvailabilityKind(kind.key)) continue;
       final entries = <ShowcaseAvailabilityEntry>[
         for (final provider
             in data.providers[kind.key] ?? <Map<String, dynamic>>[])
@@ -109,35 +113,38 @@ List<ShowcaseAvailabilityRow> showcaseAvailabilityRows(
       rows.add(
         ShowcaseAvailabilityRow(
           'watch-${kind.key}',
-          '${first ? 'Where to watch · ${prefs.region} — ' : ''}${kind.value}',
+          '${visibility.whereToWatch && first ? 'Where to watch · ${prefs.region} — ' : ''}${kind.value}',
           entries,
         ),
       );
       first = false;
     }
-    final uri = Uri.tryParse(data.providerLink ?? '');
-    final valid =
-        uri?.scheme == 'https' &&
-        const {'www.themoviedb.org', 'themoviedb.org'}.contains(uri?.host);
-    rows.add(
-      ShowcaseAvailabilityRow(
-        'watch-attribution',
-        first
-            ? 'Where to watch · ${prefs.region}'
-            : 'Availability via JustWatch · TMDB',
-        [
-          ShowcaseAvailabilityEntry(
-            first
-                ? 'No availability information for this region'
-                : valid
-                ? 'Check availability on TMDB'
-                : 'Availability information',
-            link: valid ? uri.toString() : null,
-          ),
-        ],
-        wide: true,
-      ),
-    );
+    if (visibility.availabilityLink) {
+      final uri = Uri.tryParse(data.providerLink ?? '');
+      final valid =
+          uri?.scheme == 'https' &&
+          const {'www.themoviedb.org', 'themoviedb.org'}.contains(uri?.host);
+      final emptyVisibleWatchSection = first && visibility.whereToWatch;
+      rows.add(
+        ShowcaseAvailabilityRow(
+          'watch-attribution',
+          emptyVisibleWatchSection
+              ? 'Where to watch · ${prefs.region}'
+              : 'Availability via JustWatch · TMDB',
+          [
+            ShowcaseAvailabilityEntry(
+              emptyVisibleWatchSection
+                  ? 'No availability information for this region'
+                  : valid
+                  ? 'Check availability on TMDB'
+                  : 'Availability information',
+              link: valid ? uri.toString() : null,
+            ),
+          ],
+          wide: true,
+        ),
+      );
+    }
   }
   return rows;
 }

@@ -440,7 +440,7 @@ class _SourcesScreenState extends State<_SourcesScreen> {
       final rules = await StorageService.getQuickPlayRules(
         isMovie: !widget.selection.isSeries,
       );
-      final aliases = await SourcePriority.engineAliases();
+      final aliases = await SourcePriority.sourceAliases();
       if (!mounted) return;
       _sourcePriority = rules.sourcePriority;
       _sourceAliases = aliases;
@@ -530,9 +530,19 @@ class _SourcesScreenState extends State<_SourcesScreen> {
   }
 
   Future<void> _reloadBound() async {
-    final bound = _imdbId.isEmpty
+    final allBound = _imdbId.isEmpty
         ? <SeriesSource>[]
         : await SeriesSourceService.getSources(_imdbId);
+    final catalogId = widget.selection.hasStremioEpisodeIdentity
+        ? widget.selection.stremioCatalogId
+        : null;
+    final bound = allBound
+        .where((source) => source.matchesCatalogScope(
+            catalogId: catalogId,
+            catalogKey: widget.selection.hasStremioEpisodeIdentity
+              ? widget.selection.stremioAddonKey : null,
+        ))
+        .toList();
     Torrent? cached;
     if (widget.selection.isSeries &&
         widget.selection.season != null &&
@@ -706,7 +716,25 @@ class _SourcesScreenState extends State<_SourcesScreen> {
       // non-standard content types by contentType). Previously this path was
       // torrent-only, so addon direct links never appeared in the Search tab's
       // Sources list even though Home showed them.
-      final iptvSearch = !_keywordMode && widget.searchOverride == null
+      var originVideoId = sel.stremioVideoId?.trim();
+      if (sel.hasStremioEpisodeIdentity &&
+          originVideoId?.isNotEmpty != true &&
+          sel.season != null &&
+          sel.episode != null) {
+        originVideoId = await StremioService.instance
+            .resolveSeriesEpisodeVideoId(
+              addonKey: sel.stremioAddonKey!,
+              addonId: sel.stremioAddonId,
+              catalogId: sel.stremioCatalogId!,
+              season: sel.season!,
+              episode: sel.episode!,
+            );
+        if (!mounted || token != _searchToken) return;
+      }
+      final iptvSearch =
+          !_keywordMode &&
+              widget.searchOverride == null &&
+              !sel.hasStremioEpisodeIdentity
           ? IptvSourceSearch.search(
               sel,
               deferXtreamSeriesEpisodes: true,
@@ -722,7 +750,14 @@ class _SourcesScreenState extends State<_SourcesScreen> {
               },
             )
           : null;
-      final res = widget.searchOverride != null
+      final customEpisodeUnavailable =
+          sel.hasStremioEpisodeIdentity && originVideoId?.isNotEmpty != true;
+      final res = customEpisodeUnavailable
+          ? <String, dynamic>{
+              'torrents': <Torrent>[],
+              'addonStatuses': <AddonSearchStatus>[],
+            }
+          : widget.searchOverride != null
           ? await widget.searchOverride!(onBatch)
           : _keywordMode
           ? await TorrentService.searchAllEngines(
@@ -743,6 +778,8 @@ class _SourcesScreenState extends State<_SourcesScreen> {
                   : null,
               onBatch: onBatch,
               preserveSourceOrder: true,
+              originAddonKey: sel.stremioAddonKey,
+              originVideoId: originVideoId,
             );
       final iptv = iptvSearch == null ? <IptvSourceResult>[] : await iptvSearch;
       if (!mounted || token != _searchToken) return;
@@ -763,6 +800,7 @@ class _SourcesScreenState extends State<_SourcesScreen> {
             .toList(growable: false),
         (status) => status.sourceKey,
         _sourcePriority,
+        aliases: _sourceAliases,
       );
       _presentStreaming(combinedTorrents, token);
       _finishSearch(token);
@@ -1148,12 +1186,16 @@ class _SourcesScreenState extends State<_SourcesScreen> {
               t,
               imdbId: _imdbId,
               isMovie: _isMovie,
+              addonCatalogId: widget.selection.stremioCatalogId,
+              addonCatalogKey: widget.selection.stremioAddonKey,
             )
           : await TorrentPlaybackService.bindSource(
               context,
               t,
               imdbId: _imdbId,
               isMovie: _isMovie,
+              addonCatalogId: widget.selection.stremioCatalogId,
+              addonCatalogKey: widget.selection.stremioAddonKey,
             );
       if (!mounted) return;
       if (ok) {
@@ -1457,16 +1499,19 @@ class _SourcesScreenState extends State<_SourcesScreen> {
   List<CinemaSourceProvider> get _cinemaProviders {
     final counts = <String, int>{};
     final names = <String, String>{};
+    for (final status in _addonStatuses) {
+      names.putIfAbsent(status.sourceKey, () => status.name);
+    }
     for (final t in _torrents) {
       final key = SourcePriority.keyForSource(
         t.source,
         aliases: _sourceAliases,
       );
       counts[key] = (counts[key] ?? 0) + 1;
-      names.putIfAbsent(key, () => _providerLabel(t.source));
-    }
-    for (final status in _addonStatuses) {
-      names.putIfAbsent(status.sourceKey, () => status.name);
+      names.putIfAbsent(
+        key,
+        () => t.addonDisplayName ?? _providerLabel(t.source),
+      );
     }
     for (final source in _iptvSources) {
       names[source.key] = 'IPTV · ${source.name}';
@@ -1475,6 +1520,7 @@ class _SourcesScreenState extends State<_SourcesScreen> {
       names.keys.toList()..sort(),
       (key) => key,
       _sourcePriority,
+      aliases: _sourceAliases,
     );
     return [
       CinemaSourceProvider(
@@ -1489,7 +1535,7 @@ class _SourcesScreenState extends State<_SourcesScreen> {
           count: counts[key] ?? 0,
           failed: _addonStatuses.any((s) => s.sourceKey == key && s.failed),
           loading: _addonStatuses.any(
-            (s) => s.sourceKey == key && _retryingAddons.contains(s.addonId),
+            (s) => s.sourceKey == key && _retryingAddons.contains(s.requestKey),
           ),
         ),
     ];
@@ -1650,26 +1696,49 @@ class _SourcesScreenState extends State<_SourcesScreen> {
   /// dedupe, series-pack post-processing, and the frozen-list "+N new
   /// sources" pill as any live batch.
   Future<void> _retryAddon(AddonSearchStatus status) async {
-    if (_retryingAddons.contains(status.addonId)) return;
+    final requestKey = status.requestKey;
+    if (_retryingAddons.contains(requestKey)) return;
     final token = _searchToken;
-    setState(() => _retryingAddons.add(status.addonId));
+    setState(() => _retryingAddons.add(requestKey));
     try {
       final sel = _effectiveSelection;
+      var originVideoId = sel.stremioVideoId?.trim();
+      if (sel.hasStremioEpisodeIdentity &&
+          originVideoId?.isNotEmpty != true &&
+          sel.season != null &&
+          sel.episode != null) {
+        originVideoId = await StremioService.instance
+            .resolveSeriesEpisodeVideoId(
+              addonKey: sel.stremioAddonKey!,
+              addonId: sel.stremioAddonId,
+              catalogId: sel.stremioCatalogId!,
+              season: sel.season!,
+              episode: sel.episode!,
+            );
+      }
+      if (sel.hasStremioEpisodeIdentity &&
+          originVideoId?.isNotEmpty != true) {
+        if (mounted && token == _searchToken) {
+          setState(() => _retryingAddons.remove(requestKey));
+        }
+        return;
+      }
       final batch = await StremioService.instance.retryAddonStreams(
-        addonId: status.addonId,
+        addonId: requestKey,
         type: sel.contentType ?? (sel.isSeries ? 'series' : 'movie'),
         imdbId: sel.imdbId,
         season: sel.season,
         episode: sel.episode,
         timeout: StremioService.manualRetryTimeout,
         preserveOrder: true,
+        originVideoId: originVideoId,
       );
       if (!mounted || token != _searchToken) return;
       setState(() {
-        _retryingAddons.remove(status.addonId);
+        _retryingAddons.remove(requestKey);
         _addonStatuses = [
           for (final s in _addonStatuses)
-            s.addonId == status.addonId ? status.withResult(batch.length) : s,
+            s.requestKey == requestKey ? status.withResult(batch.length) : s,
         ];
       });
       if (batch.isEmpty) return;
@@ -1685,7 +1754,7 @@ class _SourcesScreenState extends State<_SourcesScreen> {
     } catch (_) {
       if (!mounted || token != _searchToken) return;
       // Keep the failed state on the chip — it IS the error indicator.
-      setState(() => _retryingAddons.remove(status.addonId));
+      setState(() => _retryingAddons.remove(requestKey));
     }
   }
 
@@ -1905,11 +1974,27 @@ class _SourcesScreenState extends State<_SourcesScreen> {
       for (final t in _torrents)
         if (t.source.isNotEmpty) t.source,
     };
+    final labelsByKey = <String, String>{
+      for (final status in _addonStatuses) status.sourceKey: status.name,
+    };
     final sourceByKey = <String, String>{
       for (final source in sources.toList()..sort())
         SourcePriority.keyForSource(source, aliases: _sourceAliases): source,
       for (final source in _iptvSources) source.key: source.key,
     };
+    for (final torrent in _torrents) {
+      final key = SourcePriority.keyForSource(
+        torrent.source,
+        aliases: _sourceAliases,
+      );
+      labelsByKey.putIfAbsent(
+        key,
+        () => torrent.addonDisplayName ?? _providerLabel(torrent.source),
+      );
+    }
+    for (final source in _iptvSources) {
+      labelsByKey[source.key] = 'IPTV · ${source.name}';
+    }
     final retryByKey = <String, AddonSearchStatus>{
       for (final status in _addonStatuses)
         if (_statusActionable(status) &&
@@ -1925,6 +2010,7 @@ class _SourcesScreenState extends State<_SourcesScreen> {
       providerKeys,
       (key) => key,
       _sourcePriority,
+      aliases: _sourceAliases,
     );
 
     Widget pill({
@@ -2001,7 +2087,7 @@ class _SourcesScreenState extends State<_SourcesScreen> {
                             ),
                           ),
                           const SizedBox(width: 5),
-                          if (_retryingAddons.contains(status.addonId))
+                          if (_retryingAddons.contains(status.requestKey))
                             const SizedBox.square(
                               dimension: 11,
                               child: CircularProgressIndicator(
@@ -2028,7 +2114,7 @@ class _SourcesScreenState extends State<_SourcesScreen> {
                         _rebuildVisible();
                       },
                       child: Text(
-                        _providerLabel(source),
+                        labelsByKey[key] ?? _providerLabel(source),
                         style: TextStyle(
                           color: _sourceFilter == key ? app.inkOn(accent) : dim,
                           fontSize: 12.5,
@@ -2549,15 +2635,16 @@ class _SourcesScreenState extends State<_SourcesScreen> {
   /// `size · ↑seeders · ↓leechers · SOURCE` meta line for a redesigned row.
   String _rowSubtitle(Torrent t) {
     final parts = <String>[];
+    final sourceLabel = t.addonDisplayName ?? t.source;
     if (t.isDirectStream || t.isExternalStream) {
       if (t.sizeBytes > 0) parts.add(_fmtSize(t.sizeBytes));
-      if (t.source.isNotEmpty) parts.add(t.source.toUpperCase());
+      if (sourceLabel.isNotEmpty) parts.add(sourceLabel.toUpperCase());
       return parts.join(' · ');
     }
     if (t.sizeBytes > 0) parts.add(_fmtSize(t.sizeBytes));
     if (t.seeders > 0) parts.add('↑ ${t.seeders}');
     if (t.leechers > 0) parts.add('↓ ${t.leechers}');
-    if (t.source.isNotEmpty) parts.add(t.source.toUpperCase());
+    if (sourceLabel.isNotEmpty) parts.add(sourceLabel.toUpperCase());
     final date = _fmtDate(t.createdUnix);
     if (date != null) parts.add(date);
     return parts.join(' · ');
@@ -3217,7 +3304,7 @@ class _CatalogSourcesDialogState extends State<_CatalogSourcesDialog> {
           final a = _addons[i];
           final searchable = a.catalogs.where((c) => c.supportsSearch).length;
           return _SrcToggleRow(
-            label: a.name,
+            label: a.displayName,
             subtitle: searchable > 1 ? '$searchable searchable catalogs' : null,
             enabled: !_disabled.contains(a.id),
             autofocus: i == 0,

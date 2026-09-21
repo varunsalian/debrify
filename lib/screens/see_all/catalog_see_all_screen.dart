@@ -507,7 +507,7 @@ class _CatalogSeeAllScreenState extends State<CatalogSeeAllScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             SeeAllHeader(
-              title: widget.addon.name,
+              title: widget.addon.displayName,
               subtitle: _searching
                   ? 'Results for “$_searchQuery”'
                   : 'Browse catalog',

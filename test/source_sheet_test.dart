@@ -761,10 +761,9 @@ void main() {
   );
 
   testWidgets(
-    'same-named addons share ONE group and Fetch asks every one of them',
+    'same-manifest configurations keep separate aliased source groups',
     (tester) async {
       final fetchedIds = <String>[];
-      final probedIds = <String>[];
       final fetcher = SeriesSourceFetcher(
         season: 1,
         episode: 2,
@@ -773,32 +772,19 @@ void main() {
         packsFetched: true,
         episodesFetched: true,
         listAddons: () async => const [
-          SourceAddonRef('comet-a', 'Comet'),
-          SourceAddonRef('comet-b', 'Comet'),
+          SourceAddonRef('comet', 'Comet Main', addonKey: 'config-a'),
+          SourceAddonRef('comet', 'Comet Backup', addonKey: 'config-b'),
         ],
         fetchAddonEpisodes: (addonId, _, _) async {
           fetchedIds.add(addonId);
-          // A carries a magnet; B is direct-only — only A may be probed.
-          return addonId == 'comet-b'
-              ? [
-                  _source(
-                    name: 'Comet B direct',
-                    source: 'stremio:comet',
-                    type: StreamType.directUrl,
-                    hash: '',
-                  ),
-                ]
-              : [
-                  _source(
-                    name: 'Comet A S01E02',
-                    source: 'stremio:comet',
-                    hash: 'd' * 40,
-                  ),
-                ];
-        },
-        fetchAddonPacks: (addonId, _) async {
-          probedIds.add(addonId);
-          return <Torrent>[];
+          return [
+            _source(
+              name: addonId == 'config-a' ? 'Main result' : 'Backup result',
+              source: 'stremio:$addonId',
+              type: StreamType.directUrl,
+              hash: '',
+            ),
+          ];
         },
       );
       await tester.pumpWidget(
@@ -810,22 +796,25 @@ void main() {
       await tester.pump();
       await tester.pump();
 
-      // One group, not two duplicates.
-      expect(find.text('Comet'), findsOneWidget);
-      await tester.tap(find.text('Comet'));
+      expect(find.text('Comet Main'), findsOneWidget);
+      expect(find.text('Comet Backup'), findsOneWidget);
+      await tester.tap(find.text('Comet Main'));
       await tester.pump();
       await tester.tap(find.text('Fetch results'));
       await tester.pump();
       await tester.pump();
 
-      expect(fetchedIds, ['comet-a', 'comet-b']);
-      expect(find.text('Comet B direct'), findsOneWidget);
-      expect(find.text('Comet A S01E02'), findsOneWidget);
+      expect(fetchedIds, ['config-a']);
+      expect(find.text('Main result'), findsOneWidget);
+
+      await tester.tap(find.text('Comet Backup'));
+      await tester.pump();
+      await tester.tap(find.text('Fetch results'));
       await tester.pump();
       await tester.pump();
-      expect(probedIds, [
-        'comet-a',
-      ], reason: 'only the magnet-bearing id earns the pack probe');
+
+      expect(fetchedIds, ['config-a', 'config-b']);
+      expect(find.text('Backup result'), findsOneWidget);
     },
   );
 

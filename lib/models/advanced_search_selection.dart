@@ -13,6 +13,17 @@ class AdvancedSearchSelection {
   /// Poster image URL from catalog
   final String? posterUrl;
 
+  /// Exact Stremio identity for an episode supplied by a custom addon catalog.
+  ///
+  /// Cinemeta happens to use `<meta id>:<season>:<episode>`, but the Stremio
+  /// protocol allows every video in a series meta response to have an arbitrary
+  /// ID. Keep the origin configuration, parent meta ID, and video ID together
+  /// so playback never has to guess that ID from season/episode coordinates.
+  final String? stremioAddonId;
+  final String? stremioAddonKey;
+  final String? stremioCatalogId;
+  final String? stremioVideoId;
+
   /// Trakt watch progress (0-100) for resuming playback from Trakt
   final double? traktProgressPercent;
 
@@ -51,6 +62,10 @@ class AdvancedSearchSelection {
     this.episode,
     this.contentType,
     this.posterUrl,
+    this.stremioAddonId,
+    this.stremioAddonKey,
+    this.stremioCatalogId,
+    this.stremioVideoId,
     this.traktProgressPercent,
     this.traktSource = false,
     this.simklProgressPercent,
@@ -80,6 +95,11 @@ class AdvancedSearchSelection {
         episode: null,
         contentType: contentType,
         posterUrl: posterUrl,
+        stremioAddonId: stremioAddonId,
+        stremioAddonKey: stremioAddonKey,
+        stremioCatalogId: stremioCatalogId,
+        // A whole-season search is not the episode represented by this ID.
+        stremioVideoId: null,
         traktProgressPercent: traktProgressPercent,
         traktSource: traktSource,
         simklProgressPercent: simklProgressPercent,
@@ -89,6 +109,39 @@ class AdvancedSearchSelection {
         fromCatalogEpisodeDrillDown: fromCatalogEpisodeDrillDown,
         fromCatalogItemDetail: fromCatalogItemDetail,
       );
+
+  bool get hasStremioEpisodeIdentity =>
+      stremioAddonKey?.trim().isNotEmpty == true &&
+      stremioCatalogId?.trim().isNotEmpty == true;
+
+  AdvancedSearchSelection withStremioEpisodeIdentity({
+    required String addonId,
+    required String addonKey,
+    required String catalogId,
+    required String videoId,
+  }) => AdvancedSearchSelection(
+    initialContinuousShuffle: initialContinuousShuffle,
+    imdbId: imdbId,
+    isSeries: isSeries,
+    title: title,
+    year: year,
+    season: season,
+    episode: episode,
+    contentType: contentType,
+    posterUrl: posterUrl,
+    stremioAddonId: addonId,
+    stremioAddonKey: addonKey,
+    stremioCatalogId: catalogId,
+    stremioVideoId: videoId,
+    traktProgressPercent: traktProgressPercent,
+    traktSource: traktSource,
+    simklProgressPercent: simklProgressPercent,
+    simklSource: simklSource,
+    mdblistProgressPercent: mdblistProgressPercent,
+    mdblistSource: mdblistSource,
+    fromCatalogEpisodeDrillDown: fromCatalogEpisodeDrillDown,
+    fromCatalogItemDetail: fromCatalogItemDetail,
+  );
 
   String get displayQuery {
     if (!isSeries || season == null || episode == null) {

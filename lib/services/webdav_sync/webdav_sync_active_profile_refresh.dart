@@ -54,6 +54,11 @@ final class DefaultWebDavSyncActiveProfileRefresher
     await warmIf('tv_home_style', StorageService.getTvHomeStyle);
     await warmIf('debrify_tv_style', StorageService.getDebrifyTvStyle);
     await warmIf('detail_page_style', StorageService.getDetailPageStyle);
+    if (changedKeys.any(
+      StorageService.detailPageSectionPreferenceKeys.contains,
+    )) {
+      await guarded(StorageService.getDetailPageSectionVisibility);
+    }
     await warmIf('detail_theme', StorageService.getDetailTheme);
     await warmIf('parents_guide_style', StorageService.getParentsGuideStyle);
     await warmIf('iptv_style', StorageService.getIptvStyle);

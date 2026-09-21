@@ -26,6 +26,7 @@ import '../../services/iptv_channel_order.dart';
 import '../../services/iptv_media_store.dart' show IptvListMeta;
 import '../../services/iptv_load_phase.dart';
 import '../../services/iptv_catalog_db.dart';
+import '../../services/iptv_catalog_refresh_service.dart';
 import '../../services/iptv_service.dart';
 import '../../services/main_page_bridge.dart';
 import '../../services/stremio_iptv_service.dart';
@@ -288,10 +289,6 @@ class IptvResultsViewState extends State<IptvResultsView>
   /// cleared when either changes (a different playlist, or a refresh's new
   /// generation, whose rows can carry changed data).
   String? _dbInstanceCacheKey;
-
-  /// Same freshness window the services' in-memory caches used: a DB catalog
-  /// ingested within it presents without a background revalidate.
-  static const Duration _dbCatalogTtl = Duration(minutes: 30);
 
   /// Set when a playlist switch was made from the TV source rail: once the
   /// new catalog presents, DPAD focus moves into the content pane. Moving
@@ -673,6 +670,9 @@ class IptvResultsViewState extends State<IptvResultsView>
     // Virtual Stremio playlists come and go with the installed addon set.
     StremioService.instance.addAddonsChangedListener(_onStremioAddonsChanged);
     IptvChannelOrderSignal.revision.addListener(_onChannelOrderChanged);
+    IptvCatalogRefreshService.instance.revision.addListener(
+      _onCatalogRefreshed,
+    );
     // Chained, not fire-and-forget: the startup launch needs the playlist list
     // to exist before it can pick the target's provider.
     // Guarded on the error too, not just mounted: _loadSettings now SWALLOWS
@@ -1109,6 +1109,9 @@ class IptvResultsViewState extends State<IptvResultsView>
 
   @override
   void dispose() {
+    IptvCatalogRefreshService.instance.revision.removeListener(
+      _onCatalogRefreshed,
+    );
     _sourceCountsDebounce?.cancel();
     _androidRecStateDebounce?.cancel();
     LiveRecordingService.schedulesRevision.removeListener(_onSchedulesChanged);
@@ -1765,38 +1768,6 @@ class IptvResultsViewState extends State<IptvResultsView>
     }
   }
 
-  /// Catalogs at or above this many rows never refresh on their own.
-  ///
-  /// Refreshing one means downloading the provider's entire response, decoding
-  /// it and ingesting a fresh generation — the single heaviest thing this page
-  /// does, and at 50k channels heavy enough that it is what the weakest boxes
-  /// die on. Suppressing an interrupted refresh only stops the immediate
-  /// retry; it does not make the operation itself affordable, so above this
-  /// size it stops being something the page decides to do unprompted. The
-  /// stored catalog keeps serving, and Settings → the playlist → Refresh
-  /// remains the deliberate, user-chosen way to pull a fresh one.
-  static const _autoRefreshRowCeiling = 20000;
-
-  /// Whether a stale DB-backed catalog may refresh itself right now. Pure, so
-  /// the policy can be tested without standing up the page.
-  @visibleForTesting
-  static bool shouldAutoRevalidate({
-    required int channelCount,
-    required int ageMs,
-    required bool userRequested,
-    required bool interrupted,
-  }) {
-    if (ageMs <= _dbCatalogTtl.inMilliseconds) return false;
-    // Asking for this load explicitly overrides both guards below — they exist
-    // to stop the page choosing to do something expensive, not to refuse the
-    // user.
-    if (userRequested) return true;
-    if (channelCount >= _autoRefreshRowCeiling) return false;
-    return !interrupted;
-  }
-
-  /// Every heavy background job this catalog needs, run STRICTLY ONE AT A
-  /// TIME: pending migration, then numbering adoption, then an optional
   /// refresh.
   ///
   /// Serialization is the point. Each stage is a whole-catalog job that scans
@@ -1813,6 +1784,7 @@ class IptvResultsViewState extends State<IptvResultsView>
     int ticket, {
     required bool userRequested,
   }) async {
+    final refreshHours = await IptvCatalogRefreshService.getIntervalHours();
     // Let the page settle before taking the gate. Nothing on screen waits for
     // any of this, and starting whole-catalog work while the list is still
     // painting its first rows, resolving EPG and loading logos is what tips a
@@ -1876,12 +1848,8 @@ class IptvResultsViewState extends State<IptvResultsView>
       // pipeline this one queued behind.
       final current = IptvCatalogDb.snapshot(cacheKey) ?? snap;
       final age = DateTime.now().millisecondsSinceEpoch - current.ingestedAt;
-      if (!shouldAutoRevalidate(
-        channelCount: current.channelCount,
-        ageMs: age,
-        userRequested: userRequested,
-        interrupted: IptvCatalogDb.revalidateInterrupted(cacheKey),
-      )) {
+      if (refreshHours == 0 ||
+          age < Duration(hours: refreshHours).inMilliseconds) {
         return false;
       }
       return true;
@@ -2067,12 +2035,63 @@ class IptvResultsViewState extends State<IptvResultsView>
     }
   }
 
+  bool _applyingCatalogRefresh = false;
+  void _onCatalogRefreshed() {
+    if (!mounted || _applyingCatalogRefresh || !IptvCatalogDb.isOpen) return;
+    final playlist = _selectedPlaylist;
+    if (playlist == null || _dbSnapshot == null) return;
+    final key = IptvCatalogKey.forPlaylist(playlist, _selectedContentType);
+    if (key == null) return;
+    _applyingCatalogRefresh = true;
+    unawaited(
+      _revalidateDbCatalogInner(
+            playlist,
+            _selectedContentType,
+            key,
+            _loadTicket,
+            usePublishedSnapshot: true,
+          )
+          .catchError((Object error) {
+            debugPrint(
+              'IPTV catalog presentation refresh failed (${error.runtimeType})',
+            );
+          })
+          .whenComplete(() => _applyingCatalogRefresh = false),
+    );
+  }
+
+  final _catalogPresentationJobs = <String, Future<void>>{};
   Future<void> _revalidateDbCatalogInner(
     IptvPlaylist playlist,
     String contentType,
     String cacheKey,
-    int ticket,
-  ) async {
+    int ticket, {
+    bool usePublishedSnapshot = false,
+  }) {
+    final key = '$cacheKey#$ticket';
+    final existing = _catalogPresentationJobs[key];
+    if (existing != null) return existing;
+    final future = _applyDbCatalogRefresh(
+      playlist,
+      contentType,
+      cacheKey,
+      ticket,
+      usePublishedSnapshot: usePublishedSnapshot,
+    );
+    final tracked = future.whenComplete(
+      () => _catalogPresentationJobs.remove(key),
+    );
+    _catalogPresentationJobs[key] = tracked;
+    return tracked;
+  }
+
+  Future<void> _applyDbCatalogRefresh(
+    IptvPlaylist playlist,
+    String contentType,
+    String cacheKey,
+    int ticket, {
+    bool usePublishedSnapshot = false,
+  }) async {
     _chipShowTimer?.cancel();
     _chipShowTimer = Timer(const Duration(milliseconds: 400), () {
       if (!_revalidateSuperseded(playlist, contentType, ticket)) {
@@ -2082,7 +2101,23 @@ class IptvResultsViewState extends State<IptvResultsView>
 
     IptvParseResult result;
     try {
-      result = await _fetchCatalogFromNetwork(playlist, contentType, ticket);
+      final published = usePublishedSnapshot
+          ? IptvCatalogDb.snapshot(cacheKey)
+          : null;
+      result = published == null
+          ? await IptvCatalogRefreshService.instance.refreshCatalog(
+              playlist,
+              contentType,
+            )
+          : IptvParseResult(
+              channels: const [],
+              categories: published.categories,
+              ingest: CatalogIngestReceipt(
+                catalogKey: cacheKey,
+                channelCount: published.channelCount,
+                contentDigest: published.contentDigest,
+              ),
+            );
     } catch (e) {
       result = IptvParseResult(
         channels: const [],
@@ -2291,6 +2326,17 @@ class IptvResultsViewState extends State<IptvResultsView>
     String contentType,
     int ticket,
   ) async {
+    if (IptvCatalogDb.isOpen &&
+        IptvCatalogKey.forPlaylist(playlist, contentType) != null) {
+      return IptvCatalogRefreshService.instance.refreshCatalog(
+        playlist,
+        contentType,
+        force: true,
+        priority: true,
+        onPhase: (phase, {bytes, totalBytes}) =>
+            _onLoadPhase(ticket, phase, bytes: bytes, totalBytes: totalBytes),
+      );
+    }
     // Built once and shared by every branch below: a branch that forgets to
     // pass it silently loses its progress reporting, which is exactly how the
     // M3U path shipped dead.

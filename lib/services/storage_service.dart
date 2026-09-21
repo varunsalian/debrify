@@ -29,6 +29,7 @@ import '../models/stremio_addon.dart';
 import '../models/webdav_item.dart';
 import '../models/android_video_renderer_mode.dart';
 import '../models/content_display_match_mode.dart';
+import '../models/detail_page_section_visibility.dart';
 import '../models/tv_hero_artwork_quality.dart';
 import '../models/tracking_source.dart';
 import '../utils/json_isolate.dart';
@@ -1234,6 +1235,68 @@ class StorageService {
         : kDetailPageStyleDefault;
     await prefs.setString(_detailPageStyleKey, normalized);
     detailPageStyleCached = normalized;
+  }
+
+  static const String _detailShowWhereToWatchKey = 'detail_show_where_to_watch';
+  static const String _detailShowRentKey = 'detail_show_rent';
+  static const String _detailShowBuyKey = 'detail_show_buy';
+  static const String _detailShowAvailabilityLinkKey =
+      'detail_show_availability_link';
+  static const String _detailShowDidYouKnowKey = 'detail_show_did_you_know';
+
+  /// Public key set lets profile/WebDAV refresh update the synchronous mirror
+  /// when one of these independently stored switches changes remotely.
+  static const Set<String> detailPageSectionPreferenceKeys = {
+    _detailShowWhereToWatchKey,
+    _detailShowRentKey,
+    _detailShowBuyKey,
+    _detailShowAvailabilityLinkKey,
+    _detailShowDidYouKnowKey,
+  };
+
+  /// Warmed before the first frame and on profile activation because Showcase
+  /// builds its optional bands synchronously.
+  static DetailPageSectionVisibility detailPageSectionVisibilityCached =
+      DetailPageSectionVisibility.defaults;
+  static final Lock _detailPageSectionWriteLock = Lock();
+  static int _detailPageSectionWriteGeneration = 0;
+
+  static Future<DetailPageSectionVisibility>
+  getDetailPageSectionVisibility() async {
+    final prefs = await ProfilePreferences.instance();
+    return detailPageSectionVisibilityCached = DetailPageSectionVisibility(
+      whereToWatch: prefs.getBool(_detailShowWhereToWatchKey) ?? true,
+      rent: prefs.getBool(_detailShowRentKey) ?? true,
+      buy: prefs.getBool(_detailShowBuyKey) ?? true,
+      availabilityLink: prefs.getBool(_detailShowAvailabilityLinkKey) ?? true,
+      didYouKnow: prefs.getBool(_detailShowDidYouKnowKey) ?? true,
+    );
+  }
+
+  static Future<void> setDetailPageSectionVisibility(
+    DetailPageSectionVisibility visibility,
+  ) async {
+    // Publish before awaiting disk so a details page opened immediately after
+    // the tap cannot observe the previous value for one frame.
+    final generation = ++_detailPageSectionWriteGeneration;
+    detailPageSectionVisibilityCached = visibility;
+    // Capture the active profile before joining the write queue. A profile
+    // switch then makes this facade reject the stale write instead of sending
+    // an old profile's choice into the newly active profile.
+    final prefs = await ProfilePreferences.instance();
+    await _detailPageSectionWriteLock.synchronized(() async {
+      if (generation != _detailPageSectionWriteGeneration) return;
+      await Future.wait([
+        prefs.setBool(_detailShowWhereToWatchKey, visibility.whereToWatch),
+        prefs.setBool(_detailShowRentKey, visibility.rent),
+        prefs.setBool(_detailShowBuyKey, visibility.buy),
+        prefs.setBool(
+          _detailShowAvailabilityLinkKey,
+          visibility.availabilityLink,
+        ),
+        prefs.setBool(_detailShowDidYouKnowKey, visibility.didYouKnow),
+      ]);
+    });
   }
 
   static const String _detailThemeKey = 'detail_theme';
@@ -10547,6 +10610,7 @@ class StorageService {
     tvHomeStyleCached = 'canvas';
     debrifyTvStyleCached = 'grid';
     detailPageStyleCached = kDetailPageStyleDefault;
+    detailPageSectionVisibilityCached = DetailPageSectionVisibility.defaults;
     detailThemeCached = 'signal';
     appThemeCached = 'legacy';
     themeOverridesCached = '';

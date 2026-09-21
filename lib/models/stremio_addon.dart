@@ -534,6 +534,10 @@ class StremioAddon {
 
   /// Human-readable name from manifest
   final String name;
+
+  /// Optional user-owned label. The manifest name remains untouched so
+  /// updates and protocol identity never depend on presentation choices.
+  final String? userAlias;
   final String? logo;
 
   /// The full manifest URL (includes any configuration)
@@ -581,6 +585,7 @@ class StremioAddon {
     required this.id,
     this.manifestId,
     required this.name,
+    this.userAlias,
     this.logo,
     required this.manifestUrl,
     required this.baseUrl,
@@ -601,11 +606,24 @@ class StremioAddon {
 
   String get storageKey => connectionResourceId ?? manifestUrl;
 
+  String get displayName {
+    final alias = userAlias?.trim();
+    return alias == null || alias.isEmpty ? name : alias;
+  }
+
   /// Opaque, secret-free identity for persisted references to this exact addon
   /// configuration. Configured Stremio URLs can contain API keys, so bound
   /// sources store this digest instead of copying [manifestUrl]/[baseUrl].
   String get sourceBindingKey =>
       sha256.convert(utf8.encode(storageKey)).toString();
+
+  /// Configuration-specific result bucket. Two configured instances of the
+  /// same manifest intentionally have different keys even when their names
+  /// (or aliases) are identical.
+  String get sourceKey => 'stremio:$portableConfigurationKey';
+
+  /// Pre-alias builds persisted priority using the manifest display name.
+  String get legacySourceKey => 'stremio:${name.trim().toLowerCase()}';
 
   /// Stable, secret-free identity for preferences that must survive profile
   /// backup and restore. Connection-resource IDs are device-local, while the
@@ -811,6 +829,7 @@ class StremioAddon {
       id: json['id'] as String,
       manifestId: json['manifest_id'] as String?,
       name: json['name'] as String,
+      userAlias: json['user_alias'] as String?,
       logo: json['logo'] as String?,
       manifestUrl: json['manifest_url'] as String,
       baseUrl: json['base_url'] as String,
@@ -842,6 +861,7 @@ class StremioAddon {
       'id': id,
       if (manifestId != null) 'manifest_id': manifestId,
       'name': name,
+      if (userAlias?.trim().isNotEmpty == true) 'user_alias': userAlias!.trim(),
       if (logo != null) 'logo': logo,
       'manifest_url': manifestUrl,
       'subtitle_priority_id': portableConfigurationKey,
@@ -874,6 +894,7 @@ class StremioAddon {
     String? id,
     String? manifestId,
     String? name,
+    String? userAlias,
     String? manifestUrl,
     String? baseUrl,
     String? connectionResourceId,
@@ -894,6 +915,7 @@ class StremioAddon {
       id: id ?? this.id,
       manifestId: manifestId ?? this.manifestId,
       name: name ?? this.name,
+      userAlias: userAlias ?? this.userAlias,
       logo: logo,
       manifestUrl: manifestUrl ?? this.manifestUrl,
       baseUrl: baseUrl ?? this.baseUrl,
@@ -914,6 +936,34 @@ class StremioAddon {
       catalogs: catalogs ?? this.catalogs,
       addedAt: addedAt ?? this.addedAt,
       lastChecked: lastChecked ?? this.lastChecked,
+    );
+  }
+
+  /// Unlike [copyWith], this can deliberately clear an alias.
+  StremioAddon withUserAlias(String? value) {
+    final normalized = value?.trim();
+    return StremioAddon(
+      id: id,
+      manifestId: manifestId,
+      name: name,
+      userAlias: normalized == null || normalized.isEmpty ? null : normalized,
+      logo: logo,
+      manifestUrl: manifestUrl,
+      baseUrl: baseUrl,
+      connectionResourceId: connectionResourceId,
+      connectionResourceRevision: connectionResourceRevision,
+      connectionResourceReadOnly: connectionResourceReadOnly,
+      connectionResourceCredentialsRedacted:
+          connectionResourceCredentialsRedacted,
+      description: description,
+      version: version,
+      enabled: enabled,
+      types: types,
+      resources: resources,
+      idPrefixes: idPrefixes,
+      catalogs: catalogs,
+      addedAt: addedAt,
+      lastChecked: lastChecked,
     );
   }
 
@@ -974,6 +1024,7 @@ class StremioStream {
   /// contains the addon's configured URL or credentials.
   final String? addonId;
   final String? addonKey;
+  final String? resultSourceKey;
   final String? videoId;
 
   /// Stable-ish stream profile plus its original response position. The
@@ -997,6 +1048,7 @@ class StremioStream {
     this.addonLogo,
     this.addonId,
     this.addonKey,
+    this.resultSourceKey,
     this.videoId,
     this.streamKey,
     this.streamIndex = 0,
@@ -1079,6 +1131,7 @@ class StremioStream {
     String? addonLogo,
     String? addonId,
     String? addonKey,
+    String? resultSourceKey,
     int streamIndex = 0,
     String? videoId,
   }) {
@@ -1123,6 +1176,7 @@ class StremioStream {
       addonLogo: addonLogo,
       addonId: addonId,
       addonKey: addonKey,
+      resultSourceKey: resultSourceKey,
       videoId: videoId,
       streamKey: _directStreamProfileKey(json),
       streamIndex: streamIndex,

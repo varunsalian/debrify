@@ -1079,6 +1079,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private var stremioSourceBadgeText: TextView? = null
     private var stremioResolutionToken = 0 // Guards against stale async resolution callbacks
     private var hasPlaylistResolver = false // True when source switching rebuilds entire playlist
+    private var hasAdjacentEpisodeResolver = false
+    private var customShuffleEpisodes: List<ShuffleEpisode>? = null
     // VOD is not exposed as successfully started until ExoPlayer renders a
     // frame. HTTP errors, resolver failures and silent startup stalls advance
     // this cursor through the already-ranked source list.
@@ -1484,6 +1486,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private val playbackListener = object : Player.Listener {
         override fun onEvents(player: Player, events: Player.Events) {
             if (isFinishing || isDestroyed) return
+            sendPlaybackMaintenanceState()
             if (events.contains(Player.EVENT_TRACKS_CHANGED) ||
                 events.contains(Player.EVENT_PLAYBACK_STATE_CHANGED)) {
                 if (player.playbackState == Player.STATE_READY) {
@@ -1751,16 +1754,16 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                                 )
                                 return
                             }
+                            if (hasPlaylistResolver) {
+                                requestAdjacentEpisodeFetch(
+                                    model.imdbId,
+                                    currentItem.season,
+                                    currentItem.episode,
+                                    autoAdvance = true,
+                                )
+                                return
+                            }
                             if (model.imdbId != null) {
-                                if (hasPlaylistResolver) {
-                                    requestAdjacentEpisodeFetch(
-                                        model.imdbId!!,
-                                        currentItem.season,
-                                        currentItem.episode,
-                                        autoAdvance = true,
-                                    )
-                                    return
-                                }
                                 requestQuickPlayNextEpisode(model.imdbId!!, currentItem.season, currentItem.episode)
                             }
                         }
@@ -5211,17 +5214,15 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                     requestEpisodeFetch(nextTarget.season, nextTarget.episode)
                     return
                 }
-                if (model.imdbId != null) {
-                    if (hasPlaylistResolver) {
-                        requestAdjacentEpisodeFetch(
-                            model.imdbId!!,
-                            currentItem.season,
-                            currentItem.episode,
-                        )
-                    } else {
-                        requestQuickPlayNextEpisode(model.imdbId!!, currentItem.season, currentItem.episode)
-                        finish()
-                    }
+                if (hasPlaylistResolver) {
+                    requestAdjacentEpisodeFetch(
+                        model.imdbId,
+                        currentItem.season,
+                        currentItem.episode,
+                    )
+                } else if (model.imdbId != null) {
+                    requestQuickPlayNextEpisode(model.imdbId!!, currentItem.season, currentItem.episode)
+                    finish()
                 } else {
                     Toast.makeText(this, "End of playlist", Toast.LENGTH_SHORT).show()
                 }
@@ -5251,6 +5252,16 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 requestEpisodeFetch(previousTarget.season, previousTarget.episode)
                 return
             }
+            if (hasAdjacentEpisodeResolver &&
+                currentItem?.season != null && currentItem.episode != null) {
+                requestAdjacentEpisodeFetch(
+                    model.imdbId,
+                    currentItem.season,
+                    currentItem.episode,
+                    direction = -1,
+                )
+                return
+            }
         }
         Toast.makeText(this, "Beginning of playlist", Toast.LENGTH_SHORT).show()
     }
@@ -5266,7 +5277,10 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             !isStremioTvMode &&
             (getPrevPlayableIndex(currentIndex) != null ||
                 (hasPlaylistResolver &&
-                    guideAdjacent(model, currentItem, -1) != null))
+                    (guideAdjacent(model, currentItem, -1) != null ||
+                        (hasAdjacentEpisodeResolver &&
+                            ((currentItem?.season ?: 0) > 1 ||
+                                (currentItem?.episode ?: 0) > 1)))))
         iptvPrevButton?.visibility = if (hasPrevious) View.VISIBLE else View.GONE
     }
 
@@ -5403,7 +5417,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         val model = payload ?: return false
         return hasPlaylistResolver && !isIptvMode && !isStremioTvMode &&
             model.contentType.equals("series", ignoreCase = true) &&
-            model.guideEpisodes.isNotEmpty()
+            (customShuffleEpisodes != null || model.guideEpisodes.isNotEmpty())
     }
 
     /** Resolve outside the pack only when catalog playback supplies a resolver. */
@@ -5439,7 +5453,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             val episode = item.episode
             if (season != null && episode != null) ShuffleEpisode(season, episode) else null
         }
-        val eligible = model.guideEpisodes.filter {
+        val eligible = customShuffleEpisodes ?: model.guideEpisodes.filter {
             it.season > 0 && it.episode > 0 && it.shuffleEligible
         }.map { ShuffleEpisode(it.season, it.episode) }
         val target = if (attempted.size < 3) showShuffle.pick(eligible, current, attempted) else null
@@ -16811,12 +16825,23 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         deliverProgress(map)
     }
 
+    private fun sendPlaybackMaintenanceState() {
+        MainActivity.getAndroidTvPlayerChannel()?.invokeMethod(
+            "torrentPlaybackMaintenanceState",
+            mapOf(
+                "sourcePersistenceSessionId" to sourcePersistenceSessionId,
+                "ready" to (player?.isPlaying == true && player?.playbackState == Player.STATE_READY),
+            ),
+        )
+    }
+
     private fun sendPlaybackActivityState(active: Boolean) {
         try {
             MainActivity.getAndroidTvPlayerChannel()?.invokeMethod(
                 "torrentPlaybackActivityState",
                 mapOf("sourcePersistenceSessionId" to sourcePersistenceSessionId, "active" to active),
             )
+            if (active) sendPlaybackMaintenanceState()
         } catch (error: RuntimeException) {
             DiagnosticFileLog.recordError(
                 source = "android_tv_player", event = "activity_state_delivery_failed", throwable = error,
@@ -16845,6 +16870,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
     /** The guide episode adjacent to the current item (specials excluded). */
     private fun guideAdjacent(model: PlaybackPayload, currentItem: PlaybackItem?, direction: Int): SeasonEpisode? {
+        // Custom catalogs own navigation even when the ordinary guide is loaded.
+        if (hasAdjacentEpisodeResolver) return null
         val s = currentItem?.season ?: return null
         val e = currentItem.episode ?: return null
         val eps = model.guideEpisodes
@@ -16935,10 +16962,11 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     /** Guide-not-ready Next for a catalog series. Flutter resolves the next
      * identity and runs the normal in-player episode source ladder. */
     private fun requestAdjacentEpisodeFetch(
-        imdbId: String,
+        imdbId: String?,
         currentSeason: Int,
         currentEpisode: Int,
         autoAdvance: Boolean = false,
+        direction: Int = 1,
     ) {
         if (episodeFetchInFlight) return
         val channel = MainActivity.getAndroidTvPlayerChannel()
@@ -16948,15 +16976,17 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         }
         episodeFetchInFlight = true
         val token = ++stremioResolutionToken
-        showStatusPillTransient("Finding next episode…")
+        val directionLabel = if (direction < 0) "previous" else "next"
+        showStatusPillTransient("Finding $directionLabel episode…")
         channel.invokeMethod(
             "requestEpisodeFetch",
             hashMapOf<String, Any>(
-                "imdbId" to imdbId,
                 "currentSeason" to currentSeason,
                 "currentEpisode" to currentEpisode,
-                "direction" to 1,
-            ),
+                "direction" to direction,
+            ).apply {
+                if (imdbId != null) put("imdbId", imdbId)
+            },
             object : io.flutter.plugin.common.MethodChannel.Result {
                 override fun success(result: Any?) {
                     runOnUiThread {
@@ -16967,13 +16997,13 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                         val items = map?.get("items") as? List<*>
                         val fetchedSourceIndex = (map?.get("sourceIndex") as? Number)?.toInt()
                         if (map == null || items.isNullOrEmpty() || fetchedSourceIndex == null) {
-                            showStatusPillTransient("No playable next episode found")
+                            showStatusPillTransient("No playable $directionLabel episode found")
                             return@runOnUiThread
                         }
                         val targetSeason = (map["targetSeason"] as? Number)?.toInt()
                         val targetEpisode = (map["targetEpisode"] as? Number)?.toInt()
                         if (targetSeason == null || targetEpisode == null) {
-                            showStatusPillTransient("No playable next episode found")
+                            showStatusPillTransient("No playable $directionLabel episode found")
                             return@runOnUiThread
                         }
                         adoptSourceList(map)
@@ -16991,7 +17021,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                     runOnUiThread {
                         episodeFetchInFlight = false
                         if (token != stremioResolutionToken) return@runOnUiThread
-                        showStatusPillTransient("No playable next episode found")
+                        showStatusPillTransient("No playable $directionLabel episode found")
                     }
                 }
 
@@ -18090,8 +18120,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
      * torrent magnets (probePacks). Only then does the lazy season-pack probe
      * run as a SECOND call, so direct links render the moment they arrive. */
     private fun requestAddonTorrentSources(groupId: String) {
-        // Every addon sharing this group's name — same-named addons collapse
-        // into one group (results only carry the name), so the fetch asks all.
+        // Configuration-specific group ids keep separately configured copies
+        // of the same manifest independently fetchable.
         val addonIds = sourceAddons.filter { it.sourceKey == groupId }.map { it.id }
         if (addonIds.isEmpty()) return
         if (addonFetchState[groupId] == "fetching") return
@@ -18816,6 +18846,15 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
             // Parse playlist resolver flag
             hasPlaylistResolver = obj.optBoolean("hasPlaylistResolver", false)
+            hasAdjacentEpisodeResolver = obj.optBoolean("hasAdjacentEpisodeResolver", false)
+            customShuffleEpisodes = obj.optJSONArray("customShuffleEpisodes")?.let { rows ->
+                (0 until rows.length()).mapNotNull { index ->
+                    val row = rows.optJSONObject(index) ?: return@mapNotNull null
+                    val season = row.optInt("season", -1)
+                    val episode = row.optInt("number", -1)
+                    if (season > 0 && episode > 0) ShuffleEpisode(season, episode) else null
+                }
+            }
             startupTryNextOnFailure = obj.optBoolean("startupTryNextOnFailure", false)
             startupMaxAttempts = obj.optInt("startupMaxAttempts", 1).coerceIn(1, 10)
             startupResolverProvider = obj.optString("startupResolverProvider")

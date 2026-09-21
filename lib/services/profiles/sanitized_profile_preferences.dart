@@ -38,6 +38,11 @@ abstract final class SanitizedProfilePreferences {
       case 'detail_trailer_autoplay_enabled':
       case 'home_hero_trailer_audio_enabled':
       case 'detail_trailer_audio_enabled':
+      case 'detail_show_where_to_watch':
+      case 'detail_show_rent':
+      case 'detail_show_buy':
+      case 'detail_show_availability_link':
+      case 'detail_show_did_you_know':
       case 'tv_trailer_underlay_enabled':
       case 'iptv_channel_preview_enabled':
       case 'subtitle_bold':

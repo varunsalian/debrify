@@ -266,14 +266,15 @@ void main() {
     await ConnectionResourceService(registry: registry, cipher: cipher).create(
       context: actor,
       type: ConnectionResourceType.stremioAddon,
-      label: 'OpenSubtitles v3',
+      label: 'Subtitles Backup',
       publicConfig: const <String, dynamic>{
-        'addonName': 'OpenSubtitles v3',
+        'addonName': 'Subtitles Backup',
         'contentKinds': <String>['movie', 'series'],
       },
       secretConfig: const <String, dynamic>{
         'id': 'org.stremio.opensubtitlesv3',
         'name': 'OpenSubtitles v3',
+        'user_alias': 'Subtitles Backup',
         'manifest_url': 'https://opensubtitles-v3.strem.io/manifest.json',
         'base_url': 'https://opensubtitles-v3.strem.io',
         'resources': <String>['subtitles'],
@@ -294,6 +295,7 @@ void main() {
     // Profile collections expose their stable connection-resource id as the
     // compatibility model id; native only needs a stable grouping id here.
     expect(addons.single['id'], startsWith('resource-'));
+    expect(addons.single['name'], 'Subtitles Backup');
     expect(
       addons.single['manifest_url'],
       'https://opensubtitles-v3.strem.io/manifest.json',

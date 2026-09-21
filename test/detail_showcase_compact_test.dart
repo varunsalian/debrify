@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:debrify/models/stremio_addon.dart';
+import 'package:debrify/models/detail_page_section_visibility.dart';
 import 'package:debrify/services/imdb_enrichment_service.dart';
 import 'package:debrify/services/imdb_parents_guide_service.dart';
 import 'package:debrify/services/trakt/trakt_episode_model.dart';
@@ -149,6 +150,7 @@ Widget _host(
   // Looks that ship it (Spotlight is `fadeUp`).
   EntranceStyle? entrance,
   AppTheme? theme,
+  DetailPageSectionVisibility? sectionVisibility,
 }) =>
     MediaQuery(
       data: MediaQueryData(size: size),
@@ -166,6 +168,7 @@ Widget _host(
             body: DetailShowcase(
               model: m,
               dpad: dpad,
+              sectionVisibility: sectionVisibility,
               episodesHost: m.isMovie
                   ? null
                   : (builder) => Builder(
@@ -651,6 +654,22 @@ void main() {
         findsOneWidget, reason: 'quotes are set in quotation marks');
     expect(find.text('+18', skipOffstage: false), findsOneWidget,
         reason: '20 total, 2 mounted — the rest live on IMDb');
+  });
+
+  testWidgets('did you know visibility removes its band and DPAD target',
+      (tester) async {
+    _surface(tester, _tv);
+    await tester.pumpWidget(_host(
+      _model(isMovie: true, extra: dykExtra),
+      dpad: true,
+      size: _tv,
+      sectionVisibility:
+          const DetailPageSectionVisibility(didYouKnow: false),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Did You Know', skipOffstage: false), findsNothing);
+    expect(find.text('TRIVIA', skipOffstage: false), findsNothing);
   });
 
   testWidgets('absent data mounts none of the new surfaces', (tester) async {

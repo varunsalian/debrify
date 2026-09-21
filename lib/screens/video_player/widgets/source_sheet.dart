@@ -185,6 +185,8 @@ class _SourceSheetState extends State<SourceSheet> {
   }
 
   String _groupLabel(Torrent torrent) {
+    final addonName = torrent.addonDisplayName?.trim();
+    if (addonName != null && addonName.isNotEmpty) return addonName;
     var source = torrent.source.trim();
     if (source.isEmpty) return 'Other sources';
     // The title-level binding (torrent_playback_service._torrentFromSource).
@@ -230,7 +232,7 @@ class _SourceSheetState extends State<SourceSheet> {
     _addonIdsByGroup.clear();
     _engineIdByGroup.clear();
     for (final addon in _allAddons) {
-      (_addonIdsByGroup[addon.sourceKey] ??= <String>[]).add(addon.id);
+      (_addonIdsByGroup[addon.sourceKey] ??= <String>[]).add(addon.requestKey);
     }
     for (final engine in _allEngines) {
       _engineIdByGroup[engine.sourceKey] = engine.id;

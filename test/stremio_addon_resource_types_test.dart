@@ -76,5 +76,41 @@ void main() {
       expect(addon.types, <String>['movie']);
       expect(addon.supportsSeries, isFalse);
     });
+
+    test('user aliases round-trip without changing manifest identity', () {
+      final addon = StremioAddon.fromManifest(
+        <String, dynamic>{
+          'id': 'org.example.streams',
+          'name': 'AIOStreams',
+          'resources': <dynamic>['stream'],
+        },
+        'https://example.com/main/manifest.json',
+      ).withUserAlias('AIOStreams Main');
+      final restored = StremioAddon.fromJson(addon.toJson());
+
+      expect(restored.name, 'AIOStreams');
+      expect(restored.displayName, 'AIOStreams Main');
+      expect(restored.userAlias, 'AIOStreams Main');
+      expect(restored.sourceKey, addon.sourceKey);
+      expect(restored.withUserAlias(null).displayName, 'AIOStreams');
+    });
+
+    test('same-name configurations receive different result bucket keys', () {
+      StremioAddon configured(String path) =>
+          StremioAddon.fromManifest(<String, dynamic>{
+            'id': 'org.example.streams',
+            'name': 'AIOStreams',
+            'resources': <dynamic>['stream'],
+          }, 'https://example.com/$path/manifest.json');
+
+      expect(
+        configured('main').sourceKey,
+        isNot(configured('backup').sourceKey),
+      );
+      expect(
+        configured('main').legacySourceKey,
+        configured('backup').legacySourceKey,
+      );
+    });
   });
 }

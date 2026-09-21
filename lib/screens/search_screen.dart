@@ -13200,7 +13200,7 @@ class _SearchScreenState extends State<SearchScreen>
                       controlAffinity: ListTileControlAffinity.leading,
                       value: selected.contains(e.key),
                       title: Text(
-                        e.key,
+                        _kwSourceLabel(e.key),
                         style: TextStyle(fontSize: 13, color: scheme.onSurface),
                       ),
                       secondary: Text(
@@ -14405,6 +14405,51 @@ class _SearchScreenState extends State<SearchScreen>
     return null;
   }
 
+  Future<AdvancedSearchSelection> _withCatalogEpisodeIdentity(
+    AdvancedSearchSelection selection,
+    StremioMeta item,
+    StremioAddon addon,
+  ) async {
+    final season = selection.season;
+    final episode = selection.episode;
+    if (!selection.isSeries || season == null || episode == null) {
+      return selection;
+    }
+    final videoId = await _stremio.episodeVideoIdForLaunch(
+      addon: addon,
+      imdbId: selection.imdbId,
+      catalogId: item.id,
+      season: season,
+      episode: episode,
+    );
+    if (videoId == null || videoId.isEmpty) {
+      // An unknown catalog identity must not silently fall back to the
+      // ordinary IMDb episode when metadata is
+      // temporarily unavailable. Preserve the origin so playback can retry
+      // resolution and fail as unavailable instead of playing different media.
+      if (!StremioService.isCanonicalCatalogAlias(item.id, selection.imdbId)) {
+        return selection.withStremioEpisodeIdentity(
+          addonId: addon.id,
+          addonKey: addon.sourceBindingKey,
+          catalogId: item.id,
+          videoId: '',
+        );
+      }
+      return selection;
+    }
+    if (StremioService.isCanonicalEpisodeId(
+      selection.imdbId, videoId, season, episode,
+    )) {
+      return selection;
+    }
+    return selection.withStremioEpisodeIdentity(
+      addonId: addon.id,
+      addonKey: addon.sourceBindingKey,
+      catalogId: item.id,
+      videoId: videoId,
+    );
+  }
+
   Future<void> _playRandomEpisodeFromDetail(
     StremioMeta item,
     StremioAddon addon,
@@ -14412,21 +14457,17 @@ class _SearchScreenState extends State<SearchScreen>
     final mode = await showRandomPlaybackDialog(context, title: item.name);
     if (!mounted || mode == null) return;
     final imdb = _imdbOf(item);
-    if (imdb == null) {
-      _snack('No IMDb match to pick an episode for "${item.name}".');
-      return;
-    }
     final metaAddon = await _metaAddonFor(addon);
     // If we fell back to a different meta addon than the item's origin, its
     // content id won't match — query by IMDb id instead of the origin's id.
     final contentId = (metaAddon != null && metaAddon.id == addon.id)
         ? item.id
-        : imdb;
+        : (imdb ?? item.id);
     final videos = metaAddon == null
         ? null
         : await _stremio.fetchSeriesMeta(metaAddon, contentId);
     if (!mounted) return;
-    if (videos != null) {
+    if (videos != null && imdb != null) {
       unawaited(
         LocalSeriesCompletionService.instance.recordRawEpisodeInventory(
           imdbId: imdb,
@@ -14436,7 +14477,7 @@ class _SearchScreenState extends State<SearchScreen>
       );
     }
 
-    final episodes = <({int season, int episode})>[];
+    final episodes = <({int season, int episode, String videoId})>[];
     for (final v in videos ?? const <Map<String, dynamic>>[]) {
       final sRaw = v['season'];
       final s = sRaw is num ? sRaw.toInt() : null;
@@ -14444,7 +14485,15 @@ class _SearchScreenState extends State<SearchScreen>
       final eRaw = v['number'] ?? v['episode'];
       final e = eRaw is num ? eRaw.toInt() : null;
       if (e == null) continue;
-      episodes.add((season: s, episode: e));
+      final videoId = StremioService.randomEpisodeVideoId(
+        catalogId: contentId,
+        imdbId: imdb,
+        season: s,
+        episode: e,
+        videoId: v['id'],
+      );
+      if (videoId == null) continue;
+      episodes.add((season: s, episode: e, videoId: videoId));
     }
     if (episodes.isEmpty) {
       _snack("Couldn't load episodes for \"${item.name}\".");
@@ -14452,19 +14501,29 @@ class _SearchScreenState extends State<SearchScreen>
     }
 
     final pick = episodes[Random().nextInt(episodes.length)];
-    _playSelection(
-      AdvancedSearchSelection(
-        initialContinuousShuffle: mode == RandomPlaybackMode.continuous,
-        imdbId: imdb,
-        isSeries: true,
-        title: item.name,
-        year: item.year,
-        season: pick.season,
-        episode: pick.episode,
-        contentType: item.type,
-        posterUrl: item.poster,
-      ),
+    var selection = AdvancedSearchSelection(
+      initialContinuousShuffle: mode == RandomPlaybackMode.continuous,
+      imdbId: imdb ?? item.id,
+      isSeries: true,
+      title: item.name,
+      year: item.year,
+      season: pick.season,
+      episode: pick.episode,
+      contentType: item.type,
+      posterUrl: item.poster,
     );
+    if (metaAddon != null &&
+        !StremioService.isCanonicalEpisodeId(
+          selection.imdbId, pick.videoId, pick.season, pick.episode,
+        )) {
+      selection = selection.withStremioEpisodeIdentity(
+        addonId: metaAddon.id,
+        addonKey: metaAddon.sourceBindingKey,
+        catalogId: contentId,
+        videoId: pick.videoId,
+      );
+    }
+    _playSelection(selection);
   }
 
   // Catalog Play = auto-best in-tab; Sources = manual list in-tab. For a series
@@ -14529,6 +14588,11 @@ class _SearchScreenState extends State<SearchScreen>
           )
         : null;
     Future<void> launch(AdvancedSearchSelection selection) async {
+      selection = await _withCatalogEpisodeIdentity(selection, item, addon);
+      if (!mounted || cancelled) {
+        resolving?.dismiss();
+        return;
+      }
       debugPrint(
         '[SeriesResume] ${browseSourcesOnly ? 'sources-open' : 'play-launch'} '
         'title="${selection.title}" '
@@ -14851,11 +14915,42 @@ class _SearchScreenState extends State<SearchScreen>
       // re-opening it — parity with the deprecated home's continue-watching
       // quick-play (only the local, non-Trakt path; Trakt resolves its own next).
       if (lastFinished) {
-        final next = await NextEpisodeService.findNextEpisode(
-          playId,
-          season,
-          episode,
+        final ({int season, int episode})? next;
+        final catalogVideoId = await _stremio.episodeVideoIdForLaunch(
+          addon: addon,
+          imdbId: playId,
+          catalogId: item.id,
+          season: season,
+          episode: episode,
         );
+        final usesCustomCatalogIdentity =
+            catalogVideoId != null && catalogVideoId.isNotEmpty
+                ? !StremioService.isCanonicalEpisodeId(
+                    playId, catalogVideoId, season, episode,
+                  )
+                : !StremioService.isCanonicalCatalogAlias(item.id, playId);
+        if (playId.startsWith('tt') && !usesCustomCatalogIdentity) {
+          final resolved = await NextEpisodeService.findNextEpisode(
+            playId,
+            season,
+            episode,
+          );
+          next = resolved == null
+              ? null
+              : (season: resolved.season, episode: resolved.episode);
+        } else {
+          final resolved = await _stremio.resolveAdjacentSeriesEpisode(
+            addonKey: addon.sourceBindingKey,
+            addonId: addon.id,
+            catalogId: item.id,
+            season: season,
+            episode: episode,
+            direction: 1,
+          );
+          next = resolved == null
+              ? null
+              : (season: resolved.season, episode: resolved.episode);
+        }
         if (!mounted || cancelled) return;
         if (next != null) {
           season = next.season;
@@ -15830,6 +15925,10 @@ class _SearchScreenState extends State<SearchScreen>
     posterUrl: sel.posterUrl,
     year: sel.year,
     addonId: _activeAddonId,
+    stremioAddonId: sel.stremioAddonId,
+    stremioAddonKey: sel.stremioAddonKey,
+    stremioCatalogId: sel.stremioCatalogId,
+    stremioVideoId: sel.stremioVideoId,
     traktProgressPercent: sel.traktProgressPercent,
     // Trakt-row plays scrobble to Trakt instead of saving a duplicate local
     // Continue Watching entry (mirrors Home passing selection.traktSource).
@@ -17032,7 +17131,7 @@ class _SearchScreenState extends State<SearchScreen>
           for (final source in _kwSourceList)
             CinemaSourceProvider(
               id: source,
-              label: _SourcesScreenState._prettySource(source),
+              label: _kwSourceLabel(source),
               count: counts[source] ?? 0,
             ),
         ],
@@ -17166,17 +17265,20 @@ class _SearchScreenState extends State<SearchScreen>
   /// row — same grammar as the Sources screen's rows (shared SourceRow look).
   static String _kwRowSubtitle(Torrent t) {
     final parts = <String>[];
+    final sourceLabel = t.addonDisplayName?.trim().isNotEmpty == true
+        ? t.addonDisplayName!.trim()
+        : t.source;
     if (t.isDirectStream || t.isExternalStream) {
       if (t.sizeBytes > 0) {
         parts.add(_SourcesScreenState._fmtSize(t.sizeBytes));
       }
-      if (t.source.isNotEmpty) parts.add(t.source.toUpperCase());
+      if (sourceLabel.isNotEmpty) parts.add(sourceLabel.toUpperCase());
       return parts.join(' · ');
     }
     if (t.sizeBytes > 0) parts.add(_SourcesScreenState._fmtSize(t.sizeBytes));
     if (t.seeders > 0) parts.add('↑ ${t.seeders}');
     if (t.leechers > 0) parts.add('↓ ${t.leechers}');
-    if (t.source.isNotEmpty) parts.add(t.source.toUpperCase());
+    if (sourceLabel.isNotEmpty) parts.add(sourceLabel.toUpperCase());
     final date = _SourcesScreenState._fmtDate(t.createdUnix);
     if (date != null) parts.add(date);
     return parts.join(' · ');
@@ -17186,6 +17288,15 @@ class _SearchScreenState extends State<SearchScreen>
   static String _kwPrettySource(String s) {
     final v = s.startsWith('stremio:') ? s.substring(8) : s;
     return v.isEmpty ? s : v[0].toUpperCase() + v.substring(1);
+  }
+
+  String _kwSourceLabel(String source) {
+    for (final torrent in _kwFullSet) {
+      if (_kwSourceOf(torrent) != source) continue;
+      final label = torrent.addonDisplayName?.trim();
+      if (label != null && label.isNotEmpty) return label;
+    }
+    return _kwPrettySource(source);
   }
 
   /// Horizontal source tabs (All / per-source with counts) above the toolbar —
@@ -17288,7 +17399,7 @@ class _SearchScreenState extends State<SearchScreen>
             for (var i = 0; i < sources.length; i++)
               tab(
                 i + 1,
-                '${_kwPrettySource(sources[i])} · ${counts[sources[i]] ?? 0}',
+                '${_kwSourceLabel(sources[i])} · ${counts[sources[i]] ?? 0}',
                 _kwSourceTab == sources[i],
                 () => _setKwSourceTab(sources[i]),
               ),
@@ -18514,7 +18625,10 @@ class _SearchScreenState extends State<SearchScreen>
             (_isMdblistAuthenticated || _discSource == _discMdblist))
           const StremioDropdownOption(_discMdblist, 'MDBList'),
         for (final a in _discAddons)
-          StremioDropdownOption('$_discAddonPrefix${a.id}', a.name),
+          StremioDropdownOption(
+            '$_discAddonPrefix${a.id}',
+            a.displayName,
+          ),
       ],
       onSelected: _selectDiscoverSource,
     );
@@ -19532,7 +19646,7 @@ class _SearchScreenState extends State<SearchScreen>
           ? 'MDBList'
           : 'Simkl';
     }
-    return section.addon.name;
+    return section.addon.displayName;
   }
 
   /// Applies the Home presentation preference only to catalog/source

@@ -12,6 +12,7 @@ import 'webdav_sync_codec.dart';
 import 'webdav_sync_hot_models.dart';
 import '../playlist_dedupe_key.dart';
 import '../transfer/transfer_io.dart';
+import '../../utils/catalog_source_scope.dart';
 
 abstract final class WebDavSyncRecordKey {
   static String homeCollection(String id) => 'homecollection/${_part(id)}';
@@ -324,6 +325,17 @@ final class WebDavSyncIdentityMaps {
     required Map<String, String> directReplacements,
     required Map<String, String> iptvReplacements,
   }) {
+    if (value.startsWith('catalog:')) {
+      final parts = value.split(':');
+      if (parts.length < 5) return value;
+      final origin = directReplacements[parts[1]] ?? parts[1];
+      final binding = _rewriteSeriesBinding(
+        parts.skip(3).join(':'),
+        directReplacements: directReplacements,
+        iptvReplacements: iptvReplacements,
+      );
+      return 'catalog:$origin:${parts[2]}:$binding';
+    }
     const directPrefix = 'direct:';
     if (value.startsWith(directPrefix)) {
       final separator = value.indexOf(':', directPrefix.length);
@@ -1712,14 +1724,22 @@ abstract final class WebDavSyncHotMerge {
   }
 
   static String _seriesBindingKey(Map<String, dynamic> source) {
+    final scope = catalogSourceScope(
+      source['addonCatalogId']?.toString(),
+      source['addonCatalogKey']?.toString(),
+    );
     final hash = source['torrentHash']?.toString() ?? '';
-    if (hash.isNotEmpty) return 'hash:$hash';
+    if (hash.isNotEmpty) return '${scope}hash:$hash';
     final service = source['debridService']?.toString() ?? 'rd';
     if (service == 'local') {
       return 'local:${source['localPath'] ?? source['debridTorrentId'] ?? ''}';
     }
     if (service == 'stremio_direct') {
-      return 'direct:${source['addonKey'] ?? ''}:${source['streamKey'] ?? ''}';
+      final group = source['bingeGroup']?.toString() ?? '';
+      if (scope.isNotEmpty && group.isNotEmpty) {
+        return '${scope}direct:${source['addonKey'] ?? ''}:group:${sha256.convert(utf8.encode(group))}';
+      }
+      return '${scope}direct:${source['addonKey'] ?? ''}:${source['streamKey'] ?? ''}';
     }
     if (service == 'iptv_direct') {
       return 'iptv:${source['iptvPlaylistId'] ?? ''}:'

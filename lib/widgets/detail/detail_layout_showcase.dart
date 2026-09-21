@@ -4,6 +4,8 @@ import '../../services/metadata_explore_service.dart';
 import '../../services/profiles/profile_runtime.dart';
 import 'showcase_availability.dart';
 import '../../models/metadata_preferences.dart';
+import '../../models/detail_page_section_visibility.dart';
+import '../../services/storage_service.dart';
 import '../../screens/metadata_explore_page.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
@@ -61,6 +63,7 @@ class DetailShowcase extends StatefulWidget {
   /// ladder's widgets all exist.
   final bool dpad;
   final MetadataExploreService? exploreService;
+  final DetailPageSectionVisibility? sectionVisibility;
 
   const DetailShowcase({
     super.key,
@@ -68,6 +71,7 @@ class DetailShowcase extends StatefulWidget {
     required this.episodesHost,
     this.dpad = true,
     this.exploreService,
+    this.sectionVisibility,
   });
 
   @override
@@ -207,15 +211,28 @@ class _DetailShowcaseState extends State<DetailShowcase> {
   final _extraNodes = <String, List<FocusNode>>{};
   final _extraKeys = <String, GlobalKey>{};
 
+  DetailPageSectionVisibility get _sectionVisibility =>
+      widget.sectionVisibility ??
+      StorageService.detailPageSectionVisibilityCached;
+
   List<ShowcaseAvailabilityRow> get _extraRows => showcaseAvailabilityRows(
     _explore, widget.model.metadataPreferences,
     failed: _exploreFailed,
+    visibility: _sectionVisibility,
   );
 
-  Object? _explorePolicy(MetadataPreferences? prefs) => prefs == null ? null : (
+  DetailPageSectionVisibility _visibilityFor(DetailShowcase showcase) =>
+      showcase.sectionVisibility ??
+      StorageService.detailPageSectionVisibilityCached;
+
+  Object? _explorePolicy(
+    MetadataPreferences? prefs,
+    DetailPageSectionVisibility visibility,
+  ) => prefs == null ? null : (
     prefs.language, prefs.region,
     prefs.features.contains(MetadataFeature.companies),
-    prefs.features.contains(MetadataFeature.availability),
+    prefs.features.contains(MetadataFeature.availability) &&
+        visibility.showsAnyAvailability,
   );
 
   void _scopeChanged() {
@@ -229,8 +246,10 @@ class _DetailShowcaseState extends State<DetailShowcase> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.model.item.id != widget.model.item.id ||
         oldWidget.model.item.type != widget.model.item.type ||
-        _explorePolicy(oldWidget.model.metadataPreferences) !=
-            _explorePolicy(widget.model.metadataPreferences) ||
+        _explorePolicy(oldWidget.model.metadataPreferences,
+                _visibilityFor(oldWidget)) !=
+            _explorePolicy(widget.model.metadataPreferences,
+                _visibilityFor(widget)) ||
         oldWidget.exploreService != widget.exploreService) {
       _loadExplore();
     }
@@ -246,6 +265,9 @@ class _DetailShowcaseState extends State<DetailShowcase> {
     final features = prefs.features.intersection({
       MetadataFeature.companies, MetadataFeature.availability,
     });
+    if (!_sectionVisibility.showsAnyAvailability) {
+      features.remove(MetadataFeature.availability);
+    }
     if (features.isEmpty) return;
     _fetchExplore(generation, prefs.copyWith(features: features), 0);
   }
@@ -930,7 +952,9 @@ class _DetailShowcaseState extends State<DetailShowcase> {
   /// spoiler filter — a rail holding nothing but a "+N on IMDb" card would be
   /// a signpost to content the page can't show. Both _bands and _pageBody
   /// gate on this same list, so topology and rendering agree.
-  List<DidYouKnowEntry> get _dyk => _x?.didYouKnow ?? const [];
+  List<DidYouKnowEntry> get _dyk => _sectionVisibility.didYouKnow
+      ? _x?.didYouKnow ?? const []
+      : const [];
 
   /// Cards mounted, plus the terminal "+N" card when IMDb holds more.
   int get _dykNodeCount =>

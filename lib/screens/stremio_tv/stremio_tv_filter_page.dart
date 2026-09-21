@@ -184,7 +184,7 @@ class _StremioTvFilterPageState extends State<StremioTvFilterPage> {
           on: on,
         );
       }).toList();
-      return _FilterAddon(id: addon.id, name: addon.name, cats: cats);
+      return _FilterAddon(id: addon.id, name: addon.displayName, cats: cats);
     }).toList();
   }
 

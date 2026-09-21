@@ -148,8 +148,8 @@ class _RemoteAddonExportState extends State<RemoteAddonExport> {
           SnackBar(
             content: Text(
               supportsApplicationResult
-                  ? 'Installed "${addon.name}" on TV'
-                  : 'Sent "${addon.name}" — confirm the import on TV',
+                  ? 'Installed "${addon.displayName}" on TV'
+                  : 'Sent "${addon.displayName}" — confirm the import on TV',
             ),
             backgroundColor: supportsApplicationResult
                 ? const Color(0xFF10B981)
@@ -320,7 +320,7 @@ class _RemoteAddonExportState extends State<RemoteAddonExport> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        addon.name,
+                        addon.displayName,
                         style: const TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w500,

@@ -1049,6 +1049,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
         firstAired: released,
         thumbnailUrl: thumbnail,
         rating: rating,
+        stremioVideoId: v['id']?.toString(),
       );
 
       seasonMap.putIfAbsent(seasonNum, () => []);
@@ -1637,7 +1638,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
     final show = _selectedShow;
     if (show == null || widget.onItemSelected == null) return;
 
-    final selection = AdvancedSearchSelection(
+    var selection = AdvancedSearchSelection(
       imdbId: show.effectiveImdbId ?? show.id,
       isSeries: true,
       title: show.name,
@@ -1660,6 +1661,19 @@ class EpisodesPanelState extends State<EpisodesPanel> {
       // catalog grid) when they back out of the torrent results.
       fromCatalogEpisodeDrillDown: true,
     );
+    final videoId = episode.stremioVideoId?.trim();
+    if (videoId != null &&
+        videoId.isNotEmpty &&
+        !StremioService.isCanonicalEpisodeId(
+          selection.imdbId, videoId, episode.season, episode.number,
+        )) {
+      selection = selection.withStremioEpisodeIdentity(
+        addonId: widget.addon.id,
+        addonKey: widget.addon.sourceBindingKey,
+        catalogId: show.id,
+        videoId: videoId,
+      );
+    }
     widget.onBeforeTerminalDispatch?.call();
     widget.onItemSelected!(selection);
   }
@@ -1672,7 +1686,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
     final show = _selectedShow;
     if (show == null) return;
 
-    final selection = AdvancedSearchSelection(
+    var selection = AdvancedSearchSelection(
       imdbId: show.effectiveImdbId ?? show.id,
       isSeries: true,
       title: show.name,
@@ -1691,6 +1705,20 @@ class EpisodesPanelState extends State<EpisodesPanel> {
           : null,
       fromCatalogEpisodeDrillDown: true,
     );
+
+    final videoId = episode.stremioVideoId?.trim();
+    if (videoId != null &&
+        videoId.isNotEmpty &&
+        !StremioService.isCanonicalEpisodeId(
+          selection.imdbId, videoId, episode.season, episode.number,
+        )) {
+      selection = selection.withStremioEpisodeIdentity(
+        addonId: widget.addon.id,
+        addonKey: widget.addon.sourceBindingKey,
+        catalogId: show.id,
+        videoId: videoId,
+      );
+    }
 
     widget.onBeforeTerminalDispatch?.call();
     if (widget.onQuickPlay != null) {

@@ -82,7 +82,7 @@ class StremioTvGuideSheet extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          channel.addon.name,
+                          channel.addon.displayName,
                           style: theme.textTheme.labelSmall?.copyWith(
                             color: theme.colorScheme.onSurfaceVariant
                                 .withValues(alpha: 0.6),

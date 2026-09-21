@@ -857,6 +857,80 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
   Future<void> _toggleAddon(StremioAddon a) =>
       _stremio.setAddonEnabled(a.storageKey, !a.enabled);
 
+  Future<void> _renameAddon(StremioAddon a) async {
+    var value = a.userAlias ?? a.name;
+    final alias = await showDialog<String>(
+      context: context,
+      builder: (ctx) => _HubDialog(
+        title: 'Rename addon',
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            TextFormField(
+              autofocus: true,
+              initialValue: value,
+              maxLength: 60,
+              decoration: const InputDecoration(
+                labelText: 'Display name',
+                hintText: 'For example, AIOStreams Main',
+              ),
+              onChanged: (next) => value = next,
+              onFieldSubmitted: (next) => Navigator.of(ctx).pop(next.trim()),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Manifest name: ${a.name}',
+              style: TextStyle(
+                color: AppThemeScope.of(ctx).fade(
+                  AppThemeScope.of(ctx).core.tx,
+                  0.58,
+                ),
+                fontSize: 12,
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          _HubDialogButton(
+            label: 'Use manifest name',
+            onTap: () => Navigator.of(ctx).pop(''),
+          ),
+          _HubDialogButton(
+            label: 'Cancel',
+            onTap: () => Navigator.of(ctx).pop(),
+          ),
+          _HubDialogButton(
+            label: 'Save',
+            primary: true,
+            onTap: () => Navigator.of(ctx).pop(value.trim()),
+          ),
+        ],
+      ),
+    );
+    if (alias == null || !mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await _stremio.setAddonAlias(a.storageKey, alias);
+      if (!mounted) return;
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            alias.isEmpty ? 'Using ${a.name}' : 'Renamed to ${alias.trim()}',
+          ),
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('Could not rename addon: $error'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
   Future<void> _updateAddon(StremioAddon a) async {
     final messenger = ScaffoldMessenger.of(context);
     final refreshed = await _stremio.refreshAddon(a.manifestUrl);
@@ -864,7 +938,7 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
     if (refreshed == null) {
       messenger.showSnackBar(
         SnackBar(
-          content: Text('Failed to update ${a.name}'),
+          content: Text('Failed to update ${a.displayName}'),
           backgroundColor: Colors.red,
         ),
       );
@@ -873,11 +947,11 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
           ? ' (v${a.version} → v${refreshed.version})'
           : '';
       messenger.showSnackBar(
-        SnackBar(content: Text('${a.name} updated$detail')),
+        SnackBar(content: Text('${a.displayName} updated$detail')),
       );
     } else {
       messenger.showSnackBar(
-        SnackBar(content: Text('${a.name} is already up to date')),
+        SnackBar(content: Text('${a.displayName} is already up to date')),
       );
     }
   }
@@ -906,10 +980,10 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
         title: 'Remove addon',
         content: Text(
           isShared
-              ? '"${a.name}" is shared with $borrowerCount other '
+              ? '"${a.displayName}" is shared with $borrowerCount other '
                     'profile${borrowerCount == 1 ? '' : 's'}. Removing it '
                     'will also remove it from those shared profiles.'
-              : 'Remove "${a.name}" from your addons?',
+              : 'Remove "${a.displayName}" from your addons?',
           style: TextStyle(color: app.fade(app.core.tx, 0.75)),
         ),
         actions: [
@@ -929,7 +1003,9 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
     try {
       await _stremio.removeAddon(a.manifestUrl, revokeSharedProfiles: isShared);
       if (!mounted) return;
-      messenger.showSnackBar(SnackBar(content: Text('${a.name} removed')));
+      messenger.showSnackBar(
+        SnackBar(content: Text('${a.displayName} removed')),
+      );
     } catch (e) {
       if (!mounted) return;
       messenger.showSnackBar(
@@ -961,6 +1037,12 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
           Navigator.of(ctx).pop();
           _updateAddon(a);
         },
+        onRename: a.canManage
+            ? () {
+                Navigator.of(ctx).pop();
+                _renameAddon(a);
+              }
+            : null,
         onDetails: () {
           Navigator.of(ctx).pop();
           _showDetails(a);
@@ -978,7 +1060,7 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
     showDialog<void>(
       context: context,
       builder: (ctx) => _HubDialog(
-        title: a.name,
+        title: a.displayName,
         content: SingleChildScrollView(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -991,6 +1073,7 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
                 ),
                 const SizedBox(height: 14),
               ],
+              if (a.userAlias != null) _detailRow('Manifest name', a.name),
               _detailRow('ID', a.id),
               if (a.version != null) _detailRow('Version', a.version!),
               _detailRow(
@@ -1498,7 +1581,7 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
       );
     }
     final items = _installed
-        .where((a) => _matchesFilters(types: a.types, name: a.name))
+        .where((a) => _matchesFilters(types: a.types, name: a.displayName))
         .toList();
     return Column(
       children: [
@@ -1621,8 +1704,8 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
                 StremioDropdownOption(
                   StremioService.metadataProviderValue(addon),
                   StremioService.isCinemetaAddon(addon)
-                      ? '${addon.name} · Recommended'
-                      : addon.name,
+                      ? '${addon.displayName} · Recommended'
+                      : addon.displayName,
                 ),
               const StremioDropdownOption(
                 StremioService.automaticMetadataProvider,
@@ -2126,7 +2209,7 @@ class _InstalledRow extends StatelessWidget {
                           const SizedBox(width: 14),
                           Expanded(
                             child: _AddonTitleLine(
-                              name: addon.name,
+                              name: addon.displayName,
                               version: addon.version,
                               stacked: true,
                             ),
@@ -2147,7 +2230,7 @@ class _InstalledRow extends StatelessWidget {
                       const SizedBox(width: 20),
                       Expanded(
                         child: _AddonInfo(
-                          name: addon.name,
+                          name: addon.displayName,
                           version: addon.version,
                           types: addon.types,
                           resources: addon.resources,
@@ -2801,6 +2884,7 @@ class _AddonOptionsSheet extends StatelessWidget {
   final StremioAddon addon;
   final VoidCallback onToggle;
   final VoidCallback onUpdate;
+  final VoidCallback? onRename;
   final VoidCallback onDetails;
   final VoidCallback onRemove;
 
@@ -2808,6 +2892,7 @@ class _AddonOptionsSheet extends StatelessWidget {
     required this.addon,
     required this.onToggle,
     required this.onUpdate,
+    this.onRename,
     required this.onDetails,
     required this.onRemove,
   });
@@ -2834,7 +2919,7 @@ class _AddonOptionsSheet extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 8),
               child: Text(
-                addon.name,
+                addon.displayName,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
@@ -2857,6 +2942,12 @@ class _AddonOptionsSheet extends StatelessWidget {
               label: 'Update',
               onTap: onUpdate,
             ),
+            if (onRename != null)
+              _OptionTile(
+                icon: Icons.drive_file_rename_outline_rounded,
+                label: 'Rename',
+                onTap: onRename!,
+              ),
             _OptionTile(
               icon: Icons.info_outline_rounded,
               label: 'View details',

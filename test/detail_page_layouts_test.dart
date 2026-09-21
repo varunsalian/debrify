@@ -3,6 +3,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:debrify/screens/settings/detail_page_style_page.dart';
+import 'package:debrify/models/detail_page_section_visibility.dart';
+import 'package:debrify/services/profiles/sanitized_profile_preferences.dart';
 import 'package:debrify/services/storage_service.dart';
 import 'package:debrify/widgets/detail/detail_style.dart';
 
@@ -138,6 +140,53 @@ void main() {
         'premiere',
       ]) {
         expect(StorageService.kDetailPageStyles.contains(s), isTrue);
+      }
+    });
+  });
+
+  group('detail page section visibility', () {
+    setUp(() => SharedPreferences.setMockInitialValues({}));
+
+    test('all optional sections remain visible by default', () async {
+      final visibility =
+          await StorageService.getDetailPageSectionVisibility();
+      expect(visibility, DetailPageSectionVisibility.defaults);
+      expect(visibility.showsAnyAvailability, isTrue);
+    });
+
+    test('choices round-trip independently and update the sync cache', () async {
+      const visibility = DetailPageSectionVisibility(
+        whereToWatch: false,
+        rent: true,
+        buy: false,
+        availabilityLink: false,
+        didYouKnow: false,
+      );
+      await StorageService.setDetailPageSectionVisibility(visibility);
+
+      expect(StorageService.detailPageSectionVisibilityCached, visibility);
+      expect(await StorageService.getDetailPageSectionVisibility(), visibility);
+    });
+
+    test('rapid changes cannot let an older write win', () async {
+      const older = DetailPageSectionVisibility(whereToWatch: false);
+      const latest = DetailPageSectionVisibility(
+        whereToWatch: false,
+        rent: false,
+      );
+
+      await Future.wait([
+        StorageService.setDetailPageSectionVisibility(older),
+        StorageService.setDetailPageSectionVisibility(latest),
+      ]);
+
+      expect(await StorageService.getDetailPageSectionVisibility(), latest);
+    });
+
+    test('portable profile validation accepts only booleans', () {
+      for (final key in StorageService.detailPageSectionPreferenceKeys) {
+        expect(SanitizedProfilePreferences.allowsEntry(key, true), isTrue);
+        expect(SanitizedProfilePreferences.allowsEntry(key, 'true'), isFalse);
       }
     });
   });

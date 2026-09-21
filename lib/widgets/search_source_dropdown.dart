@@ -84,7 +84,7 @@ class SearchSourceOption {
   factory SearchSourceOption.fromAddon(StremioAddon addon) => SearchSourceOption(
     type: SearchSourceType.addon,
     addon: addon,
-    label: addon.name,
+    label: addon.displayName,
     icon: Icons.extension,
   );
 

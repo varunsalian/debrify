@@ -364,7 +364,7 @@ class _HomeSectionsFilterPageState extends State<HomeSectionsFilterPage> {
             ),
       ];
       if (items.isEmpty) continue;
-      groups.add(_Group(addon.name, items));
+      groups.add(_Group(addon.displayName, items));
     }
     return groups;
   }

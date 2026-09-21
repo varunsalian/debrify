@@ -14,9 +14,185 @@ import 'iptv_load_phase.dart';
 import 'profiles/profile_collection_resource_facade.dart';
 import 'profiles/profile_runtime.dart';
 
-/// A panel response crossed the buffering cap — the server's real answer,
-/// deliberately NOT one of the transient network failures the retry loop
-/// re-attempts.
+/// Only file metadata crosses to the catalog worker, never response bodies.
+class _DiskResponse {
+  const _DiskResponse(this.path, this.charset);
+  final String path;
+  final String? charset;
+}
+
+/// Strict array framing, bounded independently of the total response size.
+/// JSON decoding sees only one object, including across UTF-8/chunk boundaries.
+@visibleForTesting
+Stream<Map<String, dynamic>> xtreamJsonItems(
+  Stream<List<int>> chunks, {
+  String? charset,
+  int maxItemBytes = 1024 * 1024,
+  int maxDepth = 64,
+}) async* {
+  var state = 0; // opening array, item or end, item, delimiter, finished
+  var afterComma = false;
+  var quoted = false;
+  var escaped = false;
+  final stack = <int>[];
+  final item = Uint8List(maxItemBytes);
+  var itemLength = 0;
+  var prefixPosition = 0;
+  var readingBom = false;
+  await for (final chunk in chunks) {
+    for (final byte in chunk) {
+      // utf8.decode removes a leading BOM in the materialized path. Match
+      // that behavior even when its three bytes arrive in separate chunks.
+      if (prefixPosition == 0 && byte == 0xef) {
+        readingBom = true;
+        prefixPosition = 1;
+        continue;
+      }
+      if (readingBom) {
+        if (byte != (prefixPosition == 1 ? 0xbb : 0xbf)) {
+          throw const FormatException('Invalid Xtream UTF-8 BOM');
+        }
+        prefixPosition++;
+        readingBom = prefixPosition < 3;
+        continue;
+      }
+      prefixPosition = 3;
+      final space = byte == 32 || byte == 10 || byte == 13 || byte == 9;
+      if (state != 2 && space) continue;
+      if (state == 0) {
+        if (byte != 91) throw const FormatException('Expected Xtream array');
+        state = 1;
+      } else if (state == 1) {
+        if (byte == 93 && !afterComma) {
+          state = 4;
+          continue;
+        }
+        if (byte != 123) throw const FormatException('Expected Xtream object');
+        if (itemLength == maxItemBytes) {
+          throw const FormatException('Xtream item too large');
+        }
+        item[itemLength++] = byte;
+        stack.add(byte);
+        state = 2;
+      } else if (state == 2) {
+        if (itemLength == maxItemBytes) {
+          throw const FormatException('Xtream item too large');
+        }
+        item[itemLength++] = byte;
+        if (quoted) {
+          if (escaped) {
+            escaped = false;
+          } else if (byte == 92) {
+            escaped = true;
+          } else if (byte == 34) {
+            quoted = false;
+          }
+        } else if (byte == 34) {
+          quoted = true;
+        } else if (byte == 123 || byte == 91) {
+          stack.add(byte);
+          if (stack.length > maxDepth) {
+            throw const FormatException('Xtream nesting too deep');
+          }
+        } else if (byte == 125 || byte == 93) {
+          if (stack.isEmpty || stack.removeLast() != (byte == 125 ? 123 : 91)) {
+            throw const FormatException('Mismatched Xtream JSON');
+          }
+          if (stack.isEmpty) {
+            final decoded = jsonDecode(
+              XtreamCodesService.decodeResponseBytes(
+                Uint8List.sublistView(item, 0, itemLength),
+                charset,
+              ),
+            );
+            yield decoded as Map<String, dynamic>;
+            itemLength = 0;
+            state = 3;
+          }
+        }
+      } else if (state == 3) {
+        if (byte == 44) {
+          state = 1;
+          afterComma = true;
+        } else if (byte == 93) {
+          state = 4;
+        } else {
+          throw const FormatException('Expected Xtream array delimiter');
+        }
+      } else {
+        throw const FormatException('Trailing Xtream JSON');
+      }
+    }
+  }
+  if (state != 4) throw const FormatException('Truncated Xtream JSON');
+}
+
+Future<IptvParseResult> _ingestXtreamFiles(
+  (_StreamsJob, _DiskResponse, _DiskResponse?, SendPort) input,
+) async {
+  XtreamCodesService.buildsOnThisIsolate++;
+  final (job, streams, categories, authorization) = input;
+  final map = <String, String>{};
+  final names = <String>[];
+  String? warning;
+  try {
+    if (categories == null) throw const FormatException('Missing categories');
+    var bytes = 0;
+    await for (final item in xtreamJsonItems(
+      File(categories.path).openRead(),
+      charset: categories.charset,
+    )) {
+      final id = item['category_id']?.toString() ?? '';
+      final name = item['category_name']?.toString() ?? '';
+      bytes += id.length + name.length;
+      if (names.length >= 10000 || bytes > 1024 * 1024) {
+        throw const FormatException('Too many Xtream categories');
+      }
+      if (id.isNotEmpty && name.isNotEmpty) {
+        map[id] = name;
+        names.add(name);
+      }
+    }
+  } catch (_) {
+    map.clear();
+    names.clear();
+    warning =
+        'Could not load ${job.label} categories — showing channels ungrouped';
+  }
+  return IptvCatalogDb.ingestIncremental(
+    dbPath: job.ingestDbPath!,
+    catalogKey: job.ingestCatalogKey!,
+    numberingSourceKey: job.numberingSourceKey,
+    beforePublish: () async {
+      final reply = ReceivePort();
+      try {
+        authorization.send(reply.sendPort);
+        if (await reply.first != true) {
+          throw StateError('Xtream load cancelled');
+        }
+      } finally {
+        reply.close();
+      }
+    },
+    produce: (emit) async {
+      await for (final item in xtreamJsonItems(
+        File(streams.path).openRead(),
+        charset: streams.charset,
+      )) {
+        for (final channel in _channelsFromItems(job, map, [item])) {
+          emit(channel);
+        }
+      }
+      return IptvParseResult(
+        channels: const [],
+        categories: names,
+        warning: warning,
+      );
+    },
+  );
+}
+
+/// A size violation is not a transient network failure to retry.
 class _ResponseTooLargeException implements Exception {
   final Uri uri;
   _ResponseTooLargeException(this.uri);
@@ -91,6 +267,81 @@ class XtreamCodesService {
   /// day one — this is its Xtream counterpart.)
   static const _maxResponseBytes = 100 * 1024 * 1024; // 100 MB
 
+  @visibleForTesting
+  static int? debugMaxDownloadBytes;
+  @visibleForTesting
+  static Duration? debugDownloadDeadline;
+  @visibleForTesting
+  static String? debugDownloadDirectory;
+
+  Future<_DiskResponse> _downloadToFile(
+    String url,
+    File file, {
+    required Future<void> Function() beforeRetry,
+    Duration timeout = const Duration(seconds: 90),
+    int attempts = 3,
+  }) => _withTransientRetry(
+    () => _downloadToFileOnce(url, file, timeout),
+    attempts: attempts,
+    beforeRetry: beforeRetry,
+  );
+
+  Future<_DiskResponse> _downloadToFileOnce(
+    String url,
+    File file,
+    Duration requestTimeout,
+  ) async {
+    final client = http.Client();
+    final timeout = debugDownloadDeadline ?? requestTimeout;
+    final watch = Stopwatch()..start();
+    final timer = Timer(timeout, client.close);
+    RandomAccessFile? output;
+    StreamIterator<List<int>>? chunks;
+    Duration remaining() {
+      final value = timeout - watch.elapsed;
+      if (value <= Duration.zero) {
+        throw TimeoutException('Xtream download deadline');
+      }
+      return value;
+    }
+
+    try {
+      // Truncate before every attempt, including retries after a partial body.
+      output = await file.open(mode: FileMode.write);
+      final uri = Uri.parse(url);
+      final request = http.Request('GET', uri)..headers.addAll(_headers);
+      final response = await client.send(request).timeout(remaining());
+      if (response.statusCode != 200) {
+        throw HttpException('Xtream HTTP ${response.statusCode}');
+      }
+      final cap = debugMaxDownloadBytes ?? _maxResponseBytes;
+      if ((response.contentLength ?? 0) > cap) {
+        throw _ResponseTooLargeException(uri);
+      }
+      chunks = StreamIterator(response.stream);
+      var count = 0;
+      while (await chunks.moveNext().timeout(remaining())) {
+        final chunk = chunks.current;
+        count += chunk.length;
+        if (count > cap) throw _ResponseTooLargeException(uri);
+        // Await the actual disk write before requesting another network chunk.
+        await output.writeFrom(chunk);
+        remaining();
+      }
+      return _DiskResponse(
+        file.path,
+        _charsetExp
+            .firstMatch(response.headers['content-type'] ?? '')
+            ?.group(1),
+      );
+    } finally {
+      timer.cancel();
+      client.close();
+      await chunks?.cancel();
+      await output?.close();
+    }
+  }
+
   /// Streamed GET with [_maxResponseBytes] enforced chunk-by-chunk, so an
   /// over-limit (or lying Content-Length) download aborts early instead of
   /// buffering whole. [timeout] bounds the entire request, matching the old
@@ -151,10 +402,16 @@ class XtreamCodesService {
     String url, {
     required Duration timeout,
     int attempts = 3,
+  }) => _withTransientRetry(() => _getCapped(url, timeout), attempts: attempts);
+
+  Future<T> _withTransientRetry<T>(
+    Future<T> Function() request, {
+    int attempts = 3,
+    Future<void> Function()? beforeRetry,
   }) async {
     for (var attempt = 1; ; attempt++) {
       try {
-        return await _getCapped(url, timeout);
+        return await request();
       } catch (e) {
         // Over-cap is the server's real answer, not a hiccup — retrying
         // would re-download the same oversized payload up to [attempts]
@@ -172,6 +429,7 @@ class XtreamCodesService {
           '${backoff.inMilliseconds}ms',
         );
         await Future<void>.delayed(backoff);
+        await beforeRetry?.call();
       }
     }
   }
@@ -513,6 +771,104 @@ class XtreamCodesService {
           : isSeries
           ? 'get_series'
           : 'get_vod_streams';
+
+      if (ingestTarget != null) {
+        final directory = await Directory(
+          debugDownloadDirectory ?? Directory.systemTemp.path,
+        ).createTemp('xtream-');
+        try {
+          onPhase?.call(IptvLoadPhases.downloading);
+          final streams = await _downloadToFile(
+            '$base&action=$streamsAction',
+            File('${directory.path}/streams'),
+            beforeRetry: beforeIngest,
+          );
+          _DiskResponse? categories;
+          try {
+            categories = await _downloadToFile(
+              '$base&action=$categoriesAction',
+              File('${directory.path}/categories'),
+              beforeRetry: beforeIngest,
+              // Optional labels must not hold up a usable stream catalog
+              // with the much larger stream-list retry budget.
+              timeout: const Duration(seconds: 30),
+              attempts: 1,
+            );
+          } catch (_) {
+            // Categories are optional; malformed categories also degrade in worker.
+          }
+          final encodedUser = Uri.encodeComponent(username);
+          final encodedPass = Uri.encodeComponent(password);
+          var form = _LiveUrlForm.standardTs;
+          if (isLive) {
+            final handle = await File(streams.path).open();
+            String head;
+            try {
+              head = latin1.decode(await handle.read(streamIdProbeWindow));
+            } finally {
+              await handle.close();
+            }
+            final match = _sampleStreamIdExp.firstMatch(head);
+            final id = match?.group(1) ?? match?.group(2);
+            if (id != null) {
+              form = await _detectLiveUrlForm(
+                serverUrl,
+                encodedUser,
+                encodedPass,
+                id,
+              );
+            }
+          }
+          onPhase?.call(IptvLoadPhases.processing);
+          final job = _StreamsJob(
+            streamsBytes: TransferableTypedData.fromList([]),
+            categoriesBytes: null,
+            streamsCharset: streams.charset,
+            categoriesCharset: categories?.charset,
+            serverUrl: serverUrl,
+            encodedUser: encodedUser,
+            encodedPass: encodedPass,
+            contentType: contentType,
+            label: label,
+            liveUrlForm: form,
+            ingestDbPath: ingestTarget.path,
+            ingestCatalogKey: IptvCatalogKey.forXtream(
+              serverUrl,
+              username,
+              contentType,
+            ),
+            numberingSourceKey: numberingSourceKey,
+          );
+          return await IptvCatalogDb.runWithWriteTarget(ingestTarget, () async {
+            await beforeIngest();
+            isolateBuilds++;
+            final authorization = ReceivePort();
+            final subscription = authorization.listen((message) async {
+              final reply = message as SendPort;
+              try {
+                await beforeIngest();
+                IptvCatalogDb.validateWriteTarget(ingestTarget);
+                reply.send(true);
+              } catch (_) {
+                reply.send(false);
+              }
+            });
+            try {
+              return await compute(_ingestXtreamFiles, (
+                job,
+                streams,
+                categories,
+                authorization.sendPort,
+              ));
+            } finally {
+              await subscription.cancel();
+              authorization.close();
+            }
+          });
+        } finally {
+          await directory.delete(recursive: true);
+        }
+      }
 
       // Kick off both requests in parallel, but only the stream list is
       // required: a category failure (network or malformed body) must not
@@ -1275,9 +1631,6 @@ IptvParseResult _buildXtreamStreams(_StreamsJob job) {
   _StreamsJob job,
   Map<String, String> categoryMap,
 ) {
-  final isLive = job.contentType == 'live';
-  final isSeries = job.contentType == 'series';
-
   // The expensive UTF-8 pass now happens HERE, on the worker.
   final streamsBody = XtreamCodesService.decodeResponseBytes(
     job.streamsBytes.materialize().asUint8List(),
@@ -1289,8 +1642,17 @@ IptvParseResult _buildXtreamStreams(_StreamsJob job) {
   );
   if (streamsError != null) return (null, streamsError);
 
-  final channels = <IptvChannel>[];
-  for (final stream in streamsData!) {
+  return (_channelsFromItems(job, categoryMap, streamsData!).toList(), null);
+}
+
+Iterable<IptvChannel> _channelsFromItems(
+  _StreamsJob job,
+  Map<String, String> categoryMap,
+  Iterable<dynamic> items,
+) sync* {
+  final isLive = job.contentType == 'live';
+  final isSeries = job.contentType == 'series';
+  for (final stream in items) {
     final name = stream['name']?.toString() ?? '';
     if (name.isEmpty) continue;
 
@@ -1316,29 +1678,27 @@ IptvParseResult _buildXtreamStreams(_StreamsJob job) {
                   stream['release_date'] ??
                   stream['releasedate'])
               ?.toString();
-      channels.add(
-        IptvChannel(
-          name: name,
-          url: 'xtream-series://$seriesId',
-          // `cover` is the canonical series art; some panels send
-          // `stream_icon` instead (the live/VOD field).
-          logoUrl: (stream['cover'] ?? stream['stream_icon'])?.toString(),
-          group: group,
-          duration: null, // not live
-          contentType: 'series',
-          attributes: {
-            'series_id': seriesId,
-            if ((stream['plot']?.toString() ?? '').isNotEmpty)
-              'plot': stream['plot'].toString(),
-            if ((stream['genre']?.toString() ?? '').isNotEmpty)
-              'genre': stream['genre'].toString(),
-            if (releaseDate != null && releaseDate.isNotEmpty)
-              'releaseDate': releaseDate,
-            if ((stream['rating']?.toString() ?? '').isNotEmpty)
-              'rating': stream['rating'].toString(),
-            if (backdrop != null && backdrop.isNotEmpty) 'backdrop': backdrop,
-          },
-        ),
+      yield IptvChannel(
+        name: name,
+        url: 'xtream-series://$seriesId',
+        // `cover` is the canonical series art; some panels send
+        // `stream_icon` instead (the live/VOD field).
+        logoUrl: (stream['cover'] ?? stream['stream_icon'])?.toString(),
+        group: group,
+        duration: null, // not live
+        contentType: 'series',
+        attributes: {
+          'series_id': seriesId,
+          if ((stream['plot']?.toString() ?? '').isNotEmpty)
+            'plot': stream['plot'].toString(),
+          if ((stream['genre']?.toString() ?? '').isNotEmpty)
+            'genre': stream['genre'].toString(),
+          if (releaseDate != null && releaseDate.isNotEmpty)
+            'releaseDate': releaseDate,
+          if ((stream['rating']?.toString() ?? '').isNotEmpty)
+            'rating': stream['rating'].toString(),
+          if (backdrop != null && backdrop.isNotEmpty) 'backdrop': backdrop,
+        },
       );
       continue;
     }
@@ -1347,54 +1707,49 @@ IptvParseResult _buildXtreamStreams(_StreamsJob job) {
     if (streamId.isEmpty) continue;
 
     if (isLive) {
-      channels.add(
-        IptvChannel(
-          name: name,
-          url: _liveUrlFor(
-            job.serverUrl,
-            job.encodedUser,
-            job.encodedPass,
-            streamId,
-            job.liveUrlForm,
-          ),
-          logoUrl: stream['stream_icon']?.toString(),
-          group: group,
-          duration: -1, // live
-          contentType: 'live',
-          attributes: {
-            if (stream['epg_channel_id'] != null)
-              'tvg-id': stream['epg_channel_id'].toString(),
-            'stream_id': streamId,
-            // Catchup: whether the panel records this channel, and for how
-            // many days back the archive reaches.
-            if (stream['tv_archive'] != null)
-              'tv_archive': stream['tv_archive'].toString(),
-            if (stream['tv_archive_duration'] != null)
-              'tv_archive_duration': stream['tv_archive_duration'].toString(),
-          },
+      yield IptvChannel(
+        name: name,
+        url: _liveUrlFor(
+          job.serverUrl,
+          job.encodedUser,
+          job.encodedPass,
+          streamId,
+          job.liveUrlForm,
         ),
+        logoUrl: stream['stream_icon']?.toString(),
+        group: group,
+        duration: -1, // live
+        contentType: 'live',
+        attributes: {
+          if (stream['epg_channel_id'] != null)
+            'tvg-id': stream['epg_channel_id'].toString(),
+          'stream_id': streamId,
+          // Catchup: whether the panel records this channel, and for how
+          // many days back the archive reaches.
+          if (stream['tv_archive'] != null)
+            'tv_archive': stream['tv_archive'].toString(),
+          if (stream['tv_archive_duration'] != null)
+            'tv_archive_duration': stream['tv_archive_duration'].toString(),
+        },
       );
     } else {
       final extension = stream['container_extension']?.toString() ?? 'mp4';
-      channels.add(
-        IptvChannel(
-          name: name,
-          url:
-              '${job.serverUrl}/movie/${job.encodedUser}/${job.encodedPass}/'
-              '$streamId.$extension',
-          logoUrl: stream['stream_icon']?.toString(),
-          group: group,
-          duration: null, // not live
-          contentType: 'vod',
-          attributes: {
-            if (stream['rating'] != null) 'rating': stream['rating'].toString(),
-            'stream_id': streamId,
-          },
-        ),
+      yield IptvChannel(
+        name: name,
+        url:
+            '${job.serverUrl}/movie/${job.encodedUser}/${job.encodedPass}/'
+            '$streamId.$extension',
+        logoUrl: stream['stream_icon']?.toString(),
+        group: group,
+        duration: null, // not live
+        contentType: 'vod',
+        attributes: {
+          if (stream['rating'] != null) 'rating': stream['rating'].toString(),
+          'stream_id': streamId,
+        },
       );
     }
   }
-  return (channels, null);
 }
 
 /// Ingest (when the catalog DB is in play) or hand the built list back —

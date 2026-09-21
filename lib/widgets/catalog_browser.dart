@@ -916,7 +916,7 @@ class CatalogBrowserState extends State<CatalogBrowser> {
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          addon.name,
+                          addon.displayName,
                           // Explicit color: dropdown menu items render
                           // outside the page's DefaultTextStyle. onSurface
                           // follows Appearance → Text Brightness.

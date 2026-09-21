@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../../services/analytics_service.dart';
 import '../../services/storage_service.dart';
+import '../../models/detail_page_section_visibility.dart';
 import '../../utils/platform_util.dart';
 import 'widgets/settings_widgets.dart';
 import '../../theme/app_theme_scope.dart';
@@ -141,6 +142,7 @@ class DetailPageStylePage extends StatefulWidget {
 class _DetailPageStylePageState extends State<DetailPageStylePage> {
   bool _loading = true;
   String _style = StorageService.kDetailPageStyleDefault;
+  DetailPageSectionVisibility _sections = DetailPageSectionVisibility.defaults;
 
   /// Non-focusable marker around the options card; used on TV to hand entry
   /// focus to its first focusable descendant (the first option row).
@@ -169,11 +171,15 @@ class _DetailPageStylePageState extends State<DetailPageStylePage> {
   }
 
   Future<void> _load() async {
-    final style = await StorageService.getDetailPageStyle();
+    final values = await Future.wait<Object>([
+      StorageService.getDetailPageStyle(),
+      StorageService.getDetailPageSectionVisibility(),
+    ]);
     if (!mounted) return;
     setState(() {
       // Narrowed, so a value this build can't draw still shows a selection.
-      _style = effectiveDetailPageStyle(style);
+      _style = effectiveDetailPageStyle(values[0] as String);
+      _sections = values[1] as DetailPageSectionVisibility;
       _loading = false;
     });
     if (PlatformUtil.isAndroidTvCached) {
@@ -195,6 +201,11 @@ class _DetailPageStylePageState extends State<DetailPageStylePage> {
     // does not stamp over the choice. See theme/app_looks.dart.
     LookApplier.noteExternalWrite('detail_page_style');
     await StorageService.setDetailPageStyle(value);
+  }
+
+  Future<void> _setSections(DetailPageSectionVisibility value) async {
+    setState(() => _sections = value);
+    await StorageService.setDetailPageSectionVisibility(value);
   }
 
   @override
@@ -221,7 +232,7 @@ class _DetailPageStylePageState extends State<DetailPageStylePage> {
                   icon: Icons.article_rounded,
                   title: 'Details Page',
                   subtitle:
-                      'How a movie or series page is laid out when you open it',
+                      'Choose the layout and what appears when you open a movie or series',
                 ),
                 const SizedBox(height: 24),
                 Focus(
@@ -229,11 +240,64 @@ class _DetailPageStylePageState extends State<DetailPageStylePage> {
                   canRequestFocus: false,
                   skipTraversal: true,
                   child: SettingsSection(
-                    title: '',
+                    title: 'Layout',
                     children: [
                       for (final choice in _choices) _optionRow(choice),
                     ],
                   ),
+                ),
+                const SizedBox(height: 24),
+                SettingsSection(
+                  title: 'Visible sections',
+                  children: [
+                    SettingsToggleTile(
+                      key: const ValueKey('detail-show-where-to-watch'),
+                      icon: Icons.live_tv_rounded,
+                      title: 'Where to watch',
+                      subtitle: 'Subscription, free and ad-supported services',
+                      value: _sections.whereToWatch,
+                      onChanged: (value) =>
+                          _setSections(_sections.copyWith(whereToWatch: value)),
+                    ),
+                    SettingsToggleTile(
+                      key: const ValueKey('detail-show-rent'),
+                      icon: Icons.key_rounded,
+                      title: 'Rent',
+                      subtitle: 'Services where the title can be rented',
+                      value: _sections.rent,
+                      onChanged: (value) =>
+                          _setSections(_sections.copyWith(rent: value)),
+                    ),
+                    SettingsToggleTile(
+                      key: const ValueKey('detail-show-buy'),
+                      icon: Icons.shopping_bag_outlined,
+                      title: 'Buy',
+                      subtitle: 'Services where the title can be purchased',
+                      value: _sections.buy,
+                      onChanged: (value) =>
+                          _setSections(_sections.copyWith(buy: value)),
+                    ),
+                    SettingsToggleTile(
+                      key: const ValueKey('detail-show-availability-link'),
+                      icon: Icons.open_in_new_rounded,
+                      title: 'Availability via JustWatch · TMDB',
+                      subtitle: 'Show the external availability card',
+                      value: _sections.availabilityLink,
+                      onChanged: (value) => _setSections(
+                        _sections.copyWith(availabilityLink: value),
+                      ),
+                      subtitleMaxLines: 2,
+                    ),
+                    SettingsToggleTile(
+                      key: const ValueKey('detail-show-did-you-know'),
+                      icon: Icons.lightbulb_outline_rounded,
+                      title: 'Did You Know',
+                      subtitle: 'Trivia, goofs and memorable quotes',
+                      value: _sections.didYouKnow,
+                      onChanged: (value) =>
+                          _setSections(_sections.copyWith(didYouKnow: value)),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 14),
                 Text(

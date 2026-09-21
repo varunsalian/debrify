@@ -850,120 +850,134 @@ class _PlaylistPickerSheetState extends State<_PlaylistPickerSheet> {
         color: colorScheme.surface,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
       ),
-      child: FocusScope(
-        autofocus: true,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Handle
-            Center(
-              child: Container(
-                margin: const EdgeInsets.symmetric(vertical: 12),
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: colorScheme.onSurfaceVariant.withValues(alpha: 0.4),
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-            ),
-            // Title
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Text(
-                'Select Playlist',
-                style: theme.textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-            const SizedBox(height: 8),
-
-            // Playlists
-            if (widget.playlists.isEmpty)
-              Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  children: [
-                    Icon(
-                      Icons.playlist_add,
-                      size: 48,
-                      color: colorScheme.onSurfaceVariant,
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      'No playlists added yet',
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        color: colorScheme.onSurfaceVariant,
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.sizeOf(context).height * 0.9,
+      ),
+      child: SafeArea(
+        top: false,
+        child: FocusScope(
+          autofocus: true,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Handle
+                Center(
+                  child: Container(
+                    margin: const EdgeInsets.symmetric(vertical: 12),
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: colorScheme.onSurfaceVariant.withValues(
+                        alpha: 0.4,
                       ),
+                      borderRadius: BorderRadius.circular(2),
                     ),
-                  ],
-                ),
-              )
-            else
-              ...widget.playlists.asMap().entries.map((entry) {
-                final index = entry.key;
-                final playlist = entry.value;
-                final isSelected = playlist == widget.selectedPlaylist;
-
-                return _FocusablePickerTile(
-                  focusNode: index < _focusNodes.length
-                      ? _focusNodes[index]
-                      : null,
-                  label: playlist.name,
-                  subtitle: playlist.isFavorites
-                      ? 'Your starred channels'
-                      : playlist.isCustomList
-                      ? 'Your list'
-                      : playlist.isXtreamCodes
-                      ? 'Xtream Codes - ${playlist.serverUrl}'
-                      : playlist.isLocalFile
-                      ? 'Local file'
-                      : playlist.url,
-                  icon: isSelected
-                      ? Icons.check_circle
-                      : playlist.isFavorites
-                      ? Icons.star_rounded
-                      : playlist.isCustomList
-                      ? Icons.bookmark_rounded
-                      : playlist.isXtreamCodes
-                      ? Icons.login
-                      : (playlist.isLocalFile
-                            ? Icons.folder
-                            : Icons.playlist_play),
-                  isSelected: isSelected,
-                  onTap: () => Navigator.of(context).pop(playlist),
-                  onKeyEvent: (node, event) => _handleKeyEvent(
-                    node,
-                    event,
-                    index,
-                    () => Navigator.of(context).pop(playlist),
                   ),
-                );
-              }),
+                ),
+                // Title
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Text(
+                    'Select Playlist',
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
 
-            // Add playlist button
-            if (widget.onAddPlaylist != null) ...[
-              const Divider(),
-              _FocusablePickerTile(
-                focusNode: _focusNodes.isNotEmpty ? _focusNodes.last : null,
-                label: 'Add Playlist',
-                icon: Icons.add,
-                isSelected: false,
-                onTap: () {
-                  Navigator.of(context).pop();
-                  widget.onAddPlaylist!();
-                },
-                onKeyEvent: (node, event) =>
-                    _handleKeyEvent(node, event, _focusNodes.length - 1, () {
+                // Playlists
+                if (widget.playlists.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      children: [
+                        Icon(
+                          Icons.playlist_add,
+                          size: 48,
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          'No playlists added yet',
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ),
+                  )
+                else
+                  ...widget.playlists.asMap().entries.map((entry) {
+                    final index = entry.key;
+                    final playlist = entry.value;
+                    final isSelected = playlist == widget.selectedPlaylist;
+
+                    return _FocusablePickerTile(
+                      focusNode: index < _focusNodes.length
+                          ? _focusNodes[index]
+                          : null,
+                      label: playlist.name,
+                      subtitle: playlist.isFavorites
+                          ? 'Your starred channels'
+                          : playlist.isCustomList
+                          ? 'Your list'
+                          : playlist.isXtreamCodes
+                          ? 'Xtream Codes - ${playlist.serverUrl}'
+                          : playlist.isLocalFile
+                          ? 'Local file'
+                          : playlist.url,
+                      icon: isSelected
+                          ? Icons.check_circle
+                          : playlist.isFavorites
+                          ? Icons.star_rounded
+                          : playlist.isCustomList
+                          ? Icons.bookmark_rounded
+                          : playlist.isXtreamCodes
+                          ? Icons.login
+                          : (playlist.isLocalFile
+                                ? Icons.folder
+                                : Icons.playlist_play),
+                      isSelected: isSelected,
+                      onTap: () => Navigator.of(context).pop(playlist),
+                      onKeyEvent: (node, event) => _handleKeyEvent(
+                        node,
+                        event,
+                        index,
+                        () => Navigator.of(context).pop(playlist),
+                      ),
+                    );
+                  }),
+
+                // Add playlist button
+                if (widget.onAddPlaylist != null) ...[
+                  const Divider(),
+                  _FocusablePickerTile(
+                    focusNode: _focusNodes.isNotEmpty ? _focusNodes.last : null,
+                    label: 'Add Playlist',
+                    icon: Icons.add,
+                    isSelected: false,
+                    onTap: () {
                       Navigator.of(context).pop();
                       widget.onAddPlaylist!();
-                    }),
-              ),
-            ],
+                    },
+                    onKeyEvent: (node, event) => _handleKeyEvent(
+                      node,
+                      event,
+                      _focusNodes.length - 1,
+                      () {
+                        Navigator.of(context).pop();
+                        widget.onAddPlaylist!();
+                      },
+                    ),
+                  ),
+                ],
 
-            const SizedBox(height: 16),
-          ],
+                const SizedBox(height: 16),
+              ],
+            ),
+          ),
         ),
       ),
     );
@@ -1410,7 +1424,9 @@ class _FocusablePickerTileState extends State<_FocusablePickerTile> {
                     style: TextStyle(
                       fontSize: 12,
                       color: _isFocused
-                          ? colorScheme.onPrimaryContainer.withValues(alpha: 0.7)
+                          ? colorScheme.onPrimaryContainer.withValues(
+                              alpha: 0.7,
+                            )
                           : colorScheme.onSurfaceVariant,
                     ),
                     maxLines: 1,
@@ -1425,7 +1441,9 @@ class _FocusablePickerTileState extends State<_FocusablePickerTile> {
                         Icons.more_vert_rounded,
                         size: 20,
                         color: _isFocused
-                            ? colorScheme.onPrimaryContainer.withValues(alpha: 0.7)
+                            ? colorScheme.onPrimaryContainer.withValues(
+                                alpha: 0.7,
+                              )
                             : colorScheme.onSurfaceVariant,
                       ),
                       onPressed: widget.onTrailingTap,

@@ -10,6 +10,7 @@ import '../models/profiles/profile_policy.dart';
 import '../models/torrent.dart';
 import '../utils/iptv_title.dart';
 import 'iptv_catalog_db.dart';
+import 'iptv_catalog_refresh_service.dart';
 import 'iptv_catalog_key.dart';
 import 'profiles/profile_async_authorization.dart';
 import 'profiles/profile_runtime.dart';
@@ -42,7 +43,7 @@ class IptvEpisodeResolution {
   final Torrent? source;
 }
 
-/// Manual source discovery only. Never fetches or refreshes whole catalogs.
+/// Searches cached catalogs; the shared queue prepares missing/stale catalogs.
 class IptvSourceSearch {
   static final _authorizations = Expando<Future<void> Function()>();
   static final _episodePatterns = <RegExp>[
@@ -665,6 +666,7 @@ class IptvSourceSearch {
     String? desiredEntryKey,
     String preferredAudioLanguage = 'en',
     bool deferXtreamSeriesEpisodes = false,
+    bool catalogRetried = false,
   }) async {
     final key = keyFor(playlist);
     final providerKind = playlist.isXtreamCodes ? 'xtream' : 'm3u';
@@ -697,9 +699,30 @@ class IptvSourceSearch {
       }
       final check = current.check;
 
-      final snapshot = IptvCatalogDb.snapshot(
+      final refresh = catalogRetried
+          ? null
+          : IptvCatalogRefreshService.instance.refreshCatalog(
+              playlist,
+              catalogType,
+              priority: true,
+            );
+      var snapshot = IptvCatalogDb.snapshot(
         IptvCatalogKey.forPlaylist(playlist, catalogType)!,
       );
+      if (snapshot == null && refresh != null) {
+        await refresh.timeout(
+          const Duration(seconds: 8),
+          onTimeout: () => const IptvParseResult(channels: [], categories: []),
+        );
+        await check();
+        if (ProfileRuntime.scope.value != scope ||
+            shouldContinue?.call() == false) {
+          return result('Search canceled.', const [], true);
+        }
+        snapshot = IptvCatalogDb.snapshot(
+          IptvCatalogKey.forPlaylist(playlist, catalogType)!,
+        );
+      }
       if (snapshot == null) {
         logIptvSourceEvent(
           'playlist_search_completed',
@@ -710,7 +733,7 @@ class IptvSourceSearch {
           elapsedMs: stopwatch.elapsedMilliseconds,
         );
         return result(
-          'Catalog not loaded. Open IPTV → ${playlist.name} → ${selection.isSeries ? 'Series' : 'Movies'} once to download it.',
+          '${selection.isSeries ? 'Series' : 'Movies'} catalog is not ready. Automatic updates prepare it in the background; retry shortly, or use Refresh in IPTV settings if updates are off.',
           const [],
           true,
         );
@@ -756,7 +779,7 @@ class IptvSourceSearch {
       }) async {
         // Read bounded pages; hidden IPTV categories remain hidden here too.
         for (var offset = 0; ; offset += 200) {
-          final page = snapshot.page(
+          final page = snapshot!.page(
             offset: offset,
             limit: 200,
             search: search,
@@ -800,6 +823,29 @@ class IptvSourceSearch {
         candidates,
         preferredAudioLanguage,
       );
+      if (orderedCandidates.isEmpty && refresh != null) {
+        final updated = await refresh.timeout(
+          const Duration(seconds: 8),
+          onTimeout: () => const IptvParseResult(channels: [], categories: []),
+        );
+        if (updated.ingest != null &&
+            ProfileRuntime.scope.value == scope &&
+            shouldContinue?.call() != false &&
+            IptvCatalogDb.snapshot(
+                  IptvCatalogKey.forPlaylist(playlist, catalogType)!,
+                )?.generation !=
+                snapshot.generation) {
+          return _playlist(
+            playlist,
+            selection,
+            shouldContinue,
+            desiredEntryKey: desiredEntryKey,
+            preferredAudioLanguage: preferredAudioLanguage,
+            deferXtreamSeriesEpisodes: deferXtreamSeriesEpisodes,
+            catalogRetried: true,
+          );
+        }
+      }
       final torrents = <Torrent>[];
       final emittedSeriesKeys = <String>{};
       var lookupFailures = 0;

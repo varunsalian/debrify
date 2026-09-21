@@ -1640,6 +1640,50 @@ void main() {
     );
   });
 
+  test('custom pins preserve scope and translate deletion keys', () {
+    String digest(String value) => sha256.convert(utf8.encode(value)).toString();
+    final maps = WebDavSyncIdentityMaps(
+      circleToLocalProfiles: const {'profile-circle': 'profile-local'},
+      circleToLocalResources: const {
+        'origin-circle': 'origin-local',
+        'stream-circle': 'stream-local',
+      },
+    );
+    final origin = digest('origin-local');
+    final stream = digest('stream-local');
+    final pins = [
+      for (final hash in ['same-hash', ''])
+        for (final catalog in [null, 'edit-a', 'edit-b'])
+          {
+            'torrentHash': hash,
+            'torrentName': 'Pin',
+            'debridService': 'stremio_direct',
+            'debridTorrentId': '',
+            'addonKey': stream,
+            'streamKey': 'profile',
+            if (catalog != null) 'addonCatalogId': catalog,
+            if (catalog != null) 'addonCatalogKey': origin,
+          },
+    ];
+    final built = _buildWithPreferences(maps, 'device-a', {
+      'series_source_tt123': jsonEncode(pins),
+    }, now: 100);
+    final restored = WebDavSyncHotMerge.materializePreferences(
+      document: built.document, identityMaps: maps,
+    );
+    expect(jsonDecode(restored['series_source_tt123'] as String), hasLength(6));
+    for (final base in ['hash:same-hash', 'direct:$stream:profile']) {
+      final local = 'catalog:$origin:${digest('edit-a')}:$base';
+      final wire = maps.seriesBindingToWire(local);
+      expect(wire, startsWith('catalog:${digest('origin-circle')}:'));
+      expect(maps.seriesBindingToLocal(wire), local);
+      final projected = WebDavSyncRecordKey.projectLocalTombstoneKey(
+        WebDavSyncRecordKey.source('tt123', local), maps,
+      );
+      expect(built.document.watchState.records.containsKey(projected), isTrue);
+    }
+  });
+
   test('IPTV pins keep distinct circle-mapped catalog identities', () {
     final mapsA = WebDavSyncIdentityMaps(
       circleToLocalProfiles: const <String, String>{

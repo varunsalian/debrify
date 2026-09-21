@@ -45,6 +45,7 @@ import 'services/discover_prefs.dart';
 import 'services/hide_watched_prefs.dart';
 import 'services/stream_badges_service.dart';
 import 'services/iptv_catalog_db.dart';
+import 'services/iptv_catalog_refresh_service.dart';
 import 'services/profiles/local_backup/local_backup_archive.dart'
     show LocalBackupScratch;
 import 'services/profiles/profile_bootstrap.dart';
@@ -714,6 +715,7 @@ Future<void> _continueApplicationStartup() async {
   // block startup.
   try {
     await StorageService.getDetailPageStyle();
+    await StorageService.getDetailPageSectionVisibility();
   } catch (_) {}
   // And the details THEME, for the same reason — the page resolves both in its
   // first build, so a stored choice must be readable before the first frame.
@@ -783,6 +785,7 @@ Future<void> _continueApplicationStartup() async {
   // the DB ready.
   WidgetsBinding.instance.addPostFrameCallback((_) {
     unawaited(_prewarmIptvCatalogDb());
+    IptvCatalogRefreshService.instance.start();
   });
 
   if (!kIsWeb && (Platform.isWindows || Platform.isLinux)) {

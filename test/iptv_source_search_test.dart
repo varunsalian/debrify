@@ -132,21 +132,24 @@ void main() {
     },
   );
 
-  test('unloaded movies stay visible and no catalog is downloaded', () async {
-    expect(
-      await StorageService.getIptvPlaylists(forSettings: false),
-      hasLength(1),
-    );
-    final result = await IptvSourceSearch.search(movie);
-    expect(result.single.name, 'My TV');
-    expect(result.single.message, contains('Movies'));
-    expect(result.single.message, contains('Catalog not loaded'));
-    expect(result.single.torrents, isEmpty);
-    expect(
-      IptvCatalogDb.snapshot(IptvCatalogKey.forPlaylist(playlist, 'vod')!),
-      isNull,
-    );
-  });
+  test(
+    'unavailable movies stay visible with automatic preparation guidance',
+    () async {
+      expect(
+        await StorageService.getIptvPlaylists(forSettings: false),
+        hasLength(1),
+      );
+      final result = await IptvSourceSearch.search(movie);
+      expect(result.single.name, 'My TV');
+      expect(result.single.message, contains('Movies'));
+      expect(result.single.message, contains('catalog is not ready'));
+      expect(result.single.torrents, isEmpty);
+      expect(
+        IptvCatalogDb.snapshot(IptvCatalogKey.forPlaylist(playlist, 'vod')!),
+        isNull,
+      );
+    },
+  );
 
   test('movie cache does not imply series readiness', () async {
     ingest('vod', []);
@@ -160,7 +163,7 @@ void main() {
       ),
     );
     expect(result.single.message, contains('Series'));
-    expect(result.single.message, contains('Catalog not loaded'));
+    expect(result.single.message, contains('catalog is not ready'));
   });
 
   test('empty loaded catalog is no match, not missing', () async {

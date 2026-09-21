@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'profiles/profile_preferences.dart';
 import 'webdav_sync/webdav_sync_hot_merge.dart';
 import 'webdav_sync/webdav_sync_tombstones.dart';
+import '../utils/catalog_source_scope.dart';
 
 /// Represents a bound torrent source for a series.
 /// When set, episode playback skips torrent search and uses this source directly.
@@ -35,6 +36,8 @@ class SeriesSource {
   final int? localModifiedAt;
   final String? addonId;
   final String? addonKey;
+  final String? addonCatalogId;
+  final String? addonCatalogKey;
   final String? streamKey;
   final String? bingeGroup;
   final int? streamIndex;
@@ -56,6 +59,8 @@ class SeriesSource {
     this.localModifiedAt,
     this.addonId,
     this.addonKey,
+    this.addonCatalogId,
+    this.addonCatalogKey,
     this.streamKey,
     this.bingeGroup,
     this.streamIndex,
@@ -82,18 +87,23 @@ class SeriesSource {
       (iptvCatalogType?.trim().isNotEmpty ?? false) &&
       (iptvEntryKey?.trim().isNotEmpty ?? false);
 
+  /// Origin configuration and catalog together define the pinned content.
+  bool matchesCatalogScope({String? catalogId, String? catalogKey}) =>
+      addonCatalogId == catalogId && addonCatalogKey == catalogKey;
+
   /// Stable identity used for dedupe, reorder keys, and removal. Existing
   /// hash-backed bindings retain their exact behavior; only hashless cloud
   /// bindings fall back to provider + kind + provider id.
   String get bindingKey {
-    if (torrentHash.isNotEmpty) return 'hash:$torrentHash';
+    final catalogScope = catalogSourceScope(addonCatalogId, addonCatalogKey);
+    if (torrentHash.isNotEmpty) return '${catalogScope}hash:$torrentHash';
     if (isLocal) {
       final path = (localPath ?? debridTorrentId).trim();
       return 'local:$path';
     }
     if (isAddonDirect) {
       if (bingeGroup != null && bingeGroup!.isNotEmpty) {
-        return 'direct:${addonKey!.trim()}:group:${sha256.convert(utf8.encode(bingeGroup!))}';
+        return '${catalogScope}direct:${addonKey!.trim()}:group:${sha256.convert(utf8.encode(bingeGroup!))}';
       }
       // [streamIndex] is deliberately NOT part of the identity. It is the
       // stream's position in the addon's response, which moves between searches
@@ -103,7 +113,7 @@ class SeriesSource {
       // still stored, because re-resolution needs it; it just cannot be identity.
       // [streamKey] is the real identity: a URL-free stream profile (see
       // StremioStream.streamKey), so it survives signed/expiring links.
-      return 'direct:${addonKey!.trim()}:${streamKey?.trim() ?? ''}';
+      return '${catalogScope}direct:${addonKey!.trim()}:${streamKey?.trim() ?? ''}';
     }
     if (isIptvDirect) {
       return 'iptv:${iptvPlaylistId!.trim()}:${iptvCatalogType!.trim()}:${iptvEntryKey!.trim()}';
@@ -153,6 +163,8 @@ class SeriesSource {
     if (localModifiedAt != null) 'localModifiedAt': localModifiedAt,
     if (addonId != null) 'addonId': addonId,
     if (addonKey != null) 'addonKey': addonKey,
+    if (addonCatalogId != null) 'addonCatalogId': addonCatalogId,
+    if (addonCatalogKey != null) 'addonCatalogKey': addonCatalogKey,
     if (streamKey != null) 'streamKey': streamKey,
     if (bingeGroup != null) 'bingeGroup': bingeGroup,
     if (streamIndex != null) 'streamIndex': streamIndex,
@@ -175,6 +187,8 @@ class SeriesSource {
     localModifiedAt: json['localModifiedAt'] as int?,
     addonId: json['addonId'] as String?,
     addonKey: json['addonKey'] as String?,
+    addonCatalogId: json['addonCatalogId'] as String?,
+    addonCatalogKey: json['addonCatalogKey'] as String?,
     streamKey: json['streamKey'] as String?,
     bingeGroup: json['bingeGroup'] as String?,
     streamIndex: json['streamIndex'] as int?,

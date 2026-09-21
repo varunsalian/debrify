@@ -4,6 +4,8 @@ import android.content.Context
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Base64
+import android.util.Log
+import android.os.SystemClock
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 import java.security.MessageDigest
@@ -31,9 +33,12 @@ object DeviceSecretCipherPlugin {
     private val CANARY_AAD = "debrify-device-secret-canary-aad-v1".toByteArray(Charsets.UTF_8)
     @Volatile private var migrationAuditPending = false
     @Volatile private var resetAuthorizationAvailable = false
+    @Volatile private var diagnosticContext: Context? = null
+    private var lastFailureDiagnosticMs: Long? = null
 
     fun register(context: Context, engine: FlutterEngine) {
         val applicationContext = context.applicationContext
+        diagnosticContext = applicationContext
         MethodChannel(engine.dartExecutor.binaryMessenger, CHANNEL)
             .setMethodCallHandler { call, result ->
                 try {
@@ -111,7 +116,49 @@ object DeviceSecretCipherPlugin {
 
     @JvmStatic
     fun openForNative(envelope: String, aad: ByteArray): ByteArray {
-        return openWithKey(envelope, aad, getRequiredKey())
+        try {
+            return openWithKey(envelope, aad, getRequiredKey())
+        } catch (error: Exception) {
+            diagnoseOpenFailure(error)
+            throw error
+        }
+    }
+
+    // Read-only with respect to persisted vault state. Never replace a key or
+    // rewrite an envelope while diagnosing an authentication failure.
+    @Synchronized
+    private fun diagnoseOpenFailure(original: Exception) {
+        val now = SystemClock.elapsedRealtime()
+        val previous = lastFailureDiagnosticMs
+        if (previous != null && now - previous < 30_000) return
+        lastFailureDiagnosticMs = now
+        try {
+            val context = diagnosticContext ?: return
+            val key = getRequiredKey()
+            val canary = context.getSharedPreferences(STATE_PREFERENCES, Context.MODE_PRIVATE)
+                .getString(CANARY_KEY, null)
+            fun check(block: () -> Unit): String = try {
+                block()
+                "ok"
+            } catch (error: Exception) {
+                diagnosticDescription("check", error)
+            }
+            val stored = if (canary == null) "absent" else check {
+                verifyCanary(canary, key)
+            }
+            val fresh = check {
+                val probe = sealWithKey(CANARY_PLAINTEXT, CANARY_AAD, key)
+                // Reload the alias rather than only testing the first handle.
+                verifyCanary(probe, getRequiredKey())
+            }
+            Log.w("DebrifyDeviceVault", "event=open_failure " +
+                "error=${diagnosticDescription("open", original)} " +
+                "stored_canary=$stored fresh_roundtrip=$fresh")
+        } catch (error: Exception) {
+            Log.w("DebrifyDeviceVault", "event=diagnostic_unavailable " +
+                "error=${diagnosticDescription("open", original)} " +
+                "probe=${diagnosticDescription("probe", error)}")
+        }
     }
 
     private fun openWithKey(envelope: String, aad: ByteArray, key: SecretKey): ByteArray {

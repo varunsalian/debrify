@@ -38,16 +38,38 @@ typedef AddonPackSearch =
 /// automatic Next/Previous must skip a direct URL that is positively dead.
 typedef SeriesSourceCandidateValidator = Future<bool> Function(Torrent source);
 
+typedef AdjacentEpisodeResolver =
+    Future<({int season, int episode})?> Function(
+      int season,
+      int episode,
+      int direction,
+    );
+
 /// An applicable addon, as the sheets' rail needs it.
 class SourceAddonRef {
   final String id;
   final String name;
-  const SourceAddonRef(this.id, this.name);
+  final String? addonKey;
+  final String? resultSourceKey;
+  const SourceAddonRef(
+    this.id,
+    this.name, {
+    this.addonKey,
+    this.resultSourceKey,
+  });
 
   /// Matches `Torrent.source` for this addon's converted results — the
   /// sheets' group id, so a placeholder group and the addon's fetched rows
   /// land in the same bucket.
-  String get sourceKey => 'stremio:$name'.toLowerCase();
+  String get sourceKey => resultSourceKey?.isNotEmpty == true
+      ? resultSourceKey!
+      : addonKey?.isNotEmpty == true
+      ? 'stremio:$addonKey'
+      : 'stremio:$name'.toLowerCase();
+
+  /// Exact configuration key for a targeted fetch. The manifest id remains a
+  /// compatibility fallback for older/test callers with no configuration key.
+  String get requestKey => addonKey ?? id;
 }
 
 class SourceEngineRef {
@@ -87,6 +109,8 @@ class SeriesSourceFetcher {
     this.pinnedDirectCandidates,
     this.prepareNextDirectEpisode,
     this.searchForRecovery,
+    this.resolveAdjacentEpisode,
+    this.loadCustomEpisodeInventory,
   }) : _searchPacks = searchPacks,
        _searchEpisodes = searchEpisodes,
        _searchMovie = null,
@@ -102,6 +126,8 @@ class SeriesSourceFetcher {
     this.fetchEngine,
     this.validateCandidate,
     this.searchForRecovery,
+    this.resolveAdjacentEpisode,
+    this.loadCustomEpisodeInventory,
   }) : _searchMovie = searchMovie,
        _searchPacks = null,
        _searchEpisodes = null,
@@ -183,6 +209,10 @@ class SeriesSourceFetcher {
   /// run before representations of the same hash are collapsed.
   final Future<List<Torrent>?> Function(String mode, int season, int episode)?
   searchForRecovery;
+
+  final AdjacentEpisodeResolver? resolveAdjacentEpisode;
+  final Future<List<Map<String, dynamic>>> Function()?
+  loadCustomEpisodeInventory;
 
   /// Whether this is the movie flavor (flat list, [modeMovie] only).
   bool get isMovie => _searchMovie != null;

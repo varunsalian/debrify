@@ -223,7 +223,7 @@ class NativeProfileProjection {
     }
 
     final id = addon['id']?.toString().trim();
-    final rawName = addon['name']?.toString().trim();
+    final rawName = (addon['user_alias'] ?? addon['name'])?.toString().trim();
     final host = Uri.tryParse(manifestUrl)?.host ?? '';
     // Only URL-only restore records need native manifest hydration. A normal
     // catalog/stream addon also has a manifest URL but is already complete;

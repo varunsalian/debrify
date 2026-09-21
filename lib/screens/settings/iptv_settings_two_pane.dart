@@ -9,6 +9,53 @@ import '../../theme/app_theme.dart';
 import '../../theme/app_theme_scope.dart';
 import 'iptv_style_page.dart';
 
+String iptvAutoRefreshLabel(int hours) =>
+    hours == 0 ? 'Off' : 'Every $hours hours';
+
+const iptvAutoRefreshExplanation =
+    'Updates occur when the app or operating system permits; exact timing '
+    'is not guaranteed. Local files are not refreshed.';
+
+/// Shared picker for phone and TV settings, including keyboard/DPAD input.
+class IptvAutoRefreshDialog extends StatelessWidget {
+  const IptvAutoRefreshDialog({super.key, required this.intervalHours});
+
+  final int intervalHours;
+
+  @override
+  Widget build(BuildContext context) => SimpleDialog(
+    title: const Text('Auto-refresh'),
+    children: [
+      const Padding(
+        padding: EdgeInsets.fromLTRB(24, 0, 24, 16),
+        child: Text(
+          'Applies to all sources in this profile. '
+          '$iptvAutoRefreshExplanation',
+        ),
+      ),
+      for (final hours in const [0, 6, 12, 24, 48])
+        TextButton(
+          style: TextButton.styleFrom(
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+          ),
+          autofocus: hours == intervalHours,
+          onPressed: () => Navigator.of(context).pop(hours),
+          child: Row(
+            children: [
+              Icon(
+                hours == intervalHours
+                    ? Icons.radio_button_checked
+                    : Icons.radio_button_unchecked,
+              ),
+              const SizedBox(width: 12),
+              Text(iptvAutoRefreshLabel(hours)),
+            ],
+          ),
+        ),
+    ],
+  );
+}
+
 /// Two-pane IPTV settings for TV and desktop ("Concept A"): a rail of the
 /// user's actual sources on the left, the selected source's detail on the
 /// right, with Add / Lists / Startup / Channel preview as rail destinations
@@ -36,6 +83,8 @@ class IptvSettingsTwoPane extends StatefulWidget {
     required this.playlists,
     required this.defaultPlaylistId,
     required this.refreshingIds,
+    this.autoRefreshHours = 24,
+    this.onPickAutoRefresh,
     required this.customLists,
     required this.startupEnabled,
     required this.startupMode,
@@ -95,6 +144,8 @@ class IptvSettingsTwoPane extends StatefulWidget {
   final List<IptvPlaylist> playlists;
   final String? defaultPlaylistId;
   final Set<String> refreshingIds;
+  final int autoRefreshHours;
+  final VoidCallback? onPickAutoRefresh;
   final List<IptvListMeta> customLists;
 
   final bool startupEnabled;
@@ -224,6 +275,10 @@ class _StartupDest extends _Dest {
   const _StartupDest();
 }
 
+class _AutoRefreshDest extends _Dest {
+  const _AutoRefreshDest();
+}
+
 class _ContinueWatchingDest extends _Dest {
   const _ContinueWatchingDest();
 }
@@ -324,7 +379,7 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
   /// always-present Player guide, and the optional Recording entry.
   int get _railCount =>
       widget.playlists.length +
-      6 +
+      7 +
       (widget.showAppearanceSection ? 1 : 0) +
       (widget.showRecordingSection ? 1 : 0);
 
@@ -344,6 +399,7 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
   /// Rail index of the Recording entry — directly under Player guide.
   /// Meaningful only while showRecordingSection is true.
   int get _recordingIndex => _playerGuideIndex + 1;
+  int get _autoRefreshIndex => _railCount - 1;
 
   /// Grow-only, deliberately. Shrinking would dispose a node while the
   /// *previous* tree still holds a [Focus] referencing it — didUpdateWidget
@@ -440,10 +496,12 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
       _AppearanceDest() => _appearanceIndex,
       _PlayerGuideDest() => _playerGuideIndex,
       _RecordingDest() => _recordingIndex,
+      _AutoRefreshDest() => _autoRefreshIndex,
     };
   }
 
   _Dest _destForRail(int index) {
+    if (index == _autoRefreshIndex) return const _AutoRefreshDest();
     if (index < widget.playlists.length) {
       return _SourceDest(widget.playlists[index].id);
     }
@@ -682,7 +740,7 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
                 ),
                 onDown: widget.showRecordingSection
                     ? () => _focusRail(_recordingIndex)
-                    : null,
+                    : () => _focusRail(_autoRefreshIndex),
                 onRight: _enterPane,
               ),
               if (widget.showRecordingSection)
@@ -704,9 +762,26 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
                   onFocused: () => _dest.value = const _RecordingDest(),
                   onSelect: _enterPane,
                   onUp: () => _focusRail(_playerGuideIndex),
-                  onDown: null,
+                  onDown: () => _focusRail(_autoRefreshIndex),
                   onRight: _enterPane,
                 ),
+              _RailEntry(
+                focusNode: _railNodes[_autoRefreshIndex],
+                icon: Icons.update_rounded,
+                title: 'Auto-refresh',
+                subtitle: iptvAutoRefreshLabel(widget.autoRefreshHours),
+                selected: selected == _autoRefreshIndex,
+                chevron: true,
+                onFocused: () => _dest.value = const _AutoRefreshDest(),
+                onSelect: _enterPane,
+                onUp: () => _focusRail(
+                  widget.showRecordingSection
+                      ? _recordingIndex
+                      : _playerGuideIndex,
+                ),
+                onDown: null,
+                onRight: _enterPane,
+              ),
             ],
           );
         },
@@ -749,6 +824,27 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
       _AppearanceDest() => _buildAppearancePane(),
       _PlayerGuideDest() => _buildPlayerGuidePane(),
       _RecordingDest() => _buildRecordingPane(),
+      _AutoRefreshDest() => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const _PaneHeader(
+            icon: Icons.update_rounded,
+            title: 'Auto-refresh',
+            meta: 'All sources in this profile',
+            badges: [],
+          ),
+          const SizedBox(height: 24),
+          _PaneRow(
+            focusNode: _paneNodes[0],
+            icon: Icons.schedule_rounded,
+            title: iptvAutoRefreshLabel(widget.autoRefreshHours),
+            subtitle: iptvAutoRefreshExplanation,
+            trailing: const Icon(Icons.chevron_right_rounded),
+            onTap: widget.onPickAutoRefresh,
+            onLeft: () => _focusRail(_autoRefreshIndex),
+          ),
+        ],
+      ),
     };
     // A key per destination gives each view its own scroll position, so
     // arriving from a scrolled-down Channel lists doesn't drop you into a
@@ -764,6 +860,7 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
         _AppearanceDest() => 'appearance',
         _PlayerGuideDest() => 'player_guide',
         _RecordingDest() => 'recording',
+        _AutoRefreshDest() => 'auto-refresh',
       }),
       padding: const EdgeInsets.fromLTRB(28, 22, 28, 32),
       children: [child],
