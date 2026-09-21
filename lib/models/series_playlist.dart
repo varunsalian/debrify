@@ -1,4 +1,6 @@
 import 'dart:math' as math;
+import 'custom_series_identity.dart';
+import '../services/stremio_service.dart';
 import 'package:flutter/foundation.dart';
 import '../utils/series_parser.dart';
 import '../utils/movie_parser.dart';
@@ -757,6 +759,16 @@ class SeriesPlaylist {
     Map<String, dynamic>? playlistItem,
     String? imdbId,
   }) async {
+    final custom = CustomSeriesIdentity.parse(imdbId ?? this.imdbId);
+    if (custom != null) {
+      this.imdbId = custom.id;
+      final addon = await StremioService.instance.addonForCustomProgress(custom.id);
+      if (addon == null) return;
+      fullTvmazeEpisodes = await StremioService.instance.customSeriesEpisodeInventory(
+        addonKey: addon.sourceBindingKey, catalogId: custom.catalogId,
+      );
+      return;
+    }
     if (!isSeries) {
       debugPrint('SeriesPlaylist: Not a series, skipping TVMaze fetch');
       return;

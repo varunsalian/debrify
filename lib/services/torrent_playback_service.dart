@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'iptv_source_search.dart';
 import '../models/advanced_search_selection.dart';
+import '../models/custom_series_identity.dart';
 import 'source_selection_diagnostics.dart';
 import 'dart:convert';
 import 'dart:io';
@@ -154,6 +155,10 @@ class PlaybackMeta {
   bool get hasStremioEpisodeIdentity =>
       stremioAddonKey?.trim().isNotEmpty == true &&
       stremioCatalogId?.trim().isNotEmpty == true;
+
+  String? get progressIdentity => CustomSeriesIdentity.isCustom(imdbId) ? imdbId : hasStremioEpisodeIdentity
+      ? CustomSeriesIdentity(stremioAddonKey!, stremioCatalogId!).id
+      : imdbId;
 }
 
 /// Isolated "add a chosen torrent to debrid → do the configured post-torrent
@@ -5951,6 +5956,9 @@ class TorrentPlaybackService {
         posterUrl: meta.posterUrl,
         year: meta.year,
         addonId: meta.addonId,
+        stremioAddonId: meta.stremioAddonId,
+        stremioAddonKey: meta.stremioAddonKey,
+        stremioCatalogId: meta.stremioCatalogId,
         // Keep scrobbling across the binge — a Trakt-row play must not stop
         // updating Trakt (and start saving duplicate local Continue Watching
         // entries) from episode 2 onward. Home drops this and goes stale
@@ -6086,7 +6094,7 @@ class TorrentPlaybackService {
     onStartupSourcesExhausted: onStartupSourcesExhausted,
     startupHasRemainingSavedSources: startupHasRemainingSavedSources,
     seriesSourceFetcher: seriesSourceFetcher,
-    contentImdbId: meta?.imdbId,
+    contentImdbId: meta?.progressIdentity,
     contentType: meta?.contentType,
     contentSeason: meta?.season,
     contentEpisode: meta?.episode,
@@ -6094,12 +6102,13 @@ class TorrentPlaybackService {
     posterUrl: meta?.posterUrl,
     contentYear: meta?.year,
     addonId: meta?.addonId,
-    traktScrobble: meta?.traktScrobble ?? false,
-    traktProgressPercent: meta?.traktProgressPercent,
-    simklScrobble: meta?.simklScrobble ?? false,
-    simklProgressPercent: meta?.simklProgressPercent,
-    mdblistScrobble: meta?.mdblistScrobble ?? false,
-    mdblistProgressPercent: meta?.mdblistProgressPercent,
+    suppressTrackerAutoSync: meta?.hasStremioEpisodeIdentity ?? false,
+    traktScrobble: meta?.hasStremioEpisodeIdentity == true ? false : meta?.traktScrobble ?? false,
+    traktProgressPercent: meta?.hasStremioEpisodeIdentity == true ? null : meta?.traktProgressPercent,
+    simklScrobble: meta?.hasStremioEpisodeIdentity == true ? false : meta?.simklScrobble ?? false,
+    simklProgressPercent: meta?.hasStremioEpisodeIdentity == true ? null : meta?.simklProgressPercent,
+    mdblistScrobble: meta?.hasStremioEpisodeIdentity == true ? false : meta?.mdblistScrobble ?? false,
+    mdblistProgressPercent: meta?.hasStremioEpisodeIdentity == true ? null : meta?.mdblistProgressPercent,
     resumePolicy: meta?.resumePolicy ?? PlaybackResumePolicy.sourceSpecific,
     // Debrid torrent ids let the player back-fill poster/IMDb onto a saved
     // Playlist-library entry and power the in-player "Fix Metadata" action

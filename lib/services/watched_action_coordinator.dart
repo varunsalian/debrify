@@ -1,4 +1,5 @@
 import 'episode_tracker_snapshot_revision.dart';
+import '../models/custom_series_identity.dart';
 import 'local_series_completion_service.dart';
 import 'mdblist/mdblist_models.dart';
 import 'mdblist/mdblist_service.dart';
@@ -55,6 +56,7 @@ class WatchedActionCoordinator {
       await StorageService.unmarkMovieAsFinished(id);
     }
 
+    if (CustomSeriesIdentity.isCustom(id)) return const WatchedActionResult([]);
     final policy = await TrackingSourcePolicy.load();
     final failures = <String>[];
     if (_writes(policy, forceTargets, TrackingSource.trakt) &&
@@ -116,6 +118,8 @@ class WatchedActionCoordinator {
       );
     }
     EpisodeTrackerSnapshotRevision.invalidateTitle('local', imdbId);
+
+    if (CustomSeriesIdentity.isCustom(imdbId)) return const WatchedActionResult([]);
 
     final policy = await TrackingSourcePolicy.load();
     final failures = <String>[];

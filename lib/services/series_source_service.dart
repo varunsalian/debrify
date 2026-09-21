@@ -1,8 +1,10 @@
 import 'dart:convert';
+import '../models/custom_series_identity.dart';
 import 'package:crypto/crypto.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'profiles/profile_preferences.dart';
+import 'stremio_service.dart';
 import 'webdav_sync/webdav_sync_hot_merge.dart';
 import 'webdav_sync/webdav_sync_tombstones.dart';
 import '../utils/catalog_source_scope.dart';
@@ -208,7 +210,35 @@ class SeriesSourceService {
   static Future<List<SeriesSource>> getSources(String imdbId) async {
     final prefs = await ProfilePreferences.instance();
     final raw = prefs.getString('$_prefix$imdbId');
-    if (raw == null) return [];
+    if (raw == null) {
+      final custom = CustomSeriesIdentity.parse(imdbId);
+      if (custom == null) return [];
+      final addon = await StremioService.instance.addonForCustomProgress(imdbId);
+      final bindingKey = addon?.sourceBindingKey ?? custom.addonKey;
+      // Old releases stored custom pins in the IMDb bucket, but already saved
+      // their exact catalog/configuration scope. Move only proven matches.
+      final migrated = <SeriesSource>[];
+      for (final key in prefs.getKeys().where((k) => k.startsWith(_prefix)).toList()) {
+        final oldId = key.substring(_prefix.length);
+        if (CustomSeriesIdentity.isCustom(oldId)) continue;
+        final matches = (await getSources(oldId)).where((s) =>
+          s.matchesCatalogScope(catalogId: custom.catalogId, catalogKey: bindingKey)).toList();
+        for (final source in matches) {
+          if (!migrated.any((s) => s.bindingKey == source.bindingKey)) migrated.add(source);
+        }
+      }
+      if (migrated.isEmpty) return [];
+      await _saveSources(prefs, imdbId, migrated);
+      for (final key in prefs.getKeys().where((k) => k.startsWith(_prefix)).toList()) {
+        final oldId = key.substring(_prefix.length);
+        if (CustomSeriesIdentity.isCustom(oldId)) continue;
+        for (final source in (await getSources(oldId)).where((s) =>
+          s.matchesCatalogScope(catalogId: custom.catalogId, catalogKey: bindingKey)).toList()) {
+          await removeSourceEntry(oldId, source);
+        }
+      }
+      return migrated;
+    }
     try {
       final decoded = jsonDecode(raw);
       // New format: JSON array

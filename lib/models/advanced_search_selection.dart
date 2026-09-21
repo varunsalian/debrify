@@ -1,3 +1,5 @@
+import 'custom_series_identity.dart';
+
 class AdvancedSearchSelection {
   final bool initialContinuousShuffle;
   final String imdbId;
@@ -121,7 +123,8 @@ class AdvancedSearchSelection {
     required String videoId,
   }) => AdvancedSearchSelection(
     initialContinuousShuffle: initialContinuousShuffle,
-    imdbId: imdbId,
+    imdbId: CustomSeriesIdentity.parse(imdbId)?.catalogId == catalogId
+        ? imdbId : CustomSeriesIdentity(addonKey, catalogId).id,
     isSeries: isSeries,
     title: title,
     year: year,
@@ -133,12 +136,9 @@ class AdvancedSearchSelection {
     stremioAddonKey: addonKey,
     stremioCatalogId: catalogId,
     stremioVideoId: videoId,
-    traktProgressPercent: traktProgressPercent,
-    traktSource: traktSource,
-    simklProgressPercent: simklProgressPercent,
-    simklSource: simklSource,
-    mdblistProgressPercent: mdblistProgressPercent,
-    mdblistSource: mdblistSource,
+    traktSource: false,
+    simklSource: false,
+    mdblistSource: false,
     fromCatalogEpisodeDrillDown: fromCatalogEpisodeDrillDown,
     fromCatalogItemDetail: fromCatalogItemDetail,
   );

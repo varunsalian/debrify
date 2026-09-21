@@ -13,6 +13,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart' show kIsWeb, listEquals;
 import 'package:flutter/material.dart';
+import '../models/custom_series_identity.dart';
 import 'package:path_provider/path_provider.dart';
 import '../utils/app_storage.dart';
 import 'package:window_manager/window_manager.dart';
@@ -548,6 +549,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           collectionTitle: widget.title, // Pass video title as fallback
           forceSeries: forceSeries,
         );
+        if (CustomSeriesIdentity.isCustom(widget.contentImdbId)) {
+          _cachedSeriesPlaylist!.imdbId = widget.contentImdbId;
+        }
       } catch (e) {
         return null;
       }
@@ -1286,6 +1290,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   /// initialization, this may legitimately appear after launch when TVMaze
   /// enriches a release-only playlist.
   String? get _currentSeriesImdbId {
+    if (CustomSeriesIdentity.isCustom(_effectiveContentImdbId)) return _effectiveContentImdbId;
     final value =
         _seriesPlaylist?.imdbId ??
         _syntheticGuidePlaylist?.imdbId ??
@@ -1777,7 +1782,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   bool _forceLocalCompletionTracking = false;
 
   Future<void> _loadTrackingPolicy() async {
-    final policy = await TrackingSourcePolicy.load();
+    final policy = (await TrackingSourcePolicy.load()).forContent(_effectiveContentImdbId);
     if (!mounted) return;
     _forceLocalCompletionTracking = policy.forcesLocalCompletion;
     // A very short item can cross its completion threshold before this async
@@ -1800,6 +1805,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
   ({String imdbId, int season, int episode, Duration duration, String key})?
   _currentSkipSegmentRequest() {
+    if (CustomSeriesIdentity.isCustom(_effectiveContentImdbId)) return null;
     // Two stale-media windows, both of which would judge the incoming item
     // against the outgoing one's clock:
     //
@@ -1971,7 +1977,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     if (!widget.traktScrobble) return;
     if (widget.contentImdbId == null) return;
     if (widget.contentType != 'movie' && widget.contentType != 'series') return;
-    final policy = await TrackingSourcePolicy.load();
+    final policy = (await TrackingSourcePolicy.load()).forContent(_effectiveContentImdbId);
     _traktScrobbleEnabled =
         policy.scrobbles(TrackingSource.trakt) &&
         await TraktService.instance.isAuthenticated();
@@ -2195,7 +2201,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     if (!widget.simklScrobble) return;
     if (widget.contentImdbId == null) return;
     if (widget.contentType != 'movie' && widget.contentType != 'series') return;
-    final policy = await TrackingSourcePolicy.load();
+    final policy = (await TrackingSourcePolicy.load()).forContent(_effectiveContentImdbId);
     _simklScrobbleEnabled =
         policy.scrobbles(TrackingSource.simkl) &&
         await SimklService.instance.isAuthenticated();
@@ -2395,7 +2401,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       debugPrint('[MDBListDiag] player init skipped: tracking not requested');
       return;
     }
-    final policy = await TrackingSourcePolicy.load();
+    final policy = (await TrackingSourcePolicy.load()).forContent(_effectiveContentImdbId);
     if (!policy.scrobbles(TrackingSource.mdblist)) return;
     // Playlist launches resolve their requested/resume episode asynchronously.
     // Before that finishes `_currentIndex` is still zero, so constructing the
@@ -2520,7 +2526,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   }
 
   Future<double?> _currentEpisodeTraktPercent({bool forGuide = false}) async {
-    final policy = await TrackingSourcePolicy.load();
+    final policy = (await TrackingSourcePolicy.load()).forContent(_effectiveContentImdbId);
     if (!forGuide && !policy.progressFrom(TrackingSource.trakt)) return null;
     final imdbId = _currentSeriesImdbId;
     if (imdbId == null) return null;
@@ -2578,7 +2584,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   /// above but remains independently stored so remote unwatch changes never
   /// mutate local playback history.
   Future<double?> _currentEpisodeSimklPercent({bool forGuide = false}) async {
-    final policy = await TrackingSourcePolicy.load();
+    final policy = (await TrackingSourcePolicy.load()).forContent(_effectiveContentImdbId);
     if (!forGuide && !policy.progressFrom(TrackingSource.simkl)) return null;
     final imdbId = _currentSeriesImdbId;
     if (imdbId == null) return null;
@@ -2627,7 +2633,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   }
 
   Future<double?> _currentEpisodeMdblistPercent({bool forGuide = false}) async {
-    final policy = await TrackingSourcePolicy.load();
+    final policy = (await TrackingSourcePolicy.load()).forContent(_effectiveContentImdbId);
     if (!forGuide && !policy.progressFrom(TrackingSource.mdblist)) return null;
     final imdbId = _currentSeriesImdbId;
     if (imdbId == null) return null;
@@ -11717,6 +11723,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   Timer? _autosaveTimer;
 
   String get _resumeKey {
+    final customKey = CustomSeriesIdentity.resumeBookmarkKey(
+      _effectiveContentImdbId, _effectiveContentSeason, _effectiveContentEpisode,
+    );
+    if (customKey != null) return customKey;
     if (_activePlaylist != null &&
         _activePlaylist!.isNotEmpty &&
         _currentIndex >= 0 &&
@@ -11854,7 +11864,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       // Don't reset _isManualEpisodeSelection here - let it be reset after a delay
       return;
     }
-    final trackingPolicy = await TrackingSourcePolicy.load();
+    final trackingPolicy = (await TrackingSourcePolicy.load()).forContent(_effectiveContentImdbId);
     // The launched item's widget percent is a first-load-only signal; capture it
     // before marking it spent so it can't apply to a later switched-to episode.
     final firstLoad = !_launchTraktPercentSpent;
@@ -11941,7 +11951,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     final state = locallyFinishedMovie
         ? null
         : await _getEnhancedPlaybackState() ??
-              await StorageService.getVideoResume(_resumeKey);
+              (CustomSeriesIdentity.isCustom(_effectiveContentImdbId)
+                  ? null : await StorageService.getVideoResume(_resumeKey));
     if (state != null) {
       if (allowLocalResume) {
         localMs = (state['positionMs'] ?? 0) as int;
@@ -12183,6 +12194,14 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       // authoritative. Prefer the canonical episode record for catalog play;
       // generic playback retains its exact video/source lookup first.
       if (_effectiveContentType == 'series') {
+        if (CustomSeriesIdentity.isCustom(_effectiveContentImdbId)) {
+          if (_effectiveContentSeason == null || _effectiveContentEpisode == null) return null;
+          return LocalPlaybackResumeResolver.episode(
+            seriesTitle: _effectiveContentTitle ?? widget.title,
+            season: _effectiveContentSeason!, episode: _effectiveContentEpisode!,
+            imdbId: _effectiveContentImdbId, policy: widget.resumePolicy,
+          );
+        }
         if (widget.resumePolicy == PlaybackResumePolicy.sourceSpecific &&
             currentEntry != null) {
           final exactVideo = await StorageService.getVideoPlaybackState(
@@ -12463,7 +12482,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     } catch (e) {}
 
     // Also save to legacy system for backward compatibility
-    await StorageService.upsertVideoResume(
+    if (!CustomSeriesIdentity.isCustom(_effectiveContentImdbId)) await StorageService.upsertVideoResume(
       _resumeKey,
       {
         'positionMs': pos.inMilliseconds,
@@ -17188,6 +17207,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   /// Fetch Stremio addon subtitles proactively and auto-select if no embedded subtitle was applied.
   /// This mirrors the Android TV behavior where subtitles are always fetched on playback start.
   Future<void> _fetchAndMaybeAutoSelectAddonSubtitle() async {
+    if (CustomSeriesIdentity.isCustom(_effectiveContentImdbId) && _manualContentImdbId == null) return;
     // Capture token at start to detect if content changes during async operations
     final fetchToken = _addonSubtitleFetchToken;
 

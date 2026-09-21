@@ -1,4 +1,5 @@
 import 'storage_service.dart';
+import '../models/custom_series_identity.dart';
 
 /// Determines which local bookmark owns resume for the current playback.
 ///
@@ -21,6 +22,9 @@ class LocalPlaybackResumeResolver {
     PlaybackResumePolicy policy = PlaybackResumePolicy.sourceSpecific,
   }) async {
     final wanted = imdbId?.trim() ?? '';
+    if (CustomSeriesIdentity.isCustom(wanted)) {
+      return StorageService.getVideoPlaybackStateByImdbId(wanted);
+    }
 
     if (policy == PlaybackResumePolicy.catalogCanonical && wanted.isNotEmpty) {
       // Completion is canonical too. In particular, do not resurrect a legacy
@@ -61,6 +65,7 @@ class LocalPlaybackResumeResolver {
         imdbId?.trim().isNotEmpty != true) {
       return StorageService.getSeriesPlaybackState(
         seriesTitle: seriesTitle,
+        imdbId: imdbId,
         season: season,
         episode: episode,
       );
@@ -73,6 +78,7 @@ class LocalPlaybackResumeResolver {
       ),
       StorageService.getSeriesPlaybackState(
         seriesTitle: seriesTitle,
+        imdbId: imdbId,
         season: season,
         episode: episode,
       ),

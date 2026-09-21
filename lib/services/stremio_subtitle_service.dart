@@ -1,4 +1,5 @@
 import 'dart:convert';
+import '../models/custom_series_identity.dart';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
@@ -64,6 +65,7 @@ class StremioSubtitleService {
     int? season,
     int? episode,
   }) async {
+    if (CustomSeriesIdentity.isCustom(imdbId)) return const StremioSubtitleResult(subtitles: []);
     final addons = await getSubtitleAddons();
 
     if (addons.isEmpty) {
@@ -139,6 +141,7 @@ class StremioSubtitleService {
     int? episode,
     void Function(List<AddonSubtitleSlot> slots)? onUpdate,
   }) async {
+    if (CustomSeriesIdentity.isCustom(imdbId)) return [];
     final addons = await getSubtitleAddons();
     final slots = [
       for (final a in addons)
@@ -189,6 +192,10 @@ class StremioSubtitleService {
     int? season,
     int? episode,
   }) async {
+    if (CustomSeriesIdentity.isCustom(imdbId)) return AddonSubtitleSlot(
+      addonId: addonId, addonName: addonId, status: AddonSubtitleStatus.failed,
+      error: 'Choose a subtitle identity for this custom series',
+    );
     final addons = await getSubtitleAddons();
     StremioAddon? addon;
     for (final a in addons) {

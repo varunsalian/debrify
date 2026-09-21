@@ -4895,6 +4895,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
      */
     private fun fetchStremioSubtitles(item: PlaybackItem) {
         val model = payload ?: return
+        if (model.imdbId?.startsWith("custom-series:") == true && manualSubtitleImdbId.isNullOrEmpty()) return
 
         // Launch-supplied captions (e.g. YouTube): use them directly and skip
         // addon discovery entirely — the title-based IMDB lookup would be

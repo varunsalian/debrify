@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:debrify/models/custom_series_identity.dart';
 
 import 'package:debrify/services/playback_recovery_intent.dart';
 
@@ -70,6 +71,28 @@ void main() {
       ))?['positionMs'],
       3028860,
     );
+  });
+
+  test('custom recovery cannot overwrite canonical episode with the same title', () async {
+    final identity = const CustomSeriesIdentity('edit-config', 'OnePace').id;
+    await StorageService.saveSeriesPlaybackState(seriesTitle: 'The Example Show',
+      season: 2, episode: 4, positionMs: 1234, durationMs: 3122536, imdbId: 'tt1234567');
+    final raw = _checkpoint(positionMs: 20000)..['imdbId'] = identity;
+    final checkpoint = TvPlaybackCheckpoint.tryParse(jsonEncode(raw))!;
+    await TvPlaybackRecovery.applyCheckpoint(checkpoint, sameProcessReturn: true);
+    expect((await StorageService.getLastPlayedEpisodeByImdbId(identity))?['positionMs'], 20000);
+    expect((await StorageService.getLastPlayedEpisodeByImdbId('tt1234567'))?['positionMs'], 1234);
+  });
+
+  test('clearing original cannot suppress recovery of a same-title custom edit', () async {
+    final identity = const CustomSeriesIdentity('edit-config', 'OnePace').id;
+    final raw = _checkpoint(positionMs: 20000)..['imdbId'] = identity;
+    await StorageService.saveSeriesPlaybackState(seriesTitle: 'The Example Show',
+      season: 2, episode: 4, positionMs: 1234, durationMs: 3122536, imdbId: 'tt1234567');
+    await StorageService.clearSeriesWatchProgress('tt1234567', 'The Example Show');
+    final checkpoint = TvPlaybackCheckpoint.tryParse(jsonEncode(raw))!;
+    expect(await TvPlaybackRecovery.applyCheckpoint(checkpoint, sameProcessReturn: true), isTrue);
+    expect((await StorageService.getLastPlayedEpisodeByImdbId(identity))?['positionMs'], 20000);
   });
 
   test(

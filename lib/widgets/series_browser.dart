@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../models/series_playlist.dart';
+import '../models/custom_series_identity.dart';
 import '../services/episode_info_service.dart';
 import '../services/episode_tracker_snapshot_service.dart';
 import '../services/storage_service.dart';
@@ -312,12 +313,17 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
     List<Map<String, dynamic>> allEpisodes = _fullEpisodes;
 
     // Try to get show ID from: 1) SeriesPlaylist, 2) saved mapping, 3) IMDB lookup
-    int? showId =
+    final isCustom = CustomSeriesIdentity.isCustom(_effectiveImdbId);
+    if (isCustom && allEpisodes.isEmpty) {
+      await widget.seriesPlaylist.fetchEpisodeInfo(imdbId: _effectiveImdbId);
+      allEpisodes = widget.seriesPlaylist.fullTvmazeEpisodes;
+    }
+    int? showId = isCustom ? null :
         widget.seriesPlaylist.tvmazeShowId ?? await _getOverrideShowId();
 
     // If no show ID yet but we have IMDB ID, do IMDB lookup
     final effectiveImdbId = _effectiveImdbId;
-    if (showId == null && effectiveImdbId != null) {
+    if (!isCustom && showId == null && effectiveImdbId != null) {
       try {
         final showInfo = await TVMazeService.lookupByImdbId(effectiveImdbId);
         if (showInfo != null && showInfo['id'] != null) {
@@ -396,7 +402,7 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
               break;
             }
           }
-        } else {
+        } else if (!CustomSeriesIdentity.isCustom(_effectiveImdbId)) {
           // Fall back to searching by series title
           episodeData = await EpisodeInfoService.getEpisodeInfo(
             widget.seriesPlaylist.seriesTitle!,
@@ -423,7 +429,9 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
   /// Load the last played episode for this series
   Future<void> _loadLastPlayedEpisode() async {
     try {
-      final lastEpisode = await StorageService.getLastPlayedEpisode(
+      final lastEpisode = CustomSeriesIdentity.isCustom(_effectiveImdbId)
+          ? await StorageService.getLastPlayedEpisodeByImdbId(_effectiveImdbId!)
+          : await StorageService.getLastPlayedEpisode(
         seriesTitle: widget.seriesPlaylist.seriesTitle ?? 'Unknown Series',
       );
       if (lastEpisode != null && mounted) {
@@ -483,7 +491,7 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
             _traktEpisodeProgress = results[1] as Map<String, double>;
             _simklEpisodeProgress = results[2] as Map<String, double>;
             _mdblistEpisodeProgress = results[3] as Map<String, double>;
-            _trackingPolicy = results[4] as TrackingSourcePolicy;
+            _trackingPolicy = (results[4] as TrackingSourcePolicy).forContent(imdbId);
           });
         }
       }

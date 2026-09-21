@@ -1,11 +1,13 @@
 import 'metadata_preferences_service.dart';
 import 'home_return_cache.dart';
+import 'local_series_completion_service.dart';
 import 'prepared_stream_requests.dart';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 import '../models/stremio_addon.dart';
+import '../models/custom_series_identity.dart';
 import '../models/torrent.dart';
 import '../utils/concurrency.dart';
 import '../utils/json_isolate.dart';
@@ -2645,6 +2647,7 @@ class StremioService {
     // result still overwrites the cached entry.
     bool forceRefresh = false,
   }) async {
+    await restoreCatalogProgressIdentities();
     // Build catalog URL: {baseUrl}/catalog/{type}/{catalogId}.json
     // With extra parameters: {baseUrl}/catalog/{type}/{catalogId}/genre=Action.json
     // Multiple extras are joined with &: /genre=Action&skip=20.json
@@ -2880,6 +2883,9 @@ class StremioService {
       result.add({
         'season': season,
         'number': episode,
+        if (video['title'] != null) 'name': video['title'],
+        if (video['overview'] != null) 'summary': video['overview'],
+        if (video['thumbnail'] != null) 'image': {'medium': video['thumbnail'], 'original': video['thumbnail']},
         if (video['released'] != null) 'airstamp': video['released'],
       });
     }
@@ -2894,6 +2900,124 @@ class StremioService {
       (catalogId == imdbId ||
           RegExp(r'^(?:tmdb|trakt|imdb):(?:(?:tv|series):)?(?:tt)?\d+$')
               .hasMatch(catalogId));
+
+  Future<StremioAddon?> addonForCustomProgress(String id) async {
+    final custom = CustomSeriesIdentity.parse(id);
+    if (custom == null) return null;
+    final addons = await getEnabledAddons();
+    return addons.where((a) => a.portableConfigurationKey == custom.addonKey ||
+        a.sourceBindingKey == custom.addonKey).firstOrNull;
+  }
+
+  final catalogProgressRevision = ValueNotifier<int>(0);
+  final Map<String, String> _catalogProgressIdentities = {};
+  static const _progressIdentityPrefix = 'catalog_progress_identity_v1:';
+
+  Future<void> restoreCatalogProgressIdentities() async {
+    final prefs = await ProfilePreferences.instance();
+    _catalogProgressIdentities.clear();
+    for (final key in prefs.getKeys()) {
+      if (!key.startsWith(_progressIdentityPrefix)) continue;
+      final value = prefs.getString(key);
+      if (value != null) {
+        _catalogProgressIdentities[key.substring(_progressIdentityPrefix.length)] = value;
+      }
+    }
+  }
+
+  Future<String?> restoredCatalogProgressIdentity(StremioMeta item) async {
+    final addon = item.sourceAddon;
+    if (item.type != 'series' || addon == null ||
+        CustomSeriesIdentity.isCustom(item.imdbId)) return catalogProgressIdentity(item);
+    final key = '${addon.portableConfigurationKey}:${item.id}';
+    final prefs = await ProfilePreferences.instance();
+    final saved = prefs.getString('$_progressIdentityPrefix$key');
+    if (saved != null) {
+      _catalogProgressIdentities[key] = saved;
+      return saved;
+    }
+    return catalogProgressIdentity(item);
+  }
+
+  /// Synchronous badge lookup: never fetch metadata for a scrolling grid and
+  /// never borrow canonical watched state while addon identity is unverified.
+  String? catalogProgressIdentity(StremioMeta item) {
+    final id = item.effectiveImdbId ?? item.id;
+    if (item.type != 'series' || CustomSeriesIdentity.isCustom(id)) return id;
+    final addon = item.sourceAddon;
+    if (addon == null || addon.id == 'com.linvo.cinemeta') return id;
+    return _catalogProgressIdentities['${addon.portableConfigurationKey}:${item.id}'] ??
+        (isCanonicalCatalogAlias(item.id, id) ? id : null);
+  }
+
+  Future<void> _rememberCatalogProgress(StremioMeta item, StremioAddon addon) async {
+    final key = '${addon.portableConfigurationKey}:${item.id}';
+    final id = item.effectiveImdbId ?? item.id;
+    final prefs = await ProfilePreferences.instance();
+    await prefs.setString('$_progressIdentityPrefix$key', id);
+    if (_catalogProgressIdentities[key] == id) return;
+    _catalogProgressIdentities[key] = id;
+    catalogProgressRevision.value++;
+  }
+
+  /// Classify before reading history. Unknown catalog-owned series must never
+  /// borrow the history of an IMDb match. Known canonical aliases stay shared.
+  Future<StremioMeta> scopeSeriesProgress(
+    StremioMeta item, StremioAddon addon,
+  ) async {
+    if (item.type != 'series' || CustomSeriesIdentity.isCustom(item.imdbId)) {
+      if (item.type == 'series') await _rememberCatalogProgress(item, addon);
+      return item;
+    }
+    final imdb = item.effectiveImdbId ?? item.id;
+    final canonical = isCanonicalCatalogAlias(item.id, imdb);
+    final prefs = await ProfilePreferences.instance();
+    final previous = prefs.getString('$_progressIdentityPrefix${addon.portableConfigurationKey}:${item.id}');
+    // A proven custom catalog remains isolated even while its provider is down.
+    if (CustomSeriesIdentity.isCustom(previous)) {
+      final scoped = item.withCustomSeriesIdentity(addon);
+      await _rememberCatalogProgress(scoped, addon);
+      return scoped;
+    }
+    final cached = _seriesMetaCache['${addon.portableConfigurationKey}:${item.id}'];
+    final cachedVideos = cached != null && DateTime.now().difference(cached.fetchedAt) < _seriesMetaCacheTtl
+        ? cached.videos : null;
+    final needsMetadata = addon.supportsMeta && addon.baseUrl.isNotEmpty &&
+        (!canonical || addon.id != 'com.linvo.cinemeta');
+    final videos = cachedVideos ?? (needsMetadata
+        ? await fetchSeriesMeta(addon, item.id)
+        : null);
+    if (videos == null && previous == imdb) {
+      await _rememberCatalogProgress(item, addon);
+      return item;
+    }
+    // Do not read canonical history while an addon-owned episode identity is
+    // unknown. Use the metadata request's normal bounded timeout, and allow a
+    // retry on failure rather than committing a timing-dependent progress key.
+    if (needsMetadata && videos == null && previous != imdb) {
+      throw StateError('Could not verify series episode identity. Please retry.');
+    }
+    final ids = (videos ?? const <Map<String, dynamic>>[])
+        .where((v) => v['id']?.toString().isNotEmpty == true).toList();
+    final custom = ids.isEmpty ? !canonical : ids.any((v) {
+      final s = _videoCoordinate(v['season']);
+      final e = _videoCoordinate(v['number'] ?? v['episode']);
+      return s == null || e == null ||
+          !isCanonicalEpisodeId(imdb, v['id'].toString(), s, e);
+    });
+    if (!custom) {
+      await _rememberCatalogProgress(item, addon);
+      return item;
+    }
+    final scoped = item.withCustomSeriesIdentity(addon);
+    await _rememberCatalogProgress(scoped, addon);
+    if (videos != null && videos.isNotEmpty) {
+      await LocalSeriesCompletionService.instance.recordRawEpisodeInventory(
+        imdbId: scoped.imdbId!, seriesTitle: item.name, videos: videos,
+      );
+    }
+    return scoped;
+  }
 
   static bool isCanonicalEpisodeId(
     String imdbId,
@@ -3566,6 +3690,8 @@ class StremioService {
     HomeReturnCache.invalidate();
     _addonsCache = null;
     _catalogCache.clear();
+    _seriesMetaCache.clear();
+    _catalogProgressIdentities.clear();
     _streamRequests.clear();
     for (final idle in _idleStreamClients) {
       idle.close();

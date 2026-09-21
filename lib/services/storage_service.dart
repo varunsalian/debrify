@@ -1,4 +1,5 @@
 import '../models/subtitle_source_priority.dart';
+import '../models/custom_series_identity.dart';
 import '../models/home_collection.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -2930,7 +2931,7 @@ class StorageService {
       if (raw is! Map) return false;
       final storedId = raw['imdbId']?.toString().trim().toLowerCase();
       return storedId == id ||
-          ((storedId == null || storedId.isEmpty) &&
+          (!CustomSeriesIdentity.isCustom(id) && (storedId == null || storedId.isEmpty) &&
               raw['type'] == 'series' &&
               raw['title']?.toString().trim().toLowerCase() ==
                   title.trim().toLowerCase());
@@ -3010,10 +3011,12 @@ class StorageService {
     }
 
     final seriesAliases = <String>{
-      if (seriesTitle != null) alias('series', seriesTitle),
+      if (seriesTitle != null) _seriesProgressKey(seriesTitle, stableId),
     };
     final videoAliases = <String>{
-      if (resumeId != null) alias('video', resumeId),
+      if (resumeId != null) CustomSeriesIdentity.isCustom(stableId)
+          ? 'video_${stableId}_${resumeId.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_')}'
+          : alias('video', resumeId),
     };
     if (stableId != null && stableId.isNotEmpty) {
       if (seriesTitle == null) {
@@ -3130,6 +3133,11 @@ class StorageService {
   }
 
   /// Save playback state for series content
+  static String _seriesProgressKey(String title, String? id) =>
+      CustomSeriesIdentity.isCustom(id)
+          ? 'series_$id'
+          : 'series_${title.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_')}';
+
   static Future<void> saveSeriesPlaybackState({
     required String seriesTitle,
     required int season,
@@ -3143,8 +3151,7 @@ class StorageService {
     int? recoveryUpdatedAtMs,
   }) async {
     final map = await _getPlaybackStateMap();
-    final key =
-        'series_${seriesTitle.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_')}';
+    final key = _seriesProgressKey(seriesTitle, imdbId);
 
     if (!map.containsKey(key)) {
       map[key] = {'type': 'series', 'title': seriesTitle, 'seasons': {}};
@@ -3190,8 +3197,7 @@ class StorageService {
     final completedAtMs =
         recoveryUpdatedAtMs ?? DateTime.now().millisecondsSinceEpoch;
     final map = await _getPlaybackStateMap();
-    final key =
-        'series_${seriesTitle.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_')}';
+    final key = _seriesProgressKey(seriesTitle, imdbId);
 
     if (!map.containsKey(key)) {
       map[key] = {
@@ -3276,8 +3282,7 @@ class StorageService {
     String? imdbId,
   }) async {
     final map = await _getPlaybackStateMap();
-    final currentTitleKey =
-        'series_${seriesTitle.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_')}';
+    final currentTitleKey = _seriesProgressKey(seriesTitle, imdbId);
     final normalizedImdbId = imdbId?.trim().toLowerCase();
     final stableImdbId = normalizedImdbId == null || normalizedImdbId.isEmpty
         ? null
@@ -3342,6 +3347,8 @@ class StorageService {
       final storedTitle = raw['title']?.toString().trim().toLowerCase();
       final matchesStableId = storedId == normalized;
       final matchesLegacyTitle =
+          !CustomSeriesIdentity.isCustom(normalized) &&
+          !CustomSeriesIdentity.isCustom(storedId) &&
           normalizedTitle != null &&
           normalizedTitle.isNotEmpty &&
           storedTitle == normalizedTitle;
@@ -3441,8 +3448,7 @@ class StorageService {
     String? imdbId,
   }) async {
     final map = await _getPlaybackStateMap();
-    final currentTitleKey =
-        'series_${seriesTitle.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_')}';
+    final currentTitleKey = _seriesProgressKey(seriesTitle, imdbId);
     final normalizedImdbId = imdbId?.trim().toLowerCase();
     final stableImdbId = normalizedImdbId == null || normalizedImdbId.isEmpty
         ? null
@@ -3524,7 +3530,7 @@ class StorageService {
       }
     }
     if (result.isNotEmpty) return result;
-    if (seriesTitle != null && seriesTitle.isNotEmpty) {
+    if (!CustomSeriesIdentity.isCustom(imdbId) && seriesTitle != null && seriesTitle.isNotEmpty) {
       // Only ID-less legacy records may provide title fallback. A matching
       // display title does not make another IMDb series the same show.
       final index = await getFinishedSeriesEpisodeIndex();
@@ -3853,6 +3859,9 @@ class StorageService {
     required String seriesTitle,
     String? imdbId,
   }) async {
+    if (CustomSeriesIdentity.isCustom(imdbId)) {
+      return getEpisodeProgressByImdbId(imdbId!);
+    }
     final reads = await Future.wait([
       if (imdbId != null && imdbId.isNotEmpty)
         getEpisodeProgressByImdbId(imdbId)
@@ -3886,6 +3895,9 @@ class StorageService {
     required String seriesTitle,
     String? imdbId,
   }) async {
+    if (CustomSeriesIdentity.isCustom(imdbId)) {
+      return getFinishedEpisodesByImdbId(imdbId: imdbId!);
+    }
     final reads = await Future.wait([
       if (imdbId != null && imdbId.isNotEmpty)
         getFinishedEpisodesByImdbId(imdbId: imdbId)
@@ -3919,10 +3931,10 @@ class StorageService {
     required String seriesTitle,
     required int season,
     required int episode,
+    String? imdbId,
   }) async {
     final map = await _getPlaybackStateMap();
-    final key =
-        'series_${seriesTitle.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_')}';
+    final key = _seriesProgressKey(seriesTitle, imdbId);
 
     final seriesData = map[key];
     if (seriesData == null || seriesData['type'] != 'series') return null;
@@ -3949,8 +3961,9 @@ class StorageService {
     int? recoveryUpdatedAtMs,
   }) async {
     final map = await _getPlaybackStateMap();
-    final key =
-        'video_${videoTitle.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_')}';
+    final key = CustomSeriesIdentity.isCustom(imdbId)
+        ? 'video_${imdbId}_${videoTitle.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_')}'
+        : 'video_${videoTitle.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_')}';
 
     map[key] = {
       'type': 'video',
@@ -3973,10 +3986,12 @@ class StorageService {
   static Future<Map<String, dynamic>?> getVideoPlaybackState({
     required String videoTitle,
     bool includeFinished = false,
+    String? contentIdentity,
   }) async {
     final map = await _getPlaybackStateMap();
-    final key =
-        'video_${videoTitle.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_')}';
+    final key = CustomSeriesIdentity.isCustom(contentIdentity)
+        ? 'video_${contentIdentity}_${videoTitle.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_')}'
+        : 'video_${videoTitle.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_')}';
 
     final videoData = map[key];
     if (videoData == null || videoData['type'] != 'video') return null;

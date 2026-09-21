@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:crypto/crypto.dart';
 
 import '../utils/stremio_url.dart';
+import 'custom_series_identity.dart';
 
 /// Represents an extra parameter for a catalog (e.g., genre, search, skip)
 class StremioExtraParam {
@@ -144,6 +145,8 @@ class StremioMeta {
   final String id;
 
   /// Resolved IMDB ID (e.g., 'tt1234567'), extracted from imdb_id field or links
+  /// Scoped custom series use [CustomSeriesIdentity] here for local history;
+  /// their original addon metadata ID remains in [id].
   final String? imdbId;
 
   /// Content type ('movie' or 'series')
@@ -219,6 +222,24 @@ class StremioMeta {
   });
 
   /// Create a copy with a source addon attached.
+  StremioMeta withCustomSeriesIdentity(StremioAddon addon) => StremioMeta(
+    id: id,
+    imdbId: CustomSeriesIdentity(addon.portableConfigurationKey, id).id,
+    type: type,
+    name: name,
+    poster: poster,
+    background: background,
+    description: description,
+    year: year,
+    imdbRating: imdbRating,
+    genres: genres,
+    runtime: runtime,
+    sourceAddon: addon,
+    trailerYtId: trailerYtId,
+    logo: logo,
+    addedAtMs: addedAtMs,
+  );
+
   StremioMeta withSourceAddon(StremioAddon addon) => StremioMeta(
     id: id,
     imdbId: imdbId,
@@ -330,7 +351,9 @@ class StremioMeta {
     // Resolve IMDB ID: if id is already IMDB, use it directly.
     // Otherwise try imdb_id field, then extract from links array.
     String? imdbId;
-    if (id.startsWith('tt') && id.length >= 9) {
+    if (CustomSeriesIdentity.parse(json['imdb_id'] as String?) != null) {
+      imdbId = json['imdb_id'] as String;
+    } else if (id.startsWith('tt') && id.length >= 9) {
       imdbId = id;
     } else {
       final rawImdbId = json['imdb_id'] as String?;

@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../models/stremio_addon.dart';
+import '../services/stremio_service.dart';
 import '../theme/app_theme_scope.dart';
 import '../theme/widgets/themed_artwork.dart';
 import '../utils/platform_util.dart';
@@ -101,6 +102,24 @@ class _CatalogItemTileState extends State<CatalogItemTile>
 
   bool get _active => _focused || _hovered;
 
+  Widget _watchedBadge({bool compact = false}) => ValueListenableBuilder<int>(
+    valueListenable: StremioService.instance.catalogProgressRevision,
+    builder: (context, _, child) => FutureBuilder<String?>(
+      future: StremioService.instance.restoredCatalogProgressIdentity(widget.item),
+      builder: (context, snapshot) {
+      // Use original provenance, not metadata-provider enrichment.
+      final id = snapshot.data;
+      if (id == null) return const SizedBox.shrink();
+      return MovieWatchedBadge(
+        imdbId: id,
+        contentType: widget.item.type,
+        compact: compact,
+        tickPolicyScoped: true,
+      );
+      },
+    ),
+  );
+
   @override
   void dispose() {
     _longPressTimer?.cancel();
@@ -116,7 +135,6 @@ class _CatalogItemTileState extends State<CatalogItemTile>
     final typeLabel = item.type == 'series' ? 'SERIES' : 'MOVIE';
     final isMovie = item.type.toLowerCase() == 'movie';
     final supportsWatched = isMovie || item.type.toLowerCase() == 'series';
-    final movieId = item.effectiveImdbId ?? item.id;
     final board = widget.boardChrome;
     // TVs are low-powered: keep the focus highlight but make it instant
     // (no per-frame tweening of large posters/shadows). Board chrome animates
@@ -214,12 +232,7 @@ class _CatalogItemTileState extends State<CatalogItemTile>
               if (supportsWatched)
                 Padding(
                   padding: const EdgeInsets.only(top: 4),
-                  child: MovieWatchedBadge(
-                    imdbId: movieId,
-                    contentType: item.type,
-                    compact: true,
-                    tickPolicyScoped: true,
-                  ),
+                  child: _watchedBadge(compact: true),
                 ),
             ],
           ),
@@ -231,11 +244,7 @@ class _CatalogItemTileState extends State<CatalogItemTile>
           Positioned(
             top: 9,
             left: widget.showTypeBadge ? 68 : 9,
-            child: MovieWatchedBadge(
-              imdbId: movieId,
-              contentType: item.type,
-              tickPolicyScoped: true,
-            ),
+            child: _watchedBadge(),
           ),
         if (rating != null && widget.showRatingBadge)
           Positioned(top: 10, right: 10, child: _RatingChip(value: rating)),

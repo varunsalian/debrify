@@ -4,6 +4,7 @@ import 'torrent_playback_service.dart';
 import 'iptv_source_search.dart';
 import 'startup_recovery_sources.dart';
 import 'dart:async';
+import '../models/custom_series_identity.dart';
 import 'source_selection_diagnostics.dart';
 import '../utils/platform_util.dart';
 import 'dart:convert';
@@ -708,12 +709,15 @@ class VideoPlayerLauncher {
   static VideoPlayerLaunchArgs normalizeScrobbleFlags(
     VideoPlayerLaunchArgs args,
     TrackingSourcePolicy policy,
-  ) => args.copyWith(
-    traktScrobble: args.traktScrobble && policy.scrobbles(TrackingSource.trakt),
-    simklScrobble: args.simklScrobble && policy.scrobbles(TrackingSource.simkl),
-    mdblistScrobble:
-        args.mdblistScrobble && policy.scrobbles(TrackingSource.mdblist),
-  );
+  ) {
+    policy = policy.forContent(args.contentImdbId);
+    return args.copyWith(
+      traktScrobble: args.traktScrobble && policy.scrobbles(TrackingSource.trakt),
+      simklScrobble: args.simklScrobble && policy.scrobbles(TrackingSource.simkl),
+      mdblistScrobble:
+          args.mdblistScrobble && policy.scrobbles(TrackingSource.mdblist),
+    );
+  }
 
   /// Whether a launch needs to explain why the user's external-player default
   /// cannot be honored. Authenticated WebDAV playback is the current caller:
@@ -824,7 +828,7 @@ class VideoPlayerLauncher {
   }) async {
     // Apply the tracker master switches to catalog content with stable IDs.
     var args = originalArgs;
-    final trackingPolicy = await TrackingSourcePolicy.load();
+    final trackingPolicy = (await TrackingSourcePolicy.load()).forContent(args.contentImdbId);
     final defaultPlayerMode = await StorageService.getDefaultPlayerMode();
     if (!context.mounted) return;
     if (shouldExplainExternalPlayerFallback(args, defaultPlayerMode)) {
@@ -2195,7 +2199,7 @@ class VideoPlayerLauncher {
     if (args.iptvChannels != null && args.iptvChannels!.isNotEmpty) {
       return _launchIptvOnAndroidTv(args);
     }
-    final trackingPolicy = await TrackingSourcePolicy.load();
+    final trackingPolicy = (await TrackingSourcePolicy.load()).forContent(args.contentImdbId);
 
     // Reset Trakt scrobble state for clean session
     _traktHeartbeatTimer?.cancel();
@@ -3601,7 +3605,7 @@ class VideoPlayerLauncher {
     // Run in background - don't await
     () async {
       try {
-        final trackingPolicy = await TrackingSourcePolicy.load();
+        final trackingPolicy = (await TrackingSourcePolicy.load()).forContent(contentImdbId);
         // Determine forceSeries: prefer viewMode, then use contentType from catalog
         bool? forceSeries = viewMode?.toForceSeries();
         if (forceSeries == null && contentType != null) {
@@ -5255,7 +5259,7 @@ class _AndroidTvPlaybackPayloadBuilder {
             isMovie: contentType != _PlaybackContentType.series,
           )
         : null;
-    final trackingPolicy = await TrackingSourcePolicy.load();
+    final trackingPolicy = (await TrackingSourcePolicy.load()).forContent(args.contentImdbId);
     final localCompletionTracking =
         (trackingPolicy.forcesLocalCompletion ||
             (!args.traktScrobble &&
@@ -5839,7 +5843,8 @@ class _AndroidTvPlaybackPayloadBuilder {
         continue;
       }
       final resumeId = _resumeIdForEntry(entry);
-      result.add(await _readVideoState(resumeId));
+      result.add(CustomSeriesIdentity.isCustom(args.contentImdbId)
+          ? const _PerItemState() : await _readVideoState(resumeId));
     }
     return result;
   }

@@ -6,6 +6,7 @@ import 'dart:async';
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import '../models/custom_series_identity.dart';
 import 'package:flutter/services.dart';
 
 import '../models/stremio_addon.dart';
@@ -336,11 +337,17 @@ class EpisodesPanelState extends State<EpisodesPanel> {
   /// Whether a Trakt account is connected. This screen is reachable from
   /// Discover/catalog without Trakt, so the Trakt-only episode menu (mark
   /// watched/unwatched, rate) is only offered when this is true.
-  bool _isTraktAuthenticated = false;
+  bool _traktAuthenticated = false;
+  bool get _isTraktAuthenticated => _traktAuthenticated &&
+      !CustomSeriesIdentity.isCustom((_selectedShow ?? widget.show).imdbId);
 
   /// Whether Simkl is connected, for watched-action destinations and options.
-  bool _isSimklAuthenticated = false;
-  bool _isMdblistAuthenticated = false;
+  bool _simklAuthenticated = false;
+  bool _mdblistAuthenticated = false;
+  bool get _isSimklAuthenticated => _simklAuthenticated &&
+      !CustomSeriesIdentity.isCustom((_selectedShow ?? widget.show).imdbId);
+  bool get _isMdblistAuthenticated => _mdblistAuthenticated &&
+      !CustomSeriesIdentity.isCustom((_selectedShow ?? widget.show).imdbId);
 
   // MDBList can acknowledge a completed scrobble just before the player route
   // finishes popping, and its watched snapshot can trail that acknowledgement
@@ -416,7 +423,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
     StremioMeta show,
     int generation,
   ) async {
-    final policy = await TrackingSourcePolicy.load();
+    final policy = (await TrackingSourcePolicy.load()).forContent(show.imdbId);
     if (!mounted || generation != _episodeModeGeneration) return;
     _trackingPolicy = policy;
     // Direct-source mode: the host owns progress (URL-keyed player positions
@@ -540,7 +547,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
       }
     }
 
-    if (await _mdblistService.isAuthenticated()) {
+    if (!CustomSeriesIdentity.isCustom(imdbId) && await _mdblistService.isAuthenticated()) {
       if (policy.progressFrom(TrackingSource.mdblist)) {
         try {
           final result = await _mdblistService.fetchShowEpisodeProgress(imdbId);
@@ -705,7 +712,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
     if (_isDirectSource) return; // no IMDb id — the Trakt menu can't act
     final authed = await _traktService.isAuthenticated();
     if (mounted && authed != _isTraktAuthenticated) {
-      setState(() => _isTraktAuthenticated = authed);
+      setState(() => _traktAuthenticated = authed);
     }
   }
 
@@ -714,7 +721,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
     if (_isDirectSource) return; // mirrors _resolveTraktAuth
     final authed = await _simklService.isAuthenticated();
     if (mounted && authed != _isSimklAuthenticated) {
-      setState(() => _isSimklAuthenticated = authed);
+      setState(() => _simklAuthenticated = authed);
     }
   }
 
@@ -722,7 +729,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
     if (_isDirectSource) return;
     final authed = await _mdblistService.isAuthenticated();
     if (mounted && authed != _isMdblistAuthenticated) {
-      setState(() => _isMdblistAuthenticated = authed);
+      setState(() => _mdblistAuthenticated = authed);
     }
   }
 
@@ -979,6 +986,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
     }
 
     // 2) Trakt public seasons API (no auth required; keyed off the IMDb id).
+    if (CustomSeriesIdentity.isCustom(show.imdbId)) return [];
     final traktId = show.effectiveImdbId ?? show.id;
     if (traktId.isNotEmpty) {
       try {
@@ -1083,7 +1091,17 @@ class EpisodesPanelState extends State<EpisodesPanel> {
     int? initialEpisode,
   }) async {
     final generation = ++_episodeModeGeneration;
-    final trackingPolicy = await TrackingSourcePolicy.load();
+    try {
+      show = await _stremioService.scopeSeriesProgress(show, widget.addon);
+    } on StateError {
+      if (mounted && generation == _episodeModeGeneration) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Could not verify series episodes. Please retry.'),
+        ));
+      }
+      return;
+    }
+    final trackingPolicy = (await TrackingSourcePolicy.load()).forContent(show.imdbId);
     if (!mounted || generation != _episodeModeGeneration) return;
     _trackingPolicy = trackingPolicy;
 
@@ -1226,7 +1244,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
             effectiveEpisode = lastPlayed['episode'] as int?;
           }
         }
-        if (effectiveSeason == null && effectiveEpisode == null) {
+        if (!CustomSeriesIdentity.isCustom(show.imdbId) && effectiveSeason == null && effectiveEpisode == null) {
           final byTitle = await StorageService.getLastPlayedEpisode(
             seriesTitle: show.name,
           );
@@ -2211,6 +2229,9 @@ class EpisodesPanelState extends State<EpisodesPanel> {
         _traktService.isAuthenticated(), _simklService.isAuthenticated(),
         _mdblistService.isAuthenticated(),
       ])];
+      if (CustomSeriesIdentity.isCustom(show.imdbId)) {
+        connected.fillRange(1, connected.length, false);
+      }
       if (!mounted) return;
       final providers = [TrackingSource.local, TrackingSource.trakt, TrackingSource.simkl, TrackingSource.mdblist];
       final names = ['locally', 'on Trakt', 'on Simkl', 'on MDBList'];
