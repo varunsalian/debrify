@@ -35,6 +35,9 @@ import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
 import android.media.audiofx.LoudnessEnhancer;
+import com.debrify.app.audio.NativeAudioRouting;
+import com.debrify.app.audio.NativeAudioRenderersFactory;
+import com.debrify.app.audio.AudioEffectSession;
 import android.media.MediaCodecInfo;
 import android.media.MediaCodecList;
 
@@ -166,6 +169,14 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         private Format inputFormat;
 
         @Override
+        public void onAudioTrackInitialized(
+                AnalyticsListener.EventTime eventTime,
+                androidx.media3.exoplayer.audio.AudioSink.AudioTrackConfig audioTrackConfig) {
+            if (nightModeIndex > 0) initializeLoudnessEnhancer();
+            if (player != null) syncAudioEffectSession(player.getAudioSessionId());
+        }
+
+        @Override
         public void onVideoInputFormatChanged(
                 AnalyticsListener.EventTime eventTime,
                 Format format,
@@ -249,6 +260,8 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
     private View nightModeButton;
     private View speedButton;
     private int nightModeIndex = 0;  // Off by default
+    private final NativeAudioRouting nativeAudioRouting = new NativeAudioRouting();
+    private boolean systemAudioEffectsEnabled = false;
     private LoudnessEnhancer loudnessEnhancer = null;
     private View guideButton;
     private View channelNextButton;
@@ -522,6 +535,7 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
                 if (loudnessEnhancer == null && nightModeIndex > 0) {
                     initializeLoudnessEnhancer();
                 }
+                if (player != null) syncAudioEffectSession(player.getAudioSessionId());
             } else if (playbackState == Player.STATE_BUFFERING) {
                 if (hasEverBeenReady) {
                     showBufferingIndicatorDebounced();
@@ -588,6 +602,7 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
 
         @Override
         public void onAudioSessionIdChanged(int audioSessionId) {
+            syncAudioEffectSession(audioSessionId);
             // Reinitialize night mode effect when audio session changes
             if (nightModeIndex > 0 && audioSessionId != 0) {
                 releaseLoudnessEnhancer();
@@ -780,7 +795,8 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
 
     @OptIn(markerClass = UnstableApi.class)
     private void initialisePlayer() {
-        DefaultRenderersFactory baseRenderersFactory = new DefaultRenderersFactory(this)
+        nativeAudioRouting.update(nightModeIndex > 0, systemAudioEffectsEnabled);
+        DefaultRenderersFactory baseRenderersFactory = new NativeAudioRenderersFactory(this, nativeAudioRouting)
                 .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER)
                 .setEnableDecoderFallback(true)
                 .setAllowedVideoJoiningTimeMs(300);
@@ -797,6 +813,8 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
 
         // Build track selector parameters with robust language matching
         DefaultTrackSelector.Parameters.Builder paramsBuilder = trackSelector.buildUponParameters()
+                // Recover passthrough after HDMI/display-mode capability changes.
+                .setAllowInvalidateSelectionsOnRendererCapabilitiesChange(true)
                 .setPreferredAudioMimeType("audio/opus");
 
         // Apply audio language preference
@@ -841,6 +859,7 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
     private void createPlayer(LoadControl loadControl) {
         // Release night mode effect before releasing player to prevent memory leak
         releaseLoudnessEnhancer();
+        AudioEffectSession.INSTANCE.closeCurrent(this);
 
         if (player != null) {
             player.removeListener(playbackListener);
@@ -1582,6 +1601,12 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
     }
 
     // Night mode (dynamic range compression)
+    private void syncAudioEffectSession(int sessionId) {
+        if (systemAudioEffectsEnabled && sessionId != 0) {
+            AudioEffectSession.INSTANCE.open(this, sessionId);
+        }
+    }
+
     private void initializeLoudnessEnhancer() {
         if (player == null) {
             return;
@@ -1633,6 +1658,8 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
             nightModeIndex = (int) com.debrify.app.profiles.ProfilePreferenceProjection
                 .getLong(this, "player_night_mode_index", 0);
             nightModeIndex = Math.max(0, Math.min(nightModeIndex, nightModeGains.length - 1));
+            systemAudioEffectsEnabled = com.debrify.app.profiles.ProfilePreferenceProjection
+                    .getBoolean(this, "player_system_audio_effects", false);
 
             displayMatchMode = TvContentDisplayMatchMode.Companion.fromStorage(
                     com.debrify.app.profiles.ProfilePreferenceProjection.getString(
@@ -1665,12 +1692,16 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
     private void applyNightMode(int index) {
         nightModeIndex = index;
 
+        boolean routeChanged = nativeAudioRouting.update(nightModeIndex > 0, systemAudioEffectsEnabled);
+        if (routeChanged) releaseLoudnessEnhancer();
+        boolean restartingAudio = routeChanged && nativeAudioRouting.reprepare(player);
+
         if (nightModeIndex == 0) {
             // Turn off
             if (loudnessEnhancer != null) {
                 loudnessEnhancer.setEnabled(false);
             }
-        } else {
+        } else if (!restartingAudio) {
             // Turn on or adjust
             if (loudnessEnhancer == null) {
                 initializeLoudnessEnhancer();
@@ -6122,6 +6153,7 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
 
         // Release night mode audio effect
         releaseLoudnessEnhancer();
+        AudioEffectSession.INSTANCE.closeCurrent(this);
 
         if (player != null) {
             player.removeListener(playbackListener);

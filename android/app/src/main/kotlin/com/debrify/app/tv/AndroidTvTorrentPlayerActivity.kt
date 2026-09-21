@@ -41,6 +41,8 @@ import com.debrify.app.recording.RecordingRegistry
 import com.debrify.app.recording.RecordingSchedule
 import com.debrify.app.recording.RecordingScheduleStore
 import com.debrify.app.diagnostics.DiagnosticFileLog
+import com.debrify.app.audio.NativeAudioRouting
+import com.debrify.app.audio.NativeAudioRenderersFactory
 import android.widget.ArrayAdapter
 import android.widget.EditText
 import android.widget.FrameLayout
@@ -73,7 +75,6 @@ import androidx.media3.exoplayer.ExoPlaybackException
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.analytics.AnalyticsListener
 import androidx.media3.exoplayer.audio.AudioSink
-import androidx.media3.exoplayer.audio.DefaultAudioSink
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.source.MergingMediaSource
 import androidx.media3.exoplayer.source.ProgressiveMediaSource
@@ -259,6 +260,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
     // Player
     private var player: ExoPlayer? = null
+    private val nativeAudioRouting = NativeAudioRouting()
     private var trackSelector: DefaultTrackSelector? = null
     private var subtitleListener: Player.Listener? = null
     private var displayMatchMode = TvContentDisplayMatchMode.SYSTEM
@@ -266,6 +268,16 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
     private val decoderAnalyticsListener = object : AnalyticsListener {
         private var inputFormat: Format? = null
+
+        override fun onAudioTrackInitialized(
+            eventTime: AnalyticsListener.EventTime,
+            audioTrackConfig: AudioSink.AudioTrackConfig,
+        ) {
+            // Format/route changes can replace AudioTrack without changing its
+            // session ID or media item. Reattach effects to the actual output.
+            if (nightModeIndex > 0) initializeLoudnessEnhancer()
+            syncAudioEffectSession()
+        }
 
         override fun onVideoInputFormatChanged(
             eventTime: AnalyticsListener.EventTime,
@@ -2705,6 +2717,9 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
         // Build track selector parameters with robust language matching
         val paramsBuilder = trackSelector?.buildUponParameters()
+            // HDMI can temporarily lose surround support during a display-mode
+            // switch. Reconsider PCM fallback when the capabilities return.
+            ?.setAllowInvalidateSelectionsOnRendererCapabilitiesChange(true)
             ?.setPreferredAudioMimeType("audio/opus")
             ?.setIgnoredTextSelectionFlags(C.SELECTION_FLAG_DEFAULT)
 
@@ -2766,21 +2781,10 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             mainPost = { action -> runOnUiThread(action) },
             positionMs = { player?.currentPosition ?: 0L },
         ).also { speechTap = it }
-        val baseRenderersFactory = object : DefaultRenderersFactory(this) {
-            override fun buildAudioSink(
-                context: android.content.Context,
-                enableFloatOutput: Boolean,
-                enableAudioTrackPlaybackParams: Boolean,
-            ): AudioSink {
-                return DefaultAudioSink.Builder(context)
-                    .setEnableFloatOutput(enableFloatOutput)
-                    .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
-                    .setAudioProcessorChain(
-                        DefaultAudioSink.DefaultAudioProcessorChain(tap.processor)
-                    )
-                    .build()
-            }
-        }
+        nativeAudioRouting.update(nightModeIndex > 0, systemAudioEffectsEnabled)
+        val baseRenderersFactory = NativeAudioRenderersFactory(
+            this, nativeAudioRouting, arrayOf(tap.processor),
+        )
             .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER)
             .setEnableDecoderFallback(true)
             .setMediaCodecSelector(iptvMediaCodecSelector())
@@ -16533,10 +16537,18 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private fun applyNightMode(index: Int) {
         nightModeIndex = index
 
+        val routeChanged = nativeAudioRouting.update(nightModeIndex > 0, systemAudioEffectsEnabled)
+        if (routeChanged) {
+            // A recreated AudioTrack may retain its session ID; READY must
+            // attach a fresh effect even without onAudioSessionIdChanged.
+            releaseLoudnessEnhancer()
+        }
+        val restartingAudio = routeChanged && nativeAudioRouting.reprepare(player)
+
         if (nightModeIndex == 0) {
             // Turn off
             loudnessEnhancer?.enabled = false
-        } else {
+        } else if (!restartingAudio) {
             // Turn on or adjust
             if (loudnessEnhancer == null) {
                 initializeLoudnessEnhancer()
