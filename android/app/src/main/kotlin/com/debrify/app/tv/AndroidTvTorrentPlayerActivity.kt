@@ -2780,6 +2780,11 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             }
         }
 
+        // Start with text off until the selected audio is known. This also
+        // prevents a file's default/forced track flashing before policy runs.
+        if (playerPreferences.getBoolean("subtitle_only_foreign_audio", false)) {
+            paramsBuilder?.setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
+        }
         trackSelector?.parameters = paramsBuilder?.build()!!
 
         // Subtitle auto-sync's PCM tap rides the audio sink as a user
@@ -4787,7 +4792,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 .clearOverridesOfType(C.TRACK_TYPE_TEXT)
                 .setTrackTypeDisabled(
                     C.TRACK_TYPE_TEXT,
-                    playerPreferences.getString("player_default_subtitle_language", null) == "off",
+                    playerPreferences.getString("player_default_subtitle_language", null) == "off" ||
+                        playerPreferences.getBoolean("subtitle_only_foreign_audio", false),
                 )
                 .build()
         }
@@ -6910,6 +6916,11 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             manualSelection = userManuallySelectedSubtitle,
             suppressed = suppressSubtitleAutoSelect,
             addonSelected = currentStremioSubtitleIndex >= 0,
+            audioAllowsSubtitles = audioAllowsAutomaticSubtitles(
+                onlyForeignAudio = playerPreferences.getBoolean("subtitle_only_foreign_audio", false),
+                preferredAudio = playerPreferences.getString("player_default_audio_language", null),
+                selectedAudio = selectedAudioLanguage(tracks),
+            ),
             candidates = candidates,
             sourcePriority = SubtitleSettings.getSubtitleSourcePriority(this),
             addonDiscoveryReady = subtitleAddonDiscoveryReady,
@@ -6923,6 +6934,21 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 )
             },
         )) {
+            SubtitleAutoSelection.Off -> {
+                if (currentStremioSubtitleIndex >= 0 || externalSubtitleActive) {
+                    stopExternalSubtitleRendering() // invalidates in-flight addon downloads
+                    currentStremioSubtitleIndex = -1
+                }
+                trackSelector?.let { selector ->
+                    if (!selector.parameters.disabledTrackTypes.contains(C.TRACK_TYPE_TEXT)) {
+                        selector.parameters = selector.parameters.buildUpon()
+                            .clearOverridesOfType(C.TRACK_TYPE_TEXT)
+                            .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
+                            .build()
+                    }
+                }
+                return
+            }
             SubtitleAutoSelection.Wait, SubtitleAutoSelection.Keep -> return
             is SubtitleAutoSelection.Embedded -> {
                 val (group, index) = positions[choice.index]

@@ -50,6 +50,7 @@ class TracksSheet {
     mk.Player player, {
     required Future<void> Function(String audioId, String subtitleId)
     onTrackChanged,
+    Future<void> Function(String audioId, String subtitleId)? onAudioTrackChanged,
     void Function(SubtitleSettingsData settings)? onSubtitleStyleChanged,
     VoidCallback? onSyncOverlayRequested,
     String? contentImdbId,
@@ -382,6 +383,7 @@ class TracksSheet {
                         player: player,
                         selectedSub: selectedSub,
                         onTrackChanged: onTrackChanged,
+                        onAudioTrackChanged: onAudioTrackChanged,
                         setModalState: setModalState,
                         onAudioChanged: (v) =>
                             setModalState(() => selectedAudio = v),
@@ -598,6 +600,7 @@ class TracksSheet {
     required mk.Player player,
     required String selectedSub,
     required Future<void> Function(String, String) onTrackChanged,
+    Future<void> Function(String, String)? onAudioTrackChanged,
     required StateSetter setModalState,
     required void Function(String) onAudioChanged,
     bool? audioPassthrough,
@@ -632,7 +635,7 @@ class TracksSheet {
           selectedAudio: selectedAudio,
           player: player,
           selectedSub: selectedSub,
-          onTrackChanged: onTrackChanged,
+          onTrackChanged: onAudioTrackChanged ?? onTrackChanged,
           onAudioChanged: onAudioChanged,
           passthrough: audioPassthrough,
           onPassthroughChanged: onAudioPassthroughChanged,

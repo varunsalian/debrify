@@ -21,6 +21,7 @@ class NativePlayerPreferencesTest {
         .put("debrify_tv_player_style", "cinema")
         .put("player_default_subtitle_language", "off")
         .put("player_night_mode_index", 3)
+        .put("subtitle_only_foreign_audio", true)
 
     @Before fun reset() {
         prefs.edit().clear().commit()
@@ -47,6 +48,7 @@ class NativePlayerPreferencesTest {
             assertEquals("cinema", settings.getString("debrify_tv_player_style", "cinema"))
             assertEquals("off", settings.getString("player_default_subtitle_language", null))
             assertEquals(3L, settings.getLong("player_night_mode_index", 0))
+            assertTrue(settings.getBoolean("subtitle_only_foreign_audio", false))
         }
     }
 
@@ -55,6 +57,7 @@ class NativePlayerPreferencesTest {
         val settings = NativePlayerPreferences.fromIntent(context, launch())
         assertEquals("ott", settings.getString("tv_player_controls_style", "ott"))
         assertNull(settings.getString("player_default_subtitle_language", null))
+        assertFalse(settings.getBoolean("subtitle_only_foreign_audio", false))
         assertEquals(0L, settings.getLong("player_night_mode_index", 0))
         assertFalse(settings.getBoolean("player_system_audio_effects", false))
     }

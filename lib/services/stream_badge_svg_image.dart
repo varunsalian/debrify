@@ -30,6 +30,7 @@ class StreamBadgeSvgImage extends ImageProvider<StreamBadgeSvgImage> {
   static final _cache = CacheManager(
     Config(
       'stream-badge-svg-v1',
+      maxCacheSizeBytes: 8 * 1024 * 1024,
       stalePeriod: const Duration(days: 7),
       maxNrOfCacheObjects: 64,
       fileService: BadgeSvgFileService(),

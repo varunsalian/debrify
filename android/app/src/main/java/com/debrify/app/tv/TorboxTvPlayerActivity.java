@@ -485,6 +485,7 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
     private final ArrayList<StremioSubtitle> stremioSubtitles = new ArrayList<>();
     private int currentStremioSubtitleIndex = -1;  // -1 means no Stremio subtitle selected
     private boolean isLoadingStremioSubtitles = false;  // Loading state for UI indicator
+    private boolean userManuallySelectedSubtitle = false;
     private boolean embeddedSubtitleSelected = false;  // Track if embedded subtitle was auto-selected
     private int addonSubtitleFetchToken = 0;  // Guard against stale async fetches on content switch
     private final ExecutorService subtitleExecutor = Executors.newSingleThreadExecutor();
@@ -564,6 +565,9 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
 
         @Override
         public void onTracksChanged(Tracks tracks) {
+            if (playerPreferences.getBoolean("subtitle_only_foreign_audio", false)) {
+                ensureDefaultSubtitleSelected();
+            }
             // The unified menu's audio-track marker is derived live from
             // player.getCurrentTracks(); ExoPlayer applies a track override
             // asynchronously, so repaint once it actually takes effect (the
@@ -864,6 +868,9 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
             paramsBuilder.setPreferredTextLanguages(englishVariants.toArray(new String[0]));
         }
 
+        if (playerPreferences.getBoolean("subtitle_only_foreign_audio", false)) {
+            paramsBuilder.setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true);
+        }
         trackSelector.setParameters(paramsBuilder.build());
 
         LoadControl loadControl = buildLoadControl(bandwidthMeter.getBitrateEstimate());
@@ -2473,6 +2480,12 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
      */
     private void resetSubtitleState() {
         stopExternalSubtitleRendering();
+        userManuallySelectedSubtitle = false;
+        if (trackSelector != null && playerPreferences.getBoolean("subtitle_only_foreign_audio", false)) {
+            trackSelector.setParameters(trackSelector.buildUponParameters()
+                    .clearOverridesOfType(C.TRACK_TYPE_TEXT)
+                    .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true).build());
+        }
         if (subtitleOverlay != null) {
             subtitleOverlay.setCues(Collections.emptyList());
         }
@@ -3556,7 +3569,29 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         percentSeekApplied = true;
     }
 
+    /** Both auto-selection entry points enforce the selected audio policy. */
+    private boolean applyAutomaticSubtitleAudioPolicy() {
+        if (userManuallySelectedSubtitle) return false;
+        boolean allowed = SubtitleAutoSelectionKt.audioAllowsAutomaticSubtitles(
+                playerPreferences.getBoolean("subtitle_only_foreign_audio", false),
+                playerPreferences.getString("player_default_audio_language", null),
+                player == null ? null : SubtitleAutoSelectionKt.selectedAudioLanguage(player.getCurrentTracks()));
+        if (allowed) return true;
+        if (currentStremioSubtitleIndex >= 0 || externalSubtitleActive) {
+            stopExternalSubtitleRendering();
+            currentStremioSubtitleIndex = -1;
+        }
+        embeddedSubtitleSelected = false;
+        if (trackSelector != null && !trackSelector.getParameters().disabledTrackTypes.contains(C.TRACK_TYPE_TEXT)) {
+            trackSelector.setParameters(trackSelector.buildUponParameters()
+                    .clearOverridesOfType(C.TRACK_TYPE_TEXT)
+                    .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true).build());
+        }
+        return false;
+    }
+
     private void ensureDefaultSubtitleSelected() {
+        if (!applyAutomaticSubtitleAudioPolicy() || embeddedSubtitleSelected) return;
         if (trackSelector == null) {
             return;
         }
@@ -3641,6 +3676,7 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
      * Called after Stremio subtitles are fetched, if no embedded subtitle was selected.
      */
     private void tryAutoSelectAddonSubtitle() {
+        if (!applyAutomaticSubtitleAudioPolicy()) return;
         // Skip if embedded subtitle was already selected
         if (embeddedSubtitleSelected) {
             return;
@@ -4148,6 +4184,7 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
     }
 
     private void applySubtitleTrack(@Nullable TrackOption option) {
+        userManuallySelectedSubtitle = true;
         if (trackSelector == null) {
             return;
         }
@@ -5252,6 +5289,7 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
     }
 
     private void applySelectedSubtitleTrackFromPanel() {
+        userManuallySelectedSubtitle = true;
         if (currentSubtitleTrackIndex < 0 || currentSubtitleTrackIndex >= subtitleTrackOptions.size()) {
             // Off - disable all subtitles
             currentStremioSubtitleIndex = -1;

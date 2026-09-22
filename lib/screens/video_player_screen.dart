@@ -77,6 +77,7 @@ import 'video_player/models/hud_state.dart';
 import 'video_player/painters/double_tap_ripple_painter.dart';
 import 'video_player/utils/gesture_helpers.dart';
 import 'video_player/utils/language_mapping.dart';
+import 'video_player/utils/subtitle_audio_policy.dart';
 import 'video_player/utils/aspect_mode_utils.dart';
 import 'video_player/constants/timing_constants.dart';
 import 'video_player/widgets/auto_sync_pill.dart';
@@ -1373,6 +1374,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   // Windows-125x, etc.) instead of our http client pre-decoding as UTF-8.
   final Set<String> _tempSubtitleFiles = {};
   String? _activeExternalSubtitlePath;
+  bool _subtitleOnlyForeignAudio = false;
+  String? _subtitlePreferredAudio;
+  String? _subtitleSelectedAudio;
+  int _subtitleAudioRevision = 0;
   bool _subtitleAutoSyncEnabled = false;
   MediaKitSubtitleAutoSync? _subtitleAutoSync;
   // The quiet bottom-right auto-sync surface: a 5s announce line, then
@@ -3700,13 +3705,17 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       _syncActiveSkipSegmentUi();
       _checkAndApplyLocalCompletion();
     });
-    if (_subtitleAutoSyncEnabled) {
+    if (_subtitleAutoSyncEnabled || _subtitleOnlyForeignAudio) {
       var lastAudioTrackId = player.state.track.audio.id;
+      var lastAudioLanguage = player.state.track.audio.language;
       _trackSub = player.stream.track.listen((track) {
         if (!isCurrent()) return;
         final audioTrackId = track.audio.id;
-        if (audioTrackId != lastAudioTrackId) {
+        if (audioTrackId != lastAudioTrackId ||
+            track.audio.language != lastAudioLanguage) {
           lastAudioTrackId = audioTrackId;
+          lastAudioLanguage = track.audio.language;
+          unawaited(_refreshSubtitleAudioPolicy());
           _subtitleAutoSync?.audioTrackChanged();
         }
       });
@@ -4651,6 +4660,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // both natively and in Flutter. Restored bitmap selections re-enable it.
     if (platform is mk.NativePlayer) {
       try {
+        if (_subtitleOnlyForeignAudio) {
+          await platform.setProperty('sid', 'no');
+        }
         await platform.setProperty(
           'sub-visibility',
           Platform.isIOS && (_isPipActive || _iosPipStarting) ? 'yes' : 'no',
@@ -4802,7 +4814,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   Future<bool> _setSubtitleTrackWithDiagnostics(
     mk.SubtitleTrack track, {
     required String source,
+    bool Function()? isCurrent,
   }) async {
+    if (isCurrent != null && !isCurrent()) return false;
     if (Platform.isAndroid &&
         !PlatformUtil.isAndroidTvCached &&
         requiresNativeSubtitleRendering(track) &&
@@ -4833,6 +4847,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
     try {
       await _setNativeSubtitleVisibilityForTrack(track);
+      if (isCurrent != null && !isCurrent()) return false;
       await _player.setSubtitleTrack(track);
     } catch (error, stackTrace) {
       debugPrint(
@@ -6194,6 +6209,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   }
 
   Future<void> _loadPlayerDefaults() async {
+    _subtitleOnlyForeignAudio = await StorageService.getSubtitleOnlyForeignAudio();
+    _subtitlePreferredAudio = await StorageService.getDefaultAudioLanguage();
     _subtitleAutoSyncEnabled =
         await StorageService.getSubtitleAutoSyncEnabled();
     debugPrint(
@@ -16467,6 +16484,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     await TracksSheet.show(
       context,
       _player,
+      onAudioTrackChanged: _audioTrackChoiceChanged,
       onTrackChanged: (audioId, subtitleId) async {
         _userManuallySelectedSubtitle = true;
         if (!subtitleId.startsWith('stremio:')) {
@@ -16515,9 +16533,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         _selectedStremioSubtitleId = id;
         _userManuallySelectedSubtitle = true;
       },
-      onApplyEmbeddedSubtitle: (track) => _setSubtitleTrackWithDiagnostics(
-        track,
-        source: 'tracks-sheet-embedded',
+      onApplyEmbeddedSubtitle: (track) => _withManualSubtitleChoice(
+        () => _setSubtitleTrackWithDiagnostics(
+          track,
+          source: 'tracks-sheet-embedded',
+        ),
       ),
       onApplyStremioSubtitle: _applyStremioSubtitleFromTracksSheet,
       onIdentifyTitle: _identifyTitleAndFetchSubtitles,
@@ -16619,8 +16639,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     if (PlatformUtil.isTelevision) _tvRootFocus.requestFocus();
   }
 
-  /// The old tracks-sheet `onTrackChanged` closure, verbatim: shared tail of
-  /// every track selection made from the menu.
+  /// Persist an explicit subtitle choice made from the menu.
   Future<void> _menuApplyTrackChange(String audioId, String subtitleId) async {
     _userManuallySelectedSubtitle = true;
     if (!subtitleId.startsWith('stremio:')) {
@@ -16630,52 +16649,86 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     await _persistTrackChoice(audioId, subtitleId);
   }
 
+  Future<void> _audioTrackChoiceChanged(String audioId, String currentSubId) async {
+    _captureIptvAudioLanguage(audioId);
+    await _persistTrackChoice(
+      audioId,
+      _subtitleOnlyForeignAudio && !_userManuallySelectedSubtitle
+          ? 'auto'
+          : currentSubId,
+    );
+    await _refreshSubtitleAudioPolicy();
+  }
+
   Future<void> _menuSelectAudio(String audioId, String currentSubId) async {
     final track = _player.state.tracks.audio
         .where((a) => a.id == audioId)
         .firstOrNull;
     if (track == null) return;
     await _player.setAudioTrack(track);
-    await _menuApplyTrackChange(audioId, currentSubId);
+    await _audioTrackChoiceChanged(audioId, currentSubId);
   }
 
-  Future<bool> _menuSubtitlesOff(String audioId) async {
-    final applied = await _setSubtitleTrackWithDiagnostics(
-      mk.SubtitleTrack.no(),
-      source: 'player-menu-off',
-    );
-    if (!applied) return false;
-    _selectedStremioSubtitleId = null;
-    await _menuApplyTrackChange(audioId, 'no');
-    return true;
-  }
-
-  Future<bool> _menuSelectEmbeddedSubtitle(String subId, String audioId) async {
-    final track = _player.state.tracks.subtitle
-        .where((s) => s.id == subId)
-        .firstOrNull;
-    if (track == null) {
-      _showSubtitleFailureMessage(
-        'That subtitle track is no longer available. Try another track.',
-      );
-      return false;
+  Future<bool> _withManualSubtitleChoice(Future<bool> Function() apply) async {
+    if (!_subtitleOnlyForeignAudio) return apply();
+    final previouslyManual = _userManuallySelectedSubtitle;
+    final token = _addonSubtitleFetchToken;
+    final revision = ++_subtitleAudioRevision;
+    _userManuallySelectedSubtitle = true;
+    var applied = false;
+    try {
+      applied = await apply();
+      return applied;
+    } finally {
+      if (!applied &&
+          mounted &&
+          token == _addonSubtitleFetchToken &&
+          revision == _subtitleAudioRevision) {
+        _userManuallySelectedSubtitle = previouslyManual;
+        unawaited(_refreshSubtitleAudioPolicy());
+      }
     }
-    final applied = await _setSubtitleTrackWithDiagnostics(
-      track,
-      source: 'player-menu-embedded',
-    );
-    if (!applied) return false;
-    _selectedStremioSubtitleId = null;
-    await _menuApplyTrackChange(audioId, subId);
-    return true;
   }
+
+  Future<bool> _menuSubtitlesOff(String audioId) =>
+      _withManualSubtitleChoice(() async {
+        final applied = await _setSubtitleTrackWithDiagnostics(
+          mk.SubtitleTrack.no(),
+          source: 'player-menu-off',
+        );
+        if (!applied) return false;
+        _selectedStremioSubtitleId = null;
+        await _menuApplyTrackChange(audioId, 'no');
+        return true;
+      });
+
+  Future<bool> _menuSelectEmbeddedSubtitle(String subId, String audioId) =>
+      _withManualSubtitleChoice(() async {
+        final track = _player.state.tracks.subtitle
+            .where((s) => s.id == subId)
+            .firstOrNull;
+        if (track == null) {
+          _showSubtitleFailureMessage(
+            'That subtitle track is no longer available. Try another track.',
+          );
+          return false;
+        }
+        final applied = await _setSubtitleTrackWithDiagnostics(
+          track,
+          source: 'player-menu-embedded',
+        );
+        if (!applied) return false;
+        _selectedStremioSubtitleId = null;
+        await _menuApplyTrackChange(audioId, subId);
+        return true;
+      });
 
   /// Returns false when the download/apply failed — the panel keeps the
   /// previous selection (and its sync offset) in that case.
   Future<bool> _menuSelectAddonSubtitle(
     StremioSubtitle sub,
     String audioId,
-  ) async {
+  ) => _withManualSubtitleChoice(() async {
     // Playback continues behind the menu: if the content switches while the
     // download is in flight (auto-advance, zap), applying the stale subtitle
     // would attach it — and persist its ids — against the NEW item.
@@ -16710,9 +16763,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       );
       return false;
     }
-  }
+  });
 
-  Future<bool> _applyStremioSubtitleFromTracksSheet(StremioSubtitle sub) async {
+  Future<bool> _applyStremioSubtitleFromTracksSheet(
+    StremioSubtitle sub,
+  ) => _withManualSubtitleChoice(() async {
     final token = _addonSubtitleFetchToken;
     try {
       final filePath = await _downloadStremioSubtitleToTempFile(sub);
@@ -16743,7 +16798,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       );
       return false;
     }
-  }
+  });
 
   Widget _buildPlayerMenuPanel() {
     final audios = _player.state.tracks.audio
@@ -16839,6 +16894,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _manualContentEpisode = null;
     _manualSubtitleDisplayLabel = null;
     _embeddedSubtitleApplied = false;
+    _subtitleSelectedAudio = null;
+    _subtitleAudioRevision++;
     _userManuallySelectedSubtitle = false;
     _trackPreferencesReadyForAddonSubtitles = false;
     _addonSubtitleFetchToken++;
@@ -16934,6 +16991,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           await _applyDefaultAudioLanguage();
         }
 
+        if (_isIptvSeriesContext) {
+          await _applyIptvAudioPreference(_iptvSwitchTicket);
+        }
+        await _refreshSubtitleAudioPolicy(reselect: false);
+
         // Bail out if content changed during audio track application
         if (restoreToken != _addonSubtitleFetchToken) return;
 
@@ -16995,6 +17057,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                 subtitleTrack,
                 source: 'restore-stored-embedded',
               );
+              if (_subtitleOnlyForeignAudio && subtitleApplied) {
+                _userManuallySelectedSubtitle = true;
+              }
             }
           } else {
             // Stored track doesn't exist in this video - fall through to default
@@ -17014,16 +17079,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         // No track preferences at all - apply default language settings
         debugPrint('SubAuto: no stored prefs → default-language path');
         await _applyDefaultAudioLanguage();
+        if (_isIptvSeriesContext) {
+          await _applyIptvAudioPreference(_iptvSwitchTicket);
+        }
+        await _refreshSubtitleAudioPolicy(reselect: false);
         subtitleApplied = await _applyDefaultSubtitleLanguage();
-      }
-
-      // IPTV series: the language-based memory wins over the per-title ordinal
-      // / global default applied above (episodes are separate files whose track
-      // orderings differ, so only language carries). No-op off a series episode.
-      // No switch is in flight on the initial open, so the current ticket is a
-      // valid generation for the staleness guard.
-      if (_isIptvSeriesContext) {
-        await _applyIptvAudioPreference(_iptvSwitchTicket);
       }
 
       // Final check before applying state
@@ -17035,6 +17095,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       // Track if embedded subtitle was applied for addon fallback
       _embeddedSubtitleApplied = subtitleApplied;
       _trackPreferencesReadyForAddonSubtitles = true;
+      await _refreshSubtitleAudioPolicy();
       debugPrint(
         'SubAuto: restore done — embeddedSubtitleApplied=$subtitleApplied → running addon auto-select',
       );
@@ -17101,22 +17162,85 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     }
   }
 
+  bool get _audioAllowsAutomaticSubtitles => allowsAutomaticSubtitles(
+    onlyForeignAudio: _subtitleOnlyForeignAudio,
+    preferredAudio: _subtitlePreferredAudio,
+    selectedAudio: _subtitleSelectedAudio,
+  );
+
+  Future<void> _refreshSubtitleAudioPolicy({bool reselect = true}) async {
+    if (!_subtitleOnlyForeignAudio || _userManuallySelectedSubtitle) return;
+    final revision = ++_subtitleAudioRevision;
+    final token = _addonSubtitleFetchToken;
+    _subtitleSelectedAudio = null;
+    final audio = _player.state.track.audio;
+    String? language = LanguageMapper.canonicalLanguage(audio.language) ??
+        LanguageMapper.canonicalLanguage(audio.title);
+    final platform = _player.platform;
+    if (platform is mk.NativePlayer) {
+      try {
+        // Dart may still expose the 'auto' placeholder at startup.
+        final tag = await platform.getProperty('current-tracks/audio/lang');
+        language = LanguageMapper.canonicalLanguage(tag) ?? language;
+      } catch (_) {
+        // Retain recognized track metadata if the native property is unavailable.
+      }
+    }
+    bool current() =>
+        mounted &&
+        token == _addonSubtitleFetchToken &&
+        revision == _subtitleAudioRevision &&
+        !_userManuallySelectedSubtitle;
+    if (!current()) return;
+    _subtitleSelectedAudio = language;
+    if (!reselect || !_trackPreferencesReadyForAddonSubtitles) return;
+    if (!_audioAllowsAutomaticSubtitles) {
+      _embeddedSubtitleApplied = false;
+      _selectedStremioSubtitleId = null;
+      _setActiveExternalSubtitlePath(null);
+      await _setSubtitleTrackWithDiagnostics(
+        mk.SubtitleTrack.no(),
+        source: 'audio-language-off',
+        isCurrent: current,
+      );
+    }
+    if (!current()) return;
+    await _applySubtitleSourcePriority(
+      _cachedAddonSlots ?? const [],
+      token,
+      discoveryReady: _cachedAddonSlots != null,
+    );
+  }
+
   /// Apply default subtitle language from settings (when no stored preference exists)
   /// Returns true if an embedded subtitle was found and applied, false otherwise.
   Future<bool> _applyDefaultSubtitleLanguage({
     bool ignoreSourcePriority = false,
   }) async {
     final token = _addonSubtitleFetchToken;
+    final audioRevision = _subtitleAudioRevision;
+    bool current() =>
+        mounted &&
+        token == _addonSubtitleFetchToken &&
+        audioRevision == _subtitleAudioRevision &&
+        !_userManuallySelectedSubtitle;
     try {
+      if (!_audioAllowsAutomaticSubtitles) {
+        await _setSubtitleTrackWithDiagnostics(
+          mk.SubtitleTrack.no(),
+          source: 'audio-language-default-off',
+          isCurrent: current,
+        );
+        return false;
+      }
       final defaultLang = await StorageService.getDefaultSubtitleLanguage();
       debugPrint('SubAuto: defaultSubtitleLanguage setting = $defaultLang');
-      if (token != _addonSubtitleFetchToken || _userManuallySelectedSubtitle) {
+      if (!current()) {
         return false;
       }
       if (!ignoreSourcePriority && defaultLang != 'off') {
         final order = await StorageService.getSubtitleSourcePriority();
-        if (token != _addonSubtitleFetchToken ||
-            _userManuallySelectedSubtitle) {
+        if (!current()) {
           return false;
         }
         if (order.first != SubtitleSourcePriority.embedded) return false;
@@ -17132,8 +17256,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
             // Fall back to media_kit's reported selection.
           }
         }
-        if (token != _addonSubtitleFetchToken ||
-            _userManuallySelectedSubtitle) {
+        if (!current()) {
           return false;
         }
         final track = subtitleWithoutLanguagePreference(
@@ -17144,6 +17267,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         return _setSubtitleTrackWithDiagnostics(
           track,
           source: 'no-preference-embedded',
+          isCurrent: current,
         );
       }
 
@@ -17154,6 +17278,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         final applied = await _setSubtitleTrackWithDiagnostics(
           mk.SubtitleTrack.no(),
           source: 'default-language-off',
+          isCurrent: current,
         );
         return applied; // User explicitly disabled, don't try addon
       }
@@ -17181,6 +17306,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         return _setSubtitleTrackWithDiagnostics(
           matchingTrack,
           source: 'default-language-embedded',
+          isCurrent: current,
         );
       }
       debugPrint(
@@ -17275,7 +17401,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
   /// Load a replacement first, then unload older addon tracks. A malformed
   /// replacement therefore leaves the currently working subtitle untouched.
-  Future<bool> _applyExternalSubtitleTrack(mk.SubtitleTrack track) async {
+  Future<bool> _applyExternalSubtitleTrack(
+    mk.SubtitleTrack track, {
+    bool Function()? isCurrent,
+  }) async {
     // Track IDs are small mpv ordinals and may be reused by the next media.
     // Keep the content generation with this operation so a delayed apply can
     // never remove a same-numbered subtitle from newly opened content.
@@ -17288,13 +17417,15 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     final applied = await _setSubtitleTrackWithDiagnostics(
       track,
       source: 'addon-external',
+      isCurrent: isCurrent,
     );
     if (!applied) return false;
 
     final platform = _player.platform;
     if (platform is mk.NativePlayer) {
       for (final id in oldExternalIds) {
-        if (!mounted || contentToken != _addonSubtitleFetchToken) {
+        if (!mounted || contentToken != _addonSubtitleFetchToken ||
+            (isCurrent != null && !isCurrent())) {
           debugPrint(
             'VideoPlayer: Content changed during addon subtitle cleanup; '
             'stopping before track $id',
@@ -17460,7 +17591,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   Future<void> _applySubtitlePriorityUpdate(
     SubtitlePriorityUpdate update,
   ) async {
+    final audioRevision = _subtitleAudioRevision;
     bool valid() =>
+        audioRevision == _subtitleAudioRevision &&
+        _audioAllowsAutomaticSubtitles &&
         mounted &&
         update.token == _addonSubtitleFetchToken &&
         _trackPreferencesReadyForAddonSubtitles &&
@@ -17492,6 +17626,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
               title: sub.displayName,
               language: sub.lang,
             ),
+            isCurrent: valid,
           );
           if (applied) selectedPath = path;
           return applied;

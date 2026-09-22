@@ -9461,6 +9461,18 @@ class StorageService {
     await prefs.setBool(_subtitleAutoSyncKey, enabled);
   }
 
+  /// Opt-in: automatically show subtitles only for a known audio language
+  /// different from the profile's preferred audio language.
+  static Future<bool> getSubtitleOnlyForeignAudio() async {
+    final prefs = await ProfilePreferences.instance();
+    return prefs.getBool('subtitle_only_foreign_audio') ?? false;
+  }
+
+  static Future<void> setSubtitleOnlyForeignAudio(bool enabled) async {
+    final prefs = await ProfilePreferences.instance();
+    await prefs.setBool('subtitle_only_foreign_audio', enabled);
+  }
+
   /// Ordered, portable subtitle sources for automatic selection.
   static Future<List<String>> getSubtitleSourcePriority() async {
     final prefs = await ProfilePreferences.instance();
