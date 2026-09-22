@@ -961,7 +961,7 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
     final messenger = ScaffoldMessenger.of(context);
     final int borrowerCount;
     try {
-      borrowerCount = await _stremio.addonBorrowerCount(a.manifestUrl);
+      borrowerCount = await _stremio.addonBorrowerCount(a.storageKey);
     } catch (e) {
       if (!mounted) return;
       messenger.showSnackBar(
@@ -1001,7 +1001,7 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
     );
     if (confirmed != true || !mounted) return;
     try {
-      await _stremio.removeAddon(a.manifestUrl, revokeSharedProfiles: isShared);
+      await _stremio.removeAddon(a.storageKey, revokeSharedProfiles: isShared);
       if (!mounted) return;
       messenger.showSnackBar(
         SnackBar(content: Text('${a.displayName} removed')),
@@ -1037,7 +1037,7 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
           Navigator.of(ctx).pop();
           _updateAddon(a);
         },
-        onRename: a.canManage
+        onRename: a.canManage && !a.connectionResourceSecretPending
             ? () {
                 Navigator.of(ctx).pop();
                 _renameAddon(a);
@@ -2215,7 +2215,10 @@ class _InstalledRow extends StatelessWidget {
                             ),
                           ),
                           const SizedBox(width: 10),
-                          _StatusPill(enabled: addon.enabled),
+                          _StatusPill(
+                            enabled: addon.enabled,
+                            reconnect: addon.connectionResourceSecretPending,
+                          ),
                           const SizedBox(width: 4),
                           chevron,
                         ],
@@ -2239,7 +2242,10 @@ class _InstalledRow extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(width: 16),
-                      _StatusPill(enabled: addon.enabled),
+                      _StatusPill(
+                        enabled: addon.enabled,
+                        reconnect: addon.connectionResourceSecretPending,
+                      ),
                       const SizedBox(width: 8),
                       chevron,
                     ],
@@ -2853,13 +2859,14 @@ Widget _addonLogo(String? url, {double size = 64}) => SizedBox(
 
 class _StatusPill extends StatelessWidget {
   final bool enabled;
-  const _StatusPill({required this.enabled});
+  final bool reconnect;
+  const _StatusPill({required this.enabled, this.reconnect = false});
 
   @override
   Widget build(BuildContext context) {
-    final color = enabled
-        ? kSeeAllAccent2
-        : Colors.white.withValues(alpha: 0.4);
+    final color = reconnect
+        ? Colors.amber
+        : enabled ? kSeeAllAccent2 : Colors.white.withValues(alpha: 0.4);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
       decoration: BoxDecoration(
@@ -2867,7 +2874,7 @@ class _StatusPill extends StatelessWidget {
         borderRadius: BorderRadius.circular(8),
       ),
       child: Text(
-        enabled ? 'ON' : 'OFF',
+        reconnect ? 'RECONNECT' : (enabled ? 'ON' : 'OFF'),
         style: TextStyle(
           color: color,
           fontSize: 10.5,
@@ -2937,11 +2944,12 @@ class _AddonOptionsSheet extends StatelessWidget {
               label: addon.enabled ? 'Disable' : 'Enable',
               onTap: onToggle,
             ),
-            _OptionTile(
-              icon: Icons.sync_rounded,
-              label: 'Update',
-              onTap: onUpdate,
-            ),
+            if (!addon.connectionResourceSecretPending)
+              _OptionTile(
+                icon: Icons.sync_rounded,
+                label: 'Update',
+                onTap: onUpdate,
+              ),
             if (onRename != null)
               _OptionTile(
                 icon: Icons.drive_file_rename_outline_rounded,

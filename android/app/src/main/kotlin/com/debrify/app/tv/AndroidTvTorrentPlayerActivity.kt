@@ -41,6 +41,8 @@ import com.debrify.app.recording.RecordingRegistry
 import com.debrify.app.recording.RecordingSchedule
 import com.debrify.app.recording.RecordingScheduleStore
 import com.debrify.app.diagnostics.DiagnosticFileLog
+import com.debrify.app.audio.NativeAudioRouting
+import com.debrify.app.audio.NativeAudioRenderersFactory
 import android.widget.ArrayAdapter
 import android.widget.EditText
 import android.widget.FrameLayout
@@ -73,7 +75,6 @@ import androidx.media3.exoplayer.ExoPlaybackException
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.analytics.AnalyticsListener
 import androidx.media3.exoplayer.audio.AudioSink
-import androidx.media3.exoplayer.audio.DefaultAudioSink
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.source.MergingMediaSource
 import androidx.media3.exoplayer.source.ProgressiveMediaSource
@@ -259,6 +260,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
     // Player
     private var player: ExoPlayer? = null
+    private val nativeAudioRouting = NativeAudioRouting()
     private var trackSelector: DefaultTrackSelector? = null
     private var subtitleListener: Player.Listener? = null
     private var displayMatchMode = TvContentDisplayMatchMode.SYSTEM
@@ -266,6 +268,16 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
     private val decoderAnalyticsListener = object : AnalyticsListener {
         private var inputFormat: Format? = null
+
+        override fun onAudioTrackInitialized(
+            eventTime: AnalyticsListener.EventTime,
+            audioTrackConfig: AudioSink.AudioTrackConfig,
+        ) {
+            // Format/route changes can replace AudioTrack without changing its
+            // session ID or media item. Reattach effects to the actual output.
+            if (nightModeIndex > 0) initializeLoudnessEnhancer()
+            syncAudioEffectSession()
+        }
 
         override fun onVideoInputFormatChanged(
             eventTime: AnalyticsListener.EventTime,
@@ -1497,6 +1509,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         }
 
         override fun onPlaybackStateChanged(playbackState: Int) {
+            if (nativeAudioRouting.reprepareIfPending(player, playbackSpeeds[playbackSpeedIndex])) return
             when (playbackState) {
                 Player.STATE_READY -> {
                     if (pendingShufflePlayback?.mediaStarted == true) pendingShufflePlayback = null
@@ -1982,6 +1995,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     // Broadcast receiver for async metadata updates from Flutter
     private var metadataUpdateReceiver: android.content.BroadcastReceiver? = null
 
+    private lateinit var playerPreferences: com.debrify.app.profiles.NativePlayerPreferences
+
     override fun onCreate(savedInstanceState: Bundle?) {
         DiagnosticFileLog.initialize(this)
         sourcePersistenceSessionId = intent.getIntExtra("playbackSessionId", 0)
@@ -1993,6 +2008,14 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 "savedState=${savedInstanceState != null}",
         )
         super.onCreate(savedInstanceState)
+        try {
+            playerPreferences = com.debrify.app.profiles.NativePlayerPreferences.fromIntent(this, intent)
+        } catch (_: Exception) {
+            android.util.Log.w("AndroidTvPlayer", "Player settings handoff rejected")
+            Toast.makeText(this, "Player settings could not be loaded. Try again.", Toast.LENGTH_LONG).show()
+            finish()
+            return
+        }
         setContentView(R.layout.activity_android_tv_torrent_player)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
@@ -2700,11 +2723,14 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         trackSelector = DefaultTrackSelector(this)
 
         // Get default language settings
-        val defaultAudioLang = SubtitleSettings.getDefaultAudioLanguage(this)
-        val defaultSubtitleLang = SubtitleSettings.getDefaultSubtitleLanguage(this)
+        val defaultAudioLang = playerPreferences.getString("player_default_audio_language", null)
+        val defaultSubtitleLang = playerPreferences.getString("player_default_subtitle_language", null)
 
         // Build track selector parameters with robust language matching
         val paramsBuilder = trackSelector?.buildUponParameters()
+            // HDMI can temporarily lose surround support during a display-mode
+            // switch. Reconsider PCM fallback when the capabilities return.
+            ?.setAllowInvalidateSelectionsOnRendererCapabilitiesChange(true)
             ?.setPreferredAudioMimeType("audio/opus")
             ?.setIgnoredTextSelectionFlags(C.SELECTION_FLAG_DEFAULT)
 
@@ -2766,21 +2792,10 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             mainPost = { action -> runOnUiThread(action) },
             positionMs = { player?.currentPosition ?: 0L },
         ).also { speechTap = it }
-        val baseRenderersFactory = object : DefaultRenderersFactory(this) {
-            override fun buildAudioSink(
-                context: android.content.Context,
-                enableFloatOutput: Boolean,
-                enableAudioTrackPlaybackParams: Boolean,
-            ): AudioSink {
-                return DefaultAudioSink.Builder(context)
-                    .setEnableFloatOutput(enableFloatOutput)
-                    .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
-                    .setAudioProcessorChain(
-                        DefaultAudioSink.DefaultAudioProcessorChain(tap.processor)
-                    )
-                    .build()
-            }
-        }
+        nativeAudioRouting.update(nightModeIndex > 0, systemAudioEffectsEnabled, playbackSpeeds[playbackSpeedIndex])
+        val baseRenderersFactory = NativeAudioRenderersFactory(
+            this, nativeAudioRouting, arrayOf(tap.processor),
+        )
             .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER)
             .setEnableDecoderFallback(true)
             .setMediaCodecSelector(iptvMediaCodecSelector())
@@ -3016,6 +3031,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         }
 
         player = playerBuilder.build()
+        player?.setPlaybackSpeed(playbackSpeeds[playbackSpeedIndex])
 
         player?.addListener(playbackListener)
         player?.addAnalyticsListener(decoderAnalyticsListener)
@@ -4771,7 +4787,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 .clearOverridesOfType(C.TRACK_TYPE_TEXT)
                 .setTrackTypeDisabled(
                     C.TRACK_TYPE_TEXT,
-                    SubtitleSettings.getDefaultSubtitleLanguage(this) == "off",
+                    playerPreferences.getString("player_default_subtitle_language", null) == "off",
                 )
                 .build()
         }
@@ -4895,6 +4911,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
      */
     private fun fetchStremioSubtitles(item: PlaybackItem) {
         val model = payload ?: return
+        if (model.imdbId?.startsWith("custom-series:") == true && manualSubtitleImdbId.isNullOrEmpty()) return
 
         // Launch-supplied captions (e.g. YouTube): use them directly and skip
         // addon discovery entirely — the title-based IMDB lookup would be
@@ -6859,7 +6876,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     /** Apply source priority once tracks and any higher-priority addons are ready. */
     private fun tryAutoSelectAddonSubtitle() {
         val currentPlayer = player ?: return
-        val defaultSubtitleLang = SubtitleSettings.getDefaultSubtitleLanguage(this)
+        val defaultSubtitleLang = playerPreferences.getString("player_default_subtitle_language", null)
         val targetLanguage = defaultSubtitleLang ?: "en"
         val tracks = currentPlayer.currentTracks
         val positions = mutableListOf<Pair<Tracks.Group, Int>>()
@@ -12614,8 +12631,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     // (null tokens) keeps every legacy paint path verbatim.
     private val guideStyle: GuideStyle by lazy {
         GuideStyle.fromPref(
-            com.debrify.app.profiles.ProfilePreferenceProjection.getString(
-                this,
+            playerPreferences.getString(
                 "iptv_player_guide_style",
                 "classic",
             ),
@@ -12630,8 +12646,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     // rather than baked into this lazy.
     private val controlsSkin: TvControlsSkin by lazy {
         TvControlsSkin.fromPref(
-            com.debrify.app.profiles.ProfilePreferenceProjection.getString(
-                this,
+            playerPreferences.getString(
                 TvControlsSkin.PREF_KEY,
                 "ott",
             ),
@@ -15530,8 +15545,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         } else {
             "Playback speed" to playbackSpeedLabels.mapIndexed { i, l ->
                 mrow(l, selected = i == playbackSpeedIndex, onOk = {
-                    playbackSpeedIndex = i.coerceIn(0, playbackSpeeds.lastIndex)
-                    player?.setPlaybackSpeed(playbackSpeeds[playbackSpeedIndex])
+                    applyPlaybackSpeed(i)
                 })
             }
         }
@@ -16408,9 +16422,18 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
     // Playback speed
     private fun cyclePlaybackSpeed() {
-        playbackSpeedIndex = (playbackSpeedIndex + 1) % playbackSpeeds.size
+        applyPlaybackSpeed((playbackSpeedIndex + 1) % playbackSpeeds.size)
+        Toast.makeText(this, "Speed: ${playbackSpeedLabels[playbackSpeedIndex]}", Toast.LENGTH_SHORT).show()
+    }
+
+    private fun applyPlaybackSpeed(index: Int) {
+        playbackSpeedIndex = index.coerceIn(0, playbackSpeeds.lastIndex)
         val speed = playbackSpeeds[playbackSpeedIndex]
-        player?.setPlaybackSpeed(speed)
+        val routeChanged = nativeAudioRouting.update(nightModeIndex > 0, systemAudioEffectsEnabled, speed)
+        if (routeChanged) {
+            releaseLoudnessEnhancer()
+        }
+        nativeAudioRouting.setPlaybackSpeed(player, speed, routeChanged)
         // Dock skins carry the speed on the button itself — visibly on
         // BROADCAST's labeled pill, and as the shared focus caption on the
         // rest (which would otherwise go stale). Classic keeps its Toast-only
@@ -16419,7 +16442,6 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             speedButton?.text = playbackSpeedLabels[playbackSpeedIndex]
             refreshOttCaptionFor(speedButton)
         }
-        Toast.makeText(this, "Speed: ${playbackSpeedLabels[playbackSpeedIndex]}", Toast.LENGTH_SHORT).show()
     }
 
     /**
@@ -16473,22 +16495,21 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         try {
             // Load aspect index for TV (separate from mobile)
             // TV only: 0=Fit, 1=Fill, 2=Zoom, 3=Cinema Zoom (default: 0=Fit)
-            resizeModeIndex = com.debrify.app.profiles.ProfilePreferenceProjection
-                .getLong(this, "player_default_aspect_index_tv", 0L).toInt()
+            resizeModeIndex = playerPreferences
+                .getLong("player_default_aspect_index_tv", 0L).toInt()
                 .coerceIn(0, resizeModes.lastIndex)
 
             // Load night mode index (default: 0 = Off)
-            nightModeIndex = com.debrify.app.profiles.ProfilePreferenceProjection
-                .getLong(this, "player_night_mode_index", 0L).toInt()
+            nightModeIndex = playerPreferences
+                .getLong("player_night_mode_index", 0L).toInt()
                 .coerceIn(0, nightModeGains.lastIndex)
 
             // Announce our audio session to system effect apps (default: off)
-            systemAudioEffectsEnabled = com.debrify.app.profiles.ProfilePreferenceProjection
-                .getBoolean(this, "player_system_audio_effects", false)
+            systemAudioEffectsEnabled = playerPreferences
+                .getBoolean("player_system_audio_effects", false)
 
             displayMatchMode = TvContentDisplayMatchMode.fromStorage(
-                com.debrify.app.profiles.ProfilePreferenceProjection.getString(
-                    this,
+                playerPreferences.getString(
                     "content_display_match_mode",
                     TvContentDisplayMatchMode.SYSTEM.storageKey,
                 ),
@@ -16498,10 +16519,9 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
             // Manual community intro/outro buttons. These are the same keys the
             // Flutter Playback settings page writes; enabled never means auto-seek.
-            skipSegmentsEnabled = com.debrify.app.profiles.ProfilePreferenceProjection
-                .getBoolean(this, "skip_segments_enabled", true)
-            val storedSkipSegmentProvider = com.debrify.app.profiles.ProfilePreferenceProjection.getString(
-                this,
+            skipSegmentsEnabled = playerPreferences
+                .getBoolean("skip_segments_enabled", true)
+            val storedSkipSegmentProvider = playerPreferences.getString(
                 "skip_segment_provider",
                 TvSkipSegmentClients.AUTO,
             ) ?: TvSkipSegmentClients.AUTO
@@ -16512,6 +16532,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             }
 
             android.util.Log.d("AndroidTvPlayer", "Loaded defaults - aspect=$resizeModeIndex, nightMode=$nightModeIndex, audioEffects=$systemAudioEffectsEnabled, displayMatch=${displayMatchMode.storageKey}, skipSegments=$skipSegmentsEnabled, skipProvider=$skipSegmentProviderId")
+            android.util.Log.d("AndroidTvPlayer", "Player settings handoff: style=$controlsSkin subtitles=${playerPreferences.getString("player_default_subtitle_language", "auto")} nightMode=$nightModeIndex")
         } catch (e: Exception) {
             android.util.Log.e("AndroidTvPlayer", "Error loading player defaults", e)
             // Keep default values
@@ -16532,10 +16553,19 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private fun applyNightMode(index: Int) {
         nightModeIndex = index
 
+        val speed = playbackSpeeds[playbackSpeedIndex]
+        val routeChanged = nativeAudioRouting.update(nightModeIndex > 0, systemAudioEffectsEnabled, speed)
+        if (routeChanged) {
+            // A recreated AudioTrack may retain its session ID; READY must
+            // attach a fresh effect even without onAudioSessionIdChanged.
+            releaseLoudnessEnhancer()
+        }
+        val restartingAudio = routeChanged && nativeAudioRouting.reprepare(player, speed)
+
         if (nightModeIndex == 0) {
             // Turn off
             loudnessEnhancer?.enabled = false
-        } else {
+        } else if (!restartingAudio) {
             // Turn on or adjust
             if (loudnessEnhancer == null) {
                 initializeLoudnessEnhancer()

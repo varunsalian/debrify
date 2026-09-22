@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:debrify/services/profiles/device_key_provider.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -20,6 +22,76 @@ void main() {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(deviceSecretChannel, null);
   });
+
+  test(
+    'native sealing verifies the complete payload with the same AAD',
+    () async {
+      final plaintext = List<int>.generate(96 * 1024, (i) => i % 256);
+      final aad = utf8.encode('resource metadata');
+      final methods = <String>[];
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(deviceSecretChannel, (call) async {
+            methods.add(call.method);
+            final args = call.arguments as Map;
+            expect(base64Decode(args['associatedData'] as String), aad);
+            if (call.method == 'seal') {
+              expect(base64Decode(args['plaintext'] as String), plaintext);
+              return 'candidate';
+            }
+            expect(args['envelope'], 'candidate');
+            return base64Encode(plaintext);
+          });
+      expect(
+        await PlatformDeviceSecretCipher().seal(plaintext, associatedData: aad),
+        'native1:candidate',
+      );
+      expect(methods, ['seal', 'open']);
+    },
+  );
+
+  test(
+    'native sealing rejects successful decryption of different bytes',
+    () async {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(
+            deviceSecretChannel,
+            (call) async =>
+                call.method == 'seal' ? 'candidate' : base64Encode([1, 2]),
+          );
+      await expectLater(
+        PlatformDeviceSecretCipher().seal([1, 3], associatedData: []),
+        throwsA(
+          isA<DeviceVaultException>().having(
+            (e) => e.operation,
+            'operation',
+            'seal',
+          ),
+        ),
+      );
+    },
+  );
+
+  test(
+    'record authentication failure never authorizes a vault reset',
+    () async {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(deviceSecretChannel, (_) async {
+            throw PlatformException(code: 'device_secret_record_unreadable');
+          });
+      await expectLater(
+        PlatformDeviceSecretCipher().open('native1:record', associatedData: []),
+        throwsA(
+          isA<DeviceVaultException>()
+              .having(
+                (e) => e.failure,
+                'failure',
+                DeviceVaultFailure.recordUnreadable,
+              )
+              .having((e) => e.requiresReset, 'requiresReset', isFalse),
+        ),
+      );
+    },
+  );
 
   test('existing native vault initialization forbids key creation', () async {
     DeviceKeyProvider.debugLinuxOverride = false;

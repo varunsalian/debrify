@@ -1,4 +1,5 @@
 import '../models/tracking_source.dart';
+import '../models/custom_series_identity.dart';
 import 'storage_service.dart';
 
 export '../models/tracking_source.dart';
@@ -17,6 +18,13 @@ class TrackingSourcePolicy {
   final Set<TrackingSource> scrobbleTargets;
   final WatchProgressSource progressSource;
   final Set<TrackingSource> homeTickSources;
+
+  TrackingSourcePolicy forContent(String? id) => CustomSeriesIdentity.isCustom(id)
+      ? const TrackingSourcePolicy(
+          scrobbleTargets: {}, progressSource: WatchProgressSource.local,
+          homeTickSources: {TrackingSource.local},
+        )
+      : this;
 
   static Future<TrackingSourcePolicy> load() async {
     final scrobbleTargets = await StorageService.getTrackingScrobbleTargets();

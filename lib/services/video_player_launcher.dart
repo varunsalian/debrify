@@ -1,9 +1,11 @@
 import '../utils/show_shuffle.dart';
 import 'failed_saved_source.dart';
 import 'torrent_playback_service.dart';
-import 'iptv_source_search.dart';
+import 'direct_source_authorization.dart';
+import 'media_server_watch_sync.dart';
 import 'startup_recovery_sources.dart';
 import 'dart:async';
+import '../models/custom_series_identity.dart';
 import 'source_selection_diagnostics.dart';
 import '../utils/platform_util.dart';
 import 'dart:convert';
@@ -708,16 +710,19 @@ class VideoPlayerLauncher {
   static VideoPlayerLaunchArgs normalizeScrobbleFlags(
     VideoPlayerLaunchArgs args,
     TrackingSourcePolicy policy,
-  ) => args.copyWith(
-    traktScrobble: args.traktScrobble && policy.scrobbles(TrackingSource.trakt),
-    simklScrobble: args.simklScrobble && policy.scrobbles(TrackingSource.simkl),
-    mdblistScrobble:
-        args.mdblistScrobble && policy.scrobbles(TrackingSource.mdblist),
-  );
+  ) {
+    policy = policy.forContent(args.contentImdbId);
+    return args.copyWith(
+      traktScrobble: args.traktScrobble && policy.scrobbles(TrackingSource.trakt),
+      simklScrobble: args.simklScrobble && policy.scrobbles(TrackingSource.simkl),
+      mdblistScrobble:
+          args.mdblistScrobble && policy.scrobbles(TrackingSource.mdblist),
+    );
+  }
 
   /// Whether a launch needs to explain why the user's external-player default
-  /// cannot be honored. Authenticated WebDAV playback is the current caller:
-  /// its Basic auth header can be consumed by Debrify's player but is not part
+  /// cannot be honored. Authenticated server playback carries headers which
+  /// can be consumed by Debrify's player but are not part
   /// of the URL handed to another app.
   static bool shouldExplainExternalPlayerFallback(
     VideoPlayerLaunchArgs args,
@@ -728,7 +733,8 @@ class VideoPlayerLauncher {
         (defaultPlayerMode == 'deovr' && Platform.isAndroid);
     final carriesAuthorization =
         args.httpHeaders?.keys.any(
-          (key) => key.toLowerCase() == 'authorization',
+          (key) => key.toLowerCase() == 'authorization' ||
+              key.toLowerCase() == 'x-emby-token',
         ) ??
         false;
     return wantsExternal && args.disableExternalPlayer && carriesAuthorization;
@@ -745,7 +751,7 @@ class VideoPlayerLauncher {
           builder: (dialogContext) => AlertDialog(
             title: const Text('External player unavailable'),
             content: const Text(
-              'This WebDAV server requires authentication. Debrify cannot pass '
+              'This server requires authentication. Debrify cannot pass '
               'the required authorization headers to another app, so this video '
               'will open in the Debrify player.',
             ),
@@ -809,6 +815,16 @@ class VideoPlayerLauncher {
         handoffNow: handoffNow,
         handoffWhenCovered: handoffWhenCovered,
       );
+    } on NativePlayerSettingsUnavailable catch (error) {
+      // No player opened, so no return observer will balance the launch signal.
+      // Clear sync's playback gate even if the route/loader has gone away.
+      if (!isTrailer) MainPageBridge.notifyContentPlaybackStopped();
+      handoffNow();
+      if (context.mounted) {
+        ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+          SnackBar(content: Text(error.message.toString())),
+        );
+      }
     } finally {
       handoffNow();
     }
@@ -824,7 +840,7 @@ class VideoPlayerLauncher {
   }) async {
     // Apply the tracker master switches to catalog content with stable IDs.
     var args = originalArgs;
-    final trackingPolicy = await TrackingSourcePolicy.load();
+    final trackingPolicy = (await TrackingSourcePolicy.load()).forContent(args.contentImdbId);
     final defaultPlayerMode = await StorageService.getDefaultPlayerMode();
     if (!context.mounted) return;
     if (shouldExplainExternalPlayerFallback(args, defaultPlayerMode)) {
@@ -2195,7 +2211,7 @@ class VideoPlayerLauncher {
     if (args.iptvChannels != null && args.iptvChannels!.isNotEmpty) {
       return _launchIptvOnAndroidTv(args);
     }
-    final trackingPolicy = await TrackingSourcePolicy.load();
+    final trackingPolicy = (await TrackingSourcePolicy.load()).forContent(args.contentImdbId);
 
     // Reset Trakt scrobble state for clean session
     _traktHeartbeatTimer?.cancel();
@@ -2214,10 +2230,23 @@ class VideoPlayerLauncher {
     _simklLastKnownEpisode = null;
 
     _AndroidTvPlaybackPayload? builtPayload;
+    final serverWatch = MediaServerWatchController();
+    _AndroidTvPlaylistResolver? playbackResolver;
     try {
+      final initialSources = args.stremioSources;
+      final initialSourceIndex = args.stremioCurrentSourceIndex ?? 0;
+      if (initialSources != null &&
+          initialSourceIndex >= 0 &&
+          initialSourceIndex < initialSources.length) {
+        await serverWatch.prepare(
+          initialSources[initialSourceIndex],
+          contentTitle: args.contentTitle ?? args.title,
+        );
+      }
       final builder = _AndroidTvPlaybackPayloadBuilder(args);
       final result = await builder.build();
       if (result == null) {
+        unawaited(serverWatch.close());
         return false;
       }
       builtPayload = result.payload;
@@ -2233,6 +2262,7 @@ class VideoPlayerLauncher {
         entries: result.entries,
         resolveEntry: (entry) => _resolveEntryUrl(entry, args),
       );
+      playbackResolver = resolver;
 
       // Generate a unique session ID for this playback launch
       // This prevents stale metadata from previous sessions being sent to new sessions
@@ -2263,6 +2293,10 @@ class VideoPlayerLauncher {
             return null;
           }
           final torrent = currentStremioSources[sourceIndex];
+          await serverWatch.prepare(
+            torrent,
+            contentTitle: args.contentTitle ?? args.title,
+          );
           debugPrint(
             'VideoPlayerLauncher: resolving stremio source $sourceIndex: ${torrent.displayTitle}',
           );
@@ -2299,7 +2333,11 @@ class VideoPlayerLauncher {
             'VideoPlayerLauncher: resolving source playlist $sourceIndex: ${torrent.displayTitle}',
           );
           try {
-            await IptvSourceSearch.authorize(torrent);
+            await DirectSourceAuthorization.authorize(torrent);
+            await serverWatch.prepare(
+              torrent,
+              contentTitle: args.contentTitle ?? args.title,
+            );
           } catch (_) {
             return null;
           }
@@ -3245,6 +3283,21 @@ class VideoPlayerLauncher {
         onProgress: (progress) {
           final season = (progress['season'] as num?)?.toInt();
           final episode = (progress['episode'] as num?)?.toInt();
+          final watchIndex = (progress['sourceIndex'] as num?)?.toInt();
+          if (progress['isBuffering'] != true &&
+              watchIndex != null &&
+              watchIndex >= 0 &&
+              watchIndex < currentStremioSources.length) {
+            serverWatch.observe(
+              currentStremioSources[watchIndex],
+              positionMs: (progress['positionMs'] as num?)?.toInt() ?? 0,
+              durationMs: (progress['durationMs'] as num?)?.toInt() ?? 0,
+              playing: progress['isPlaying'] == true,
+              completed: progress['completed'] == true,
+              season: season,
+              episode: episode,
+            );
+          }
           if (seriesFetcher != null &&
               season != null &&
               episode != null &&
@@ -3270,6 +3323,7 @@ class VideoPlayerLauncher {
           return _handleProgressUpdate(result.payload, progress);
         },
         onFinished: () async {
+          unawaited(serverWatch.close());
           await _handlePlaybackFinished(result.payload);
           resolver.dispose();
           // The native player may have requested a Quick Play next episode
@@ -3337,6 +3391,11 @@ class VideoPlayerLauncher {
             : (index) =>
                   sourcePlaylistResolverForTv!(index, automaticRecovery: true),
         onCommitStremioSource: sourceCommitterForTv,
+        onCommitPlaybackProgressSource: (sourceIndex) {
+          if (sourceIndex >= 0 && sourceIndex < currentStremioSources.length) {
+            serverWatch.commit(currentStremioSources[sourceIndex]);
+          }
+        },
         onStartupSourcesExhausted: args.onStartupSourcesExhausted,
         onRequestMoreSources: moreSourcesProviderForTv,
         onStartupSourceFailed: (index, reason) async {
@@ -3356,6 +3415,7 @@ class VideoPlayerLauncher {
       );
 
       if (!launched) {
+        unawaited(serverWatch.close());
         await result.payload.mdblistSession?.close();
         result.payload.mdblistSession = null;
         resolver.dispose();
@@ -3382,9 +3442,12 @@ class VideoPlayerLauncher {
 
       return true;
     } catch (e) {
+      unawaited(serverWatch.close());
       await builtPayload?.mdblistSession?.close();
       if (builtPayload != null) builtPayload.mdblistSession = null;
       debugPrint('VideoPlayerLauncher: Android TV launch failed: $e');
+      playbackResolver?.dispose();
+      if (e is NativePlayerSettingsUnavailable) rethrow;
       return false;
     }
   }
@@ -3517,6 +3580,7 @@ class VideoPlayerLauncher {
       return launched;
     } catch (e) {
       debugPrint('VideoPlayerLauncher: IPTV Android TV launch failed: $e');
+      if (e is NativePlayerSettingsUnavailable) rethrow;
       return false;
     }
   }
@@ -3601,7 +3665,7 @@ class VideoPlayerLauncher {
     // Run in background - don't await
     () async {
       try {
-        final trackingPolicy = await TrackingSourcePolicy.load();
+        final trackingPolicy = (await TrackingSourcePolicy.load()).forContent(contentImdbId);
         // Determine forceSeries: prefer viewMode, then use contentType from catalog
         bool? forceSeries = viewMode?.toForceSeries();
         if (forceSeries == null && contentType != null) {
@@ -5255,7 +5319,7 @@ class _AndroidTvPlaybackPayloadBuilder {
             isMovie: contentType != _PlaybackContentType.series,
           )
         : null;
-    final trackingPolicy = await TrackingSourcePolicy.load();
+    final trackingPolicy = (await TrackingSourcePolicy.load()).forContent(args.contentImdbId);
     final localCompletionTracking =
         (trackingPolicy.forcesLocalCompletion ||
             (!args.traktScrobble &&
@@ -5839,7 +5903,8 @@ class _AndroidTvPlaybackPayloadBuilder {
         continue;
       }
       final resumeId = _resumeIdForEntry(entry);
-      result.add(await _readVideoState(resumeId));
+      result.add(CustomSeriesIdentity.isCustom(args.contentImdbId)
+          ? const _PerItemState() : await _readVideoState(resumeId));
     }
     return result;
   }

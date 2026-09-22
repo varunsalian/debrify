@@ -7,6 +7,30 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test(
+    'media-server authentication forces internal playback for any default',
+    () {
+      for (final key in ['X-Emby-Token', 'x-emby-token']) {
+        final args = TorrentPlaybackService.playerArgsForTesting(
+          null,
+          httpHeaders: {key: 'private-token'},
+        );
+        expect(args.disableExternalPlayer, isTrue);
+        expect(
+          VideoPlayerLauncher.shouldExplainExternalPlayerFallback(
+            args,
+            'external',
+          ),
+          isTrue,
+        );
+      }
+      expect(
+        TorrentPlaybackService.playerArgsForTesting(null).disableExternalPlayer,
+        isFalse,
+      );
+    },
+  );
+
   group('Android external document handoff', () {
     for (final url in [
       'content://documents/document/movie%3Aone',

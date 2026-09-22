@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:crypto/crypto.dart';
 
 import '../utils/stremio_url.dart';
+import 'custom_series_identity.dart';
 
 /// Represents an extra parameter for a catalog (e.g., genre, search, skip)
 class StremioExtraParam {
@@ -144,6 +145,8 @@ class StremioMeta {
   final String id;
 
   /// Resolved IMDB ID (e.g., 'tt1234567'), extracted from imdb_id field or links
+  /// Scoped custom series use [CustomSeriesIdentity] here for local history;
+  /// their original addon metadata ID remains in [id].
   final String? imdbId;
 
   /// Content type ('movie' or 'series')
@@ -219,6 +222,24 @@ class StremioMeta {
   });
 
   /// Create a copy with a source addon attached.
+  StremioMeta withCustomSeriesIdentity(StremioAddon addon) => StremioMeta(
+    id: id,
+    imdbId: CustomSeriesIdentity(addon.portableConfigurationKey, id).id,
+    type: type,
+    name: name,
+    poster: poster,
+    background: background,
+    description: description,
+    year: year,
+    imdbRating: imdbRating,
+    genres: genres,
+    runtime: runtime,
+    sourceAddon: addon,
+    trailerYtId: trailerYtId,
+    logo: logo,
+    addedAtMs: addedAtMs,
+  );
+
   StremioMeta withSourceAddon(StremioAddon addon) => StremioMeta(
     id: id,
     imdbId: imdbId,
@@ -330,7 +351,9 @@ class StremioMeta {
     // Resolve IMDB ID: if id is already IMDB, use it directly.
     // Otherwise try imdb_id field, then extract from links array.
     String? imdbId;
-    if (id.startsWith('tt') && id.length >= 9) {
+    if (CustomSeriesIdentity.parse(json['imdb_id'] as String?) != null) {
+      imdbId = json['imdb_id'] as String;
+    } else if (id.startsWith('tt') && id.length >= 9) {
       imdbId = id;
     } else {
       final rawImdbId = json['imdb_id'] as String?;
@@ -553,6 +576,7 @@ class StremioAddon {
   final int? connectionResourceRevision;
   final bool connectionResourceReadOnly;
   final bool connectionResourceCredentialsRedacted;
+  final bool connectionResourceSecretPending;
 
   /// Optional description from manifest
   final String? description;
@@ -593,6 +617,7 @@ class StremioAddon {
     this.connectionResourceRevision,
     this.connectionResourceReadOnly = false,
     this.connectionResourceCredentialsRedacted = false,
+    this.connectionResourceSecretPending = false,
     this.description,
     this.version,
     this.enabled = true,
@@ -839,6 +864,8 @@ class StremioAddon {
           json['_connectionResourceReadOnly'] as bool? ?? false,
       connectionResourceCredentialsRedacted:
           json['_connectionResourceCredentialsRedacted'] as bool? ?? false,
+      connectionResourceSecretPending:
+          json['_connectionResourceSecretPending'] as bool? ?? false,
       description: json['description'] as String?,
       version: json['version'] as String?,
       enabled: json['enabled'] as bool? ?? true,
@@ -875,6 +902,8 @@ class StremioAddon {
       if (connectionResourceCredentialsRedacted)
         '_connectionResourceCredentialsRedacted':
             connectionResourceCredentialsRedacted,
+      if (connectionResourceSecretPending)
+        '_connectionResourceSecretPending': true,
       if (description != null) 'description': description,
       if (version != null) 'version': version,
       'enabled': enabled,
@@ -901,6 +930,7 @@ class StremioAddon {
     int? connectionResourceRevision,
     bool? connectionResourceReadOnly,
     bool? connectionResourceCredentialsRedacted,
+    bool? connectionResourceSecretPending,
     String? description,
     String? version,
     bool? enabled,
@@ -927,6 +957,9 @@ class StremioAddon {
       connectionResourceCredentialsRedacted:
           connectionResourceCredentialsRedacted ??
           this.connectionResourceCredentialsRedacted,
+      connectionResourceSecretPending:
+          connectionResourceSecretPending ??
+          this.connectionResourceSecretPending,
       description: description ?? this.description,
       version: version ?? this.version,
       enabled: enabled ?? this.enabled,
@@ -955,6 +988,7 @@ class StremioAddon {
       connectionResourceReadOnly: connectionResourceReadOnly,
       connectionResourceCredentialsRedacted:
           connectionResourceCredentialsRedacted,
+      connectionResourceSecretPending: connectionResourceSecretPending,
       description: description,
       version: version,
       enabled: enabled,

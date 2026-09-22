@@ -1742,7 +1742,9 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
       connectionResourceId: playlist.connectionResourceId,
       connectionResourceRevision: playlist.connectionResourceRevision,
       connectionReadOnly: playlist.connectionReadOnly,
-      credentialsRedacted: playlist.credentialsRedacted,
+      // The validated editor result supplies the replacement source details.
+      // Keeping the placeholder flag would silently retain the old secret.
+      credentialsRedacted: false,
     );
 
     final unreachableKeys = _catalogKeysFor(

@@ -964,6 +964,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
       final isMovie = item.type.toLowerCase() == 'movie';
       final results = await TorrentService.searchByImdbWithStremio(
         item.effectiveImdbId ?? item.id,
+        includeMediaServers: false,
         isMovie: isMovie,
         season: season,
         episode: episode,
@@ -1316,6 +1317,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
     final isMovie = item.type.toLowerCase() == 'movie';
     final results = await TorrentService.searchByImdbWithStremio(
       item.effectiveImdbId ?? item.id,
+      includeMediaServers: false,
       isMovie: isMovie,
       season: season,
       episode: episode,

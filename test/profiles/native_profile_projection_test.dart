@@ -16,6 +16,7 @@ import 'package:debrify/services/profiles/profile_registry.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/profiles/profile_scope.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -487,4 +488,187 @@ void main() {
     expect(projection['publication'], sequence);
     expect(active['revision'], updated.authorizationRevision);
   });
+
+  test(
+    'launch barrier refreshes player defaults before repeated handoffs',
+    () async {
+      final profile = (await registry.getProfile(adminId))!;
+      ProfileLockController.instance.activate(profile, unlocked: true);
+      final prefs = await ProfilePreferences.instance();
+      final raw = await SharedPreferences.getInstance();
+      // The main Settings page retains these values even when an earlier
+      // native publication failed, leaving the native view denied.
+      await prefs.setString('tv_player_controls_style', 'frost');
+      await prefs.setString('debrify_tv_player_style', 'cinema');
+      await prefs.setString('player_default_subtitle_language', 'off');
+      await prefs.setInt('player_night_mode_index', 3);
+      for (var run = 0; run < 2; run++) {
+        await NativeProfileProjection.invalidate();
+        await NativeProfileProjection.withPlayerLaunch(scope, () async {
+          final snapshot =
+              jsonDecode(raw.getString(NativeProfileProjection.deviceKey)!)
+                  as Map;
+          expect(snapshot['state'], 'active');
+          expect(snapshot['profileId'], adminId);
+          expect(
+            snapshot['publication'],
+            raw.getInt(NativeProfileProjection.sequenceKey),
+          );
+          final values = snapshot['values'] as Map;
+          expect(values['tv_player_controls_style'], 'frost');
+          expect(values['debrify_tv_player_style'], 'cinema');
+          expect(values['player_default_subtitle_language'], 'off');
+          expect(values['player_night_mode_index'], 3);
+          return true;
+        });
+      }
+    },
+  );
+
+  test('failed refresh and locked profiles never call native launch', () async {
+    final profile = (await registry.getProfile(adminId))!;
+    ProfileLockController.instance.activate(profile, unlocked: true);
+    var launches = 0;
+    Future<bool> launch() async {
+      launches++;
+      return true;
+    }
+
+    NativeProfileProjection.debugAfterInvalidation = (_) async =>
+        throw StateError('write failed');
+    await expectLater(
+      NativeProfileProjection.withPlayerLaunch(scope, launch),
+      throwsA(isA<NativePlayerSettingsUnavailable>()),
+    );
+    expect(launches, 0);
+    NativeProfileProjection.debugAfterInvalidation = null;
+    ProfileLockController.instance.lock();
+    await expectLater(
+      NativeProfileProjection.withPlayerLaunch(scope, launch),
+      throwsA(isA<NativePlayerSettingsUnavailable>()),
+    );
+    expect(launches, 0);
+  });
+
+  test('native handoff retains its valid publication until accepted', () async {
+    final profile = (await registry.getProfile(adminId))!;
+    ProfileLockController.instance.activate(profile, unlocked: true);
+    final started = Completer<void>();
+    final accepted = Completer<void>();
+    final launch = NativeProfileProjection.withPlayerLaunch(scope, () async {
+      started.complete();
+      await accepted.future;
+    });
+    await started.future;
+    var invalidated = false;
+    final pending = NativeProfileProjection.invalidate().then(
+      (_) => invalidated = true,
+    );
+    await Future<void>.delayed(Duration.zero);
+    expect(invalidated, false);
+    accepted.complete();
+    await launch;
+    await pending;
+    expect(invalidated, true);
+  });
+
+  test(
+    'native settings rejection stays terminal but ordinary launch errors do not',
+    () async {
+      final profile = (await registry.getProfile(adminId))!;
+      ProfileLockController.instance.activate(profile, unlocked: true);
+      await expectLater(
+        NativeProfileProjection.withPlayerLaunch(scope, () async {
+          throw PlatformException(code: 'player_settings_unavailable');
+        }),
+        throwsA(isA<NativePlayerSettingsUnavailable>()),
+      );
+      final ordinaryFailure = PlatformException(code: 'launch_failed');
+      await expectLater(
+        NativeProfileProjection.withPlayerLaunch(
+          scope,
+          () async => throw ordinaryFailure,
+        ),
+        throwsA(same(ordinaryFailure)),
+      );
+      // Errors must also release the publication queue for the next launch.
+      expect(
+        await NativeProfileProjection.withPlayerLaunch(scope, () async => true),
+        true,
+      );
+    },
+  );
+
+  test(
+    'a lock during refresh aborts before invoking native playback',
+    () async {
+      final profile = (await registry.getProfile(adminId))!;
+      ProfileLockController.instance.activate(profile, unlocked: true);
+      NativeProfileProjection.debugAfterInvalidation = (_) async {
+        ProfileLockController.instance.lock();
+      };
+      var called = false;
+      await expectLater(
+        NativeProfileProjection.withPlayerLaunch(
+          scope,
+          () async => called = true,
+        ),
+        throwsA(isA<NativePlayerSettingsUnavailable>()),
+      );
+      expect(called, false);
+    },
+  );
+
+  test('legacy native launch does not publish a committed profile', () async {
+    ProfileRuntime.debugReset();
+    ProfileRuntime.initializeLegacy();
+    expect(
+      await NativeProfileProjection.withPlayerLaunch(null, () async => true),
+      true,
+    );
+    final raw = await SharedPreferences.getInstance();
+    expect(raw.containsKey(NativeProfileProjection.deviceKey), false);
+  });
+
+  test(
+    'a switch during the final write cannot publish old player settings',
+    () async {
+      final profile = (await registry.getProfile(adminId))!;
+      ProfileLockController.instance.activate(profile, unlocked: true);
+      final profilePrefs = await ProfilePreferences.instance();
+      await profilePrefs.setString('tv_player_controls_style', 'frost');
+      await profilePrefs.setString('player_default_subtitle_language', 'off');
+      await profilePrefs.setInt('player_night_mode_index', 3);
+      await NativeProfileProjection.publish(scope);
+      final actor = await ProfileAuthorizationContext.capture(registry);
+      final other = await registry.createProfile(
+        name: 'Other',
+        role: UserProfileRole.admin,
+        actingProfileId: actor.profileId,
+        actingAuthorizationRevision: actor.authorizationRevision,
+        actingSessionEpoch: actor.sessionEpoch,
+      );
+      NativeProfileProjection.debugAfterInvalidation = (_) async {
+        ProfileRuntime.publish(
+          ProfileScope(profileId: other.id, dataGeneration: 1, sessionEpoch: 2),
+        );
+        ProfileLockController.instance.activate(other, unlocked: true);
+      };
+      await expectLater(
+        NativeProfileProjection.publish(scope),
+        throwsStateError,
+      );
+      final raw = await SharedPreferences.getInstance();
+      final projection =
+          jsonDecode(raw.getString(NativeProfileProjection.deviceKey)!) as Map;
+      expect(
+        projection['publication'],
+        isNot(raw.getInt(NativeProfileProjection.sequenceKey)),
+      );
+      expect(
+        () => profilePrefs.getString('tv_player_controls_style'),
+        throwsStateError,
+      );
+    },
+  );
 }

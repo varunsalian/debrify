@@ -1,6 +1,7 @@
 import '../models/stremio_addon.dart';
 import 'hide_watched_prefs.dart';
 import 'watched_status_service.dart';
+import 'stremio_service.dart';
 
 /// Drops already-watched titles from catalog lists while the "Hide watched
 /// titles" switch is on.
@@ -10,7 +11,7 @@ import 'watched_status_service.dart';
 /// posters — so the tick and the hiding never disagree. For shows it means
 /// the whole show is finished, never "saw one episode".
 ///
-/// Only movies and series with an IMDb id can be matched; everything else
+/// Only movies and series with a resolved progress identity can be matched; everything else
 /// passes. Nothing is hidden until the first watched snapshot has been
 /// published, so a cold start paints the same list as before rather than
 /// losing items a beat later.
@@ -34,8 +35,11 @@ class WatchedFilter {
       status.ensureStarted();
       return false;
     }
-    if (!_matchable(m)) return false;
-    return status.isWatchedForTicks(m.effectiveImdbId!, m.type);
+    final type = m.type.toLowerCase();
+    if (type != 'movie' && type != 'series') return false;
+    final identity = StremioService.instance.catalogProgressIdentity(m);
+    return identity != null && identity.isNotEmpty &&
+        status.isWatchedForTicks(identity, m.type);
   }
 
   /// [items] without the hidden ones. Returns [items] itself when the switch
@@ -48,10 +52,4 @@ class WatchedFilter {
     ];
   }
 
-  static bool _matchable(StremioMeta m) {
-    final type = m.type.toLowerCase();
-    if (type != 'movie' && type != 'series') return false;
-    final imdb = m.effectiveImdbId;
-    return imdb != null && imdb.isNotEmpty;
-  }
 }

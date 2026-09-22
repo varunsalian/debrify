@@ -39,6 +39,7 @@ import '../../utils/tv_keys.dart' show TvHeldKeyGuard, isActivateOrSpaceKey;
 import '../../screens/iptv/xtream_series_detail.dart';
 import '../../screens/settings/iptv_settings_page.dart';
 import '../hero_trailer_backdrop.dart';
+import '../home/cw_card_menu.dart';
 import '../../theme/app_theme_scope.dart';
 import '../see_all/see_all_filter_bar.dart';
 import '../see_all/stremio_dropdown.dart';
@@ -4625,14 +4626,54 @@ class IptvResultsViewState extends State<IptvResultsView>
     await _refreshAfterPlayback();
   }
 
-  /// Pull freshly saved positions back into the list after playback. The
-  /// Continue-watching shelf is rebuilt outright — an item can have just
-  /// entered it (first watch), moved to the front, or aged out by finishing.
-  ///
-  /// Deliberately NOT via _loadSettings: that path re-derives the landing
-  /// selection (and always lands on Favorites when any exist), which would
-  /// yank the user off whatever they were browsing every time they came back
-  /// from the player.
+  /// Offer resume/removal for movies, series and catch-up on the CW shelf.
+  Future<void> _showContinueWatchingActions(IptvChannel channel) async {
+    // Capture the provider before opening a dialog: series IDs are only
+    // unique within their provider, and the selected shelf can change.
+    final playlistId = _originPlaylistIdFor(channel) ?? '';
+    final seriesId = channel.attributes['series_id'] ?? '';
+    final isSeries = channel.contentType == 'series';
+    final action = await showCwCardMenu(
+      context,
+      title: channel.name,
+      posterUrl: channel.logoUrl,
+      isTelevision: widget.isTelevision,
+      playLabel: isSeries ? 'Open series' : 'Resume',
+      playDescription: isSeries ? 'Choose an episode' : 'Continue playback',
+      removeDescription: isSeries
+          ? 'Clear saved progress for all episodes of this series.'
+          : 'Clear saved progress for this item.',
+    );
+    if (!mounted || action == null) return;
+    if (action == CwCardAction.play) {
+      await _playChannel(channel);
+      return;
+    }
+    try {
+      if (isSeries) {
+        if (seriesId.isEmpty) return;
+        await StorageService.removeIptvContinueWatchingSeries(
+          playlistId: playlistId,
+          seriesId: seriesId,
+        );
+      } else {
+        await StorageService.removeIptvContinueWatchingItem(channel.url);
+      }
+      if (!mounted) return;
+      await _refreshAfterPlayback();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Removed from Continue Watching')),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not remove item. Please try again.')),
+      );
+    }
+  }
+
+  /// Refresh progress and shelf membership without resetting source selection.
   Future<void> _refreshAfterPlayback() async {
     if (!mounted) return;
     // Read the shelf ONCE and reuse it below. Each read decodes both the
@@ -7932,6 +7973,9 @@ class IptvResultsViewState extends State<IptvResultsView>
                       channel: channel,
                       isTelevision: widget.isTelevision,
                       onTap: () => _playChannel(channel),
+                      onLongPress: (_selectedPlaylist?.isContinueWatching ?? false)
+                          ? () => _showContinueWatchingActions(channel)
+                          : null,
                       focusNode: _focusNodeFor(channel),
                       isFavorited: _favoriteUrls.contains(channel.url),
                       inAnyList: _membership[channel.url]?.isNotEmpty ?? false,
@@ -8063,6 +8107,9 @@ class IptvResultsViewState extends State<IptvResultsView>
           channel: channel,
           isPreviewSelected: selected,
           onTap: centerItem,
+          onLongPress: (_selectedPlaylist?.isContinueWatching ?? false)
+              ? () => _showContinueWatchingActions(channel)
+              : null,
           isFavorited: _favoriteUrls.contains(channel.url),
           inAnyList: _membership[channel.url]?.isNotEmpty ?? false,
           onFavoriteToggle: channel.contentType == 'series'

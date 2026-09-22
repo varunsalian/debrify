@@ -24,6 +24,10 @@ class Torrent {
   // Direct URL for non-torrent streams (directUrl or externalUrl types)
   final String? directUrl;
   final Map<String, String>? httpHeaders;
+
+  /// Authoritative audio-track languages when supplied by a media server.
+  /// Null retains legacy release-name inference; empty means unknown/no audio.
+  final List<String>? audioLanguages;
   final String? stremioBingeGroup;
   final String? stremioVideoId;
 
@@ -81,6 +85,7 @@ class Torrent {
     this.streamType = StreamType.torrent,
     this.directUrl,
     this.httpHeaders,
+    this.audioLanguages,
     this.stremioBingeGroup,
     this.stremioVideoId,
     this.magnetUrl,
@@ -198,6 +203,9 @@ class Torrent {
       streamType: streamType,
       directUrl: json['direct_url'] as String?,
       httpHeaders: (json['http_headers'] as Map?)?.cast<String, String>(),
+      audioLanguages: (json['audio_languages'] as List?)
+          ?.whereType<String>()
+          .toList(),
       stremioBingeGroup: json['stremio_binge_group'] as String?,
       stremioVideoId: json['stremio_video_id'] as String?,
       magnetUrl: (json['magnet_url'] ?? json['magnet'])?.toString(),
@@ -240,6 +248,7 @@ class Torrent {
       if (streamType != StreamType.torrent) 'stream_type': streamType.name,
       if (directUrl != null) 'direct_url': directUrl,
       if (httpHeaders != null) 'http_headers': httpHeaders,
+      if (audioLanguages != null) 'audio_languages': audioLanguages,
       if (stremioBingeGroup != null) 'stremio_binge_group': stremioBingeGroup,
       if (stremioVideoId != null) 'stremio_video_id': stremioVideoId,
       if (magnetUrl != null) 'magnet_url': magnetUrl,

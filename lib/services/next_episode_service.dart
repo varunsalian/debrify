@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'stremio_service.dart';
 import '../models/stremio_addon.dart';
+import '../models/custom_series_identity.dart';
 
 class NextEpisodeService {
   /// Find the next episode after the given season/episode using Stremio catalog addon metadata.
@@ -12,6 +13,16 @@ class NextEpisodeService {
   ) async {
     try {
       final stremioService = StremioService.instance;
+      final custom = CustomSeriesIdentity.parse(imdbId);
+      if (custom != null) {
+        final addon = await stremioService.addonForCustomProgress(imdbId);
+        if (addon == null) return null;
+        final next = await stremioService.resolveAdjacentSeriesEpisode(
+          addonKey: addon.sourceBindingKey, catalogId: custom.catalogId,
+          season: currentSeason, episode: currentEpisode, direction: 1,
+        );
+        return next == null ? null : (season: next.season, episode: next.episode);
+      }
       final addons = await stremioService.getEnabledAddons();
       if (addons.isEmpty) return null;
 

@@ -15,6 +15,7 @@ enum ConnectionResourceType {
   jackett,
   prowlarr,
   reddit,
+  mediaServer,
 }
 
 extension ConnectionResourceTypeBinding on ConnectionResourceType {
@@ -32,6 +33,7 @@ extension ConnectionResourceTypeBinding on ConnectionResourceType {
     ConnectionResourceType.mdblist => 'tracker.mdblist',
     ConnectionResourceType.reddit => 'tracker.reddit',
     ConnectionResourceType.webDav ||
+    ConnectionResourceType.mediaServer ||
     ConnectionResourceType.iptvM3u ||
     ConnectionResourceType.iptvXtream ||
     ConnectionResourceType.xmltv ||
@@ -64,6 +66,12 @@ class ConnectionResource {
   final bool enabled;
   final bool secretPending;
 
+  /// Local read failure only. Never exported as missing credentials or synced
+  /// to another device; the original encrypted record remains untouched.
+  final bool secretUnreadable;
+
+  bool get needsReconnect => secretPending || secretUnreadable;
+
   const ConnectionResource({
     required this.id,
     required this.type,
@@ -74,6 +82,7 @@ class ConnectionResource {
     required this.authorizationRevision,
     required this.enabled,
     this.secretPending = false,
+    this.secretUnreadable = false,
   });
 }
 

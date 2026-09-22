@@ -130,6 +130,8 @@ import 'settings/simkl_settings_page.dart';
 import 'settings/mdblist_settings_page.dart';
 import 'settings/tracking_settings_page.dart';
 import 'settings/webdav_settings_page.dart';
+import 'settings/media_server_settings_page.dart';
+import '../services/media_server_service.dart';
 import 'settings/stremio_tv_settings_page.dart';
 import '../widgets/remote/remote_role_picker_screen.dart';
 import '../theme/app_looks.dart';
@@ -631,6 +633,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         () => StorageService.getUpdateIncludeAlphaEnabled(),
         false,
       ),
+      summaries.read('Media servers', () async => (await MediaServerService.connections()).length, 0),
     ]);
 
     if (!mounted || ProfileRuntime.scope.value != startingScope) return;
@@ -684,6 +687,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final pendingCredentialTypes = results[42] as Set<ConnectionResourceType>;
     final configuredIptvPlaylists = results[43] as List;
     final includeAlphaUpdates = results[44] as bool;
+    _mediaServerCount = results[45] as int;
 
     // Set initial state from cached data
     // Use cached account info if available
@@ -983,7 +987,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       return const <ConnectionResourceType>{};
     }
     return resources
-        .where((resource) => resource.secretPending)
+        .where((resource) => resource.needsReconnect)
         .map((resource) => resource.type)
         .toSet();
   }
@@ -1185,6 +1189,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
         : _pikpakCaption,
     onTap: _openPikPakSettings,
   );
+  int _mediaServerCount = 0;
+  ConnectionInfo get _mediaServersInfo => ConnectionInfo(
+    title: 'Jellyfin & Emby',
+    connected: !_summaryFailures.contains('Media servers') && _mediaServerCount > 0,
+    status: _summaryFailures.contains('Media servers') ? 'Unavailable' : _mediaServerCount > 0 ? 'Configured' : 'Not configured',
+    caption: _mediaServerCount > 0 ? '$_mediaServerCount server connections' : 'Play movies and episodes from your servers',
+    onTap: _openMediaServerSettings,
+  );
   ConnectionInfo get _webDavInfo => ConnectionInfo(
     title: 'WebDAV',
     connected: !_summaryFailures.contains('WebDAV') && _webDavConnected,
@@ -1274,6 +1286,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _allDebridInfo,
         _pikpakInfo,
         _webDavInfo,
+        _mediaServersInfo,
         _iptvInfo,
         _indexerManagersInfo,
       ],
@@ -1398,6 +1411,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         allDebrid: _allDebridInfo,
         pikpak: _pikpakInfo,
         webDav: _webDavInfo,
+        mediaServers: _mediaServersInfo,
         iptv: _iptvInfo,
         trakt: _traktInfo,
         simkl: _simklInfo,
@@ -1723,6 +1737,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         'password',
         'app token',
       ]),
+      conn(_mediaServersInfo, const ['jellyfin', 'emby', 'media server', 'nas', 'server', 'login']),
       conn(_iptvInfo, const [
         'live tv',
         'm3u',
@@ -4971,6 +4986,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (loggedOut == true) {
       _focusFirstCard();
     }
+  }
+
+  Future<void> _openMediaServerSettings() async {
+    if (!await _ensureProfileFeature(ProfileFeature.cloud)) return;
+    if (!mounted) return;
+    await pushSettingsPage(context, const MediaServerSettingsPage());
+    if (mounted) await _loadSummaries();
   }
 
   Future<void> _openWebDavSettings() async {

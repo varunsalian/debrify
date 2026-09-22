@@ -1,4 +1,5 @@
 import 'dart:async';
+import '../../models/custom_series_identity.dart';
 
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -718,7 +719,7 @@ class ProfilePreferences implements SharedPreferences {
   }
 
   static void _validateSyncEntry(String key, Object value) {
-    if (key.isEmpty || key.length > 256 || key.contains('\u0000')) {
+    if (key.isEmpty || (key.length > 256 && !CustomSeriesIdentity.isPortableSourceKey(key)) || key.contains('\u0000')) {
       throw ArgumentError.value(key, 'key', 'Invalid sync preference key');
     }
     if (value is double && !value.isFinite) {

@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 import 'package:synchronized/synchronized.dart';
 
 import '../utils/json_isolate.dart';
+import '../models/custom_series_identity.dart';
 import 'profiles/profile_preferences.dart';
 import 'profiles/profile_runtime.dart';
 import 'profiles/profile_scope.dart';
@@ -86,7 +87,7 @@ class LocalSeriesCompletionService {
         ? ProfileRuntime.capture()
         : null;
     final id = imdbId.trim().toLowerCase();
-    if (id.isEmpty || !id.startsWith('tt')) return Future.value();
+    if (id.isEmpty || (!id.startsWith('tt') && !CustomSeriesIdentity.isCustom(id))) return Future.value();
 
     final parsed = <({String key, int? releasedAt})>[];
     for (final season in seasons) {
@@ -340,7 +341,7 @@ class LocalSeriesCompletionService {
             seriesTitle: title,
           )
         : finishedIndex[imdbId] ??
-              finishedIndex['title:${title.trim().toLowerCase()}'] ??
+              (CustomSeriesIdentity.isCustom(imdbId) ? null : finishedIndex['title:${title.trim().toLowerCase()}']) ??
               const <String, Set<int>>{};
     final watched = <String>{
       for (final season in finished.entries)

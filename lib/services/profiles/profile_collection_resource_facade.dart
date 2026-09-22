@@ -46,40 +46,61 @@ class ProfileCollectionResourceFacade {
       final canReveal =
           !readOnly && grant.allows(ResourcePermission.revealSecret);
       Map<String, dynamic> secret;
-      if (resource.secretPending && !forSettings) {
+      var needsReconnect = resource.needsReconnect;
+      if (forRemoteTransfer && !grant.allows(ResourcePermission.writeRemote)) {
         continue;
-      } else if (resource.secretPending) {
+      }
+      if (forRemoteTransfer && resource.secretUnreadable) {
+        throw const ResourceSecretUnavailableException();
+      }
+      try {
+        if (needsReconnect && !forSettings) {
+          continue;
+        } else if (needsReconnect) {
+          secret = _redactedSettingsRecord(resource);
+        } else if (forRemoteTransfer) {
+          secret = await service.resolveSecretForUse(
+            context: context,
+            resourceId: resource.id,
+            feature: ProfileFeature.remoteTransfer,
+            permission: ResourcePermission.writeRemote,
+          );
+        } else if (forSettings && !canReveal) {
+          secret = _redactedSettingsRecord(resource);
+        } else if (forSettings) {
+          secret = await service.revealSecret(
+            context: context,
+            resourceId: resource.id,
+            feature: ProfileFeature.manageConnections,
+          );
+        } else {
+          // An independently restricted grant is not an error for the rest of
+          // the collection. Preflight that stable property before decryption;
+          // authorization exceptions from resolve must still propagate because
+          // they can mean the profile/session changed during this read.
+          if (!grant.allows(ResourcePermission.use)) continue;
+          secret = await service.resolveSecretForUse(
+            context: context,
+            resourceId: resource.id,
+            feature: feature,
+          );
+        }
+      } on ResourceSecretUnavailableException {
+        // A restore/export must never silently succeed with missing secrets.
+        if (forRemoteTransfer) rethrow;
+        await context.validate(registry);
+        needsReconnect = true;
+        if (!forSettings) continue;
         secret = _redactedSettingsRecord(resource);
-      } else if (forRemoteTransfer) {
-        if (!grant.allows(ResourcePermission.writeRemote)) continue;
-        secret = await service.resolveSecretForUse(
-          context: context,
-          resourceId: resource.id,
-          feature: ProfileFeature.remoteTransfer,
-          permission: ResourcePermission.writeRemote,
-        );
-      } else if (forSettings && !canReveal) {
-        secret = _redactedSettingsRecord(resource);
-      } else if (forSettings) {
-        secret = await service.revealSecret(
-          context: context,
-          resourceId: resource.id,
-          feature: ProfileFeature.manageConnections,
-        );
-      } else {
-        // An independently restricted grant is not an error for the rest of
-        // the collection. Preflight that stable property before decryption;
-        // authorization exceptions from resolve must still propagate because
-        // they can mean the profile/session changed during this read.
-        if (!grant.allows(ResourcePermission.use)) continue;
-        secret = await service.resolveSecretForUse(
-          context: context,
-          resourceId: resource.id,
-          feature: feature,
-        );
       }
       result.add(<String, dynamic>{
         ...secret,
+        if (needsReconnect &&
+            resource.type == ConnectionResourceType.stremioAddon)
+          'description': readOnly
+              ? 'Reconnect required. Ask the connection owner to restore it.'
+              : 'Reconnect required. Restore this connection from a '
+                    'working backup, or remove it and add it again.',
         'enabled':
             localSettings?.enabled ?? (secret['enabled'] as bool? ?? true),
         // Preserve the provider identity before exposing the configuration's
@@ -94,8 +115,8 @@ class ProfileCollectionResourceFacade {
         '_connectionResourceRevision': resource.authorizationRevision,
         '_connectionResourceReadOnly': readOnly,
         '_connectionResourceCredentialsRedacted':
-            forSettings && (!canReveal || resource.secretPending),
-        '_connectionResourceSecretPending': resource.secretPending,
+            forSettings && (!canReveal || needsReconnect),
+        '_connectionResourceSecretPending': needsReconnect,
       });
     }
     // Close the collection-level race after the final item. Callers that do
@@ -131,6 +152,7 @@ class ProfileCollectionResourceFacade {
     required ProfileFeature feature,
     required List<ResourceCollectionItem> items,
     bool revokeBorrowers = false,
+    bool preserveUnavailable = false,
   }) async {
     if (!active) {
       throw StateError('Connection resources are not active');
@@ -146,6 +168,7 @@ class ProfileCollectionResourceFacade {
       feature: feature,
       items: items,
       revokeBorrowers: revokeBorrowers,
+      preserveUnavailable: preserveUnavailable,
     );
   }
 
@@ -231,6 +254,7 @@ class ProfileCollectionResourceFacade {
     required List<ResourceCollectionItem> items,
     bool forSettings = false,
     bool revokeBorrowers = false,
+    bool preserveUnavailable = false,
   }) async {
     if (!active) {
       throw StateError('Connection resources are not active');
@@ -244,6 +268,7 @@ class ProfileCollectionResourceFacade {
       feature: feature,
       items: items,
       revokeBorrowers: revokeBorrowers,
+      preserveUnavailable: preserveUnavailable,
     );
     if (ProfileRuntime.scope.value != expectedScope) {
       throw StateError('Profile changed while saving connections');

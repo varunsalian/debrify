@@ -1,5 +1,6 @@
 import '../models/torrent.dart';
 import '../models/torrent_filter_state.dart';
+import '../screens/video_player/utils/language_mapping.dart';
 import '../widgets/torrent_result_row.dart' show TorrentQualityExtension;
 import 'format_tag_detector.dart';
 
@@ -27,8 +28,12 @@ class TorrentFilterMatcher {
       return false;
     }
     if (f.languages.isNotEmpty) {
-      final l = detectAudioLanguage(t.name);
-      if (l == null || !f.languages.contains(l)) return false;
+      if (t.audioLanguages != null) {
+        if (!matchesAudioMetadata(t.audioLanguages!, f.languages)) return false;
+      } else {
+        final l = detectAudioLanguage(t.name);
+        if (l == null || !f.languages.contains(l)) return false;
+      }
     }
     if (f.sizes.isNotEmpty) {
       // Unknown size (bucket == null) matches no bucket, so a size filter
@@ -42,6 +47,48 @@ class TorrentFilterMatcher {
       return false;
     }
     return true;
+  }
+
+  /// Match server track metadata without guessing English or treating every
+  /// multi-language file as containing any requested language.
+  static bool matchesAudioMetadata(
+    List<String> languages,
+    Set<AudioLanguage> selected,
+  ) {
+    if (selected.isEmpty) return true;
+    final available = languages
+        .map(audioLanguageForCode)
+        .whereType<AudioLanguage>()
+        .toSet();
+    // The language chooser exposes only a subset of known languages. Count
+    // all recognized track languages, canonicalizing aliases/regions, rather
+    // than dropping e.g. Swedish merely because it has no filter chip.
+    final distinct = languages
+        .map((language) => audioLanguageForCode(language)?.name ??
+            LanguageMapper.niceLanguage(language).toLowerCase())
+        .where((language) => language.isNotEmpty)
+        .toSet();
+    return available.any(selected.contains) ||
+        (selected.contains(AudioLanguage.multiAudio) && distinct.length > 1);
+  }
+
+  static AudioLanguage? audioLanguageForCode(String value) {
+    final code = value.trim().toLowerCase().split(RegExp('[-_]')).first;
+    return switch (code) {
+      'en' || 'eng' || 'english' => AudioLanguage.english,
+      'hi' || 'hin' || 'hindi' => AudioLanguage.hindi,
+      'es' || 'spa' || 'esp' || 'spanish' => AudioLanguage.spanish,
+      'fr' || 'fra' || 'fre' || 'french' => AudioLanguage.french,
+      'de' || 'deu' || 'ger' || 'german' => AudioLanguage.german,
+      'ru' || 'rus' || 'russian' => AudioLanguage.russian,
+      'zh' || 'zho' || 'chi' || 'cmn' || 'yue' || 'chinese' => AudioLanguage.chinese,
+      'ja' || 'jpn' || 'japanese' => AudioLanguage.japanese,
+      'ko' || 'kor' || 'korean' => AudioLanguage.korean,
+      'it' || 'ita' || 'italian' => AudioLanguage.italian,
+      'pt' || 'por' || 'portuguese' => AudioLanguage.portuguese,
+      'ar' || 'ara' || 'arabic' => AudioLanguage.arabic,
+      _ => null,
+    };
   }
 
   /// HDR when the name carries any HDR-family tag, SDR otherwise.

@@ -34,6 +34,9 @@ Torrent _direct(String name, String source) => Torrent(
 
 void main() {
   group('keyForSource', () {
+    test('media servers keep their own provider keys', () {
+      expect(SourcePriority.keyForSource('mediaserver:MyServer'), 'mediaserver:myserver');
+    });
     test('addon rows keep their stremio key, engines get the prefix', () {
       expect(
         SourcePriority.keyForSource('stremio:Torrentio'),

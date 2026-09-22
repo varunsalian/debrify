@@ -1,4 +1,5 @@
 import 'episode_tracker_snapshot_revision.dart';
+import '../models/custom_series_identity.dart';
 import 'local_series_completion_service.dart';
 import 'mdblist/mdblist_continue_watching_service.dart';
 import 'mdblist/mdblist_models.dart';
@@ -84,6 +85,10 @@ class SeriesProgressResetService {
         return true;
       });
     // Sequential per account, but a failed account never prevents the others.
+    if (CustomSeriesIdentity.isCustom(id)) {
+      EpisodeTrackerSnapshotRevision.invalidateTitle('local', id);
+      return failures;
+    }
     if (provider == null || provider == TrackingSource.trakt)
       await attempt('Trakt', () async {
         final service = TraktService.instance;

@@ -4,6 +4,7 @@ import 'stremio_service.dart';
 import 'torrent_service.dart';
 import 'storage_service.dart';
 import 'iptv_source_search.dart';
+import 'media_server_service.dart';
 
 /// One row of the Quick Play "Addon Priority" list: a place results come
 /// from — a torrent search engine or a Stremio addon. Users see one flat
@@ -95,7 +96,7 @@ class SourcePriority {
   static String keyForSource(String source, {Map<String, String>? aliases}) {
     final s = source.trim().toLowerCase();
     if (s.isEmpty) return '';
-    if (s.startsWith('stremio:') || s.startsWith('iptv:')) return s;
+    if (s.startsWith('stremio:') || s.startsWith('iptv:') || s.startsWith('mediaserver:')) return s;
     return aliases?[s] ?? 'engine:$s';
   }
 
@@ -255,6 +256,12 @@ class SourcePriority {
             SourceProviderRef(key: key, name: playlist.name, isEngine: false),
           );
         }
+      }
+    } catch (_) {}
+    try {
+      for (final server in await MediaServerService.connections()) {
+        final key = 'mediaserver:${server.id}'.toLowerCase();
+        if (seen.add(key)) refs.add(SourceProviderRef(key: key, name: server.label, isEngine: false));
       }
     } catch (_) {}
     return refs;

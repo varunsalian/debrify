@@ -13,6 +13,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart' show kIsWeb, listEquals;
 import 'package:flutter/material.dart';
+import '../models/custom_series_identity.dart';
 import 'package:path_provider/path_provider.dart';
 import '../utils/app_storage.dart';
 import 'package:window_manager/window_manager.dart';
@@ -24,6 +25,8 @@ import 'package:synchronized/synchronized.dart';
 import '../services/storage_service.dart';
 import '../services/local_playback_resume_resolver.dart';
 import '../services/startup_stream_policy.dart';
+import '../services/direct_source_authorization.dart';
+import '../services/media_server_watch_sync.dart';
 import '../services/resume_write_guard.dart';
 import '../models/profiles/profile_policy.dart';
 import '../services/profiles/profile_policy_guard.dart';
@@ -548,6 +551,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           collectionTitle: widget.title, // Pass video title as fallback
           forceSeries: forceSeries,
         );
+        if (CustomSeriesIdentity.isCustom(widget.contentImdbId)) {
+          _cachedSeriesPlaylist!.imdbId = widget.contentImdbId;
+        }
       } catch (e) {
         return null;
       }
@@ -1226,6 +1232,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   // Stremio source sheet state
   bool _showSourceSheet = false;
   int _currentSourceIndex = 0;
+  final _serverWatch = MediaServerWatchController();
+  Torrent? _openedWatchSource;
+  int _watchOpenEpoch = 0;
   List<PlaylistEntry>? _pendingSourcePlaylist;
   // Overrides for sources after Stremio TV channel switch
   List<Torrent>? _stremioSourcesOverride;
@@ -1286,6 +1295,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   /// initialization, this may legitimately appear after launch when TVMaze
   /// enriches a release-only playlist.
   String? get _currentSeriesImdbId {
+    if (CustomSeriesIdentity.isCustom(_effectiveContentImdbId)) return _effectiveContentImdbId;
     final value =
         _seriesPlaylist?.imdbId ??
         _syntheticGuidePlaylist?.imdbId ??
@@ -1777,7 +1787,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   bool _forceLocalCompletionTracking = false;
 
   Future<void> _loadTrackingPolicy() async {
-    final policy = await TrackingSourcePolicy.load();
+    final policy = (await TrackingSourcePolicy.load()).forContent(_effectiveContentImdbId);
     if (!mounted) return;
     _forceLocalCompletionTracking = policy.forcesLocalCompletion;
     // A very short item can cross its completion threshold before this async
@@ -1800,6 +1810,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
   ({String imdbId, int season, int episode, Duration duration, String key})?
   _currentSkipSegmentRequest() {
+    if (CustomSeriesIdentity.isCustom(_effectiveContentImdbId)) return null;
     // Two stale-media windows, both of which would judge the incoming item
     // against the outgoing one's clock:
     //
@@ -1971,7 +1982,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     if (!widget.traktScrobble) return;
     if (widget.contentImdbId == null) return;
     if (widget.contentType != 'movie' && widget.contentType != 'series') return;
-    final policy = await TrackingSourcePolicy.load();
+    final policy = (await TrackingSourcePolicy.load()).forContent(_effectiveContentImdbId);
     _traktScrobbleEnabled =
         policy.scrobbles(TrackingSource.trakt) &&
         await TraktService.instance.isAuthenticated();
@@ -2195,7 +2206,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     if (!widget.simklScrobble) return;
     if (widget.contentImdbId == null) return;
     if (widget.contentType != 'movie' && widget.contentType != 'series') return;
-    final policy = await TrackingSourcePolicy.load();
+    final policy = (await TrackingSourcePolicy.load()).forContent(_effectiveContentImdbId);
     _simklScrobbleEnabled =
         policy.scrobbles(TrackingSource.simkl) &&
         await SimklService.instance.isAuthenticated();
@@ -2395,7 +2406,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       debugPrint('[MDBListDiag] player init skipped: tracking not requested');
       return;
     }
-    final policy = await TrackingSourcePolicy.load();
+    final policy = (await TrackingSourcePolicy.load()).forContent(_effectiveContentImdbId);
     if (!policy.scrobbles(TrackingSource.mdblist)) return;
     // Playlist launches resolve their requested/resume episode asynchronously.
     // Before that finishes `_currentIndex` is still zero, so constructing the
@@ -2520,7 +2531,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   }
 
   Future<double?> _currentEpisodeTraktPercent({bool forGuide = false}) async {
-    final policy = await TrackingSourcePolicy.load();
+    final policy = (await TrackingSourcePolicy.load()).forContent(_effectiveContentImdbId);
     if (!forGuide && !policy.progressFrom(TrackingSource.trakt)) return null;
     final imdbId = _currentSeriesImdbId;
     if (imdbId == null) return null;
@@ -2578,7 +2589,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   /// above but remains independently stored so remote unwatch changes never
   /// mutate local playback history.
   Future<double?> _currentEpisodeSimklPercent({bool forGuide = false}) async {
-    final policy = await TrackingSourcePolicy.load();
+    final policy = (await TrackingSourcePolicy.load()).forContent(_effectiveContentImdbId);
     if (!forGuide && !policy.progressFrom(TrackingSource.simkl)) return null;
     final imdbId = _currentSeriesImdbId;
     if (imdbId == null) return null;
@@ -2627,7 +2638,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   }
 
   Future<double?> _currentEpisodeMdblistPercent({bool forGuide = false}) async {
-    final policy = await TrackingSourcePolicy.load();
+    final policy = (await TrackingSourcePolicy.load()).forContent(_effectiveContentImdbId);
     if (!forGuide && !policy.progressFrom(TrackingSource.mdblist)) return null;
     final imdbId = _currentSeriesImdbId;
     if (imdbId == null) return null;
@@ -3665,6 +3676,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         _iptvLiveRecovery.onProgress(d, wantsPlayback: _isPlaying);
       }
       _position = d;
+      _observeServerWatch();
       _prepareNextDirectEpisode();
       _updateMdblistPosition();
       _playbackUiClock.updatePosition(d);
@@ -3710,6 +3722,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       }
       final wasPlaying = _isPlaying;
       _isPlaying = p;
+      _observeServerWatch();
       ProfileLockController.instance.setPlaybackActive(p);
       _syncWakelock(p);
       _pushPipState();
@@ -4526,8 +4539,25 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     bool liveStream = false,
     EpisodePlaybackRequest? request,
     bool Function()? beforeOpen,
+    Torrent? source,
   }) async {
     if (request?.isCurrent == false) return;
+    final watchEpoch = ++_watchOpenEpoch;
+    final sources = _effectiveSources;
+    final indexedSource = sources != null &&
+            _currentSourceIndex >= 0 &&
+            _currentSourceIndex < sources.length
+        ? sources[_currentSourceIndex]
+        : null;
+    final candidate = source ??
+        (indexedSource?.directUrl == media.uri ? indexedSource : null);
+    final watchSource = MediaServerWatchController.isServerSource(candidate)
+        ? candidate
+        : null;
+    if (!identical(watchSource, _openedWatchSource)) {
+      _observeServerWatch();
+      _serverWatch.commit(null);
+    }
     // EVERY content open invalidates the outgoing media's resume protection —
     // the one choke point all switch paths share, so no path (Stremio TV
     // channel, Magic TV next, zap, source switch, startup ladder) can leave a
@@ -4537,9 +4567,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // that re-protects (_seekForResume) re-arms AFTER it.
     _resumeVerifyEpoch++;
     _resumeWriteGuard.clear();
-    _activeOpenedMedia = media;
-    _activeMediaShouldPlay = desiredPlay ?? play;
-    _activeMediaUserPaused = false;
     _beginMediaGeneration();
     // Live IPTV (Phase 2, Layer 1): ffmpeg-level reconnect. mpv's default
     // reconnect covers only seekable inputs — a live/streamed input NEVER
@@ -4616,14 +4643,40 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         debugPrint('Player: subtitle visibility reset failed: $error');
       }
     }
-    // Final synchronous ownership check after all asynchronous setup.
-    if (beforeOpen != null && !beforeOpen()) return;
-    PlayerVisibility.playbackState(this, ready: false);
-    if (request != null) {
-      await request.commit(() => _player.open(media, play: play));
-      return;
+    Future<void> commitOpen() async {
+      // Final ownership check after setup AND asynchronous authorization.
+      if (_screenDisposed || !mounted) return;
+      if (watchSource != null) {
+        await _serverWatch.prepare(
+          watchSource,
+          contentTitle: _effectiveContentTitle,
+        );
+        await DirectSourceAuthorization.authorize(watchSource);
+      }
+      if (_screenDisposed || !mounted || watchEpoch != _watchOpenEpoch ||
+          request?.isCurrent == false) {
+        return;
+      }
+      // This callback arms candidate validation. Never arm it while the old
+      // media could still emit events during a server watch-state request.
+      if (beforeOpen != null && !beforeOpen()) return;
+      _openedWatchSource = watchSource;
+      _activeOpenedMedia = media;
+      _activeMediaShouldPlay = desiredPlay ?? play;
+      _activeMediaUserPaused = false;
+      PlayerVisibility.playbackState(this, ready: false);
+      if (request != null) {
+        await request.commit(() => _player.open(media, play: play));
+        return;
+      }
+      return _player.open(media, play: play);
     }
-    return _player.open(media, play: play);
+    // Startup direct fallbacks bypass URL resolvers. Recheck their captured
+    // capability here so revoked/disabled/reconnected sources cannot open.
+    if (source != null) {
+      return DirectSourceAuthorization.runIfAuthorized(source, commitOpen);
+    }
+    return commitOpen();
   }
 
   void _releasePlayerDiagnostic(String fields) {
@@ -4924,6 +4977,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // gate commits it. In particular, a short provider error video can emit
     // `completed`; never let that become a watched/scrobble event.
     if (_validationGateActive) return;
+    _observeServerWatch(completed: true);
     // LIVE IPTV: an ended live stream is a dropped connection, not a
     // finished item — the origin closed on us (mpv's keep-open parks on the
     // last frame, which is the "fake pause" from the Discord report). The
@@ -8318,7 +8372,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       }),
     ];
     try {
-      await _openMedia(mk.Media(url, httpHeaders: httpHeaders), play: true);
+      await _openMedia(
+        mk.Media(url, httpHeaders: httpHeaders),
+        play: true,
+        source: source,
+      );
     } catch (e) {
       debugPrint(
         '[StartupFailover] event=open_exception platform=flutter '
@@ -8482,11 +8540,17 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       }),
     ];
     try {
-      // Arm before open: a fast local/CDN response can render its first frame
-      // before open() completes. Initial startup has no previous-media events;
-      // subsequent attempts use open()'s media reset to establish the boundary.
-      armed = true;
-      await _openMedia(mk.Media(url, httpHeaders: httpHeaders), play: true);
+      // Arm at the final open boundary, after setup and authorization. Old
+      // candidate events during those awaits must not validate this source.
+      await _openMedia(
+        mk.Media(url, httpHeaders: httpHeaders),
+        play: true,
+        source: source,
+        beforeOpen: () {
+          armed = true;
+          return true;
+        },
+      );
     } catch (e) {
       // Exception strings from media backends may embed signed stream URLs.
       // The runtime type is enough to distinguish open failures safely.
@@ -8809,6 +8873,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   }
 
   Future<void> _commitValidatedStremioSource(Torrent? source) async {
+    if (identical(source, _openedWatchSource)) {
+      _serverWatch.commit(source);
+    }
     logSourceSelection(
       'player_source_committed',
       source: source,
@@ -9206,6 +9273,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
               await _seekForResume(outgoingPosition.inMilliseconds);
             }
             _currentStreamUrl = outgoingDirectUrl;
+            _serverWatch.commit(_openedWatchSource);
             unawaited(_restoreTrackPreferences());
           } catch (restoreError) {
             debugPrint(
@@ -9397,6 +9465,14 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           await _openMedia(
             mk.Media(previousUrl, httpHeaders: _activeHttpHeaders),
             play: true,
+            source: _effectiveSources != null &&
+                    previousSourceIndex >= 0 &&
+                    previousSourceIndex < _effectiveSources!.length &&
+                    MediaServerWatchController.isServerSource(
+                      _effectiveSources![previousSourceIndex],
+                    )
+                ? _effectiveSources![previousSourceIndex]
+                : null,
           );
           await _waitForVideoReady();
           if (hasExternalAudio) {
@@ -9408,6 +9484,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
             await _seekForResume(resumePosition.inMilliseconds);
           }
           _currentStreamUrl = previousUrl;
+          _serverWatch.commit(_openedWatchSource);
           if (!hasExternalAudio) {
             // Subtitle state was reset for the candidate; bring the user's
             // subtitle/audio choices back on the restored stream.
@@ -10420,6 +10497,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       setState(() {
         _isTransitioning = false;
       });
+    }
+    // Ordinary episode opens use the readiness path above, rather than the
+    // startup/manual-source commit callback. Bind sync only after that lands.
+    if (manualValidationSourceIndex == null) {
+      _serverWatch.commit(_openedWatchSource);
     }
     return true;
   }
@@ -11513,6 +11595,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
   @override
   void dispose() {
+    _observeServerWatch();
+    unawaited(_serverWatch.close());
+    _watchOpenEpoch++;
     final replacedPip =
         (_iosPipSession?.wasReplaced ?? false) ||
         (_iosPipDetached && !PipService.isOwner(this));
@@ -11717,6 +11802,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   Timer? _autosaveTimer;
 
   String get _resumeKey {
+    final customKey = CustomSeriesIdentity.resumeBookmarkKey(
+      _effectiveContentImdbId, _effectiveContentSeason, _effectiveContentEpisode,
+    );
+    if (customKey != null) return customKey;
     if (_activePlaylist != null &&
         _activePlaylist!.isNotEmpty &&
         _currentIndex >= 0 &&
@@ -11854,7 +11943,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       // Don't reset _isManualEpisodeSelection here - let it be reset after a delay
       return;
     }
-    final trackingPolicy = await TrackingSourcePolicy.load();
+    final trackingPolicy = (await TrackingSourcePolicy.load()).forContent(_effectiveContentImdbId);
     // The launched item's widget percent is a first-load-only signal; capture it
     // before marking it spent so it can't apply to a later switched-to episode.
     final firstLoad = !_launchTraktPercentSpent;
@@ -11941,7 +12030,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     final state = locallyFinishedMovie
         ? null
         : await _getEnhancedPlaybackState() ??
-              await StorageService.getVideoResume(_resumeKey);
+              (CustomSeriesIdentity.isCustom(_effectiveContentImdbId)
+                  ? null : await StorageService.getVideoResume(_resumeKey));
     if (state != null) {
       if (allowLocalResume) {
         localMs = (state['positionMs'] ?? 0) as int;
@@ -12183,6 +12273,14 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       // authoritative. Prefer the canonical episode record for catalog play;
       // generic playback retains its exact video/source lookup first.
       if (_effectiveContentType == 'series') {
+        if (CustomSeriesIdentity.isCustom(_effectiveContentImdbId)) {
+          if (_effectiveContentSeason == null || _effectiveContentEpisode == null) return null;
+          return LocalPlaybackResumeResolver.episode(
+            seriesTitle: _effectiveContentTitle ?? widget.title,
+            season: _effectiveContentSeason!, episode: _effectiveContentEpisode!,
+            imdbId: _effectiveContentImdbId, policy: widget.resumePolicy,
+          );
+        }
         if (widget.resumePolicy == PlaybackResumePolicy.sourceSpecific &&
             currentEntry != null) {
           final exactVideo = await StorageService.getVideoPlaybackState(
@@ -12271,6 +12369,26 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     return false;
   }
 
+  void _observeServerWatch({bool completed = false}) {
+    if (!_serverWatch.isActive || _validationGateActive || !_isReady ||
+        _isTransitioning ||
+        _resumeWriteGuard.heldTargetIfBlocked(_position.inMilliseconds) != null) {
+      return;
+    }
+    // This resolver follows the current playlist entry after episode advance;
+    // launch metadata alone still describes the originally opened episode.
+    final currentEpisode = _traktSeasonEpisode();
+    _serverWatch.observe(
+      _openedWatchSource,
+      positionMs: _position.inMilliseconds,
+      durationMs: _duration.inMilliseconds,
+      playing: _isPlaying,
+      completed: completed,
+      season: currentEpisode.season,
+      episode: currentEpisode.episode,
+    );
+  }
+
   Future<void> _saveResume({
     bool debounced = false,
     Duration? positionOverride,
@@ -12280,6 +12398,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // older write kept it queued until the guard ended; conversely, a newly
     // started transition must suppress work which was waiting on the lock.
     if (_resumeSaveBlocked(debounced)) return Future<void>.value();
+    _observeServerWatch();
     // A periodic tick carries no unique intent. If any newer/older save owns
     // the lock, drop this tick instead of building an unbounded timer backlog.
     if (debounced && _resumeSaveLock.locked) return Future<void>.value();
@@ -12463,7 +12582,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     } catch (e) {}
 
     // Also save to legacy system for backward compatibility
-    await StorageService.upsertVideoResume(
+    if (!CustomSeriesIdentity.isCustom(_effectiveContentImdbId)) await StorageService.upsertVideoResume(
       _resumeKey,
       {
         'positionMs': pos.inMilliseconds,
@@ -17188,6 +17307,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   /// Fetch Stremio addon subtitles proactively and auto-select if no embedded subtitle was applied.
   /// This mirrors the Android TV behavior where subtitles are always fetched on playback start.
   Future<void> _fetchAndMaybeAutoSelectAddonSubtitle() async {
+    if (CustomSeriesIdentity.isCustom(_effectiveContentImdbId) && _manualContentImdbId == null) return;
     // Capture token at start to detect if content changes during async operations
     final fetchToken = _addonSubtitleFetchToken;
 

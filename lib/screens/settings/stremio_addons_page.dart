@@ -419,7 +419,7 @@ class _StremioAddonsPageContentState extends State<StremioAddonsPageContent> {
     final int borrowerCount;
     try {
       borrowerCount = await _stremioService.addonBorrowerCount(
-        addon.manifestUrl,
+        addon.storageKey,
       );
     } catch (e) {
       if (!mounted) return;
@@ -462,7 +462,7 @@ class _StremioAddonsPageContentState extends State<StremioAddonsPageContent> {
 
     try {
       await _stremioService.removeAddon(
-        addon.manifestUrl,
+        addon.storageKey,
         revokeSharedProfiles: isShared,
       );
       if (mounted) {
@@ -1481,7 +1481,7 @@ class _StremioAddonsPageState extends State<StremioAddonsPage> {
     final int borrowerCount;
     try {
       borrowerCount = await _stremioService.addonBorrowerCount(
-        addon.manifestUrl,
+        addon.storageKey,
       );
     } catch (e) {
       if (!mounted) return;
@@ -1524,7 +1524,7 @@ class _StremioAddonsPageState extends State<StremioAddonsPage> {
 
     try {
       await _stremioService.removeAddon(
-        addon.manifestUrl,
+        addon.storageKey,
         revokeSharedProfiles: isShared,
       );
       // Note: _loadAddons() is called automatically via the addons changed listener
@@ -1987,6 +1987,7 @@ class _AddonTileState extends State<_AddonTile> {
   }
 
   String _getAddonSubtitle(StremioAddon addon) {
+    if (addon.connectionResourceSecretPending) return 'Reconnect required';
     final parts = <String>[];
 
     if (addon.types.isNotEmpty) {
@@ -2340,7 +2341,8 @@ class _AddonOptionsSheetState extends State<_AddonOptionsSheet> {
                 onTap: widget.onToggle,
               ),
             ),
-            if (widget.addon.canManage) ...[
+            if (widget.addon.canManage &&
+                !widget.addon.connectionResourceSecretPending) ...[
               FocusTraversalOrder(
                 order: const NumericFocusOrder(1),
                 child: _OptionTile(

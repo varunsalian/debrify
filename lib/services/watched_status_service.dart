@@ -1,4 +1,6 @@
 import 'dart:async';
+import '../models/custom_series_identity.dart';
+import 'stremio_service.dart';
 
 import 'package:flutter/foundation.dart';
 
@@ -93,6 +95,7 @@ class WatchedStatusService extends ChangeNotifier {
   }
 
   bool _isWatchedForTicks(String id, bool series) {
+    if (CustomSeriesIdentity.isCustom(id)) return _localSeries.contains(id);
     return (_tickSources.contains(TrackingSource.local) &&
             (series ? _localSeries : _localMovies).contains(id)) ||
         (_tickSources.contains(TrackingSource.trakt) &&
@@ -270,6 +273,8 @@ class WatchedStatusService extends ChangeNotifier {
   }
 
   Future<void> _refresh(int generation) async {
+    await StremioService.instance.restoreCatalogProgressIdentities();
+    if (generation != _generation) return;
     final localGeneration = ++_localGeneration;
     final mdblistRevision = MdblistService.instance.watchedRevision.value;
     // Start network work immediately, but publish the cheap local snapshot as

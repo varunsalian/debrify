@@ -28,6 +28,15 @@ class ProfileRegistry {
 
   static const int schemaVersion = 8;
   final Database _db;
+  final Map<String, int> _unreadableSecretRevisions = {};
+
+  /// Session-local health, tied to the exact revision that failed. A repair
+  /// or sync replacement automatically makes the next revision usable again.
+  /// No ciphertext, grants, sync metadata, or recovery snapshots are changed.
+  void noteUnreadableSecret(String resourceId, int revision) {
+    _unreadableSecretRevisions[resourceId] = revision;
+  }
+
   Future<void> _recoveryCheckpoint = Future<void>.value();
   static final Lock _tombstoneOutboxDrainLock = Lock();
   Future<void> Function()? authorityWillChangeCallback;
@@ -2167,6 +2176,7 @@ class ProfileRegistry {
           'public_config_json',
           'sealed_secret_payload',
           'secret_payload_version',
+          'authorization_revision',
         ],
         where: includeDisabled ? 'id = ?' : 'id = ? AND disabled_at_ms IS NULL',
         whereArgs: <Object>[id],
@@ -2181,6 +2191,7 @@ class ProfileRegistry {
       );
       return SealedResourceSecretRecord(
         resourceId: row['id']! as String,
+        authorizationRevision: row['authorization_revision']! as int,
         type: ConnectionResourceType.values.byName(row['type']! as String),
         ownerProfileId: row['owner_profile_id']! as String,
         publicSchemaVersion: publicConfig['schemaVersion']! as int,
@@ -3438,6 +3449,7 @@ class ProfileRegistry {
     required Set<ConnectionResourceType> types,
     required List<PreparedConnectionResource> replacements,
     required int ownerPermissions,
+    Map<String, int> retainedResourceRevisions = const {},
     bool revokeBorrowers = false,
     Iterable<WebDavSyncRegistryRecordId> mergedBaselineRecords =
         const <WebDavSyncRegistryRecordId>[],
@@ -3495,6 +3507,14 @@ class ProfileRegistry {
         for (final row in existing) row['id']! as String: row,
       };
       final replacementIds = <String>{};
+      for (final entry in retainedResourceRevisions.entries) {
+        if (existingById[entry.key]?['authorization_revision'] != entry.value) {
+          throw StateError(
+            'Retained connection changed during collection save',
+          );
+        }
+        replacementIds.add(entry.key);
+      }
       for (final replacement in replacements) {
         if (!replacementIds.add(replacement.resource.id)) {
           throw StateError('Replacement collection contains duplicate IDs');
@@ -5968,7 +5988,7 @@ class ProfileRegistry {
     return buffer.toString();
   }
 
-  static ConnectionResource _decodeResource(Map<String, Object?> row) {
+  ConnectionResource _decodeResource(Map<String, Object?> row) {
     return ConnectionResource(
       id: row['id']! as String,
       type: ConnectionResourceType.values.byName(row['type']! as String),
@@ -5985,6 +6005,9 @@ class ProfileRegistry {
       authorizationRevision: row['authorization_revision']! as int,
       enabled: row['disabled_at_ms'] == null,
       secretPending: row['secret_pending'] == 1,
+      secretUnreadable:
+          _unreadableSecretRevisions[row['id']] ==
+          row['authorization_revision'],
     );
   }
 
@@ -6714,6 +6737,7 @@ class RegistrySyncBindingProjection {
 
 class SealedResourceSecretRecord {
   final String resourceId;
+  final int authorizationRevision;
   final ConnectionResourceType type;
   final String ownerProfileId;
   final int publicSchemaVersion;
@@ -6722,6 +6746,7 @@ class SealedResourceSecretRecord {
 
   const SealedResourceSecretRecord({
     required this.resourceId,
+    this.authorizationRevision = 0,
     required this.type,
     required this.ownerProfileId,
     required this.publicSchemaVersion,

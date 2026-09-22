@@ -15,11 +15,13 @@ object ProfilePreferenceProjection {
         context.getSharedPreferences(FLUTTER_PREFS, Context.MODE_PRIVATE)
 
     private fun root(context: Context): JSONObject? {
-        val prefs = flutterPrefs(context)
-        if (prefs.getString(MODE_KEY, null) != "profileCommitted") return null
+        // Read one SharedPreferences image. Separate getString/getLong calls
+        // can combine the JSON from one publication with another's sequence.
+        val prefs = flutterPrefs(context).all
+        if (prefs[MODE_KEY] != "profileCommitted") return null
         return runCatching {
-            val root = JSONObject(prefs.getString(PROJECTION_KEY, null) ?: return null)
-            val sequence = prefs.getLong(PROJECTION_SEQUENCE_KEY, -1L)
+            val root = JSONObject(prefs[PROJECTION_KEY] as? String ?: return null)
+            val sequence = (prefs[PROJECTION_SEQUENCE_KEY] as? Number)?.toLong() ?: -1L
             if (root.optInt("version") != 2 ||
                 root.optString("state") != "active" ||
                 root.optLong("publication", -2L) != sequence ||
@@ -30,6 +32,8 @@ object ProfilePreferenceProjection {
     }
 
     private fun projection(context: Context): JSONObject? = root(context)?.optJSONObject("values")
+
+    internal fun activeSnapshot(context: Context): JSONObject? = root(context)
 
     private fun committed(context: Context): Boolean =
         flutterPrefs(context).getString(MODE_KEY, null) == "profileCommitted"

@@ -1,4 +1,5 @@
 import '../models/tracking_source.dart';
+import '../models/custom_series_identity.dart';
 import 'profiles/profile_runtime.dart';
 import 'trakt/trakt_service.dart';
 import 'simkl/simkl_service.dart';
@@ -31,6 +32,7 @@ class SeasonWatchedService {
     Iterable<int> episodes,
     TrackingSource provider,
   ) async {
+    if (CustomSeriesIdentity.isCustom(imdbId) && provider != TrackingSource.local) return null;
     final numbers = episodes.toSet();
     if (numbers.isEmpty) return null;
     try {
@@ -82,6 +84,7 @@ class SeasonWatchedService {
     bool watched = true,
     MdblistService? mdblistService,
   }) {
+    if (CustomSeriesIdentity.isCustom(imdbId) && provider != TrackingSource.local) return Future.value(0);
     final numbers = episodes.toSet().toList()..sort();
     Future<int> run() async {
       Set<String> alreadyWatched = {};

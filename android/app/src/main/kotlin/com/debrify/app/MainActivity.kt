@@ -2764,8 +2764,17 @@ class MainActivity : FlutterActivity() {
         android.util.Log.d("DebrifyTV", "MainActivity: config=$config")
 
         android.util.Log.d("DebrifyTV", "MainActivity: Creating intent for TorboxTvPlayerActivity")
+        val playerPreferences = try {
+            com.debrify.app.profiles.NativePlayerPreferences.captureForLaunch(
+                this, args["nativePlayerProfile"] as? Map<*, *>,
+            )
+        } catch (_: IllegalStateException) {
+            result.error("player_settings_unavailable", "Player settings could not be loaded. Try again.", null)
+            return
+        }
         val intent = Intent().apply {
             setClassName(this@MainActivity, "com.debrify.app.tv.TorboxTvPlayerActivity")
+            putExtra(com.debrify.app.profiles.NativePlayerPreferences.EXTRA, playerPreferences)
             putExtra("initialUrl", initialUrl)
             putExtra("initialTitle", initialTitle)
             putExtra("provider", provider)
@@ -2941,6 +2950,14 @@ class MainActivity : FlutterActivity() {
         val ownerGeneration =
             (payload["playbackOwnerDataGeneration"] as? Number)?.toInt() ?: 0
 
+        val playerPreferences = try {
+            com.debrify.app.profiles.NativePlayerPreferences.captureForLaunch(
+                this, args["nativePlayerProfile"] as? Map<*, *>,
+            )
+        } catch (_: IllegalStateException) {
+            result.error("player_settings_unavailable", "Player settings could not be loaded. Try again.", null)
+            return
+        }
         try {
             val payloadJson = mapToJson(payload).toString()
 
@@ -2962,6 +2979,7 @@ class MainActivity : FlutterActivity() {
                 )
                 putExtra("payloadPath", tempFile.absolutePath)
                 putExtra("playbackSessionId", playbackSessionId)
+                putExtra(com.debrify.app.profiles.NativePlayerPreferences.EXTRA, playerPreferences)
             }
             com.debrify.app.tv.TvPlaybackRecoveryStore.begin(filesDir, playbackSessionId)
             com.debrify.app.tv.PlaybackReturnHandoff.begin(

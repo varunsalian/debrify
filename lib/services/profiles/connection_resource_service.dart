@@ -2,6 +2,9 @@ import 'dart:convert';
 import 'dart:math';
 
 import 'package:collection/collection.dart';
+import 'package:cryptography/cryptography.dart'
+    show SecretBoxAuthenticationError;
+import 'package:flutter/foundation.dart' show debugPrint;
 
 import '../../models/profiles/connection_resource.dart';
 import '../../models/profiles/profile_policy.dart';
@@ -23,6 +26,17 @@ class ResourceAuthorizationException implements Exception {
 
 class ResourceImpactRequiredException extends ResourceAuthorizationException {
   const ResourceImpactRequiredException(super.message);
+}
+
+/// A single saved credential needs repair. Kept distinct from permission
+/// denial and vault outages so only ordinary reads may degrade gracefully;
+/// backups and transfers must report an incomplete export as a failure.
+class ResourceSecretUnavailableException implements Exception {
+  const ResourceSecretUnavailableException();
+
+  @override
+  String toString() =>
+      'Reconnect required: the saved credential could not be read';
 }
 
 enum ResourceDisconnectDisposition { borrowerDetached, ownerDeleted }
@@ -110,6 +124,7 @@ class ConnectionResourceService {
     required ProfileFeature feature,
     required List<ResourceCollectionItem> items,
     bool revokeBorrowers = false,
+    bool preserveUnavailable = false,
   }) async {
     final owner = await context.validate(registry);
     if (!owner.allows(ProfileFeature.manageConnections) ||
@@ -121,6 +136,7 @@ class ConnectionResourceService {
     }
     final replacements = <PreparedConnectionResource>[];
     final replacementIds = <String>{};
+    final retained = <String, int>{};
     for (final item in items) {
       if (!types.contains(item.type)) {
         throw ArgumentError.value(item.type, 'items');
@@ -149,6 +165,17 @@ class ConnectionResourceService {
           throw const ResourceAuthorizationException(
             'Collection source cannot be managed',
           );
+        }
+        if (source.needsReconnect &&
+            item.secretConfig['_connectionResourceCredentialsRedacted'] ==
+                true) {
+          if (!replacementIds.add(source.id)) {
+            throw const ResourceAuthorizationException(
+              'Collection contains a duplicate source',
+            );
+          }
+          retained[source.id] = source.authorizationRevision;
+          continue;
         }
         // A compatibility model's id is the resource id exposed by read().
         // Keep that identity stable across collection edits, while rotating
@@ -191,11 +218,25 @@ class ConnectionResourceService {
         ),
       );
     }
+    // Automatic hydration works from an execution read, which omits
+    // unavailable entries. Preserve them on that partial save. Explicit
+    // management replacements still remove omitted entries as requested.
+    if (preserveUnavailable) {
+      for (final resource in await registry.listGrantedResources(owner.id)) {
+        if (resource.ownerProfileId == owner.id &&
+            types.contains(resource.type) &&
+            resource.needsReconnect &&
+            !replacementIds.contains(resource.id)) {
+          retained[resource.id] = resource.authorizationRevision;
+        }
+      }
+    }
     await context.validate(registry);
     await registry.replaceOwnedResourceCollection(
       ownerProfileId: owner.id,
       types: types,
       replacements: replacements,
+      retainedResourceRevisions: retained,
       ownerPermissions: ResourcePermission.values.fold<int>(
         0,
         (mask, permission) => mask | permission.bit,
@@ -325,6 +366,9 @@ class ConnectionResourceService {
       throw const ResourceAuthorizationException(
         'Resource credentials are pending owner sign-in',
       );
+    }
+    if (authorized.secretUnreadable) {
+      throw const ResourceSecretUnavailableException();
     }
     final secret = await _openSecret(resourceId);
     await _revalidateResource(
@@ -470,7 +514,7 @@ class ConnectionResourceService {
     // Compare JSON values, not randomized ciphertext. Account refreshes often
     // save the existing credential; that must not invalidate jobs or wake sync.
     final encoded = jsonEncode(secretConfig);
-    if (!resource.secretPending) {
+    if (!resource.needsReconnect) {
       Map<String, dynamic>? current;
       try {
         current = await _openSecret(resourceId);
@@ -526,19 +570,32 @@ class ConnectionResourceService {
       includeDisabled: includeDisabled,
     );
     if (sealed == null) throw StateError('Resource secret is unavailable');
-    final opened = await cipher.open(
-      sealed.envelope,
-      associatedData: associatedDataForSecret(
-        resourceId: sealed.resourceId,
-        type: sealed.type,
-        ownerProfileId: sealed.ownerProfileId,
-        publicSchemaVersion: sealed.publicSchemaVersion,
-        payloadVersion: sealed.payloadVersion,
-      ),
+    try {
+      final opened = await cipher.open(
+        sealed.envelope,
+        associatedData: associatedDataForSecret(
+          resourceId: sealed.resourceId,
+          type: sealed.type,
+          ownerProfileId: sealed.ownerProfileId,
+          publicSchemaVersion: sealed.publicSchemaVersion,
+          payloadVersion: sealed.payloadVersion,
+        ),
+      );
+      final value = jsonDecode(utf8.decode(opened));
+      if (value is! Map) throw const FormatException('Invalid resource secret');
+      return Map<String, dynamic>.from(value);
+    } on DeviceVaultException catch (error) {
+      if (error.failure != DeviceVaultFailure.recordUnreadable) rethrow;
+    } on SecretBoxAuthenticationError {
+      // In-process ciphers (Linux and tests) report AEAD failure directly.
+    } on FormatException {
+      // Malformed envelope or authenticated but invalid JSON is record-local.
+    }
+    registry.noteUnreadableSecret(resourceId, sealed.authorizationRevision);
+    debugPrint(
+      'ConnectionResource: reconnect_required type=${sealed.type.name}',
     );
-    final value = jsonDecode(utf8.decode(opened));
-    if (value is! Map) throw const FormatException('Invalid resource secret');
-    return Map<String, dynamic>.from(value);
+    throw const ResourceSecretUnavailableException();
   }
 
   Future<ConnectionResource> authorize({
@@ -955,7 +1012,8 @@ class ConnectionResourceService {
         'region',
         'accountLabel',
       },
-      ConnectionResourceType.webDav => const <String>{'accountLabel'},
+      ConnectionResourceType.webDav ||
+      ConnectionResourceType.mediaServer => const <String>{'accountLabel'},
       ConnectionResourceType.trakt ||
       ConnectionResourceType.simkl ||
       ConnectionResourceType.mdblist ||

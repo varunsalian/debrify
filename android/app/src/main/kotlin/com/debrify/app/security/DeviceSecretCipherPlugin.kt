@@ -12,6 +12,7 @@ import java.security.MessageDigest
 import java.security.KeyStore
 import java.util.UUID
 import javax.crypto.Cipher
+import javax.crypto.AEADBadTagException
 import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
@@ -120,8 +121,25 @@ object DeviceSecretCipherPlugin {
             return openWithKey(envelope, aad, getRequiredKey())
         } catch (error: Exception) {
             diagnoseOpenFailure(error)
+            if (error is AEADBadTagException && storedCanaryIsReadable()) {
+                throw DeviceSecretRecordUnreadableException(error)
+            }
             throw error
         }
+    }
+
+    // Only isolate a record after proving the persisted key still works.
+    // Missing/pre-canary vaults and provider outages retain global recovery.
+    private fun storedCanaryIsReadable(): Boolean = try {
+        val context = diagnosticContext
+        val canary = context?.getSharedPreferences(STATE_PREFERENCES, Context.MODE_PRIVATE)
+            ?.getString(CANARY_KEY, null)
+        if (canary == null) false else {
+            verifyCanary(canary, getRequiredKey())
+            true
+        }
+    } catch (_: Exception) {
+        false
     }
 
     // Read-only with respect to persisted vault state. Never replace a key or
@@ -383,6 +401,7 @@ object DeviceSecretCipherPlugin {
     private fun errorCode(error: Throwable): String = when (error) {
         is DeviceSecretMissingException -> "device_secret_missing"
         is DeviceSecretUnreadableException -> "device_secret_unreadable"
+        is DeviceSecretRecordUnreadableException -> "device_secret_record_unreadable"
         else -> "device_secret_failed"
     }
 
@@ -405,4 +424,7 @@ object DeviceSecretCipherPlugin {
 
     private class DeviceSecretUnreadableException(cause: Throwable? = null) :
         IllegalStateException("The device-secret key cannot open its canary", cause)
+
+    private class DeviceSecretRecordUnreadableException(cause: Throwable) :
+        IllegalStateException("The saved credential cannot be authenticated", cause)
 }

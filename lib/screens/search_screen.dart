@@ -5,6 +5,7 @@ import '../models/metadata_card_artwork.dart';
 import '../models/hero_metadata_presentation.dart';
 import '../services/profiles/profile_runtime.dart';
 import '../services/iptv_source_search.dart';
+import '../services/media_server_service.dart';
 import 'metadata_explore_page.dart';
 import '../widgets/metadata_presentation_mixin.dart';
 import '../models/metadata_preferences.dart';
@@ -34,6 +35,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/foundation.dart'
     show ValueListenable, listEquals, visibleForTesting;
 import 'package:flutter/material.dart';
+import '../models/custom_series_identity.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -1206,13 +1208,13 @@ class _SearchScreenState extends State<SearchScreen>
   /// as a plain poster. IPTV rows are exempt: they are routeKey-keyed player
   /// history that no tracker can describe.
   double? _cwCardProgress(_CwKind kind, StremioMeta item) =>
-      _cwCardMaps(kind).progress[item.imdbId];
+      CustomSeriesIdentity.isCustom(item.imdbId) ? _cwProgress[item.imdbId] : _cwCardMaps(kind).progress[item.imdbId];
 
   String? _cwCardEpisode(_CwKind kind, StremioMeta item) =>
-      _cwCardMaps(kind).episode[item.imdbId];
+      CustomSeriesIdentity.isCustom(item.imdbId) ? _cwEpisode[item.imdbId] : _cwCardMaps(kind).episode[item.imdbId];
 
   int? _cwCardRemainingMinutes(_CwKind kind, StremioMeta item) =>
-      _cwCardMaps(kind).remaining?[item.imdbId];
+      CustomSeriesIdentity.isCustom(item.imdbId) ? _cwRemainingMinutes[item.imdbId] : _cwCardMaps(kind).remaining?[item.imdbId];
 
   ({
     Map<String, double> progress,
@@ -3578,6 +3580,8 @@ class _SearchScreenState extends State<SearchScreen>
     }
 
     final raw = await StorageService.getContinueWatchingItems();
+    final configuredAddons = raw.any((m) => CustomSeriesIdentity.isCustom(m['imdbId'] as String?))
+        ? await _stremio.getEnabledAddons() : const <StremioAddon>[];
     final items = <StremioMeta>[];
     final progress = <String, double>{};
     final episode = <String, String>{};
@@ -3591,16 +3595,17 @@ class _SearchScreenState extends State<SearchScreen>
       final type = (m['contentType'] as String?) ?? 'movie';
       items.add(
         StremioMeta(
-          id: imdbId,
+          id: CustomSeriesIdentity.parse(imdbId)?.catalogId ?? imdbId,
           imdbId: imdbId,
           type: type,
           name: (m['title'] as String?) ?? 'Untitled',
           poster: m['posterUrl'] as String?,
           year: m['year'] as String?,
+          sourceAddon: configuredAddons.where((a) => a.portableConfigurationKey == CustomSeriesIdentity.parse(imdbId)?.addonKey || a.sourceBindingKey == CustomSeriesIdentity.parse(imdbId)?.addonKey).firstOrNull,
         ),
       );
       ids.add(imdbId);
-      addonIds[imdbId] = m['addonId'] as String?;
+      addonIds[imdbId] = CustomSeriesIdentity.parse(imdbId)?.addonKey ?? m['addonId'] as String?;
 
       // Watched fraction — joined from the playback-state store, exactly like
       // HomeContinueWatchingSection (finished episodes count as 100%).
@@ -4973,6 +4978,9 @@ class _SearchScreenState extends State<SearchScreen>
   /// Prefers the stored source addon; falls back to any homepage addon, then a
   /// minimal placeholder so Play still works even if the addon is gone.
   StremioAddon _addonForContinue(String? addonId) {
+    for (final addon in _addonsById.values) {
+      if (addon.sourceBindingKey == addonId || addon.portableConfigurationKey == addonId) return addon;
+    }
     if (addonId != null && _addonsById.containsKey(addonId)) {
       return _addonsById[addonId]!;
     }
@@ -5100,13 +5108,13 @@ class _SearchScreenState extends State<SearchScreen>
   /// list menu). The detail's action row + a "Remove from Continue Watching"
   /// action are wired via [_openItem] (which detects membership in [_cwIds]).
   void _openContinueItem(StremioMeta item) {
-    _openItem(item, _addonForContinue(_cwAddonId[item.imdbId]));
+    _openItem(item, item.sourceAddon ?? _addonForContinue(_cwAddonId[item.imdbId]));
   }
 
   /// Long-press quick-play for a Continue Watching title — resumes directly
   /// (series resume the last-played episode) without opening the detail.
   void _onContinuePlay(StremioMeta item) {
-    _onCatalogPlay(item, _addonForContinue(_cwAddonId[item.imdbId]));
+    _onCatalogPlay(item, item.sourceAddon ?? _addonForContinue(_cwAddonId[item.imdbId]));
   }
 
   /// Open a plain Simkl-list title (Discover's Simkl Trending/watchlist lists) —
@@ -12781,7 +12789,8 @@ class _SearchScreenState extends State<SearchScreen>
                 await _copyKwLink(t);
               },
             ),
-            if (ProfilePolicyGuard.allowsSync(ProfileFeature.downloads))
+            if (ProfilePolicyGuard.allowsSync(ProfileFeature.downloads) &&
+                TorrentPlaybackService.supportsDirectStreamDownload(t))
               ListTile(
                 leading: const Icon(
                   Icons.download_rounded,
@@ -13404,6 +13413,12 @@ class _SearchScreenState extends State<SearchScreen>
     }
   }
 
+  Future<StremioAddon?> _progressOriginAddon(StremioMeta item, StremioAddon fallback) async {
+    final custom = CustomSeriesIdentity.parse(item.imdbId);
+    if (custom == null) return fallback;
+    return _stremio.addonForCustomProgress(item.imdbId!);
+  }
+
   void _openItem(
     StremioMeta item,
     StremioAddon addon, {
@@ -13419,7 +13434,40 @@ class _SearchScreenState extends State<SearchScreen>
     // When set, switch back to this tab once the detail route closes — lets a
     // cross-tab opener (the Calendar) return the user to where they came from.
     int? returnToTabOnClose,
-  }) {
+  }) async {
+    try {
+      item = await _stremio.scopeSeriesProgress(item, addon);
+    } on StateError {
+      if (mounted) _snack('Could not verify series episodes. Please retry.');
+      return;
+    }
+    if (!mounted) return;
+    final origin = await _progressOriginAddon(item, addon);
+    if (!mounted) return;
+    if (origin == null) {
+      final remove = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: Text(item.name),
+          content: const Text('The addon configuration for this series is unavailable. Your local history is still saved.'),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Close')),
+            if (_cwIds.contains(item.imdbId))
+              TextButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('Remove from Continue Watching')),
+          ],
+        ),
+      );
+      if (remove == true) {
+        await StorageService.removeContinueWatchingItem(item.imdbId!);
+        await StorageService.clearPlaybackStateByImdbId(item.imdbId!);
+        if (!mounted) return;
+        _seriesResumeCache.clear();
+        await _loadContinueWatching();
+      }
+      return;
+    }
+    addon = origin;
+    if (CustomSeriesIdentity.isCustom(item.imdbId)) item = item.withSourceAddon(origin);
     _activeAddonId = addon.id;
     final imdb = _imdbOf(item);
     // Show a "Remove from Continue Watching" action when this title is on the
@@ -13449,7 +13497,7 @@ class _SearchScreenState extends State<SearchScreen>
         hasBoundSource: _isBound(item),
         // The Trakt-syncing actions key off the IMDb id, so only offer them
         // for titles that have one (else the sync call fails with an error).
-        isTraktAuthenticated: _isTraktAuthenticated && imdb != null,
+          isTraktAuthenticated: _isTraktAuthenticated && imdb != null && !CustomSeriesIdentity.isCustom(imdb),
         status: status,
       ),
       if (inCw)
@@ -13481,7 +13529,7 @@ class _SearchScreenState extends State<SearchScreen>
     List<SimklMenuOption> buildSimklOptions(SimklTitleStatus? status) =>
         buildSimklMenuOptions(
           isSeries: item.type == 'series',
-          isSimklAuthenticated: _isSimklAuthenticated && imdb != null,
+          isSimklAuthenticated: _isSimklAuthenticated && imdb != null && !CustomSeriesIdentity.isCustom(imdb),
           // Offer "Remove from Continue Watching" for a paused entry (movie or
           // series) — it has a session to delete. Not for "up next" entries
           // (progress null, no session; they leave via a status change). For a
@@ -13495,7 +13543,7 @@ class _SearchScreenState extends State<SearchScreen>
 
     List<MdblistMenuOption> buildMdblistOptions(MdblistTitleStatus? status) =>
         buildMdblistMenuOptions(
-          authenticated: _isMdblistAuthenticated && imdb != null,
+          authenticated: _isMdblistAuthenticated && imdb != null && !CustomSeriesIdentity.isCustom(imdb),
           isSeries: item.type == 'series',
           inContinueWatching: inMdblistCw,
           status: status,
@@ -14559,7 +14607,19 @@ class _SearchScreenState extends State<SearchScreen>
     // callback and do not need to enter this resolver.
     bool browseSourcesOnly = false,
   }) async {
-    final trackingPolicy = await TrackingSourcePolicy.load();
+    try {
+      item = await _stremio.scopeSeriesProgress(item, addon);
+    } on StateError {
+      if (mounted) _snack('Could not verify series episodes. Please retry.');
+      return;
+    }
+    if (!mounted) return;
+    final origin = await _progressOriginAddon(item, addon);
+    if (!mounted) return;
+    if (origin == null) { _snack('The addon configuration for this series is unavailable.'); return; }
+    addon = origin;
+    if (CustomSeriesIdentity.isCustom(item.imdbId)) item = item.withSourceAddon(origin);
+    final trackingPolicy = (await TrackingSourcePolicy.load()).forContent(item.imdbId);
     debugPrint(
       '[SeriesResume] play-pressed title="${item.name}" '
       'id=${item.effectiveImdbId ?? item.id} type=${item.type} '
@@ -14872,7 +14932,7 @@ class _SearchScreenState extends State<SearchScreen>
       season = byId?['season'] as int?;
       episode = byId?['episode'] as int?;
       final lastFinished = byId?['finished'] == true;
-      if (season == null || episode == null) {
+      if (!CustomSeriesIdentity.isCustom(playId) && (season == null || episode == null)) {
         final byTitle = trackingPolicy.progressFrom(TrackingSource.local)
             ? await StorageService.getLastPlayedEpisode(seriesTitle: item.name)
             : null;
@@ -15062,7 +15122,7 @@ class _SearchScreenState extends State<SearchScreen>
     })
   >
   _reconcileSeriesResume(StremioMeta item, {bool isTraktSource = false}) async {
-    final trackingPolicy = await TrackingSourcePolicy.load();
+    final trackingPolicy = (await TrackingSourcePolicy.load()).forContent(item.imdbId);
     final ttId = item.imdbId ?? (item.id.startsWith('tt') ? item.id : '');
     final playId = ttId.isNotEmpty ? ttId : (item.effectiveImdbId ?? item.id);
     final nowMs = DateTime.now().millisecondsSinceEpoch;
@@ -15473,7 +15533,8 @@ class _SearchScreenState extends State<SearchScreen>
     Map<String, dynamic>? entry =
         await StorageService.getLastPlayedEpisodeByImdbId(playId);
     var finished = entry?['finished'] == true;
-    if (entry?['season'] is! int || entry?['episode'] is! int) {
+    if (!CustomSeriesIdentity.isCustom(playId) &&
+        (entry?['season'] is! int || entry?['episode'] is! int)) {
       entry = await StorageService.getLastPlayedEpisode(seriesTitle: item.name);
       finished = entry?['finished'] == true;
     }
@@ -15600,7 +15661,7 @@ class _SearchScreenState extends State<SearchScreen>
     bool isTraktSource = false,
     bool isMdblistSource = false,
   }) async {
-    final trackingPolicy = await TrackingSourcePolicy.load();
+    final trackingPolicy = (await TrackingSourcePolicy.load()).forContent(item.imdbId);
     debugPrint(
       '[SeriesResume] label-resolve-start title="${item.name}" '
       'id=${item.effectiveImdbId ?? item.id} type=${item.type} '
@@ -15857,6 +15918,9 @@ class _SearchScreenState extends State<SearchScreen>
       year: show.year,
       contentType: show.type,
       posterUrl: show.poster,
+      stremioAddonId: show.sourceAddon?.id,
+      stremioAddonKey: CustomSeriesIdentity.isCustom(imdb) ? show.sourceAddon?.sourceBindingKey : null,
+      stremioCatalogId: CustomSeriesIdentity.parse(imdb)?.catalogId,
     );
     Navigator.of(context)
         .push(
@@ -15894,6 +15958,9 @@ class _SearchScreenState extends State<SearchScreen>
       year: show.year,
       contentType: show.type,
       posterUrl: show.poster,
+      stremioAddonId: show.sourceAddon?.id,
+      stremioAddonKey: CustomSeriesIdentity.isCustom(imdb) ? show.sourceAddon?.sourceBindingKey : null,
+      stremioCatalogId: CustomSeriesIdentity.parse(imdb)?.catalogId,
     );
     Navigator.of(context)
         .push(
@@ -15917,7 +15984,7 @@ class _SearchScreenState extends State<SearchScreen>
     // Only a real IMDb id here — the launcher's Trakt auto-sync + local
     // Continue Watching must never fire on an empty or non-IMDb (IPTV) id,
     // even though the search itself still uses sel.imdbId (the addon id).
-    imdbId: sel.imdbId.startsWith('tt') ? sel.imdbId : null,
+    imdbId: sel.imdbId.startsWith('tt') || CustomSeriesIdentity.isCustom(sel.imdbId) ? sel.imdbId : null,
     contentType: sel.contentType ?? (sel.isSeries ? 'series' : 'movie'),
     season: sel.season,
     episode: sel.episode,

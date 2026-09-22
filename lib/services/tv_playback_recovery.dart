@@ -213,6 +213,7 @@ class TvPlaybackRecovery {
         ? null
         : await StorageService.getVideoPlaybackState(
             videoTitle: resumeId,
+            contentIdentity: checkpoint.imdbId,
             includeFinished: true,
           );
     final seriesTitle = checkpoint.seriesTitle ?? checkpoint.title;
@@ -230,6 +231,7 @@ class TvPlaybackRecovery {
         ? null
         : await StorageService.getSeriesPlaybackState(
             seriesTitle: seriesTitle,
+            imdbId: checkpoint.imdbId,
             season: season,
             episode: episode,
           );
@@ -257,6 +259,7 @@ class TvPlaybackRecovery {
             retrying) {
           final existing = await StorageService.getSeriesPlaybackState(
             seriesTitle: seriesTitle,
+            imdbId: checkpoint.imdbId,
             season: season,
             episode: episode,
           );
@@ -286,6 +289,7 @@ class TvPlaybackRecovery {
       final episode = checkpoint.itemIndex + 1;
       final existing = await StorageService.getSeriesPlaybackState(
         seriesTitle: checkpoint.seriesTitle!,
+        imdbId: checkpoint.imdbId,
         season: 0,
         episode: episode,
       );

@@ -35,6 +35,9 @@ import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
 import android.media.audiofx.LoudnessEnhancer;
+import com.debrify.app.audio.NativeAudioRouting;
+import com.debrify.app.audio.NativeAudioRenderersFactory;
+import com.debrify.app.audio.AudioEffectSession;
 import android.media.MediaCodecInfo;
 import android.media.MediaCodecList;
 
@@ -166,6 +169,14 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         private Format inputFormat;
 
         @Override
+        public void onAudioTrackInitialized(
+                AnalyticsListener.EventTime eventTime,
+                androidx.media3.exoplayer.audio.AudioSink.AudioTrackConfig audioTrackConfig) {
+            if (nightModeIndex > 0) initializeLoudnessEnhancer();
+            if (player != null) syncAudioEffectSession(player.getAudioSessionId());
+        }
+
+        @Override
         public void onVideoInputFormatChanged(
                 AnalyticsListener.EventTime eventTime,
                 Format format,
@@ -249,6 +260,8 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
     private View nightModeButton;
     private View speedButton;
     private int nightModeIndex = 0;  // Off by default
+    private final NativeAudioRouting nativeAudioRouting = new NativeAudioRouting();
+    private boolean systemAudioEffectsEnabled = false;
     private LoudnessEnhancer loudnessEnhancer = null;
     private View guideButton;
     private View channelNextButton;
@@ -510,6 +523,9 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
     private final Player.Listener playbackListener = new Player.Listener() {
         @Override
         public void onPlaybackStateChanged(int playbackState) {
+            if (nativeAudioRouting.reprepareIfPending(player, playbackSpeeds[playbackSpeedIndex])) {
+                return;
+            }
             if (playbackState == Player.STATE_READY) {
                 hasEverBeenReady = true;
                 hideBufferingIndicator();
@@ -522,6 +538,7 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
                 if (loudnessEnhancer == null && nightModeIndex > 0) {
                     initializeLoudnessEnhancer();
                 }
+                if (player != null) syncAudioEffectSession(player.getAudioSessionId());
             } else if (playbackState == Player.STATE_BUFFERING) {
                 if (hasEverBeenReady) {
                     showBufferingIndicatorDebounced();
@@ -588,6 +605,7 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
 
         @Override
         public void onAudioSessionIdChanged(int audioSessionId) {
+            syncAudioEffectSession(audioSessionId);
             // Reinitialize night mode effect when audio session changes
             if (nightModeIndex > 0 && audioSessionId != 0) {
                 releaseLoudnessEnhancer();
@@ -596,9 +614,19 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         }
     };
 
+    private com.debrify.app.profiles.NativePlayerPreferences playerPreferences;
+
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        try {
+            playerPreferences = com.debrify.app.profiles.NativePlayerPreferences.fromIntent(this, getIntent());
+        } catch (Exception error) {
+            android.util.Log.w("TorboxTvPlayer", "Player settings handoff rejected");
+            android.widget.Toast.makeText(this, "Player settings could not be loaded. Try again.", android.widget.Toast.LENGTH_LONG).show();
+            finish();
+            return;
+        }
         setContentView(R.layout.activity_torbox_tv_player);
 
         // Load default player settings from Flutter's SharedPreferences
@@ -729,8 +757,7 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         }
         currentChannelId = safeString(intent.getStringExtra("currentChannelId"));
         playerStyle = DebrifyTvPlayerStyle.fromPref(
-                com.debrify.app.profiles.ProfilePreferenceProjection.getString(
-                        this, "debrify_tv_player_style", "cinema"));
+                playerPreferences.getString("debrify_tv_player_style", "cinema"));
         int providedChannelNumber = intent.getIntExtra("currentChannelNumber", -1);
         if (providedChannelNumber > 0) {
             currentChannelNumber = providedChannelNumber;
@@ -780,7 +807,8 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
 
     @OptIn(markerClass = UnstableApi.class)
     private void initialisePlayer() {
-        DefaultRenderersFactory baseRenderersFactory = new DefaultRenderersFactory(this)
+        nativeAudioRouting.update(nightModeIndex > 0, systemAudioEffectsEnabled, playbackSpeeds[playbackSpeedIndex]);
+        DefaultRenderersFactory baseRenderersFactory = new NativeAudioRenderersFactory(this, nativeAudioRouting)
                 .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER)
                 .setEnableDecoderFallback(true)
                 .setAllowedVideoJoiningTimeMs(300);
@@ -792,11 +820,13 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         trackSelector = new DefaultTrackSelector(this, new AdaptiveTrackSelection.Factory());
 
         // Get default language settings
-        String defaultAudioLang = SubtitleSettings.getDefaultAudioLanguage(this);
-        String defaultSubtitleLang = SubtitleSettings.getDefaultSubtitleLanguage(this);
+        String defaultAudioLang = playerPreferences.getString("player_default_audio_language", null);
+        String defaultSubtitleLang = playerPreferences.getString("player_default_subtitle_language", null);
 
         // Build track selector parameters with robust language matching
         DefaultTrackSelector.Parameters.Builder paramsBuilder = trackSelector.buildUponParameters()
+                // Recover passthrough after HDMI/display-mode capability changes.
+                .setAllowInvalidateSelectionsOnRendererCapabilitiesChange(true)
                 .setPreferredAudioMimeType("audio/opus");
 
         // Apply audio language preference
@@ -815,8 +845,11 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
 
         // Apply subtitle language preference
         if ("off".equals(defaultSubtitleLang)) {
-            // Disable subtitle auto-selection by setting empty preferred language
+            // An empty language alone still permits default/forced tracks.
+            // Match the movie player's explicit Off behavior; manual subtitle
+            // selection re-enables text tracks in applySubtitleTrack.
             paramsBuilder.setPreferredTextLanguage("");
+            paramsBuilder.setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true);
         } else if (defaultSubtitleLang != null) {
             // Get all language variants (ISO 639-1, ISO 639-2, etc.) for robust matching
             List<String> variants = LanguageMapper.getLanguageVariantsForExoPlayer(defaultSubtitleLang);
@@ -841,6 +874,7 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
     private void createPlayer(LoadControl loadControl) {
         // Release night mode effect before releasing player to prevent memory leak
         releaseLoudnessEnhancer();
+        AudioEffectSession.INSTANCE.closeCurrent(this);
 
         if (player != null) {
             player.removeListener(playbackListener);
@@ -861,6 +895,7 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
                     C.VIDEO_CHANGE_FRAME_RATE_STRATEGY_ONLY_IF_SEAMLESS);
         }
         player = playerBuilder.build();
+        player.setPlaybackSpeed(playbackSpeeds[playbackSpeedIndex]);
         player.addListener(playbackListener);
         player.addAnalyticsListener(decoderAnalyticsListener);
         playerView.setPlayer(player);
@@ -1575,13 +1610,27 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         if (player == null) {
             return;
         }
-        playbackSpeedIndex = (playbackSpeedIndex + 1) % playbackSpeeds.length;
-        float speed = playbackSpeeds[playbackSpeedIndex];
-        player.setPlaybackSpeed(speed);
+        applyPlaybackSpeed((playbackSpeedIndex + 1) % playbackSpeeds.length);
         Toast.makeText(this, "Speed: " + playbackSpeedLabels[playbackSpeedIndex], Toast.LENGTH_SHORT).show();
     }
 
+    private void applyPlaybackSpeed(int index) {
+        playbackSpeedIndex = Math.max(0, Math.min(index, playbackSpeeds.length - 1));
+        float speed = playbackSpeeds[playbackSpeedIndex];
+        boolean routeChanged = nativeAudioRouting.update(nightModeIndex > 0, systemAudioEffectsEnabled, speed);
+        if (routeChanged) {
+            releaseLoudnessEnhancer();
+        }
+        nativeAudioRouting.setPlaybackSpeed(player, speed, routeChanged);
+    }
+
     // Night mode (dynamic range compression)
+    private void syncAudioEffectSession(int sessionId) {
+        if (systemAudioEffectsEnabled && sessionId != 0) {
+            AudioEffectSession.INSTANCE.open(this, sessionId);
+        }
+    }
+
     private void initializeLoudnessEnhancer() {
         if (player == null) {
             return;
@@ -1625,24 +1674,26 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         try {
             // Load aspect index for TV (separate from mobile)
             // TV only: 0=Fit, 1=Fill, 2=Zoom, 3=Cinema Zoom (default: 0=Fit)
-            resizeModeIndex = (int) com.debrify.app.profiles.ProfilePreferenceProjection
-                .getLong(this, "player_default_aspect_index_tv", 0);
+            resizeModeIndex = (int) playerPreferences
+                .getLong("player_default_aspect_index_tv", 0);
             resizeModeIndex = Math.max(0, Math.min(resizeModeIndex, resizeModes.length - 1));
 
             // Load night mode index (default: 0 = Off)
-            nightModeIndex = (int) com.debrify.app.profiles.ProfilePreferenceProjection
-                .getLong(this, "player_night_mode_index", 0);
+            nightModeIndex = (int) playerPreferences
+                .getLong("player_night_mode_index", 0);
             nightModeIndex = Math.max(0, Math.min(nightModeIndex, nightModeGains.length - 1));
+            systemAudioEffectsEnabled = playerPreferences
+                    .getBoolean("player_system_audio_effects", false);
 
             displayMatchMode = TvContentDisplayMatchMode.Companion.fromStorage(
-                    com.debrify.app.profiles.ProfilePreferenceProjection.getString(
-                            this,
+                    playerPreferences.getString(
                             "content_display_match_mode",
                             TvContentDisplayMatchMode.SYSTEM.getStorageKey()));
             if (displayModeController != null) displayModeController.clear();
             displayModeController = new TvDisplayModeController(this, displayMatchMode);
 
             android.util.Log.d("TorboxTvPlayer", "Loaded defaults - aspect=" + resizeModeIndex + ", nightMode=" + nightModeIndex + ", displayMatch=" + displayMatchMode.getStorageKey());
+            android.util.Log.d("TorboxTvPlayer", "Player settings handoff: style=" + playerPreferences.getString("debrify_tv_player_style", "cinema") + " subtitles=" + playerPreferences.getString("player_default_subtitle_language", "auto") + " nightMode=" + nightModeIndex);
         } catch (Exception e) {
             android.util.Log.e("TorboxTvPlayer", "Error loading player defaults", e);
             // Keep default values
@@ -1665,12 +1716,17 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
     private void applyNightMode(int index) {
         nightModeIndex = index;
 
+        float speed = playbackSpeeds[playbackSpeedIndex];
+        boolean routeChanged = nativeAudioRouting.update(nightModeIndex > 0, systemAudioEffectsEnabled, speed);
+        if (routeChanged) releaseLoudnessEnhancer();
+        boolean restartingAudio = routeChanged && nativeAudioRouting.reprepare(player, speed);
+
         if (nightModeIndex == 0) {
             // Turn off
             if (loudnessEnhancer != null) {
                 loudnessEnhancer.setEnabled(false);
             }
-        } else {
+        } else if (!restartingAudio) {
             // Turn on or adjust
             if (loudnessEnhancer == null) {
                 initializeLoudnessEnhancer();
@@ -3514,7 +3570,7 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         }
 
         // Get user's default subtitle language preference
-        String defaultSubtitleLang = SubtitleSettings.getDefaultSubtitleLanguage(this);
+        String defaultSubtitleLang = playerPreferences.getString("player_default_subtitle_language", null);
 
         // If subtitles are explicitly disabled, don't auto-select
         if ("off".equals(defaultSubtitleLang)) {
@@ -3596,7 +3652,7 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         }
 
         // Get user's default subtitle language preference
-        String defaultSubtitleLang = SubtitleSettings.getDefaultSubtitleLanguage(this);
+        String defaultSubtitleLang = playerPreferences.getString("player_default_subtitle_language", null);
 
         // If subtitles are explicitly disabled, don't auto-select
         if ("off".equals(defaultSubtitleLang)) {
@@ -4540,12 +4596,7 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
             final int target = i;
             col3.add(UnifiedMenuController.row(playbackSpeedLabels[i])
                     .selected(i == playbackSpeedIndex)
-                    .onOk(() -> {
-                        playbackSpeedIndex = Math.max(0, Math.min(target, playbackSpeeds.length - 1));
-                        if (player != null) {
-                            player.setPlaybackSpeed(playbackSpeeds[playbackSpeedIndex]);
-                        }
-                    })
+                    .onOk(() -> applyPlaybackSpeed(target))
                     .build());
         }
         return new UnifiedMenuController.Model(col1, "PLAYBACK", col2, "Playback speed", col3);
@@ -6122,6 +6173,7 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
 
         // Release night mode audio effect
         releaseLoudnessEnhancer();
+        AudioEffectSession.INSTANCE.closeCurrent(this);
 
         if (player != null) {
             player.removeListener(playbackListener);
