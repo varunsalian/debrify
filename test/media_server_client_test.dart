@@ -51,6 +51,27 @@ void main() {
 
   for (final kind in MediaServerKind.values) {
     test(
+      '${kind.label} API and playback headers support modern and legacy auth',
+      () {
+        final headers = MediaServerClient.headers(
+          'device1',
+          'opaque.token_123-abc==',
+          kind,
+        );
+        expect(
+          headers['Authorization'],
+          '${kind == MediaServerKind.emby ? 'Emby' : 'MediaBrowser'} '
+          'Client="Debrify", Device="Debrify", DeviceId="device1", Version="1.0", '
+          'Token="opaque.token_123-abc=="',
+        );
+        expect(headers['X-Emby-Token'], 'opaque.token_123-abc==');
+        final anonymous = MediaServerClient.headers('device1', null, kind);
+        expect(anonymous['Authorization'], isNot(contains('Token=')));
+        expect(anonymous.containsKey('X-Emby-Token'), false);
+      },
+    );
+
+    test(
       '${kind.label} login sends password only in body and verifies server identity',
       () async {
         final client = MediaServerClient(
@@ -59,6 +80,10 @@ void main() {
             expect(request.url.toString(), isNot(contains('my-password')));
             if (request.url.path.endsWith('AuthenticateByName')) {
               expect(request.method, 'POST');
+              expect(
+                request.headers['Authorization'],
+                isNot(contains('Token=')),
+              );
               expect(jsonDecode(request.body), {
                 'Username': 'user',
                 'Pw': 'my-password',
@@ -70,6 +95,13 @@ void main() {
               });
             }
             expect(request.headers['X-Emby-Token'], 'secret-token');
+            // Simulate modern Jellyfin: a legacy-only token header is not
+            // authentication, even though the login response was successful.
+            if (!request.headers['Authorization']!.contains(
+              'Token="secret-token"',
+            )) {
+              return http.Response('Missing authorization token', 401);
+            }
             if (request.url.path.endsWith('System/Info')) {
               return http.Response('Administrator access required', 403);
             }
@@ -97,6 +129,26 @@ void main() {
       },
     );
   }
+
+  test(
+    'server tokens cannot inject quoted auth parameters or header lines',
+    () {
+      for (final token in [
+        '',
+        'token"',
+        'token\\',
+        'token,DeviceId="other',
+        'token\r\nInjected: yes',
+        'token\n',
+        'token with spaces',
+      ]) {
+        expect(
+          () => MediaServerClient.headers('device1', token),
+          throwsA(isA<MediaServerException>()),
+        );
+      }
+    },
+  );
 
   for (final status in [401, 403]) {
     test('public identity does not hide a user-session HTTP $status', () async {

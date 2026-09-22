@@ -85,10 +85,38 @@ Watch-sync tests cover user-specific progress, tick conversion, authenticated
 empty-body check-ins, throttling/coalescing, ordering, conflict handling,
 per-profile opt-in and authorization changes.
 
+The opt-in `test/media_server_live_test.dart` suite exercises actual HTTP calls
+and Debrify's source/watch services against isolated synthetic test libraries.
+On September 22, 2026 it passed against Jellyfin 12.1.0 and Emby 4.9.3.0:
+ordinary-user login, exact movie/episode matching, authenticated byte-range
+streaming, pin resolution, resume import, pause/stop, EOF completion, fresh replay
+sessions and disconnect protection. Authentication includes the token in the
+standard Authorization parameter (required by Jellyfin 12), with the legacy
+token header retained for older servers. A separate isolated macOS harness also
+verified actual internal-player movie playback from both servers, server resume,
+pause persistence, switching Emby to Jellyfin, seeking, EOF reporting while the
+route stays open, replay progress, and an episode transition from Jellyfin S01E01
+to Emby S01E02 with separate outgoing/incoming bookmarks. The harness used
+in-memory preferences and a temporary profile, not personal application data.
+
+Run with:
+
+```sh
+DEBRIFY_MEDIA_SERVER_LIVE=1 flutter test --no-pub test/media_server_live_test.dart
+```
+
+Tests are skipped by default and require
+servers named `Debrify Test Jellyfin` / `Debrify Test Emby`, ordinary user
+`debrify-test`, and the documented synthetic titles/catalog IDs. URLs may be
+overridden using `DEBRIFY_JELLYFIN_URL` / `DEBRIFY_EMBY_URL`; passwords come from
+matching `DEBRIFY_*_PASSWORD` environment variables or macOS Keychain services
+`Debrify Test Jellyfin` / `Debrify Test Emby`, account `debrify-test`. Tests change
+only synthetic watch data and restore the movie/first episode bookmark to 04:00.
+
 Before release, check against real Jellyfin and Emby servers on supported
 devices: login, movie playback and seeking, multiple versions, episode advance,
 embedded subtitles/audio, source switching, expired token/reconnect, and a
 remote server with a reverse-proxy base path. With watch sync enabled, also check
 resume from another client, pause/exit, completion, episode/source switching,
-and profile/account changes during playback. No real server was available
-during this implementation, so real-server playback is not yet verified.
+and profile/account changes during playback. Real-server API verification does
+not substitute for playback checks across all supported device platforms.
