@@ -66,6 +66,9 @@ class IptvChannelRow extends StatefulWidget {
   /// and reversible, a held remote button is neither.
   final bool hasCustomLists;
 
+  /// Overrides the row's hold action, for example on Continue Watching.
+  final VoidCallback? onLongPress;
+
   /// Fired when this row gains DPAD focus — drives the TV preview stage.
   final VoidCallback? onFocused;
 
@@ -141,6 +144,7 @@ class IptvChannelRow extends StatefulWidget {
     this.inAnyList = false,
     this.onOpenListPicker,
     this.hasCustomLists = false,
+    this.onLongPress,
     this.onFocused,
     this.onPointerRest,
     this.onDetached,
@@ -213,6 +217,10 @@ class _IptvChannelRowState extends State<IptvChannelRow>
     _holdController.addStatusListener((status) {
       if (status == AnimationStatus.completed) {
         _favHoldFired = true;
+        if (widget.onLongPress != null) {
+          widget.onLongPress!();
+          return;
+        }
         final openPicker = widget.onOpenListPicker;
         if (openPicker != null && widget.hasCustomLists) {
           openPicker();
@@ -472,6 +480,7 @@ class _IptvChannelRowState extends State<IptvChannelRow>
         final canHoldToFavorite =
             widget.isTelevision &&
             (widget.onFavoriteToggle != null ||
+                widget.onLongPress != null ||
                 widget.onOpenListPicker != null);
         if (!canHoldToFavorite) {
           if (event is KeyDownEvent) {
@@ -538,7 +547,7 @@ class _IptvChannelRowState extends State<IptvChannelRow>
           // Touch/desktop counterpart of TV's hold-OK. The row had no
           // long-press before, so this adds a gesture rather than
           // reinterpreting one.
-          onLongPress: widget.onOpenListPicker,
+          onLongPress: widget.onLongPress ?? widget.onOpenListPicker,
           behavior: HitTestBehavior.opaque,
           child: row,
         ),
@@ -761,6 +770,12 @@ class _IptvChannelRowState extends State<IptvChannelRow>
   ///   the channel's destination is a choice, not an assumption.
   Widget _buildFavTrailing() {
     final app = AppThemeScope.of(context);
+    if (widget.isTelevision && widget.onLongPress != null && _focused) {
+      return const Padding(
+        padding: EdgeInsets.only(left: 8),
+        child: Text('HOLD OK · Options', style: TextStyle(fontSize: 10)),
+      );
+    }
     // Describes what HOLD OK will actually do, so the hint can't promise a
     // picker on a remote that is really going to toggle the favorite.
     final picksList = widget.onOpenListPicker != null && widget.hasCustomLists;
@@ -802,11 +817,7 @@ class _IptvChannelRowState extends State<IptvChannelRow>
       if (marksListOnly) {
         return Padding(
           padding: const EdgeInsets.only(left: 8),
-          child: Icon(
-            Icons.bookmark_rounded,
-            size: 16,
-            color: app.iptv.inkDim,
-          ),
+          child: Icon(Icons.bookmark_rounded, size: 16, color: app.iptv.inkDim),
         );
       }
       return const SizedBox.shrink();
