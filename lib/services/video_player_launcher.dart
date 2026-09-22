@@ -2,6 +2,7 @@ import '../utils/show_shuffle.dart';
 import 'failed_saved_source.dart';
 import 'torrent_playback_service.dart';
 import 'direct_source_authorization.dart';
+import 'media_server_watch_sync.dart';
 import 'startup_recovery_sources.dart';
 import 'dart:async';
 import '../models/custom_series_identity.dart';
@@ -2219,10 +2220,22 @@ class VideoPlayerLauncher {
     _simklLastKnownEpisode = null;
 
     _AndroidTvPlaybackPayload? builtPayload;
+    final serverWatch = MediaServerWatchController();
     try {
+      final initialSources = args.stremioSources;
+      final initialSourceIndex = args.stremioCurrentSourceIndex ?? 0;
+      if (initialSources != null &&
+          initialSourceIndex >= 0 &&
+          initialSourceIndex < initialSources.length) {
+        await serverWatch.prepare(
+          initialSources[initialSourceIndex],
+          contentTitle: args.contentTitle ?? args.title,
+        );
+      }
       final builder = _AndroidTvPlaybackPayloadBuilder(args);
       final result = await builder.build();
       if (result == null) {
+        unawaited(serverWatch.close());
         return false;
       }
       builtPayload = result.payload;
@@ -2268,6 +2281,10 @@ class VideoPlayerLauncher {
             return null;
           }
           final torrent = currentStremioSources[sourceIndex];
+          await serverWatch.prepare(
+            torrent,
+            contentTitle: args.contentTitle ?? args.title,
+          );
           debugPrint(
             'VideoPlayerLauncher: resolving stremio source $sourceIndex: ${torrent.displayTitle}',
           );
@@ -2305,6 +2322,10 @@ class VideoPlayerLauncher {
           );
           try {
             await DirectSourceAuthorization.authorize(torrent);
+            await serverWatch.prepare(
+              torrent,
+              contentTitle: args.contentTitle ?? args.title,
+            );
           } catch (_) {
             return null;
           }
@@ -3250,6 +3271,21 @@ class VideoPlayerLauncher {
         onProgress: (progress) {
           final season = (progress['season'] as num?)?.toInt();
           final episode = (progress['episode'] as num?)?.toInt();
+          final watchIndex = (progress['sourceIndex'] as num?)?.toInt();
+          if (progress['isBuffering'] != true &&
+              watchIndex != null &&
+              watchIndex >= 0 &&
+              watchIndex < currentStremioSources.length) {
+            serverWatch.observe(
+              currentStremioSources[watchIndex],
+              positionMs: (progress['positionMs'] as num?)?.toInt() ?? 0,
+              durationMs: (progress['durationMs'] as num?)?.toInt() ?? 0,
+              playing: progress['isPlaying'] == true,
+              completed: progress['completed'] == true,
+              season: season,
+              episode: episode,
+            );
+          }
           if (seriesFetcher != null &&
               season != null &&
               episode != null &&
@@ -3275,6 +3311,7 @@ class VideoPlayerLauncher {
           return _handleProgressUpdate(result.payload, progress);
         },
         onFinished: () async {
+          unawaited(serverWatch.close());
           await _handlePlaybackFinished(result.payload);
           resolver.dispose();
           // The native player may have requested a Quick Play next episode
@@ -3342,6 +3379,11 @@ class VideoPlayerLauncher {
             : (index) =>
                   sourcePlaylistResolverForTv!(index, automaticRecovery: true),
         onCommitStremioSource: sourceCommitterForTv,
+        onCommitPlaybackProgressSource: (sourceIndex) {
+          if (sourceIndex >= 0 && sourceIndex < currentStremioSources.length) {
+            serverWatch.commit(currentStremioSources[sourceIndex]);
+          }
+        },
         onStartupSourcesExhausted: args.onStartupSourcesExhausted,
         onRequestMoreSources: moreSourcesProviderForTv,
         onStartupSourceFailed: (index, reason) async {
@@ -3361,6 +3403,7 @@ class VideoPlayerLauncher {
       );
 
       if (!launched) {
+        unawaited(serverWatch.close());
         await result.payload.mdblistSession?.close();
         result.payload.mdblistSession = null;
         resolver.dispose();
@@ -3387,6 +3430,7 @@ class VideoPlayerLauncher {
 
       return true;
     } catch (e) {
+      unawaited(serverWatch.close());
       await builtPayload?.mdblistSession?.close();
       if (builtPayload != null) builtPayload.mdblistSession = null;
       debugPrint('VideoPlayerLauncher: Android TV launch failed: $e');

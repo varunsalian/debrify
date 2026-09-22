@@ -26,6 +26,7 @@ import '../services/storage_service.dart';
 import '../services/local_playback_resume_resolver.dart';
 import '../services/startup_stream_policy.dart';
 import '../services/direct_source_authorization.dart';
+import '../services/media_server_watch_sync.dart';
 import '../services/resume_write_guard.dart';
 import '../models/profiles/profile_policy.dart';
 import '../services/profiles/profile_policy_guard.dart';
@@ -1231,6 +1232,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   // Stremio source sheet state
   bool _showSourceSheet = false;
   int _currentSourceIndex = 0;
+  final _serverWatch = MediaServerWatchController();
+  Torrent? _openedWatchSource;
+  int _watchOpenEpoch = 0;
   List<PlaylistEntry>? _pendingSourcePlaylist;
   // Overrides for sources after Stremio TV channel switch
   List<Torrent>? _stremioSourcesOverride;
@@ -3672,6 +3676,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         _iptvLiveRecovery.onProgress(d, wantsPlayback: _isPlaying);
       }
       _position = d;
+      _observeServerWatch();
       _prepareNextDirectEpisode();
       _updateMdblistPosition();
       _playbackUiClock.updatePosition(d);
@@ -3717,6 +3722,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       }
       final wasPlaying = _isPlaying;
       _isPlaying = p;
+      _observeServerWatch();
       ProfileLockController.instance.setPlaybackActive(p);
       _syncWakelock(p);
       _pushPipState();
@@ -4536,6 +4542,22 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     Torrent? source,
   }) async {
     if (request?.isCurrent == false) return;
+    final watchEpoch = ++_watchOpenEpoch;
+    final sources = _effectiveSources;
+    final indexedSource = sources != null &&
+            _currentSourceIndex >= 0 &&
+            _currentSourceIndex < sources.length
+        ? sources[_currentSourceIndex]
+        : null;
+    final candidate = source ??
+        (indexedSource?.directUrl == media.uri ? indexedSource : null);
+    final watchSource = MediaServerWatchController.isServerSource(candidate)
+        ? candidate
+        : null;
+    if (!identical(watchSource, _openedWatchSource)) {
+      _observeServerWatch();
+      _serverWatch.commit(null);
+    }
     // EVERY content open invalidates the outgoing media's resume protection —
     // the one choke point all switch paths share, so no path (Stremio TV
     // channel, Magic TV next, zap, source switch, startup ladder) can leave a
@@ -4624,7 +4646,21 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     Future<void> commitOpen() async {
       // Final ownership check after setup AND asynchronous authorization.
       if (_screenDisposed || !mounted) return;
+      if (watchSource != null) {
+        await _serverWatch.prepare(
+          watchSource,
+          contentTitle: _effectiveContentTitle,
+        );
+        await DirectSourceAuthorization.authorize(watchSource);
+      }
+      if (_screenDisposed || !mounted || watchEpoch != _watchOpenEpoch ||
+          request?.isCurrent == false) {
+        return;
+      }
+      // This callback arms candidate validation. Never arm it while the old
+      // media could still emit events during a server watch-state request.
       if (beforeOpen != null && !beforeOpen()) return;
+      _openedWatchSource = watchSource;
       _activeOpenedMedia = media;
       _activeMediaShouldPlay = desiredPlay ?? play;
       _activeMediaUserPaused = false;
@@ -4941,6 +4977,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // gate commits it. In particular, a short provider error video can emit
     // `completed`; never let that become a watched/scrobble event.
     if (_validationGateActive) return;
+    _observeServerWatch(completed: true);
     // LIVE IPTV: an ended live stream is a dropped connection, not a
     // finished item — the origin closed on us (mpv's keep-open parks on the
     // last frame, which is the "fake pause" from the Discord report). The
@@ -8836,6 +8873,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   }
 
   Future<void> _commitValidatedStremioSource(Torrent? source) async {
+    if (identical(source, _openedWatchSource)) {
+      _serverWatch.commit(source);
+    }
     logSourceSelection(
       'player_source_committed',
       source: source,
@@ -9233,6 +9273,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
               await _seekForResume(outgoingPosition.inMilliseconds);
             }
             _currentStreamUrl = outgoingDirectUrl;
+            _serverWatch.commit(_openedWatchSource);
             unawaited(_restoreTrackPreferences());
           } catch (restoreError) {
             debugPrint(
@@ -9424,6 +9465,14 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           await _openMedia(
             mk.Media(previousUrl, httpHeaders: _activeHttpHeaders),
             play: true,
+            source: _effectiveSources != null &&
+                    previousSourceIndex >= 0 &&
+                    previousSourceIndex < _effectiveSources!.length &&
+                    MediaServerWatchController.isServerSource(
+                      _effectiveSources![previousSourceIndex],
+                    )
+                ? _effectiveSources![previousSourceIndex]
+                : null,
           );
           await _waitForVideoReady();
           if (hasExternalAudio) {
@@ -9435,6 +9484,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
             await _seekForResume(resumePosition.inMilliseconds);
           }
           _currentStreamUrl = previousUrl;
+          _serverWatch.commit(_openedWatchSource);
           if (!hasExternalAudio) {
             // Subtitle state was reset for the candidate; bring the user's
             // subtitle/audio choices back on the restored stream.
@@ -10447,6 +10497,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       setState(() {
         _isTransitioning = false;
       });
+    }
+    // Ordinary episode opens use the readiness path above, rather than the
+    // startup/manual-source commit callback. Bind sync only after that lands.
+    if (manualValidationSourceIndex == null) {
+      _serverWatch.commit(_openedWatchSource);
     }
     return true;
   }
@@ -11540,6 +11595,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
   @override
   void dispose() {
+    _observeServerWatch();
+    unawaited(_serverWatch.close());
+    _watchOpenEpoch++;
     final replacedPip =
         (_iosPipSession?.wasReplaced ?? false) ||
         (_iosPipDetached && !PipService.isOwner(this));
@@ -12311,6 +12369,26 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     return false;
   }
 
+  void _observeServerWatch({bool completed = false}) {
+    if (!_serverWatch.isActive || _validationGateActive || !_isReady ||
+        _isTransitioning ||
+        _resumeWriteGuard.heldTargetIfBlocked(_position.inMilliseconds) != null) {
+      return;
+    }
+    // This resolver follows the current playlist entry after episode advance;
+    // launch metadata alone still describes the originally opened episode.
+    final currentEpisode = _traktSeasonEpisode();
+    _serverWatch.observe(
+      _openedWatchSource,
+      positionMs: _position.inMilliseconds,
+      durationMs: _duration.inMilliseconds,
+      playing: _isPlaying,
+      completed: completed,
+      season: currentEpisode.season,
+      episode: currentEpisode.episode,
+    );
+  }
+
   Future<void> _saveResume({
     bool debounced = false,
     Duration? positionOverride,
@@ -12320,6 +12398,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // older write kept it queued until the guard ended; conversely, a newly
     // started transition must suppress work which was waiting on the lock.
     if (_resumeSaveBlocked(debounced)) return Future<void>.value();
+    _observeServerWatch();
     // A periodic tick carries no unique intent. If any newer/older save owns
     // the lock, drop this tick instead of building an unbounded timer backlog.
     if (debounced && _resumeSaveLock.locked) return Future<void>.value();

@@ -679,14 +679,26 @@ class AndroidTvPlayerBridge {
               : null;
           final committer = _stremioSourceCommitter;
           final persistenceSession = _sourcePersistenceSession;
+          final progressSession = _progressSession;
           if (sourceIndex == null ||
-              committer == null ||
+              (committer == null &&
+                  progressSession?.onSourceCommitted == null) ||
               persistenceSession == null ||
               (sourceSessionId != null &&
                   sourceSessionId != persistenceSession.id)) {
             return null;
           }
-          await persistenceSession.enqueue(() => committer(sourceIndex));
+          // Reserve this boundary synchronously, before awaiting pin writes.
+          // Those writes have their own timeout/queue and must not decide
+          // which watch session owns already-received progress callbacks.
+          final progressCommit = progressSession?.enqueueSourceCommit(
+            sessionId: sourceSessionId ?? persistenceSession.id,
+            sourceIndex: sourceIndex,
+          );
+          if (committer != null) {
+            await persistenceSession.enqueue(() => committer(sourceIndex));
+          }
+          await progressCommit;
           return null;
         case 'startupSourceFailed':
           final failure = call.arguments;
@@ -1767,6 +1779,7 @@ class AndroidTvPlayerBridge {
     Future<List<Map<String, dynamic>>?> Function(int)? onResolveSourcePlaylist,
     Future<List<Map<String, dynamic>>?> Function(int)? onResolveStartupSourcePlaylist,
     Future<void> Function(int)? onCommitStremioSource,
+    void Function(int)? onCommitPlaybackProgressSource,
     PlaybackFinishedCallback? onStartupSourcesExhausted,
     Future<void> Function(int, String)? onStartupSourceFailed,
     Future<Map<String, dynamic>?> Function(String, {int? season, int? episode})?
@@ -1814,11 +1827,13 @@ class AndroidTvPlayerBridge {
     final persistenceSession = StremioSourcePersistenceSession(sessionId);
     _sourcePersistenceSession = persistenceSession;
     final profileOwner = ProfileSessionMemory.captureOwner();
-    final progressSession = onProgress == null
+    final progressSession = onProgress == null &&
+            onCommitPlaybackProgressSource == null
         ? null
         : NativePlaybackProgressSession(
             id: persistenceSession.id,
-            persist: onProgress,
+            persist: onProgress ?? (_) async {},
+            onSourceCommitted: onCommitPlaybackProgressSource,
             isCurrent: () =>
                 profileOwner == ProfileSessionMemory.captureOwner(),
           );

@@ -27,6 +27,10 @@ class MediaServerService {
   static const types = {ConnectionResourceType.mediaServer};
   static final _tickets = Expando<Future<void> Function()>();
   static final _bindings = Expando<String>();
+  static final _watchTargets = Expando<MediaServerWatchTarget>();
+
+  static MediaServerWatchTarget? watchTargetFor(Torrent source) =>
+      owns(source) ? _watchTargets[source] : null;
 
   static SeriesSource? bindingFor(Torrent source) {
     final descriptor = _bindings[source];
@@ -436,6 +440,20 @@ class MediaServerService {
                     : 'S${season.toString().padLeft(2, '0')}E${episode.toString().padLeft(2, '0')}',
               );
               _tickets[torrent] = check;
+              if (capability != null) {
+                _watchTargets[torrent] = MediaServerWatchTarget(
+                  account: account,
+                  capability: capability,
+                  authorize: check,
+                  itemId: itemId,
+                  mediaSourceId: sourceId,
+                  contentId: id,
+                  isMovie: isMovie,
+                  season: season,
+                  episode: episode,
+                  title: title,
+                );
+              }
               _bindings[torrent] = MediaServerSource(
                 serverId: resourceId,
                 contentId: id,
@@ -486,4 +504,32 @@ class MediaServerService {
     if (ProfileRuntime.scope.value != scope) return {'torrents': <Torrent>[]};
     return result();
   }
+}
+
+/// In-memory, revocable identity of the exact library item selected for play.
+/// Never reconstruct this from a URL or persist the account with progress.
+class MediaServerWatchTarget {
+  const MediaServerWatchTarget({
+    required this.account,
+    required this.capability,
+    required this.authorize,
+    required this.itemId,
+    required this.mediaSourceId,
+    required this.contentId,
+    required this.isMovie,
+    required this.season,
+    required this.episode,
+    required this.title,
+  });
+
+  final MediaServerAccount account;
+  final ProfileAsyncAuthorization capability;
+  final Future<void> Function() authorize;
+  final String itemId;
+  final String mediaSourceId;
+  final String contentId;
+  final bool isMovie;
+  final int? season;
+  final int? episode;
+  final String title;
 }

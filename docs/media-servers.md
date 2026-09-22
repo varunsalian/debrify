@@ -25,9 +25,9 @@ Playback streams the original file through the server to Debrify. It does not
 hand authenticated streams to external players or DeoVR; these streams always
 use the internal player. It does not
 open the server's filesystem path on the client. The device must support the
-file's formats and have enough bandwidth; transcoding/remux negotiation,
-external server subtitle fetching, and two-way server watch-state sync are not
-implemented. Embedded audio/subtitle tracks and Debrify's existing progress
+file's formats and have enough bandwidth; transcoding/remux negotiation and
+external server subtitle fetching are not implemented. Embedded audio/subtitle
+tracks and Debrify's existing progress
 and subtitle features continue to use the normal player.
 Downloading Jellyfin/Emby sources to the device is currently disabled; the
 background downloader does not yet support their authenticated stream lifecycle.
@@ -44,14 +44,51 @@ switch, credential change, disabled connection, or grant revocation. Disconnecti
 an owned shared connection requires confirming its impact on other profiles.
 Legacy installs without a committed profile cannot add media servers.
 
+## Watch-state sync
+
+Enable **Settings → Jellyfin & Emby → Sync server watch progress** for the
+current Debrify profile. It is off by default. Shared connections use the same
+server account: enabling this also updates that account's progress in other apps.
+
+For a selected server movie or episode, Debrify reads that user's resume and
+watched state before opening playback. Server progress seeds the local bookmark
+when none exists, or replaces it when the server supplies a newer timestamp.
+Unknown timestamps do not replace existing bookmarks, and local completed marks
+are retained. A server's `Played` history flag does not discard an active partial
+rewatch bookmark. Existing tracker-progress selection, explicit resume, start-over,
+random-start and episode auto-advance rules still apply; server imports feed the
+local resume source, not a new tracker priority.
+
+Validated internal playback reports start, progress (about every ten seconds,
+plus pause/seek changes), and stop to the selected server. Completion reports
+watched status immediately at EOF, even while the player stays open. Replaying
+the same open item starts a fresh watch session without importing an old bookmark.
+Failed/unplayed candidates never report playback. Source switches
+and episode changes keep separate item/session identities. Disconnecting,
+revoking a connection, switching profiles or turning sync off prevents subsequent
+reports. Enable the setting before launching a new playback session.
+
+This is playback-driven sync, not a background library mirror: other apps'
+changes are read the next time a server item is opened. Playing through debrid
+or another addon does not update a server. Manual watched/unwatched edits outside
+playback are not broadcast, and server unwatched state does not erase local
+completion. Network failures do not block playback; there is no offline replay
+queue. If the initial watch-state read fails, that playback attempt does not
+write progress back to the server.
+
 ## Validation
 
 Automated tests use simulated Jellyfin/Emby responses for login, reverse-proxy
 paths, redirects, timeouts, exact matching, paging, versions, next-episode pin
 resolution, permissions, profile changes and source-search integration.
+Watch-sync tests cover user-specific progress, tick conversion, authenticated
+empty-body check-ins, throttling/coalescing, ordering, conflict handling,
+per-profile opt-in and authorization changes.
 
 Before release, check against real Jellyfin and Emby servers on supported
 devices: login, movie playback and seeking, multiple versions, episode advance,
 embedded subtitles/audio, source switching, expired token/reconnect, and a
-remote server with a reverse-proxy base path. No real server was available
+remote server with a reverse-proxy base path. With watch sync enabled, also check
+resume from another client, pause/exit, completion, episode/source switching,
+and profile/account changes during playback. No real server was available
 during this implementation, so real-server playback is not yet verified.

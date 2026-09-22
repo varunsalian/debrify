@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -13,6 +14,8 @@ import 'package:debrify/services/storage_service.dart';
 import 'package:debrify/services/direct_source_authorization.dart';
 import 'package:debrify/services/media_server_client.dart';
 import 'package:debrify/services/media_server_service.dart';
+import 'package:debrify/services/media_server_watch_sync.dart';
+import 'package:debrify/services/native_playback_progress_session.dart';
 import 'package:debrify/services/profiles/connection_resource_service.dart';
 import 'package:debrify/services/profiles/device_key_provider.dart';
 import 'package:debrify/services/profiles/profile_authorization.dart';
@@ -45,6 +48,10 @@ void main() {
   List<Map<String, dynamic>> audioStreams = [];
   var episodeNumber = 1;
   var requestCount = 0;
+  var watchPosition = 30000;
+  var watchPlayed = false;
+  final watchReports = <http.Request>[];
+  Future<void> Function(http.Request)? beforeWatchReport;
 
   setUpAll(() {
     sqfliteFfiInit();
@@ -81,6 +88,10 @@ void main() {
     videoMetadata = {};
     audioStreams = [];
     requestCount = 0;
+    watchPosition = 30000;
+    watchPlayed = false;
+    watchReports.clear();
+    beforeWatchReport = null;
     episodeNumber = 1;
     MediaServerService.clientFactory = () => MediaServerClient(
       client: MockClient((request) async {
@@ -152,16 +163,35 @@ void main() {
                 },
             ],
           };
+        } else if (request.url.path.contains('/Users/user1/Items/')) {
+          data = {
+            'Id': request.url.pathSegments.last,
+            'RunTimeTicks': 100000 * 10000,
+            'UserData': {
+              'Played': watchPlayed,
+              'PlaybackPositionTicks': watchPosition * 10000,
+              'LastPlayedDate': '2026-01-01T00:00:00Z',
+            },
+          };
+        } else if (request.url.path.contains('/Sessions/Playing') ||
+            request.url.path.contains('/PlayedItems/')) {
+          watchReports.add(request);
+          await beforeWatchReport?.call(request);
+          return http.Response('', 204);
         } else {
           throw StateError('Unexpected endpoint: ${request.url.path}');
         }
         return http.Response(jsonEncode(data), 200);
       }),
     );
+    MediaServerWatchSync.clientFactory = () =>
+        MediaServerService.clientFactory();
   });
 
   tearDown(() async {
     MediaServerService.clientFactory = MediaServerClient.new;
+    MediaServerWatchSync.clientFactory = () =>
+        MediaServerClient(timeout: const Duration(seconds: 5));
     ProfileRuntime.debugReset();
     ProfileBootstrap.debugInstallRegistry(null);
     DeviceKeyProvider.debugReset();
@@ -198,6 +228,521 @@ void main() {
             episode: movie ? null : episode,
           ))['torrents']
           as List<Torrent>;
+
+  test(
+    'watch sync defaults off without additional requests or local writes',
+    () async {
+      await connect();
+      final source = (await search()).first;
+      final before = requestCount;
+      final controller = MediaServerWatchController();
+      await controller.prepare(source);
+      controller.commit(source);
+      controller.observe(
+        source,
+        positionMs: 30000,
+        durationMs: 100000,
+        playing: true,
+      );
+      await controller.close();
+      expect(requestCount, before);
+      expect(watchReports, isEmpty);
+      expect(
+        await StorageService.getVideoPlaybackStateByImdbId('tt123'),
+        isNull,
+      );
+    },
+  );
+
+  for (final kind in MediaServerKind.values) {
+    for (final movie in [true, false]) {
+      test(
+        '${kind.label} played history preserves a partial ${movie ? 'movie' : 'episode'} rewatch',
+        () async {
+          await connect(kind);
+          await MediaServerWatchSync.setEnabled(true);
+          watchPlayed = true;
+          final source = (await search(movie: movie)).first;
+          // Older local resume must not be erased by the server's Played flag.
+          if (movie) {
+            await StorageService.saveVideoPlaybackState(
+              videoTitle: source.displayTitle,
+              videoUrl: source.directUrl!,
+              imdbId: 'tt123',
+              positionMs: 10000,
+              durationMs: 100000,
+              recoveryUpdatedAtMs: DateTime.utc(2025).millisecondsSinceEpoch,
+            );
+          }
+          final controller = MediaServerWatchController();
+          await controller.prepare(
+            source,
+            contentTitle: 'Stable catalog title',
+          );
+          await controller.close();
+          final state = movie
+              ? await StorageService.getVideoPlaybackStateByImdbId('tt123')
+              : await StorageService.getSeriesPlaybackState(
+                  seriesTitle: 'Stable catalog title',
+                  imdbId: 'tt123',
+                  season: 1,
+                  episode: 1,
+                );
+          final finished = movie
+              ? await StorageService.isMovieFinished('tt123')
+              : await StorageService.isEpisodeFinished(
+                  seriesTitle: 'Stable catalog title',
+                  imdbId: 'tt123',
+                  season: 1,
+                  episode: 1,
+                );
+          expect(state?['positionMs'], 30000);
+          expect(finished, false);
+          expect(watchReports, isEmpty);
+        },
+      );
+    }
+
+    test(
+      '${kind.label} EOF finalizes immediately and a replay has a fresh session',
+      () async {
+        await connect(kind);
+        await MediaServerWatchSync.setEnabled(true);
+        final source = (await search()).first;
+        final watched = Completer<void>();
+        final replayStarted = Completer<void>();
+        final releaseWatched = Completer<void>();
+        beforeWatchReport = (request) async {
+          if (request.url.path.contains('/PlayedItems/')) {
+            watched.complete();
+            await releaseWatched.future;
+          } else if (request.url.path.endsWith('/Playing') &&
+              watched.isCompleted) {
+            replayStarted.complete();
+          }
+        };
+        final controller = MediaServerWatchController();
+        await controller.prepare(source);
+        controller.commit(source);
+        controller.observe(
+          source,
+          positionMs: 40000,
+          durationMs: 100000,
+          playing: true,
+        );
+        controller.observe(
+          source,
+          positionMs: 100000,
+          durationMs: 100000,
+          playing: false,
+          completed: true,
+        );
+        // No player close or source switch: EOF itself must flush stop/watched.
+        await watched.future.timeout(const Duration(seconds: 2));
+        final eofStop = watchReports.firstWhere(
+          (r) => r.url.path.endsWith('/Stopped'),
+        );
+        expect(jsonDecode(eofStop.body)['PositionTicks'], 1000000000);
+        final originalStart = watchReports.firstWhere(
+          (r) => r.url.path.endsWith('/Playing'),
+        );
+        final originalSession = jsonDecode(originalStart.body)['PlaySessionId'];
+        // Repeated EOF and a paused seek back do not start another viewing.
+        controller.observe(
+          source,
+          positionMs: 100000,
+          durationMs: 100000,
+          playing: false,
+          completed: true,
+        );
+        controller.observe(
+          source,
+          positionMs: 10000,
+          durationMs: 100000,
+          playing: false,
+        );
+        expect(replayStarted.isCompleted, false);
+        // Replay must work without another prepare()/commit() or media open.
+        controller.observe(
+          source,
+          positionMs: 10000,
+          durationMs: 100000,
+          playing: true,
+        );
+        expect(
+          replayStarted.isCompleted,
+          false,
+        ); // outgoing writes still blocked
+        releaseWatched.complete();
+        await replayStarted.future.timeout(const Duration(seconds: 2));
+        controller.observe(
+          source,
+          positionMs: 20000,
+          durationMs: 100000,
+          playing: false,
+        );
+        await controller.close();
+        final replayStart = watchReports.lastWhere(
+          (r) => r.url.path.endsWith('/Playing'),
+        );
+        expect(
+          jsonDecode(replayStart.body)['PlaySessionId'],
+          isNot(originalSession),
+        );
+        expect(jsonDecode(watchReports.last.body)['PositionTicks'], 200000000);
+        expect(
+          watchReports.where((r) => r.url.path.contains('/PlayedItems/')),
+          hasLength(1),
+        );
+      },
+    );
+  }
+
+  test(
+    'queued native EOF stays with its outgoing source before the next commit',
+    () async {
+      await connect();
+      await MediaServerWatchSync.setEnabled(true);
+      final sources = await search();
+      final controller = MediaServerWatchController();
+      await controller.prepare(sources.first);
+      await controller.prepare(sources.last);
+      final entered = Completer<void>();
+      final release = Completer<void>();
+      final queue = NativePlaybackProgressSession(
+        id: 7,
+        isCurrent: () => true,
+        onSourceCommitted: (i) => controller.commit(sources[i]),
+        persist: (progress) async {
+          controller.observe(
+            sources[progress['sourceIndex'] as int],
+            positionMs: progress['positionMs'] as int,
+            durationMs: 100000,
+            playing: progress['completed'] != true,
+            completed: progress['completed'] == true,
+          );
+          if (progress['positionMs'] == 40000) {
+            entered.complete();
+            await release.future; // blocked local persistence, not blocked HTTP
+          }
+        },
+      );
+      await queue.enqueueSourceCommit(sessionId: 7, sourceIndex: 0);
+      final first = queue.enqueue({
+        'sourcePersistenceSessionId': 7,
+        'sourceIndex': 0,
+        'positionMs': 40000,
+      });
+      await entered.future;
+      final eof = queue.enqueue({
+        'sourcePersistenceSessionId': 7,
+        'sourceIndex': 0,
+        'positionMs': 100000,
+        'completed': true,
+      });
+      final commit = queue.enqueueSourceCommit(sessionId: 7, sourceIndex: 1);
+      final incoming = queue.enqueue({
+        'sourcePersistenceSessionId': 7,
+        'sourceIndex': 1,
+        'positionMs': 5000,
+      });
+      final drain = queue.closeAndDrain();
+      release.complete();
+      await Future.wait([first, eof, commit, incoming]);
+      await drain;
+      await controller.close();
+      final stopped = watchReports
+          .where((r) => r.url.path.endsWith('/Stopped'))
+          .toList();
+      expect(stopped, hasLength(2));
+      expect(jsonDecode(stopped[0].body)['MediaSourceId'], 'version1_1080');
+      expect(jsonDecode(stopped[0].body)['PositionTicks'], 1000000000);
+      expect(jsonDecode(stopped[1].body)['MediaSourceId'], 'version1_2160');
+      expect(jsonDecode(stopped[1].body)['PositionTicks'], 50000000);
+      expect(
+        watchReports.where((r) => r.url.path.contains('/PlayedItems/')),
+        hasLength(1),
+      );
+    },
+  );
+
+  test('source switch drains outgoing stop before incoming start', () async {
+    await connect();
+    await MediaServerWatchSync.setEnabled(true);
+    final sources = await search();
+    final started = Completer<void>();
+    final stopping = Completer<void>();
+    final releaseStop = Completer<void>();
+    beforeWatchReport = (request) async {
+      if (request.url.path.endsWith('/Playing') && !started.isCompleted) {
+        started.complete();
+      }
+      if (request.url.path.endsWith('/Stopped') &&
+          jsonDecode(request.body)['MediaSourceId'] == 'version1_1080') {
+        stopping.complete();
+        await releaseStop.future;
+      }
+    };
+    final controller = MediaServerWatchController();
+    await controller.prepare(sources.first);
+    controller.commit(sources.first);
+    controller.observe(
+      sources.first,
+      positionMs: 40000,
+      durationMs: 100000,
+      playing: true,
+    );
+    await started.future;
+    await controller.prepare(sources.last);
+    controller.commit(sources.last);
+    controller.observe(
+      sources.last,
+      positionMs: 50000,
+      durationMs: 100000,
+      playing: true,
+    );
+    // A late old-source observation must never overwrite either session.
+    controller.observe(
+      sources.first,
+      positionMs: 90000,
+      durationMs: 100000,
+      playing: true,
+    );
+    await stopping.future;
+    expect(
+      watchReports.where(
+        (request) =>
+            jsonDecode(request.body)['MediaSourceId'] == 'version1_2160',
+      ),
+      isEmpty,
+    );
+    final closing = controller.close();
+    releaseStop.complete();
+    await closing;
+    final firstStop = watchReports.firstWhere(
+      (request) => request.url.path.endsWith('/Stopped'),
+    );
+    expect(jsonDecode(firstStop.body)['PositionTicks'], 400000000);
+    final newStart = watchReports.firstWhere(
+      (request) =>
+          request.url.path.endsWith('/Playing') &&
+          jsonDecode(request.body)['MediaSourceId'] == 'version1_2160',
+    );
+    expect(
+      watchReports.indexOf(newStart),
+      greaterThan(watchReports.indexOf(firstStop)),
+    );
+    expect(jsonDecode(watchReports.last.body)['PositionTicks'], 500000000);
+  });
+
+  test(
+    'local completed state is not erased by a partial server bookmark',
+    () async {
+      await connect();
+      await MediaServerWatchSync.setEnabled(true);
+      await StorageService.markMovieAsFinished('tt123');
+      final source = (await search()).first;
+      final controller = MediaServerWatchController();
+      await controller.prepare(source);
+      await controller.close();
+      expect(await StorageService.isMovieFinished('tt123'), true);
+      expect(
+        await StorageService.getVideoPlaybackStateByImdbId('tt123'),
+        isNull,
+      );
+    },
+  );
+
+  test('newer server progress preserves local playback preferences', () async {
+    await connect();
+    await MediaServerWatchSync.setEnabled(true);
+    final source = (await search()).first;
+    await StorageService.saveVideoPlaybackState(
+      videoTitle: source.displayTitle,
+      videoUrl: source.directUrl!,
+      imdbId: 'tt123',
+      positionMs: 10000,
+      durationMs: 100000,
+      speed: 1.5,
+      aspect: 'cover',
+      recoveryUpdatedAtMs: DateTime.utc(2025).millisecondsSinceEpoch,
+    );
+    final controller = MediaServerWatchController();
+    await controller.prepare(source);
+    await controller.close();
+    final state = await StorageService.getVideoPlaybackStateByImdbId('tt123');
+    expect(state?['positionMs'], 30000);
+    expect(state?['speed'], 1.5);
+    expect(state?['aspect'], 'cover');
+  });
+
+  for (final movie in [true, false]) {
+    test(
+      'watch sync imports ${movie ? 'movie' : 'episode'} and reports only the validated source',
+      () async {
+        await connect();
+        await MediaServerWatchSync.setEnabled(true);
+        final sources = await search(movie: movie);
+        final source = sources.first;
+        final controller = MediaServerWatchController();
+        await controller.prepare(source, contentTitle: 'Stable catalog title');
+        final state = movie
+            ? await StorageService.getVideoPlaybackStateByImdbId('tt123')
+            : await StorageService.getSeriesPlaybackState(
+                seriesTitle: 'Stable catalog title',
+                imdbId: 'tt123',
+                season: 1,
+                episode: 1,
+              );
+        expect(state?['positionMs'], 30000);
+        expect(watchReports, isEmpty);
+        controller.observe(
+          source,
+          positionMs: 31000,
+          durationMs: 100000,
+          playing: true,
+          season: 1,
+          episode: 1,
+        );
+        expect(watchReports, isEmpty); // not committed
+        controller.commit(source);
+        controller.observe(
+          sources.last,
+          positionMs: 35000,
+          durationMs: 100000,
+          playing: true,
+          season: 1,
+          episode: 1,
+        );
+        if (!movie) {
+          controller.observe(
+            source,
+            positionMs: 35000,
+            durationMs: 100000,
+            playing: true,
+            season: 1,
+            episode: 2,
+          );
+        }
+        expect(watchReports, isEmpty);
+        controller.observe(
+          source,
+          positionMs: 40000,
+          durationMs: 100000,
+          playing: true,
+          season: 1,
+          episode: 1,
+        );
+        await controller.close();
+        expect(watchReports.first.url.path, '/base/Sessions/Playing');
+        expect(watchReports.last.url.path, '/base/Sessions/Playing/Stopped');
+        expect(
+          jsonDecode(watchReports.last.body)['ItemId'],
+          movie ? 'movie1' : 'episode1',
+        );
+        expect(jsonDecode(watchReports.last.body)['PositionTicks'], 400000000);
+      },
+    );
+  }
+
+  test(
+    'a newer local bookmark retains its position and presentation preferences',
+    () async {
+      await connect();
+      await MediaServerWatchSync.setEnabled(true);
+      final source = (await search()).first;
+      await StorageService.saveVideoPlaybackState(
+        videoTitle: source.displayTitle,
+        videoUrl: source.directUrl!,
+        imdbId: 'tt123',
+        positionMs: 70000,
+        durationMs: 100000,
+        speed: 1.5,
+        aspect: 'cover',
+        recoveryUpdatedAtMs: DateTime.utc(2026, 9).millisecondsSinceEpoch,
+      );
+      final controller = MediaServerWatchController();
+      await controller.prepare(source);
+      await controller.close();
+      final state = await StorageService.getVideoPlaybackStateByImdbId('tt123');
+      expect(state?['positionMs'], 70000);
+      expect(state?['speed'], 1.5);
+      expect(state?['aspect'], 'cover');
+    },
+  );
+
+  test(
+    'server watched state imports without reporting an unplayed candidate',
+    () async {
+      await connect();
+      await MediaServerWatchSync.setEnabled(true);
+      watchPlayed = true;
+      watchPosition = 0;
+      final source = (await search()).first;
+      final controller = MediaServerWatchController();
+      await controller.prepare(source);
+      await controller.close();
+      expect(await StorageService.isMovieFinished('tt123'), true);
+      expect(watchReports, isEmpty);
+    },
+  );
+
+  test(
+    'unavailable server disables sync for that attempt, not playback',
+    () async {
+      await connect();
+      await MediaServerWatchSync.setEnabled(true);
+      final source = (await search()).first;
+      unavailable = true;
+      final controller = MediaServerWatchController();
+      await expectLater(controller.prepare(source), completes);
+      unavailable = false;
+      await DirectSourceAuthorization.authorize(source);
+      controller.commit(source);
+      controller.observe(
+        source,
+        positionMs: 40000,
+        durationMs: 100000,
+        playing: true,
+      );
+      await controller.close();
+      expect(watchReports, isEmpty);
+      expect(
+        await StorageService.getVideoPlaybackStateByImdbId('tt123'),
+        isNull,
+      );
+    },
+  );
+
+  for (final change in ['disable sync', 'profile switch', 'disconnect']) {
+    test('$change blocks prepared watch writes', () async {
+      final resource = await connect();
+      await MediaServerWatchSync.setEnabled(true);
+      final source = (await search()).first;
+      final controller = MediaServerWatchController();
+      await controller.prepare(source);
+      controller.commit(source);
+      switch (change) {
+        case 'disable sync':
+          await MediaServerWatchSync.setEnabled(false);
+        case 'profile switch':
+          ProfileRuntime.initializeCommitted(
+            ProfileScope(profileId: member, dataGeneration: 1, sessionEpoch: 2),
+          );
+          expect(await MediaServerWatchSync.enabled(), false);
+        case 'disconnect':
+          await MediaServerService.remove(resource);
+      }
+      controller.observe(
+        source,
+        positionMs: 40000,
+        durationMs: 100000,
+        playing: true,
+      );
+      await controller.close();
+      expect(watchReports, isEmpty);
+    });
+  }
 
   test(
     'both servers store encrypted tokens and expose multiple direct versions',

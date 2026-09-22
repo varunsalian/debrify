@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 import '../models/media_server.dart';
+import '../models/media_server_watch_state.dart';
 
 /// Shared Jellyfin/Emby user API. Only same-server endpoints are constructed;
 /// remote paths supplied in library metadata are never opened directly.
@@ -67,6 +68,7 @@ class MediaServerClient {
     Map<String, String>? query,
     Map<String, dynamic>? body,
     Future<void> Function()? authorize,
+    bool allowEmptyResponse = false,
   }) async {
     await authorize?.call();
     final request =
@@ -120,6 +122,7 @@ class MediaServerClient {
           'The server could not complete the request (HTTP ${response.statusCode}).',
         );
       }
+      if (allowEmptyResponse && response.bodyBytes.isEmpty) return {};
       final data = jsonDecode(utf8.decode(response.bodyBytes));
       if (data is! Map<String, dynamic>) throw const FormatException();
       return data;
@@ -363,6 +366,100 @@ class MediaServerClient {
               (source['Id'] as String).isNotEmpty,
         )
         .toList();
+  }
+
+  Future<MediaServerWatchState> watchState(
+    MediaServerAccount account,
+    String itemId, {
+    Future<void> Function()? authorize,
+  }) async {
+    final item = await _request(
+      account.baseUrl,
+      'Users/${_segment(account.userId)}/Items/${_segment(itemId)}',
+      deviceId: account.deviceId,
+      kind: account.kind,
+      token: account.token,
+      authorize: authorize,
+    );
+    if (item['Id'] != itemId) {
+      throw const MediaServerException('The server returned a different item.');
+    }
+    return MediaServerWatchState.fromItem(item);
+  }
+
+  Future<String?> watchSessionId(
+    MediaServerAccount account,
+    String itemId, {
+    Future<void> Function()? authorize,
+  }) async {
+    final info = await _request(
+      account.baseUrl,
+      'Items/${_segment(itemId)}/PlaybackInfo',
+      deviceId: account.deviceId,
+      kind: account.kind,
+      token: account.token,
+      query: {'UserId': account.userId},
+      authorize: authorize,
+    );
+    final id = info['PlaySessionId'];
+    if (info['ErrorCode'] != null) {
+      throw const MediaServerException('Server playback session unavailable.');
+    }
+    return id is String && id.isNotEmpty ? _segment(id) : null;
+  }
+
+  Future<void> reportWatchProgress(
+    MediaServerAccount account, {
+    required String itemId,
+    required String mediaSourceId,
+    required String playSessionId,
+    required String action,
+    required int positionMs,
+    required bool paused,
+    Future<void> Function()? authorize,
+  }) async {
+    final path = switch (action) {
+      'start' => 'Sessions/Playing',
+      'progress' => 'Sessions/Playing/Progress',
+      'stop' => 'Sessions/Playing/Stopped',
+      _ => throw ArgumentError.value(action, 'action'),
+    };
+    await _request(
+      account.baseUrl,
+      path,
+      deviceId: account.deviceId,
+      kind: account.kind,
+      token: account.token,
+      body: {
+        'ItemId': _segment(itemId),
+        'MediaSourceId': _segment(mediaSourceId),
+        'PlaySessionId': _segment(playSessionId),
+        'PositionTicks': (positionMs < 0 ? 0 : positionMs) * 10000,
+        'IsPaused': paused,
+        'CanSeek': true,
+        'PlayMethod': 'DirectPlay',
+        if (action == 'progress') 'EventName': paused ? 'Pause' : 'TimeUpdate',
+      },
+      authorize: authorize,
+      allowEmptyResponse: true,
+    );
+  }
+
+  Future<void> markWatched(
+    MediaServerAccount account,
+    String itemId, {
+    Future<void> Function()? authorize,
+  }) async {
+    await _request(
+      account.baseUrl,
+      'Users/${_segment(account.userId)}/PlayedItems/${_segment(itemId)}',
+      deviceId: account.deviceId,
+      kind: account.kind,
+      token: account.token,
+      body: const {},
+      authorize: authorize,
+      allowEmptyResponse: true,
+    );
   }
 
   static Uri playbackUrl(

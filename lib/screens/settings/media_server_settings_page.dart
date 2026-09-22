@@ -4,6 +4,7 @@ import '../../models/media_server.dart';
 import '../../models/profiles/connection_resource.dart';
 import '../../models/profiles/profile_policy.dart';
 import '../../services/media_server_service.dart';
+import '../../services/media_server_watch_sync.dart';
 import '../../services/profiles/profile_collection_resource_facade.dart';
 import '../../services/profiles/profile_runtime.dart';
 import '../../widgets/tv_text_field.dart';
@@ -20,6 +21,7 @@ class _MediaServerSettingsPageState extends State<MediaServerSettingsPage> {
   List<ConnectionResource> _connections = [];
   bool _loading = true;
   bool _busy = false;
+  bool _watchSync = false;
   String? _error;
 
   @override
@@ -32,9 +34,11 @@ class _MediaServerSettingsPageState extends State<MediaServerSettingsPage> {
     final scope = ProfileRuntime.scope.value;
     try {
       final connections = await MediaServerService.connections();
+      final watchSync = await MediaServerWatchSync.enabled();
       if (!mounted || ProfileRuntime.scope.value != scope) return;
       setState(() {
         _connections = connections;
+        _watchSync = watchSync;
         _loading = false;
         _error = null;
       });
@@ -45,6 +49,24 @@ class _MediaServerSettingsPageState extends State<MediaServerSettingsPage> {
           _error = 'Could not load media servers. Please retry.';
         });
       }
+    }
+  }
+
+  Future<void> _setWatchSync(bool value) async {
+    if (_busy) return;
+    final scope = ProfileRuntime.scope.value;
+    setState(() => _busy = true);
+    try {
+      await MediaServerWatchSync.setEnabled(value);
+      if (mounted && ProfileRuntime.scope.value == scope) {
+        setState(() => _watchSync = value);
+      }
+    } catch (_) {
+      if (mounted && ProfileRuntime.scope.value == scope) {
+        setState(() => _error = 'Could not change watch sync. Please retry.');
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
     }
   }
 
@@ -161,8 +183,18 @@ class _MediaServerSettingsPageState extends State<MediaServerSettingsPage> {
               ),
               const SizedBox(height: 12),
               const Text(
-                'Matching uses the server’s IMDb, TMDB or TVDB IDs and season/episode numbers. Missing IDs or different anime numbering may produce no match. Server transcoding and watch-state sync are not included.',
+                'Matching uses the server’s IMDb, TMDB or TVDB IDs and season/episode numbers. Missing IDs or different anime numbering may produce no match. Server transcoding is not included.',
               ),
+              if (ProfileCollectionResourceFacade.active)
+                SettingsToggleTile(
+                  icon: Icons.sync,
+                  title: 'Sync server watch progress',
+                  subtitle:
+                      'For this Debrify profile: resume from the selected server and report playback/watched status back. Shared connections update the same server user. Applies to new playback sessions; no background library sync.',
+                  subtitleMaxLines: 5,
+                  value: _watchSync,
+                  onChanged: _setWatchSync,
+                ),
               const SizedBox(height: 24),
               if (_error != null) ...[
                 Text(_error!),
