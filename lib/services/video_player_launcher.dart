@@ -571,6 +571,22 @@ class VideoPlayerLaunchArgs {
 }
 
 class VideoPlayerLauncher {
+  @visibleForTesting
+  static Future<List<int>> debugNativeResumePositions(
+    VideoPlayerLaunchArgs args,
+    List<PlaylistEntry> entries,
+  ) async {
+    final states = await _AndroidTvPlaybackPayloadBuilder(args)
+        ._fetchPerItemPlaybackState(
+          entries,
+          contentType: args.contentType == 'series'
+              ? _PlaybackContentType.series
+              : _PlaybackContentType.single,
+          seriesPlaylist: null,
+        );
+    return states.map((state) => state.positionMs).toList();
+  }
+
   /// The external app needs its own temporary grant for this exact document.
   /// Debrify's persisted folder/file permission is not shared across apps.
   static AndroidIntent androidExternalVideoIntent(String url) => AndroidIntent(
@@ -5903,7 +5919,8 @@ class _AndroidTvPlaybackPayloadBuilder {
         continue;
       }
       final resumeId = _resumeIdForEntry(entry);
-      result.add(CustomSeriesIdentity.isCustom(args.contentImdbId)
+      result.add((CustomSeriesIdentity.isCustom(args.contentImdbId) ||
+              (args.contentImdbId?.startsWith('medialibrary:') ?? false))
           ? const _PerItemState() : await _readVideoState(resumeId));
     }
     return result;

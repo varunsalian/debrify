@@ -1,9 +1,11 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
 
 import '../models/media_server.dart';
+import '../models/media_server_library.dart';
 import '../models/media_server_watch_state.dart';
 
 /// Shared Jellyfin/Emby user API. Only same-server endpoints are constructed;
@@ -346,6 +348,130 @@ class MediaServerClient {
       );
     }
     return episodes;
+  }
+
+  Future<MediaServerLibraryPage> library(
+    MediaServerAccount account, {
+    String? parentId,
+    bool views = false,
+    int offset = 0,
+    String search = '',
+    String sort = 'SortName',
+    String mode = 'browse',
+    bool episodeOrder = false,
+    Future<void> Function()? authorize,
+  }) async {
+    if (offset < 0 ||
+        !const {'SortName', 'DateCreated', 'ProductionYear'}.contains(sort) ||
+        !const {'browse', 'recent', 'resume'}.contains(mode)) {
+      throw ArgumentError('Invalid library query');
+    }
+    final data = await _request(
+      account.baseUrl,
+      views
+          ? 'Users/${_segment(account.userId)}/Views'
+          : 'Users/${_segment(account.userId)}/Items',
+      deviceId: account.deviceId,
+      kind: account.kind,
+      token: account.token,
+      query: {
+        'UserId': account.userId,
+        if (views) 'IncludeExternalContent': 'false',
+        if (!views) ...{
+          if (parentId != null) 'ParentId': _segment(parentId),
+          'StartIndex': '$offset',
+          'Limit': '60',
+          'EnableTotalRecordCount': 'true',
+          'Recursive': search.trim().isNotEmpty || mode != 'browse'
+              ? 'true'
+              : 'false',
+          if (search.trim().isNotEmpty) 'SearchTerm': search.trim(),
+          if (search.trim().isNotEmpty || mode != 'browse')
+            'IncludeItemTypes': mode == 'browse'
+                ? 'Movie,Series,Episode,Video,MusicVideo'
+                : 'Movie,Episode,Video,MusicVideo',
+          if (mode == 'resume') 'Filters': 'IsResumable',
+          'SortBy': mode == 'resume'
+              ? 'DatePlayed,SortName'
+              : mode == 'recent'
+              ? 'DateCreated,SortName'
+              : episodeOrder
+              ? 'ParentIndexNumber,IndexNumber,SortName'
+              : sort == 'SortName'
+              ? 'SortName'
+              : '$sort,SortName',
+          'SortOrder': mode != 'browse' || (!episodeOrder && sort != 'SortName')
+              ? 'Descending'
+              : 'Ascending',
+          'Fields': 'Overview,PrimaryImageAspectRatio,DateCreated',
+          'EnableImages': 'true',
+          'ImageTypeLimit': '1',
+          'EnableUserData': 'true',
+          'IsMissing': 'false',
+        },
+      },
+      authorize: authorize,
+    );
+    return MediaServerLibraryPage.fromJson(data, offset, 60);
+  }
+
+  Future<MediaServerLibraryItem> libraryItem(
+    MediaServerAccount account,
+    String itemId, {
+    Future<void> Function()? authorize,
+  }) async {
+    final data = await _request(
+      account.baseUrl,
+      'Users/${_segment(account.userId)}/Items/${_segment(itemId)}',
+      deviceId: account.deviceId,
+      kind: account.kind,
+      token: account.token,
+      authorize: authorize,
+    );
+    final item = MediaServerLibraryItem.fromJson(data);
+    if (item.id != itemId) {
+      throw const MediaServerException('The server returned a different item.');
+    }
+    return item;
+  }
+
+  /// Authenticated, bounded thumbnails. Never forward credentials on redirects.
+  Future<Uint8List?> libraryImage(
+    MediaServerAccount account,
+    String itemId, {
+    Future<void> Function()? authorize,
+  }) async {
+    await authorize?.call();
+    final request =
+        http.Request(
+            'GET',
+            endpoint(
+              account.baseUrl,
+              'Items/${_segment(itemId)}/Images/Primary',
+              {'MaxWidth': '360', 'Quality': '85'},
+            ),
+          )
+          ..followRedirects = false
+          ..headers.addAll(
+            headers(account.deviceId, account.token, account.kind),
+          );
+    final bytes = await (() async {
+      final response = await _client.send(request);
+      if (response.statusCode != 200) {
+        await response.stream.listen(null).cancel();
+        return null;
+      }
+      final buffer = BytesBuilder(copy: false);
+      await for (final chunk in response.stream) {
+        if (buffer.length + chunk.length > 2 * 1024 * 1024) {
+          throw const MediaServerException('Server image is too large.');
+        }
+        buffer.add(chunk);
+      }
+      return buffer.takeBytes();
+    })().timeout(timeout);
+    await authorize?.call();
+    return bytes;
   }
 
   Future<List<Map<String, dynamic>>> mediaSources(

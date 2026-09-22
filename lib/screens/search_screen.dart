@@ -24,6 +24,8 @@ import '../widgets/home/catalog_continuation_button.dart';
 import '../services/home_row_refresh.dart';
 import '../services/profiles/connection_resource_service.dart';
 import 'dart:async';
+import '../models/media_server.dart';
+import 'media_server_library_panel.dart';
 import '../services/diagnostic_log.dart';
 import '../services/resolved_playback_link_cache.dart';
 import 'dart:convert';
@@ -317,6 +319,8 @@ const String _discCw = 'cw';
 const String _discTrakt = 'trakt';
 const String _discSimkl = 'simkl';
 const String _discTmdb = 'tmdb';
+const String _discJellyfin = 'jellyfin';
+const String _discEmby = 'emby';
 const String _discMdblist = 'mdblist';
 const String _discAddonPrefix = 'a:';
 
@@ -18171,6 +18175,8 @@ class _SearchScreenState extends State<SearchScreen>
         landing == _discTrakt ||
         landing == _discSimkl ||
         landing == _discTmdb ||
+        landing == _discJellyfin ||
+        landing == _discEmby ||
         (kMdblistEnabled && landing == _discMdblist);
 
     // Search→MDBList handoff is a stronger, explicit navigation intent. For
@@ -18248,7 +18254,11 @@ class _SearchScreenState extends State<SearchScreen>
     // Touch has no persistent focus, so a reactive detail rail has nothing to
     // react to — keep the full-width grid there. TV gets the glass-stage
     // two-pane layout.
-    if (!widget.isTelevision) return panel;
+    if (!widget.isTelevision ||
+        _discSource == _discJellyfin ||
+        _discSource == _discEmby) {
+      return panel;
+    }
     return LayoutBuilder(
       builder: (context, c) {
         // Guard a degenerate canvas: too narrow leaves no room for a usable grid
@@ -18655,6 +18665,15 @@ class _SearchScreenState extends State<SearchScreen>
     }
     _discFocused.value = null;
     _discShown.value = null;
+    if (source == _discJellyfin || source == _discEmby) {
+      _discTrailerStreams.value = null;
+      _discTrailerMeta.value = null;
+      _discTrailerLoading.value = false;
+      _discTrailerShowing.value = false;
+      _discTheater.value = false;
+      _discTheaterTimer?.cancel();
+      _discTakeover.value = 0;
+    }
     setState(() {
       _discSourceRevision++;
       _discSource = source;
@@ -18682,6 +18701,8 @@ class _SearchScreenState extends State<SearchScreen>
         const StremioDropdownOption(_discCw, 'Continue Watching'),
         const StremioDropdownOption(_discTrakt, 'Trakt'),
         const StremioDropdownOption(_discSimkl, 'Simkl'),
+        const StremioDropdownOption(_discJellyfin, 'Jellyfin'),
+        const StremioDropdownOption(_discEmby, 'Emby'),
         if (_metadataFeaturePolicy?.features.contains(MetadataFeature.discovery) ==
             true)
           const StremioDropdownOption(_discTmdb, 'TMDB'),
@@ -18699,6 +18720,17 @@ class _SearchScreenState extends State<SearchScreen>
       ],
       onSelected: _selectDiscoverSource,
     );
+
+    if (_discSource == _discJellyfin || _discSource == _discEmby) {
+      return MediaServerLibraryPanel(
+        key: ValueKey(_discSource),
+        kind: _discSource == _discJellyfin
+            ? MediaServerKind.jellyfin
+            : MediaServerKind.emby,
+        leading: source,
+        isTelevision: widget.isTelevision,
+      );
+    }
 
     if (_discSource == _discTmdb && _metadataFeaturePolicy != null) {
       return MetadataBrowsePage(

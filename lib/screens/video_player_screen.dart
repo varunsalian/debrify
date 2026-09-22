@@ -239,6 +239,22 @@ class IptvCatchupRequestGate {
 /// - Resume playback from last position
 /// - Series-aware episode ordering and tracking
 class VideoPlayerScreen extends StatefulWidget {
+  /// Final local-resume selection. Server/custom identities must not inherit
+  /// URL-keyed progress belonging to catalog or generic playback.
+  static Future<Map<String, dynamic>?> readLocalResume({
+    required String? contentId,
+    required String resumeKey,
+    required Future<Map<String, dynamic>?> Function() enhanced,
+  }) async {
+    final state = await enhanced();
+    if (state != null ||
+        CustomSeriesIdentity.isCustom(contentId) ||
+        (contentId?.startsWith('medialibrary:') ?? false)) {
+      return state;
+    }
+    return StorageService.getVideoResume(resumeKey);
+  }
+
   final String videoUrl;
 
   /// Optional separate audio track played alongside [videoUrl] via mpv's
@@ -12029,9 +12045,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // resume candidate.
     final state = locallyFinishedMovie
         ? null
-        : await _getEnhancedPlaybackState() ??
-              (CustomSeriesIdentity.isCustom(_effectiveContentImdbId)
-                  ? null : await StorageService.getVideoResume(_resumeKey));
+        : await VideoPlayerScreen.readLocalResume(
+            contentId: _effectiveContentImdbId,
+            resumeKey: _resumeKey,
+            enhanced: _getEnhancedPlaybackState,
+          );
     if (state != null) {
       if (allowLocalResume) {
         localMs = (state['positionMs'] ?? 0) as int;
@@ -12273,7 +12291,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       // authoritative. Prefer the canonical episode record for catalog play;
       // generic playback retains its exact video/source lookup first.
       if (_effectiveContentType == 'series') {
-        if (CustomSeriesIdentity.isCustom(_effectiveContentImdbId)) {
+        if (CustomSeriesIdentity.isCustom(_effectiveContentImdbId) ||
+            (_effectiveContentImdbId?.startsWith('medialibrary:') ?? false)) {
           if (_effectiveContentSeason == null || _effectiveContentEpisode == null) return null;
           return LocalPlaybackResumeResolver.episode(
             seriesTitle: _effectiveContentTitle ?? widget.title,

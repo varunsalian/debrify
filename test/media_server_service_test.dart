@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:debrify/models/media_server.dart';
+import 'package:debrify/models/media_server_library.dart';
+import 'package:debrify/services/media_server_library_playback.dart';
 import 'package:debrify/models/profiles/connection_resource.dart';
 import 'package:debrify/models/profiles/profile_policy.dart';
 import 'package:debrify/models/torrent.dart';
@@ -166,6 +168,8 @@ void main() {
         } else if (request.url.path.contains('/Users/user1/Items/')) {
           data = {
             'Id': request.url.pathSegments.last,
+            'Name': 'Library recording',
+            'Type': 'Video',
             'RunTimeTicks': 100000 * 10000,
             'UserData': {
               'Played': watchPlayed,
@@ -218,6 +222,61 @@ void main() {
       resourceId: resource.id,
     );
     return (await registry.getResource(resource.id))!;
+  }
+
+  for (final kind in MediaServerKind.values) {
+    test(
+      '${kind.label} exact library recording plays without catalog binding',
+      () async {
+        final resource = await connect(kind);
+        expect(
+          (await MediaServerService.libraryConnections(kind)).single.id,
+          resource.id,
+        );
+        final session = await MediaServerService.openLibrary(resource.id);
+        final sources = await session.sources(
+          MediaServerLibraryItem.fromJson({
+            'Id': 'recording1',
+            'Type': 'Video',
+          }),
+        );
+        expect(sources, hasLength(2));
+        expect(MediaServerService.bindingFor(sources.first), isNull);
+        final args = MediaServerLibraryPlayback.arguments(
+          sources,
+          0,
+          title: 'Recording',
+        );
+        expect(args.disableExternalPlayer, true);
+        expect(args.suppressTrackerAutoSync, true);
+        expect(args.contentImdbId, startsWith('medialibrary:'));
+        expect(args.httpHeaders!['X-Emby-Token'], 'token-secret');
+        final playlist = await args.resolveSourceToPlaylist!(sources.last);
+        expect(playlist!.single.httpHeaders!['X-Emby-Token'], 'token-secret');
+        final owner = await ProfileAuthorizationContext.capture(registry);
+        await registry.setProfileResourceSettings(
+          profileId: admin,
+          resourceId: resource.id,
+          enabled: false,
+          settings: {},
+          actingAuthorizationRevision: owner.authorizationRevision,
+          expectedResourceAuthorizationRevision: resource.authorizationRevision,
+          feature: ProfileFeature.cloud,
+        );
+        final before = requestCount;
+        await expectLater(
+          session.browse(parentId: 'library1'),
+          throwsA(anything),
+        );
+        await expectLater(session.image('recording1'), throwsA(anything));
+        await expectLater(
+          args.resolveSourceToPlaylist!(sources.last),
+          throwsA(anything),
+        );
+        expect(requestCount, before);
+        expect(await MediaServerService.libraryConnections(kind), isEmpty);
+      },
+    );
   }
 
   Future<List<Torrent>> search({bool movie = true, int episode = 1}) async =>

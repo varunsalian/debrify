@@ -1752,6 +1752,8 @@ class StorageService {
       value == 'simkl' ||
       value == 'tmdb' ||
       value == 'mdblist' ||
+      value == 'jellyfin' ||
+      value == 'emby' ||
       (value.startsWith('a:') && value.length > 2 && value.length <= 514);
 
   /// What Discover should show when opened. Unset defaults to remembering the
@@ -2688,6 +2690,8 @@ class StorageService {
     String? addonId,
     String? year,
   }) async {
+    // Server-owned titles reopen through Discover, not catalog lookup.
+    if (imdbId.startsWith('medialibrary:')) return;
     final prefs = await ProfilePreferences.instance();
     final raw = prefs.getString(_continueWatchingKey);
     List<Map<String, dynamic>> items = [];
@@ -3134,7 +3138,8 @@ class StorageService {
 
   /// Save playback state for series content
   static String _seriesProgressKey(String title, String? id) =>
-      CustomSeriesIdentity.isCustom(id)
+      (CustomSeriesIdentity.isCustom(id) ||
+              (id?.startsWith('medialibrary:') ?? false))
           ? 'series_$id'
           : 'series_${title.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_')}';
 
@@ -3859,7 +3864,8 @@ class StorageService {
     required String seriesTitle,
     String? imdbId,
   }) async {
-    if (CustomSeriesIdentity.isCustom(imdbId)) {
+    if (CustomSeriesIdentity.isCustom(imdbId) ||
+        (imdbId?.startsWith('medialibrary:') ?? false)) {
       return getEpisodeProgressByImdbId(imdbId!);
     }
     final reads = await Future.wait([
@@ -3895,7 +3901,8 @@ class StorageService {
     required String seriesTitle,
     String? imdbId,
   }) async {
-    if (CustomSeriesIdentity.isCustom(imdbId)) {
+    if (CustomSeriesIdentity.isCustom(imdbId) ||
+        (imdbId?.startsWith('medialibrary:') ?? false)) {
       return getFinishedEpisodesByImdbId(imdbId: imdbId!);
     }
     final reads = await Future.wait([
@@ -3961,7 +3968,8 @@ class StorageService {
     int? recoveryUpdatedAtMs,
   }) async {
     final map = await _getPlaybackStateMap();
-    final key = CustomSeriesIdentity.isCustom(imdbId)
+    final key = (CustomSeriesIdentity.isCustom(imdbId) ||
+            (imdbId?.startsWith('medialibrary:') ?? false))
         ? 'video_${imdbId}_${videoTitle.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_')}'
         : 'video_${videoTitle.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_')}';
 
@@ -3989,7 +3997,8 @@ class StorageService {
     String? contentIdentity,
   }) async {
     final map = await _getPlaybackStateMap();
-    final key = CustomSeriesIdentity.isCustom(contentIdentity)
+    final key = (CustomSeriesIdentity.isCustom(contentIdentity) ||
+            (contentIdentity?.startsWith('medialibrary:') ?? false))
         ? 'video_${contentIdentity}_${videoTitle.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_')}'
         : 'video_${videoTitle.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_')}';
 

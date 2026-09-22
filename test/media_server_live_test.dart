@@ -239,6 +239,77 @@ void main() {
       }
 
       for (final kind in MediaServerKind.values) {
+        test(
+          '${kind.label} Discover libraries, hierarchy and exact playback',
+          () async {
+            final matched = await connectAndFind(kind);
+            final resources = await MediaServerService.libraryConnections(kind);
+            final library = await MediaServerService.openLibrary(
+              resources.single.id,
+            );
+            final views = await library.browse(views: true);
+            expect(views.items, isNotEmpty);
+            final target = MediaServerService.watchTargetFor(matched)!;
+            var foundMovie = false;
+            var foundEpisode = false;
+            final browsed = <String>[];
+            final folders = [...views.items];
+            final visited = <String>{};
+            while (folders.isNotEmpty) {
+              final view = folders.removeLast();
+              if (!visited.add(view.id)) continue;
+              expect(visited.length, lessThan(100));
+              final children = await library.browse(parentId: view.id);
+              browsed.add(
+                '${view.name}: ${children.items.map((i) => '${i.type}:${i.name}:${i.id}').join(', ')}',
+              );
+              for (final child in children.items) {
+                if (child.isFolder) folders.add(child);
+                if (child.id == target.itemId) {
+                  foundMovie = true;
+                  final sources = await library.sources(child);
+                  expect(sources, hasLength(1));
+                  expect(sources.single.directUrl, matched.directUrl);
+                  expect(MediaServerService.bindingFor(sources.single), isNull);
+                  if (child.imageId != null) {
+                    expect(await library.image(child.imageId!), isNotEmpty);
+                  }
+                }
+                if (child.type == 'Series') {
+                  final seasons = await library.browse(
+                    parentId: child.id,
+                    episodeOrder: true,
+                  );
+                  for (final season in seasons.items.where(
+                    (item) => item.type == 'Season',
+                  )) {
+                    final episodes = await library.browse(
+                      parentId: season.id,
+                      episodeOrder: true,
+                    );
+                    for (final episode in episodes.items.where(
+                      (item) => item.type == 'Episode',
+                    )) {
+                      foundEpisode = true;
+                      final sources = await library.sources(episode);
+                      final watch = MediaServerService.watchTargetFor(
+                        sources.first,
+                      )!;
+                      expect(watch.isMovie, false);
+                      expect(watch.season, episode.season);
+                      expect(watch.episode, episode.episode);
+                    }
+                  }
+                }
+              }
+              await library.browse(parentId: view.id, mode: 'recent');
+              await library.browse(parentId: view.id, mode: 'resume');
+              await library.browse(parentId: view.id, search: 'Debrify');
+            }
+            expect(foundMovie, true, reason: browsed.join('\n'));
+            expect(foundEpisode, true);
+          },
+        );
         for (final movie in [true, false]) {
           test(
             '${kind.label} ${movie ? 'movie' : 'episode'} resume, stop, EOF and replay',

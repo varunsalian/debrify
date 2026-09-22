@@ -19,7 +19,8 @@ class TrackingSourcePolicy {
   final WatchProgressSource progressSource;
   final Set<TrackingSource> homeTickSources;
 
-  TrackingSourcePolicy forContent(String? id) => CustomSeriesIdentity.isCustom(id)
+  TrackingSourcePolicy forContent(String? id) =>
+      CustomSeriesIdentity.isCustom(id) || (id?.startsWith('medialibrary:') ?? false)
       ? const TrackingSourcePolicy(
           scrobbleTargets: {}, progressSource: WatchProgressSource.local,
           homeTickSources: {TrackingSource.local},
