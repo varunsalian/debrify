@@ -2958,11 +2958,10 @@ class ProfileRegistry {
         final existingAvatar = isCreate
             ? null
             : existing.single['avatar_key'] as String?;
-        final avatarKey =
-            item.avatarKey ??
-            (existingAvatar?.startsWith('file:') == true
-                ? existingAvatar
-                : null);
+        final avatarKey = ProfileAvatar.resolveCircleSyncAvatar(
+          current: existingAvatar,
+          incoming: item.avatarKey,
+        );
         final pin = item.pin;
         final insert = <String, Object?>{
           'id': item.id,

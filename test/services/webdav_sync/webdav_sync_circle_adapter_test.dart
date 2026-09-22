@@ -18,6 +18,7 @@ import 'package:debrify/services/profiles/profile_registry.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/profiles/profile_scope.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_circle_models.dart';
+import 'package:debrify/services/webdav_sync/webdav_sync_circle_merge.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_codec.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_engine_state.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_hot_merge.dart';
@@ -176,6 +177,128 @@ void main() {
     await registry.close();
     await directory.delete(recursive: true);
   });
+
+  for (final selfService in [false, true]) {
+    for (final photo in [false, true]) {
+      test(
+        '${selfService ? 'self-service' : 'admin'} avatar ${photo ? 'photo' : 'built-in'} survives repeated circle sync',
+        () async {
+          final maps = WebDavSyncIdentityMaps(
+            circleToLocalProfiles: {'p-active': activeId},
+            circleToLocalResources: {},
+          );
+          Future<void> save(String avatar) async {
+            final actor = await ProfileAuthorizationContext.capture(registry);
+            if (selfService) {
+              await registry.updateActiveProfileIdentity(
+                profileId: activeId,
+                name: 'Local Admin',
+                avatarKey: avatar,
+                actingAuthorizationRevision: actor.authorizationRevision,
+                actingSessionEpoch: actor.sessionEpoch,
+              );
+            } else {
+              await registry.updateProfile(
+                id: activeId,
+                avatarKey: avatar,
+                actingProfileId: actor.profileId,
+                actingAuthorizationRevision: actor.authorizationRevision,
+                actingSessionEpoch: actor.sessionEpoch,
+              );
+            }
+          }
+
+          Future<WebDavSyncBuiltCircleState> build(
+            WebDavSyncProfilesDocument? previous,
+          ) => adapter.buildCircleState(
+            session,
+            WebDavSyncCircleBuildRequest(
+              identityMaps: maps,
+              deviceId: 'device-local',
+              circleId: circleRoot.document.circleId,
+              circleKey: circleRoot.key,
+              localNowMs: DateTime.now().millisecondsSinceEpoch,
+              clockOffsetMs: 0,
+              serverNowMs: DateTime.now().millisecondsSinceEpoch,
+              previousProfiles: previous,
+            ),
+          );
+          await save('art:aurora');
+          var baseline = (await build(null)).profiles;
+          await Future<void>.delayed(const Duration(milliseconds: 2));
+          final wanted = photo ? 'file:avatars/a1b2.png' : 'art:orbit';
+          await save(wanted);
+          for (var cycle = 0; cycle < 3; cycle++) {
+            final built = await build(baseline);
+            final merged = WebDavSyncCircleMerge.mergeProfiles([
+              baseline,
+              built.profiles,
+            ]);
+            final result = await adapter.applyCircleState(
+              session,
+              _request(
+                root: circleRoot,
+                profiles: merged,
+                resources: _emptyResources(),
+                profileMap: {'p-active': activeId},
+                resourceMap: {},
+                registryVersions: built.registryVersions,
+              ),
+            );
+            expect(result, WebDavSyncCircleApplyResult.applied);
+            expect(
+              (await registry.getProfile(activeId))!.avatarKey,
+              wanted,
+              reason: 'sync cycle $cycle',
+            );
+            baseline = merged;
+          }
+          if (photo) {
+            // Exercise the registry write path as well as avatar-only no-ops.
+            final built = await build(baseline);
+            final prior = baseline.profiles['p-active']!;
+            final incoming = _profiles({
+              'p-active': WebDavSyncCircleLeaf<WebDavSyncProfileValue>(
+                stamp: prior.stamp,
+                value: WebDavSyncProfileValue.fromJson({
+                  ...prior.value!.toJson(),
+                  'name': 'Remote rename',
+                  'avatarKey': 'art:orbit',
+                }),
+              ),
+            });
+            expect(
+              await adapter.applyCircleState(
+                session,
+                _request(
+                  root: circleRoot,
+                  profiles: incoming,
+                  resources: _emptyResources(),
+                  profileMap: {'p-active': activeId},
+                  resourceMap: {},
+                  registryVersions: built.registryVersions,
+                ),
+              ),
+              WebDavSyncCircleApplyResult.applied,
+            );
+            final renamed = (await registry.getProfile(activeId))!;
+            expect(renamed.name, 'Remote rename');
+            expect(renamed.avatarKey, wanted);
+            baseline = incoming;
+          }
+          // Reverting an accidental built-in selection is a fresh local edit.
+          await Future<void>.delayed(const Duration(milliseconds: 2));
+          await save('art:aurora');
+          final reverted = await build(baseline);
+          final merged = WebDavSyncCircleMerge.mergeProfiles([
+            baseline,
+            reverted.profiles,
+          ]);
+          expect(merged.profiles['p-active']!.value!.avatarKey, 'art:aurora');
+        },
+      );
+    }
+  }
 
   test(
     'engine files apply through the hot adapter without filling preferences',
