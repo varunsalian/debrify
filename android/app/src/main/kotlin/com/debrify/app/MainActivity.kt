@@ -1049,6 +1049,7 @@ class MainActivity : FlutterActivity() {
             .putBoolean("flutter.tv_low_res_render_active", renderScale < 0.999f)
             .commit()
         super.onCreate(savedInstanceState)
+        com.debrify.app.download.UpdateApkCleanup.schedule(this)
         applyFixedSurfaceSize()
         // Enable edge-to-edge display to properly handle system navigation bars
         WindowCompat.setDecorFitsSystemWindows(window, false)
