@@ -117,6 +117,15 @@ class _SourcesScreenState extends State<_SourcesScreen> {
 
   void _updateSelectedDirect() {
     _selectedDirect = null;
+    if (_bound.isNotEmpty && _bound.first.isMediaServer) {
+      for (final candidate in _torrents) {
+        if (MediaServerService.bindingFor(candidate)?.bindingKey == _bound.first.bindingKey) {
+          _selectedDirect = candidate;
+          break;
+        }
+      }
+      return;
+    }
     if (_bound.isNotEmpty && _bound.first.isIptvDirect) {
       final pin = _bound.first;
       for (final candidate in _torrents) {
@@ -373,6 +382,7 @@ class _SourcesScreenState extends State<_SourcesScreen> {
   bool get _isMovie => !widget.selection.isSeries;
   SeriesSource? _bindingFor(Torrent torrent) {
     for (final source in _bound) {
+      if (source.isMediaServer && MediaServerService.bindingFor(torrent)?.bindingKey == source.bindingKey) return source;
       if (IptvSourceSearch.owns(torrent) &&
           source.isIptvDirect &&
           source.iptvPlaylistId == torrent.iptvPlaylistId &&
@@ -1343,6 +1353,8 @@ class _SourcesScreenState extends State<_SourcesScreen> {
                 subtitle: Text(
                   binding != null
                       ? 'Stop refreshing this stream for playback'
+                      : MediaServerService.owns(t)
+                      ? 'Resolve this version from your media server when played'
                       : IptvSourceSearch.owns(t)
                       ? 'Resolve it from this IPTV catalog when played'
                       : 'Re-fetch a fresh link from this addon when played',
@@ -1367,7 +1379,8 @@ class _SourcesScreenState extends State<_SourcesScreen> {
                 await _copySourceLink(t);
               },
             ),
-            if (ProfilePolicyGuard.allowsSync(ProfileFeature.downloads))
+            if (ProfilePolicyGuard.allowsSync(ProfileFeature.downloads) &&
+                TorrentPlaybackService.supportsDirectStreamDownload(t))
               ListTile(
                 leading: const Icon(
                   Icons.download_rounded,
@@ -1696,6 +1709,10 @@ class _SourcesScreenState extends State<_SourcesScreen> {
   /// dedupe, series-pack post-processing, and the frozen-list "+N new
   /// sources" pill as any live batch.
   Future<void> _retryAddon(AddonSearchStatus status) async {
+    if (status.sourceKey.startsWith('mediaserver:')) {
+      if (!_searching) await _runSearch();
+      return;
+    }
     final requestKey = status.requestKey;
     if (_retryingAddons.contains(requestKey)) return;
     final token = _searchToken;

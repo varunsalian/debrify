@@ -11,6 +11,7 @@ import 'dart:math';
 import '../../models/home_collection_inventory.dart';
 
 import '../../models/profiles/connection_resource.dart';
+import '../../models/media_server_source.dart';
 import '../../models/profiles/profile_avatar.dart';
 import '../../models/profiles/profile_policy.dart';
 import '../../models/profiles/user_profile.dart';
@@ -1419,13 +1420,21 @@ class ProfileRestoreCoordinator {
     if (resourceIds.isEmpty) return value;
     if (value is List<String>) {
       return value
-          .map((item) => resourceIds[item] ?? item)
+          .map((item) => resourceIds[item] ??
+              MediaServerSource.remapPriorityKey(item, resourceIds))
           .toList(growable: false);
     }
     if (value is! String) return value;
     final direct = resourceIds[value];
     if (direct != null) return direct;
-    if (!resourceIds.keys.any(value.contains)) return value;
+    final priority = MediaServerSource.remapPriorityKey(value, resourceIds);
+    if (priority != value) return priority;
+    // JSON-backed Quick Play rules contain lowercased provider IDs, so an
+    // exact resource-ID substring check alone would skip their remapping.
+    if (!value.contains('mediaserver:') &&
+        !resourceIds.keys.any(value.contains)) {
+      return value;
+    }
     try {
       final decoded = jsonDecode(value);
       if (decoded is Map || decoded is List) {
@@ -1442,7 +1451,10 @@ class ProfileRestoreCoordinator {
     Object? value,
     Map<String, String> resourceIds,
   ) {
-    if (value is String) return resourceIds[value] ?? value;
+    if (value is String) {
+      return resourceIds[value] ??
+          MediaServerSource.remapPriorityKey(value, resourceIds);
+    }
     if (value is List) {
       return value
           .map((item) => _remapJsonValue(item, resourceIds))
@@ -1459,6 +1471,17 @@ class ProfileRestoreCoordinator {
           entry.value,
           resourceIds,
         );
+      }
+      // Pins embed a secret-free JSON descriptor, rather than a bare resource
+      // ID. Remap only its server reference; content/version IDs are unrelated.
+      if (value['debridService'] == 'media_server' &&
+          value['debridTorrentId'] is String) {
+        final descriptor = MediaServerSource.tryDecode(
+          value['debridTorrentId'] as String,
+        );
+        if (descriptor != null) {
+          result['debridTorrentId'] = descriptor.remap(resourceIds).encode();
+        }
       }
       return result;
     }
@@ -1737,7 +1760,8 @@ class ProfileRestoreCoordinator {
         'region',
         'accountLabel',
       },
-      ConnectionResourceType.webDav => const <String>{'accountLabel'},
+      ConnectionResourceType.webDav ||
+      ConnectionResourceType.mediaServer => const <String>{'accountLabel'},
       ConnectionResourceType.trakt ||
       ConnectionResourceType.simkl ||
       ConnectionResourceType.mdblist ||

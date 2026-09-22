@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'dart:math';
 import 'dart:isolate';
 
+import '../../models/media_server_source.dart';
+
 import 'package:crypto/crypto.dart';
 
 import '../profiles/profile_appearance_preferences.dart';
@@ -325,6 +327,18 @@ final class WebDavSyncIdentityMaps {
     required Map<String, String> directReplacements,
     required Map<String, String> iptvReplacements,
   }) {
+    const mediaServerPrefix = 'media-server:';
+    if (value.startsWith(mediaServerPrefix)) {
+      final descriptor = MediaServerSource.tryDecode(
+        value.substring(mediaServerPrefix.length),
+      );
+      if (descriptor != null) {
+        return MediaServerSource.bindingKey(
+          descriptor.remap(iptvReplacements).encode(),
+        );
+      }
+      return value;
+    }
     if (value.startsWith('catalog:')) {
       final parts = value.split(':');
       if (parts.length < 5) return value;
@@ -404,6 +418,11 @@ final class WebDavSyncIdentityMaps {
     String value,
     _IdentityReplacements replacements,
   ) {
+    final priority = MediaServerSource.remapPriorityKey(
+      value,
+      replacements.composite,
+    );
+    if (priority != value) return priority;
     const prefix = 'server:';
     var searchFrom = 0;
     var copiedThrough = 0;
@@ -1731,6 +1750,11 @@ abstract final class WebDavSyncHotMerge {
     final hash = source['torrentHash']?.toString() ?? '';
     if (hash.isNotEmpty) return '${scope}hash:$hash';
     final service = source['debridService']?.toString() ?? 'rd';
+    if (service == 'media_server') {
+      return MediaServerSource.bindingKey(
+        source['debridTorrentId']?.toString() ?? '',
+      );
+    }
     if (service == 'local') {
       return 'local:${source['localPath'] ?? source['debridTorrentId'] ?? ''}';
     }

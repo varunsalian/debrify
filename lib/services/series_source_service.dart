@@ -1,5 +1,6 @@
 import 'dart:convert';
 import '../models/custom_series_identity.dart';
+import '../models/media_server_source.dart';
 import 'package:crypto/crypto.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -15,6 +16,7 @@ class SeriesSource {
   static const String localService = 'local';
   static const String addonDirectService = 'stremio_direct';
   static const String iptvDirectService = 'iptv_direct';
+  static const String mediaServerService = 'media_server';
   static const String localKindMovieFile = 'movie_file';
   static const String localKindSeriesFolder = 'series_folder';
   static const String cloudKindFile = 'file';
@@ -72,6 +74,7 @@ class SeriesSource {
   });
 
   bool get isLocal => debridService == localService;
+  bool get isMediaServer => debridService == mediaServerService;
   bool get isProviderNativeCloud =>
       !isLocal &&
       torrentHash.isEmpty &&
@@ -120,6 +123,7 @@ class SeriesSource {
     if (isIptvDirect) {
       return 'iptv:${iptvPlaylistId!.trim()}:${iptvCatalogType!.trim()}:${iptvEntryKey!.trim()}';
     }
+    if (isMediaServer) return MediaServerSource.bindingKey(debridTorrentId);
     return 'cloud:$debridService:${cloudSourceKind ?? ''}:${debridTorrentId.trim()}';
   }
 

@@ -5,6 +5,7 @@ import '../models/metadata_card_artwork.dart';
 import '../models/hero_metadata_presentation.dart';
 import '../services/profiles/profile_runtime.dart';
 import '../services/iptv_source_search.dart';
+import '../services/media_server_service.dart';
 import 'metadata_explore_page.dart';
 import '../widgets/metadata_presentation_mixin.dart';
 import '../models/metadata_preferences.dart';
@@ -12788,7 +12789,8 @@ class _SearchScreenState extends State<SearchScreen>
                 await _copyKwLink(t);
               },
             ),
-            if (ProfilePolicyGuard.allowsSync(ProfileFeature.downloads))
+            if (ProfilePolicyGuard.allowsSync(ProfileFeature.downloads) &&
+                TorrentPlaybackService.supportsDirectStreamDownload(t))
               ListTile(
                 leading: const Icon(
                   Icons.download_rounded,

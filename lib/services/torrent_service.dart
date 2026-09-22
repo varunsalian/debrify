@@ -10,6 +10,7 @@ import 'engine/settings_manager.dart';
 import 'indexer_manager_service.dart';
 import 'profiles/profile_async_authorization.dart';
 import 'stremio_service.dart';
+import 'media_server_service.dart';
 
 /// Streaming-search hook: fired once per source (engine / addon batch) that
 /// returned results, AS it completes — long before the slowest engine's
@@ -438,6 +439,8 @@ class TorrentService {
     int? season,
     int? episode,
     bool includeStremio = true,
+    // URL-only consumers (Debrify TV) cannot carry native session headers yet.
+    bool includeMediaServers = true,
     List<int>? availableSeasons,
     String?
     contentType, // Optional explicit content type (for TV channels, etc.)
@@ -475,6 +478,23 @@ class TorrentService {
           timeout: engineTimeout,
           onBatch: onBatch, // per-engine batches stream straight through
           preserveSourceOrder: preserveSourceOrder,
+        ),
+      );
+    }
+
+    // An addon's episode ID is authoritative (e.g. a fan edit); native
+    // libraries can only match canonical IMDb season/episode numbering.
+    if (includeStremio &&
+        includeMediaServers &&
+        !isNonImdbContent &&
+        originVideoId?.trim().isNotEmpty != true) {
+      searchFutures.add(
+        MediaServerService.search(
+          id: imdbId,
+          isMovie: isMovie,
+          season: season,
+          episode: episode,
+          onBatch: onBatch,
         ),
       );
     }
@@ -619,6 +639,20 @@ class TorrentService {
     final capability = await ProfileAsyncAuthorization.capture(
       ProfileFeature.torrentSearch,
     );
+    // Never substitute a canonical server episode for an addon-specific ID.
+    final nativeSearch =
+        originVideoId?.trim().isNotEmpty != true &&
+            (contentType == null ||
+                contentType == 'movie' ||
+                contentType == 'series')
+        ? MediaServerService.search(
+            id: imdbId,
+            isMovie: isMovie,
+            season: season,
+            episode: episode,
+            onBatch: onBatch,
+          )
+        : Future.value(<String, dynamic>{});
     final result = await _searchStremioAddons(
       imdbId: imdbId,
       isMovie: isMovie,
@@ -632,8 +666,23 @@ class TorrentService {
       originAddonKey: originAddonKey,
       originVideoId: originVideoId,
     );
+    final native = await nativeSearch;
     await capability?.runIfCurrent(() async {});
-    return result;
+    return {
+      ...result,
+      'torrents': <Torrent>[
+        ...?result['torrents'] as List<Torrent>?,
+        ...?native['torrents'] as List<Torrent>?,
+      ],
+      'addonStatuses': <AddonSearchStatus>[
+        ...?result['addonStatuses'] as List<AddonSearchStatus>?,
+        ...?native['addonStatuses'] as List<AddonSearchStatus>?,
+      ],
+      'addonErrors': <String, String>{
+        ...?result['addonErrors'] as Map<String, String>?,
+        ...?native['addonErrors'] as Map<String, String>?,
+      },
+    };
   }
 
   static Future<Map<String, dynamic>> _searchStremioAddons({

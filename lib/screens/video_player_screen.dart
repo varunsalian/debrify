@@ -25,6 +25,7 @@ import 'package:synchronized/synchronized.dart';
 import '../services/storage_service.dart';
 import '../services/local_playback_resume_resolver.dart';
 import '../services/startup_stream_policy.dart';
+import '../services/direct_source_authorization.dart';
 import '../services/resume_write_guard.dart';
 import '../models/profiles/profile_policy.dart';
 import '../services/profiles/profile_policy_guard.dart';
@@ -4532,6 +4533,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     bool liveStream = false,
     EpisodePlaybackRequest? request,
     bool Function()? beforeOpen,
+    Torrent? source,
   }) async {
     if (request?.isCurrent == false) return;
     // EVERY content open invalidates the outgoing media's resume protection —
@@ -4543,9 +4545,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // that re-protects (_seekForResume) re-arms AFTER it.
     _resumeVerifyEpoch++;
     _resumeWriteGuard.clear();
-    _activeOpenedMedia = media;
-    _activeMediaShouldPlay = desiredPlay ?? play;
-    _activeMediaUserPaused = false;
     _beginMediaGeneration();
     // Live IPTV (Phase 2, Layer 1): ffmpeg-level reconnect. mpv's default
     // reconnect covers only seekable inputs — a live/streamed input NEVER
@@ -4622,14 +4621,26 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         debugPrint('Player: subtitle visibility reset failed: $error');
       }
     }
-    // Final synchronous ownership check after all asynchronous setup.
-    if (beforeOpen != null && !beforeOpen()) return;
-    PlayerVisibility.playbackState(this, ready: false);
-    if (request != null) {
-      await request.commit(() => _player.open(media, play: play));
-      return;
+    Future<void> commitOpen() async {
+      // Final ownership check after setup AND asynchronous authorization.
+      if (_screenDisposed || !mounted) return;
+      if (beforeOpen != null && !beforeOpen()) return;
+      _activeOpenedMedia = media;
+      _activeMediaShouldPlay = desiredPlay ?? play;
+      _activeMediaUserPaused = false;
+      PlayerVisibility.playbackState(this, ready: false);
+      if (request != null) {
+        await request.commit(() => _player.open(media, play: play));
+        return;
+      }
+      return _player.open(media, play: play);
     }
-    return _player.open(media, play: play);
+    // Startup direct fallbacks bypass URL resolvers. Recheck their captured
+    // capability here so revoked/disabled/reconnected sources cannot open.
+    if (source != null) {
+      return DirectSourceAuthorization.runIfAuthorized(source, commitOpen);
+    }
+    return commitOpen();
   }
 
   void _releasePlayerDiagnostic(String fields) {
@@ -8324,7 +8335,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       }),
     ];
     try {
-      await _openMedia(mk.Media(url, httpHeaders: httpHeaders), play: true);
+      await _openMedia(
+        mk.Media(url, httpHeaders: httpHeaders),
+        play: true,
+        source: source,
+      );
     } catch (e) {
       debugPrint(
         '[StartupFailover] event=open_exception platform=flutter '
@@ -8488,11 +8503,17 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       }),
     ];
     try {
-      // Arm before open: a fast local/CDN response can render its first frame
-      // before open() completes. Initial startup has no previous-media events;
-      // subsequent attempts use open()'s media reset to establish the boundary.
-      armed = true;
-      await _openMedia(mk.Media(url, httpHeaders: httpHeaders), play: true);
+      // Arm at the final open boundary, after setup and authorization. Old
+      // candidate events during those awaits must not validate this source.
+      await _openMedia(
+        mk.Media(url, httpHeaders: httpHeaders),
+        play: true,
+        source: source,
+        beforeOpen: () {
+          armed = true;
+          return true;
+        },
+      );
     } catch (e) {
       // Exception strings from media backends may embed signed stream URLs.
       // The runtime type is enough to distinguish open failures safely.

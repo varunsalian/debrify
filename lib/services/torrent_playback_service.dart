@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'direct_source_authorization.dart';
+import 'media_server_service.dart';
 import 'iptv_source_search.dart';
 import '../models/advanced_search_selection.dart';
 import '../models/custom_series_identity.dart';
@@ -287,7 +289,7 @@ class TorrentPlaybackService {
       torrent = resolved;
     }
     try {
-      await IptvSourceSearch.authorize(torrent);
+      await DirectSourceAuthorization.authorize(torrent);
     } catch (_) {
       if (context.mounted) {
         _snack(context, 'IPTV connection changed. Search sources again.');
@@ -571,7 +573,7 @@ class TorrentPlaybackService {
       final loader = ov;
       var handedToLauncher = false;
       try {
-        await IptvSourceSearch.authorize(direct);
+        await DirectSourceAuthorization.authorize(direct);
         final resolverProvider = provider ?? await _defaultConfiguredProvider();
         if (!context.mounted) return;
         final args = _playerArgs(
@@ -677,7 +679,7 @@ class TorrentPlaybackService {
       final t = await resolveDirect(candidate);
       if (t == null) return null;
       try {
-        await IptvSourceSearch.authorize(t);
+        await DirectSourceAuthorization.authorize(t);
       } catch (_) {
         return null;
       }
@@ -1865,7 +1867,7 @@ class TorrentPlaybackService {
               if (resolution.source == null) continue;
               source = resolution.source!;
             }
-            await IptvSourceSearch.authorize(source);
+            await DirectSourceAuthorization.authorize(source);
             final alive =
                 !activeRules.validateDirectLinks ||
                 !shouldPreflightDirectStream(source) ||
@@ -2280,6 +2282,7 @@ class TorrentPlaybackService {
   /// final CDN host may no longer identify the link as an IP-bound proxy.
   static bool shouldPreflightDirectStream(Torrent torrent) {
     return !IptvSourceSearch.owns(torrent) &&
+        !MediaServerService.owns(torrent) &&
         !StartupStreamPolicy.isAioStreams(
           addonId: torrent.stremioAddonId,
           sourceName: torrent.source,
@@ -3033,7 +3036,7 @@ class TorrentPlaybackService {
       source = resolution.source!;
     }
     try {
-      await IptvSourceSearch.authorize(source);
+      await DirectSourceAuthorization.authorize(source);
     } catch (_) {
       return null;
     }
@@ -3142,9 +3145,11 @@ class TorrentPlaybackService {
         }
         for (final pin in pins) {
           // Existing pack handling retains precedence for a primary pack.
-          if (!pin.isAddonDirect && !pin.isIptvDirect) break;
+          if (!pin.isAddonDirect && !pin.isIptvDirect && !pin.isMediaServer) break;
           try {
-            final fresh = pin.isIptvDirect
+            final fresh = pin.isMediaServer
+                ? await MediaServerService.resolvePinned(pin, season: s, episode: e)
+                : pin.isIptvDirect
                 ? await IptvSourceSearch.resolvePinned(
                     pin,
                     title: meta.title ?? label,
@@ -3238,7 +3243,7 @@ class TorrentPlaybackService {
       episodesFetched: episodesFetched,
       validateCandidate: (source) async {
         try {
-          await IptvSourceSearch.authorize(source);
+          await DirectSourceAuthorization.authorize(source);
         } catch (_) {
           return false;
         }
@@ -3385,6 +3390,7 @@ class TorrentPlaybackService {
         }
       },
       listAddons: () async => [
+        if (!meta.hasStremioEpisodeIdentity) ...await _mediaServerSourceRefs(),
         for (final addon
             in await StremioService.instance.applicableStreamingAddons(
               type: 'series',
@@ -3415,6 +3421,10 @@ class TorrentPlaybackService {
           : Future<List<Torrent>?>.value(const <Torrent>[]),
       fetchAddonEpisodes: (addonId, s, e) async {
         try {
+          if (addonId.startsWith('mediaserver:')) {
+            if (meta.hasStremioEpisodeIdentity) return const <Torrent>[];
+            return _fetchMediaServerSources(addonId, imdbId, false, s, e);
+          }
           final originVideoId = await _originEpisodeVideoId(meta, s, e);
           if (meta.hasStremioEpisodeIdentity && originVideoId == null) {
             return null;
@@ -3434,6 +3444,7 @@ class TorrentPlaybackService {
         }
       },
       fetchAddonPacks: (addonId, s) async {
+        if (addonId.startsWith('mediaserver:')) return const <Torrent>[];
         if (!imdbId.startsWith('tt') || meta.hasStremioEpisodeIdentity) {
           return const <Torrent>[];
         }
@@ -3460,6 +3471,7 @@ class TorrentPlaybackService {
         provider != SeriesSource.localService &&
         provider != SeriesSource.addonDirectService &&
         provider != SeriesSource.iptvDirectService &&
+        provider != SeriesSource.mediaServerService &&
         provider != 'stream') {
       return provider;
     }
@@ -3512,6 +3524,7 @@ class TorrentPlaybackService {
         }
       },
       listAddons: () async => [
+        ...await _mediaServerSourceRefs(),
         for (final addon
             in await StremioService.instance.applicableStreamingAddons(
               type: 'movie',
@@ -3530,6 +3543,9 @@ class TorrentPlaybackService {
           _fetchOneEngine(engineId, imdbId: imdbId, isMovie: true),
       fetchAddonEpisodes: (addonId, _, __) async {
         try {
+          if (addonId.startsWith('mediaserver:')) {
+            return _fetchMediaServerSources(addonId, imdbId, true, null, null);
+          }
           return await StremioService.instance.retryAddonStreams(
             addonId: addonId,
             type: 'movie',
@@ -3541,6 +3557,34 @@ class TorrentPlaybackService {
         }
       },
     );
+  }
+
+  static Future<List<SourceAddonRef>> _mediaServerSourceRefs() async => [
+    for (final server in await MediaServerService.connections())
+      SourceAddonRef(
+        'mediaserver:${server.id}',
+        server.label,
+        addonKey: 'mediaserver:${server.id}',
+        resultSourceKey: 'mediaserver:${server.id}',
+      ),
+  ];
+
+  static Future<List<Torrent>?> _fetchMediaServerSources(
+    String sourceKey,
+    String contentId,
+    bool isMovie,
+    int? season,
+    int? episode,
+  ) async {
+    final result = await MediaServerService.search(
+      id: contentId,
+      isMovie: isMovie,
+      season: season,
+      episode: episode,
+      resourceFilter: sourceKey.substring('mediaserver:'.length),
+    );
+    if ((result['addonErrors'] as Map).isNotEmpty) return null;
+    return result['torrents'] as List<Torrent>;
   }
 
   static Future<List<SourceEngineRef>> _sourceEngineListing() async {
@@ -3759,6 +3803,13 @@ class TorrentPlaybackService {
     List<StremioAddon> addons,
     List<String> priority,
   ) {
+    // This shortcut sees only Stremio batches, not native-library/IPTV batches.
+    // A saved native priority therefore requires the complete ordered search.
+    if (priority.any(
+      (key) => key.startsWith('iptv:') || key.startsWith('mediaserver:'),
+    )) {
+      return null;
+    }
     if (addons.isEmpty) return null;
     final aliases = <String, String>{
       for (final addon in addons) addon.sourceKey: addon.legacySourceKey,
@@ -3782,6 +3833,21 @@ class TorrentPlaybackService {
       return null;
     }
     return first.sourceKey;
+  }
+
+  /// Search transports use either error map. Only direct-provider failures
+  /// should trigger this path's retry/connection feedback, not torrent engines.
+  @visibleForTesting
+  static Map<String, String> directSearchErrors(Map<String, dynamic> result) {
+    final errors = <String, String>{
+      ...?(result['engineErrors'] as Map?)?.cast<String, String>(),
+      ...?(result['addonErrors'] as Map?)?.cast<String, String>(),
+    };
+    return {
+      for (final entry in errors.entries)
+        if (entry.key.startsWith('stremio:') ||
+            entry.key.startsWith('mediaserver:')) entry.key: entry.value,
+    };
   }
 
   static Future<bool> _playAddonStream(
@@ -3845,7 +3911,6 @@ class TorrentPlaybackService {
         rules.allowDirectLinks &&
         rules.tryNextOnFailure &&
         exactAddonOrder &&
-        !rules.sourcePriority.any((key) => key.startsWith('iptv:')) &&
         !prefersTorrentCandidates(rules) &&
         (noProvider ||
             forceAddonOnly ||
@@ -3939,6 +4004,7 @@ class TorrentPlaybackService {
       final torrents = <Torrent>[];
       final engineErrors = <String, String>{};
       final addonErrors = <String, String>{};
+      final addonStatuses = <AddonSearchStatus>[];
       final stages = meta.hasStremioEpisodeIdentity
           ? const [QuickPlaySourceMode.addonsOnly]
           : addonStreamSearchPlan(
@@ -3956,6 +4022,9 @@ class TorrentPlaybackService {
         addonErrors.addAll(
           (result['addonErrors'] as Map?)?.cast<String, String>() ?? const {},
         );
+        addonStatuses.addAll(
+          (result['addonStatuses'] as List?)?.cast<AddonSearchStatus>() ?? const [],
+        );
         // Forced/no-provider searches are addon-only; mixed provider searches
         // are a single combined stage. Keep this guard for explicit one-stage
         // legacy modes and to avoid unnecessary future stages if added.
@@ -3971,6 +4040,7 @@ class TorrentPlaybackService {
         'torrents': [...torrents, ...await iptv],
         'engineErrors': engineErrors,
         'addonErrors': addonErrors,
+        'addonStatuses': addonStatuses,
       };
     }
 
@@ -4077,19 +4147,8 @@ class TorrentPlaybackService {
     // surface them under different keys: searchByImdbWithStremio folds addon +
     // engine errors together under 'engineErrors', while the noProvider path's
     // searchStremioAddonsOnly returns them raw under 'addonErrors'. Read both,
-    // then keep only 'stremio:' keys — a flaky engine must not misblame
+    // then keep only direct-provider keys — a flaky engine must not misblame
     // "didn't respond" on a title that simply has no stream.
-    Map<String, String> addonErrorsOf(Map<String, dynamic> r) {
-      final all = <String, String>{
-        ...?(r['engineErrors'] as Map<String, String>?),
-        ...?(r['addonErrors'] as Map<String, String>?),
-      };
-      return {
-        for (final e in all.entries)
-          if (e.key.startsWith('stremio:')) e.key: e.value,
-      };
-    }
-
     String failedAddonNamesOf(
       Map<String, dynamic> r,
       Map<String, String> errors,
@@ -4107,14 +4166,14 @@ class TorrentPlaybackService {
     }
 
     var torrents = (res['torrents'] as List).cast<Torrent>();
-    var errors = addonErrorsOf(res);
+    var errors = directSearchErrors(res);
     // Empty ONLY because an addon errored is usually a transient upstream
     // blip — retry once before giving up.
     if (torrents.isEmpty && errors.isNotEmpty) {
       try {
         res = await search();
         torrents = (res['torrents'] as List).cast<Torrent>();
-        errors = addonErrorsOf(res);
+        errors = directSearchErrors(res);
       } catch (_) {
         // Keep the first attempt's (empty) result — reported below.
       }
@@ -4131,7 +4190,13 @@ class TorrentPlaybackService {
       // so, since a retry will usually succeed.
       if (errors.isNotEmpty) {
         final failed = failedAddonNamesOf(res, errors);
-        _snack(context, '$failed didn\'t respond for "$label" — try again.');
+        final nativeErrors = errors.entries
+            .where((entry) => entry.key.startsWith('mediaserver:'))
+            .map((entry) => entry.value)
+            .toSet();
+        _snack(context, nativeErrors.isEmpty
+            ? '$failed didn\'t respond for "$label" — try again.'
+            : '$failed: ${nativeErrors.join(' ')}');
       } else {
         // noProvider: addons searched fine and returned nothing directly
         // playable. Torrent engines were skipped (they need a provider), so the
@@ -4221,6 +4286,7 @@ class TorrentPlaybackService {
       SeriesSource.localService,
       SeriesSource.addonDirectService,
       SeriesSource.iptvDirectService,
+      SeriesSource.mediaServerService,
     };
     return supported.contains(stored);
   }
@@ -4832,9 +4898,9 @@ class TorrentPlaybackService {
         return true; // Cancel already dismissed the overlay.
       }
 
-      if (source.isIptvDirect) {
+      if (source.isIptvDirect || source.isMediaServer) {
         fallbackHint =
-            'Saved IPTV source is unavailable. Falling back to search.';
+            'Saved server source is unavailable. Falling back to search.';
         logIptvSourceEvent(
           'bound_playback_started',
           playlistId: source.iptvPlaylistId,
@@ -4844,7 +4910,9 @@ class TorrentPlaybackService {
           episode: meta.episode,
         );
         try {
-          final fresh = await IptvSourceSearch.resolvePinned(
+          final fresh = source.isMediaServer
+              ? await MediaServerService.resolvePinned(source, season: meta.season, episode: meta.episode)
+              : await IptvSourceSearch.resolvePinned(
             source,
             title: meta.title ?? label,
             year: meta.year,
@@ -4903,7 +4971,7 @@ class TorrentPlaybackService {
                 httpHeaders: fresh.httpHeaders,
               ),
               fresh.displayTitle,
-              provider: SeriesSource.iptvDirectService,
+              provider: source.isMediaServer ? SeriesSource.mediaServerService : SeriesSource.iptvDirectService,
               recoveryProvider: preferredProvider,
               startupHasRemainingSavedSources: remainingSources.isNotEmpty,
               meta: meta,
@@ -5450,6 +5518,13 @@ class TorrentPlaybackService {
     String? addonCatalogId,
     String? addonCatalogKey,
   }) async {
+    try {
+      await DirectSourceAuthorization.authorize(torrent);
+    } catch (_) {
+      if (context.mounted) _snack(context, 'Connection changed. Search sources again.');
+      return false;
+    }
+    if (!context.mounted) return false;
     if (imdbId.isEmpty) {
       _snack(context, 'No IMDb match — can\'t pin a source.');
       return false;
@@ -5460,7 +5535,7 @@ class TorrentPlaybackService {
       addonCatalogId: addonCatalogId,
       addonCatalogKey: addonCatalogKey,
     );
-    if (source == null || !source.isAddonDirect) {
+    if (source == null || (!source.isAddonDirect && !source.isMediaServer)) {
       _snack(context, 'This direct stream cannot be refreshed by its addon.');
       return false;
     }
@@ -5498,7 +5573,7 @@ class TorrentPlaybackService {
       return false;
     }
     try {
-      await IptvSourceSearch.authorize(torrent);
+      await DirectSourceAuthorization.authorize(torrent);
     } catch (error) {
       logIptvSourceEvent(
         'manual_pin_completed',
@@ -6075,8 +6150,10 @@ class TorrentPlaybackService {
     PlaylistViewMode? viewMode,
     Map<String, String>? httpHeaders,
   }) => VideoPlayerLaunchArgs(
-    // Continuous shuffle needs the in-app episode-fetch and EOF callbacks.
-    disableExternalPlayer: meta?.initialContinuousShuffle ?? false,
+    // External apps receive only the URL, not media-server session headers.
+    // Continuous shuffle also needs the in-app episode-fetch/EOF callbacks.
+    disableExternalPlayer: (meta?.initialContinuousShuffle ?? false) ||
+        (httpHeaders?.keys.any((key) => key.toLowerCase() == 'x-emby-token') ?? false),
     initialContinuousShuffle: meta?.initialContinuousShuffle ?? false,
     videoUrl: videoUrl,
     httpHeaders: httpHeaders,
@@ -6119,8 +6196,10 @@ class TorrentPlaybackService {
   );
 
   @visibleForTesting
-  static VideoPlayerLaunchArgs playerArgsForTesting(PlaybackMeta? meta) =>
-      _playerArgs(videoUrl: 'video', title: 'Title', meta: meta);
+  static VideoPlayerLaunchArgs playerArgsForTesting(
+    PlaybackMeta? meta, {
+    Map<String, String>? httpHeaders,
+  }) => _playerArgs(videoUrl: 'video', title: 'Title', meta: meta, httpHeaders: httpHeaders);
 
   /// Providers with credentials configured (in this service's precedence
   /// order) plus the user's saved default when it's still configured — the
@@ -6153,6 +6232,7 @@ class TorrentPlaybackService {
   static bool _isNonDebridLaunchProvider(String provider) =>
       provider == SeriesSource.localService ||
       provider == SeriesSource.addonDirectService ||
+      provider == SeriesSource.mediaServerService ||
       provider == SeriesSource.iptvDirectService;
 
   /// In-player Sources-switcher resolver for launches that didn't go through a
@@ -6169,7 +6249,7 @@ class TorrentPlaybackService {
         t = resolution.source!;
       }
       try {
-        await IptvSourceSearch.authorize(t);
+        await DirectSourceAuthorization.authorize(t);
       } catch (_) {
         return null;
       }
@@ -6381,6 +6461,7 @@ class TorrentPlaybackService {
   }) {
     final now = DateTime.now().millisecondsSinceEpoch;
     if (source.streamType == StreamType.directUrl) {
+      if (MediaServerService.owns(source)) return MediaServerService.bindingFor(source);
       if (IptvSourceSearch.owns(source)) {
         final playlistId = source.iptvPlaylistId;
         final catalogType = source.iptvCatalogType;
@@ -6821,7 +6902,7 @@ class TorrentPlaybackService {
         t = resolution.source!;
       }
       try {
-        await IptvSourceSearch.authorize(t);
+        await DirectSourceAuthorization.authorize(t);
       } catch (_) {
         return null;
       }
@@ -6876,6 +6957,7 @@ class TorrentPlaybackService {
         var bindingProvider = provider;
         if (t.streamType == StreamType.torrent &&
             (bindingProvider == SeriesSource.addonDirectService ||
+                bindingProvider == SeriesSource.mediaServerService ||
                 bindingProvider == SeriesSource.iptvDirectService)) {
           bindingProvider =
               await _defaultConfiguredProvider() ?? bindingProvider;
@@ -7073,6 +7155,11 @@ class TorrentPlaybackService {
     }
   }
 
+  /// Native media-server streams need credential-aware background downloads,
+  /// including redirect and resource-revocation handling, before enabling this.
+  static bool supportsDirectStreamDownload(Torrent torrent) =>
+      !MediaServerService.owns(torrent);
+
   /// Download a direct/external addon stream to device (parity with the old
   /// screen's direct-stream "Download to device" action). Follows redirects
   /// first — MediaFusion-style playback URLs 30x-hop to the real file — then
@@ -7081,6 +7168,12 @@ class TorrentPlaybackService {
     BuildContext context,
     Torrent torrent,
   ) async {
+    if (!supportsDirectStreamDownload(torrent)) {
+      if (context.mounted) {
+        _snack(context, 'Jellyfin and Emby downloads are not supported yet.');
+      }
+      return;
+    }
     if (IptvSourceSearch.isDeferredXtreamSeries(torrent)) {
       if (context.mounted) {
         _snack(context, 'Finding this IPTV episode…');
@@ -7101,7 +7194,7 @@ class TorrentPlaybackService {
       torrent = resolution.source!;
     }
     try {
-      await IptvSourceSearch.authorize(torrent);
+      await DirectSourceAuthorization.authorize(torrent);
     } catch (_) {
       if (context.mounted) {
         _snack(context, 'IPTV connection changed. Search sources again.');
@@ -7117,7 +7210,7 @@ class TorrentPlaybackService {
     _snack(context, 'Resolving download URL…');
     final resolved = await _resolveDownloadUrl(raw);
     try {
-      await IptvSourceSearch.authorize(torrent);
+      await DirectSourceAuthorization.authorize(torrent);
       await DownloadService.instance.enqueueDownload(
         url: resolved,
         fileName: torrent.displayTitle,
@@ -8471,6 +8564,8 @@ class TorrentPlaybackService {
         return 'Direct addon';
       case SeriesSource.iptvDirectService:
         return 'IPTV';
+      case SeriesSource.mediaServerService:
+        return 'Media server';
       case 'stream':
         return 'Stream';
       default:

@@ -1,5 +1,8 @@
 import 'package:debrify/services/profiles/local_backup/local_backup_archive.dart';
 import 'dart:convert';
+import 'package:debrify/models/media_server_source.dart';
+import 'package:debrify/models/quick_play_rules.dart';
+import 'package:debrify/services/series_source_service.dart';
 import 'dart:math';
 import 'package:debrify/models/home_collection.dart';
 import 'package:debrify/services/profiles/profile_preference_budget.dart';
@@ -206,6 +209,58 @@ void main() {
     AppStorage.debugReset();
     await registry.close();
     await temporaryDirectory.delete(recursive: true);
+  });
+
+  test('profile restore remaps embedded media-server pin resources', () async {
+    final resources = ConnectionResourceService(registry: registry, cipher: cipher);
+    final resource = await resources.create(
+      context: await ProfileAuthorizationContext.capture(registry),
+      type: ConnectionResourceType.mediaServer, label: 'Jellyfin',
+      publicConfig: {'accountLabel': 'Jellyfin'},
+      secretConfig: {'token': 'server-token', 'kind': 'jellyfin'},
+    );
+    final prefs = await ProfilePreferences.instance();
+    final original = [for (final movie in [true, false]) SeriesSource(
+      torrentHash: '', torrentName: 'Example', debridService: 'media_server', boundAt: 100,
+      debridTorrentId: MediaServerSource(serverId: resource.id, contentId: 'tt123',
+        isMovie: movie, variant: movie ? 'file-version' : '1080p').encode(),
+    )];
+    await prefs.setString('series_source_tt123', jsonEncode(original.map((pin) => pin.toJson()).toList()));
+    for (final movie in [true, false]) {
+      await StorageService.setQuickPlayRules(
+        QuickPlayRules.debrifyDefault(isMovie: movie).copyWith(sourcePriority: [
+          'mediaserver:${resource.id}'.toLowerCase(), 'stremio:backup',
+        ]), isMovie: movie);
+    }
+    final package = await ProfilePackageService(registry: registry, resources: resources).exportAllProfiles(
+      context: await ProfileAuthorizationContext.capture(registry), includeSecrets: true, includeDatabases: false,
+    );
+    final report = await ProfileRestoreCoordinator(registry: registry, cipher: cipher).restoreDeviceGraph(
+      package: package, authorization: await ProfileAuthorizationContext.capture(registry),
+    );
+    final lifecycle = ProfileLifecycleCoordinator(registry: registry);
+    addTearDown(lifecycle.dispose);
+    await lifecycle.switchTo(report.importedProfileIds.single);
+    final restoredResource = (await registry.listGrantedResources(report.importedProfileIds.single))
+        .singleWhere((value) => value.type == ConnectionResourceType.mediaServer &&
+            value.ownerProfileId == report.importedProfileIds.single);
+    expect(restoredResource.id, isNot(resource.id));
+    for (final movie in [true, false]) {
+      expect((await StorageService.getQuickPlayRules(isMovie: movie)).sourcePriority,
+        ['mediaserver:${restoredResource.id}'.toLowerCase(), 'stremio:backup']);
+    }
+    final restoredPrefs = await ProfilePreferences.instance();
+    final restored = (jsonDecode(restoredPrefs.getString('series_source_tt123')!) as List)
+        .map((value) => SeriesSource.fromJson(Map<String, dynamic>.from(value as Map))).toList();
+    expect(restored, hasLength(2));
+    for (var i = 0; i < restored.length; i++) {
+      final descriptor = MediaServerSource.tryDecode(restored[i].debridTorrentId)!;
+      expect(descriptor.serverId, restoredResource.id);
+      expect(descriptor.contentId, 'tt123');
+      expect(descriptor.variant, i == 0 ? 'file-version' : '1080p');
+      expect(descriptor.isMovie, i == 0);
+      expect(restored[i].bindingKey, isNot(original[i].bindingKey));
+    }
   });
 
   test(

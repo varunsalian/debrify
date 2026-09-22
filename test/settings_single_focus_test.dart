@@ -136,6 +136,33 @@ void main() {
     expect(litRows(tester), 1);
   });
 
+  testWidgets('Connections routes through the media-server card when present', (tester) async {
+    ConnectionInfo connection(String title) => ConnectionInfo(title: title,
+      connected: true, status: 'Configured', caption: 'Ready', onTap: () async {});
+    await pump(tester, SingleChildScrollView(child: SizedBox(width: 800,
+      child: ConnectionsSummary(
+        realDebrid: connection('Real Debrid'), torbox: connection('Torbox'),
+        premiumize: connection('Premiumize'), allDebrid: connection('AllDebrid'),
+        pikpak: connection('PikPak'), webDav: connection('WebDAV'),
+        mediaServers: connection('Jellyfin & Emby'),
+        indexerManagers: connection('Indexer Managers'), iptv: connection('IPTV'),
+        tracking: connection('Tracking'), trakt: connection('Trakt'), simkl: connection('Simkl'),
+      ),
+    )));
+    final cards = tester.widgetList<ConnectionCard>(find.byType(ConnectionCard));
+    cards.singleWhere((card) => card.info.title == 'IPTV').focusNode!.requestFocus();
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pump();
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'settings-media-servers');
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pump();
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'settings-tracking');
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+    await tester.pump();
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'settings-media-servers');
+  });
+
   testWidgets('wide Connections routes IPTV down through Tracking', (
     tester,
   ) async {

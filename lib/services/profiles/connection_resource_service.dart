@@ -955,7 +955,8 @@ class ConnectionResourceService {
         'region',
         'accountLabel',
       },
-      ConnectionResourceType.webDav => const <String>{'accountLabel'},
+      ConnectionResourceType.webDav ||
+      ConnectionResourceType.mediaServer => const <String>{'accountLabel'},
       ConnectionResourceType.trakt ||
       ConnectionResourceType.simkl ||
       ConnectionResourceType.mdblist ||

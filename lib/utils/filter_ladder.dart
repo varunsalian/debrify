@@ -131,6 +131,7 @@ class FilterLadder {
     int sizeBytes,
     TorrentFilterState tier,
     DynamicRange? range,
+    List<String>? audioLanguages,
   ) {
     if (tier.qualities.isNotEmpty &&
         !tier.qualities.contains(qualityTierForName(name))) {
@@ -141,7 +142,10 @@ class FilterLadder {
             .contains(TorrentFilterMatcher.detectRipSource(name))) {
       return false;
     }
-    if (tier.languages.isNotEmpty && !langMatches(name, tier.languages)) {
+    final languageMatches = audioLanguages == null
+        ? langMatches(name, tier.languages)
+        : TorrentFilterMatcher.matchesAudioMetadata(audioLanguages, tier.languages);
+    if (!languageMatches) {
       return false;
     }
     if (tier.sizes.isNotEmpty) {
@@ -163,7 +167,12 @@ class FilterLadder {
   /// [allowCamFloor] is off for addon/IPTV streams (see [tierOf]) whose
   /// labels aren't scene names — a stream called "channel.ts" is a transport
   /// stream, not a telesync, and must not sink below everything.
-  int tierOfName(String name, {bool allowCamFloor = true, int sizeBytes = 0}) {
+  int tierOfName(
+    String name, {
+    bool allowCamFloor = true,
+    int sizeBytes = 0,
+    List<String>? audioLanguages,
+  }) {
     if (!isActive) return 0;
     if (allowCamFloor &&
         !filters.ripSources.contains(RipSourceCategory.cam) &&
@@ -179,7 +188,7 @@ class FilterLadder {
         ? null
         : TorrentFilterMatcher.detectDynamicRange(name);
     for (var i = 0; i < _tiers.length; i++) {
-      if (_matchesTier(name, sizeBytes, _tiers[i], range)) return i;
+      if (_matchesTier(name, sizeBytes, _tiers[i], range, audioLanguages)) return i;
     }
     // Unreachable — the last tier is unrestricted — but stay total.
     return tierCount - 1;
@@ -192,6 +201,7 @@ class FilterLadder {
         // "TC" channel tags), so non-torrent streams skip the floor.
         allowCamFloor: t.streamType == StreamType.torrent,
         sizeBytes: t.sizeBytes,
+        audioLanguages: t.audioLanguages,
       );
 
   /// Stable tier sort: in-tier order (relevance/seeders from curation) is

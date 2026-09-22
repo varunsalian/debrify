@@ -1,7 +1,7 @@
 import '../utils/show_shuffle.dart';
 import 'failed_saved_source.dart';
 import 'torrent_playback_service.dart';
-import 'iptv_source_search.dart';
+import 'direct_source_authorization.dart';
 import 'startup_recovery_sources.dart';
 import 'dart:async';
 import '../models/custom_series_identity.dart';
@@ -720,8 +720,8 @@ class VideoPlayerLauncher {
   }
 
   /// Whether a launch needs to explain why the user's external-player default
-  /// cannot be honored. Authenticated WebDAV playback is the current caller:
-  /// its Basic auth header can be consumed by Debrify's player but is not part
+  /// cannot be honored. Authenticated server playback carries headers which
+  /// can be consumed by Debrify's player but are not part
   /// of the URL handed to another app.
   static bool shouldExplainExternalPlayerFallback(
     VideoPlayerLaunchArgs args,
@@ -732,7 +732,8 @@ class VideoPlayerLauncher {
         (defaultPlayerMode == 'deovr' && Platform.isAndroid);
     final carriesAuthorization =
         args.httpHeaders?.keys.any(
-          (key) => key.toLowerCase() == 'authorization',
+          (key) => key.toLowerCase() == 'authorization' ||
+              key.toLowerCase() == 'x-emby-token',
         ) ??
         false;
     return wantsExternal && args.disableExternalPlayer && carriesAuthorization;
@@ -749,7 +750,7 @@ class VideoPlayerLauncher {
           builder: (dialogContext) => AlertDialog(
             title: const Text('External player unavailable'),
             content: const Text(
-              'This WebDAV server requires authentication. Debrify cannot pass '
+              'This server requires authentication. Debrify cannot pass '
               'the required authorization headers to another app, so this video '
               'will open in the Debrify player.',
             ),
@@ -2303,7 +2304,7 @@ class VideoPlayerLauncher {
             'VideoPlayerLauncher: resolving source playlist $sourceIndex: ${torrent.displayTitle}',
           );
           try {
-            await IptvSourceSearch.authorize(torrent);
+            await DirectSourceAuthorization.authorize(torrent);
           } catch (_) {
             return null;
           }

@@ -173,6 +173,50 @@ void main() {
     expect(fetcher.episodesFetched, isTrue);
   });
 
+  test(
+    'native priorities disable early addon launch until all sources arrive',
+    () {
+      final stremio = addon('backup');
+      for (final native in ['mediaserver:primary', 'iptv:primary']) {
+        expect(
+          TorrentPlaybackService.leadingDirectAddonKey(
+            [stremio],
+            [native, stremio.sourceKey],
+          ),
+          isNull,
+        );
+      }
+      expect(
+        TorrentPlaybackService.leadingDirectAddonKey(
+          [stremio],
+          [stremio.sourceKey],
+        ),
+        stremio.sourceKey,
+      );
+    },
+  );
+
+  test(
+    'Quick Play retains native and addon errors, excluding engine errors',
+    () {
+      for (final field in ['engineErrors', 'addonErrors']) {
+        expect(
+          TorrentPlaybackService.directSearchErrors({
+            field: {
+              'mediaserver:home': 'Reconnect this server.',
+              'stremio:backup': 'Timed out',
+              'engine:test': 'Offline',
+            },
+          }),
+          {
+            'mediaserver:home': 'Reconnect this server.',
+            'stremio:backup': 'Timed out',
+          },
+        );
+      }
+    },
+  );
+
   test('early direct uses exact addon configuration priority keys', () {
     final primary = StremioAddon(
       id: 'com.test.aio',
@@ -386,6 +430,44 @@ void main() {
       expect(result['torrents'], hasLength(2));
     },
   );
+
+  for (final combined in [false, true]) {
+    test(
+      'custom episode keeps compatible addons in ${combined ? 'combined' : 'addon-only'} search',
+      () async {
+        final origin = addon('onepace');
+        install([origin, addon('fallback')]);
+        final paths = <String, String>{};
+        service.debugStreamHttpClientFactory = () =>
+            MockClient((request) async {
+              paths[request.url.host] = Uri.decodeComponent(request.url.path);
+              return response('https://cdn.test/${request.url.host}');
+            });
+        final result = combined
+            ? await TorrentService.searchByImdbWithStremio(
+                'tt0388629',
+                isMovie: false,
+                season: 1,
+                episode: 1,
+                originAddonKey: origin.sourceBindingKey,
+                originVideoId: 'RO_1',
+              )
+            : await TorrentService.searchStremioAddonsOnly(
+                imdbId: 'tt0388629',
+                isMovie: false,
+                season: 1,
+                episode: 1,
+                originAddonKey: origin.sourceBindingKey,
+                originVideoId: 'RO_1',
+              );
+        expect(paths, {
+          'onepace.test': '/stream/series/RO_1.json',
+          'fallback.test': '/stream/series/RO_1.json',
+        });
+        expect(result['torrents'], hasLength(2));
+      },
+    );
+  }
 
   test(
     'concurrent pinned lookup and ordinary search share addon request',
