@@ -576,6 +576,7 @@ class StremioAddon {
   final int? connectionResourceRevision;
   final bool connectionResourceReadOnly;
   final bool connectionResourceCredentialsRedacted;
+  final bool connectionResourceSecretPending;
 
   /// Optional description from manifest
   final String? description;
@@ -616,6 +617,7 @@ class StremioAddon {
     this.connectionResourceRevision,
     this.connectionResourceReadOnly = false,
     this.connectionResourceCredentialsRedacted = false,
+    this.connectionResourceSecretPending = false,
     this.description,
     this.version,
     this.enabled = true,
@@ -862,6 +864,8 @@ class StremioAddon {
           json['_connectionResourceReadOnly'] as bool? ?? false,
       connectionResourceCredentialsRedacted:
           json['_connectionResourceCredentialsRedacted'] as bool? ?? false,
+      connectionResourceSecretPending:
+          json['_connectionResourceSecretPending'] as bool? ?? false,
       description: json['description'] as String?,
       version: json['version'] as String?,
       enabled: json['enabled'] as bool? ?? true,
@@ -898,6 +902,8 @@ class StremioAddon {
       if (connectionResourceCredentialsRedacted)
         '_connectionResourceCredentialsRedacted':
             connectionResourceCredentialsRedacted,
+      if (connectionResourceSecretPending)
+        '_connectionResourceSecretPending': true,
       if (description != null) 'description': description,
       if (version != null) 'version': version,
       'enabled': enabled,
@@ -924,6 +930,7 @@ class StremioAddon {
     int? connectionResourceRevision,
     bool? connectionResourceReadOnly,
     bool? connectionResourceCredentialsRedacted,
+    bool? connectionResourceSecretPending,
     String? description,
     String? version,
     bool? enabled,
@@ -950,6 +957,9 @@ class StremioAddon {
       connectionResourceCredentialsRedacted:
           connectionResourceCredentialsRedacted ??
           this.connectionResourceCredentialsRedacted,
+      connectionResourceSecretPending:
+          connectionResourceSecretPending ??
+          this.connectionResourceSecretPending,
       description: description ?? this.description,
       version: version ?? this.version,
       enabled: enabled ?? this.enabled,
@@ -978,6 +988,7 @@ class StremioAddon {
       connectionResourceReadOnly: connectionResourceReadOnly,
       connectionResourceCredentialsRedacted:
           connectionResourceCredentialsRedacted,
+      connectionResourceSecretPending: connectionResourceSecretPending,
       description: description,
       version: version,
       enabled: enabled,

@@ -339,7 +339,11 @@ class StremioService {
           // the (network-long) hydration can never publish under the new
           // profile's scope.
           try {
-            await _saveAddons(addons, initiatingAuthorization: authorization);
+            await _saveAddons(
+              addons,
+              initiatingAuthorization: authorization,
+              preserveUnavailable: true,
+            );
             // _saveAddons reads the complete settings inventory back so its
             // management callers retain disabled rows. Re-read through the
             // execution path here; a playback caller must never receive that
@@ -579,6 +583,7 @@ class StremioService {
     List<StremioAddon> addons, {
     ProfileAsyncAuthorization? initiatingAuthorization,
     bool revokeSharedProfiles = false,
+    bool preserveUnavailable = false,
   }) async {
     Future<List<StremioAddon>> persist() async {
       if (ProfileCollectionResourceFacade.active) {
@@ -605,6 +610,7 @@ class StremioService {
           // collection (and may be returned to the management caller).
           forSettings: true,
           revokeBorrowers: revokeSharedProfiles,
+          preserveUnavailable: preserveUnavailable,
         );
         return rows.map(StremioAddon.fromJson).toList(growable: false);
       } else {
@@ -812,10 +818,12 @@ class StremioService {
     );
   }
 
-  Future<int> addonBorrowerCount(String manifestUrl) async {
+  Future<int> addonBorrowerCount(String addonKey) async {
     final addons = await getAddonsForManagement();
     final target = addons
-        .where((a) => a.manifestUrl == manifestUrl)
+        .where((a) =>
+            a.storageKey == addonKey ||
+            (a.manifestUrl.isNotEmpty && a.manifestUrl == addonKey))
         .firstOrNull;
     final resourceId = target?.connectionResourceId;
     if (resourceId == null) return 0;
@@ -842,10 +850,10 @@ class StremioService {
     return count;
   }
 
-  /// Remove an addon by its manifest URL. Shared profile access is revoked
-  /// only after the caller has explicitly confirmed that destructive impact.
+  /// Remove an addon by storage key (or a legacy manifest URL). Shared access
+  /// is revoked only after the caller has explicitly confirmed that impact.
   Future<void> removeAddon(
-    String manifestUrl, {
+    String addonKey, {
     bool revokeSharedProfiles = false,
   }) async {
     final authorization = await ProfileAsyncAuthorization.capture(
@@ -855,7 +863,8 @@ class StremioService {
     final addons = await getAddonsForManagement();
     StremioAddon? target;
     for (final addon in addons) {
-      if (addon.manifestUrl == manifestUrl) {
+      if (addon.storageKey == addonKey ||
+          (addon.manifestUrl.isNotEmpty && addon.manifestUrl == addonKey)) {
         target = addon;
         break;
       }
@@ -879,7 +888,9 @@ class StremioService {
       debugPrint('StremioService: Removed addon');
       return;
     }
-    addons.removeWhere((a) => a.manifestUrl == manifestUrl);
+    addons.removeWhere((a) =>
+        a.storageKey == addonKey ||
+        (a.manifestUrl.isNotEmpty && a.manifestUrl == addonKey));
     await _saveAddons(addons, initiatingAuthorization: authorization);
     debugPrint('StremioService: Removed addon');
   }

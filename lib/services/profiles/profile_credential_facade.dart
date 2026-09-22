@@ -206,7 +206,7 @@ class ProfileCredentialFacade {
       permission: ResourcePermission.use,
       feature: field.feature,
     );
-    if (resource.secretPending) return null;
+    if (resource.needsReconnect) return null;
     return (
       resourceId: resource.id,
       resourceAuthorizationRevision: resource.authorizationRevision,
@@ -228,15 +228,20 @@ class ProfileCredentialFacade {
     );
     if (resourceId == null) return (handled: true, value: null);
     final resource = await registry.getResource(resourceId);
-    if (resource?.secretPending == true) {
+    if (resource?.needsReconnect == true) {
       return (handled: true, value: null);
     }
-    final secret = await _service(registry).resolveSecretForUse(
-      context: context,
-      resourceId: resourceId,
-      feature: field.feature,
-    );
-    return (handled: true, value: secret[field.field] as String?);
+    try {
+      final secret = await _service(registry).resolveSecretForUse(
+        context: context,
+        resourceId: resourceId,
+        feature: field.feature,
+      );
+      return (handled: true, value: secret[field.field] as String?);
+    } on ResourceSecretUnavailableException {
+      await context.validate(registry);
+      return (handled: true, value: null);
+    }
   }
 
   /// Answers whether the active profile has a usable binding without opening
@@ -265,7 +270,7 @@ class ProfileCredentialFacade {
         permission: ResourcePermission.use,
         feature: field.feature,
       );
-      if (resource.secretPending) {
+      if (resource.needsReconnect) {
         return (handled: true, configured: false, pending: true);
       }
       return (handled: true, configured: true, pending: false);
@@ -386,16 +391,21 @@ class ProfileCredentialFacade {
     );
     if (id == null) return (handled: false, value: null);
     final resource = await registry.getResource(id);
-    if (resource?.secretPending == true) return (handled: false, value: null);
-    final secret = await _service(registry).resolveSecretForUse(
-      context: context,
-      resourceId: id,
-      feature: ProfileFeature.trackersAndDiscovery,
-    );
-    return (
-      handled: secret.containsKey('expiryMs'),
-      value: secret['expiryMs'] as int?,
-    );
+    if (resource?.needsReconnect == true) return (handled: true, value: null);
+    try {
+      final secret = await _service(registry).resolveSecretForUse(
+        context: context,
+        resourceId: id,
+        feature: ProfileFeature.trackersAndDiscovery,
+      );
+      return (
+        handled: secret.containsKey('expiryMs'),
+        value: secret['expiryMs'] as int?,
+      );
+    } on ResourceSecretUnavailableException {
+      await context.validate(registry);
+      return (handled: true, value: null);
+    }
   }
 
   static Future<bool> setTraktSessionExpiry(int expiryMs) async {
@@ -451,7 +461,7 @@ class ProfileCredentialFacade {
     }
     context = await ProfileAuthorizationContext.capture(registry);
     final resource = await registry.getResource(resourceId);
-    if (resource?.secretPending == true) {
+    if (resource?.needsReconnect == true) {
       await service.updateSecret(
         context: context,
         resourceId: resourceId,
@@ -495,7 +505,7 @@ class ProfileCredentialFacade {
       permission: ResourcePermission.manage,
       feature: ProfileFeature.manageConnections,
     );
-    final current = authorized.secretPending
+    final current = authorized.needsReconnect
         ? <String, dynamic>{}
         : await service.resolveSecretForUse(
             context: context,

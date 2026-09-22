@@ -220,7 +220,7 @@ abstract interface class DeviceSecretCipher {
   Future<List<int>> open(String envelope, {required List<int> associatedData});
 }
 
-enum DeviceVaultFailure { missing, unreadable, unavailable }
+enum DeviceVaultFailure { missing, unreadable, unavailable, recordUnreadable }
 
 extension DeviceVaultFailureRecovery on DeviceVaultFailure {
   bool get requiresReset =>
@@ -251,6 +251,7 @@ class DeviceVaultException implements Exception {
     final failure = switch (error.code) {
       'device_secret_missing' => DeviceVaultFailure.missing,
       'device_secret_unreadable' => DeviceVaultFailure.unreadable,
+      'device_secret_record_unreadable' => DeviceVaultFailure.recordUnreadable,
       _ => DeviceVaultFailure.unavailable,
     };
     return DeviceVaultException(
@@ -326,12 +327,36 @@ class PlatformDeviceSecretCipher implements DeviceSecretCipher {
     List<int> plaintext, {
     required List<int> associatedData,
   }) async {
+    // Check the actual payload, not just the small vault canary. A provider
+    // may accept encryption but fail to reopen larger records. Never let a
+    // caller persist such an envelope or replace a working credential with it.
+    final input = base64Encode(plaintext);
+    final aad = base64Encode(associatedData);
     final value = await _invoke<String>('seal', <String, Object>{
-      'plaintext': base64Encode(plaintext),
-      'associatedData': base64Encode(associatedData),
+      'plaintext': input,
+      'associatedData': aad,
     });
     if (value == null) throw StateError('Device secret encryption failed');
-    return 'native1:$value';
+    final envelope = 'native1:$value';
+    try {
+      // All native implementations return canonical, unwrapped base64. Compare
+      // that representation to avoid another full decoded copy of large IPTV
+      // records on memory-constrained televisions.
+      final reopened = await _invoke<String>('open', <String, Object>{
+        'envelope': value,
+        'associatedData': aad,
+      });
+      if (reopened != input) {
+        throw const FormatException('Device secret verification mismatch');
+      }
+    } catch (_) {
+      throw const DeviceVaultException(
+        failure: DeviceVaultFailure.unavailable,
+        operation: 'seal',
+        diagnostic: 'Credential verification failed; nothing was saved',
+      );
+    }
+    return envelope;
   }
 
   @override
@@ -417,7 +442,19 @@ class PassphraseDeviceSecretCipher implements DeviceSecretCipher {
       secretKey: key,
       aad: associatedData,
     );
-    return 'linux1:${state.keyId}:${base64Encode(<int>[...box.nonce, ...box.cipherText, ...box.mac.bytes])}';
+    final envelope =
+        'linux1:${state.keyId}:${base64Encode(<int>[...box.nonce, ...box.cipherText, ...box.mac.bytes])}';
+    if (!listEquals(
+      plaintext,
+      await open(envelope, associatedData: associatedData),
+    )) {
+      throw const DeviceVaultException(
+        failure: DeviceVaultFailure.unavailable,
+        operation: 'seal',
+        diagnostic: 'Credential verification failed; nothing was saved',
+      );
+    }
+    return envelope;
   }
 
   @override

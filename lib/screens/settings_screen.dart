@@ -987,7 +987,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       return const <ConnectionResourceType>{};
     }
     return resources
-        .where((resource) => resource.secretPending)
+        .where((resource) => resource.needsReconnect)
         .map((resource) => resource.type)
         .toSet();
   }

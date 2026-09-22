@@ -569,7 +569,9 @@ class _IndexerManagerEditorDialogState
         connectionResourceId: config?.connectionResourceId,
         connectionResourceRevision: config?.connectionResourceRevision,
         connectionReadOnly: config?.connectionReadOnly ?? false,
-        credentialsRedacted: config?.credentialsRedacted ?? false,
+        // Validation requires a URL and API key: this is an explicit repair,
+        // not the untouched redacted placeholder loaded from settings.
+        credentialsRedacted: false,
       ),
     );
   }

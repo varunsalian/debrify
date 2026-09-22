@@ -39,6 +39,8 @@ private final class DeviceSecretCipher {
         result(FlutterError(code: "device_secret_missing", message: nil, details: nil))
       } catch DeviceSecretError.unreadable {
         result(FlutterError(code: "device_secret_unreadable", message: nil, details: nil))
+      } catch CryptoKitError.authenticationFailure {
+        result(FlutterError(code: "device_secret_record_unreadable", message: nil, details: nil))
       } catch {
         result(FlutterError(code: "device_secret_failed", message: error.localizedDescription, details: nil))
       }

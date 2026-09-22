@@ -2569,8 +2569,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           value: _selectedResources.contains(resource.id),
           title: Text(resource.label),
           subtitle: Text(
-            resource.secretPending
-                ? 'credentials pending owner sign-in'
+            resource.needsReconnect
+                ? 'Reconnect required'
                 : resource.type.name,
           ),
           secondary:
