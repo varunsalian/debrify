@@ -6,6 +6,8 @@ import 'package:path_provider_platform_interface/path_provider_platform_interfac
 
 import 'package:debrify/models/iptv_playlist.dart';
 import 'package:debrify/services/iptv_epg_service.dart';
+import 'package:debrify/services/iptv_catalog_db.dart';
+import 'package:debrify/services/iptv_catalog_key.dart';
 
 /// True end-to-end run of the Xtream→xmltv.php guide layering, the exact
 /// scenario field reports describe: a panel whose per-stream get_short_epg
@@ -31,6 +33,14 @@ class _FakePathProvider extends PathProviderPlatform {
   }
 }
 
+IptvChannel saved(String url, String origin, {String name = 'Saved name'}) =>
+    IptvChannel(
+      name: name,
+      url: url,
+      duration: -1,
+      attributes: {'list_playlist_id': origin},
+    );
+
 void main() {
   late Directory storageRoot;
   late HttpServer server;
@@ -41,6 +51,7 @@ void main() {
   // the healthy-panel case whose catchup flags the schedule path must keep.
   var serveDataTable = false;
   var dataTableIncludesRawStart = true;
+  void Function()? onGuideRequest;
 
   DateTime guideStart() {
     final now = DateTime.now().toUtc();
@@ -103,8 +114,20 @@ void main() {
       final path = request.uri.path;
       if (path.endsWith('xmltv.php')) {
         xmltvHits++;
+        onGuideRequest?.call();
+        if (request.uri.queryParameters['variant'] == 'failed') {
+          request.response.statusCode = 503;
+          request.response.close();
+          return;
+        }
         // Served as a gzip FILE (magic bytes), like real panels do.
-        final body = gzip.encode(utf8.encode(guideXml()));
+        final body = gzip.encode(
+          utf8.encode(
+            request.uri.queryParameters['variant'] == 'other'
+                ? guideXml().replaceAll('Show ', 'Other ')
+                : guideXml(),
+          ),
+        );
         request.response.headers.contentType = ContentType(
           'application',
           'octet-stream',
@@ -157,6 +180,314 @@ void main() {
   setUp(() {
     serveDataTable = false;
     dataTableIncludesRawStart = true;
+    onGuideRequest = null;
+  });
+
+  for (final dbMode in [false, true]) {
+    test(
+      'successive lists cannot poison the ${dbMode ? 'DB' : 'memory'} provider guide',
+      () async {
+        final dir = await Directory.systemTemp.createTemp('epg_coverage');
+        try {
+          final guideUrl =
+              'http://127.0.0.1:$port/xmltv.php?case=coverage-$dbMode';
+          final provider = IptvPlaylist(
+            id: 'coverage',
+            name: 'Provider',
+            url: 'https://coverage.test/provider',
+            epgUrl: guideUrl,
+            addedAt: DateTime.now(),
+          );
+          final channels = [
+            saved('https://coverage.test/one', 'coverage', name: 'Mock One'),
+            saved(
+              'https://coverage.test/two',
+              'coverage',
+              name: 'Named Only Channel',
+            ),
+          ];
+          String? catalogKey;
+          if (dbMode) {
+            IptvCatalogDb.debugDirectoryOverride = dir.path;
+            await IptvCatalogDb.open();
+            catalogKey = IptvCatalogKey.forPlaylist(provider, 'live')!;
+            IptvCatalogDb.ingest(
+              dbPath: IptvCatalogDb.path,
+              catalogKey: catalogKey,
+              channels: channels,
+              epgUrl: guideUrl,
+            );
+          }
+          final service = IptvEpgService.instance;
+          await service.setListEpgContext(
+            channels: [channels.first],
+            playlists: [provider],
+          );
+          expect(
+            service.peekNowNext(channels.first.url)?.now?.title,
+            contains('mock1.test'),
+          );
+          await service.setListEpgContext(
+            channels: [channels.last],
+            playlists: [provider],
+          );
+          expect(
+            service.peekNowNext(channels.last.url)?.now?.title,
+            contains('namedonly.guide'),
+          );
+          final hits = xmltvHits;
+          await service.setListEpgContext(
+            channels: [channels.first],
+            playlists: [provider],
+          );
+          expect(service.peekNowNext(channels.first.url)?.now, isNotNull);
+          expect(
+            xmltvHits,
+            hits,
+            reason: 'Returning to identical coverage reuses its snapshot',
+          );
+          await service.setM3uEpgContext(
+            playlistKey: provider.id,
+            epgUrl: guideUrl,
+            channels: channels,
+            dbCatalogKey: catalogKey,
+          );
+          expect(
+            service.peekNowNext(channels.first.url)?.now?.title,
+            contains('mock1.test'),
+          );
+          expect(
+            service.peekNowNext(channels.last.url)?.now?.title,
+            contains('namedonly.guide'),
+          );
+        } finally {
+          IptvEpgService.instance.clearM3uEpgContext();
+          if (dbMode) {
+            IptvCatalogDb.debugClose();
+            IptvCatalogDb.debugDirectoryOverride = null;
+          }
+          await dir.delete(recursive: true);
+        }
+      },
+    );
+  }
+
+  test('one failed provider does not hide another Favorites guide', () async {
+    final channels = [
+      saved('https://failed.test/live', 'failed', name: 'Mock One'),
+      saved('https://healthy.test/live', 'healthy', name: 'Mock One'),
+    ];
+    await IptvEpgService.instance.setListEpgContext(
+      channels: channels,
+      playlists: [
+        IptvPlaylist(
+          id: 'failed',
+          name: 'Failed',
+          url: 'https://failed.test/list',
+          addedAt: DateTime.now(),
+          epgUrl: 'http://127.0.0.1:$port/xmltv.php?variant=failed',
+        ),
+        IptvPlaylist(
+          id: 'healthy',
+          name: 'Healthy',
+          url: 'https://healthy.test/list',
+          addedAt: DateTime.now(),
+          epgUrl: 'http://127.0.0.1:$port/xmltv.php?case=healthy-list',
+        ),
+      ],
+    );
+    expect(IptvEpgService.isEpgCapable(channels.first), false);
+    expect(
+      IptvEpgService.instance.peekNowNext(channels.last.url)?.now,
+      isNotNull,
+    );
+  });
+
+  test(
+    'leaving Favorites during a download cannot publish stale programme data',
+    () async {
+      final channel = saved(
+        'https://inflight.test/live',
+        'inflight',
+        name: 'Mock One',
+      );
+      onGuideRequest = () => IptvEpgService.instance.clearM3uEpgContext();
+      await IptvEpgService.instance.setListEpgContext(
+        channels: [channel],
+        playlists: [
+          IptvPlaylist(
+            id: 'inflight',
+            name: 'In flight',
+            url: 'https://inflight.test/list',
+            addedAt: DateTime.now(),
+            epgUrl: 'http://127.0.0.1:$port/xmltv.php?case=inflight-list',
+          ),
+        ],
+      );
+      expect(IptvEpgService.isEpgCapable(channel), false);
+    },
+  );
+
+  test(
+    'Favorites and custom-list view activate their origin-aware guide path',
+    () {
+      final source = File(
+        'lib/widgets/iptv/iptv_results_view.dart',
+      ).readAsStringSync();
+      final start = source.indexOf('void _updateEpgContext(');
+      final end = source.indexOf('final isPlainM3u', start);
+      final listBranch = source.substring(start, end);
+      expect(
+        listBranch,
+        contains('playlist.isFavorites || playlist.isCustomList'),
+      );
+      expect(listBranch, contains('service.setListEpgContext('));
+      expect(listBranch, contains('channels: result.channels'));
+      expect(listBranch, contains('ticket == _loadTicket'));
+    },
+  );
+
+  test(
+    'Favorites recover IDs and header guide URLs from cached provider catalogs',
+    () async {
+      final dir = await Directory.systemTemp.createTemp('favorite_epg_catalog');
+      IptvCatalogDb.debugDirectoryOverride = dir.path;
+      await IptvCatalogDb.open();
+      try {
+        final provider = IptvPlaylist(
+          id: 'provider',
+          name: 'Provider',
+          url: 'https://provider.test/list.m3u',
+          addedAt: DateTime.now(),
+        );
+        const stream = 'https://stream.test/channel';
+        IptvCatalogDb.ingest(
+          dbPath: IptvCatalogDb.path,
+          catalogKey: IptvCatalogKey.forPlaylist(provider, 'live')!,
+          epgUrl: 'http://127.0.0.1:$port/xmltv.php?case=cached-favorite',
+          channels: [
+            IptvChannel(
+              name: 'Renamed at provider',
+              url: stream,
+              duration: -1,
+              attributes: {'tvg-id': 'mock1.test'},
+            ),
+          ],
+        );
+        final favorite = saved(stream, provider.id);
+        await IptvEpgService.instance.setListEpgContext(
+          channels: [favorite],
+          playlists: [provider],
+        );
+        expect(IptvEpgService.isEpgCapable(favorite), true);
+        expect(
+          IptvEpgService.instance.peekNowNext(stream)?.now?.title,
+          contains('mock1.test'),
+        );
+        expect(await IptvEpgService.instance.schedule(stream), isNotEmpty);
+      } finally {
+        IptvEpgService.instance.clearM3uEpgContext();
+        IptvCatalogDb.debugClose();
+        IptvCatalogDb.debugDirectoryOverride = null;
+        await dir.delete(recursive: true);
+      }
+    },
+  );
+
+  test(
+    'mixed Favorites keep overlapping guide IDs isolated across providers',
+    () async {
+      final first = IptvPlaylist(
+        id: 'first',
+        name: 'First',
+        url: 'local-first',
+        addedAt: DateTime.now(),
+        content:
+            '#EXTM3U url-tvg="http://127.0.0.1:$port/xmltv.php?case=first-list"\n#EXTINF:-1 tvg-id="mock1.test",Original\nhttps://first.test/live\n',
+      );
+      final second = IptvPlaylist(
+        id: 'second',
+        name: 'Second',
+        url: 'local-second',
+        addedAt: DateTime.now(),
+        epgUrl:
+            'http://127.0.0.1:$port/xmltv.php?variant=other&case=second-list',
+        content:
+            '#EXTM3U\n#EXTINF:-1 tvg-id="mock1.test",Original\nhttps://second.test/live\n',
+      );
+      final channels = [
+        saved('https://first.test/live', 'first'),
+        saved('https://second.test/live', 'second'),
+      ];
+      await IptvEpgService.instance.setListEpgContext(
+        channels: channels,
+        playlists: [first, second],
+      );
+      expect(
+        IptvEpgService.instance.peekNowNext(channels[0].url)?.now?.title,
+        startsWith('Show '),
+      );
+      expect(
+        IptvEpgService.instance.peekNowNext(channels[1].url)?.now?.title,
+        startsWith('Other '),
+      );
+      // Removing a provider or switching shelves cannot retain its old guide.
+      await IptvEpgService.instance.setListEpgContext(
+        channels: channels,
+        playlists: [first],
+      );
+      expect(IptvEpgService.isEpgCapable(channels[1]), false);
+      IptvEpgService.instance.clearM3uEpgContext();
+      expect(IptvEpgService.isEpgCapable(channels[0]), false);
+    },
+  );
+
+  test(
+    'Favorites derive Xtream XMLTV when per-stream guide is empty',
+    () async {
+      final provider = IptvPlaylist(
+        id: 'xc-list',
+        name: 'Panel',
+        url: 'xtream://',
+        serverUrl: 'http://127.0.0.1:$port',
+        username: 'list-user',
+        password: 'pass',
+        addedAt: DateTime.now(),
+      );
+      final channel = saved(
+        'http://127.0.0.1:$port/live/list-user/pass/123.ts',
+        provider.id,
+        name: 'Mock One',
+      );
+      await IptvEpgService.instance.setListEpgContext(
+        channels: [channel],
+        playlists: [provider],
+      );
+      expect(
+        (await IptvEpgService.instance.nowNext(channel.url)).now?.title,
+        contains('mock1.test'),
+      );
+    },
+  );
+
+  test('superseded Favorites setup never republishes a guide', () async {
+    final provider = IptvPlaylist(
+      id: 'stale',
+      name: 'Stale',
+      url: 'local',
+      addedAt: DateTime.now(),
+      epgUrl: 'http://127.0.0.1:$port/xmltv.php?case=stale-list',
+      content:
+          '#EXTM3U\n#EXTINF:-1 tvg-id="mock1.test",Original\nhttps://stale.test/live\n',
+    );
+    final channel = saved('https://stale.test/live', provider.id);
+    final pending = IptvEpgService.instance.setListEpgContext(
+      channels: [channel],
+      playlists: [provider],
+    );
+    IptvEpgService.instance.clearM3uEpgContext();
+    await pending;
+    expect(IptvEpgService.isEpgCapable(channel), false);
   });
 
   IptvChannel liveChannel(int id, {String? tvgId, String? name}) => IptvChannel(
@@ -188,8 +519,9 @@ void main() {
     final before = IptvEpgService.instance.peekNowNext(ch.url);
     expect(before?.now, isNotNull);
 
-    final enriched = await IptvEpgService.instance
-        .nowNextWithCatchupMetadata(ch.url);
+    final enriched = await IptvEpgService.instance.nowNextWithCatchupMetadata(
+      ch.url,
+    );
     expect(enriched.now?.title, before!.now!.title);
     expect(enriched.now?.hasArchive, isTrue);
 

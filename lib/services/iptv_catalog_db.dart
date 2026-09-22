@@ -3817,6 +3817,16 @@ class CatalogSnapshot {
     return rows.isEmpty ? null : rows.first['position'] as int;
   }
 
+  /// Recover guide metadata for saved channels even after a display rename.
+  /// Hidden categories affect browsing, not an already-saved membership.
+  IptvChannel? channelForGuide(String url) {
+    final rows = _db.select(
+      'SELECT * $_base AND $_isLiveSql AND url = ? ORDER BY position LIMIT 1',
+      [..._args(), url],
+    );
+    return rows.isEmpty ? null : _channelFromRow(rows.first);
+  }
+
   /// Catalog entry (position + row) matching url+name, or null.
   ///
   /// Unlike [positionOf] this hands back the row itself, which the startup
