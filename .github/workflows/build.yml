@@ -607,7 +607,7 @@ jobs:
     - name: Install Linux dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libstdc++-12-dev libasound2-dev libpulse-dev libva-dev libvdpau-dev libxpresent-dev patchelf
+        sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libstdc++-12-dev libasound2-dev libpulse-dev libva-dev libvdpau-dev libxpresent-dev patchelf zsync
 
     - name: Build private libmpv
       run: |
@@ -657,9 +657,15 @@ jobs:
 
     - name: Create AppImage
       run: |
+        set -euo pipefail
+
         # Download appimagetool
         wget -q https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage
         chmod +x appimagetool-x86_64.AppImage
+
+        RELEASE_TAG="${{ github.event.release.tag_name }}"
+        VERSION="${RELEASE_TAG#v}"
+        if [ -z "$VERSION" ]; then VERSION="dev"; fi
 
         # Create AppDir structure
         mkdir -p AppDir/usr/bin
@@ -674,7 +680,7 @@ jobs:
         cp assets/app_icon.png AppDir/debrify.png
 
         # Create desktop file
-        cat > AppDir/debrify.desktop << 'EOF'
+        cat > AppDir/debrify.desktop << EOF
         [Desktop Entry]
         Name=Debrify
         Comment=Modern debrid companion with torrent search and playlist management
@@ -682,6 +688,9 @@ jobs:
         Icon=debrify
         Type=Application
         Categories=Utility;Network;
+        X-AppImage-Name=Debrify
+        X-AppImage-Version=${VERSION}
+        X-AppImage-Arch=x86_64
         EOF
 
         cp AppDir/debrify.desktop AppDir/usr/share/applications/
@@ -692,15 +701,76 @@ jobs:
         chmod +x AppDir/AppRun
 
         # Build AppImage
+        APPIMAGE="debrify-${RELEASE_TAG:-dev}-x86_64.AppImage"
+        if [ -n "$RELEASE_TAG" ]; then
+          UPDATE_CHANNEL=latest
+          if [ "${{ github.event.release.prerelease }}" = "true" ]; then
+            UPDATE_CHANNEL=latest-all
+          fi
+          REPOSITORY_OWNER="${GITHUB_REPOSITORY%%/*}"
+          REPOSITORY_NAME="${GITHUB_REPOSITORY#*/}"
+          UPDATE_INFORMATION="gh-releases-zsync|${REPOSITORY_OWNER}|${REPOSITORY_NAME}|${UPDATE_CHANNEL}|debrify-*-x86_64.AppImage.zsync"
+          ARCH=x86_64 ./appimagetool-x86_64.AppImage --appimage-extract-and-run -u "$UPDATE_INFORMATION" AppDir "$APPIMAGE"
+        else
+          ARCH=x86_64 ./appimagetool-x86_64.AppImage --appimage-extract-and-run AppDir "$APPIMAGE"
+        fi
+
+    - name: Verify release AppImage metadata
+      if: github.event_name == 'release'
+      run: |
+        set -euo pipefail
+        APPIMAGE="debrify-${{ github.event.release.tag_name }}-x86_64.AppImage"
+        SIDECAR="${APPIMAGE}.zsync"
+        test -s "$APPIMAGE"
+        test -s "$SIDECAR"
+
+        UPDATE_CHANNEL=latest
+        if [ "${{ github.event.release.prerelease }}" = "true" ]; then
+          UPDATE_CHANNEL=latest-all
+        fi
+        REPOSITORY_OWNER="${GITHUB_REPOSITORY%%/*}"
+        REPOSITORY_NAME="${GITHUB_REPOSITORY#*/}"
+        EXPECTED_UPDATE_INFORMATION="gh-releases-zsync|${REPOSITORY_OWNER}|${REPOSITORY_NAME}|${UPDATE_CHANNEL}|debrify-*-x86_64.AppImage.zsync"
+        ACTUAL_UPDATE_INFORMATION=$("./${APPIMAGE}" --appimage-updateinformation)
+        test "$ACTUAL_UPDATE_INFORMATION" = "$EXPECTED_UPDATE_INFORMATION"
+
+        rm -rf squashfs-root
+        "./${APPIMAGE}" --appimage-extract >/dev/null
         VERSION="${{ github.event.release.tag_name }}"
-        if [ -z "$VERSION" ]; then VERSION="dev"; fi
-        ARCH=x86_64 ./appimagetool-x86_64.AppImage --appimage-extract-and-run AppDir debrify-${VERSION}-x86_64.AppImage
+        VERSION="${VERSION#v}"
+        for DESKTOP_FILE in squashfs-root/debrify.desktop squashfs-root/usr/share/applications/debrify.desktop; do
+          grep -Fx 'X-AppImage-Name=Debrify' "$DESKTOP_FILE"
+          grep -Fx "X-AppImage-Version=${VERSION}" "$DESKTOP_FILE"
+          grep -Fx 'X-AppImage-Arch=x86_64' "$DESKTOP_FILE"
+        done
+
+    - name: Verify manual AppImage metadata
+      if: github.event_name == 'workflow_dispatch'
+      run: |
+        set -euo pipefail
+        APPIMAGE=debrify-dev-x86_64.AppImage
+        test -s "$APPIMAGE"
+        test -z "$("./${APPIMAGE}" --appimage-updateinformation)"
+        if compgen -G 'debrify-dev-x86_64.AppImage.zsync' >/dev/null; then
+          echo 'Unexpected zsync sidecar for manual build' >&2
+          exit 1
+        fi
+
+        rm -rf squashfs-root
+        "./${APPIMAGE}" --appimage-extract >/dev/null
+        for DESKTOP_FILE in squashfs-root/debrify.desktop squashfs-root/usr/share/applications/debrify.desktop; do
+          grep -Fx 'X-AppImage-Name=Debrify' "$DESKTOP_FILE"
+          grep -Fx 'X-AppImage-Version=dev' "$DESKTOP_FILE"
+          grep -Fx 'X-AppImage-Arch=x86_64' "$DESKTOP_FILE"
+        done
 
     - name: Upload AppImage to Release
       if: github.event_name == 'release'
       uses: softprops/action-gh-release@v1
       with:
-        files: debrify-${{ github.event.release.tag_name }}-x86_64.AppImage
+        files: |
+          debrify-${{ github.event.release.tag_name }}-x86_64.AppImage
+          debrify-${{ github.event.release.tag_name }}-x86_64.AppImage.zsync
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -734,7 +804,7 @@ jobs:
     - name: Install Linux dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libstdc++-12-dev libasound2-dev libpulse-dev libva-dev libvdpau-dev libxpresent-dev patchelf
+        sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libstdc++-12-dev libasound2-dev libpulse-dev libva-dev libvdpau-dev libxpresent-dev patchelf zsync
 
     # Build inside Ubuntu 22.04 even though GitHub currently only offers the
     # native public ARM runner on 24.04. This keeps both AppImage architectures
@@ -789,9 +859,15 @@ jobs:
 
     - name: Create AppImage
       run: |
+        set -euo pipefail
+
         # Download appimagetool for aarch64
         wget -q https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-aarch64.AppImage
         chmod +x appimagetool-aarch64.AppImage
+
+        RELEASE_TAG="${{ github.event.release.tag_name }}"
+        VERSION="${RELEASE_TAG#v}"
+        if [ -z "$VERSION" ]; then VERSION="dev"; fi
 
         # Create AppDir structure
         mkdir -p AppDir/usr/bin
@@ -806,7 +882,7 @@ jobs:
         cp assets/app_icon.png AppDir/debrify.png
 
         # Create desktop file
-        cat > AppDir/debrify.desktop << 'EOF'
+        cat > AppDir/debrify.desktop << EOF
         [Desktop Entry]
         Name=Debrify
         Comment=Modern debrid companion with torrent search and playlist management
@@ -814,6 +890,9 @@ jobs:
         Icon=debrify
         Type=Application
         Categories=Utility;Network;
+        X-AppImage-Name=Debrify
+        X-AppImage-Version=${VERSION}
+        X-AppImage-Arch=aarch64
         EOF
 
         cp AppDir/debrify.desktop AppDir/usr/share/applications/
@@ -824,19 +903,79 @@ jobs:
         chmod +x AppDir/AppRun
 
         # Build AppImage
-        VERSION="${{ github.event.release.tag_name }}"
-        if [ -z "$VERSION" ]; then VERSION="dev"; fi
-
         # Note: appimagetool expects "arm_aarch64" not "aarch64"
         # See: https://github.com/AppImage/AppImageKit/issues/1163
         export ARCH=arm_aarch64
-        ./appimagetool-aarch64.AppImage --appimage-extract-and-run AppDir debrify-${VERSION}-arm64.AppImage
+        APPIMAGE="debrify-${RELEASE_TAG:-dev}-arm64.AppImage"
+        if [ -n "$RELEASE_TAG" ]; then
+          UPDATE_CHANNEL=latest
+          if [ "${{ github.event.release.prerelease }}" = "true" ]; then
+            UPDATE_CHANNEL=latest-all
+          fi
+          REPOSITORY_OWNER="${GITHUB_REPOSITORY%%/*}"
+          REPOSITORY_NAME="${GITHUB_REPOSITORY#*/}"
+          UPDATE_INFORMATION="gh-releases-zsync|${REPOSITORY_OWNER}|${REPOSITORY_NAME}|${UPDATE_CHANNEL}|debrify-*-arm64.AppImage.zsync"
+          ./appimagetool-aarch64.AppImage --appimage-extract-and-run -u "$UPDATE_INFORMATION" AppDir "$APPIMAGE"
+        else
+          ./appimagetool-aarch64.AppImage --appimage-extract-and-run AppDir "$APPIMAGE"
+        fi
+
+    - name: Verify release AppImage metadata
+      if: github.event_name == 'release'
+      run: |
+        set -euo pipefail
+        APPIMAGE="debrify-${{ github.event.release.tag_name }}-arm64.AppImage"
+        SIDECAR="${APPIMAGE}.zsync"
+        test -s "$APPIMAGE"
+        test -s "$SIDECAR"
+
+        UPDATE_CHANNEL=latest
+        if [ "${{ github.event.release.prerelease }}" = "true" ]; then
+          UPDATE_CHANNEL=latest-all
+        fi
+        REPOSITORY_OWNER="${GITHUB_REPOSITORY%%/*}"
+        REPOSITORY_NAME="${GITHUB_REPOSITORY#*/}"
+        EXPECTED_UPDATE_INFORMATION="gh-releases-zsync|${REPOSITORY_OWNER}|${REPOSITORY_NAME}|${UPDATE_CHANNEL}|debrify-*-arm64.AppImage.zsync"
+        ACTUAL_UPDATE_INFORMATION=$("./${APPIMAGE}" --appimage-updateinformation)
+        test "$ACTUAL_UPDATE_INFORMATION" = "$EXPECTED_UPDATE_INFORMATION"
+
+        rm -rf squashfs-root
+        "./${APPIMAGE}" --appimage-extract >/dev/null
+        VERSION="${{ github.event.release.tag_name }}"
+        VERSION="${VERSION#v}"
+        for DESKTOP_FILE in squashfs-root/debrify.desktop squashfs-root/usr/share/applications/debrify.desktop; do
+          grep -Fx 'X-AppImage-Name=Debrify' "$DESKTOP_FILE"
+          grep -Fx "X-AppImage-Version=${VERSION}" "$DESKTOP_FILE"
+          grep -Fx 'X-AppImage-Arch=aarch64' "$DESKTOP_FILE"
+        done
+
+    - name: Verify manual AppImage metadata
+      if: github.event_name == 'workflow_dispatch'
+      run: |
+        set -euo pipefail
+        APPIMAGE=debrify-dev-arm64.AppImage
+        test -s "$APPIMAGE"
+        test -z "$("./${APPIMAGE}" --appimage-updateinformation)"
+        if compgen -G 'debrify-dev-arm64.AppImage.zsync' >/dev/null; then
+          echo 'Unexpected zsync sidecar for manual build' >&2
+          exit 1
+        fi
+
+        rm -rf squashfs-root
+        "./${APPIMAGE}" --appimage-extract >/dev/null
+        for DESKTOP_FILE in squashfs-root/debrify.desktop squashfs-root/usr/share/applications/debrify.desktop; do
+          grep -Fx 'X-AppImage-Name=Debrify' "$DESKTOP_FILE"
+          grep -Fx 'X-AppImage-Version=dev' "$DESKTOP_FILE"
+          grep -Fx 'X-AppImage-Arch=aarch64' "$DESKTOP_FILE"
+        done
 
     - name: Upload AppImage to Release
       if: github.event_name == 'release'
       uses: softprops/action-gh-release@v1
       with:
-        files: debrify-${{ github.event.release.tag_name }}-arm64.AppImage
+        files: |
+          debrify-${{ github.event.release.tag_name }}-arm64.AppImage
+          debrify-${{ github.event.release.tag_name }}-arm64.AppImage.zsync
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
