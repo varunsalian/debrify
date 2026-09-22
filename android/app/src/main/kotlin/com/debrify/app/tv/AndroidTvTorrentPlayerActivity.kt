@@ -1509,6 +1509,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         }
 
         override fun onPlaybackStateChanged(playbackState: Int) {
+            if (nativeAudioRouting.reprepareIfPending(player, playbackSpeeds[playbackSpeedIndex])) return
             when (playbackState) {
                 Player.STATE_READY -> {
                     if (pendingShufflePlayback?.mediaStarted == true) pendingShufflePlayback = null
@@ -2781,7 +2782,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             mainPost = { action -> runOnUiThread(action) },
             positionMs = { player?.currentPosition ?: 0L },
         ).also { speechTap = it }
-        nativeAudioRouting.update(nightModeIndex > 0, systemAudioEffectsEnabled)
+        nativeAudioRouting.update(nightModeIndex > 0, systemAudioEffectsEnabled, playbackSpeeds[playbackSpeedIndex])
         val baseRenderersFactory = NativeAudioRenderersFactory(
             this, nativeAudioRouting, arrayOf(tap.processor),
         )
@@ -3020,6 +3021,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         }
 
         player = playerBuilder.build()
+        player?.setPlaybackSpeed(playbackSpeeds[playbackSpeedIndex])
 
         player?.addListener(playbackListener)
         player?.addAnalyticsListener(decoderAnalyticsListener)
@@ -15535,8 +15537,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         } else {
             "Playback speed" to playbackSpeedLabels.mapIndexed { i, l ->
                 mrow(l, selected = i == playbackSpeedIndex, onOk = {
-                    playbackSpeedIndex = i.coerceIn(0, playbackSpeeds.lastIndex)
-                    player?.setPlaybackSpeed(playbackSpeeds[playbackSpeedIndex])
+                    applyPlaybackSpeed(i)
                 })
             }
         }
@@ -16413,9 +16414,18 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
     // Playback speed
     private fun cyclePlaybackSpeed() {
-        playbackSpeedIndex = (playbackSpeedIndex + 1) % playbackSpeeds.size
+        applyPlaybackSpeed((playbackSpeedIndex + 1) % playbackSpeeds.size)
+        Toast.makeText(this, "Speed: ${playbackSpeedLabels[playbackSpeedIndex]}", Toast.LENGTH_SHORT).show()
+    }
+
+    private fun applyPlaybackSpeed(index: Int) {
+        playbackSpeedIndex = index.coerceIn(0, playbackSpeeds.lastIndex)
         val speed = playbackSpeeds[playbackSpeedIndex]
-        player?.setPlaybackSpeed(speed)
+        val routeChanged = nativeAudioRouting.update(nightModeIndex > 0, systemAudioEffectsEnabled, speed)
+        if (routeChanged) {
+            releaseLoudnessEnhancer()
+        }
+        nativeAudioRouting.setPlaybackSpeed(player, speed, routeChanged)
         // Dock skins carry the speed on the button itself — visibly on
         // BROADCAST's labeled pill, and as the shared focus caption on the
         // rest (which would otherwise go stale). Classic keeps its Toast-only
@@ -16424,7 +16434,6 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             speedButton?.text = playbackSpeedLabels[playbackSpeedIndex]
             refreshOttCaptionFor(speedButton)
         }
-        Toast.makeText(this, "Speed: ${playbackSpeedLabels[playbackSpeedIndex]}", Toast.LENGTH_SHORT).show()
     }
 
     /**
@@ -16537,13 +16546,14 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private fun applyNightMode(index: Int) {
         nightModeIndex = index
 
-        val routeChanged = nativeAudioRouting.update(nightModeIndex > 0, systemAudioEffectsEnabled)
+        val speed = playbackSpeeds[playbackSpeedIndex]
+        val routeChanged = nativeAudioRouting.update(nightModeIndex > 0, systemAudioEffectsEnabled, speed)
         if (routeChanged) {
             // A recreated AudioTrack may retain its session ID; READY must
             // attach a fresh effect even without onAudioSessionIdChanged.
             releaseLoudnessEnhancer()
         }
-        val restartingAudio = routeChanged && nativeAudioRouting.reprepare(player)
+        val restartingAudio = routeChanged && nativeAudioRouting.reprepare(player, speed)
 
         if (nightModeIndex == 0) {
             // Turn off

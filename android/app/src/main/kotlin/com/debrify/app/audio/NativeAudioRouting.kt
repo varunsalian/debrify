@@ -21,27 +21,63 @@ import com.debrify.app.diagnostics.DiagnosticFileLog
 class NativeAudioRouting {
     @Volatile var requiresPcm: Boolean = false
         private set
+    private var pendingRepreparePlayer: Player? = null
 
-    fun update(nightMode: Boolean, systemEffects: Boolean): Boolean {
-        val next = nightMode || systemEffects
+    fun update(nightMode: Boolean, systemEffects: Boolean, playbackSpeed: Float = 1f): Boolean {
+        val next = nightMode || systemEffects || playbackSpeed != 1f
         val changed = next != requiresPcm
         requiresPcm = next
         return changed
+    }
+
+    fun setPlaybackSpeed(player: Player?, playbackSpeed: Float, routeChanged: Boolean) {
+        if (routeChanged || (player != null && pendingRepreparePlayer === player)) {
+            reprepare(player, playbackSpeed)
+        } else {
+            player?.setPlaybackSpeed(playbackSpeed)
+        }
     }
 
     /**
      * Re-evaluate bypass/decoder selection, not just the effect's enabled flag.
      * stop/prepare retains the playlist, position, track overrides, speed and
      * playWhenReady. In particular, do not call play() on a paused session.
-     * Idle/ended players pick up the policy on their next normal preparation.
+     * Set a requested speed AFTER stopping the old encoded sink, otherwise it
+     * can reject the speed and report 1x back before PCM is configured.
+     * An ended renderer can survive a seek, so defer BOTH its rebuild and speed
+     * change until playback resumes. Otherwise ExoPlayer can see the requested
+     * speed as already set and skip sending it again when the route is rebuilt.
      */
-    fun reprepare(player: Player?): Boolean {
-        if (player == null || player.mediaItemCount == 0 ||
-            (player.playbackState != Player.STATE_READY &&
-                player.playbackState != Player.STATE_BUFFERING)) return false
-        player.stop()
-        player.prepare()
-        return true
+    fun reprepare(player: Player?, playbackSpeed: Float? = null): Boolean {
+        pendingRepreparePlayer = null
+        if (player == null) return false
+        val hasMedia = player.mediaItemCount > 0
+        val restart = hasMedia &&
+            (player.playbackState == Player.STATE_READY ||
+                player.playbackState == Player.STATE_BUFFERING)
+        if (hasMedia && player.playbackState == Player.STATE_ENDED) {
+            pendingRepreparePlayer = player
+            return false
+        }
+        if (restart) player.stop()
+        playbackSpeed?.let { player.setPlaybackSpeed(it) }
+        if (restart) player.prepare()
+        return restart
+    }
+
+    /** Called by both players before handling a playback-state change. */
+    fun reprepareIfPending(player: Player?, playbackSpeed: Float): Boolean {
+        if (pendingRepreparePlayer !== player) {
+            // A replacement player already uses the current routing policy.
+            pendingRepreparePlayer = null
+            return false
+        }
+        if (player == null || (player.playbackState != Player.STATE_BUFFERING &&
+                player.playbackState != Player.STATE_READY)) return false
+        // reprepare clears the pending player BEFORE stop/prepare dispatch their
+        // own state callbacks. Use the latest selection, even if it changed
+        // again while ended or the old sink reset its reported speed to 1x.
+        return reprepare(player, playbackSpeed)
     }
 }
 
@@ -83,7 +119,7 @@ class NativeAudioRenderersFactory @JvmOverloads constructor(
     )
 }
 
-/** Deny encoded bypass while PCM effects are requested, not decoded playback. */
+/** Effects and variable speed require decoded PCM instead of encoded bypass. */
 internal class EffectsAwareAudioSink(
     delegate: AudioSink,
     private val routing: NativeAudioRouting,
@@ -107,7 +143,7 @@ internal class EffectsAwareAudioSink(
         val mode = if (inputFormat.sampleMimeType == MimeTypes.AUDIO_RAW) "pcm" else "encoded"
         val message = "mode=$mode mime=${inputFormat.sampleMimeType} " +
             "channels=${inputFormat.channelCount} rate=${inputFormat.sampleRate} " +
-            "effectsRequirePcm=${routing.requiresPcm}"
+            "requiresPcm=${routing.requiresPcm}"
         Log.i("NativeAudio", message)
         DiagnosticFileLog.record("native_audio", "output_configured", message)
     }

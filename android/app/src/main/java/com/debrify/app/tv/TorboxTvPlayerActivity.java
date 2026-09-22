@@ -523,6 +523,9 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
     private final Player.Listener playbackListener = new Player.Listener() {
         @Override
         public void onPlaybackStateChanged(int playbackState) {
+            if (nativeAudioRouting.reprepareIfPending(player, playbackSpeeds[playbackSpeedIndex])) {
+                return;
+            }
             if (playbackState == Player.STATE_READY) {
                 hasEverBeenReady = true;
                 hideBufferingIndicator();
@@ -795,7 +798,7 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
 
     @OptIn(markerClass = UnstableApi.class)
     private void initialisePlayer() {
-        nativeAudioRouting.update(nightModeIndex > 0, systemAudioEffectsEnabled);
+        nativeAudioRouting.update(nightModeIndex > 0, systemAudioEffectsEnabled, playbackSpeeds[playbackSpeedIndex]);
         DefaultRenderersFactory baseRenderersFactory = new NativeAudioRenderersFactory(this, nativeAudioRouting)
                 .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER)
                 .setEnableDecoderFallback(true)
@@ -880,6 +883,7 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
                     C.VIDEO_CHANGE_FRAME_RATE_STRATEGY_ONLY_IF_SEAMLESS);
         }
         player = playerBuilder.build();
+        player.setPlaybackSpeed(playbackSpeeds[playbackSpeedIndex]);
         player.addListener(playbackListener);
         player.addAnalyticsListener(decoderAnalyticsListener);
         playerView.setPlayer(player);
@@ -1594,10 +1598,18 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         if (player == null) {
             return;
         }
-        playbackSpeedIndex = (playbackSpeedIndex + 1) % playbackSpeeds.length;
-        float speed = playbackSpeeds[playbackSpeedIndex];
-        player.setPlaybackSpeed(speed);
+        applyPlaybackSpeed((playbackSpeedIndex + 1) % playbackSpeeds.length);
         Toast.makeText(this, "Speed: " + playbackSpeedLabels[playbackSpeedIndex], Toast.LENGTH_SHORT).show();
+    }
+
+    private void applyPlaybackSpeed(int index) {
+        playbackSpeedIndex = Math.max(0, Math.min(index, playbackSpeeds.length - 1));
+        float speed = playbackSpeeds[playbackSpeedIndex];
+        boolean routeChanged = nativeAudioRouting.update(nightModeIndex > 0, systemAudioEffectsEnabled, speed);
+        if (routeChanged) {
+            releaseLoudnessEnhancer();
+        }
+        nativeAudioRouting.setPlaybackSpeed(player, speed, routeChanged);
     }
 
     // Night mode (dynamic range compression)
@@ -1692,9 +1704,10 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
     private void applyNightMode(int index) {
         nightModeIndex = index;
 
-        boolean routeChanged = nativeAudioRouting.update(nightModeIndex > 0, systemAudioEffectsEnabled);
+        float speed = playbackSpeeds[playbackSpeedIndex];
+        boolean routeChanged = nativeAudioRouting.update(nightModeIndex > 0, systemAudioEffectsEnabled, speed);
         if (routeChanged) releaseLoudnessEnhancer();
-        boolean restartingAudio = routeChanged && nativeAudioRouting.reprepare(player);
+        boolean restartingAudio = routeChanged && nativeAudioRouting.reprepare(player, speed);
 
         if (nightModeIndex == 0) {
             // Turn off
@@ -4571,12 +4584,7 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
             final int target = i;
             col3.add(UnifiedMenuController.row(playbackSpeedLabels[i])
                     .selected(i == playbackSpeedIndex)
-                    .onOk(() -> {
-                        playbackSpeedIndex = Math.max(0, Math.min(target, playbackSpeeds.length - 1));
-                        if (player != null) {
-                            player.setPlaybackSpeed(playbackSpeeds[playbackSpeedIndex]);
-                        }
-                    })
+                    .onOk(() -> applyPlaybackSpeed(target))
                     .build());
         }
         return new UnifiedMenuController.Model(col1, "PLAYBACK", col2, "Playback speed", col3);
