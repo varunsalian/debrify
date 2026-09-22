@@ -1995,6 +1995,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     // Broadcast receiver for async metadata updates from Flutter
     private var metadataUpdateReceiver: android.content.BroadcastReceiver? = null
 
+    private lateinit var playerPreferences: com.debrify.app.profiles.NativePlayerPreferences
+
     override fun onCreate(savedInstanceState: Bundle?) {
         DiagnosticFileLog.initialize(this)
         sourcePersistenceSessionId = intent.getIntExtra("playbackSessionId", 0)
@@ -2006,6 +2008,14 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 "savedState=${savedInstanceState != null}",
         )
         super.onCreate(savedInstanceState)
+        try {
+            playerPreferences = com.debrify.app.profiles.NativePlayerPreferences.fromIntent(this, intent)
+        } catch (_: Exception) {
+            android.util.Log.w("AndroidTvPlayer", "Player settings handoff rejected")
+            Toast.makeText(this, "Player settings could not be loaded. Try again.", Toast.LENGTH_LONG).show()
+            finish()
+            return
+        }
         setContentView(R.layout.activity_android_tv_torrent_player)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
@@ -2713,8 +2723,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         trackSelector = DefaultTrackSelector(this)
 
         // Get default language settings
-        val defaultAudioLang = SubtitleSettings.getDefaultAudioLanguage(this)
-        val defaultSubtitleLang = SubtitleSettings.getDefaultSubtitleLanguage(this)
+        val defaultAudioLang = playerPreferences.getString("player_default_audio_language", null)
+        val defaultSubtitleLang = playerPreferences.getString("player_default_subtitle_language", null)
 
         // Build track selector parameters with robust language matching
         val paramsBuilder = trackSelector?.buildUponParameters()
@@ -4777,7 +4787,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 .clearOverridesOfType(C.TRACK_TYPE_TEXT)
                 .setTrackTypeDisabled(
                     C.TRACK_TYPE_TEXT,
-                    SubtitleSettings.getDefaultSubtitleLanguage(this) == "off",
+                    playerPreferences.getString("player_default_subtitle_language", null) == "off",
                 )
                 .build()
         }
@@ -6866,7 +6876,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     /** Apply source priority once tracks and any higher-priority addons are ready. */
     private fun tryAutoSelectAddonSubtitle() {
         val currentPlayer = player ?: return
-        val defaultSubtitleLang = SubtitleSettings.getDefaultSubtitleLanguage(this)
+        val defaultSubtitleLang = playerPreferences.getString("player_default_subtitle_language", null)
         val targetLanguage = defaultSubtitleLang ?: "en"
         val tracks = currentPlayer.currentTracks
         val positions = mutableListOf<Pair<Tracks.Group, Int>>()
@@ -12621,8 +12631,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     // (null tokens) keeps every legacy paint path verbatim.
     private val guideStyle: GuideStyle by lazy {
         GuideStyle.fromPref(
-            com.debrify.app.profiles.ProfilePreferenceProjection.getString(
-                this,
+            playerPreferences.getString(
                 "iptv_player_guide_style",
                 "classic",
             ),
@@ -12637,8 +12646,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     // rather than baked into this lazy.
     private val controlsSkin: TvControlsSkin by lazy {
         TvControlsSkin.fromPref(
-            com.debrify.app.profiles.ProfilePreferenceProjection.getString(
-                this,
+            playerPreferences.getString(
                 TvControlsSkin.PREF_KEY,
                 "ott",
             ),
@@ -16487,22 +16495,21 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         try {
             // Load aspect index for TV (separate from mobile)
             // TV only: 0=Fit, 1=Fill, 2=Zoom, 3=Cinema Zoom (default: 0=Fit)
-            resizeModeIndex = com.debrify.app.profiles.ProfilePreferenceProjection
-                .getLong(this, "player_default_aspect_index_tv", 0L).toInt()
+            resizeModeIndex = playerPreferences
+                .getLong("player_default_aspect_index_tv", 0L).toInt()
                 .coerceIn(0, resizeModes.lastIndex)
 
             // Load night mode index (default: 0 = Off)
-            nightModeIndex = com.debrify.app.profiles.ProfilePreferenceProjection
-                .getLong(this, "player_night_mode_index", 0L).toInt()
+            nightModeIndex = playerPreferences
+                .getLong("player_night_mode_index", 0L).toInt()
                 .coerceIn(0, nightModeGains.lastIndex)
 
             // Announce our audio session to system effect apps (default: off)
-            systemAudioEffectsEnabled = com.debrify.app.profiles.ProfilePreferenceProjection
-                .getBoolean(this, "player_system_audio_effects", false)
+            systemAudioEffectsEnabled = playerPreferences
+                .getBoolean("player_system_audio_effects", false)
 
             displayMatchMode = TvContentDisplayMatchMode.fromStorage(
-                com.debrify.app.profiles.ProfilePreferenceProjection.getString(
-                    this,
+                playerPreferences.getString(
                     "content_display_match_mode",
                     TvContentDisplayMatchMode.SYSTEM.storageKey,
                 ),
@@ -16512,10 +16519,9 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
             // Manual community intro/outro buttons. These are the same keys the
             // Flutter Playback settings page writes; enabled never means auto-seek.
-            skipSegmentsEnabled = com.debrify.app.profiles.ProfilePreferenceProjection
-                .getBoolean(this, "skip_segments_enabled", true)
-            val storedSkipSegmentProvider = com.debrify.app.profiles.ProfilePreferenceProjection.getString(
-                this,
+            skipSegmentsEnabled = playerPreferences
+                .getBoolean("skip_segments_enabled", true)
+            val storedSkipSegmentProvider = playerPreferences.getString(
                 "skip_segment_provider",
                 TvSkipSegmentClients.AUTO,
             ) ?: TvSkipSegmentClients.AUTO
@@ -16526,6 +16532,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             }
 
             android.util.Log.d("AndroidTvPlayer", "Loaded defaults - aspect=$resizeModeIndex, nightMode=$nightModeIndex, audioEffects=$systemAudioEffectsEnabled, displayMatch=${displayMatchMode.storageKey}, skipSegments=$skipSegmentsEnabled, skipProvider=$skipSegmentProviderId")
+            android.util.Log.d("AndroidTvPlayer", "Player settings handoff: style=$controlsSkin subtitles=${playerPreferences.getString("player_default_subtitle_language", "auto")} nightMode=$nightModeIndex")
         } catch (e: Exception) {
             android.util.Log.e("AndroidTvPlayer", "Error loading player defaults", e)
             // Keep default values

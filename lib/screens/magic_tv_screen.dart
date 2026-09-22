@@ -4898,6 +4898,10 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         _status = 'Search failed: $e';
       });
       debugPrint('DebrifyTV: Search failed: $e');
+      if (e is NativePlayerSettingsUnavailable) {
+        _showNativeSettingsFailure(e);
+        return;
+      }
     } finally {
       if (mounted) {
         setState(() {
@@ -5206,6 +5210,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       );
       // Stop prefetch when player exits
       await _stopPrefetch();
+    } on NativePlayerSettingsUnavailable catch (error) {
+      _showNativeSettingsFailure(error);
     } finally {
       if (mounted) {
         setState(() {
@@ -5598,6 +5604,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
               : 'Queue has ${_queue.length} remaining';
         });
       }
+    } on NativePlayerSettingsUnavailable catch (error) {
+      _showNativeSettingsFailure(error);
     } finally {
       _closeProgressDialog();
       if (mounted) {
@@ -5878,6 +5886,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
               : 'Queue has ${_queue.length} remaining';
         });
       }
+    } on NativePlayerSettingsUnavailable catch (error) {
+      _showNativeSettingsFailure(error);
     } finally {
       _closeProgressDialog();
       if (mounted) {
@@ -6175,6 +6185,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         ),
       );
       await _stopPrefetch();
+    } on NativePlayerSettingsUnavailable catch (error) {
+      _showNativeSettingsFailure(error);
     } finally {
       _closeProgressDialog();
       if (!mounted) return;
@@ -6426,6 +6438,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         ),
       );
       await _stopPrefetch();
+    } on NativePlayerSettingsUnavailable catch (error) {
+      _showNativeSettingsFailure(error);
     } finally {
       _closeProgressDialog();
       if (!mounted) return;
@@ -6435,6 +6449,12 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       });
       debugPrint('DebrifyTV: AllDebrid cached watch flow finished.');
     }
+  }
+
+  void _showNativeSettingsFailure(NativePlayerSettingsUnavailable error) {
+    unawaited(_stopPrefetch());
+    MainPageBridge.notifyAutoLaunchFailed(error.message.toString());
+    if (mounted) _showSnack(error.message.toString(), color: Colors.orange);
   }
 
   Future<bool> _launchTorboxOnAndroidTv({
@@ -6502,6 +6522,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       }
     } catch (e) {
       debugPrint('DebrifyTV: Android TV bridge failed: $e');
+      if (e is NativePlayerSettingsUnavailable) rethrow;
     }
 
     AndroidTvPlayerBridge.clearTorboxProvider();
@@ -7191,6 +7212,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     } catch (e, stackTrace) {
       debugPrint('DebrifyTV: ❌ Exception during Android TV launch: $e');
       debugPrint('DebrifyTV: Stack trace: $stackTrace');
+      if (e is NativePlayerSettingsUnavailable) rethrow;
     }
 
     AndroidTvPlayerBridge.clearStreamProvider();
@@ -7463,6 +7485,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
               : 'Queue has ${_queue.length} remaining';
         });
       }
+    } on NativePlayerSettingsUnavailable catch (error) {
+      _showNativeSettingsFailure(error);
     } finally {
       _closeProgressDialog();
       if (!mounted) return;
@@ -7632,6 +7656,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
               : 'Queue has ${_queue.length} remaining';
         });
       }
+    } on NativePlayerSettingsUnavailable catch (error) {
+      _showNativeSettingsFailure(error);
     } finally {
       _closeProgressDialog();
       if (!mounted) return;
@@ -7703,6 +7729,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       }
     } catch (e) {
       debugPrint('DebrifyTV: Android TV bridge failed for PikPak: $e');
+      if (e is NativePlayerSettingsUnavailable) rethrow;
     }
 
     AndroidTvPlayerBridge.clearTorboxProvider();
@@ -10163,6 +10190,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
               : 'Queue has ${_queue.length} remaining';
         });
       }
+    } on NativePlayerSettingsUnavailable catch (error) {
+      _showNativeSettingsFailure(error);
     } finally {
       _closeProgressDialog();
       if (!mounted) return;
@@ -10454,6 +10483,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
               : 'Queue has ${_queue.length} remaining';
         });
       }
+    } on NativePlayerSettingsUnavailable catch (error) {
+      _showNativeSettingsFailure(error);
     } finally {
       _closeProgressDialog();
       if (mounted) setState(() => _isBusy = false);
@@ -10727,6 +10758,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
               : 'Queue has ${_queue.length} remaining';
         });
       }
+    } on NativePlayerSettingsUnavailable catch (error) {
+      _showNativeSettingsFailure(error);
     } finally {
       _closeProgressDialog();
       if (mounted) setState(() => _isBusy = false);

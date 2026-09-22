@@ -31,6 +31,11 @@ object ProfilePrivacyState {
     }
 
     @JvmStatic
+    fun isSensitive(context: Context): Boolean =
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .getBoolean(KEY_SENSITIVE, true)
+
+    @JvmStatic
     fun shouldProtectWhenBackgrounded(context: Context): Boolean {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         // Missing state is fail-closed until Flutter publishes the active

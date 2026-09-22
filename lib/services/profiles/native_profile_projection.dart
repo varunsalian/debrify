@@ -17,6 +17,13 @@ import 'profile_bootstrap.dart';
 import 'profile_runtime.dart';
 import 'profile_scope.dart';
 
+/// A settings/profile rejection must not be treated as an unsupported player
+/// and retried through another playback implementation.
+class NativePlayerSettingsUnavailable extends StateError {
+  NativePlayerSettingsUnavailable()
+    : super('Player settings could not be loaded. Please try again.');
+}
+
 /// Publishes the native readers' active-profile view as one JSON value.
 ///
 /// Android activities and services cannot safely reconstruct generation keys,
@@ -40,9 +47,55 @@ class NativeProfileProjection {
   static const Set<String> logicalKeys =
       ProfilePreferences.nativeProjectionKeys;
 
-  static Future<void> publish(
-    ProfileScope scope,
-  ) => _serializePublication(() async {
+  static Future<void> publish(ProfileScope scope) =>
+      _serializePublication(() => _publishBody(scope));
+
+  /// Refresh before native launch and keep other publications from invalidating
+  /// the snapshot until Android has accepted the handoff. A failed refresh must
+  /// not launch a player that silently reads default settings.
+  static Future<T> withPlayerLaunch<T>(
+    ProfileScope? scope,
+    Future<T> Function() launch,
+  ) {
+    Future<T> handoff() async {
+      try {
+        return await launch();
+      } on PlatformException catch (error) {
+        if (error.code == 'player_settings_unavailable') {
+          throw NativePlayerSettingsUnavailable();
+        }
+        rethrow;
+      }
+    }
+
+    if (scope == null) {
+      if (ProfileRuntime.isInitialized && ProfileRuntime.isProfileCommitted) {
+        throw NativePlayerSettingsUnavailable();
+      }
+      return handoff();
+    }
+    return _serializePublication(() async {
+      void checkOwner() {
+        if (ProfileRuntime.scope.value != scope ||
+            ProfileRuntime.isInMaintenance ||
+            !ProfileLockController.instance.hasActivatedProfile ||
+            !ProfileLockController.instance.isUnlocked) {
+          throw StateError('Profile changed or locked before native playback');
+        }
+      }
+
+      try {
+        checkOwner();
+        await _publishBody(scope);
+        checkOwner();
+      } catch (_) {
+        throw NativePlayerSettingsUnavailable();
+      }
+      return handoff();
+    });
+  }
+
+  static Future<void> _publishBody(ProfileScope scope) async {
     // A locked session must never gain an `active` native snapshot — the
     // lock bridge routes locked-session work to [invalidate] for exactly that
     // reason, and this guard holds the same line for callers that arrive at
@@ -187,10 +240,13 @@ class NativeProfileProjection {
       await _invalidateBody();
       return;
     }
+    if (ProfileRuntime.scope.value != scope || ProfileRuntime.isInMaintenance) {
+      throw StateError('Profile scope changed during native publication');
+    }
     if (!await raw.setString(deviceKey, jsonEncode(projection))) {
       throw StateError('Could not publish native profile view');
     }
-  });
+  }
 
   /// Converts both canonical addon secrets and URL-only restore records into
   /// the one compatibility shape understood by Android's native player.

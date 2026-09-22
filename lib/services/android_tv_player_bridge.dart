@@ -25,12 +25,16 @@ import 'stremio_iptv_service.dart';
 import 'stremio_service.dart';
 import 'subtitle_font_service.dart';
 import 'profiles/profile_preferences.dart';
+import 'profiles/native_profile_projection.dart';
 import 'profiles/profile_runtime.dart';
 import 'profiles/profile_lock_controller.dart';
 import 'profiles/profile_session_memory.dart';
 import 'native_playback_progress_session.dart';
 import 'diagnostic_log.dart';
 import 'tv_playback_recovery.dart';
+
+export 'profiles/native_profile_projection.dart'
+    show NativePlayerSettingsUnavailable;
 
 typedef StreamNextProvider = Future<Map<String, String>?> Function();
 typedef TorboxNextProvider = StreamNextProvider; // Backward compatibility
@@ -1586,12 +1590,15 @@ class AndroidTvPlayerBridge {
       return false;
     }
 
+    final launchScope = ProfileRuntime.scope.value;
+
     _ensureInitialized();
     _streamNextProvider = requestNext;
     _channelSwitchProvider = requestChannelSwitch;
     _channelByIdSwitchProvider = requestChannelById;
     _playbackFinishedCallback = onFinished;
 
+    NativePlayerSettingsUnavailable? settingsFailure;
     try {
       final List<Map<String, dynamic>>? channelDirectory = channels
           ?.map((entry) => Map<String, dynamic>.from(entry))
@@ -1600,9 +1607,15 @@ class AndroidTvPlayerBridge {
       // Get custom font info for Android TV player
       final fontInfo = await _getCustomFontInfo();
 
-      final bool? launched = await _channel.invokeMethod<bool>(
-        'launchTorboxPlayback',
-        {
+      final bool? launched = await NativeProfileProjection.withPlayerLaunch(
+        launchScope,
+        () => _channel.invokeMethod<bool>('launchTorboxPlayback', {
+          if (launchScope != null)
+            'nativePlayerProfile': {
+              'profileId': launchScope.profileId,
+              'dataGeneration': launchScope.dataGeneration,
+              'sessionEpoch': launchScope.sessionEpoch,
+            },
           'initialUrl': initialUrl,
           'initialTitle': title,
           'magnets': magnets,
@@ -1621,12 +1634,17 @@ class AndroidTvPlayerBridge {
             'showChannelName': showChannelName,
           },
           ...fontInfo,
-        },
+        }),
       );
       if (launched == true) {
         return true;
       }
-    } on PlatformException {
+    } on NativePlayerSettingsUnavailable catch (error) {
+      settingsFailure = error;
+    } catch (error) {
+      debugPrint(
+        'AndroidTvPlayerBridge: TV launch settings/handoff failed (${error.runtimeType})',
+      );
       // Fall through to cleanup and return false.
     }
 
@@ -1634,6 +1652,7 @@ class AndroidTvPlayerBridge {
     _channelSwitchProvider = null;
     _channelByIdSwitchProvider = null;
     _playbackFinishedCallback = null;
+    if (settingsFailure != null) throw settingsFailure;
     return false;
   }
 
@@ -1672,6 +1691,8 @@ class AndroidTvPlayerBridge {
       return false;
     }
 
+    final launchScope = ProfileRuntime.scope.value;
+
     debugPrint('AndroidTvPlayerBridge: Initializing method channel handler');
     _ensureInitialized();
     _streamNextProvider = requestNext;
@@ -1679,6 +1700,7 @@ class AndroidTvPlayerBridge {
     _channelByIdSwitchProvider = requestChannelById;
     _playbackFinishedCallback = onFinished;
 
+    NativePlayerSettingsUnavailable? settingsFailure;
     try {
       debugPrint(
         'AndroidTvPlayerBridge: Invoking method channel "launchRealDebridPlayback"',
@@ -1692,9 +1714,15 @@ class AndroidTvPlayerBridge {
       // Get custom font info for Android TV player
       final fontInfo = await _getCustomFontInfo();
 
-      final bool? launched = await _channel.invokeMethod<bool>(
-        'launchRealDebridPlayback',
-        {
+      final bool? launched = await NativeProfileProjection.withPlayerLaunch(
+        launchScope,
+        () => _channel.invokeMethod<bool>('launchRealDebridPlayback', {
+          if (launchScope != null)
+            'nativePlayerProfile': {
+              'profileId': launchScope.profileId,
+              'dataGeneration': launchScope.dataGeneration,
+              'sessionEpoch': launchScope.sessionEpoch,
+            },
           'initialUrl': initialUrl,
           'initialTitle': title,
           'provider': 'real_debrid',
@@ -1715,7 +1743,7 @@ class AndroidTvPlayerBridge {
             'showChannelName': showChannelName,
           },
           ...fontInfo,
-        },
+        }),
       );
 
       debugPrint('AndroidTvPlayerBridge: Method channel returned: $launched');
@@ -1726,6 +1754,8 @@ class AndroidTvPlayerBridge {
       } else {
         debugPrint('AndroidTvPlayerBridge: ❌ Launch returned false or null');
       }
+    } on NativePlayerSettingsUnavailable catch (error) {
+      settingsFailure = error;
     } on PlatformException catch (e) {
       debugPrint(
         'AndroidTvPlayerBridge: ❌ PlatformException: ${e.code} - ${e.message}',
@@ -1740,6 +1770,7 @@ class AndroidTvPlayerBridge {
     _channelSwitchProvider = null;
     _channelByIdSwitchProvider = null;
     _playbackFinishedCallback = null;
+    if (settingsFailure != null) throw settingsFailure;
     return false;
   }
 
@@ -1814,6 +1845,8 @@ class AndroidTvPlayerBridge {
       return false;
     }
 
+    final launchScope = ProfileRuntime.scope.value;
+
     final sessionId = await TvPlaybackRecovery.allocateSessionId();
     await _progressDrain;
     await _progressSession?.closeAndDrain();
@@ -1869,6 +1902,7 @@ class AndroidTvPlayerBridge {
     _pendingGuideEpisodes = null;
     _pendingShowName = null;
 
+    NativePlayerSettingsUnavailable? settingsFailure;
     try {
       // Get custom font info for Android TV player
       final fontInfo = await _getCustomFontInfo();
@@ -1913,13 +1947,23 @@ class AndroidTvPlayerBridge {
         debugPrint('AndroidTvPlayerBridge: network tuning read failed: $e');
       }
 
-      final bool? launched = await _channel.invokeMethod<bool>(
-        'launchTorrentPlayback',
-        {'payload': payloadWithFont},
+      final bool? launched = await NativeProfileProjection.withPlayerLaunch(
+        launchScope,
+        () => _channel.invokeMethod<bool>('launchTorrentPlayback', {
+          'payload': payloadWithFont,
+          if (launchScope != null)
+            'nativePlayerProfile': {
+              'profileId': launchScope.profileId,
+              'dataGeneration': launchScope.dataGeneration,
+              'sessionEpoch': launchScope.sessionEpoch,
+            },
+        }),
       );
       if (launched == true) {
         return true;
       }
+    } on NativePlayerSettingsUnavailable catch (error) {
+      settingsFailure = error;
     } on PlatformException catch (e) {
       debugPrint(
         'AndroidTvPlayerBridge: torrent launch failed: ${e.code} - ${e.message}',
@@ -1954,6 +1998,7 @@ class AndroidTvPlayerBridge {
       _stremioTvNextProvider = null;
       _iptvBrowseProvider = null;
     }
+    if (settingsFailure != null) throw settingsFailure;
     return false;
   }
 

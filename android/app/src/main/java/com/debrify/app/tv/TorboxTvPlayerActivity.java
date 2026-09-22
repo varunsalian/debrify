@@ -614,9 +614,19 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         }
     };
 
+    private com.debrify.app.profiles.NativePlayerPreferences playerPreferences;
+
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        try {
+            playerPreferences = com.debrify.app.profiles.NativePlayerPreferences.fromIntent(this, getIntent());
+        } catch (Exception error) {
+            android.util.Log.w("TorboxTvPlayer", "Player settings handoff rejected");
+            android.widget.Toast.makeText(this, "Player settings could not be loaded. Try again.", android.widget.Toast.LENGTH_LONG).show();
+            finish();
+            return;
+        }
         setContentView(R.layout.activity_torbox_tv_player);
 
         // Load default player settings from Flutter's SharedPreferences
@@ -747,8 +757,7 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         }
         currentChannelId = safeString(intent.getStringExtra("currentChannelId"));
         playerStyle = DebrifyTvPlayerStyle.fromPref(
-                com.debrify.app.profiles.ProfilePreferenceProjection.getString(
-                        this, "debrify_tv_player_style", "cinema"));
+                playerPreferences.getString("debrify_tv_player_style", "cinema"));
         int providedChannelNumber = intent.getIntExtra("currentChannelNumber", -1);
         if (providedChannelNumber > 0) {
             currentChannelNumber = providedChannelNumber;
@@ -811,8 +820,8 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         trackSelector = new DefaultTrackSelector(this, new AdaptiveTrackSelection.Factory());
 
         // Get default language settings
-        String defaultAudioLang = SubtitleSettings.getDefaultAudioLanguage(this);
-        String defaultSubtitleLang = SubtitleSettings.getDefaultSubtitleLanguage(this);
+        String defaultAudioLang = playerPreferences.getString("player_default_audio_language", null);
+        String defaultSubtitleLang = playerPreferences.getString("player_default_subtitle_language", null);
 
         // Build track selector parameters with robust language matching
         DefaultTrackSelector.Parameters.Builder paramsBuilder = trackSelector.buildUponParameters()
@@ -836,8 +845,11 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
 
         // Apply subtitle language preference
         if ("off".equals(defaultSubtitleLang)) {
-            // Disable subtitle auto-selection by setting empty preferred language
+            // An empty language alone still permits default/forced tracks.
+            // Match the movie player's explicit Off behavior; manual subtitle
+            // selection re-enables text tracks in applySubtitleTrack.
             paramsBuilder.setPreferredTextLanguage("");
+            paramsBuilder.setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true);
         } else if (defaultSubtitleLang != null) {
             // Get all language variants (ISO 639-1, ISO 639-2, etc.) for robust matching
             List<String> variants = LanguageMapper.getLanguageVariantsForExoPlayer(defaultSubtitleLang);
@@ -1662,26 +1674,26 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         try {
             // Load aspect index for TV (separate from mobile)
             // TV only: 0=Fit, 1=Fill, 2=Zoom, 3=Cinema Zoom (default: 0=Fit)
-            resizeModeIndex = (int) com.debrify.app.profiles.ProfilePreferenceProjection
-                .getLong(this, "player_default_aspect_index_tv", 0);
+            resizeModeIndex = (int) playerPreferences
+                .getLong("player_default_aspect_index_tv", 0);
             resizeModeIndex = Math.max(0, Math.min(resizeModeIndex, resizeModes.length - 1));
 
             // Load night mode index (default: 0 = Off)
-            nightModeIndex = (int) com.debrify.app.profiles.ProfilePreferenceProjection
-                .getLong(this, "player_night_mode_index", 0);
+            nightModeIndex = (int) playerPreferences
+                .getLong("player_night_mode_index", 0);
             nightModeIndex = Math.max(0, Math.min(nightModeIndex, nightModeGains.length - 1));
-            systemAudioEffectsEnabled = com.debrify.app.profiles.ProfilePreferenceProjection
-                    .getBoolean(this, "player_system_audio_effects", false);
+            systemAudioEffectsEnabled = playerPreferences
+                    .getBoolean("player_system_audio_effects", false);
 
             displayMatchMode = TvContentDisplayMatchMode.Companion.fromStorage(
-                    com.debrify.app.profiles.ProfilePreferenceProjection.getString(
-                            this,
+                    playerPreferences.getString(
                             "content_display_match_mode",
                             TvContentDisplayMatchMode.SYSTEM.getStorageKey()));
             if (displayModeController != null) displayModeController.clear();
             displayModeController = new TvDisplayModeController(this, displayMatchMode);
 
             android.util.Log.d("TorboxTvPlayer", "Loaded defaults - aspect=" + resizeModeIndex + ", nightMode=" + nightModeIndex + ", displayMatch=" + displayMatchMode.getStorageKey());
+            android.util.Log.d("TorboxTvPlayer", "Player settings handoff: style=" + playerPreferences.getString("debrify_tv_player_style", "cinema") + " subtitles=" + playerPreferences.getString("player_default_subtitle_language", "auto") + " nightMode=" + nightModeIndex);
         } catch (Exception e) {
             android.util.Log.e("TorboxTvPlayer", "Error loading player defaults", e);
             // Keep default values
@@ -3558,7 +3570,7 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         }
 
         // Get user's default subtitle language preference
-        String defaultSubtitleLang = SubtitleSettings.getDefaultSubtitleLanguage(this);
+        String defaultSubtitleLang = playerPreferences.getString("player_default_subtitle_language", null);
 
         // If subtitles are explicitly disabled, don't auto-select
         if ("off".equals(defaultSubtitleLang)) {
@@ -3640,7 +3652,7 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         }
 
         // Get user's default subtitle language preference
-        String defaultSubtitleLang = SubtitleSettings.getDefaultSubtitleLanguage(this);
+        String defaultSubtitleLang = playerPreferences.getString("player_default_subtitle_language", null);
 
         // If subtitles are explicitly disabled, don't auto-select
         if ("off".equals(defaultSubtitleLang)) {

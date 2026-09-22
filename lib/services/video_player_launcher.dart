@@ -815,6 +815,16 @@ class VideoPlayerLauncher {
         handoffNow: handoffNow,
         handoffWhenCovered: handoffWhenCovered,
       );
+    } on NativePlayerSettingsUnavailable catch (error) {
+      // No player opened, so no return observer will balance the launch signal.
+      // Clear sync's playback gate even if the route/loader has gone away.
+      if (!isTrailer) MainPageBridge.notifyContentPlaybackStopped();
+      handoffNow();
+      if (context.mounted) {
+        ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+          SnackBar(content: Text(error.message.toString())),
+        );
+      }
     } finally {
       handoffNow();
     }
@@ -2221,6 +2231,7 @@ class VideoPlayerLauncher {
 
     _AndroidTvPlaybackPayload? builtPayload;
     final serverWatch = MediaServerWatchController();
+    _AndroidTvPlaylistResolver? playbackResolver;
     try {
       final initialSources = args.stremioSources;
       final initialSourceIndex = args.stremioCurrentSourceIndex ?? 0;
@@ -2251,6 +2262,7 @@ class VideoPlayerLauncher {
         entries: result.entries,
         resolveEntry: (entry) => _resolveEntryUrl(entry, args),
       );
+      playbackResolver = resolver;
 
       // Generate a unique session ID for this playback launch
       // This prevents stale metadata from previous sessions being sent to new sessions
@@ -3434,6 +3446,8 @@ class VideoPlayerLauncher {
       await builtPayload?.mdblistSession?.close();
       if (builtPayload != null) builtPayload.mdblistSession = null;
       debugPrint('VideoPlayerLauncher: Android TV launch failed: $e');
+      playbackResolver?.dispose();
+      if (e is NativePlayerSettingsUnavailable) rethrow;
       return false;
     }
   }
@@ -3566,6 +3580,7 @@ class VideoPlayerLauncher {
       return launched;
     } catch (e) {
       debugPrint('VideoPlayerLauncher: IPTV Android TV launch failed: $e');
+      if (e is NativePlayerSettingsUnavailable) rethrow;
       return false;
     }
   }
