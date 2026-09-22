@@ -7745,6 +7745,7 @@ class _SettingsLayout extends StatelessWidget {
     connections.allDebrid,
     connections.pikpak,
     connections.webDav,
+    if (connections.mediaServers != null) connections.mediaServers!,
     connections.indexerManagers,
     connections.iptv,
   ];
