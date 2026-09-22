@@ -148,13 +148,15 @@ class SpotlightHeroChrome extends StatelessWidget {
         ],
         if (!minimal && descriptionSlot != null) ...[
           const SizedBox(height: 2),
-          DefaultTextStyle(
-            style: TextStyle(color: t.fgDim, fontSize: 9.5, height: 1.1),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            child: KeyedSubtree(
-              key: const ValueKey<String>('spotlight-hero-description-slot'),
-              child: descriptionSlot!,
+          Flexible(
+            child: DefaultTextStyle(
+              style: TextStyle(color: t.fgDim, fontSize: 9.5, height: 1.1),
+              maxLines: 12,
+              overflow: TextOverflow.ellipsis,
+              child: KeyedSubtree(
+                key: const ValueKey<String>('spotlight-hero-description-slot'),
+                child: descriptionSlot!,
+              ),
             ),
           ),
         ],

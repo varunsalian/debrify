@@ -106,6 +106,48 @@ void main() {
     }
   });
 
+  testWidgets('TV hero uses its free height for a multiline description', (
+    tester,
+  ) async {
+    const description =
+        'Captain Picard and his crew are sent to Romulus, where a new leader '
+        'offers peace to the Federation. They uncover a dangerous plot and '
+        'must race to protect Earth before it is too late.';
+    final now = DateTime.now();
+    final programme = EpgProgramme(
+      title: 'Star Trek: Nemesis',
+      description: description,
+      start: now.subtract(const Duration(minutes: 15)),
+      stop: now.add(const Duration(minutes: 45)),
+    );
+
+    for (final height in [176.0, 220.0, 279.0]) {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SizedBox(
+              width: 800,
+              height: height,
+              child: SpotlightProgrammeHero(
+                channel: IptvChannel(
+                  name: 'Sky Cinema Sci-Fi',
+                  url: 'cinema',
+                  duration: -1,
+                  contentType: 'live',
+                ),
+                selectedProgramme: programme,
+                previewSlot: const SizedBox.expand(),
+              ),
+            ),
+          ),
+        ),
+      );
+      final textHeight = tester.getSize(find.text(description)).height;
+      expect(textHeight, greaterThan(20), reason: 'hero height $height');
+      expect(tester.takeException(), isNull, reason: 'hero height $height');
+    }
+  });
+
   testWidgets('programme actions rebuild when a future show becomes live', (
     tester,
   ) async {
