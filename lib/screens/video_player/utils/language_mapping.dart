@@ -1,6 +1,35 @@
 /// Utility for robust subtitle language matching and display.
 /// Handles ISO 639-1, ISO 639-2, regional variants, and common language names.
 class LanguageMapper {
+  // Keep the regional subtitle preference distinct from generic Portuguese.
+  // A plain "pt"/"por" tag does not say whether a track is Brazilian.
+  static const Set<String> _brazilianPortugueseVariants = {
+    'pt-br',
+    'por-br',
+    'ptbr',
+    'pob',
+    'pb',
+    'brazilian portuguese',
+    'portuguese (brazil)',
+    'portuguese (br)',
+    'português (brasil)',
+    'portugues (brasil)',
+    'português brasileiro',
+    'portugues brasileiro',
+  };
+
+  static bool _isBrazilianPortuguese(String value) {
+    final normalized = value
+        .toLowerCase()
+        .trim()
+        .replaceAll('_', '-')
+        .replaceFirst(
+          RegExp(r'[- ](sdh|forced|cc|full|commentary|descriptive|ad|hi|sub|subs|subtitle|subtitles)$'),
+          '',
+        );
+    return _brazilianPortugueseVariants.contains(normalized);
+  }
+
   /// Comprehensive language code mapping.
   /// Maps ISO 639-1 (2-letter) codes to all known variants.
   static const Map<String, Set<String>> _languageVariants = {
@@ -134,6 +163,7 @@ class LanguageMapper {
     if (codeOrTitle == null || codeOrTitle.isEmpty) return '';
 
     final v = codeOrTitle.toLowerCase().trim();
+    if (_isBrazilianPortuguese(v)) return 'Portuguese (Brazil)';
 
     // Try direct lookup in display names
     if (_displayNames.containsKey(v)) {
@@ -167,6 +197,9 @@ class LanguageMapper {
 
     final targetLower = targetLang.toLowerCase().trim();
     final trackLower = trackLang.toLowerCase().trim();
+    if (targetLower == 'pt-br' || targetLower == 'pt_br') {
+      return _isBrazilianPortuguese(trackLower);
+    }
 
     // Direct match
     if (targetLower == trackLower) return true;

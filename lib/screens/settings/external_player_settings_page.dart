@@ -1431,6 +1431,7 @@ class _ExternalPlayerSettingsPageState
     ('de', 'German'),
     ('it', 'Italian'),
     ('pt', 'Portuguese'),
+    ('pt-BR', 'Portuguese (Brazil)'),
     ('ru', 'Russian'),
     ('ja', 'Japanese'),
     ('ko', 'Korean'),

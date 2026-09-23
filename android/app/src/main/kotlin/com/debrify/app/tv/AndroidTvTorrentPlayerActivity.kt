@@ -2787,8 +2787,11 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
         // Start with text off until the selected audio is known. This also
         // prevents a file's default/forced track flashing before policy runs.
+        // Wait for exact regional matching; ExoPlayer can treat pt-PT as a
+        // partial match for pt-BR during its initial track selection.
         if (playerPreferences.getBoolean("subtitle_only_foreign_audio", false) ||
-            playerPreferences.getBoolean("subtitle_forced_only", false)) {
+            playerPreferences.getBoolean("subtitle_forced_only", false) ||
+            defaultSubtitleLang?.equals("pt-BR", ignoreCase = true) == true) {
             paramsBuilder?.setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
         }
         trackSelector?.parameters = paramsBuilder?.build()!!
@@ -6936,7 +6939,12 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             addonDiscoveryReady = subtitleAddonDiscoveryReady,
             addons = addonSubtitleResults.map { slot ->
                 val eligible = slot.subtitles.indices.filter { slot.subtitles[it].url !in failedSubtitleUrls }
-                val matching = eligible.filter { LanguageMapper.matchesLanguage(targetLanguage, slot.subtitles[it].lang) }
+                val matching = eligible.filter {
+                    val subtitle = slot.subtitles[it]
+                    LanguageMapper.matchesLanguage(targetLanguage, subtitle.lang) ||
+                        (targetLanguage.equals("pt-BR", ignoreCase = true) &&
+                            LanguageMapper.matchesLanguage(targetLanguage, subtitle.label))
+                }
                 AddonSubtitleCandidate(
                     addonId = slot.addon.priorityId,
                     loading = slot.status == AddonSubtitleStatus.LOADING,
