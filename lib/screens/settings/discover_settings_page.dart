@@ -79,6 +79,8 @@ class _DiscoverSettingsPageState extends State<DiscoverSettingsPage> {
         'Simkl',
         'Always open Simkl browsing',
       ),
+      const SettingsSelectOption('jellyfin', 'Jellyfin', 'Always open your Jellyfin libraries'),
+      const SettingsSelectOption('emby', 'Emby', 'Always open your Emby libraries'),
     ];
 
     var tmdbEnabled = false;

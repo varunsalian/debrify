@@ -5,6 +5,8 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../services/cache_scratch_cleanup.dart';
+
 import '../../services/launch_animation/launch_animation_library.dart';
 import '../../services/launch_animation/launch_package.dart';
 import '../../services/storage_service.dart';
@@ -98,44 +100,48 @@ class _ImportedLaunchAnimationsState extends State<ImportedLaunchAnimations> {
     }
     if (result == null || result.files.isEmpty) return;
     final selected = result.files.single;
-    if (selected.size > LaunchLimits.compressedBytes) {
-      throw const LaunchImportException(
-        'Animation files must be 10 MiB or smaller.',
-      );
+    try {
+      if (selected.size > LaunchLimits.compressedBytes) {
+        throw const LaunchImportException(
+          'Animation files must be 10 MiB or smaller.',
+        );
+      }
+      if (selected.path == null) {
+        throw const LaunchImportException(
+          'Copy the animation to local storage, then try again.',
+        );
+      }
+      final file = File(selected.path!);
+      final package = await _library.inspectFile(file);
+      if (!mounted) return;
+      var id = package.initialId;
+      final pair = package.orientationPair;
+      if (pair != null) {
+        id = MediaQuery.orientationOf(context) == Orientation.portrait
+            ? pair.portrait.id
+            : pair.landscape.id;
+      } else if (package.animations.length > 1) {
+        final choice = await showDialog<String>(
+          context: context,
+          builder: (context) => SimpleDialog(
+            title: const Text('Choose an animation'),
+            children: [
+              for (final animation in package.animations)
+                SimpleDialogOption(
+                  onPressed: () => Navigator.pop(context, animation.id),
+                  child: Text(animation.name),
+                ),
+            ],
+          ),
+        );
+        if (choice == null) return;
+        id = choice;
+      }
+      final entry = await _library.install(file, animationId: id);
+      if (mounted) await _preview(entry);
+    } finally {
+      await CacheScratchCleanup.releasePickerCopy(selected.path);
     }
-    if (selected.path == null) {
-      throw const LaunchImportException(
-        'Copy the animation to local storage, then try again.',
-      );
-    }
-    final file = File(selected.path!);
-    final package = await _library.inspectFile(file);
-    if (!mounted) return;
-    var id = package.initialId;
-    final pair = package.orientationPair;
-    if (pair != null) {
-      id = MediaQuery.orientationOf(context) == Orientation.portrait
-          ? pair.portrait.id
-          : pair.landscape.id;
-    } else if (package.animations.length > 1) {
-      final choice = await showDialog<String>(
-        context: context,
-        builder: (context) => SimpleDialog(
-          title: const Text('Choose an animation'),
-          children: [
-            for (final animation in package.animations)
-              SimpleDialogOption(
-                onPressed: () => Navigator.pop(context, animation.id),
-                child: Text(animation.name),
-              ),
-          ],
-        ),
-      );
-      if (choice == null) return;
-      id = choice;
-    }
-    final entry = await _library.install(file, animationId: id);
-    if (mounted) await _preview(entry);
   });
   Future<void> _preview(InstalledLaunchAnimation entry) async {
     await Navigator.of(context).push(

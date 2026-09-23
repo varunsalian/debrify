@@ -251,6 +251,12 @@ void main() {
           )
           .map((card) => card.info)
           .toList();
+      // The desktop/Spotlight grid has its own provider list. Supplying the
+      // connection to ConnectionsSummary alone must not hide it here.
+      expect(
+        infos.where((info) => info.title == 'Jellyfin & Emby'),
+        hasLength(1),
+      );
       final torbox = infos.singleWhere((info) => info.title == 'Torbox');
       expect(torbox.connected, isTrue);
       expect(torbox.caption, 'credentials pending owner sign-in');

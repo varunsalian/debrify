@@ -117,6 +117,8 @@ class XmltvEpgSource {
   /// case-insensitively — Kodi's default, and panels/guides really do
   /// disagree on casing) or by normalized name ([channelNames],
   /// pre-normalized via [normalizeChannelName]).
+  /// [cacheByCoverage] isolates filtered virtual-list snapshots by their
+  /// requested IDs/names; they never replace the full provider's cache.
   /// Returns null only when nothing could be loaded at all. Never throws.
   static Future<XmltvGuide?> load({
     required String epgUrl,
@@ -124,10 +126,12 @@ class XmltvEpgSource {
     required Set<String> channelNames,
     String? dbPath,
     IptvLoadPhase? onPhase,
+    bool cacheByCoverage = false,
   }) {
     if (tvgIds.isEmpty && channelNames.isEmpty) return Future.value(null);
     // In-flight coalescing keys on the exact request (URL + id/name sets);
-    // the stored guide below keys on the URL alone.
+    // full-provider storage keys on the URL; list subsets opt into coverage
+    // keys so their filtered snapshots cannot shadow other lists/providers.
     final ids = tvgIds.toList()..sort();
     final names = channelNames.toList()..sort();
     // Chunked md5, never one giant joined string: at 50k ids + names the
@@ -141,16 +145,27 @@ class XmltvEpgSource {
     }
 
     addPart(epgUrl);
+    addPart(dbPath ?? 'memory');
+    addPart(cacheByCoverage ? 'coverage' : 'provider');
+    addPart('ids:${ids.length}');
     ids.forEach(addPart);
+    addPart('names:${names.length}');
     names.forEach(addPart);
     byteSink.close();
     final key = digestSink.value.toString();
     final inFlight = _inFlight[key];
     if (inFlight != null) return inFlight;
     final future =
-        _load(epgUrl, tvgIds, channelNames, dbPath, onPhase).whenComplete(() {
-      _inFlight.remove(key);
-    });
+        _load(
+          epgUrl,
+          tvgIds,
+          channelNames,
+          dbPath,
+          onPhase,
+          cacheByCoverage ? key : null,
+        ).whenComplete(() {
+          _inFlight.remove(key);
+        });
     _inFlight[key] = future;
     return future;
   }
@@ -161,19 +176,31 @@ class XmltvEpgSource {
     Set<String> channelNames,
     String? dbPath,
     IptvLoadPhase? onPhase,
+    String? coverageKey,
   ) async {
     // One stored guide per URL, overwritten in place — keying on the id
     // set too would mint a new multi-MB orphan on every channel-list churn
     // AND force a full guide re-download for a one-channel change. The
     // trade-off: channels added to the playlist since the guide was
     // written have no data until the next TTL refresh.
-    final guideKey = md5.convert(utf8.encode(epgUrl)).toString();
+    // Coverage snapshots use a disjoint namespace. In particular they must
+    // never be imported as the URL-wide legacy snapshot by _loadDbMode.
+    final guideKey = coverageKey == null
+        ? md5.convert(utf8.encode(epgUrl)).toString()
+        : 'subset-$coverageKey';
     final cacheFile = await _cacheFileFor(guideKey);
     _sweepCache(keep: cacheFile.path); // fire-and-forget housekeeping
 
     if (dbPath != null) {
-      return _loadDbMode(epgUrl, tvgIds, channelNames, dbPath, guideKey,
-          cacheFile, onPhase);
+      return _loadDbMode(
+        epgUrl,
+        tvgIds,
+        channelNames,
+        dbPath,
+        guideKey,
+        cacheFile,
+        onPhase,
+      );
     }
 
     // Fresh snapshot → done, no network at all.
@@ -203,8 +230,10 @@ class XmltvEpgSource {
       // its 48h programme window outlives the 12h TTL by a lot.
       final fallback = cached?.guide;
       if (fallback != null && fallback.byId.isNotEmpty) {
-        debugPrint('XmltvEpgSource: empty parse, keeping stale snapshot: '
-            '$epgUrl');
+        debugPrint(
+          'XmltvEpgSource: empty parse, keeping stale snapshot: '
+          '$epgUrl',
+        );
         return fallback;
       }
       // No better answer exists — negative-cache the empty result briefly

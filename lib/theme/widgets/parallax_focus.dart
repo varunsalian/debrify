@@ -455,52 +455,14 @@ class _ParallaxBodyState extends State<_ParallaxBody>
           final v = _c.value;
           final lift = v.clamp(0.0, 1.4);
           final unit = lift.clamp(0.0, 1.0);
-          if (lift <= 0.0001 && _c.velocity.abs() < 0.01) {
-            return _withFixedScaleForeground(
-              child: child!,
-              foreground: widget.fixedScaleForeground,
-              scale: 1,
-            );
-          }
-
-          final scale = 1 + (widget.shape.scale - 1) * lift;
-
-          // The Android TV LITE body — the per-frame raster budget of an
-          // Amlogic/Mali GLES2 box. Keeps what makes the cursor a cursor
-          // (lift, rise, a soft shadow) and sheds what it pays for every
-          // animated frame ×2 cards per step: the tilt (whose perspective
-          // matrix re-rasters the subtree), the specular glare (a full-card
-          // RadialGradient) and with it the rounded ClipRRect (a saveLayer
-          // on that pipeline). Same compromise-per-box family as grain-off
-          // and the flattened ground gradient; Apple TV and pointer devices
-          // keep the full effect below — as does any subtree inside a
-          // [ParallaxRichScope] (the detail page), which is why [richTv] skips
-          // this branch.
-          if (PlatformUtil.isAndroidTvCached && (!widget.richTv || _lite)) {
-            return Transform(
-              alignment: Alignment.center,
-              transform: Matrix4.identity()
-                ..translateByDouble(0, -_risePerScale * (scale - 1), 0, 1)
-                ..scaleByDouble(scale, scale, 1, 1),
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  borderRadius: radius == BorderRadius.zero ? null : radius,
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.45 * unit),
-                      offset: const Offset(0, 16),
-                      blurRadius: 12,
-                    ),
-                  ],
-                ),
-                child: _withFixedScaleForeground(
-                  child: child!,
-                  foreground: widget.fixedScaleForeground,
-                  scale: scale,
-                ),
-              ),
-            );
-          }
+          // Keep the same ancestors at rest, in motion, and when TV switches
+          // between lite and rich effects. Removing wrappers remounts the card
+          // subtree and resets badge/image loading on every focus transition.
+          final resting = lift <= 0.0001 && _c.velocity.abs() < 0.01;
+          final lite =
+              PlatformUtil.isAndroidTvCached && (!widget.richTv || _lite);
+          final rich = !resting && !lite;
+          final scale = resting ? 1.0 : 1 + (widget.shape.scale - 1) * lift;
 
           // Tilt rides the spring's VELOCITY, not a bell curve over its
           // position. That is what makes the card swing THROUGH neutral: the
@@ -512,13 +474,13 @@ class _ParallaxBodyState extends State<_ParallaxBody>
           // overshoot it reads as the card freezing flat and then leaning the
           // same way again.
           final swing = (_c.velocity / _kickRef).clamp(-1.0, 1.0);
-          final rx = -_lean.dy * _tilt * swing;
-          final ry = _lean.dx * _tilt * swing;
+          final rx = rich ? -_lean.dy * _tilt * swing : 0.0;
+          final ry = rich ? _lean.dx * _tilt * swing : 0.0;
 
           return Transform(
             alignment: Alignment.center,
             transform: Matrix4.identity()
-              ..setEntry(3, 2, -1 / _perspective)
+              ..setEntry(3, 2, rich ? -1 / _perspective : 0)
               ..translateByDouble(
                 -ry * _shiftPerDeg,
                 rx * _shiftPerDeg - _risePerScale * (scale - 1),
@@ -531,18 +493,21 @@ class _ParallaxBodyState extends State<_ParallaxBody>
             child: DecoratedBox(
               decoration: BoxDecoration(
                 borderRadius: radius == BorderRadius.zero ? null : radius,
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.45 * unit),
-                    offset: Offset(
-                      -ry * _shadowPerDeg,
-                      16 + rx * _shadowPerDeg,
-                    ),
-                    blurRadius: 25,
-                  ),
-                ],
+                boxShadow: resting
+                    ? null
+                    : [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.45 * unit),
+                          offset: Offset(
+                            -ry * _shadowPerDeg,
+                            16 + rx * _shadowPerDeg,
+                          ),
+                          blurRadius: lite ? 12 : 25,
+                        ),
+                      ],
               ),
               child: ClipRRect(
+                clipBehavior: rich ? Clip.antiAlias : Clip.none,
                 borderRadius: radius,
                 child: _withFixedScaleForeground(
                   scale: scale,
@@ -558,27 +523,28 @@ class _ParallaxBodyState extends State<_ParallaxBody>
                       // Painted as a gradient whose own stops carry the alpha —
                       // an Opacity here would be a saveLayer per frame, which is
                       // the one thing a TV cursor cannot afford.
-                      Positioned.fill(
-                        child: IgnorePointer(
-                          child: DecoratedBox(
-                            decoration: BoxDecoration(
-                              gradient: RadialGradient(
-                                center: Alignment(
-                                  (-ry * 0.042).clamp(-1.0, 1.0),
-                                  (-1.05 + rx * 0.042).clamp(-2.0, 1.0),
+                      if (rich)
+                        Positioned.fill(
+                          child: IgnorePointer(
+                            child: DecoratedBox(
+                              decoration: BoxDecoration(
+                                gradient: RadialGradient(
+                                  center: Alignment(
+                                    (-ry * 0.042).clamp(-1.0, 1.0),
+                                    (-1.05 + rx * 0.042).clamp(-2.0, 1.0),
+                                  ),
+                                  radius: 0.85,
+                                  colors: [
+                                    Colors.white.withValues(alpha: 0.31 * unit),
+                                    Colors.white.withValues(alpha: 0.14 * unit),
+                                    Colors.white.withValues(alpha: 0),
+                                  ],
+                                  stops: const [0, 0.26, 0.58],
                                 ),
-                                radius: 0.85,
-                                colors: [
-                                  Colors.white.withValues(alpha: 0.31 * unit),
-                                  Colors.white.withValues(alpha: 0.14 * unit),
-                                  Colors.white.withValues(alpha: 0),
-                                ],
-                                stops: const [0, 0.26, 0.58],
                               ),
                             ),
                           ),
                         ),
-                      ),
                     ],
                   ),
                 ),
@@ -586,7 +552,7 @@ class _ParallaxBodyState extends State<_ParallaxBody>
             ),
           );
         },
-        child: widget.child,
+        child: RepaintBoundary(child: widget.child),
       ),
     );
   }

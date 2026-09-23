@@ -452,7 +452,15 @@ class _SourcesScreenState extends State<_SourcesScreen> {
       );
       final aliases = await SourcePriority.sourceAliases();
       if (!mounted) return;
-      _sourcePriority = rules.sourcePriority;
+      final providers = await SourcePriority.providers();
+      if (!mounted) return;
+      _sourcePriority = [
+        for (final provider in SourcePriority.orderedProviders(
+          providers,
+          rules.sourcePriority,
+        ))
+          provider.key,
+      ];
       _sourceAliases = aliases;
     } catch (_) {}
   }
@@ -1529,6 +1537,10 @@ class _SourcesScreenState extends State<_SourcesScreen> {
     for (final source in _iptvSources) {
       names[source.key] = 'IPTV · ${source.name}';
     }
+    final iptvMessages = {
+      for (final source in _iptvSources)
+        if (source.retryableFailure) source.key: source.message,
+    };
     final keys = SourcePriority.orderBy(
       names.keys.toList()..sort(),
       (key) => key,
@@ -1546,6 +1558,7 @@ class _SourcesScreenState extends State<_SourcesScreen> {
           id: key,
           label: names[key]!.isEmpty ? 'Other sources' : names[key]!,
           count: counts[key] ?? 0,
+          message: iptvMessages[key] ?? _mediaServerMessages[key],
           failed: _addonStatuses.any((s) => s.sourceKey == key && s.failed),
           loading: _addonStatuses.any(
             (s) => s.sourceKey == key && _retryingAddons.contains(s.requestKey),
@@ -1553,6 +1566,12 @@ class _SourcesScreenState extends State<_SourcesScreen> {
         ),
     ];
   }
+
+  Map<String, String> get _mediaServerMessages => {
+    for (final status in _addonStatuses)
+      if (status.sourceKey.startsWith('mediaserver:') && status.error != null)
+        status.sourceKey: status.error!,
+  };
 
   void _selectCinemaProvider(String? key) {
     _sourceFilter = key;
@@ -1593,7 +1612,6 @@ class _SourcesScreenState extends State<_SourcesScreen> {
                           _iptvSources.isNotEmpty ||
                           _hasRetryableAddon))
                     _redesignToolbar(scheme, showProviders: !cinema),
-                  if (_iptvSources.isNotEmpty) _iptvSourceStatus(scheme),
                   if (_searching && !cinema) _searchingStrip(),
                   Expanded(
                     child: Stack(
@@ -2055,7 +2073,8 @@ class _SourcesScreenState extends State<_SourcesScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (showProviders && (sortedKeys.length > 1 || retryByKey.isNotEmpty))
+        if (showProviders && (sortedKeys.length > 1 || retryByKey.isNotEmpty ||
+            _iptvSources.any((s) => s.retryableFailure)))
           SizedBox(
             height: 44,
             child: ListView(
@@ -2142,6 +2161,23 @@ class _SourcesScreenState extends State<_SourcesScreen> {
               ],
             ),
           ),
+        if (showProviders)
+          for (final entry in _mediaServerMessages.entries)
+            if (_sourceFilter == null || _sourceFilter == entry.key)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 2, 12, 8),
+                child: Text(entry.value,
+                    style: TextStyle(color: scheme.error, fontSize: 12)),
+              ),
+        if (showProviders)
+          for (final source in _iptvSources)
+            if (source.retryableFailure &&
+                (_sourceFilter == null || _sourceFilter == source.key))
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 2, 12, 8),
+                child: Text('IPTV · ${source.name}: ${source.message}',
+                  style: TextStyle(color: scheme.error, fontSize: 12)),
+              ),
         Padding(
           padding: const EdgeInsets.fromLTRB(12, 2, 12, 8),
           child: Row(
@@ -2507,36 +2543,6 @@ class _SourcesScreenState extends State<_SourcesScreen> {
   static String _prettySource(String s) {
     final v = s.startsWith('stremio:') ? s.substring(8) : s;
     return v.isEmpty ? s : v[0].toUpperCase() + v.substring(1);
-  }
-
-  Widget _iptvSourceStatus(ColorScheme scheme) {
-    final sources = _iptvSources;
-    if (sources.isEmpty) return const SizedBox.shrink();
-    return SizedBox(
-      height: 76,
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-        itemCount: sources.length,
-        separatorBuilder: (_, _) => const SizedBox(width: 8),
-        itemBuilder: (context, index) {
-          final source = sources[index];
-          return SizedBox(
-            width: 330,
-            child: OutlinedButton(
-              onPressed: () => _selectCinemaProvider(
-                _sourceFilter == source.key ? null : source.key,
-              ),
-              child: Text(
-                'IPTV · ${source.name}\n${source.message}',
-                maxLines: 3,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-          );
-        },
-      ),
-    );
   }
 
   static String _sortLabel(String v) => switch (v) {

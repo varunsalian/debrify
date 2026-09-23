@@ -2,6 +2,29 @@ import 'package:debrify/models/profiles/profile_avatar.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test(
+    'circle sync preserves local photos but syncs built-in changes and clears',
+    () {
+      for (final incoming in [null, 'person', 'art:aurora']) {
+        expect(
+          ProfileAvatar.resolveCircleSyncAvatar(
+            current: 'file:avatars/a.png',
+            incoming: incoming,
+          ),
+          'file:avatars/a.png',
+        );
+        for (final current in [null, 'person', 'art:orbit']) {
+          expect(
+            ProfileAvatar.resolveCircleSyncAvatar(
+              current: current,
+              incoming: incoming,
+            ),
+            incoming,
+          );
+        }
+      }
+    },
+  );
   group('legacy keys', () {
     test('every shipped icon key still parses', () {
       for (final id in ProfileAvatar.legacyIconIds) {

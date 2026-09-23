@@ -79,6 +79,11 @@ object LanguageMapper {
      * @param trackLang The track's language tag (could be anything)
      * @return true if they match
      */
+    fun canonicalLanguage(value: String?): String? {
+        val tag = value?.lowercase()?.trim() ?: return null
+        return reverseLookup[tag] ?: reverseLookup[normalizeLanguageTag(tag)]
+    }
+
     @JvmStatic
     fun matchesLanguage(targetLang: String, trackLang: String?): Boolean {
         if (trackLang.isNullOrBlank()) return false

@@ -23,7 +23,7 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [28])
 class NativePlayerSettingsConsumptionTest {
-    private fun intent(custom: Boolean): Intent {
+    private fun intent(custom: Boolean, onlyForeign: Boolean = false): Intent {
         val context = RuntimeEnvironment.getApplication()
         val owner = mapOf("profileId" to "probe", "dataGeneration" to 1, "sessionEpoch" to 1)
         val values = if (custom) JSONObject()
@@ -31,6 +31,9 @@ class NativePlayerSettingsConsumptionTest {
             .put("debrify_tv_player_style", "network")
             .put("player_default_subtitle_language", "off")
             .put("player_night_mode_index", 3) else JSONObject()
+        if (onlyForeign) values.put("subtitle_only_foreign_audio", true)
+            .put("player_default_audio_language", "en")
+            .put("player_default_subtitle_language", "en")
         val root = JSONObject(owner).put("version", 2).put("state", "active")
             .put("publication", 1).put("values", values)
         context.getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE).edit().clear()
@@ -53,6 +56,29 @@ class NativePlayerSettingsConsumptionTest {
         assertEquals(if (custom) 3 else 0, field(activity, "nightModeIndex"))
         val selector = field(activity, "trackSelector") as DefaultTrackSelector
         assertEquals(custom, selector.parameters.disabledTrackTypes.contains(C.TRACK_TYPE_TEXT))
+    }
+
+    @Test fun channelPlayerWaitsForAudioAndRespectsManualSubtitlesUntilNextItem() {
+        val lifecycle = Robolectric.buildActivity(TorboxTvPlayerActivity::class.java,
+            intent(custom = false, onlyForeign = true)).create()
+        try {
+            val activity = lifecycle.get()
+            val selector = field(activity, "trackSelector") as DefaultTrackSelector
+            assertTrue(selector.parameters.disabledTrackTypes.contains(C.TRACK_TYPE_TEXT))
+            val optionType = Class.forName("com.debrify.app.tv.TorboxTvPlayerActivity\$TrackOption")
+            val group = Tracks.Group(TrackGroup(Format.Builder().setSampleMimeType(MimeTypes.TEXT_VTT)
+                .setLanguage("en").build()), false, intArrayOf(C.FORMAT_HANDLED), booleanArrayOf(false))
+            val option = optionType.getDeclaredConstructor(Tracks.Group::class.java, Int::class.javaPrimitiveType, String::class.java)
+                .apply { isAccessible = true }.newInstance(group, 0, "English")
+            activity.javaClass.getDeclaredMethod("applySubtitleTrack", optionType)
+                .apply { isAccessible = true }.invoke(activity, option)
+            activity.javaClass.getDeclaredMethod("ensureDefaultSubtitleSelected")
+                .apply { isAccessible = true }.invoke(activity)
+            assertFalse(selector.parameters.disabledTrackTypes.contains(C.TRACK_TYPE_TEXT))
+            activity.javaClass.getDeclaredMethod("resetSubtitleState")
+                .apply { isAccessible = true }.invoke(activity)
+            assertTrue(selector.parameters.disabledTrackTypes.contains(C.TRACK_TYPE_TEXT))
+        } finally { lifecycle.destroy() }
     }
 
     @Test fun moviePlayerConsumesDefaultsAndCustomSettings() {

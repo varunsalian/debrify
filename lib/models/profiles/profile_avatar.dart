@@ -16,6 +16,15 @@ import 'package:path/path.dart' as p;
 enum ProfileAvatarKind { icon, art, image }
 
 class ProfileAvatar {
+  /// Circle sync carries built-in avatars only. An uploaded photo is a
+  /// device-local choice, not an older copy of the wire avatar. Keep it until
+  /// the user explicitly selects another avatar locally, even when other
+  /// fields in the incoming profile record must be applied.
+  static String? resolveCircleSyncAvatar({
+    required String? current,
+    required String? incoming,
+  }) => current?.startsWith('file:') == true ? current : incoming;
+
   /// Legacy icon keys. These predate every prefix and must keep resolving —
   /// existing profiles reference them directly.
   static const Set<String> legacyIconIds = <String>{

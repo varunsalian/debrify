@@ -2178,11 +2178,10 @@ final class ProfileWebDavSyncLocalAdapter
     ProfilePinRecord currentPin,
     SyncedRegistryProfileRecord incoming,
   ) {
-    final effectiveAvatar =
-        incoming.avatarKey ??
-        (current.avatarKey?.startsWith('file:') == true
-            ? current.avatarKey
-            : null);
+    final effectiveAvatar = ProfileAvatar.resolveCircleSyncAvatar(
+      current: current.avatarKey,
+      incoming: incoming.avatarKey,
+    );
     return current.name == incoming.name.trim() &&
         current.avatarKey == effectiveAvatar &&
         current.role == incoming.role &&

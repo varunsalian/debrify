@@ -1,3 +1,6 @@
+import '../../widgets/home/snowy_mountain_background.dart';
+import '../../widgets/home/midnight_rain_background.dart';
+import '../../widgets/home/moonlit_ocean_background.dart';
 import 'package:flutter/foundation.dart';
 import '../../widgets/collections/collection_category_tabs.dart';
 import '../../widgets/see_all/see_all_header.dart';
@@ -346,7 +349,8 @@ class _CollectionFolderScreenState extends State<CollectionFolderScreen> {
       });
       // Appearance-only changes must apply even when the collection data is
       // unchanged, without reloading its rows or losing the scroll position.
-      if (_animationsEnabled != animations || _animationStyle != animationStyle) {
+      if (_animationsEnabled != animations ||
+          _animationStyle != animationStyle) {
         setState(() {
           _animationsEnabled = animations;
           _animationStyle = animationStyle;
@@ -420,7 +424,8 @@ class _CollectionFolderScreenState extends State<CollectionFolderScreen> {
   // ── Folder (re)build ───────────────────────────────────────────────────
 
   /// Resolve the current folder's enabled lists into rails and fetch their
-  /// first pages. The All view is built lazily on first switch.
+  /// first pages. Mobile folder entry defaults to All; TV and desktop start
+  /// with the first list (or the gallery in rows mode).
   void _rebuildFolder({
     bool autoFocus = false,
     bool preserveSelection = false,
@@ -478,9 +483,17 @@ class _CollectionFolderScreenState extends State<CollectionFolderScreen> {
       final index = rails.indexWhere(
         (r) => r.source.key == (oldSource ?? widget.sourceKey),
       );
-      _tab = wasAll && _collection.showAllTab && rails.length > 1
-          ? _kAllTab
-          : (index < 0 ? 0 : index);
+      final offersAll = _collection.showAllTab && rails.length > 1;
+      final defaultAll =
+          !preserveSelection &&
+          widget.sourceKey == null &&
+          !widget.isTelevision &&
+          (defaultTargetPlatform == TargetPlatform.android ||
+              defaultTargetPlatform == TargetPlatform.iOS);
+      final selectAll = offersAll && (wasAll || defaultAll);
+      _tab = selectAll ? _kAllTab : (index < 0 ? 0 : index);
+      if (selectAll) _view = _View.all;
+      if (!offersAll || (!preserveSelection && !selectAll)) _view = _View.lists;
       _tabGridKey = GlobalKey();
       _tvTitlesKey = GlobalKey();
       _spotlightKey = GlobalKey();
@@ -863,8 +876,10 @@ class _CollectionFolderScreenState extends State<CollectionFolderScreen> {
   _Rail? get _tabRail =>
       _tab >= 0 && _tab < _rails.length ? _rails[_tab] : null;
 
+  // Multi-list folders need the same visible controls and focus ladder in
+  // both All and Gallery, so users can switch views in either direction.
   bool get _homeGallery =>
-      widget.fromHome && widget.sourceKey == null && !_tabs;
+      widget.fromHome && widget.sourceKey == null && !_tabs && !_offersAll;
 
   void _focusBelowHeader() {
     if (_filterNodes.isEmpty) {
@@ -968,123 +983,245 @@ class _CollectionFolderScreenState extends State<CollectionFolderScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppThemeScope.of(context).seeAll.bg,
-      body: SafeArea(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (_styledCollectionList && (_tabs || _showingAll))
-              Row(
-                children: [
-                  Expanded(
-                    child: SeeAllHeader(
-                      title: _showingAll
-                          ? 'All titles'
-                          : (_tabRail?.title ?? _collection.title),
-                      subtitle:
-                          '${_collection.title} / ${_hasFolders ? _folder.title : ""}',
-                      isTelevision: widget.isTelevision,
-                      backNode: _backNode,
-                      onFilterDown: _focusBelowHeader,
-                    ),
-                  ),
-                  if (_hasHeaderIssue) _buildIssueAction(),
-                ],
-              )
-            else
-              CollectionBrowserHero(
-                collectionTitle: _collection.title,
-                folder: _hasFolders ? _folder : null,
-                listTitle: widget.sourceKey != null ? _tabRail?.title : null,
-                source: widget.sourceKey != null
-                    ? _tabRail?.source.provider.toUpperCase()
-                    : null,
-                listCount: _rails.length,
-                backdrop: _collection.backdropImageUrl,
-                item:
-                    widget.sourceKey != null &&
-                        (_tabRail?.items.isNotEmpty ?? false)
-                    ? _tabRail!.items.first
-                    : null,
-                backNode: _backNode,
-                action: _hasHeaderIssue ? _buildIssueAction() : null,
-                onRight: _hasHeaderIssue ? _issuesNode.requestFocus : null,
-                onDown: _focusBelowHeader,
-              ),
-            if (_touchCategories)
-              Row(
-                children: [
-                  Expanded(
-                    child: CollectionCategoryTabs(
-                      labels: [
-                        for (final rail in _rails) rail.title,
-                        if (_offersAll) 'All',
-                      ],
-                      selectedIndex: _tab == _kAllTab ? _rails.length : _tab,
-                      onSelected: (index) => _onTabChanged(
-                        index == _rails.length ? _kAllTab : index,
+      body: _collectionBackdrop(
+        SafeArea(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (_styledCollectionList && (_tabs || _showingAll))
+                Row(
+                  children: [
+                    Expanded(
+                      child: SeeAllHeader(
+                        title: 'Collections',
+                        editorial: true,
+                        editorialGutter: _headerGutter,
+                        subtitle: [
+                          _collection.title,
+                          if (_hasFolders) _folder.title,
+                          if (widget.sourceKey != null && _tabRail != null)
+                            _tabRail!.title,
+                        ].where((part) => part.isNotEmpty).join(' / '),
+                        isTelevision: widget.isTelevision,
+                        backNode: _backNode,
+                        onFilterDown: _focusBelowHeader,
                       ),
                     ),
-                  ),
-                  PopupMenuButton<String>(
-                    tooltip: 'Sort titles',
-                    icon: Icon(
-                      Icons.sort,
-                      color: _sort == _sortDefault
-                          ? null
-                          : Theme.of(context).colorScheme.primary,
-                    ),
-                    initialValue: _sort,
-                    onSelected: _onSortChanged,
-                    itemBuilder: (_) => [
-                      for (final option in const {
-                        _sortDefault: 'Default',
-                        _sortImdbDesc: 'IMDb Rating · High → Low',
-                        _sortImdbAsc: 'IMDb Rating · Low → High',
-                        _sortTitle: 'Title · A → Z',
-                      }.entries)
-                        CheckedPopupMenuItem<String>(
-                          value: option.key,
-                          checked: _sort == option.key,
-                          child: Text(option.value),
+                    if (_hasHeaderIssue) _buildIssueAction(),
+                  ],
+                )
+              else
+                CollectionBrowserHero(
+                  collectionTitle: _collection.title,
+                  folder: _hasFolders ? _folder : null,
+                  listTitle: widget.sourceKey != null ? _tabRail?.title : null,
+                  source: widget.sourceKey != null
+                      ? _tabRail?.source.provider.toUpperCase()
+                      : null,
+                  listCount: _rails.length,
+                  backdrop: _collection.backdropImageUrl,
+                  item:
+                      widget.sourceKey != null &&
+                          (_tabRail?.items.isNotEmpty ?? false)
+                      ? _tabRail!.items.first
+                      : null,
+                  backNode: _backNode,
+                  action: _hasHeaderIssue ? _buildIssueAction() : null,
+                  onRight: _hasHeaderIssue ? _issuesNode.requestFocus : null,
+                  onDown: _focusBelowHeader,
+                ),
+              if (_touchCategories)
+                Row(
+                  children: [
+                    Expanded(
+                      child: CollectionCategoryTabs(
+                        labels: [
+                          if (_offersAll) 'All',
+                          for (final rail in _rails) rail.title,
+                        ],
+                        selectedIndex: _tab == _kAllTab
+                            ? 0
+                            : _tab + (_offersAll ? 1 : 0),
+                        onSelected: (index) => _onTabChanged(
+                          _offersAll
+                              ? (index == 0 ? _kAllTab : index - 1)
+                              : index,
                         ),
-                    ],
-                  ),
-                  const SizedBox(width: 12),
-                ],
-              )
-            else if (!_homeGallery)
-              _buildFilterBar(),
-            if (_openingTitle != null)
-              Row(
-                children: [
-                  const Padding(
-                    padding: EdgeInsets.all(12),
-                    child: SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
                     ),
-                  ),
-                  Expanded(
-                    child: Text(
-                      'Opening $_openingTitle…',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                    PopupMenuButton<String>(
+                      tooltip: 'Sort titles',
+                      icon: Icon(
+                        Icons.sort,
+                        color: _sort == _sortDefault
+                            ? null
+                            : Theme.of(context).colorScheme.primary,
+                      ),
+                      initialValue: _sort,
+                      onSelected: _onSortChanged,
+                      itemBuilder: (_) => [
+                        for (final option in const {
+                          _sortDefault: 'Default',
+                          _sortImdbDesc: 'IMDb Rating · High → Low',
+                          _sortImdbAsc: 'IMDb Rating · Low → High',
+                          _sortTitle: 'Title · A → Z',
+                        }.entries)
+                          CheckedPopupMenuItem<String>(
+                            value: option.key,
+                            checked: _sort == option.key,
+                            child: Text(option.value),
+                          ),
+                      ],
                     ),
-                  ),
-                  TextButton(
-                    onPressed: () => setState(() {
-                      _openRequest++;
-                      _openingTitle = null;
-                    }),
-                    child: const Text('Cancel'),
-                  ),
-                ],
-              ),
-            Expanded(child: _buildBody()),
-          ],
+                    const SizedBox(width: 12),
+                  ],
+                )
+              else if (!_homeGallery)
+                _buildFilterBar(),
+              if (_openingTitle != null)
+                Row(
+                  children: [
+                    const Padding(
+                      padding: EdgeInsets.all(12),
+                      child: SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                    ),
+                    Expanded(
+                      child: Text(
+                        'Opening $_openingTitle…',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: () => setState(() {
+                        _openRequest++;
+                        _openingTitle = null;
+                      }),
+                      child: const Text('Cancel'),
+                    ),
+                  ],
+                ),
+              Expanded(child: _buildBody()),
+            ],
+          ),
         ),
       ),
+    );
+  }
+
+  double get _headerGutter =>
+      _spotlight ? MediaQuery.sizeOf(context).width * (84 / 1920) : 32;
+
+  Widget _collectionBackdrop(Widget child) {
+    if (!_spotlight) return child;
+    final app = AppThemeScope.of(context);
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                SpotlightBoard.groundOf(app),
+                SpotlightBoard.groundLowOf(app),
+              ],
+            ),
+          ),
+        ),
+        if (_animationsEnabled)
+          RepaintBoundary(
+            child: switch (_animationStyle) {
+              'moonlit_ocean' => MoonlitOceanBackground(
+                lowPower: widget.isTelevision,
+              ),
+              'midnight_rain' => MidnightRainBackground(
+                lowPower: widget.isTelevision,
+              ),
+              _ => SnowyMountainBackground(lowPower: widget.isTelevision),
+            },
+          ),
+        const IgnorePointer(
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                stops: [0, 0.35, 1],
+                colors: [
+                  Color(0x70000000),
+                  Color(0x16000000),
+                  Color(0x16000000),
+                ],
+              ),
+            ),
+          ),
+        ),
+        child,
+      ],
+    );
+  }
+
+  Widget _filterLayout({
+    required bool isTelevision,
+    required int activeCount,
+    required List<Widget> Function() buildChips,
+  }) {
+    if (!_styledCollectionList) {
+      return SeeAllFilterBar(
+        isTelevision: isTelevision,
+        activeCount: activeCount,
+        buildChips: buildChips,
+      );
+    }
+    final chips = buildChips();
+    final hasSort = _tabs || _view == _View.all;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.maxWidth < 700) {
+          return Wrap(
+            spacing: 12,
+            runSpacing: 10,
+            children: chips
+                .map(
+                  (chip) => ConstrainedBox(
+                    constraints: BoxConstraints(maxWidth: constraints.maxWidth),
+                    child: chip,
+                  ),
+                )
+                .toList(),
+          );
+        }
+        final leading = hasSort ? chips.take(chips.length - 1).toList() : chips;
+        return Row(
+          children: [
+            Expanded(
+              child: Row(
+                children: [
+                  for (var i = 0; i < leading.length; i++) ...[
+                    if (i > 0) const SizedBox(width: 12),
+                    Flexible(child: leading[i]),
+                  ],
+                ],
+              ),
+            ),
+            if (hasSort) ...[
+              const SizedBox(width: 24),
+              ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxWidth: constraints.maxWidth * 0.3,
+                ),
+                child: chips.last,
+              ),
+            ],
+          ],
+        );
+      },
     );
   }
 
@@ -1149,6 +1286,8 @@ class _CollectionFolderScreenState extends State<CollectionFolderScreen> {
 
   Widget _sortChip() => StremioDropdown<String>(
     label: 'Sort',
+    editorial: _styledCollectionList,
+    icon: Icons.swap_vert_rounded,
     value: _sort,
     isTelevision: widget.isTelevision,
     focusNode: _sortNode,
@@ -1168,14 +1307,18 @@ class _CollectionFolderScreenState extends State<CollectionFolderScreen> {
       skipTraversal: true,
       onKeyEvent: _handleFilterKeys,
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(24, 10, 24, 12),
-        child: SeeAllFilterBar(
+        padding: _styledCollectionList
+            ? EdgeInsets.fromLTRB(_headerGutter, 8, _headerGutter, 16)
+            : const EdgeInsets.fromLTRB(24, 10, 24, 12),
+        child: _filterLayout(
           isTelevision: widget.isTelevision,
           activeCount: _sort != _sortDefault && (_tabs || _showingAll) ? 1 : 0,
           buildChips: () => [
             if (widget.sourceKey == null)
               StremioDropdown<int>(
                 label: 'Folder',
+                editorial: _styledCollectionList,
+                icon: Icons.folder_rounded,
                 value: _folderIndex,
                 isTelevision: widget.isTelevision,
                 focusNode: _folderNode,
@@ -1190,14 +1333,16 @@ class _CollectionFolderScreenState extends State<CollectionFolderScreen> {
               if (_rails.isNotEmpty && widget.sourceKey == null)
                 StremioDropdown<int>(
                   label: 'List',
+                  editorial: _styledCollectionList,
+                  icon: Icons.format_list_bulleted_rounded,
                   value: _tab,
                   isTelevision: widget.isTelevision,
                   focusNode: _listNode,
                   options: [
-                    for (var i = 0; i < _rails.length; i++)
-                      StremioDropdownOption(i, _rails[i].title),
                     if (_offersAll)
                       const StremioDropdownOption(_kAllTab, 'All'),
+                    for (var i = 0; i < _rails.length; i++)
+                      StremioDropdownOption(i, _rails[i].title),
                   ],
                   onSelected: _onTabChanged,
                 ),
@@ -1206,12 +1351,14 @@ class _CollectionFolderScreenState extends State<CollectionFolderScreen> {
               if (_offersAll)
                 StremioDropdown<_View>(
                   label: 'View',
+                  editorial: _styledCollectionList,
+                  icon: Icons.view_carousel_outlined,
                   value: _view,
                   isTelevision: widget.isTelevision,
                   focusNode: _viewNode,
                   options: const [
-                    StremioDropdownOption(_View.lists, 'Gallery'),
                     StremioDropdownOption(_View.all, 'All'),
+                    StremioDropdownOption(_View.lists, 'Gallery'),
                   ],
                   onSelected: _onViewChanged,
                 ),
@@ -1530,6 +1677,7 @@ class _CollectionFolderScreenState extends State<CollectionFolderScreen> {
       heroAddon: null,
       onHeroOpen: (_, __) {},
       shelvesOnly: true,
+      paintBackground: false,
       animationsEnabled: _animationsEnabled,
       animationStyle: _animationStyle,
       sections: shelves,

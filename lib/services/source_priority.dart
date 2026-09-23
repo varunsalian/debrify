@@ -31,6 +31,35 @@ class SourceProviderRef {
 class SourcePriority {
   SourcePriority._();
 
+  /// The visible Settings order: saved providers first, expanding legacy
+  /// addon names to their configurations, then new providers in default order.
+  static List<SourceProviderRef> orderedProviders(
+    List<SourceProviderRef> providers,
+    List<String> stored,
+  ) {
+    final byKey = {for (final p in providers) p.key: p};
+    final out = <SourceProviderRef>[];
+    for (final key in stored) {
+      final p = byKey.remove(key);
+      if (p != null) {
+        out.add(p);
+        continue;
+      }
+      // Older builds keyed Stremio priority by manifest name. Preserve that
+      // slot for every matching configuration, in install order; the next
+      // explicit reorder persists the new stable keys.
+      final legacyMatches = byKey.values
+          .where((provider) => provider.legacyKeys.contains(key))
+          .toList(growable: false);
+      for (final provider in legacyMatches) {
+        byKey.remove(provider.key);
+        out.add(provider);
+      }
+    }
+    out.addAll(byKey.values);
+    return out;
+  }
+
   /// Put each addon's ready-to-play links ahead of that same addon's
   /// torrent-backed rows. Rows from engines and other addons keep their
   /// original slots, so this does not otherwise change relevance/provider
@@ -261,7 +290,10 @@ class SourcePriority {
     try {
       for (final server in await MediaServerService.connections()) {
         final key = 'mediaserver:${server.id}'.toLowerCase();
-        if (seen.add(key)) refs.add(SourceProviderRef(key: key, name: server.label, isEngine: false));
+        if (seen.add(key))
+          refs.add(
+            SourceProviderRef(key: key, name: server.label, isEngine: false),
+          );
       }
     } catch (_) {}
     return refs;

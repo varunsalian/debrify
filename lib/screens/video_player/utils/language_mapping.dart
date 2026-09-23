@@ -122,6 +122,13 @@ class LanguageMapper {
     return _reverseLookup!;
   }
 
+  /// Recognized language only; absent/undefined metadata must not imply a mismatch.
+  static String? canonicalLanguage(String? value) {
+    if (value == null) return null;
+    final tag = value.toLowerCase().trim();
+    return _getReverseLookup[tag] ?? _getReverseLookup[_normalizeLanguageTag(tag)];
+  }
+
   /// Get human-readable language name from any language code/tag.
   static String niceLanguage(String? codeOrTitle) {
     if (codeOrTitle == null || codeOrTitle.isEmpty) return '';

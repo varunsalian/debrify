@@ -2643,7 +2643,8 @@ class IptvResultsViewState extends State<IptvResultsView>
   ///   XMLTV index answers first, the endpoints cover anything it doesn't.
   ///   It's the same source TiviMate reads, so panels whose per-stream EPG
   ///   is broken/disabled (a real-world regular) still get a full guide.
-  /// - Everything else (Stremio/favorites/continue): no guide context.
+  /// - Favorites/custom lists: one guide context per originating provider.
+  /// - Everything else (Stremio/continue): no guide context.
   void _updateEpgContext(
     IptvPlaylist playlist,
     IptvParseResult result,
@@ -2654,6 +2655,17 @@ class IptvResultsViewState extends State<IptvResultsView>
   }) {
     final service = IptvEpgService.instance;
     _lastGuideMb = -1;
+    if (playlist.isFavorites || playlist.isCustomList) {
+      _hideChipIfOwned(_ChipOwner.guide);
+      unawaited(
+        Zone.root.run(() => service.setListEpgContext(
+          channels: result.channels,
+          playlists: _playlists,
+          isCurrent: () => mounted && ticket == _loadTicket,
+        )),
+      );
+      return;
+    }
     final isPlainM3u = !playlist.isVirtual && !playlist.isXtreamCodes;
     final isXtreamLive =
         playlist.isXtreamCodes && _selectedContentType == 'live';

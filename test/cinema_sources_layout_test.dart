@@ -21,6 +21,47 @@ const _providers = [
 ];
 
 void main() {
+  testWidgets('provider rail retains full IPTV recovery instructions', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1280, 720);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    const message =
+        'Series catalog is not ready. Retry shortly, or use Refresh in IPTV settings.';
+    String? selected;
+    await tester.pumpWidget(
+      _app(
+        CinemaSourcesLayout(
+          contextTitle: 'Show',
+          title: 'Choose a source',
+          providers: const [
+            CinemaSourceProvider(
+              id: 'iptv:test',
+              label: 'IPTV · Test',
+              count: 0,
+              message: message,
+            ),
+          ],
+          selectedProvider: null,
+          onProviderSelected: (id) => selected = id,
+          onFocusResults: () {},
+          isSourceFocused: () => false,
+          resultCount: 0,
+          isTelevision: true,
+          child: const SizedBox(),
+        ),
+      ),
+    );
+    expect(find.text(message), findsOneWidget);
+    expect(tester.widget<Text>(find.text(message)).maxLines, isNull);
+    await tester.tap(find.text('IPTV · Test'));
+    expect(selected, 'iptv:test');
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
+  });
+
   test(
     'large available panes use cinema; phones and split views stay compact',
     () {

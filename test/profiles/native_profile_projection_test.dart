@@ -131,6 +131,7 @@ void main() {
         '["addon:config-b","embedded"]',
       );
       await profilePrefs.setString('player_default_audio_language', 'ja');
+      await profilePrefs.setBool('subtitle_only_foreign_audio', true);
       await profilePrefs.setInt('subtitle_color_index', 3);
       await profilePrefs.setBool('subtitle_bold', true);
       await profilePrefs.setString('subtitle_selected_font_id', 'roboto');
@@ -146,6 +147,7 @@ void main() {
         '["addon:config-b","embedded"]',
       );
       expect(values['player_default_audio_language'], 'ja');
+      expect(values['subtitle_only_foreign_audio'], isTrue);
       expect(values['subtitle_color_index'], 3);
       expect(values['subtitle_bold'], isTrue);
       expect(values['subtitle_selected_font_id'], 'roboto');

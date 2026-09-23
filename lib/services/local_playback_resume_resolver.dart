@@ -22,6 +22,9 @@ class LocalPlaybackResumeResolver {
     PlaybackResumePolicy policy = PlaybackResumePolicy.sourceSpecific,
   }) async {
     final wanted = imdbId?.trim() ?? '';
+    if (wanted.startsWith('medialibrary:')) {
+      return StorageService.getVideoPlaybackStateByImdbId(wanted);
+    }
     if (CustomSeriesIdentity.isCustom(wanted)) {
       return StorageService.getVideoPlaybackStateByImdbId(wanted);
     }

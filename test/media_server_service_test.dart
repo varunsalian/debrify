@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:debrify/models/media_server.dart';
+import 'package:debrify/models/media_server_library.dart';
+import 'package:debrify/services/media_server_library_playback.dart';
 import 'package:debrify/models/profiles/connection_resource.dart';
 import 'package:debrify/models/profiles/profile_policy.dart';
 import 'package:debrify/models/torrent.dart';
@@ -43,6 +45,8 @@ void main() {
   late String admin;
   late String member;
   var unavailable = false;
+  var extraBrokenMovie = false;
+  var unsupportedPlayback = false;
   var failureStatus = 503;
   Map<String, dynamic> videoMetadata = {};
   List<Map<String, dynamic>> audioStreams = [];
@@ -84,6 +88,8 @@ void main() {
       ProfileScope(profileId: admin, dataGeneration: 1, sessionEpoch: 1),
     );
     unavailable = false;
+    extraBrokenMovie = false;
+    unsupportedPlayback = false;
     failureStatus = 503;
     videoMetadata = {};
     audioStreams = [];
@@ -121,12 +127,24 @@ void main() {
               request.url.queryParameters['IncludeItemTypes'] == 'Movie';
           data = {
             'Items': [
+              if (movie && extraBrokenMovie)
+                {
+                  'Id': 'broken',
+                  'Type': 'Movie',
+                  'ProviderIds': {'Imdb': 'tt123'},
+                },
               {
                 'Id': movie ? 'movie1' : 'series1',
                 'Name': 'Example',
                 'Type': movie ? 'Movie' : 'Series',
                 'ProviderIds': {'Imdb': 'tt123'},
               },
+              if (movie && extraBrokenMovie)
+                {
+                  'Id': 'broken',
+                  'Type': 'Movie',
+                  'ProviderIds': {'Imdb': 'tt123'},
+                },
             ],
           };
         } else if (request.url.path.endsWith('/Episodes')) {
@@ -142,12 +160,14 @@ void main() {
             ],
           };
         } else if (request.url.path.endsWith('/PlaybackInfo')) {
+          if (request.url.path.contains('/broken/'))
+            return http.Response('', 500);
           data = {
             'MediaSources': [
               for (final height in [1080, 2160])
                 {
                   'Id': 'version${episodeNumber}_$height',
-                  'SupportsDirectPlay': true,
+                  'SupportsDirectPlay': !unsupportedPlayback,
                   'Protocol': 'File',
                   'Container': 'mkv',
                   'Size': 12345678,
@@ -166,6 +186,8 @@ void main() {
         } else if (request.url.path.contains('/Users/user1/Items/')) {
           data = {
             'Id': request.url.pathSegments.last,
+            'Name': 'Library recording',
+            'Type': 'Video',
             'RunTimeTicks': 100000 * 10000,
             'UserData': {
               'Played': watchPlayed,
@@ -218,6 +240,61 @@ void main() {
       resourceId: resource.id,
     );
     return (await registry.getResource(resource.id))!;
+  }
+
+  for (final kind in MediaServerKind.values) {
+    test(
+      '${kind.label} exact library recording plays without catalog binding',
+      () async {
+        final resource = await connect(kind);
+        expect(
+          (await MediaServerService.libraryConnections(kind)).single.id,
+          resource.id,
+        );
+        final session = await MediaServerService.openLibrary(resource.id);
+        final sources = await session.sources(
+          MediaServerLibraryItem.fromJson({
+            'Id': 'recording1',
+            'Type': 'Video',
+          }),
+        );
+        expect(sources, hasLength(2));
+        expect(MediaServerService.bindingFor(sources.first), isNull);
+        final args = MediaServerLibraryPlayback.arguments(
+          sources,
+          0,
+          title: 'Recording',
+        );
+        expect(args.disableExternalPlayer, true);
+        expect(args.suppressTrackerAutoSync, true);
+        expect(args.contentImdbId, startsWith('medialibrary:'));
+        expect(args.httpHeaders!['X-Emby-Token'], 'token-secret');
+        final playlist = await args.resolveSourceToPlaylist!(sources.last);
+        expect(playlist!.single.httpHeaders!['X-Emby-Token'], 'token-secret');
+        final owner = await ProfileAuthorizationContext.capture(registry);
+        await registry.setProfileResourceSettings(
+          profileId: admin,
+          resourceId: resource.id,
+          enabled: false,
+          settings: {},
+          actingAuthorizationRevision: owner.authorizationRevision,
+          expectedResourceAuthorizationRevision: resource.authorizationRevision,
+          feature: ProfileFeature.cloud,
+        );
+        final before = requestCount;
+        await expectLater(
+          session.browse(parentId: 'library1'),
+          throwsA(anything),
+        );
+        await expectLater(session.image('recording1'), throwsA(anything));
+        await expectLater(
+          args.resolveSourceToPlaylist!(sources.last),
+          throwsA(anything),
+        );
+        expect(requestCount, before);
+        expect(await MediaServerService.libraryConnections(kind), isEmpty);
+      },
+    );
   }
 
   Future<List<Torrent>> search({bool movie = true, int episode = 1}) async =>
@@ -1468,6 +1545,31 @@ void main() {
         throwsA(isA<ResourceAuthorizationException>()),
       );
       expect(requestCount, greaterThan(0));
+    },
+  );
+
+  test('a failed matching item preserves other playable versions', () async {
+    await connect();
+    extraBrokenMovie = true;
+    final result = await MediaServerService.search(id: 'tt123', isMovie: true);
+    expect(result['torrents'], hasLength(2));
+    expect(result['addonErrors'], isNotEmpty);
+    await DirectSourceAuthorization.authorize(
+      (result['torrents'] as List).first,
+    );
+  });
+
+  test(
+    'unsupported playback is explained instead of reported as no matches',
+    () async {
+      await connect();
+      unsupportedPlayback = true;
+      final result = await MediaServerService.search(
+        id: 'tt123',
+        isMovie: true,
+      );
+      expect(result['torrents'], isEmpty);
+      expect(jsonEncode(result['addonErrors']), contains('transcoding'));
     },
   );
 

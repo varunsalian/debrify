@@ -1,16 +1,19 @@
 import 'dart:convert';
 import 'dart:math';
+import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart' show visibleForTesting;
 
 import '../models/media_server.dart';
+import '../models/media_server_library.dart';
 import '../models/media_server_source.dart';
 import '../models/profiles/connection_resource.dart';
 import '../models/profiles/profile_policy.dart';
 import '../models/torrent.dart';
 import '../utils/torrent_filter_matcher.dart';
 import 'media_server_client.dart';
+import 'diagnostic_log.dart';
 import 'profiles/connection_resource_service.dart';
 import 'profiles/device_key_provider.dart';
 import 'profiles/profile_async_authorization.dart';
@@ -131,6 +134,75 @@ class MediaServerService {
     );
     await context.validate(ProfileBootstrap.registry);
     return list.where((r) => types.contains(r.type)).toList();
+  }
+
+  static Future<List<ConnectionResource>> libraryConnections(
+    MediaServerKind kind,
+  ) async {
+    final capability = await ProfileAsyncAuthorization.capture(
+      ProfileFeature.cloud,
+    );
+    if (capability == null) return [];
+    return capability.runIfCurrent(() async {
+      final profile = await capability.authorization.validate(
+        ProfileBootstrap.registry,
+      );
+      if (!profile.allows(ProfileFeature.trackersAndDiscovery)) return [];
+      final result = <ConnectionResource>[];
+      for (final resource in await connections()) {
+        final grant = await ProfileBootstrap.registry.getGrant(
+          profile.id,
+          resource.id,
+        );
+        final local = await ProfileBootstrap.registry
+            .getProfileResourceSettings(profile.id, resource.id);
+        if (resource.enabled &&
+            grant?.allows(ResourcePermission.use) == true &&
+            local?.enabled != false &&
+            resource.publicConfig['accountLabel'] == kind.label) {
+          result.add(resource);
+        }
+      }
+      await capability.runIfCurrent(() async {});
+      return result;
+    });
+  }
+
+  static Future<MediaServerLibrarySession> openLibrary(
+    String resourceId,
+  ) async {
+    final context = await ProfileAuthorizationContext.capture(
+      ProfileBootstrap.registry,
+    );
+    final resource = await _resources.authorize(
+      context: context,
+      resourceId: resourceId,
+      permission: ResourcePermission.use,
+      feature: ProfileFeature.cloud,
+    );
+    if (resource.type != ConnectionResourceType.mediaServer) {
+      throw const MediaServerException('Invalid media server connection.');
+    }
+    final capability = await ProfileAsyncAuthorization.capture(
+      ProfileFeature.cloud,
+      resourceId: resourceId,
+      resourceAuthorizationRevision: resource.authorizationRevision,
+    );
+    if (capability == null) {
+      throw const MediaServerException('An active profile is required.');
+    }
+    final secret = await _resources.resolveSecretForUse(
+      context: context,
+      resourceId: resourceId,
+      feature: ProfileFeature.cloud,
+    );
+    final session = MediaServerLibrarySession._(
+      resource,
+      MediaServerAccount.fromJson(secret),
+      capability,
+    );
+    await session.authorize();
+    return session;
   }
 
   static Future<void> connect({
@@ -265,6 +337,133 @@ class MediaServerService {
     }
   }
 
+  static List<Torrent> _librarySources({
+    required MediaServerAccount account,
+    required String resourceId,
+    required String name,
+    required Map<String, dynamic> item,
+    required List<Map<String, dynamic>> sources,
+    required String id,
+    required bool isMovie,
+    required int? season,
+    required int? episode,
+    required Future<void> Function() check,
+    required ProfileAsyncAuthorization? capability,
+    bool bind = true,
+  }) {
+    final batch = <Torrent>[];
+    final itemId = item['Id'] as String;
+    final key = 'mediaserver:$resourceId'.toLowerCase();
+    for (final media in sources) {
+      final sourceId = media['Id'] as String;
+      final video = (media['MediaStreams'] as List? ?? [])
+          .whereType<Map>()
+          .where((s) => s['Type'] == 'Video');
+      final videoStream = video.isEmpty
+          ? const <String, dynamic>{}
+          : video.first;
+      final codec = videoStream['Codec'];
+      final title = item['Name'] as String? ?? 'Untitled';
+      final quality = _quality(videoStream);
+      final rangeTags = _dynamicRangeTags(videoStream);
+      final audioLanguages = (media['MediaStreams'] as List? ?? [])
+          .whereType<Map>()
+          .where(
+            (stream) =>
+                stream['Type'] == 'Audio' && stream['IsExternal'] != true,
+          )
+          .map((stream) => stream['Language'])
+          .whereType<String>()
+          .map((language) => language.trim().toLowerCase())
+          .where((language) => language.isNotEmpty)
+          .toSet()
+          .toList();
+      final languageTags = audioLanguages
+          .map(TorrentFilterMatcher.audioLanguageForCode)
+          .whereType<Enum>()
+          .map((language) => language.name)
+          .toSet();
+      final description = [
+        quality,
+        ...rangeTags,
+        ...languageTags,
+        if (codec is String) codec.toUpperCase(),
+        if (media['Container'] is String)
+          (media['Container'] as String).toUpperCase(),
+      ].join(' · ');
+      final torrent = Torrent(
+        rowid: 0,
+        infohash: sha256
+            .convert(utf8.encode('$resourceId:$itemId:$sourceId'))
+            .toString(),
+        name: [
+          title,
+          quality,
+          ...rangeTags,
+          ...languageTags,
+          if (!isMovie)
+            'S${season.toString().padLeft(2, '0')}E${episode.toString().padLeft(2, '0')}',
+        ].join(' '),
+        sizeBytes: (media['Size'] as num?)?.toInt() ?? 0,
+        createdUnix: 0,
+        seeders: 0,
+        leechers: 0,
+        completed: 0,
+        scrapedDate: 0,
+        source: key,
+        hasRealInfoHash: false,
+        audioLanguages: audioLanguages,
+        streamType: StreamType.directUrl,
+        directUrl: MediaServerClient.playbackUrl(
+          account,
+          itemId,
+          sourceId,
+        ).toString(),
+        httpHeaders: MediaServerClient.headers(
+          account.deviceId,
+          account.token,
+          account.kind,
+        ),
+        addonDisplayName: name,
+        streamLabel: '${account.kind.label} · $name',
+        streamDescription: description,
+        streamOriginalTitle: title,
+        coverageType: isMovie ? null : 'singleEpisode',
+        seasonNumber: season,
+        episodeIdentifier: isMovie
+            ? null
+            : 'S${season.toString().padLeft(2, '0')}E${episode.toString().padLeft(2, '0')}',
+      );
+      _tickets[torrent] = check;
+      if (capability != null) {
+        _watchTargets[torrent] = MediaServerWatchTarget(
+          account: account,
+          capability: capability,
+          authorize: check,
+          itemId: itemId,
+          mediaSourceId: sourceId,
+          contentId: id,
+          isMovie: isMovie,
+          season: season,
+          episode: episode,
+          title: title,
+        );
+      }
+      if (bind) {
+        _bindings[torrent] = MediaServerSource(
+          serverId: resourceId,
+          contentId: id,
+          isMovie: isMovie,
+          // Movie versions are stable source IDs. Episodes use the
+          // selected resolution so a pin can follow the next episode.
+          variant: isMovie ? sourceId : quality,
+        ).encode();
+      }
+      batch.add(torrent);
+    }
+    return batch;
+  }
+
   static Future<Map<String, dynamic>> search({
     required String id,
     required bool isMovie,
@@ -351,129 +550,73 @@ class MediaServerService {
             authorize: check,
           );
           final batch = <Torrent>[];
+          var failedItems = 0;
+          var unsupportedItems = 0;
           for (final item in items) {
             final itemId = item['Id'] as String;
-            final sources = await client.mediaSources(
-              account,
-              itemId,
-              authorize: check,
-            );
-            for (final media in sources) {
-              final sourceId = media['Id'] as String;
-              final video = (media['MediaStreams'] as List? ?? [])
-                  .whereType<Map>()
-                  .where((s) => s['Type'] == 'Video');
-              final videoStream = video.isEmpty
-                  ? const <String, dynamic>{}
-                  : video.first;
-              final codec = videoStream['Codec'];
-              final title = item['Name'] as String? ?? 'Untitled';
-              final quality = _quality(videoStream);
-              final rangeTags = _dynamicRangeTags(videoStream);
-              final audioLanguages = (media['MediaStreams'] as List? ?? [])
-                  .whereType<Map>()
-                  .where(
-                    (stream) =>
-                        stream['Type'] == 'Audio' &&
-                        stream['IsExternal'] != true,
-                  )
-                  .map((stream) => stream['Language'])
-                  .whereType<String>()
-                  .map((language) => language.trim().toLowerCase())
-                  .where((language) => language.isNotEmpty)
-                  .toSet()
-                  .toList();
-              final languageTags = audioLanguages
-                  .map(TorrentFilterMatcher.audioLanguageForCode)
-                  .whereType<Enum>()
-                  .map((language) => language.name)
-                  .toSet();
-              final description = [
-                quality,
-                ...rangeTags,
-                ...languageTags,
-                if (codec is String) codec.toUpperCase(),
-                if (media['Container'] is String)
-                  (media['Container'] as String).toUpperCase(),
-              ].join(' · ');
-              final torrent = Torrent(
-                rowid: 0,
-                infohash: sha256
-                    .convert(utf8.encode('$resourceId:$itemId:$sourceId'))
-                    .toString(),
-                name: [
-                  title,
-                  quality,
-                  ...rangeTags,
-                  ...languageTags,
-                  if (!isMovie)
-                    'S${season.toString().padLeft(2, '0')}E${episode.toString().padLeft(2, '0')}',
-                ].join(' '),
-                sizeBytes: (media['Size'] as num?)?.toInt() ?? 0,
-                createdUnix: 0,
-                seeders: 0,
-                leechers: 0,
-                completed: 0,
-                scrapedDate: 0,
-                source: key,
-                hasRealInfoHash: false,
-                audioLanguages: audioLanguages,
-                streamType: StreamType.directUrl,
-                directUrl: MediaServerClient.playbackUrl(
-                  account,
-                  itemId,
-                  sourceId,
-                ).toString(),
-                httpHeaders: MediaServerClient.headers(
-                  account.deviceId,
-                  account.token,
-                  account.kind,
-                ),
-                addonDisplayName: name,
-                streamLabel: '${account.kind.label} · $name',
-                streamDescription: description,
-                streamOriginalTitle: title,
-                coverageType: isMovie ? null : 'singleEpisode',
-                seasonNumber: season,
-                episodeIdentifier: isMovie
-                    ? null
-                    : 'S${season.toString().padLeft(2, '0')}E${episode.toString().padLeft(2, '0')}',
+            List<Map<String, dynamic>> sources;
+            try {
+              sources = await client.mediaSources(
+                account,
+                itemId,
+                authorize: check,
               );
-              _tickets[torrent] = check;
-              if (capability != null) {
-                _watchTargets[torrent] = MediaServerWatchTarget(
-                  account: account,
-                  capability: capability,
-                  authorize: check,
-                  itemId: itemId,
-                  mediaSourceId: sourceId,
-                  contentId: id,
-                  isMovie: isMovie,
-                  season: season,
-                  episode: episode,
-                  title: title,
-                );
-              }
-              _bindings[torrent] = MediaServerSource(
-                serverId: resourceId,
-                contentId: id,
-                isMovie: isMovie,
-                // Movie versions are stable source IDs. Episodes use the
-                // selected resolution so a pin can follow the next episode.
-                variant: isMovie ? sourceId : quality,
-              ).encode();
-              batch.add(torrent);
+            } on MediaServerException {
+              // A bad version must not discard other playable library items.
+              // Recheck revocation and the deadline before continuing.
+              final expired = DateTime.now().isAfter(deadline);
+              // Stop searching on deadline, but retain already resolved items.
+              // Authorization remains mandatory even when the search is done.
+              if (expired) searchComplete = true;
+              await check();
+              failedItems++;
+              if (expired) break;
+              continue;
             }
+            if (sources.isEmpty) unsupportedItems++;
+            batch.addAll(
+              _librarySources(
+                account: account,
+                resourceId: resourceId,
+                name: name,
+                item: item,
+                sources: sources,
+                id: id,
+                isMovie: isMovie,
+                season: season,
+                episode: episode,
+                check: check,
+                capability: capability,
+              ),
+            );
           }
-          await check();
           searchComplete = true;
+          await check();
           streams.addAll(batch);
+          final warning = failedItems > 0
+              ? 'Some matching items could not be checked. Retry or test this server in Settings.'
+              : unsupportedItems > 0
+              ? 'Some matching items have no supported original-file stream. Remote streams and transcoding are not supported.'
+              : null;
+          if (warning != null) errors[key] = warning;
+          DiagnosticLog.instance.recordEvent(
+            source: 'media_server',
+            event: 'search_completed',
+            fields: {
+              'kind': DiagnosticLabel(account.kind.name),
+              'matched_items': items.length,
+              'sources': batch.length,
+              'failed_items': failedItems,
+              'unsupported_items': unsupportedItems,
+            },
+          );
           statuses.add(
             AddonSearchStatus(
               addonId: key,
               name: name,
               sourceKey: key,
               count: batch.length,
+              error: warning,
             ),
           );
           if (batch.isNotEmpty) onBatch?.call(key, batch);
@@ -504,6 +647,144 @@ class MediaServerService {
     if (ProfileRuntime.scope.value != scope) return {'torrents': <Torrent>[]};
     return result();
   }
+}
+
+/// A revocable browsing session. Credentials never leave the service layer.
+abstract interface class MediaServerLibraryAccess {
+  ConnectionResource get resource;
+  MediaServerKind get kind;
+  Future<void> authorize();
+  Future<MediaServerLibraryPage> browse({
+    String? parentId,
+    bool views = false,
+    int offset = 0,
+    String search = '',
+    String sort = 'SortName',
+    String mode = 'browse',
+    bool episodeOrder = false,
+  });
+  Future<MediaServerLibraryItem> item(String id);
+  Future<Uint8List?> image(String id);
+  Future<List<Torrent>> sources(MediaServerLibraryItem item);
+}
+
+class MediaServerLibrarySession implements MediaServerLibraryAccess {
+  MediaServerLibrarySession._(this.resource, this._account, this._capability);
+  @override
+  final ConnectionResource resource;
+  final MediaServerAccount _account;
+  final ProfileAsyncAuthorization _capability;
+  @override
+  MediaServerKind get kind => _account.kind;
+
+  @override
+  Future<void> authorize() => _capability.runIfCurrent(() async {
+    final registry = ProfileBootstrap.registry;
+    final profile = await _capability.authorization.validate(registry);
+    if (!profile.allows(ProfileFeature.trackersAndDiscovery)) {
+      throw const MediaServerException(
+        'Discovery is disabled for this profile.',
+      );
+    }
+    final local = await registry.getProfileResourceSettings(
+      profile.id,
+      resource.id,
+    );
+    if (local?.enabled == false) {
+      throw const MediaServerException('This server is disabled.');
+    }
+  });
+
+  Future<T> _withClient<T>(Future<T> Function(MediaServerClient) action) async {
+    await authorize();
+    final client = MediaServerService.clientFactory();
+    try {
+      final result = await action(client);
+      await authorize();
+      return result;
+    } finally {
+      client.close();
+    }
+  }
+
+  @override
+  Future<MediaServerLibraryPage> browse({
+    String? parentId,
+    bool views = false,
+    int offset = 0,
+    String search = '',
+    String sort = 'SortName',
+    String mode = 'browse',
+    bool episodeOrder = false,
+  }) => _withClient(
+    (client) => client.library(
+      _account,
+      parentId: parentId,
+      views: views,
+      offset: offset,
+      search: search,
+      sort: sort,
+      mode: mode,
+      episodeOrder: episodeOrder,
+      authorize: authorize,
+    ),
+  );
+
+  @override
+  Future<MediaServerLibraryItem> item(String id) => _withClient(
+    (client) => client.libraryItem(_account, id, authorize: authorize),
+  );
+
+  @override
+  Future<Uint8List?> image(String id) => _withClient(
+    (client) => client.libraryImage(_account, id, authorize: authorize),
+  );
+
+  @override
+  Future<List<Torrent>> sources(MediaServerLibraryItem item) => _withClient((
+    client,
+  ) async {
+    // Refresh the exact item before playback; never trust a stale browse row.
+    final fresh = await client.libraryItem(
+      _account,
+      item.id,
+      authorize: authorize,
+    );
+    if (!fresh.playable) {
+      throw const MediaServerException(
+        'This item is not available for playback.',
+      );
+    }
+    final media = await client.mediaSources(
+      _account,
+      fresh.id,
+      authorize: authorize,
+    );
+    final sources = MediaServerService._librarySources(
+      account: _account,
+      resourceId: resource.id,
+      name: resource.label,
+      item: fresh.data,
+      sources: media,
+      id: fresh.progressId(
+        sha256
+            .convert(utf8.encode('${_account.serverId}:${_account.userId}'))
+            .toString(),
+      ),
+      isMovie: !fresh.numberedEpisode,
+      season: fresh.numberedEpisode ? fresh.season : null,
+      episode: fresh.numberedEpisode ? fresh.episode : null,
+      check: authorize,
+      capability: _capability,
+      bind: false,
+    );
+    if (sources.isEmpty) {
+      throw const MediaServerException(
+        'No original-file stream is available. Server transcoding is not supported yet.',
+      );
+    }
+    return sources;
+  });
 }
 
 /// In-memory, revocable identity of the exact library item selected for play.

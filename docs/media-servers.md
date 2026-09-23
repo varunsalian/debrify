@@ -76,7 +76,36 @@ completion. Network failures do not block playback; there is no offline replay
 queue. If the initial watch-state read fails, that playback attempt does not
 write progress back to the server.
 
-## Validation
+## Discover browsing
+
+Choose **Jellyfin** or **Emby** in Discover's Source selector, then select a
+connected server and video library. Both can also be saved as the default
+Discover source in Settings. Browse folders, series, seasons and episodes, or
+search within the current library/folder. Results are paged; library browsing
+supports name, date-added and year sorting. Recently Added and Continue Watching
+use the server's own library data and ordering.
+
+Opening a video displays its server description and available original-file
+versions. Playback opens that exact server item in the internal player, without
+requiring an IMDb/TMDB match. This includes video recordings indexed in a server
+library; live-TV/channel browsing is not included. Artwork is fetched with
+authentication headers, without credentials in URLs.
+
+Server-library progress is kept separate from same-name catalog titles and other
+server accounts. These items do not enter the catalog Home Continue Watching
+row; reopen them from Discover. Enable the existing media-server watch-sync
+option to publish playback progress to the server's Continue Watching view.
+Transcoding, external-player handoff and automatic next-episode playback from
+this browser are not included. Episodes can be selected through season browsing.
+
+## Discover validation
+
+Tests cover authenticated browsing/artwork, paging, recordings without catalog
+IDs, revoked access, isolated bookmarks, stale responses, phone layout and TV
+select navigation. The opt-in live suite also covers real Jellyfin/Emby library
+hierarchies, search, recent/resumable queries and exact-item source resolution.
+
+## Existing playback validation
 
 Automated tests use simulated Jellyfin/Emby responses for login, reverse-proxy
 paths, redirects, timeouts, exact matching, paging, versions, next-episode pin

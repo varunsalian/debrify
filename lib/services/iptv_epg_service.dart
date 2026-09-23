@@ -7,6 +7,12 @@ import 'package:http/http.dart' as http;
 
 import '../models/iptv_playlist.dart';
 import 'iptv_catalog_db.dart';
+import 'iptv_catalog_key.dart';
+import 'iptv_service.dart';
+import '../models/profiles/connection_resource.dart';
+import '../models/profiles/profile_policy.dart';
+import 'profiles/profile_collection_resource_facade.dart';
+import 'profiles/profile_runtime.dart';
 import 'iptv_load_phase.dart';
 import 'xmltv_epg_source.dart';
 
@@ -210,12 +216,104 @@ class IptvEpgService {
 
   // ── XMLTV context (plain M3U playlists) ──────────────────────────────────
   //
-  // One playlist's guide is active at a time — the page loads playlists one
-  // at a time, and a player session carries that playlist's channels. The
+  // One playlist's guide is active at a time; virtual lists instead bind
+  // each saved URL to a separate, provider-scoped guide below. The
   // index is the already-windowed programme list per tvg-id, held in memory
   // (a few MB after filtering); lookups compute now/next fresh on every ask,
   // which is what lets the rail roll programmes with no re-fetch at all.
   Map<String, String> _m3uUrlToTvgId = const {};
+  final Map<String, IptvEpgService> _listGuides = {};
+
+  /// Favorites/custom lists can mix providers whose XMLTV IDs overlap.
+  /// Resolve each membership against its own provider, never the last opened
+  /// playlist. Only selected channels are materialized, not whole catalogs.
+  Future<void> setListEpgContext({
+    required List<IptvChannel> channels,
+    required List<IptvPlaylist> playlists,
+    bool Function()? isCurrent,
+  }) async {
+    clearM3uEpgContext();
+    final generation = _m3uContextGeneration;
+    final scope = ProfileRuntime.scope.value;
+    bool current() =>
+        generation == _m3uContextGeneration &&
+        scope == ProfileRuntime.scope.value &&
+        (isCurrent?.call() ?? true);
+    final grouped = <String, List<IptvChannel>>{};
+    for (final channel in channels.where((c) => c.isLive)) {
+      final origin = channel.attributes['list_playlist_id'];
+      if (origin != null) grouped.putIfAbsent(origin, () => []).add(channel);
+    }
+    for (final playlist in playlists.where((p) => !p.isVirtual)) {
+      final selected = grouped[playlist.id];
+      if (selected == null || !current()) continue;
+      try {
+        Future<void> authorize() =>
+            ProfileCollectionResourceFacade.authorizeExecution(
+              resourceId: playlist.connectionResourceId,
+              resourceRevision: playlist.connectionResourceRevision,
+              acceptedTypes: const {
+                ConnectionResourceType.iptvM3u,
+                ConnectionResourceType.iptvXtream,
+              },
+              feature: ProfileFeature.iptv,
+            );
+        await authorize();
+        if (!current()) return;
+        final key = IptvCatalogKey.forPlaylist(playlist, 'live');
+        final snapshot = key != null && IptvCatalogDb.isOpen
+            ? IptvCatalogDb.snapshot(key)
+            : null;
+        final local = playlist.isLocalFile
+            ? await IptvService.instance.parseContent(playlist.content!)
+            : null;
+        if (!current()) return;
+        final localByUrl = {
+          for (final c in local?.channels ?? <IptvChannel>[]) c.url: c,
+        };
+        final guideChannels = [
+          for (final c in selected)
+            snapshot?.channelForGuide(c.url) ?? localByUrl[c.url] ?? c,
+        ];
+        String? url = playlist.epgUrl?.trim();
+        if (url == null || url.isEmpty) {
+          url = playlist.isXtreamCodes
+              ? xmltvUrlFor(
+                  playlist.serverUrl!,
+                  playlist.username ?? '',
+                  playlist.password ?? '',
+                )
+              : snapshot?.epgUrl ?? local?.epgUrl;
+        }
+        if (url == null || url.trim().isEmpty) {
+          for (final c in guideChannels) {
+            url = xmltvUrlForChannelUrl(c.url);
+            if (url != null) break;
+          }
+        }
+        await authorize();
+        if (!current()) return;
+        final guide = IptvEpgService._();
+        final status = await guide.setM3uEpgContext(
+          playlistKey: playlist.id,
+          epgUrl: url,
+          channels: guideChannels,
+          cacheByCoverage: true,
+        );
+        await authorize();
+        if (!current()) return;
+        if (status == M3uEpgStatus.matched) {
+          for (final c in selected) {
+            _listGuides[c.url] = guide;
+          }
+          contextVersion.value++;
+        }
+      } catch (_) {
+        // One unavailable/revoked provider must not hide other list guides.
+        if (!current()) return;
+      }
+    }
+  }
 
   /// Name-fallback candidates per channel URL, normalized, in Kodi's pass
   /// order: tvg-name first, then the channel's display name.
@@ -290,6 +388,7 @@ class IptvEpgService {
     // url→id maps below are then never retained.
     String? dbCatalogKey,
     IptvLoadPhase? onPhase,
+    bool cacheByCoverage = false,
   }) async {
     clearM3uEpgContext();
     final url = epgUrl?.trim();
@@ -382,6 +481,7 @@ class IptvEpgService {
       channelNames: wantedNames,
       dbPath: dbMode ? IptvCatalogDb.path : null,
       onPhase: onPhase,
+      cacheByCoverage: cacheByCoverage,
     );
     if (generation != _m3uContextGeneration) return M3uEpgStatus.inactive;
     if (guide == null) return M3uEpgStatus.failed;
@@ -461,7 +561,9 @@ class IptvEpgService {
 
   /// Drop the active XMLTV context (playlist switched away).
   void clearM3uEpgContext() {
-    final hadContext = _xmltvIndex != null || _xmltvGuideKey != null;
+    final hadContext =
+        _xmltvIndex != null || _xmltvGuideKey != null || _listGuides.isNotEmpty;
+    _listGuides.clear();
     _m3uContextGeneration++;
     _m3uUrlToTvgId = const {};
     _m3uUrlToNames = const {};
@@ -482,6 +584,8 @@ class IptvEpgService {
   /// the parser canonicalizes the index's keys the same way, giving the
   /// case-insensitive matching Kodi defaults to.
   List<EpgProgramme>? _xmltvProgrammesFor(String channelUrl) {
+    final listGuide = _listGuides[channelUrl];
+    if (listGuide != null) return listGuide._xmltvProgrammesFor(channelUrl);
     final guideKey = _xmltvGuideKey;
     if (guideKey != null) return _dbXmltvProgrammesFor(guideKey, channelUrl);
     final index = _xmltvIndex;
@@ -884,10 +988,10 @@ class IptvEpgService {
     }
     List<EpgProgramme> merged;
     try {
-      merged = _mergePanelMetadataIntoXmltv(
-        [if (basic.now != null) basic.now!, if (basic.next != null) basic.next!],
-        await schedule(channelUrl),
-      );
+      merged = _mergePanelMetadataIntoXmltv([
+        if (basic.now != null) basic.now!,
+        if (basic.next != null) basic.next!,
+      ], await schedule(channelUrl));
     } catch (_) {
       // Archive metadata is an enhancement. Keep valid XMLTV now/next data
       // visible when the panel schedule endpoint is temporarily unavailable.

@@ -24,6 +24,7 @@ class CinemaSourceProvider {
     required this.count,
     this.failed = false,
     this.loading = false,
+    this.message,
   });
 
   /// Null is the all-sources group. Other ids retain the search's own identity.
@@ -32,6 +33,7 @@ class CinemaSourceProvider {
   final int count;
   final bool failed;
   final bool loading;
+  final String? message;
 }
 
 /// A presentation shell for the existing source list. Matching, filtering,
@@ -586,15 +588,31 @@ class CinemaSourcesLayoutState extends State<CinemaSourcesLayout> {
                           ),
                           const SizedBox(width: 10),
                           Expanded(
-                            child: Text(
-                              provider.label,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                color: ink,
-                                fontSize: widget.isTelevision ? 15 : 14,
-                                fontWeight: FontWeight.w600,
-                              ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  provider.label,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    color: ink,
+                                    fontSize: widget.isTelevision ? 15 : 14,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                if (provider.message != null)
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 5),
+                                    child: Text(
+                                      provider.message!,
+                                      style: TextStyle(
+                                        color: ink,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  ),
+                              ],
                             ),
                           ),
                           const SizedBox(width: 8),

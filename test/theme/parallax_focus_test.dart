@@ -55,10 +55,19 @@ void main() {
     radius: 7,
   ).build();
 
-  testWidgets('Search can opt into parallax without changing the theme', (tester) async {
-    await tester.pumpWidget(host(themeWith(FocusExpression.ring), const ParallaxFocus(
-      focused: true, forceEnabled: true, child: SizedBox(width: 120, height: 180),
-    )));
+  testWidgets('Search can opt into parallax without changing the theme', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      host(
+        themeWith(FocusExpression.ring),
+        const ParallaxFocus(
+          focused: true,
+          forceEnabled: true,
+          child: SizedBox(width: 120, height: 180),
+        ),
+      ),
+    );
     await tester.pumpAndSettle();
     expect(ParallaxFocus.debugLiveBodies, 1);
     await tester.pumpWidget(const SizedBox());
@@ -426,9 +435,15 @@ void main() {
       await tester.pumpWidget(build(false));
       await tester.pumpWidget(build(true));
       await tester.pump(const Duration(milliseconds: 70));
-      expect(find.byType(ClipRRect), findsNothing);
+      expect(
+        tester.widget<ClipRRect>(find.byType(ClipRRect)).clipBehavior,
+        Clip.none,
+      );
       await tester.pumpAndSettle();
-      expect(find.byType(ClipRRect), findsOneWidget);
+      expect(
+        tester.widget<ClipRRect>(find.byType(ClipRRect)).clipBehavior,
+        Clip.antiAlias,
+      );
       final width = tester.getRect(find.byType(SizedBox).first).width;
       expect(width, closeTo(100 * ParallaxShape.poster.scale, 0.5));
       // An interrupted departure must not restore a highlight on the old card.
@@ -436,10 +451,16 @@ void main() {
       await tester.pump(const Duration(milliseconds: 40));
       await tester.pumpWidget(build(true));
       await tester.pump(const Duration(milliseconds: 40));
-      expect(find.byType(ClipRRect), findsNothing);
+      expect(
+        tester.widget<ClipRRect>(find.byType(ClipRRect)).clipBehavior,
+        Clip.none,
+      );
       await tester.pumpWidget(build(false));
       await tester.pumpAndSettle();
-      expect(find.byType(ClipRRect), findsNothing);
+      expect(
+        tester.widget<ClipRRect>(find.byType(ClipRRect)).clipBehavior,
+        Clip.none,
+      );
     });
 
     testWidgets('keeps the lift, sheds the glare and the rounded clip', (
@@ -470,7 +491,10 @@ void main() {
       // The per-frame luxuries are gone — no rounded clip (a saveLayer per
       // frame on that GLES2 pipeline) and no radial-gradient glare. These
       // are what an Amlogic/Mali box rendered as cursor lag.
-      expect(find.byType(ClipRRect), findsNothing);
+      expect(
+        tester.widget<ClipRRect>(find.byType(ClipRRect)).clipBehavior,
+        Clip.none,
+      );
       final glare = tester
           .widgetList<DecoratedBox>(find.byType(DecoratedBox))
           .where(

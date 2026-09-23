@@ -247,7 +247,7 @@ class _SourceRowState extends State<SourceRow> {
         return KeyEventResult.handled;
       }
     }
-    if (event is KeyDownEvent) {
+    if (event is KeyDownEvent || event is KeyRepeatEvent) {
       if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
         widget.onNavigateUp?.call();
         return KeyEventResult.handled;

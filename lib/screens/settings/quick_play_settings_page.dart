@@ -130,31 +130,8 @@ class _QuickPlaySettingsPageState extends State<QuickPlaySettingsPage> {
     });
   }
 
-  /// Stored keys first (skipping uninstalled ones), then any provider the
-  /// stored order doesn't know about, in default order.
-  List<SourceProviderRef> _applyStoredOrder(List<String> stored) {
-    final byKey = {for (final p in _providers) p.key: p};
-    final out = <SourceProviderRef>[];
-    for (final key in stored) {
-      final p = byKey.remove(key);
-      if (p != null) {
-        out.add(p);
-        continue;
-      }
-      // Older builds keyed Stremio priority by manifest name. Preserve that
-      // slot for every matching configuration, in install order; the next
-      // explicit reorder persists the new stable keys.
-      final legacyMatches = byKey.values
-          .where((provider) => provider.legacyKeys.contains(key))
-          .toList(growable: false);
-      for (final provider in legacyMatches) {
-        byKey.remove(provider.key);
-        out.add(provider);
-      }
-    }
-    out.addAll(byKey.values);
-    return out;
-  }
+  List<SourceProviderRef> _applyStoredOrder(List<String> stored) =>
+      SourcePriority.orderedProviders(_providers, stored);
 
   Future<void> _save(QuickPlayRules rules) async {
     final isMovie = _isMovie;

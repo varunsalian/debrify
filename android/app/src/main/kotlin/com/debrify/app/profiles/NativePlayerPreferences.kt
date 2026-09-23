@@ -18,6 +18,7 @@ class NativePlayerPreferences private constructor(private val values: JSONObject
         private val keys = listOf(
             "tv_player_controls_style", "debrify_tv_player_style", "iptv_player_guide_style",
             "player_default_subtitle_language", "player_default_audio_language",
+            "subtitle_only_foreign_audio",
             "player_default_aspect_index_tv", "player_night_mode_index",
             "player_system_audio_effects", "content_display_match_mode",
             "skip_segments_enabled", "skip_segment_provider",

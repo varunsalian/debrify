@@ -9,7 +9,6 @@ import 'package:debrify/theme/app_theme_scope.dart';
 import 'package:debrify/widgets/source_list_scroll_anchor.dart';
 import 'package:debrify/widgets/source_row.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 class _DelayedMatcher extends StreamBadgeMatcher {
@@ -96,7 +95,8 @@ void main() {
                     child: SourceListScrollAnchor(
                       child: ListView.builder(
                         controller: scroll,
-                        scrollCacheExtent: const ScrollCacheExtent.pixels(1200),
+                        // ignore: deprecated_member_use
+                        cacheExtent: 1200,
                         itemCount: nodes.length,
                         itemBuilder: (_, i) => SourceRow(
                           listIndex: i,
@@ -197,20 +197,151 @@ void main() {
         expect(afterTop, lessThan(700));
         if (mode == 'idle' || mode == 'image') {
           expect(afterTop, closeTo(beforeTop, 1));
-        } else {
-          final render = tester.renderObject(row);
-          final target = RenderAbstractViewport.of(render)
-              .getOffsetToReveal(render, 0.3)
-              .offset
-              .clamp(
-                scroll.position.minScrollExtent,
-                scroll.position.maxScrollExtent,
-              );
-          expect(scroll.offset, closeTo(target, 1));
         }
       }
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox());
     });
+  }
+
+  testWidgets('TV focus only scrolls when a source leaves the viewport', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1000, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final nodes = List.generate(30, (_) => FocusNode());
+    final scroll = ScrollController();
+    addTearDown(() {
+      for (final node in nodes) {
+        node.dispose();
+      }
+      scroll.dispose();
+    });
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AppThemeScope(
+          theme: AppThemes.legacy,
+          child: Scaffold(
+            body: SourceListScrollAnchor(
+              child: ListView.builder(
+                controller: scroll,
+                itemCount: nodes.length,
+                itemBuilder: (_, i) => SizedBox(
+                  height: i == 8 ? 900 : 100,
+                  child: SourceRow(
+                    listIndex: i,
+                    title: 'Source $i',
+                    subtitle: 'metadata',
+                    focusNode: nodes[i],
+                    onTap: () {},
+                    isTelevision: true,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    for (var i = 0; i < 5; i++) {
+      nodes[i].requestFocus();
+      await tester.pumpAndSettle();
+      expect(scroll.offset, 0);
+    }
+    nodes[8].requestFocus();
+    await tester.pumpAndSettle();
+    // A badge-heavy card can be taller than the viewport. Show its top.
+    expect(scroll.offset, closeTo(800, 1));
+    nodes[7].requestFocus();
+    await tester.pumpAndSettle();
+    expect(
+      tester.getTopLeft(find.text('Source 7')).dy,
+      greaterThanOrEqualTo(0),
+    );
+  });
+  for (final oversized in [false, true]) {
+    testWidgets(
+      oversized
+          ? 'top-aligned tall first row stays at top on focus and refocus'
+          : 'reversing to a visible row cancels the old scroll',
+      (tester) async {
+        tester.view.physicalSize = const Size(1000, 800);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        final nodes = List.generate(20, (_) => FocusNode());
+        final outside = FocusNode();
+        final scroll = ScrollController();
+        addTearDown(() {
+          for (final node in nodes) {
+            node.dispose();
+          }
+          outside.dispose();
+          scroll.dispose();
+        });
+        await tester.pumpWidget(
+          MaterialApp(
+            home: AppThemeScope(
+              theme: AppThemes.legacy,
+              child: Scaffold(
+                body: Column(
+                  children: [
+                    Focus(focusNode: outside, child: const SizedBox.shrink()),
+                    Expanded(
+                      child: SourceListScrollAnchor(
+                        child: ListView.builder(
+                          controller: scroll,
+                          // ignore: deprecated_member_use
+                          cacheExtent: 1200,
+                          itemCount: nodes.length,
+                          itemBuilder: (_, i) => SizedBox(
+                            height: oversized && i == 0 ? 900 : 100,
+                            child: SourceRow(
+                              listIndex: i,
+                              title: 'Row $i',
+                              subtitle: '',
+                              focusNode: nodes[i],
+                              onTap: () {},
+                              isTelevision: true,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+        if (oversized) {
+          for (var i = 0; i < 2; i++) {
+            nodes.first.requestFocus();
+            await tester.pumpAndSettle();
+            expect(scroll.offset, 0);
+            outside.requestFocus();
+            await tester.pumpAndSettle();
+          }
+        } else {
+          nodes[6].requestFocus();
+          await tester.pumpAndSettle();
+          nodes[8].requestFocus();
+          await tester.pump();
+          await tester.pump(const Duration(milliseconds: 16));
+          await tester.pump(const Duration(milliseconds: 16));
+          expect(scroll.position.isScrollingNotifier.value, isTrue);
+          nodes[6].requestFocus();
+          await tester.pump();
+          final stoppedAt = scroll.offset;
+          expect(scroll.position.isScrollingNotifier.value, isFalse);
+          await tester.pumpAndSettle();
+          expect(scroll.offset, closeTo(stoppedAt, 0.01));
+          expect(nodes[6].hasFocus, isTrue);
+        }
+        await tester.pumpWidget(const SizedBox());
+      },
+    );
   }
 }

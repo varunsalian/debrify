@@ -14,7 +14,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # In iOS, build-name is used as CFBundleShortVersionString while build-number is used as CFBundleVersion.
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 0.9.8-alpha.1+52
+version: 0.9.9-alpha.1+53
 
 environment:
   sdk: ^3.8.1
@@ -160,6 +160,9 @@ dependencies:
 # tvOS fallback — flutter_cache_manager, google_fonts, background_downloader.
 # Everything else is stock 0.0.3 — diff it before upgrading.
 dependency_overrides:
+  # Physical eviction and byte budgets; see the package PATCHES.md.
+  flutter_cache_manager:
+    path: packages/flutter_cache_manager_patched
   # Engine-owned Android database handles; see the package PATCHES.md.
   sqflite_android:
     path: packages/sqflite_android_patched

@@ -19,6 +19,7 @@ abstract final class SanitizedProfilePreferences {
       case 'player_start_portrait':
       case 'player_system_audio_effects':
       case 'subtitle_auto_sync_enabled':
+      case 'subtitle_only_foreign_audio':
       case 'recording_engine_enabled':
       case 'home_hero_trailer_enabled':
       case 'home_cw_hold_to_quick_play':

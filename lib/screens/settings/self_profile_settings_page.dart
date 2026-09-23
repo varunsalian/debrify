@@ -5,6 +5,8 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../services/cache_scratch_cleanup.dart';
+
 import '../../models/profiles/profile_avatar.dart';
 import '../../models/profiles/user_profile.dart';
 import '../../services/main_page_bridge.dart';
@@ -96,6 +98,7 @@ class _SelfProfileSettingsPageState extends State<SelfProfileSettingsPage> {
 
   Future<void> _pickAvatarImage() async {
     if (_busy) return;
+    String? pickerCopy;
     try {
       final pick = await FilePicker.platform.pickFiles(
         dialogTitle: 'Choose an avatar image or GIF',
@@ -104,6 +107,7 @@ class _SelfProfileSettingsPageState extends State<SelfProfileSettingsPage> {
       );
       if (pick == null || pick.files.isEmpty) return;
       final file = pick.files.single;
+      pickerCopy = file.path;
       if (file.size > ProfileAvatarIngest.maxInputBytes) {
         throw const ProfileAvatarRejected(
           'That image is too large to open. Choose one under 12 MB.',
@@ -119,6 +123,8 @@ class _SelfProfileSettingsPageState extends State<SelfProfileSettingsPage> {
       _message('The image picker is not available.');
     } catch (_) {
       _message('That image could not be opened.');
+    } finally {
+      await CacheScratchCleanup.releasePickerCopy(pickerCopy);
     }
   }
 

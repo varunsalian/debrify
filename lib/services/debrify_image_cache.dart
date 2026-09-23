@@ -14,14 +14,29 @@ import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 class DebrifyImageCache {
   DebrifyImageCache._();
 
+  /// Reclaim legacy orphan files and enforce budgets even if the user does
+  /// not visit the surfaces that used these stores in the previous session.
+  static Future<void> maintainDiskCaches() async {
+    await Future.wait(
+      [() => DefaultCacheManager(), () => manager, () => iptvLogos].map((
+        open,
+      ) async {
+        try {
+          await open().store.cleanCache();
+        } catch (_) {
+          // Best effort. The normal cache access/write path retries maintenance.
+        }
+      }),
+    );
+  }
+
   static final CacheManager manager = CacheManager(
     Config(
       'debrifyImageCache',
-      // flutter_cache_manager caps object COUNT, not bytes. On TV this store
-      // was reaching ~600 MB at 2000 objects because full-size backdrops
-      // (~2.6 MB each) share the slots with posters. Halving the slot count
-      // roughly halves the on-disk footprint — a proxy, not a hard byte cap.
+      // Count and byte limits apply together; large backdrops cannot consume
+      // an unbounded amount of storage just because there are few of them.
       maxNrOfCacheObjects: 1000,
+      maxCacheSizeBytes: 256 * 1024 * 1024,
       stalePeriod: const Duration(days: 30),
     ),
   );
@@ -36,6 +51,7 @@ class DebrifyImageCache {
     Config(
       'debrifyIptvLogoCache',
       maxNrOfCacheObjects: 2000,
+      maxCacheSizeBytes: 32 * 1024 * 1024,
       stalePeriod: const Duration(days: 30),
     ),
   );

@@ -787,6 +787,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             output: Any,
             renderTimeMs: Long,
         ) {
+            mediaServerPlaybackLog("first_frame")
             iptvTuneDiagnostics.onFirstFrame()
             if (manualSourceRestoreInProgress) {
                 manualSourceRestoreInProgress = false
@@ -1800,6 +1801,10 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         }
 
         override fun onPlayerError(error: PlaybackException) {
+            mediaServerPlaybackLog("player_error", error.errorCode,
+                generateSequence<Throwable>(error) { it.cause }.take(8)
+                    .filterIsInstance<androidx.media3.datasource.HttpDataSource.InvalidResponseCodeException>()
+                    .firstOrNull()?.responseCode)
             if (pendingShufflePlayback?.mediaStarted == true &&
                 !currentPlaybackItemIsPikPak() && failShufflePlayback()) return
             if (!isIptvMode && manualSourceRestoreInProgress) {
@@ -2780,6 +2785,11 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             }
         }
 
+        // Start with text off until the selected audio is known. This also
+        // prevents a file's default/forced track flashing before policy runs.
+        if (playerPreferences.getBoolean("subtitle_only_foreign_audio", false)) {
+            paramsBuilder?.setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
+        }
         trackSelector?.parameters = paramsBuilder?.build()!!
 
         // Subtitle auto-sync's PCM tap rides the audio sink as a user
@@ -4787,7 +4797,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 .clearOverridesOfType(C.TRACK_TYPE_TEXT)
                 .setTrackTypeDisabled(
                     C.TRACK_TYPE_TEXT,
-                    playerPreferences.getString("player_default_subtitle_language", null) == "off",
+                    playerPreferences.getString("player_default_subtitle_language", null) == "off" ||
+                        playerPreferences.getBoolean("subtitle_only_foreign_audio", false),
                 )
                 .build()
         }
@@ -6910,6 +6921,11 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             manualSelection = userManuallySelectedSubtitle,
             suppressed = suppressSubtitleAutoSelect,
             addonSelected = currentStremioSubtitleIndex >= 0,
+            audioAllowsSubtitles = audioAllowsAutomaticSubtitles(
+                onlyForeignAudio = playerPreferences.getBoolean("subtitle_only_foreign_audio", false),
+                preferredAudio = playerPreferences.getString("player_default_audio_language", null),
+                selectedAudio = selectedAudioLanguage(tracks),
+            ),
             candidates = candidates,
             sourcePriority = SubtitleSettings.getSubtitleSourcePriority(this),
             addonDiscoveryReady = subtitleAddonDiscoveryReady,
@@ -6923,6 +6939,21 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 )
             },
         )) {
+            SubtitleAutoSelection.Off -> {
+                if (currentStremioSubtitleIndex >= 0 || externalSubtitleActive) {
+                    stopExternalSubtitleRendering() // invalidates in-flight addon downloads
+                    currentStremioSubtitleIndex = -1
+                }
+                trackSelector?.let { selector ->
+                    if (!selector.parameters.disabledTrackTypes.contains(C.TRACK_TYPE_TEXT)) {
+                        selector.parameters = selector.parameters.buildUpon()
+                            .clearOverridesOfType(C.TRACK_TYPE_TEXT)
+                            .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
+                            .build()
+                    }
+                }
+                return
+            }
             SubtitleAutoSelection.Wait, SubtitleAutoSelection.Keep -> return
             is SubtitleAutoSelection.Embedded -> {
                 val (group, index) = positions[choice.index]
@@ -17659,7 +17690,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             ?: "-"
         return "sourceIndex=$index type=$sourceType " +
             "addonPresent=${!source?.addonId.isNullOrBlank()} " +
-            "sourcePresent=${!source?.source.isNullOrBlank()}"
+            "sourcePresent=${!source?.source.isNullOrBlank()} " +
+            "mediaServer=${source?.source?.startsWith("mediaserver:") == true}"
     }
 
     private fun diagnosticProvider(value: String?): String {
@@ -17682,11 +17714,21 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         else android.util.Log.d(STARTUP_FAILOVER_LOG_TAG, message)
     }
 
+    private fun mediaServerPlaybackLog(event: String, errorCode: Int? = null, httpStatus: Int? = null) {
+        val source = stremioSources.firstOrNull { it.index == currentStremioSourceIndex }
+        if (source?.source?.startsWith("mediaserver:") != true) return
+        DiagnosticFileLog.record(
+            source = "media_server", event = event,
+            message = "player=exo index=$currentStremioSourceIndex errorCode=$errorCode httpStatus=$httpStatus",
+        )
+    }
+
     private fun sourceSelectionLog(event: String, index: Int, previous: Int? = null, reason: String? = null) {
         val item = payload?.items?.getOrNull(currentIndex)
         val source = stremioSources.firstOrNull { it.index == index }
         val message = "SourceSelect: event=$event player=exo index=$index previous=$previous " +
-            "season=${item?.season} episode=${item?.episode} transport=${source?.streamType} reason=$reason"
+            "season=${item?.season} episode=${item?.episode} transport=${source?.streamType} reason=$reason " +
+            "mediaServer=${source?.source?.startsWith("mediaserver:") == true}"
         DiagnosticFileLog.record(source = "source_selection", event = event, message = message)
         android.util.Log.i("SourceSelect", message)
     }

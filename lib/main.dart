@@ -1,4 +1,6 @@
 import 'services/webdav_sync/webdav_log_upload.dart';
+import 'services/cache_scratch_cleanup.dart';
+import 'services/debrify_image_cache.dart';
 import 'widgets/webdav_sync/webdav_save_status.dart';
 import 'services/local_validation_diagnostics.dart';
 import 'dart:async';
@@ -368,6 +370,8 @@ Future<void> _mainUnchecked(List<String> launchArguments) async {
     // the message actually reaches the panel before that happens.
     await WidgetsBinding.instance.endOfFrame;
   }
+
+  await CacheScratchCleanup.run();
 
   // Publish legacy/profile storage mode before any preference, credential,
   // cache, route, or background service can observe application state.
@@ -771,6 +775,7 @@ Future<void> _continueApplicationStartup() async {
   // NB: no manual app_open — Pug's autoTrack fires app_open/app_close from the
   // app lifecycle automatically (see AnalyticsService.init / PugOptions).
   runApp(const DebrifyApp());
+  unawaited(DebrifyImageCache.maintainDiskCaches());
   applicationReady.complete();
   // Desktop scheduled recordings (Tier 1: fire while the app is running).
   // Arms stored timers + late-joins anything already in its window; no-op on

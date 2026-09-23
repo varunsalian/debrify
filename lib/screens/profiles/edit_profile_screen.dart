@@ -5,6 +5,8 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../services/cache_scratch_cleanup.dart';
+
 import '../../models/profiles/profile_avatar.dart';
 import '../../models/profiles/profile_policy.dart';
 import '../../models/profiles/user_profile.dart';
@@ -634,6 +636,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
   Future<void> _pickAvatarImage() async {
     if (_saving) return;
+    String? pickerCopy;
     try {
       // Android document providers commonly reject custom MIME/extension
       // filters. Pick any file, then trust magic-byte validation below.
@@ -644,6 +647,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       );
       if (pick == null || pick.files.isEmpty) return;
       final file = pick.files.single;
+      pickerCopy = file.path;
       if (file.size > ProfileAvatarIngest.maxInputBytes) {
         throw const ProfileAvatarRejected(
           'That image is too large to open. Choose one under 12 MB.',
@@ -668,6 +672,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('That image could not be opened.')),
       );
+    } finally {
+      await CacheScratchCleanup.releasePickerCopy(pickerCopy);
     }
   }
 

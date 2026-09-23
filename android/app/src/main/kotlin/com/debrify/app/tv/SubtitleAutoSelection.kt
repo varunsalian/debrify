@@ -1,5 +1,8 @@
 package com.debrify.app.tv
 
+import com.debrify.app.util.LanguageMapper
+import androidx.media3.common.C
+import androidx.media3.common.Tracks
 import androidx.media3.common.Format
 import androidx.media3.common.MimeTypes
 
@@ -32,6 +35,7 @@ internal data class EmbeddedSubtitleCandidate(
 )
 
 internal sealed class SubtitleAutoSelection {
+    object Off : SubtitleAutoSelection()
     object Wait : SubtitleAutoSelection()
     object Keep : SubtitleAutoSelection()
     object Addon : SubtitleAutoSelection()
@@ -56,11 +60,14 @@ internal fun chooseAutomaticSubtitle(
     sourcePriority: List<String> = listOf("embedded"),
     addons: List<AddonSubtitleCandidate> = emptyList(),
     addonDiscoveryReady: Boolean = true,
+    audioAllowsSubtitles: Boolean = true,
 ): SubtitleAutoSelection {
-    if (manualSelection || suppressed || preference == "off" || addonSelected) {
+    if (manualSelection || suppressed || preference == "off") {
         return SubtitleAutoSelection.Keep
     }
     if (!tracksReady) return SubtitleAutoSelection.Wait
+    if (!audioAllowsSubtitles) return SubtitleAutoSelection.Off
+    if (addonSelected) return SubtitleAutoSelection.Keep
     val eligible = candidates.indices.filter {
         candidates[it].supported && !candidates[it].undeclaredHlsCaption &&
             (preference == null || candidates[it].matchesLanguage)
@@ -90,3 +97,25 @@ internal fun chooseAutomaticSubtitle(
     }
     return SubtitleAutoSelection.Addon
 }
+
+/** Unknown tags are not evidence of a foreign audio track. */
+internal fun audioAllowsAutomaticSubtitles(
+    onlyForeignAudio: Boolean,
+    preferredAudio: String?,
+    selectedAudio: String?,
+): Boolean {
+    if (!onlyForeignAudio) return true
+    val preferred = LanguageMapper.canonicalLanguage(preferredAudio) ?: return false
+    val selected = LanguageMapper.canonicalLanguage(selectedAudio) ?: return false
+    return preferred != selected
+}
+
+internal fun selectedAudioLanguage(tracks: Tracks): String? =
+    tracks.groups.firstNotNullOfOrNull { group ->
+        if (group.type != C.TRACK_TYPE_AUDIO) null
+        else (0 until group.length).firstOrNull { group.isTrackSelected(it) }?.let {
+            val format = group.getTrackFormat(it)
+            LanguageMapper.canonicalLanguage(format.language)
+                ?: LanguageMapper.canonicalLanguage(format.label)
+        }
+    }
