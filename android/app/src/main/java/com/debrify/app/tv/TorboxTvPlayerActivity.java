@@ -3676,16 +3676,15 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         // Search for subtitle track matching the preferred language
         TrackOption matchingTrack = null;
         for (TrackOption option : subtitleTracks) {
-            String label = option.label;
-
             // Get track format to extract language and id
             Format format = option.group.getMediaTrackGroup().getFormat(option.trackIndex);
             String language = format.language;
             String id = format.id;
 
             // Check if track matches the preferred language using robust matching
+            // Use the raw label; the menu label appends a translated language.
             if (LanguageMapper.matchesLanguage(targetLang, language) ||
-                LanguageMapper.matchesLanguage(targetLang, label) ||
+                LanguageMapper.matchesLanguage(targetLang, format.label) ||
                 LanguageMapper.matchesLanguage(targetLang, id)) {
                 matchingTrack = option;
                 android.util.Log.d("TorboxTvPlayer", "Found matching subtitle for '" + targetLang + "': label=" + option.label + " id=" + format.id + " lang=" + format.language);
