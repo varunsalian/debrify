@@ -2787,7 +2787,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
         // Start with text off until the selected audio is known. This also
         // prevents a file's default/forced track flashing before policy runs.
-        if (playerPreferences.getBoolean("subtitle_only_foreign_audio", false)) {
+        if (playerPreferences.getBoolean("subtitle_only_foreign_audio", false) ||
+            playerPreferences.getBoolean("subtitle_forced_only", false)) {
             paramsBuilder?.setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
         }
         trackSelector?.parameters = paramsBuilder?.build()!!
@@ -4798,7 +4799,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 .setTrackTypeDisabled(
                     C.TRACK_TYPE_TEXT,
                     playerPreferences.getString("player_default_subtitle_language", null) == "off" ||
-                        playerPreferences.getBoolean("subtitle_only_foreign_audio", false),
+                        playerPreferences.getBoolean("subtitle_only_foreign_audio", false) ||
+                        playerPreferences.getBoolean("subtitle_forced_only", false),
                 )
                 .build()
         }
@@ -6903,9 +6905,11 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                     supported = group.isTrackSupported(i),
                     selected = group.isTrackSelected(i),
                     matchesLanguage = LanguageMapper.matchesLanguage(targetLanguage, format.language) ||
-                        LanguageMapper.matchesLanguage(targetLanguage, format.label) ||
-                        LanguageMapper.matchesLanguage(targetLanguage, format.id),
+                        (!playerPreferences.getBoolean("subtitle_forced_only", false) &&
+                            (LanguageMapper.matchesLanguage(targetLanguage, format.label) ||
+                                LanguageMapper.matchesLanguage(targetLanguage, format.id))),
                     defaultTrack = format.selectionFlags and C.SELECTION_FLAG_DEFAULT != 0,
+                    forcedTrack = format.selectionFlags and C.SELECTION_FLAG_FORCED != 0,
                     undeclaredHlsCaption = isUndeclaredHlsCaption(
                         isHls = currentPlayer.currentManifest is HlsManifest,
                         mimeType = format.sampleMimeType,
@@ -6926,6 +6930,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 preferredAudio = playerPreferences.getString("player_default_audio_language", null),
                 selectedAudio = selectedAudioLanguage(tracks),
             ),
+            forcedOnly = playerPreferences.getBoolean("subtitle_forced_only", false),
             candidates = candidates,
             sourcePriority = SubtitleSettings.getSubtitleSourcePriority(this),
             addonDiscoveryReady = subtitleAddonDiscoveryReady,

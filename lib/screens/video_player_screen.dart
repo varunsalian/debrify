@@ -1375,6 +1375,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   final Set<String> _tempSubtitleFiles = {};
   String? _activeExternalSubtitlePath;
   bool _subtitleOnlyForeignAudio = false;
+  bool _subtitleForcedOnly = false;
+  bool get _hasSubtitlePolicy => _subtitleOnlyForeignAudio || _subtitleForcedOnly;
   String? _subtitlePreferredAudio;
   String? _subtitleSelectedAudio;
   int _subtitleAudioRevision = 0;
@@ -3711,7 +3713,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       _syncActiveSkipSegmentUi();
       _checkAndApplyLocalCompletion();
     });
-    if (_subtitleAutoSyncEnabled || _subtitleOnlyForeignAudio) {
+    if (_subtitleAutoSyncEnabled || _hasSubtitlePolicy) {
       var lastAudioTrackId = player.state.track.audio.id;
       var lastAudioLanguage = player.state.track.audio.language;
       _trackSub = player.stream.track.listen((track) {
@@ -4674,7 +4676,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // both natively and in Flutter. Restored bitmap selections re-enable it.
     if (platform is mk.NativePlayer) {
       try {
-        if (_subtitleOnlyForeignAudio) {
+        if (_hasSubtitlePolicy) {
           await platform.setProperty('sid', 'no');
         }
         await platform.setProperty(
@@ -6227,6 +6229,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
   Future<void> _loadPlayerDefaults() async {
     _subtitleOnlyForeignAudio = await StorageService.getSubtitleOnlyForeignAudio();
+    _subtitleForcedOnly = await StorageService.getSubtitleForcedOnly();
     _subtitlePreferredAudio = await StorageService.getDefaultAudioLanguage();
     _subtitleAutoSyncEnabled =
         await StorageService.getSubtitleAutoSyncEnabled();
@@ -16670,7 +16673,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _captureIptvAudioLanguage(audioId);
     await _persistTrackChoice(
       audioId,
-      _subtitleOnlyForeignAudio && !_userManuallySelectedSubtitle
+      _hasSubtitlePolicy && !_userManuallySelectedSubtitle
           ? 'auto'
           : currentSubId,
     );
@@ -16687,7 +16690,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   }
 
   Future<bool> _withManualSubtitleChoice(Future<bool> Function() apply) async {
-    if (!_subtitleOnlyForeignAudio) return apply();
+    if (!_hasSubtitlePolicy) return apply();
     final previouslyManual = _userManuallySelectedSubtitle;
     final token = _addonSubtitleFetchToken;
     final revision = ++_subtitleAudioRevision;
@@ -17074,7 +17077,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                 subtitleTrack,
                 source: 'restore-stored-embedded',
               );
-              if (_subtitleOnlyForeignAudio && subtitleApplied) {
+              if (_hasSubtitlePolicy && subtitleApplied) {
                 _userManuallySelectedSubtitle = true;
               }
             }
@@ -17179,14 +17182,22 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     }
   }
 
-  bool get _audioAllowsAutomaticSubtitles => allowsAutomaticSubtitles(
-    onlyForeignAudio: _subtitleOnlyForeignAudio,
-    preferredAudio: _subtitlePreferredAudio,
-    selectedAudio: _subtitleSelectedAudio,
-  );
+  bool get _audioAllowsAutomaticSubtitles =>
+      _subtitleForcedOnly ||
+      allowsAutomaticSubtitles(
+        onlyForeignAudio: _subtitleOnlyForeignAudio,
+        preferredAudio: _subtitlePreferredAudio,
+        selectedAudio: _subtitleSelectedAudio,
+      );
 
   Future<void> _refreshSubtitleAudioPolicy({bool reselect = true}) async {
-    if (!_subtitleOnlyForeignAudio || _userManuallySelectedSubtitle) return;
+    if (!_hasSubtitlePolicy || _userManuallySelectedSubtitle) return;
+    if (_subtitleForcedOnly) {
+      if (reselect && _trackPreferencesReadyForAddonSubtitles) {
+        await _applySubtitleSourcePriority(const [], _addonSubtitleFetchToken);
+      }
+      return;
+    }
     final revision = ++_subtitleAudioRevision;
     final token = _addonSubtitleFetchToken;
     _subtitleSelectedAudio = null;
@@ -17254,6 +17265,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       debugPrint('SubAuto: defaultSubtitleLanguage setting = $defaultLang');
       if (!current()) {
         return false;
+      }
+      if (_subtitleForcedOnly) {
+        return _applyForcedSubtitle(defaultLang, current);
       }
       if (!ignoreSourcePriority && defaultLang != 'off') {
         final order = await StorageService.getSubtitleSourcePriority();
@@ -17335,6 +17349,35 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       debugPrint('SubAuto: _applyDefaultSubtitleLanguage FAILED: $e');
       return false;
     }
+  }
+
+  Future<bool> _applyForcedSubtitle(
+    String? language,
+    bool Function() current,
+  ) async {
+    String? id;
+    final platform = _player.platform;
+    try {
+      if (platform is mk.NativePlayer) {
+        id = await findForcedSubtitleId(
+          readProperty: platform.getProperty,
+          preferredSubtitle: language,
+          isCurrent: current,
+        );
+      }
+    } catch (error) {
+      debugPrint('SubAuto: forced-track metadata unavailable: $error');
+    }
+    if (!current()) return false;
+    final track = _player.state.tracks.subtitle
+        .where((track) => track.id == id && !isAppManagedAddonSubtitleTrack(track))
+        .firstOrNull;
+    // A missing or unmarked track must never fall back to full subtitles.
+    return _setSubtitleTrackWithDiagnostics(
+      track ?? mk.SubtitleTrack.no(),
+      source: track == null ? 'forced-only-off' : 'forced-only-embedded',
+      isCurrent: current,
+    );
   }
 
   /// Download an addon subtitle's raw bytes and write them to a temp file.
@@ -17621,6 +17664,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     if (!valid()) return;
     try {
       final language = await StorageService.getDefaultSubtitleLanguage();
+      if (_subtitleForcedOnly) {
+        if (valid()) await _applyForcedSubtitle(language, valid);
+        return;
+      }
       final saved = await StorageService.getSubtitleSourcePriority();
       String? selectedPath;
       final result = await selectSubtitleBySourcePriority(

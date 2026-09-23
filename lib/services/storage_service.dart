@@ -9461,6 +9461,17 @@ class StorageService {
     await prefs.setBool(_subtitleAutoSyncKey, enabled);
   }
 
+  /// Automatically select only explicitly forced embedded subtitle tracks.
+  static Future<bool> getSubtitleForcedOnly() async {
+    final prefs = await ProfilePreferences.instance();
+    return prefs.getBool('subtitle_forced_only') ?? false;
+  }
+
+  static Future<void> setSubtitleForcedOnly(bool enabled) async {
+    final prefs = await ProfilePreferences.instance();
+    await prefs.setBool('subtitle_forced_only', enabled);
+  }
+
   /// Opt-in: automatically show subtitles only for a known audio language
   /// different from the profile's preferred audio language.
   static Future<bool> getSubtitleOnlyForeignAudio() async {
