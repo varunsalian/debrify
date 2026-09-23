@@ -424,7 +424,7 @@ class _CollectionFolderScreenState extends State<CollectionFolderScreen> {
   // ── Folder (re)build ───────────────────────────────────────────────────
 
   /// Resolve the current folder's enabled lists into rails and fetch their
-  /// first pages. The All view is built lazily on first switch.
+  /// first pages. Folder entry defaults to All when that view is offered.
   void _rebuildFolder({
     bool autoFocus = false,
     bool preserveSelection = false,
@@ -482,9 +482,12 @@ class _CollectionFolderScreenState extends State<CollectionFolderScreen> {
       final index = rails.indexWhere(
         (r) => r.source.key == (oldSource ?? widget.sourceKey),
       );
-      _tab = wasAll && _collection.showAllTab && rails.length > 1
-          ? _kAllTab
-          : (index < 0 ? 0 : index);
+      final offersAll = _collection.showAllTab && rails.length > 1;
+      final defaultAll = !preserveSelection && widget.sourceKey == null;
+      final selectAll = offersAll && (wasAll || defaultAll);
+      _tab = selectAll ? _kAllTab : (index < 0 ? 0 : index);
+      if (selectAll) _view = _View.all;
+      if (!offersAll || (!preserveSelection && !selectAll)) _view = _View.lists;
       _tabGridKey = GlobalKey();
       _tvTitlesKey = GlobalKey();
       _spotlightKey = GlobalKey();
@@ -867,8 +870,10 @@ class _CollectionFolderScreenState extends State<CollectionFolderScreen> {
   _Rail? get _tabRail =>
       _tab >= 0 && _tab < _rails.length ? _rails[_tab] : null;
 
+  // Multi-list folders need the same visible controls and focus ladder in
+  // both All and Gallery, so users can switch views in either direction.
   bool get _homeGallery =>
-      widget.fromHome && widget.sourceKey == null && !_tabs;
+      widget.fromHome && widget.sourceKey == null && !_tabs && !_offersAll;
 
   void _focusBelowHeader() {
     if (_filterNodes.isEmpty) {
@@ -1025,12 +1030,16 @@ class _CollectionFolderScreenState extends State<CollectionFolderScreen> {
                     Expanded(
                       child: CollectionCategoryTabs(
                         labels: [
-                          for (final rail in _rails) rail.title,
                           if (_offersAll) 'All',
+                          for (final rail in _rails) rail.title,
                         ],
-                        selectedIndex: _tab == _kAllTab ? _rails.length : _tab,
+                        selectedIndex: _tab == _kAllTab
+                            ? 0
+                            : _tab + (_offersAll ? 1 : 0),
                         onSelected: (index) => _onTabChanged(
-                          index == _rails.length ? _kAllTab : index,
+                          _offersAll
+                              ? (index == 0 ? _kAllTab : index - 1)
+                              : index,
                         ),
                       ),
                     ),
@@ -1324,10 +1333,10 @@ class _CollectionFolderScreenState extends State<CollectionFolderScreen> {
                   isTelevision: widget.isTelevision,
                   focusNode: _listNode,
                   options: [
-                    for (var i = 0; i < _rails.length; i++)
-                      StremioDropdownOption(i, _rails[i].title),
                     if (_offersAll)
                       const StremioDropdownOption(_kAllTab, 'All'),
+                    for (var i = 0; i < _rails.length; i++)
+                      StremioDropdownOption(i, _rails[i].title),
                   ],
                   onSelected: _onTabChanged,
                 ),
@@ -1342,8 +1351,8 @@ class _CollectionFolderScreenState extends State<CollectionFolderScreen> {
                   isTelevision: widget.isTelevision,
                   focusNode: _viewNode,
                   options: const [
-                    StremioDropdownOption(_View.lists, 'Gallery'),
                     StremioDropdownOption(_View.all, 'All'),
+                    StremioDropdownOption(_View.lists, 'Gallery'),
                   ],
                   onSelected: _onViewChanged,
                 ),
