@@ -44,11 +44,44 @@ class SourceListScrollAnchorState extends State<SourceListScrollAnchor> {
     _animating = true;
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!_ownsFocus || run != _run) return;
+      final render = _rowContext!.findRenderObject();
+      final position = Scrollable.maybeOf(_rowContext!)?.position;
+      final viewport = render == null
+          ? null
+          : RenderAbstractViewport.maybeOf(render);
+      if (render == null || position == null || viewport == null) {
+        _animating = false;
+        return;
+      }
+      // A DPAD step normally moves to another row already on screen. Forcing
+      // every one of those rows to 30% of the viewport starts a scroll
+      // animation and repaints the entire badge-heavy list on every press.
+      // Only move the viewport when the new row actually approaches an edge.
+      final top = viewport.getOffsetToReveal(render, 0).offset;
+      final bottom = viewport.getOffsetToReveal(render, 1).offset;
+      final current = position.pixels;
+      const edge = 12.0;
+      final oversized =
+          render.paintBounds.height >= position.viewportDimension - edge * 2;
+      final alignment = oversized
+          ? ((top - current).abs() > edge ? 0.0 : null)
+          : top < current - edge
+          ? 0.1
+          : bottom > current + edge
+          ? 0.9
+          : null;
+      if (alignment == null) {
+        // Invalidating callbacks does not stop the old scroll activity. A
+        // reversal to an already visible row must hold this viewport position.
+        if (position.isScrollingNotifier.value) position.jumpTo(current);
+        _animating = false;
+        return;
+      }
       try {
         await Scrollable.ensureVisible(
           _rowContext!,
-          alignment: 0.3,
-          duration: const Duration(milliseconds: 150),
+          alignment: alignment,
+          duration: const Duration(milliseconds: 90),
           curve: Curves.easeOutCubic,
         );
       } finally {
