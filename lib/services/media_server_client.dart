@@ -1,3 +1,4 @@
+import 'diagnostic_log.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
@@ -104,9 +105,13 @@ class MediaServerClient {
       request.headers['Content-Type'] = 'application/json';
       request.body = jsonEncode(body);
     }
+    final timer = Stopwatch()..start();
+    int? status;
+    var outcome = 'failed';
     try {
       final response = await (() async {
         final stream = await _client.send(request);
+        status = stream.statusCode;
         final bytes = <int>[];
         await for (final chunk in stream.stream) {
           bytes.addAll(chunk);
@@ -143,23 +148,49 @@ class MediaServerClient {
           'The server could not complete the request (HTTP ${response.statusCode}).',
         );
       }
-      if (allowEmptyResponse && response.bodyBytes.isEmpty) return {};
+      if (allowEmptyResponse && response.bodyBytes.isEmpty) {
+        outcome = 'ok';
+        return {};
+      }
       final data = jsonDecode(utf8.decode(response.bodyBytes));
       if (data is! Map<String, dynamic>) throw const FormatException();
+      outcome = 'ok';
       return data;
     } on MediaServerException {
       rethrow;
     } on TimeoutException {
+      outcome = 'timeout';
       throw const MediaServerException(
         'Server timed out. Check its address and network connection.',
       );
     } on FormatException {
+      outcome = 'invalid_response';
       throw const MediaServerException(
         'The server returned an invalid response. Check the server URL.',
       );
     } on http.ClientException {
+      outcome = 'network_error';
       throw const MediaServerException(
         'Cannot reach the server. Check its address and network connection.',
+      );
+    } finally {
+      // Never persist paths, query parameters, bodies, headers, or exceptions.
+      DiagnosticLog.instance.recordEvent(
+        source: 'media_server',
+        event: 'request',
+        fields: {
+          'kind': DiagnosticLabel(kind.name),
+          'operation': DiagnosticLabel(
+            path.endsWith('/PlaybackInfo')
+                ? 'playback_info'
+                : path.contains('Sessions/')
+                ? 'watch_report'
+                : 'api',
+          ),
+          'status': status,
+          'outcome': DiagnosticLabel(outcome),
+          'elapsed_ms': timer.elapsedMilliseconds,
+        },
       );
     }
   }

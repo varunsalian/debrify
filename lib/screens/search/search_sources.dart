@@ -1558,7 +1558,7 @@ class _SourcesScreenState extends State<_SourcesScreen> {
           id: key,
           label: names[key]!.isEmpty ? 'Other sources' : names[key]!,
           count: counts[key] ?? 0,
-          message: iptvMessages[key],
+          message: iptvMessages[key] ?? _mediaServerMessages[key],
           failed: _addonStatuses.any((s) => s.sourceKey == key && s.failed),
           loading: _addonStatuses.any(
             (s) => s.sourceKey == key && _retryingAddons.contains(s.requestKey),
@@ -1566,6 +1566,12 @@ class _SourcesScreenState extends State<_SourcesScreen> {
         ),
     ];
   }
+
+  Map<String, String> get _mediaServerMessages => {
+    for (final status in _addonStatuses)
+      if (status.sourceKey.startsWith('mediaserver:') && status.error != null)
+        status.sourceKey: status.error!,
+  };
 
   void _selectCinemaProvider(String? key) {
     _sourceFilter = key;
@@ -2155,6 +2161,14 @@ class _SourcesScreenState extends State<_SourcesScreen> {
               ],
             ),
           ),
+        if (showProviders)
+          for (final entry in _mediaServerMessages.entries)
+            if (_sourceFilter == null || _sourceFilter == entry.key)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 2, 12, 8),
+                child: Text(entry.value,
+                    style: TextStyle(color: scheme.error, fontSize: 12)),
+              ),
         if (showProviders)
           for (final source in _iptvSources)
             if (source.retryableFailure &&

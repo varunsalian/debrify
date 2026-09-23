@@ -13,6 +13,7 @@ import '../models/profiles/profile_policy.dart';
 import '../models/torrent.dart';
 import '../utils/torrent_filter_matcher.dart';
 import 'media_server_client.dart';
+import 'diagnostic_log.dart';
 import 'profiles/connection_resource_service.dart';
 import 'profiles/device_key_provider.dart';
 import 'profiles/profile_async_authorization.dart';
@@ -549,13 +550,30 @@ class MediaServerService {
             authorize: check,
           );
           final batch = <Torrent>[];
+          var failedItems = 0;
+          var unsupportedItems = 0;
           for (final item in items) {
             final itemId = item['Id'] as String;
-            final sources = await client.mediaSources(
-              account,
-              itemId,
-              authorize: check,
-            );
+            List<Map<String, dynamic>> sources;
+            try {
+              sources = await client.mediaSources(
+                account,
+                itemId,
+                authorize: check,
+              );
+            } on MediaServerException {
+              // A bad version must not discard other playable library items.
+              // Recheck revocation and the deadline before continuing.
+              final expired = DateTime.now().isAfter(deadline);
+              // Stop searching on deadline, but retain already resolved items.
+              // Authorization remains mandatory even when the search is done.
+              if (expired) searchComplete = true;
+              await check();
+              failedItems++;
+              if (expired) break;
+              continue;
+            }
+            if (sources.isEmpty) unsupportedItems++;
             batch.addAll(
               _librarySources(
                 account: account,
@@ -572,15 +590,33 @@ class MediaServerService {
               ),
             );
           }
-          await check();
           searchComplete = true;
+          await check();
           streams.addAll(batch);
+          final warning = failedItems > 0
+              ? 'Some matching items could not be checked. Retry or test this server in Settings.'
+              : unsupportedItems > 0
+              ? 'Some matching items have no supported original-file stream. Remote streams and transcoding are not supported.'
+              : null;
+          if (warning != null) errors[key] = warning;
+          DiagnosticLog.instance.recordEvent(
+            source: 'media_server',
+            event: 'search_completed',
+            fields: {
+              'kind': DiagnosticLabel(account.kind.name),
+              'matched_items': items.length,
+              'sources': batch.length,
+              'failed_items': failedItems,
+              'unsupported_items': unsupportedItems,
+            },
+          );
           statuses.add(
             AddonSearchStatus(
               addonId: key,
               name: name,
               sourceKey: key,
               count: batch.length,
+              error: warning,
             ),
           );
           if (batch.isNotEmpty) onBatch?.call(key, batch);

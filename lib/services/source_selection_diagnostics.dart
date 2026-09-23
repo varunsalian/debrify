@@ -44,6 +44,7 @@ void logSourceSelection(
             .substring(0, 12);
   final fields = <String, Object?>{
     'source_id': sourceId == null ? null : DiagnosticLabel(sourceId),
+    'is_media_server': source?.source.startsWith('mediaserver:'),
     'index': index,
     'previous_index': previousIndex,
     'season': season,
@@ -138,4 +139,15 @@ void logIptvSourceEvent(
     'failed=$failedCount elapsedMs=$elapsedMs timedOut=$timedOut '
     'fallbackScan=$fallbackScan errorType=${error?.runtimeType}',
   );
+}
+
+/// Only fixed labels leave this function; player messages can contain secrets.
+String mediaServerPlayerErrorCategory(String message) {
+  final text = message.toLowerCase();
+  if (RegExp(r'\b(401|403)\b').hasMatch(text)) return 'http_auth';
+  if (RegExp(r'\b404\b').hasMatch(text)) return 'http_not_found';
+  if (text.contains('timed out') || text.contains('timeout')) return 'timeout';
+  if (text.contains('certificate') || text.contains('tls')) return 'tls';
+  if (text.contains('decoder') || text.contains('codec')) return 'decoder';
+  return 'player_error';
 }

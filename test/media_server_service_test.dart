@@ -45,6 +45,8 @@ void main() {
   late String admin;
   late String member;
   var unavailable = false;
+  var extraBrokenMovie = false;
+  var unsupportedPlayback = false;
   var failureStatus = 503;
   Map<String, dynamic> videoMetadata = {};
   List<Map<String, dynamic>> audioStreams = [];
@@ -86,6 +88,8 @@ void main() {
       ProfileScope(profileId: admin, dataGeneration: 1, sessionEpoch: 1),
     );
     unavailable = false;
+    extraBrokenMovie = false;
+    unsupportedPlayback = false;
     failureStatus = 503;
     videoMetadata = {};
     audioStreams = [];
@@ -123,12 +127,24 @@ void main() {
               request.url.queryParameters['IncludeItemTypes'] == 'Movie';
           data = {
             'Items': [
+              if (movie && extraBrokenMovie)
+                {
+                  'Id': 'broken',
+                  'Type': 'Movie',
+                  'ProviderIds': {'Imdb': 'tt123'},
+                },
               {
                 'Id': movie ? 'movie1' : 'series1',
                 'Name': 'Example',
                 'Type': movie ? 'Movie' : 'Series',
                 'ProviderIds': {'Imdb': 'tt123'},
               },
+              if (movie && extraBrokenMovie)
+                {
+                  'Id': 'broken',
+                  'Type': 'Movie',
+                  'ProviderIds': {'Imdb': 'tt123'},
+                },
             ],
           };
         } else if (request.url.path.endsWith('/Episodes')) {
@@ -144,12 +160,14 @@ void main() {
             ],
           };
         } else if (request.url.path.endsWith('/PlaybackInfo')) {
+          if (request.url.path.contains('/broken/'))
+            return http.Response('', 500);
           data = {
             'MediaSources': [
               for (final height in [1080, 2160])
                 {
                   'Id': 'version${episodeNumber}_$height',
-                  'SupportsDirectPlay': true,
+                  'SupportsDirectPlay': !unsupportedPlayback,
                   'Protocol': 'File',
                   'Container': 'mkv',
                   'Size': 12345678,
@@ -1527,6 +1545,31 @@ void main() {
         throwsA(isA<ResourceAuthorizationException>()),
       );
       expect(requestCount, greaterThan(0));
+    },
+  );
+
+  test('a failed matching item preserves other playable versions', () async {
+    await connect();
+    extraBrokenMovie = true;
+    final result = await MediaServerService.search(id: 'tt123', isMovie: true);
+    expect(result['torrents'], hasLength(2));
+    expect(result['addonErrors'], isNotEmpty);
+    await DirectSourceAuthorization.authorize(
+      (result['torrents'] as List).first,
+    );
+  });
+
+  test(
+    'unsupported playback is explained instead of reported as no matches',
+    () async {
+      await connect();
+      unsupportedPlayback = true;
+      final result = await MediaServerService.search(
+        id: 'tt123',
+        isMovie: true,
+      );
+      expect(result['torrents'], isEmpty);
+      expect(jsonEncode(result['addonErrors']), contains('transcoding'));
     },
   );
 

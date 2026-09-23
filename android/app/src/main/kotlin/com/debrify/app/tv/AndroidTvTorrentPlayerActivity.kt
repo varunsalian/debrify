@@ -787,6 +787,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             output: Any,
             renderTimeMs: Long,
         ) {
+            mediaServerPlaybackLog("first_frame")
             iptvTuneDiagnostics.onFirstFrame()
             if (manualSourceRestoreInProgress) {
                 manualSourceRestoreInProgress = false
@@ -1800,6 +1801,10 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         }
 
         override fun onPlayerError(error: PlaybackException) {
+            mediaServerPlaybackLog("player_error", error.errorCode,
+                generateSequence<Throwable>(error) { it.cause }.take(8)
+                    .filterIsInstance<androidx.media3.datasource.HttpDataSource.InvalidResponseCodeException>()
+                    .firstOrNull()?.responseCode)
             if (pendingShufflePlayback?.mediaStarted == true &&
                 !currentPlaybackItemIsPikPak() && failShufflePlayback()) return
             if (!isIptvMode && manualSourceRestoreInProgress) {
@@ -17685,7 +17690,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             ?: "-"
         return "sourceIndex=$index type=$sourceType " +
             "addonPresent=${!source?.addonId.isNullOrBlank()} " +
-            "sourcePresent=${!source?.source.isNullOrBlank()}"
+            "sourcePresent=${!source?.source.isNullOrBlank()} " +
+            "mediaServer=${source?.source?.startsWith("mediaserver:") == true}"
     }
 
     private fun diagnosticProvider(value: String?): String {
@@ -17708,11 +17714,21 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         else android.util.Log.d(STARTUP_FAILOVER_LOG_TAG, message)
     }
 
+    private fun mediaServerPlaybackLog(event: String, errorCode: Int? = null, httpStatus: Int? = null) {
+        val source = stremioSources.firstOrNull { it.index == currentStremioSourceIndex }
+        if (source?.source?.startsWith("mediaserver:") != true) return
+        DiagnosticFileLog.record(
+            source = "media_server", event = event,
+            message = "player=exo index=$currentStremioSourceIndex errorCode=$errorCode httpStatus=$httpStatus",
+        )
+    }
+
     private fun sourceSelectionLog(event: String, index: Int, previous: Int? = null, reason: String? = null) {
         val item = payload?.items?.getOrNull(currentIndex)
         val source = stremioSources.firstOrNull { it.index == index }
         val message = "SourceSelect: event=$event player=exo index=$index previous=$previous " +
-            "season=${item?.season} episode=${item?.episode} transport=${source?.streamType} reason=$reason"
+            "season=${item?.season} episode=${item?.episode} transport=${source?.streamType} reason=$reason " +
+            "mediaServer=${source?.source?.startsWith("mediaserver:") == true}"
         DiagnosticFileLog.record(source = "source_selection", event = event, message = message)
         android.util.Log.i("SourceSelect", message)
     }

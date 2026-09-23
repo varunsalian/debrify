@@ -3663,6 +3663,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       _handleDecoderProbeParams(params);
     });
     _rendererStartupErrorSub = player.stream.error.listen((error) {
+      final source = _openedWatchSource;
+      if (isCurrent() && source != null) {
+        // mpv errors can contain credential-bearing URLs; record only category.
+        logSourceSelection('media_server_player_error', source: source,
+            player: 'mpv', reason: mediaServerPlayerErrorCategory(error));
+      }
       // mpv also emits nonfatal decoder/stream log errors here. Re-evaluate
       // actual state; healthy playback may not emit another state event.
       if (isCurrent()) {
@@ -3889,6 +3895,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     }
   }
 
+  int _mediaServerFrameGeneration = -1;
+
   void _handleDecoderProbeParams(mk.VideoParams params) {
     final width = params.dw ?? params.w ?? 0;
     final height = params.dh ?? params.h ?? 0;
@@ -3904,6 +3912,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       _rendererStartupValidationGeneration = -1;
       _resetTvosDisplayMatchForMediaBoundary();
       return;
+    }
+    if (_openedWatchSource != null &&
+        _mediaServerFrameGeneration != _decoderProbeGeneration) {
+      _mediaServerFrameGeneration = _decoderProbeGeneration;
+      logSourceSelection('media_server_first_frame', source: _openedWatchSource,
+          player: 'mpv');
     }
     _decoderProbeParams = params;
     _scheduleTvosDisplayMatch(params);
@@ -4688,6 +4702,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       // This callback arms candidate validation. Never arm it while the old
       // media could still emit events during a server watch-state request.
       if (beforeOpen != null && !beforeOpen()) return;
+      if (watchSource != null) {
+        logSourceSelection('media_server_open', source: watchSource, player: 'mpv');
+      }
       _openedWatchSource = watchSource;
       _activeOpenedMedia = media;
       _activeMediaShouldPlay = desiredPlay ?? play;
