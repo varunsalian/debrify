@@ -115,6 +115,10 @@ class StremioDropdown<T extends Object> extends StatefulWidget {
   /// Source segment as the row's identity, per the Discover design.
   final bool quietAccent;
 
+  /// Rounded collection controls with a filled, high-contrast focus state.
+  final bool editorial;
+  final IconData? icon;
+
   /// Secondary action for options marked [StremioDropdownOption.holdable]:
   /// fired when such a row is HELD (TV) or long-pressed (touch/desktop)
   /// instead of picked. The picker closes first, so a confirmation the
@@ -137,6 +141,8 @@ class StremioDropdown<T extends Object> extends StatefulWidget {
     this.onDownArrowPressed,
     this.quiet = false,
     this.quietAccent = false,
+    this.editorial = false,
+    this.icon,
     this.onOptionHold,
     this.holdHint,
   });
@@ -224,9 +230,11 @@ class _StremioDropdownState<T extends Object>
       context: context,
       position: pos,
       color: app.seeAll.panel2,
-      elevation: 12,
+      elevation: widget.editorial ? 20 : 12,
       shape: RoundedRectangleBorder(
-        borderRadius: app.shape.br(14),
+        borderRadius: widget.editorial
+            ? BorderRadius.circular(20)
+            : app.shape.br(14),
         side: BorderSide(color: app.seeAll.line),
       ),
       constraints: const BoxConstraints(minWidth: 190, maxWidth: 320),
@@ -263,7 +271,7 @@ class _StremioDropdownState<T extends Object>
           else
             PopupMenuItem<T>(
               value: o.value,
-              height: 44,
+              height: widget.editorial ? 52 : 44,
               padding: hasSections
                   ? const EdgeInsets.only(left: 32, right: 16)
                   : null,
@@ -276,9 +284,11 @@ class _StremioDropdownState<T extends Object>
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         color: o.value == widget.value
-                            ? app.seeAll.accent2
+                            ? (widget.editorial
+                                  ? app.core.tx
+                                  : app.seeAll.accent2)
                             : Theme.of(context).colorScheme.onSurface,
-                        fontSize: 13.5,
+                        fontSize: widget.editorial ? 15 : 13.5,
                         fontWeight: o.value == widget.value
                             ? FontWeight.w800
                             : FontWeight.w600,
@@ -319,6 +329,60 @@ class _StremioDropdownState<T extends Object>
     return KeyEventResult.ignored;
   }
 
+  Widget _buildEditorial(bool active) {
+    final app = AppThemeScope.of(context);
+    final foreground = active ? const Color(0xFF141820) : app.core.tx;
+    return AnimatedContainer(
+      key: _btnKey,
+      duration: const Duration(milliseconds: 120),
+      height: 46,
+      padding: const EdgeInsets.symmetric(horizontal: 18),
+      decoration: BoxDecoration(
+        color: active
+            ? const Color(0xFFF3F1EC)
+            : app.core.tx.withValues(alpha: 0.075),
+        borderRadius: BorderRadius.circular(28),
+        border: Border.all(
+          color: app.core.tx.withValues(alpha: active ? 0 : 0.15),
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (widget.icon != null) ...[
+            Icon(widget.icon, size: 19, color: foreground),
+            const SizedBox(width: 10),
+          ],
+          if (widget.label != null) ...[
+            Text(
+              widget.label!,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+                color: foreground.withValues(alpha: 0.55),
+              ),
+            ),
+            const SizedBox(width: 10),
+          ],
+          Flexible(
+            child: Text(
+              _valueLabel,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w700,
+                color: foreground,
+              ),
+            ),
+          ),
+          const SizedBox(width: 14),
+          Icon(Icons.keyboard_arrow_down_rounded, size: 21, color: foreground),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final app = AppThemeScope.of(context);
@@ -351,7 +415,9 @@ class _StremioDropdownState<T extends Object>
           // the right edge, ellipsizing the value. Otherwise stay intrinsic (the
           // Wrap/Row usages use loose sizing, with the value allowed to shrink
           // when a narrow sheet cannot fit the label and full value).
-          child: widget.quiet
+          child: widget.editorial
+              ? _buildEditorial(active)
+              : widget.quiet
               ? _buildQuiet(active)
               : LayoutBuilder(
                   builder: (context, constraints) {
@@ -380,8 +446,8 @@ class _StremioDropdownState<T extends Object>
                           color: _focused
                               ? app.seeAll.accent
                               : (active
-                                  ? app.seeAll.accentBorder
-                                  : app.seeAll.line),
+                                    ? app.seeAll.accentBorder
+                                    : app.seeAll.line),
                         ),
                       ),
                       child: Row(
@@ -406,7 +472,9 @@ class _StremioDropdownState<T extends Object>
                           else
                             Flexible(
                               child: ConstrainedBox(
-                                constraints: const BoxConstraints(maxWidth: 200),
+                                constraints: const BoxConstraints(
+                                  maxWidth: 200,
+                                ),
                                 child: valueText,
                               ),
                             ),
@@ -906,8 +974,7 @@ class _LazyPickerRowState extends State<_LazyPickerRow> {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      color:
-                          widget.selected ? app.seeAll.accent2 : app.core.tx,
+                      color: widget.selected ? app.seeAll.accent2 : app.core.tx,
                       fontSize: 13.5,
                       fontWeight: widget.selected
                           ? FontWeight.w800

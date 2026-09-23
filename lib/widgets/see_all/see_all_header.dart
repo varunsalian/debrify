@@ -14,6 +14,8 @@ class SeeAllHeader extends StatelessWidget {
   final String subtitle;
   final bool isTelevision;
   final FocusNode backNode;
+  final bool editorial;
+  final double editorialGutter;
 
   /// DPAD-down from the back button — hand focus to the first filter control.
   final VoidCallback onFilterDown;
@@ -25,6 +27,8 @@ class SeeAllHeader extends StatelessWidget {
     required this.backNode,
     required this.onFilterDown,
     this.isTelevision = false,
+    this.editorial = false,
+    this.editorialGutter = 32,
   });
 
   KeyEventResult _onKey(FocusNode node, KeyEvent event) {
@@ -50,33 +54,46 @@ class SeeAllHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final app = AppThemeScope.of(context);
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 14, 24, 6),
+      padding: editorial
+          ? EdgeInsets.fromLTRB(editorialGutter, 24, editorialGutter, 10)
+          : const EdgeInsets.fromLTRB(20, 14, 24, 6),
       child: Row(
         children: [
           Focus(
             focusNode: backNode,
             onKeyEvent: _onKey,
-            child: Builder(builder: (context) {
-              final focused = Focus.of(context).hasFocus;
-              return InkWell(
-                borderRadius: app.shape.br(11),
-                onTap: () => Navigator.of(context).maybePop(),
-                child: Container(
-                  width: 40,
-                  height: 40,
-                  decoration: BoxDecoration(
-                    color: app.seeAll.panel,
-                    borderRadius: app.shape.br(11),
-                    border: Border.all(
-                      color: focused ? app.seeAll.accent : app.seeAll.line,
-                      width: focused ? 2 : 1,
+            child: Builder(
+              builder: (context) {
+                final focused = Focus.of(context).hasFocus;
+                return InkWell(
+                  borderRadius: app.shape.br(11),
+                  onTap: () => Navigator.of(context).maybePop(),
+                  child: Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: editorial && focused
+                          ? const Color(0xFFF3F1EC)
+                          : app.seeAll.panel,
+                      borderRadius: app.shape.br(11),
+                      border: Border.all(
+                        color: focused ? app.seeAll.accent : app.seeAll.line,
+                        width: focused ? 2 : 1,
+                      ),
+                    ),
+                    child: Icon(
+                      editorial
+                          ? Icons.chevron_left_rounded
+                          : Icons.arrow_back_rounded,
+                      size: editorial ? 27 : 20,
+                      color: editorial && focused
+                          ? const Color(0xFF141820)
+                          : app.core.tx,
                     ),
                   ),
-                  child: Icon(Icons.arrow_back_rounded,
-                      size: 20, color: app.core.tx),
-                ),
-              );
-            }),
+                );
+              },
+            ),
           ),
           const SizedBox(width: 14),
           Expanded(
@@ -88,20 +105,21 @@ class SeeAllHeader extends StatelessWidget {
                   title,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 20,
+                  style: TextStyle(
+                    fontSize: editorial ? 38 : 20,
                     fontWeight: FontWeight.w800,
-                    letterSpacing: -0.4,
+                    letterSpacing: editorial ? -1.2 : -0.4,
                   ),
                 ),
+                if (editorial) const SizedBox(height: 3),
                 Text(
                   subtitle,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    fontSize: 12.5,
+                    fontSize: editorial ? 14 : 12.5,
                     fontWeight: FontWeight.w600,
-                    color: app.fade(app.core.tx, 0.45),
+                    color: app.fade(app.core.tx, editorial ? 0.65 : 0.45),
                   ),
                 ),
               ],

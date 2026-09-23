@@ -349,6 +349,7 @@ class SpotlightBoard extends StatefulWidget {
   final bool expandFocusedCard;
   final double cardTrailerVolume;
   final bool shelvesOnly;
+  final bool paintBackground;
   final bool animationsEnabled;
   final String animationStyle;
   final bool forceCardParallax;
@@ -375,6 +376,7 @@ class SpotlightBoard extends StatefulWidget {
     this.expandFocusedCard = false,
     this.cardTrailerVolume = 0,
     this.shelvesOnly = false,
+    this.paintBackground = true,
     this.animationsEnabled = false,
     this.animationStyle = 'snowy_mountain',
     this.forceCardParallax = false,
@@ -1872,6 +1874,7 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
         child: list,
       ),
     );
+    if (!widget.paintBackground) return content;
     return DecoratedBox(
       decoration: BoxDecoration(
         gradient: LinearGradient(
