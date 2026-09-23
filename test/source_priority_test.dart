@@ -33,9 +33,77 @@ Torrent _direct(String name, String source) => Torrent(
 );
 
 void main() {
+  group('Settings provider order', () {
+    const providers = [
+      SourceProviderRef(key: 'engine:z', name: 'Z engine', isEngine: true),
+      SourceProviderRef(
+        key: 'stremio:chole',
+        name: 'Chole',
+        isEngine: false,
+        legacyKeys: {'stremio:legacy'},
+      ),
+      SourceProviderRef(
+        key: 'stremio:backup',
+        name: 'Backup',
+        isEngine: false,
+        legacyKeys: {'stremio:legacy'},
+      ),
+      SourceProviderRef(key: 'iptv:one', name: 'IPTV', isEngine: false),
+    ];
+    test(
+      'default follows Settings enumeration rather than alphabetical order',
+      () {
+        final keys = SourcePriority.orderedProviders(
+          providers,
+          [],
+        ).map((p) => p.key).toList();
+        expect(keys, providers.map((p) => p.key));
+        expect(
+          SourcePriority.orderBy(
+            ['iptv:one', 'stremio:chole', 'engine:z'],
+            (s) => s,
+            keys,
+          ),
+          ['engine:z', 'stremio:chole', 'iptv:one'],
+        );
+      },
+    );
+    test('saved priority drives both visible rail and source cards', () {
+      final keys = SourcePriority.orderedProviders(providers, [
+        'stremio:chole',
+        'missing',
+      ]).map((p) => p.key).toList();
+      expect(keys, ['stremio:chole', 'engine:z', 'stremio:backup', 'iptv:one']);
+      expect(
+        SourcePriority.orderBy(['engine:z', 'stremio:chole'], (s) => s, keys),
+        ['stremio:chole', 'engine:z'],
+      );
+      expect(
+        SourcePriority.order([
+          _t('engine', 'z'),
+          _t('preferred', 'stremio:chole'),
+        ], keys).map((t) => t.name),
+        ['preferred', 'engine'],
+      );
+    });
+    test('legacy names expand once and new providers follow saved ones', () {
+      expect(
+        SourcePriority.orderedProviders(providers, [
+          'stremio:legacy',
+          'stremio:chole',
+          'stremio:legacy',
+        ]).map((p) => p.key),
+        ['stremio:chole', 'stremio:backup', 'engine:z', 'iptv:one'],
+      );
+    });
+  });
+
   group('keyForSource', () {
     test('media servers keep their own provider keys', () {
-      expect(SourcePriority.keyForSource('mediaserver:MyServer'), 'mediaserver:myserver');
+      expect(
+        SourcePriority.keyForSource('mediaserver:MyServer'),
+        'mediaserver:myserver',
+      );
     });
     test('addon rows keep their stremio key, engines get the prefix', () {
       expect(
