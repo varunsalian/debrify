@@ -424,7 +424,8 @@ class _CollectionFolderScreenState extends State<CollectionFolderScreen> {
   // ── Folder (re)build ───────────────────────────────────────────────────
 
   /// Resolve the current folder's enabled lists into rails and fetch their
-  /// first pages. Folder entry defaults to All when that view is offered.
+  /// first pages. Mobile folder entry defaults to All; TV and desktop start
+  /// with the first list (or the gallery in rows mode).
   void _rebuildFolder({
     bool autoFocus = false,
     bool preserveSelection = false,
@@ -483,7 +484,12 @@ class _CollectionFolderScreenState extends State<CollectionFolderScreen> {
         (r) => r.source.key == (oldSource ?? widget.sourceKey),
       );
       final offersAll = _collection.showAllTab && rails.length > 1;
-      final defaultAll = !preserveSelection && widget.sourceKey == null;
+      final defaultAll =
+          !preserveSelection &&
+          widget.sourceKey == null &&
+          !widget.isTelevision &&
+          (defaultTargetPlatform == TargetPlatform.android ||
+              defaultTargetPlatform == TargetPlatform.iOS);
       final selectAll = offersAll && (wasAll || defaultAll);
       _tab = selectAll ? _kAllTab : (index < 0 ? 0 : index);
       if (selectAll) _view = _View.all;

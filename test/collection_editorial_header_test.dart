@@ -161,7 +161,13 @@ void main() {
           if (style != 'spotlight') {
             final view = tester.widget<StremioDropdown>(chip('View'));
             expect(view.options.first.label, 'All');
-            expect(view.value, view.options.first.value);
+            expect(
+              view.value,
+              view.options
+                  .firstWhere((option) => option.label == 'Gallery')
+                  .value,
+            );
+            expect(find.byType(CollectionListGallery), findsOneWidget);
             if (television) {
               tester
                   .widget<StremioDropdown>(chip('Folder'))
@@ -251,7 +257,13 @@ void main() {
           }
           final list = tester.widget<StremioDropdown<int>>(chip('List'));
           expect(list.options.first.label, 'All');
-          expect(list.value, list.options.first.value);
+          expect(list.value, list.options[1].value);
+          list.onSelected(list.options.first.value);
+          await settle();
+          expect(
+            tester.widget<StremioDropdown<int>>(chip('List')).value,
+            list.options.first.value,
+          );
           // Selecting a concrete list still maps to its original rail index.
           list.onSelected(list.options[1].value);
           await settle();
