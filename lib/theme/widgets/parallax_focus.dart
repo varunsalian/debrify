@@ -20,6 +20,10 @@ enum ParallaxShape {
   castCircle(1.08),
   pill(1.06),
 
+  /// Dense, full-width source results. Android TV uses a static cursor here:
+  /// even the lite animated blur is too expensive on Mali-450 class devices.
+  sourceRow(1.018),
+
   /// A full-width settings row or category cell. It needs the same lift and
   /// travelling glare as Spotlight cards, but only enough scale to separate
   /// from its neighbours without colliding with the dense list around it.
@@ -188,6 +192,26 @@ class ParallaxFocus extends StatelessWidget {
         child: child,
         foreground: fixedScaleForeground,
         scale: 1,
+      );
+    }
+    if (shape == ParallaxShape.sourceRow && PlatformUtil.isAndroidTvCached) {
+      // This must bypass the animated body entirely, not merely shorten its
+      // duration. Scaling and blurring a wide, badge-heavy row keeps the raster
+      // thread busy even when its Dart widgets and badge images are cached.
+      return DecoratedBox(
+        position: DecorationPosition.foreground,
+        decoration: BoxDecoration(
+          borderRadius: radius,
+          border: Border.all(
+            color: focused ? app.core.focus : Colors.transparent,
+            width: app.focus.widthFor(true),
+          ),
+        ),
+        child: _withFixedScaleForeground(
+          child: child,
+          foreground: fixedScaleForeground,
+          scale: 1,
+        ),
       );
     }
     return _ParallaxBody(

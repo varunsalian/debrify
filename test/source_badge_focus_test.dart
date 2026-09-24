@@ -3,6 +3,7 @@ import 'package:debrify/services/stream_badge_matcher.dart';
 import 'package:debrify/services/stream_badges_service.dart';
 import 'package:debrify/theme/app_theme.dart';
 import 'package:debrify/theme/app_theme_scope.dart';
+import 'package:debrify/theme/widgets/parallax_focus.dart';
 import 'package:debrify/utils/platform_util.dart';
 import 'package:debrify/widgets/source_row.dart';
 import 'package:debrify/widgets/stream_badge_strip.dart';
@@ -117,6 +118,9 @@ void main() {
         for (var i = 0; i < 4; i++) {
           row.requestFocus();
           await tester.pumpAndSettle();
+          if (themeId == 'spotlight') {
+            expect(ParallaxFocus.debugLiveBodies, 0);
+          }
           expect(find.text('Play').hitTestable(), findsOneWidget);
           expect(tester.getSize(find.byType(SourceRow)), geometry);
           expect(
