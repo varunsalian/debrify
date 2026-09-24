@@ -14,6 +14,58 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   test(
+    'next episode stops at an upcoming release without skipping ahead',
+    () async {
+      final metadata = NativeSeriesMetadataService(
+        tmdb: TmdbMetadataRepository(token: ''),
+        fallbackSeasons: (_) async => [
+          {
+            'episodes': [
+              {'season': 1, 'number': 1, 'first_aired': '2000-01-01'},
+              {'season': 1, 'number': 2, 'first_aired': '2999-01-01'},
+              {'season': 1, 'number': 3, 'first_aired': '2000-01-02'},
+            ],
+          },
+        ],
+      );
+      expect(
+        await NextEpisodeService.findNextEpisode(
+          'tt0118360',
+          1,
+          1,
+          metadata: metadata,
+        ),
+        isNull,
+      );
+    },
+  );
+
+  test('next episode permits aired and undated episodes', () async {
+    for (final release in ['2000-01-01', null, 'unknown']) {
+      final metadata = NativeSeriesMetadataService(
+        tmdb: TmdbMetadataRepository(token: ''),
+        fallbackSeasons: (_) async => [
+          {
+            'episodes': [
+              {'season': 1, 'number': 1},
+              {'season': 1, 'number': 2, 'first_aired': release},
+            ],
+          },
+        ],
+      );
+      expect(
+        await NextEpisodeService.findNextEpisode(
+          'tt0118360',
+          1,
+          1,
+          metadata: metadata,
+        ),
+        (season: 1, episode: 2),
+      );
+    }
+  });
+
+  test(
     'saved tracker title restores built-in metadata and canonical progress',
     () async {
       SharedPreferences.setMockInitialValues({});

@@ -82,6 +82,13 @@ class NextEpisodeService {
             sorted[i]['episode'] as int? ?? sorted[i]['number'] as int? ?? 0;
         if (ns <= 0 || ne <= 0) continue; // specials / unparseable
         if (ns == currentSeason && ne == currentEpisode) continue; // duplicate
+        final released = DateTime.tryParse(
+          (sorted[i]['released'] ?? '').toString(),
+        );
+        // Guides can include announced episodes. Stop at the next unaired
+        // episode rather than searching for it or skipping ahead in the story.
+        // Unknown dates remain eligible, as they are in random playback.
+        if (released != null && released.isAfter(DateTime.now())) return null;
         return (season: ns, episode: ne);
       }
       return null;
