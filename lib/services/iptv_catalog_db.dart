@@ -17,6 +17,7 @@ import 'package:sqlite3/sqlite3.dart';
 import '../models/iptv_playlist.dart';
 import '../utils/m3u_parser.dart';
 import 'iptv_channel_order.dart';
+import 'iptv_catalog_diagnostics.dart';
 import 'webdav_sync/webdav_sync_library_models.dart';
 import 'webdav_sync/webdav_sync_library_mutation.dart';
 import 'webdav_sync/webdav_sync_hot_models.dart';
@@ -743,8 +744,8 @@ class IptvCatalogDb {
   static Future<void> _openWithRecovery() async {
     try {
       await _open();
-    } catch (e) {
-      debugPrint('IptvCatalogDb: open failed ($e) — deleting and recreating');
+    } catch (e, stack) {
+      logIptvCatalogFailure('open_before_recovery', e, stack);
       await runExclusive(() async {
         final dir =
             debugDirectoryOverride ??
@@ -759,7 +760,12 @@ class IptvCatalogDb {
           }
         }
       });
-      await _open();
+      try {
+        await _open();
+      } catch (error, stack) {
+        logIptvCatalogFailure('open_after_recovery', error, stack);
+        rethrow;
+      }
     }
   }
 
@@ -1211,7 +1217,8 @@ class IptvCatalogDb {
         Pointer<Void>.fromAddress(prepared.handleAddress),
       );
       _path = path;
-    } catch (_) {
+    } catch (error, stack) {
+      logIptvCatalogFailure('attach_prepared_handle', error, stack);
       await compute(_closeTransferredCatalogDb, prepared.handleAddress);
       rethrow;
     }

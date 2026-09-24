@@ -10,6 +10,7 @@ import '../models/profiles/connection_resource.dart';
 import '../models/profiles/profile_policy.dart';
 import 'iptv_catalog_key.dart';
 import 'iptv_catalog_db.dart';
+import 'iptv_catalog_diagnostics.dart';
 import 'iptv_load_phase.dart';
 import 'profiles/profile_collection_resource_facade.dart';
 import 'profiles/profile_runtime.dart';
@@ -749,6 +750,8 @@ class XtreamCodesService {
     // three 55k-object catalogs on the heap is exactly what this mode
     // removes. Freshness policy moves to the caller (snapshot.ingestedAt).
     final ingestToDb = ingestTarget != null;
+    final diagnosticClock = Stopwatch()..start();
+    var diagnosticStage = 'setup';
 
     // Check cache
     if (!ingestToDb && _cache.containsKey(cacheKey)) {
@@ -773,11 +776,13 @@ class XtreamCodesService {
           : 'get_vod_streams';
 
       if (ingestTarget != null) {
+        diagnosticStage = 'create_download_directory';
         final directory = await Directory(
           debugDownloadDirectory ?? Directory.systemTemp.path,
         ).createTemp('xtream-');
         try {
           onPhase?.call(IptvLoadPhases.downloading);
+          diagnosticStage = 'download_streams';
           final streams = await _downloadToFile(
             '$base&action=$streamsAction',
             File('${directory.path}/streams'),
@@ -820,6 +825,7 @@ class XtreamCodesService {
             }
           }
           onPhase?.call(IptvLoadPhases.processing);
+          diagnosticStage = 'prepare_ingest';
           final job = _StreamsJob(
             streamsBytes: TransferableTypedData.fromList([]),
             categoriesBytes: null,
@@ -840,6 +846,7 @@ class XtreamCodesService {
             numberingSourceKey: numberingSourceKey,
           );
           return await IptvCatalogDb.runWithWriteTarget(ingestTarget, () async {
+            diagnosticStage = 'ingest_worker';
             await beforeIngest();
             isolateBuilds++;
             final authorization = ReceivePort();
@@ -874,6 +881,7 @@ class XtreamCodesService {
       // required: a category failure (network or malformed body) must not
       // take down the whole fetch.
       onPhase?.call(IptvLoadPhases.contacting);
+      diagnosticStage = 'download_in_memory';
       final categoriesFuture = _tryGet(
         '$base&action=$categoriesAction',
         const Duration(seconds: 30),
@@ -1001,6 +1009,7 @@ class XtreamCodesService {
       // and EPG work for up to the whole 90s timeout. Re-entrant: a caller
       // already inside the gate runs it inline.
       Future<IptvParseResult> runBuild() async {
+        diagnosticStage = 'build_streams';
         await beforeIngest();
         return useIsolate
             ? await compute(_buildXtreamStreams, job)
@@ -1039,10 +1048,10 @@ class XtreamCodesService {
         categories: categoryNames,
         warning: warning,
       );
-    } catch (error) {
-      debugPrint(
-        'XtreamCodesService: Error fetching $label streams '
-        '(${error.runtimeType})',
+    } catch (error, stack) {
+      logIptvCatalogFailure(
+        'xtream_${contentType}_$diagnosticStage', error, stack,
+        elapsedMs: diagnosticClock.elapsedMilliseconds,
       );
       return IptvParseResult(
         channels: [],
