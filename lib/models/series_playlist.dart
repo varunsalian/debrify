@@ -1,5 +1,7 @@
 import 'dart:math' as math;
 import 'custom_series_identity.dart';
+import 'media_identity.dart';
+import '../services/native_series_metadata_service.dart';
 import '../services/stremio_service.dart';
 import 'package:flutter/foundation.dart';
 import '../utils/series_parser.dart';
@@ -758,7 +760,58 @@ class SeriesPlaylist {
   Future<void> fetchEpisodeInfo({
     Map<String, dynamic>? playlistItem,
     String? imdbId,
+    NativeSeriesMetadataService? nativeMetadata,
   }) async {
+    final identity = imdbId ?? this.imdbId;
+    if (MediaIdentity.isNative(identity) && isSeries) {
+      // A catalog ID identifies one specific show. Never resolve it again by
+      // its filename/title: remakes and country variants often share a name.
+      // Preserve it even when metadata fails, so tracking cannot change shows.
+      this.imdbId = identity;
+      tvmazeShowId = null;
+      tvmazeShowName = null;
+      showPosterUrl = null;
+      fullTvmazeEpisodes = [];
+      for (final episode in allEpisodes) {
+        episode.episodeInfo = null;
+      }
+      try {
+        final metadata = nativeMetadata ?? NativeSeriesMetadataService.instance;
+        final rows = await metadata.episodes(identity!);
+        // Existing player guides consume the TVMaze-shaped episode schema.
+        // Normalize fields only; retain the provider's season/episode numbers.
+        fullTvmazeEpisodes = [
+          for (final row in rows)
+            {
+              'id': row['id'],
+              'season': row['season'],
+              'number': row['episode'],
+              'name': row['title'],
+              'summary': row['overview'],
+              if (row['released'] is String &&
+                  (row['released'] as String).length >= 4)
+                'airdate': row['released'],
+              if (row['thumbnail'] is String)
+                'image': {'medium': row['thumbnail'], 'original': row['thumbnail']},
+            },
+        ];
+        final byEpisode = {
+          for (final row in fullTvmazeEpisodes)
+            (row['season'], row['number']): row,
+        };
+        for (final episode in allEpisodes) {
+          final row = byEpisode[
+            (episode.seriesInfo.season, episode.seriesInfo.episode)
+          ];
+          if (row != null) episode.episodeInfo = EpisodeInfo.fromTVMaze(row);
+        }
+      } catch (error) {
+        debugPrint(
+          'SeriesPlaylist: Exact-ID metadata unavailable (${error.runtimeType})',
+        );
+      }
+      return;
+    }
     final custom = CustomSeriesIdentity.parse(imdbId ?? this.imdbId);
     if (custom != null) {
       this.imdbId = custom.id;
@@ -1001,6 +1054,15 @@ class SeriesPlaylist {
     int season,
     int episode,
   ) async {
+    if (MediaIdentity.isNative(imdbId)) {
+      if (fullTvmazeEpisodes.isEmpty) await fetchEpisodeInfo();
+      for (final row in fullTvmazeEpisodes) {
+        if (row['season'] == season && row['number'] == episode) {
+          return EpisodeInfo.fromTVMaze(row);
+        }
+      }
+      return null;
+    }
     try {
       // Get show information first
       final showInfo = await EpisodeInfoService.getSeriesInfo(seriesTitle);
