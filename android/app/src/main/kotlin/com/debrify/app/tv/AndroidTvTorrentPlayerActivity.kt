@@ -2843,7 +2843,10 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
         // Wrap with DefaultDataSource.Factory for local file/content URI support
         protectedStreamClient = ProtectedStreamHttp.client(networkTimeoutMs)
-        val vodHttpFactory = ProtectedStreamHttp.dataSourceFactory(protectedStreamClient)
+        val vodHttpFactory = VodHttpDataSource.Factory(
+            httpDataSourceFactory,
+            ProtectedStreamHttp.dataSourceFactory(protectedStreamClient),
+        )
         val upstreamDataSourceFactory = DefaultDataSource.Factory(
             this, if (isIptvMode) httpDataSourceFactory else vodHttpFactory,
         )
