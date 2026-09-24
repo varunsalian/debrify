@@ -1,3 +1,4 @@
+import '../../models/media_identity.dart';
 import 'dart:async';
 import 'dart:convert';
 
@@ -186,8 +187,7 @@ class SimklService {
     String? imdbOf(Map<String, dynamic> raw) {
       final content = (raw['movie'] ?? raw['show']) as Map<String, dynamic>?;
       final ids = content?['ids'] as Map<String, dynamic>?;
-      final imdb = (ids?['imdb'] as String?)?.trim().toLowerCase();
-      return imdb == null || imdb.isEmpty ? null : imdb;
+      return MediaIdentity.preferred(ids);
     }
 
     void parseMovies(dynamic bucket) {
@@ -197,7 +197,7 @@ class SimklService {
           continue;
         }
         final imdb = imdbOf(raw);
-        if (imdb != null) movies.add(imdb);
+        if (imdb != null) movies.addAll(MediaIdentity.aliases((raw['movie'] ?? raw['show'])['ids']).map((id) => MediaIdentity.progressId(id, 'movie')));
       }
     }
 
@@ -219,7 +219,7 @@ class SimklService {
             (watched == null &&
                 total == null &&
                 raw['status'] == 'completed')) {
-          series.add(imdb);
+          series.addAll(MediaIdentity.aliases((raw['show'] ?? raw['movie'])['ids']));
         }
       }
     }
@@ -252,7 +252,7 @@ class SimklService {
   /// library fetch failed) so callers keep whatever they last showed instead
   /// of wrongly rendering "no status". A genuine "not in any list" is a
   /// non-null status with a null [SimklTitleStatus.currentStatus].
-  Future<SimklTitleStatus?> fetchTitleStatus(String imdbId) async {
+  Future<SimklTitleStatus?> fetchTitleStatus(String imdbId, {String? contentType}) async {
     if (!await isAuthenticated()) return null;
     try {
       final data = await _cachedLibAllAll();
@@ -261,10 +261,11 @@ class SimklService {
         final items = (data[bucketKey] as List<dynamic>?) ?? const [];
         for (final raw in items) {
           if (raw is! Map<String, dynamic>) continue;
+          if (contentType != null && ((bucketKey == 'movies' || raw['anime_type'] == 'movie') != (contentType == 'movie'))) continue;
           final content =
               (raw['show'] ?? raw['movie']) as Map<String, dynamic>?;
           final ids = content?['ids'] as Map<String, dynamic>?;
-          if (ids?['imdb'] == imdbId) {
+          if (MediaIdentity.matches(ids, imdbId)) {
             // Ratings are documented 1-10 — treat a 0 (if Simkl ever sends
             // one for "unrated" instead of omitting the field) the same as
             // absent, rather than showing a bogus "0/10".
@@ -645,7 +646,7 @@ class SimklService {
         typeKey: [
           {
             'to': status,
-            'ids': {'imdb': imdbId},
+            'ids': MediaIdentity.apiIds(imdbId),
           },
         ],
       },
@@ -675,7 +676,7 @@ class SimklService {
         typeKey: [
           {
             'rating': rating,
-            'ids': {'imdb': imdbId},
+            'ids': MediaIdentity.apiIds(imdbId),
           },
         ],
       },
@@ -697,7 +698,7 @@ class SimklService {
       {
         typeKey: [
           {
-            'ids': {'imdb': imdbId},
+            'ids': MediaIdentity.apiIds(imdbId),
           },
         ],
       },
@@ -720,7 +721,7 @@ class SimklService {
       {
         typeKey: [
           {
-            'ids': {'imdb': imdbId},
+            'ids': MediaIdentity.apiIds(imdbId),
           },
         ],
       },
@@ -749,7 +750,7 @@ class SimklService {
       {
         typeKey: [
           {
-            'ids': {'imdb': imdbId},
+            'ids': MediaIdentity.apiIds(imdbId),
           },
         ],
       },
@@ -763,6 +764,14 @@ class SimklService {
       EpisodeTrackerSnapshotRevision.invalidateTitle('simkl', imdbId);
     }
     return true;
+  }
+
+  /// Clear sessions while the library still supplies aliases for sparse
+  /// Simkl-only playback records. On cleanup failure, retain the library entry
+  /// so a retry can still resolve the title rather than reporting a false success.
+  Future<bool> removeFromListAndPlayback(String id, String type) async {
+    if (!await deletePlaybackForImdb(id, contentType: type)) return false;
+    return removeFromList(id, type);
   }
 
   /// Existing watched-action name retained for callers that mean "make this
@@ -825,11 +834,7 @@ class SimklService {
     if (token == null || token.isEmpty) return false;
     final rows = await _postOrNull(
       '/sync/watched',
-      [
-        {
-          'ids': {'imdb': imdbId},
-        },
-      ],
+      [{...MediaIdentity.apiIds(imdbId), 'type': 'show'}],
       token: token,
       label: 'clearSeriesHistory read',
       query: {'extended': 'episodes'},
@@ -860,7 +865,7 @@ class SimklService {
       {
         'shows': [
           {
-            'ids': {'imdb': imdbId},
+            'ids': MediaIdentity.apiIds(imdbId),
             'seasons': seasons,
           },
         ],
@@ -879,7 +884,7 @@ class SimklService {
   /// reference shared by every episode-scoped write above.
   Map<String, dynamic> _episodeRef(String showImdbId, int season, int episode) {
     return {
-      'ids': {'imdb': showImdbId},
+      'ids': MediaIdentity.apiIds(showImdbId),
       'seasons': [
         {
           'number': season,
@@ -967,14 +972,14 @@ class SimklService {
     final Map<String, dynamic> body = s != null
         ? {
             'show': {
-              'ids': {'imdb': imdbId},
+              'ids': MediaIdentity.apiIds(imdbId),
             },
             'episode': {'season': s, 'number': e},
             'progress': progress,
           }
         : {
             'movie': {
-              'ids': {'imdb': imdbId},
+              'ids': MediaIdentity.apiIds(imdbId),
             },
             'progress': progress,
           };
@@ -1068,7 +1073,7 @@ class SimklService {
         '/scrobble/stop',
         {
           'show': {
-            'ids': {'imdb': imdbId},
+            'ids': MediaIdentity.apiIds(imdbId),
           },
           'episode': {'season': season, 'number': episode},
           'progress': progress,
@@ -1156,6 +1161,25 @@ class SimklService {
     return null;
   }
 
+  // Playback payloads can contain only Simkl IDs, even when the library
+  // provides TMDB/IMDb. Join only explicit aliases in the same media type.
+  bool _matches(dynamic ids, String id, {bool movie = false}) {
+    if (MediaIdentity.matches(ids, id)) return true;
+    final supplied = MediaIdentity.aliases(ids);
+    for (final bucket in [movie ? 'movies' : 'shows', 'anime']) {
+      final rows = _libCacheData?[bucket];
+      if (rows is! List) continue;
+      for (final row in rows.whereType<Map>()) {
+        if (bucket == 'anime' && (row['anime_type'] == 'movie') != movie) continue;
+        final content = row[movie ? 'movie' : 'show'] ?? row['show'];
+        if (content is! Map) continue;
+        final aliases = MediaIdentity.aliases(content['ids']);
+        if (aliases.contains(MediaIdentity.providerId(id)) && supplied.any(aliases.contains)) return true;
+      }
+    }
+    return false;
+  }
+
   /// The show+episode+progress of one playback session, or null when the
   /// session is malformed / not for [showImdbId]. Central so both readers
   /// parse identically and neither can throw.
@@ -1167,7 +1191,7 @@ class SimklService {
     final show = raw['show'];
     if (show is! Map) return null;
     final ids = show['ids'];
-    if (ids is! Map || ids['imdb'] != showImdbId) return null;
+    if (!_matches(ids, showImdbId)) return null;
     final ep = raw['episode'];
     if (ep is! Map) return null;
     final season = _asNum(ep['season'])?.toInt();
@@ -1187,6 +1211,7 @@ class SimklService {
   Future<Map<String, double>> fetchEpisodePlaybackProgress(
     String showImdbId,
   ) async {
+    if (MediaIdentity.isNative(showImdbId)) await _cachedLibAllAll();
     final sessions = await _fetchEpisodePlaybackSessions();
     if (sessions == null) return {};
     final out = <String, double>{};
@@ -1212,6 +1237,7 @@ class SimklService {
   /// forever) can no longer outrank a fresher position from another source.
   Future<({int season, int episode, double? progress, DateTime? pausedAt})?>
   fetchShowPlaybackSelection(String showImdbId) async {
+    if (MediaIdentity.isNative(showImdbId)) await _cachedLibAllAll();
     final sessions = await _fetchEpisodePlaybackSessions();
     if (sessions == null) return null;
     ({int season, int episode, double? progress})? best;
@@ -1248,13 +1274,14 @@ class SimklService {
   Future<({int season, int episode})?> fetchNextToWatch(
     String showImdbId,
   ) async {
+    if (MediaIdentity.isNative(showImdbId)) await _cachedLibAllAll();
     final shows = await fetchUpNextShowsOrNull();
     if (shows == null) return null;
     for (final raw in shows) {
       if (raw is! Map) continue;
       final show = raw['show'];
       final ids = show is Map ? show['ids'] : null;
-      if (ids is! Map || ids['imdb'] != showImdbId) continue;
+      if (!_matches(ids, showImdbId)) continue;
       return parseSimklEpisodeCode(raw['next_to_watch']);
     }
     return null;
@@ -1361,7 +1388,8 @@ class SimklService {
   /// this too. Invalidates the playback cache so the row refetches without the
   /// removed sessions. Returns true when every matching session was deleted (or
   /// there was nothing to delete). Never throws.
-  Future<bool> deletePlaybackForImdb(String imdbId) async {
+  Future<bool> deletePlaybackForImdb(String imdbId, {String? contentType}) async {
+    if (MediaIdentity.isNative(imdbId) && await _cachedLibAllAll() == null) return false;
     final token = await StorageService.getSimklAccessToken();
     if (token == null || token.isEmpty) return false;
     // Independent GETs — fetch concurrently. A null list means the fetch failed.
@@ -1374,9 +1402,10 @@ class SimklService {
     final ids = <int>{};
     for (final raw in [...?episodes, ...?movies]) {
       if (raw is! Map) continue;
+      if (contentType != null && (raw['movie'] != null) != (contentType == 'movie')) continue;
       final content = raw['show'] ?? raw['movie'];
       final cids = content is Map ? content['ids'] : null;
-      if (cids is! Map || cids['imdb'] != imdbId) continue;
+      if (!_matches(cids, imdbId, movie: raw['movie'] != null)) continue;
       final id = _asNum(raw['id'])?.toInt();
       if (id != null) ids.add(id);
     }
@@ -1416,6 +1445,7 @@ class SimklService {
     // RIGHT NOW — or this session's own fresh checkpoint — survives.
     Duration? olderThan,
   }) async {
+    if (MediaIdentity.isNative(imdbId)) await _cachedLibAllAll();
     final token = await StorageService.getSimklAccessToken();
     if (token == null || token.isEmpty) return false;
     final episodes = await _fetchEpisodePlaybackSessions();
@@ -1424,7 +1454,7 @@ class SimklService {
       if (raw is! Map) continue;
       final show = raw['show'];
       final sids = show is Map ? show['ids'] : null;
-      if (sids is! Map || sids['imdb'] != imdbId) continue;
+      if (!_matches(sids, imdbId)) continue;
       final ep = raw['episode'];
       if (ep is! Map) continue;
       if (_asNum(ep['season'])?.toInt() != season) continue;
@@ -1460,6 +1490,7 @@ class SimklService {
   /// or null when it has none (not paused / finished / not in playback / on
   /// failure). Throw-free defensive parsing like the episode readers.
   Future<double?> fetchMoviePlaybackProgress(String movieImdbId) async {
+    if (MediaIdentity.isNative(movieImdbId)) await _cachedLibAllAll();
     final sessions = await _fetchMoviePlaybackSessions();
     if (sessions == null) return null;
     for (final raw in sessions) {
@@ -1467,7 +1498,7 @@ class SimklService {
       final movie = raw['movie'];
       if (movie is! Map) continue;
       final ids = movie['ids'];
-      if (ids is! Map || ids['imdb'] != movieImdbId) continue;
+      if (!_matches(ids, movieImdbId, movie: true)) continue;
       final progress = _asNum(raw['progress'])?.toDouble();
       if (progress == null) continue;
       // Mirror Trakt's _visibleProgress: a boundary session (<=0 not started,
@@ -1542,11 +1573,7 @@ class SimklService {
     if (token == null || token.isEmpty) return null;
     final result = await _postOrNull(
       '/sync/watched',
-      [
-        {
-          'ids': {'imdb': showImdbId},
-        },
-      ],
+      [{...MediaIdentity.apiIds(showImdbId), 'type': 'show'}],
       token: token,
       label: 'fetchWatchedShowEpisodes',
       query: {'extended': 'episodes'},
@@ -1555,7 +1582,7 @@ class SimklService {
     // A successful empty history is authoritative, not a failed lookup.
     if (result.isEmpty) return {'seasons': <dynamic>[]};
     final item = result.first;
-    if (item is! Map<String, dynamic>) return null;
+    if (item is! Map<String, dynamic> || item['result'] == 'not_found') return null;
     return item;
   }
 }

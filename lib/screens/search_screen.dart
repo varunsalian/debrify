@@ -1,3 +1,5 @@
+import '../services/native_series_metadata_service.dart';
+import '../models/media_identity.dart';
 import '../widgets/random_playback_dialog.dart';
 import '../widgets/clear_pinned_sources_button.dart';
 import '../widgets/recoverable_network_image.dart';
@@ -1211,14 +1213,24 @@ class _SearchScreenState extends State<SearchScreen>
   /// in a dedicated mode a title the chosen source doesn't know simply renders
   /// as a plain poster. IPTV rows are exempt: they are routeKey-keyed player
   /// history that no tracker can describe.
+  String? _simklCardKey(StremioMeta item) {
+    final id = item.progressId ?? item.id;
+    return item.type == 'movie' && id.startsWith('tmdb:') ? 'movie|$id' : id;
+  }
+
+  String? _cwCardKey(_CwKind kind, StremioMeta item) =>
+      _cwProgressSource == WatchProgressSource.simkl ||
+          (_cwProgressSource == WatchProgressSource.smart && kind == _CwKind.simkl)
+      ? _simklCardKey(item) : item.progressId;
+
   double? _cwCardProgress(_CwKind kind, StremioMeta item) =>
-      CustomSeriesIdentity.isCustom(item.imdbId) ? _cwProgress[item.imdbId] : _cwCardMaps(kind).progress[item.imdbId];
+      CustomSeriesIdentity.isCustom(item.imdbId) ? _cwProgress[item.imdbId] : _cwCardMaps(kind).progress[_cwCardKey(kind, item)];
 
   String? _cwCardEpisode(_CwKind kind, StremioMeta item) =>
-      CustomSeriesIdentity.isCustom(item.imdbId) ? _cwEpisode[item.imdbId] : _cwCardMaps(kind).episode[item.imdbId];
+      CustomSeriesIdentity.isCustom(item.imdbId) ? _cwEpisode[item.imdbId] : _cwCardMaps(kind).episode[_cwCardKey(kind, item)];
 
   int? _cwCardRemainingMinutes(_CwKind kind, StremioMeta item) =>
-      CustomSeriesIdentity.isCustom(item.imdbId) ? _cwRemainingMinutes[item.imdbId] : _cwCardMaps(kind).remaining?[item.imdbId];
+      CustomSeriesIdentity.isCustom(item.imdbId) ? _cwRemainingMinutes[item.imdbId] : _cwCardMaps(kind).remaining?[item.progressId];
 
   ({
     Map<String, double> progress,
@@ -1383,7 +1395,7 @@ class _SearchScreenState extends State<SearchScreen>
             : (_) => null,
         remainingMinutesOf: (m) => _cwCardRemainingMinutes(_CwKind.simkl, m),
         episodeArtworkOf: _cwMergeSimkl
-            ? (m) => _simklEpisodeArtwork[m.imdbId]
+            ? (m) => _simklEpisodeArtwork[m.progressId]
             : (_) => null,
         onOpen: _openSimklCwItem,
         onQuickPlay: _playSimklCwItem,
@@ -1403,7 +1415,7 @@ class _SearchScreenState extends State<SearchScreen>
         progressOf: (m) => _cwCardProgress(_CwKind.simkl, m),
         episodeOf: (m) => _cwCardEpisode(_CwKind.simkl, m),
         remainingMinutesOf: (m) => _cwCardRemainingMinutes(_CwKind.simkl, m),
-        episodeArtworkOf: (m) => _simklEpisodeArtwork[m.imdbId],
+        episodeArtworkOf: (m) => _simklEpisodeArtwork[m.progressId],
         onOpen: _openSimklCwItem,
         onQuickPlay: _playSimklCwItem,
         onRemove: _removeSimklCwItem,
@@ -3481,9 +3493,9 @@ class _SearchScreenState extends State<SearchScreen>
     }
   }
 
-  /// IMDb id for a catalog item, or null when it isn't a `tt…` id.
+  /// Stable progress key, including supported native provider identities.
   String? _imdbOf(StremioMeta item) {
-    final id = item.imdbId ?? (item.id.startsWith('tt') ? item.id : null);
+    final id = item.progressId ?? (item.id.startsWith('tt') ? item.id : null);
     return (id != null && id.isNotEmpty) ? id : null;
   }
 
@@ -3600,7 +3612,7 @@ class _SearchScreenState extends State<SearchScreen>
       items.add(
         StremioMeta(
           id: CustomSeriesIdentity.parse(imdbId)?.catalogId ?? imdbId,
-          imdbId: imdbId,
+          imdbId: MediaIdentity.isNative(imdbId) ? null : imdbId,
           type: type,
           name: (m['title'] as String?) ?? 'Untitled',
           poster: m['posterUrl'] as String?,
@@ -5238,8 +5250,8 @@ class _SearchScreenState extends State<SearchScreen>
       for (var i = 0; i < allMetas.length; i++) allMetas[i]: i,
     };
     allMetas.sort((a, b) {
-      final pa = byImdb[a.imdbId]?.pausedAtMs;
-      final pb = byImdb[b.imdbId]?.pausedAtMs;
+      final pa = byImdb[a.progressId]?.pausedAtMs;
+      final pb = byImdb[b.progressId]?.pausedAtMs;
       if (pa != null && pb != null) {
         final c = pb.compareTo(pa);
         if (c != 0) return c;
@@ -5778,7 +5790,7 @@ class _SearchScreenState extends State<SearchScreen>
     final byImdb = <String, SimklContinueWatchingItem>{};
     void ingest(List<SimklContinueWatchingItem> items, List<StremioMeta> into) {
       for (final it in items) {
-        final id = it.id;
+        final id = _simklCardKey(it.meta)!;
         if (id.isEmpty || byImdb.containsKey(id)) continue; // dedup by imdbId
         into.add(it.meta);
         byImdb[id] = it;
@@ -5787,7 +5799,7 @@ class _SearchScreenState extends State<SearchScreen>
         if (p != null) progress[id] = (p / 100).clamp(0.0, 1.0);
         final se = _seLabel(it.season, it.episode);
         if (se != null) episode[id] = se;
-        if (it.season != null &&
+        if (MediaIdentity.isImdb(it.id) && it.season != null &&
             it.episode != null &&
             it.season! > 0 &&
             it.episode! > 0) {
@@ -5805,8 +5817,8 @@ class _SearchScreenState extends State<SearchScreen>
       for (var i = 0; i < allMetas.length; i++) allMetas[i]: i,
     };
     allMetas.sort((a, b) {
-      final pa = byImdb[a.imdbId]?.pausedAtMs;
-      final pb = byImdb[b.imdbId]?.pausedAtMs;
+      final pa = byImdb[_simklCardKey(a)]?.pausedAtMs;
+      final pb = byImdb[_simklCardKey(b)]?.pausedAtMs;
       if (pa != null && pb != null) {
         final c = pb.compareTo(pa);
         if (c != 0) return c;
@@ -5864,7 +5876,7 @@ class _SearchScreenState extends State<SearchScreen>
   /// resume itself is handled by the detail's three-way resume when Simkl is
   /// connected. No `isTraktSource` flag — this is a plain, source-neutral open.
   void _openSimklCwItem(StremioMeta item) {
-    final cw = _simklByImdb[_imdbOf(item)];
+    final cw = _simklByImdb[_simklCardKey(item)];
     _openItem(
       item,
       _addonForContinue(item.sourceAddon?.id),
@@ -5877,7 +5889,7 @@ class _SearchScreenState extends State<SearchScreen>
   /// selection carrying the paused season/episode + Simkl progress percent and
   /// plays it, mirroring the Trakt quick-play.
   Future<void> _playSimklCwItem(StremioMeta item) async {
-    final cw = _simklByImdb[_imdbOf(item)];
+    final cw = _simklByImdb[_simklCardKey(item)];
     if (cw == null) {
       // Not in the CW map (a See-All grid title that fell out of the list) —
       // play it like a plain catalog title; three-way resume still applies.
@@ -5984,8 +5996,8 @@ class _SearchScreenState extends State<SearchScreen>
     );
     final all = [...movies, ...shows]
       ..sort((a, b) {
-        final aa = byImdb[a.imdbId]?.updatedAt;
-        final bb = byImdb[b.imdbId]?.updatedAt;
+        final aa = byImdb[a.progressId]?.updatedAt;
+        final bb = byImdb[b.progressId]?.updatedAt;
         return (bb ?? DateTime.fromMillisecondsSinceEpoch(0)).compareTo(
           aa ?? DateTime.fromMillisecondsSinceEpoch(0),
         );
@@ -7924,7 +7936,7 @@ class _SearchScreenState extends State<SearchScreen>
                 shape: _homeLandscapeCards
                     ? SpotlightCardShape.wide
                     : SpotlightCardShape.poster,
-                watchedImdbId: item.effectiveImdbId ?? item.id,
+                watchedImdbId: item.progressId ?? item.id,
                 watchedContentType: item.type,
                 onOpen: () => _openMyWatchlistItem(item),
               ),
@@ -8061,7 +8073,7 @@ class _SearchScreenState extends State<SearchScreen>
                     image: _homeLandscapeCards ? _wideArtUrl(item) : item.poster,
                     fallbackImage: _homeLandscapeCards ? item.poster : null,
                     shape: _homeLandscapeCards ? SpotlightCardShape.wide : SpotlightCardShape.poster,
-                    watchedImdbId: item.effectiveImdbId ?? item.id,
+                    watchedImdbId: item.progressId ?? item.id,
                     watchedContentType: item.type,
                     onOpen: () => _sectionOpenItem(sections[i], item),
                     onOptions: _pikpakOnly ? null : () => _onCatalogPlay(item, sections[i].addon),
@@ -13440,6 +13452,10 @@ class _SearchScreenState extends State<SearchScreen>
     int? returnToTabOnClose,
   }) async {
     try {
+      if (MediaIdentity.isNative(item.id) && item.imdbId == null &&
+          (item.sourceAddon == null || item.sourceAddon!.baseUrl.isEmpty)) {
+        addon = NativeSeriesMetadataService.addon;
+      }
       item = await _stremio.scopeSeriesProgress(item, addon);
     } on StateError {
       if (mounted) _snack('Could not verify series episodes. Please retry.');
@@ -13501,7 +13517,7 @@ class _SearchScreenState extends State<SearchScreen>
         hasBoundSource: _isBound(item),
         // The Trakt-syncing actions key off the IMDb id, so only offer them
         // for titles that have one (else the sync call fails with an error).
-          isTraktAuthenticated: _isTraktAuthenticated && imdb != null && !CustomSeriesIdentity.isCustom(imdb),
+          isTraktAuthenticated: _isTraktAuthenticated && imdb != null && MediaIdentity.isImdb(imdb) && !CustomSeriesIdentity.isCustom(imdb),
         status: status,
       ),
       if (inCw)
@@ -13540,14 +13556,14 @@ class _SearchScreenState extends State<SearchScreen>
           // series the remove also moves it to On Hold so it doesn't re-surface
           // as an up-next card (see handleSimklMenuAction).
           inContinueWatching:
-              imdb != null && (_simklByImdb[imdb]?.progress != null),
+              imdb != null && (_simklByImdb[_simklCardKey(item)]?.progress != null),
           status: status,
         );
     final simklOptions = buildSimklOptions(null);
 
     List<MdblistMenuOption> buildMdblistOptions(MdblistTitleStatus? status) =>
         buildMdblistMenuOptions(
-          authenticated: _isMdblistAuthenticated && imdb != null && !CustomSeriesIdentity.isCustom(imdb),
+          authenticated: _isMdblistAuthenticated && imdb != null && MediaIdentity.isImdb(imdb) && !CustomSeriesIdentity.isCustom(imdb),
           isSeries: item.type == 'series',
           inContinueWatching: inMdblistCw,
           status: status,
@@ -13627,7 +13643,7 @@ class _SearchScreenState extends State<SearchScreen>
                 traktMenuBuilder: buildMenuOptions,
                 // Live Trakt status (in watchlist / collection / watched /
                 // rating) — only when connected and the title has an IMDb id.
-                traktStatusLoader: (_isTraktAuthenticated && imdb != null)
+                traktStatusLoader: (_isTraktAuthenticated && imdb != null && MediaIdentity.isImdb(imdb))
                     ? () => TraktService.instance.fetchTitleStatus(
                         imdb,
                         item.type,
@@ -13660,12 +13676,12 @@ class _SearchScreenState extends State<SearchScreen>
                 // Live Simkl status (current watchlist status + rating) —
                 // only when connected and the title has an IMDb id.
                 simklStatusLoader: (_isSimklAuthenticated && imdb != null)
-                    ? () => SimklService.instance.fetchTitleStatus(imdb)
+                    ? () => SimklService.instance.fetchTitleStatus(imdb, contentType: item.type)
                     : null,
                 onSimklAction: (a) => _handleDetailSimklQuickAction(item, a),
                 mdblistMenuOptions: mdblistOptions,
                 mdblistMenuBuilder: buildMdblistOptions,
-                mdblistStatusLoader: (_isMdblistAuthenticated && imdb != null)
+                mdblistStatusLoader: (_isMdblistAuthenticated && imdb != null && MediaIdentity.isImdb(imdb))
                     ? () => MdblistService.instance.fetchTitleStatus(
                         imdb,
                         item.type,
@@ -13678,7 +13694,7 @@ class _SearchScreenState extends State<SearchScreen>
                   MdblistItemMenuAction.rate,
                   presetRating: rating,
                 ),
-                recommendationsLoader: imdb != null
+                recommendationsLoader: imdb != null && MediaIdentity.isImdb(imdb)
                     ? () => _stremio.getRecommendations(
                         imdbId: imdb,
                         type: item.type,
@@ -13775,11 +13791,11 @@ class _SearchScreenState extends State<SearchScreen>
               // Live Simkl status — relabels Play → "Rewatch" for a completed
               // movie (matches the merged detail page's simklStatusLoader).
               simklStatusLoader: (_isSimklAuthenticated && imdb != null)
-                  ? () => SimklService.instance.fetchTitleStatus(imdb)
+                  ? () => SimklService.instance.fetchTitleStatus(imdb, contentType: item.type)
                   : null,
               // "More Like This" rail + sparse-item meta backfill, matching the
               // catalog detail flow.
-              recommendationsLoader: imdb != null
+              recommendationsLoader: imdb != null && MediaIdentity.isImdb(imdb)
                   ? () => _stremio.getRecommendations(
                       imdbId: imdb,
                       type: item.type,
@@ -14509,7 +14525,8 @@ class _SearchScreenState extends State<SearchScreen>
     final mode = await showRandomPlaybackDialog(context, title: item.name);
     if (!mounted || mode == null) return;
     final imdb = _imdbOf(item);
-    final metaAddon = await _metaAddonFor(addon);
+    final metaAddon = MediaIdentity.isNative(item.progressId) && addon.baseUrl.isEmpty
+        ? NativeSeriesMetadataService.addon : await _metaAddonFor(addon);
     // If we fell back to a different meta addon than the item's origin, its
     // content id won't match — query by IMDb id instead of the origin's id.
     final contentId = (metaAddon != null && metaAddon.id == addon.id)
@@ -14612,6 +14629,10 @@ class _SearchScreenState extends State<SearchScreen>
     bool browseSourcesOnly = false,
   }) async {
     try {
+      if (MediaIdentity.isNative(item.id) && item.imdbId == null &&
+          (item.sourceAddon == null || item.sourceAddon!.baseUrl.isEmpty)) {
+        addon = NativeSeriesMetadataService.addon;
+      }
       item = await _stremio.scopeSeriesProgress(item, addon);
     } on StateError {
       if (mounted) _snack('Could not verify series episodes. Please retry.');
@@ -14623,10 +14644,10 @@ class _SearchScreenState extends State<SearchScreen>
     if (origin == null) { _snack('The addon configuration for this series is unavailable.'); return; }
     addon = origin;
     if (CustomSeriesIdentity.isCustom(item.imdbId)) item = item.withSourceAddon(origin);
-    final trackingPolicy = (await TrackingSourcePolicy.load()).forContent(item.imdbId);
+    final trackingPolicy = (await TrackingSourcePolicy.load()).forContent(item.progressId);
     debugPrint(
       '[SeriesResume] play-pressed title="${item.name}" '
-      'id=${item.effectiveImdbId ?? item.id} type=${item.type} '
+      'id=${item.progressId ?? item.id} type=${item.type} '
       'traktSource=$isTraktSource mdblistSource=$isMdblistSource '
       'preferTrackerResume=$preferTraktResume',
     );
@@ -14639,7 +14660,7 @@ class _SearchScreenState extends State<SearchScreen>
         ? TorrentPlaybackService.showResolvingOverlay(
             context,
             meta: PlaybackMeta.catalog(
-              imdbId: item.effectiveImdbId,
+              imdbId: item.progressId,
               contentType: item.type,
               title: item.name,
               posterUrl: item.poster,
@@ -14686,7 +14707,7 @@ class _SearchScreenState extends State<SearchScreen>
       // carries stale percentages. Never consult tracker/CW caches here.
       if (startFromBeginning) {
         await launch(AdvancedSearchSelection(
-          imdbId: item.effectiveImdbId ?? item.id,
+          imdbId: item.progressId ?? item.id,
           isSeries: item.type == 'series', title: item.name, year: item.year,
           season: item.type == 'series' ? 1 : null,
           episode: item.type == 'series' ? 1 : null,
@@ -14770,7 +14791,7 @@ class _SearchScreenState extends State<SearchScreen>
             AdvancedSearchSelection(
               imdbId: rTtId.isNotEmpty
                   ? rTtId
-                  : (item.effectiveImdbId ?? item.id),
+                  : (item.progressId ?? item.id),
               isSeries: true,
               title: item.name,
               year: item.year,
@@ -14804,7 +14825,7 @@ class _SearchScreenState extends State<SearchScreen>
       if (item.type != 'series' &&
           isTraktSource &&
           trackingPolicy.progressFrom(TrackingSource.trakt)) {
-        final cw = _traktByImdb[item.effectiveImdbId] ?? _traktByImdb[item.id];
+        final cw = _traktByImdb[item.progressId] ?? _traktByImdb[item.id];
         if (cw != null) {
           final sel = await TraktContinueWatchingService.instance
               .selectionForItem(cw);
@@ -14881,7 +14902,7 @@ class _SearchScreenState extends State<SearchScreen>
             // flip — worst case the rewatch doesn't surface in Continue Watching,
             // exactly today's behaviour.
             final status = await SimklService.instance
-                .fetchTitleStatus(imdb)
+                .fetchTitleStatus(imdb, contentType: item.type)
                 .timeout(const Duration(seconds: 4), onTimeout: () => null);
             if (!mounted || cancelled) return;
             if (status?.currentStatus == 'completed') {
@@ -14911,7 +14932,7 @@ class _SearchScreenState extends State<SearchScreen>
       // Without an IMDb id we can't search torrents for a specific episode, so
       // fall back to the manual episode picker — except from the merged page
       // (episodes are inline there), where we play via the raw id's addon stream.
-      if (ttId.isEmpty && !skipEpisodeFallback) {
+      if (ttId.isEmpty && !MediaIdentity.isNative(item.id) && !skipEpisodeFallback) {
         if (!cancelled) {
           _openEpisodes(
             item,
@@ -14924,7 +14945,7 @@ class _SearchScreenState extends State<SearchScreen>
       }
       // Play id: the `tt…` id when present (torrent-resolvable); otherwise the raw
       // catalog id, which playFromSelection routes to the addon /stream endpoint.
-      final playId = ttId.isNotEmpty ? ttId : (item.effectiveImdbId ?? item.id);
+      final playId = ttId.isNotEmpty ? ttId : (item.progressId ?? item.id);
 
       // Resolve where to resume, mirroring EpisodesScreen's landing logic:
       // last-played episode for this show (by imdbId, then by title), else S01E01.
@@ -14936,7 +14957,7 @@ class _SearchScreenState extends State<SearchScreen>
       season = byId?['season'] as int?;
       episode = byId?['episode'] as int?;
       final lastFinished = byId?['finished'] == true;
-      if (!CustomSeriesIdentity.isCustom(playId) && (season == null || episode == null)) {
+      if (!MediaIdentity.isNative(playId) && !CustomSeriesIdentity.isCustom(playId) && (season == null || episode == null)) {
         final byTitle = trackingPolicy.progressFrom(TrackingSource.local)
             ? await StorageService.getLastPlayedEpisode(seriesTitle: item.name)
             : null;
@@ -15126,9 +15147,9 @@ class _SearchScreenState extends State<SearchScreen>
     })
   >
   _reconcileSeriesResume(StremioMeta item, {bool isTraktSource = false}) async {
-    final trackingPolicy = (await TrackingSourcePolicy.load()).forContent(item.imdbId);
+    final trackingPolicy = (await TrackingSourcePolicy.load()).forContent(item.progressId);
     final ttId = item.imdbId ?? (item.id.startsWith('tt') ? item.id : '');
-    final playId = ttId.isNotEmpty ? ttId : (item.effectiveImdbId ?? item.id);
+    final playId = ttId.isNotEmpty ? ttId : (item.progressId ?? item.id);
     final nowMs = DateTime.now().millisecondsSinceEpoch;
     final rev = _seriesResumeRev(
       playId,
@@ -15147,7 +15168,7 @@ class _SearchScreenState extends State<SearchScreen>
     }
     debugPrint(
       '[SeriesResume] reconcile-start title="${item.name}" id=$playId '
-      'rawId=${item.id} effectiveId=${item.effectiveImdbId} '
+      'rawId=${item.id} effectiveId=${item.progressId} '
       'traktAuth=$_isTraktAuthenticated simklAuth=$_isSimklAuthenticated '
       'mdblistAuth=$_isMdblistAuthenticated traktSource=$isTraktSource '
       'rev=$rev cache=${hit == null ? 'miss' : 'stale-or-revised'}',
@@ -15476,11 +15497,11 @@ class _SearchScreenState extends State<SearchScreen>
   Future<({AdvancedSearchSelection sel, int? tsMs})?> _traktSelectionFor(
     StremioMeta item,
   ) async {
-    final cached = _traktByImdb[item.effectiveImdbId] ?? _traktByImdb[item.id];
+    final cached = _traktByImdb[item.progressId] ?? _traktByImdb[item.id];
     if (cached != null) {
       debugPrint(
         '[SeriesResume] trakt-home-card-hit title="${item.name}" '
-        'lookupId=${item.effectiveImdbId ?? item.id} cardId=${cached.id} '
+        'lookupId=${item.progressId ?? item.id} cardId=${cached.id} '
         'card=S${cached.season}E${cached.episode} '
         'cardPct=${cached.progress} '
         'cardPausedAt=${_formatResumeTimestamp(cached.pausedAtMs)}',
@@ -15497,7 +15518,7 @@ class _SearchScreenState extends State<SearchScreen>
       return (sel: sel, tsMs: cached.pausedAtMs);
     }
     if (item.type != 'series') return null;
-    final id = item.effectiveImdbId ?? item.id;
+    final id = item.progressId ?? item.id;
     if (id.isEmpty) return null;
     // Mirror resolveSelection's lookup but keep the ITEM, so its Trakt activity
     // timestamp survives.
@@ -15537,7 +15558,7 @@ class _SearchScreenState extends State<SearchScreen>
     Map<String, dynamic>? entry =
         await StorageService.getLastPlayedEpisodeByImdbId(playId);
     var finished = entry?['finished'] == true;
-    if (!CustomSeriesIdentity.isCustom(playId) &&
+    if (!MediaIdentity.isNative(playId) && !CustomSeriesIdentity.isCustom(playId) &&
         (entry?['season'] is! int || entry?['episode'] is! int)) {
       entry = await StorageService.getLastPlayedEpisode(seriesTitle: item.name);
       finished = entry?['finished'] == true;
@@ -15577,7 +15598,7 @@ class _SearchScreenState extends State<SearchScreen>
     // _traktByImdb read and resolveSelection (which self-checks isAuthenticated)
     // are safe/null when disconnected — so a Trakt-sourced item still resolves
     // even if _isTraktAuthenticated hasn't settled yet.
-    final cached = _traktByImdb[item.effectiveImdbId] ?? _traktByImdb[item.id];
+    final cached = _traktByImdb[item.progressId] ?? _traktByImdb[item.id];
     if (cached != null) {
       final sel = await TraktContinueWatchingService.instance.selectionForItem(
         cached,
@@ -15593,7 +15614,7 @@ class _SearchScreenState extends State<SearchScreen>
     if (item.type != 'series') return null;
     // resolveSelection treats an empty itemId as "the first CW item", which would
     // match an unrelated title — so bail when we have no usable id.
-    final id = item.effectiveImdbId ?? item.id;
+    final id = item.progressId ?? item.id;
     if (id.isEmpty) return null;
     // Use the SAME resolution _onCatalogPlay's general series branch uses
     // (resolveSelection → fetchItems + selectionForItem). This includes Trakt's
@@ -15621,9 +15642,9 @@ class _SearchScreenState extends State<SearchScreen>
   Future<({int season, int episode, double? progress, DateTime? pausedAt})?>
   _simklResumeFor(StremioMeta item) async {
     if (item.type != 'series') return null;
-    final id = item.effectiveImdbId ?? item.id;
-    // Simkl lookups are IMDb-keyed — a non-IMDb catalog id can't match.
-    if (id.isEmpty || !id.startsWith('tt')) return null;
+    final id = item.progressId ?? item.id;
+    // Use the exact IMDb, TMDB, or Simkl identity.
+    if (id.isEmpty || (!MediaIdentity.isImdb(id) && !MediaIdentity.isNative(id))) return null;
     // The show's most recently paused session, WITH its paused_at timestamp —
     // it competes on recency inside [_reconcileSeriesResume] rather than
     // holding a fixed slot above local history, so a stale orphaned session
@@ -15641,15 +15662,15 @@ class _SearchScreenState extends State<SearchScreen>
     StremioMeta item,
   ) async {
     if (item.type != 'series') return null;
-    final id = item.effectiveImdbId ?? item.id;
-    if (id.isEmpty || !id.startsWith('tt')) return null;
+    final id = item.progressId ?? item.id;
+    if (id.isEmpty || (!MediaIdentity.isImdb(id) && !MediaIdentity.isNative(id))) return null;
     return SimklService.instance.fetchNextToWatch(id);
   }
 
   Future<MdblistContinueWatchingItem?> _mdblistResumeItemFor(
     StremioMeta item,
   ) async {
-    final id = (item.effectiveImdbId ?? item.id).toLowerCase();
+    final id = (item.progressId ?? item.id).toLowerCase();
     if (!id.startsWith('tt')) return null;
     final result = await MdblistContinueWatchingService.instance.fetch();
     if (!result.isUsable) return null;
@@ -15665,10 +15686,10 @@ class _SearchScreenState extends State<SearchScreen>
     bool isTraktSource = false,
     bool isMdblistSource = false,
   }) async {
-    final trackingPolicy = (await TrackingSourcePolicy.load()).forContent(item.imdbId);
+    final trackingPolicy = (await TrackingSourcePolicy.load()).forContent(item.progressId);
     debugPrint(
       '[SeriesResume] label-resolve-start title="${item.name}" '
-      'id=${item.effectiveImdbId ?? item.id} type=${item.type} '
+      'id=${item.progressId ?? item.id} type=${item.type} '
       'traktSource=$isTraktSource mdblistSource=$isMdblistSource',
     );
     if (isMdblistSource &&
@@ -15715,7 +15736,7 @@ class _SearchScreenState extends State<SearchScreen>
     // cross-device tracker position exists — so the button reads "Resume" for
     // a movie paused on another device, matching what Play now seeks to (kept
     // in lock-step with the movie branch of _onCatalogPlay).
-    final playId = item.imdbId ?? item.effectiveImdbId ?? item.id;
+    final playId = item.imdbId ?? item.progressId ?? item.id;
     final st = trackingPolicy.progressFrom(TrackingSource.local)
         ? await StorageService.getVideoPlaybackStateByImdbId(playId)
         : null;
@@ -15783,7 +15804,7 @@ class _SearchScreenState extends State<SearchScreen>
     // The torrent engines can't resolve a non-`tt` id, but the addon stream can
     // (playFromSelection routes any non-`tt` id to _playAddonStream), so this
     // plays instead of dead-ending on "No IMDb match".
-    imdbId: item.effectiveImdbId ?? item.id,
+    imdbId: item.progressId ?? item.id,
     isSeries: false,
     title: item.name,
     year: item.year,
@@ -15813,7 +15834,7 @@ class _SearchScreenState extends State<SearchScreen>
   final Map<String, (double?, DateTime)> _traktMoviePctMemo = {};
 
   Future<double?> _traktMoviePercent(StremioMeta item) async {
-    final id = item.effectiveImdbId ?? item.id;
+    final id = item.progressId ?? item.id;
     if (id.isEmpty || !id.startsWith('tt')) return null;
     final memo = _traktMoviePctMemo[id];
     if (memo != null &&
@@ -15832,8 +15853,8 @@ class _SearchScreenState extends State<SearchScreen>
   /// Simkl's paused position (0-100) for a movie, or null when it has none.
   /// Mirror of [_traktMoviePercent]; Simkl lookups are IMDb-keyed too.
   Future<double?> _simklMoviePercent(StremioMeta item) async {
-    final id = item.effectiveImdbId ?? item.id;
-    if (id.isEmpty || !id.startsWith('tt')) return null;
+    final id = item.progressId ?? item.id;
+    if (id.isEmpty || (!MediaIdentity.isImdb(id) && !MediaIdentity.isNative(id))) return null;
     return _resumableMoviePercent(
       await SimklService.instance.fetchMoviePlaybackProgress(id),
     );
@@ -15985,10 +16006,9 @@ class _SearchScreenState extends State<SearchScreen>
   /// instantly-playable source, and play — never leaving the Search tab.
   PlaybackMeta _metaFor(AdvancedSearchSelection sel) => PlaybackMeta.catalog(
     initialContinuousShuffle: sel.initialContinuousShuffle,
-    // Only a real IMDb id here — the launcher's Trakt auto-sync + local
-    // Continue Watching must never fire on an empty or non-IMDb (IPTV) id,
-    // even though the search itself still uses sel.imdbId (the addon id).
-    imdbId: sel.imdbId.startsWith('tt') || CustomSeriesIdentity.isCustom(sel.imdbId) ? sel.imdbId : null,
+    // Preserve native tracking identity; TrackingSourcePolicy filters out
+    // destinations that only accept IMDb. Arbitrary channel IDs stay untracked.
+    imdbId: sel.imdbId.startsWith('tt') || MediaIdentity.isNative(sel.imdbId) || CustomSeriesIdentity.isCustom(sel.imdbId) ? sel.imdbId : null,
     contentType: sel.contentType ?? (sel.isSeries ? 'series' : 'movie'),
     season: sel.season,
     episode: sel.episode,
@@ -16022,7 +16042,7 @@ class _SearchScreenState extends State<SearchScreen>
   String? _pendingPlayArtKey;
 
   void _capturePlayArt(StremioMeta item) {
-    final key = _playArtKey(item.effectiveImdbId ?? item.id, item.name);
+    final key = _playArtKey(item.progressId ?? item.id, item.name);
     // The detail page publishes a strictly richer version of the same title
     // (logo, runtime, rating, certificate — none of which catalog rows carry),
     // so never let the row's sparse copy overwrite it.
@@ -16041,7 +16061,7 @@ class _SearchScreenState extends State<SearchScreen>
   void _adoptDetailPlayArt(StremioMeta item, PlayLoaderArt art) {
     _pendingPlayArt = art;
     _pendingPlayArtKey = _playArtKey(
-      item.effectiveImdbId ?? item.id,
+      item.progressId ?? item.id,
       item.name,
     );
   }

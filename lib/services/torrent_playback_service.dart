@@ -4,6 +4,7 @@ import 'media_server_service.dart';
 import 'iptv_source_search.dart';
 import '../models/advanced_search_selection.dart';
 import '../models/custom_series_identity.dart';
+import '../models/media_identity.dart';
 import 'source_selection_diagnostics.dart';
 import 'dart:convert';
 import 'dart:io';
@@ -2650,7 +2651,7 @@ class TorrentPlaybackService {
   }) async {
     if (!rules.allowDirectLinks ||
         !allowsAddonSearch(rules) ||
-        !id.startsWith('tt')) {
+        (!id.startsWith('tt') && !MediaIdentity.isNative(id))) {
       logIptvSourceEvent(
         'quick_play_search_skipped',
         catalogType: isMovie ? 'vod' : 'series',
@@ -2658,7 +2659,9 @@ class TorrentPlaybackService {
         episode: episode,
         outcome: !rules.allowDirectLinks
             ? 'direct_links_disabled'
-            : (!allowsAddonSearch(rules) ? 'source_mode_excluded' : 'non_imdb'),
+            : (!allowsAddonSearch(rules)
+                  ? 'source_mode_excluded'
+                  : 'unsupported_identity'),
       );
       return [];
     }

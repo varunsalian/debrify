@@ -1,3 +1,4 @@
+import '../models/media_identity.dart';
 import 'package:flutter/material.dart';
 
 import '../models/stremio_addon.dart';
@@ -63,10 +64,9 @@ Future<void> openMetadataTitle(
       scope == ProfileRuntime.scope.value &&
       isCurrent?.call() != false &&
       (route == null || route.isCurrent)) {
-    // Search suggestions require IMDb identity for tracker actions/episodes.
-    // Other hosts retain their existing native-title navigation behavior.
+    // Native metadata now supplies episodes without an IMDb identity.
     final imdb = selected.effectiveImdbId ?? selected.id;
-    if (onUnresolved != null && !RegExp(r'^tt\d+$').hasMatch(imdb)) {
+    if (onUnresolved != null && !MediaIdentity.isImdb(imdb) && !MediaIdentity.isNative(imdb)) {
       onUnresolved(item);
       return;
     }

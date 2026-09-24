@@ -1,3 +1,4 @@
+import '../models/media_identity.dart';
 import 'tracking_source_policy.dart';
 import 'storage_service.dart';
 import 'trakt/trakt_service.dart';
@@ -10,7 +11,8 @@ class MovieCompletionService {
     TrackingSourcePolicy? policy,
     Future<bool> Function(TrackingSource)? read,
   }) async {
-    final selected = policy ?? await TrackingSourcePolicy.load();
+    imdbId = MediaIdentity.progressId(imdbId, 'movie');
+    final selected = (policy ?? await TrackingSourcePolicy.load()).forContent(imdbId);
     final results = await Future.wait([
       for (final source in TrackingSource.values)
         if (selected.progressFrom(source))
@@ -36,7 +38,7 @@ class MovieCompletionService {
       case TrackingSource.simkl:
         final service = SimklService.instance;
         if (!await service.isAuthenticated()) return false;
-        return (await service.fetchTitleStatus(id))?.currentStatus ==
+        return (await service.fetchTitleStatus(id, contentType: 'movie'))?.currentStatus ==
             'completed';
       case TrackingSource.mdblist:
         final service = MdblistService.instance;

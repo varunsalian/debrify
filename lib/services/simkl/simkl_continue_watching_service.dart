@@ -1,3 +1,4 @@
+import '../../models/media_identity.dart';
 import 'package:flutter/foundation.dart';
 
 import '../../models/advanced_search_selection.dart';
@@ -45,7 +46,7 @@ class SimklContinueWatchingItem {
     this.isUpNext = false,
   });
 
-  String get id => meta.imdbId ?? meta.id;
+  String get id => meta.progressId ?? meta.id;
   bool get isSeries => !isMovie;
 }
 
@@ -109,7 +110,7 @@ class SimklContinueWatchingService {
         episodeSessions,
         libIndex,
         statusIndex,
-        await _episodeCompletionTimes(episodeSessions),
+        await _episodeCompletionTimes(episodeSessions, libIndex),
       );
       // Up-next entries for shows NOT already paused (the paused entry is more
       // specific and wins). Merge with the paused shows and re-sort by recency.
@@ -174,9 +175,12 @@ class SimklContinueWatchingService {
         final imdb = _imdbOf(content is Map ? content['ids'] : null);
         if (imdb == null) continue;
         final s = raw['status'];
-        if (s is String) status[imdb] = s;
         final m = SimklItemTransformer.transformItem(raw);
-        if (m != null) meta[imdb] = m;
+        final type = m?.type ?? (bucket == 'movies' ? 'movie' : 'series');
+        for (final alias in MediaIdentity.aliases(content['ids'])) {
+          if (s is String) status['$type|$alias'] = s;
+          if (m != null) meta['$type|$alias'] = m;
+        }
       }
     }
     return (meta: meta, status: status);
@@ -193,14 +197,14 @@ class SimklContinueWatchingService {
       if (raw is! Map) continue;
       final movie = raw['movie'];
       if (movie is! Map) continue;
-      final imdb = _imdbOf(movie['ids']);
+      final imdb = _canonical(movie['ids'], 'movie', libIndex);
       if (imdb == null) continue;
       // Parked/finished/dropped in the library ⇒ not "continue watching".
-      if (_hiddenStatuses.contains(statusIndex[imdb])) continue;
+      if (_hiddenStatuses.contains(statusIndex['movie|$imdb'])) continue;
       final progress = _visibleProgress(raw['progress']);
       if (progress == null) continue;
       final cand = SimklContinueWatchingItem(
-        meta: _metaFor(imdb, 'movie', libIndex[imdb], movie['title']),
+        meta: _metaFor(imdb, 'movie', libIndex['movie|$imdb'], movie['title']),
         progress: progress,
         season: null,
         episode: null,
@@ -216,13 +220,14 @@ class SimklContinueWatchingService {
   /// bound concurrency so several old sessions do not fan out into many calls.
   Future<Map<String, Map<String, DateTime>>> _episodeCompletionTimes(
     List<dynamic> sessions,
+    Map<String, StremioMeta> libIndex,
   ) async {
     final ids = <String>{};
     for (final raw in sessions) {
       if (raw is! Map || raw['show'] is! Map || raw['episode'] is! Map) {
         continue;
       }
-      final imdb = _imdbOf(raw['show']['ids']);
+      final imdb = _canonical(raw['show']['ids'], 'series', libIndex);
       if (imdb != null &&
           _visibleProgress(raw['progress']) != null &&
           _pausedAtMs(raw['paused_at']) != null) {
@@ -256,10 +261,10 @@ class SimklContinueWatchingService {
       if (raw is! Map) continue;
       final show = raw['show'];
       if (show is! Map) continue;
-      final imdb = _imdbOf(show['ids']);
+      final imdb = _canonical(show['ids'], 'series', libIndex);
       if (imdb == null) continue;
       // Parked/finished/dropped in the library ⇒ not "continue watching".
-      if (_hiddenStatuses.contains(statusIndex[imdb])) continue;
+      if (_hiddenStatuses.contains(statusIndex['series|$imdb'])) continue;
       final ep = raw['episode'];
       if (ep is! Map) continue;
       final season = _asInt(ep['season']);
@@ -274,7 +279,7 @@ class SimklContinueWatchingService {
         continue;
       }
       final cand = SimklContinueWatchingItem(
-        meta: _metaFor(imdb, 'series', libIndex[imdb], show['title']),
+        meta: _metaFor(imdb, 'series', libIndex['series|$imdb'], show['title']),
         progress: progress,
         season: season,
         episode: number,
@@ -307,10 +312,10 @@ class SimklContinueWatchingService {
       }
       final show = raw['show'];
       if (show is! Map) continue;
-      final imdb = _imdbOf(show['ids']);
+      final imdb = _canonical(show['ids'], 'series', libIndex);
       if (imdb == null || pausedIds.contains(imdb)) continue;
       byImdb[imdb] = SimklContinueWatchingItem(
-        meta: _metaFor(imdb, 'series', libIndex[imdb], show['title']),
+        meta: _metaFor(imdb, 'series', libIndex['series|$imdb'], show['title']),
         progress: null, // not started — no resume position / progress bar
         season: se.season,
         episode: se.episode,
@@ -362,22 +367,32 @@ class SimklContinueWatchingService {
         libMeta?.name ?? (sessionTitle is String ? sessionTitle : null);
     return StremioMeta(
       id: imdb,
-      imdbId: imdb,
+      imdbId: MediaIdentity.isImdb(imdb) ? imdb : null,
       type: type,
       name: title ?? imdb,
       poster:
           libMeta?.poster ??
-          'https://images.metahub.space/poster/medium/$imdb/img',
+          (MediaIdentity.isImdb(imdb)
+              ? 'https://images.metahub.space/poster/medium/$imdb/img'
+              : null),
       background: libMeta?.background,
       year: libMeta?.year,
     );
   }
 
-  String? _imdbOf(dynamic ids) {
-    if (ids is! Map) return null;
-    final imdb = ids['imdb'];
-    return (imdb is String && imdb.startsWith('tt')) ? imdb : null;
+  String? _canonical(
+    dynamic ids,
+    String type,
+    Map<String, StremioMeta> library,
+  ) {
+    for (final alias in MediaIdentity.aliases(ids)) {
+      final meta = library['$type|$alias'];
+      if (meta != null) return meta.effectiveImdbId ?? meta.id;
+    }
+    return MediaIdentity.preferred(ids);
   }
+
+  String? _imdbOf(dynamic ids) => MediaIdentity.preferred(ids);
 
   /// Progress in (0,100), else null — mirrors the "hide un-started/finished"
   /// rule the Trakt CW list uses (TraktContinueWatchingService._visibleProgress).

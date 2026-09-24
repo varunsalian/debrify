@@ -1,3 +1,5 @@
+import '../models/media_identity.dart';
+import 'native_series_metadata_service.dart';
 import 'metadata_preferences_service.dart';
 import 'home_return_cache.dart';
 import 'local_series_completion_service.dart';
@@ -1169,6 +1171,7 @@ class StremioService {
     String? originVideoId,
     void Function(String source, List<Torrent> torrents)? onBatch,
   }) async {
+    imdbId = MediaIdentity.providerId(imdbId);
     final scope = ProfileRuntime.scope.value;
     void report(String source, List<Torrent> torrents) {
       if (ProfileRuntime.scope.value != scope) return;
@@ -1395,6 +1398,7 @@ class StremioService {
     String? originAddonKey,
     String? originVideoId,
   }) async {
+    contentId = MediaIdentity.providerId(contentId);
     final addons = await getStreamingAddons();
     final requestedContentId = originVideoId?.trim().isNotEmpty == true
         ? originVideoId!.trim()
@@ -1480,6 +1484,7 @@ class StremioService {
     bool preserveOrder = false,
     String? originVideoId,
   }) async {
+    imdbId = MediaIdentity.providerId(imdbId);
     final addon = await _streamingAddonForRequestKey(addonId);
     if (addon == null) return const <Torrent>[];
     final streamId = originVideoId?.trim().isNotEmpty == true
@@ -1939,6 +1944,7 @@ class StremioService {
     bool prepare = false,
     bool episodeRequest = false,
   }) {
+    streamId = MediaIdentity.providerId(streamId);
     // Only episode requests participate; torrent-pack, movie and live-TV
     // searches retain their existing request behavior.
     final isEpisodeRequest =
@@ -2779,6 +2785,9 @@ class StremioService {
     StremioAddon addon,
     String contentId,
   ) async {
+    if (MediaIdentity.isNative(contentId) && addon.baseUrl.isEmpty) {
+      return NativeSeriesMetadataService.instance.episodes(contentId);
+    }
     if (!addon.resources.contains('meta') || addon.baseUrl.isEmpty) {
       return null;
     }
@@ -2907,6 +2916,7 @@ class StremioService {
   /// that supplied it. Custom catalogs are not required to use Cinemeta's
   /// `<series>:<season>:<episode>` convention.
   static bool isCanonicalCatalogAlias(String catalogId, String imdbId) =>
+      (MediaIdentity.isNative(imdbId) && catalogId == imdbId) ||
       RegExp(r'^tt\d+$').hasMatch(imdbId) &&
       (catalogId == imdbId ||
           RegExp(r'^(?:tmdb|trakt|imdb):(?:(?:tv|series):)?(?:tt)?\d+$')
@@ -2980,6 +2990,10 @@ class StremioService {
       if (item.type == 'series') await _rememberCatalogProgress(item, addon);
       return item;
     }
+    if (MediaIdentity.isNative(item.id) && item.imdbId == null && addon.baseUrl.isEmpty) {
+      await _rememberCatalogProgress(item, addon);
+      return item;
+    }
     final imdb = item.effectiveImdbId ?? item.id;
     final canonical = isCanonicalCatalogAlias(item.id, imdb);
     final prefs = await ProfilePreferences.instance();
@@ -3035,7 +3049,7 @@ class StremioService {
     String videoId,
     int season,
     int episode,
-  ) => RegExp(r'^tt\d+$').hasMatch(imdbId) &&
+  ) => (MediaIdentity.isImdb(imdbId) || MediaIdentity.isNative(imdbId)) &&
       videoId == '$imdbId:$season:$episode';
 
   /// Legacy IMDb metadata may supply coordinates without a video ID.

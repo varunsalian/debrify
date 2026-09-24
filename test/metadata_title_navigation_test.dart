@@ -104,7 +104,7 @@ void main() {
     'resolved',
     'cancelled',
   ]) {
-    testWidgets('IMDb-only navigation handles $outcome', (tester) async {
+    testWidgets('native title navigation handles $outcome', (tester) async {
       final pending = Completer<StremioMeta>();
       var opens = 0;
       final fallbacks = <StremioMeta>[];
@@ -127,10 +127,10 @@ void main() {
         pending.complete(outcome == 'resolved' ? resolved : native);
       }
       await tester.pumpAndSettle();
-      expect(opens, outcome == 'resolved' ? 1 : 0);
+      expect(opens, outcome == 'cancelled' ? 0 : 1);
       expect(
         fallbacks,
-        ['resolved', 'cancelled'].contains(outcome) ? isEmpty : [native],
+        isEmpty,
       );
       expect(find.text('Retry'), findsNothing);
     });

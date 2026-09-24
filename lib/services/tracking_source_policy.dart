@@ -1,3 +1,4 @@
+import '../models/media_identity.dart';
 import '../models/tracking_source.dart';
 import '../models/custom_series_identity.dart';
 import 'storage_service.dart';
@@ -13,17 +14,40 @@ class TrackingSourcePolicy {
     required this.scrobbleTargets,
     required this.progressSource,
     required this.homeTickSources,
+    this.nativeIdentity = false,
   });
 
+  final bool nativeIdentity;
   final Set<TrackingSource> scrobbleTargets;
   final WatchProgressSource progressSource;
   final Set<TrackingSource> homeTickSources;
 
   TrackingSourcePolicy forContent(String? id) =>
-      CustomSeriesIdentity.isCustom(id) || (id?.startsWith('medialibrary:') ?? false)
+      CustomSeriesIdentity.isCustom(id) ||
+          (id?.startsWith('medialibrary:') ?? false)
       ? const TrackingSourcePolicy(
-          scrobbleTargets: {}, progressSource: WatchProgressSource.local,
+          scrobbleTargets: {},
+          progressSource: WatchProgressSource.local,
           homeTickSources: {TrackingSource.local},
+        )
+      : MediaIdentity.isNative(id)
+      ? TrackingSourcePolicy(
+          scrobbleTargets: scrobbleTargets
+              .where(
+                (s) => s == TrackingSource.simkl || s == TrackingSource.local,
+              )
+              .toSet(),
+          progressSource:
+              progressSource == WatchProgressSource.trakt ||
+                  progressSource == WatchProgressSource.mdblist
+              ? WatchProgressSource.local
+              : progressSource,
+          homeTickSources: homeTickSources
+              .where(
+                (s) => s == TrackingSource.simkl || s == TrackingSource.local,
+              )
+              .toSet(),
+          nativeIdentity: true,
         )
       : this;
 
@@ -60,13 +84,17 @@ class TrackingSourcePolicy {
 
   /// Smart preserves the legacy merged/recency behavior. A dedicated source
   /// admits only itself; local means data written by this Debrify profile.
-  bool progressFrom(TrackingSource source) => switch (progressSource) {
-    WatchProgressSource.smart => true,
-    WatchProgressSource.local => source == TrackingSource.local,
-    WatchProgressSource.trakt => source == TrackingSource.trakt,
-    WatchProgressSource.simkl => source == TrackingSource.simkl,
-    WatchProgressSource.mdblist => source == TrackingSource.mdblist,
-  };
+  bool progressFrom(TrackingSource source) =>
+      (!nativeIdentity ||
+          source == TrackingSource.local ||
+          source == TrackingSource.simkl) &&
+      switch (progressSource) {
+        WatchProgressSource.smart => true,
+        WatchProgressSource.local => source == TrackingSource.local,
+        WatchProgressSource.trakt => source == TrackingSource.trakt,
+        WatchProgressSource.simkl => source == TrackingSource.simkl,
+        WatchProgressSource.mdblist => source == TrackingSource.mdblist,
+      };
 
   bool homeTicksFrom(TrackingSource source) => homeTickSources.contains(source);
 

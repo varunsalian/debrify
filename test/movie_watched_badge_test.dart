@@ -99,7 +99,7 @@ void main() {
       'anime_type': 'movie',
       'show': {
         'title': 'Anime Film',
-        'ids': {'imdb': 'tt-anime-movie'},
+        'ids': {'imdb': 'tt1000001'},
       },
     };
     final snapshot = SimklService.debugParseCompletedTitleIds({
@@ -107,7 +107,7 @@ void main() {
         {
           'status': 'completed',
           'movie': {
-            'ids': {'imdb': 'TT-MOVIE'},
+            'ids': {'imdb': 'TT1000002'},
           },
         },
       ],
@@ -130,14 +130,14 @@ void main() {
           'total_episodes_count': 35,
           'not_aired_episodes_count': 1,
           'show': {
-            'ids': {'imdb': 'TT-INCOMPLETE'},
+            'ids': {'imdb': 'TT1000003'},
           },
         },
       ],
       'anime': [animeMovie],
     });
 
-    expect(snapshot.movies, {'tt-movie', 'tt-anime-movie'});
+    expect(snapshot.movies, {'tt1000002', 'tt1000001'});
     expect(snapshot.series, {'tt15677150'});
     expect(
       SimklItemTransformer.transformItem(
