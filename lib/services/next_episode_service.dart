@@ -6,13 +6,14 @@ import '../models/stremio_addon.dart';
 import '../models/custom_series_identity.dart';
 
 class NextEpisodeService {
-  /// Find the next episode after the given season/episode using Stremio catalog addon metadata.
+  /// Canonical titles use the built-in guide; custom edits retain their addon.
   /// Returns (season, episode) of the next episode, or null if not found / last episode.
   static Future<({int season, int episode})?> findNextEpisode(
     String imdbId,
     int currentSeason,
-    int currentEpisode,
-  ) async {
+    int currentEpisode, {
+    NativeSeriesMetadataService? metadata,
+  }) async {
     try {
       final stremioService = StremioService.instance;
       final custom = CustomSeriesIdentity.parse(imdbId);
@@ -20,24 +21,29 @@ class NextEpisodeService {
         final addon = await stremioService.addonForCustomProgress(imdbId);
         if (addon == null) return null;
         final next = await stremioService.resolveAdjacentSeriesEpisode(
-          addonKey: addon.sourceBindingKey, catalogId: custom.catalogId,
-          season: currentSeason, episode: currentEpisode, direction: 1,
+          addonKey: addon.sourceBindingKey,
+          catalogId: custom.catalogId,
+          season: currentSeason,
+          episode: currentEpisode,
+          direction: 1,
         );
-        return next == null ? null : (season: next.season, episode: next.episode);
+        return next == null
+            ? null
+            : (season: next.season, episode: next.episode);
       }
-      final addons = await stremioService.getEnabledAddons();
-      if (addons.isEmpty && !MediaIdentity.isNative(imdbId)) return null;
-
-      // Find first addon with meta support
-      final addon = addons.cast<StremioAddon?>().firstWhere(
-        (a) => a?.resources.contains('meta') == true,
-        orElse: () => null,
-      );
-      if (addon == null && !MediaIdentity.isNative(imdbId)) return null;
-
-      final episodes = MediaIdentity.isNative(imdbId)
-          ? await NativeSeriesMetadataService.instance.episodes(imdbId)
-          : await stremioService.fetchSeriesMeta(addon!, imdbId);
+      List<Map<String, dynamic>>? episodes;
+      if (MediaIdentity.isNative(imdbId) || MediaIdentity.isImdb(imdbId)) {
+        episodes = await (metadata ?? NativeSeriesMetadataService.instance)
+            .episodesWithFallback(imdbId);
+      } else {
+        final addons = await stremioService.getEnabledAddons();
+        final addon = addons.cast<StremioAddon?>().firstWhere(
+          (a) => a?.resources.contains('meta') == true,
+          orElse: () => null,
+        );
+        if (addon == null) return null;
+        episodes = await stremioService.fetchSeriesMeta(addon, imdbId);
+      }
       if (episodes == null || episodes.isEmpty) return null;
 
       // Sort episodes by season then episode number

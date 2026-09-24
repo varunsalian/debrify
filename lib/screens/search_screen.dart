@@ -4994,6 +4994,9 @@ class _SearchScreenState extends State<SearchScreen>
   /// Prefers the stored source addon; falls back to any homepage addon, then a
   /// minimal placeholder so Play still works even if the addon is gone.
   StremioAddon _addonForContinue(String? addonId) {
+    if (addonId == NativeSeriesMetadataService.addon.id) {
+      return NativeSeriesMetadataService.addon;
+    }
     for (final addon in _addonsById.values) {
       if (addon.sourceBindingKey == addonId || addon.portableConfigurationKey == addonId) return addon;
     }
@@ -5137,13 +5140,13 @@ class _SearchScreenState extends State<SearchScreen>
   /// a normal catalog detail, no resume. The CW list uses [_openSimklCwItem]
   /// instead, so a title browsed fresh here never opens mid-episode.
   void _openSimklItem(StremioMeta item) {
-    _openItem(item, _addonForContinue(item.sourceAddon?.id));
+    _openItem(item, NativeSeriesMetadataService.addonForItem(item));
   }
 
   /// Quick-play a plain Simkl-list title like any other catalog item (no
   /// resume). The CW list uses [_playSimklCwItem].
   void _playSimklItem(StremioMeta item) {
-    _onCatalogPlay(item, _addonForContinue(item.sourceAddon?.id));
+    _onCatalogPlay(item, NativeSeriesMetadataService.addonForItem(item));
   }
 
   // ── Trakt Continue Watching ───────────────────────────────────────────────
@@ -5879,7 +5882,7 @@ class _SearchScreenState extends State<SearchScreen>
     final cw = _simklByImdb[_simklCardKey(item)];
     _openItem(
       item,
-      _addonForContinue(item.sourceAddon?.id),
+      NativeSeriesMetadataService.addonForItem(item),
       initialSeason: (cw != null && !cw.isMovie) ? cw.season : null,
       initialEpisode: (cw != null && !cw.isMovie) ? cw.episode : null,
     );
@@ -5889,11 +5892,13 @@ class _SearchScreenState extends State<SearchScreen>
   /// selection carrying the paused season/episode + Simkl progress percent and
   /// plays it, mirroring the Trakt quick-play.
   Future<void> _playSimklCwItem(StremioMeta item) async {
+    _activeAddonId = NativeSeriesMetadataService.addonForItem(item).id;
+    _capturePlayArt(item);
     final cw = _simklByImdb[_simklCardKey(item)];
     if (cw == null) {
       // Not in the CW map (a See-All grid title that fell out of the list) —
       // play it like a plain catalog title; three-way resume still applies.
-      await _onCatalogPlay(item, _addonForContinue(item.sourceAddon?.id));
+      await _onCatalogPlay(item, NativeSeriesMetadataService.addonForItem(item));
       return;
     }
     _playSelection(SimklContinueWatchingService.instance.selectionForItem(cw));
@@ -14461,9 +14466,10 @@ class _SearchScreenState extends State<SearchScreen>
     );
   }
 
-  /// Resolve a meta-capable addon (for episode listings): the preferred addon
-  /// if it serves meta, otherwise the first enabled addon that does.
+  /// Keep the built-in guide for tracker titles. Otherwise use the preferred
+  /// addon if it serves meta, then the first enabled addon that does.
   Future<StremioAddon?> _metaAddonFor(StremioAddon preferred) async {
+    if (preferred.id == NativeSeriesMetadataService.addon.id) return preferred;
     if (preferred.resources.contains('meta') && preferred.baseUrl.isNotEmpty) {
       return preferred;
     }
@@ -14532,9 +14538,15 @@ class _SearchScreenState extends State<SearchScreen>
     final contentId = (metaAddon != null && metaAddon.id == addon.id)
         ? item.id
         : (imdb ?? item.id);
-    final videos = metaAddon == null
-        ? null
-        : await _stremio.fetchSeriesMeta(metaAddon, contentId);
+    List<Map<String, dynamic>>? videos;
+    try {
+      videos = metaAddon == null
+          ? null
+          : await _stremio.fetchSeriesMeta(metaAddon, contentId);
+    } catch (_) {
+      if (mounted) _snack('Could not load episodes. Please retry.');
+      return;
+    }
     if (!mounted) return;
     if (videos != null && imdb != null) {
       unawaited(

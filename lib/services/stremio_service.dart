@@ -2785,8 +2785,10 @@ class StremioService {
     StremioAddon addon,
     String contentId,
   ) async {
-    if (MediaIdentity.isNative(contentId) && addon.baseUrl.isEmpty) {
-      return NativeSeriesMetadataService.instance.episodes(contentId);
+    if (addon.baseUrl.isEmpty &&
+        (MediaIdentity.isNative(contentId) ||
+            addon.id == NativeSeriesMetadataService.addon.id)) {
+      return NativeSeriesMetadataService.instance.episodesWithFallback(contentId);
     }
     if (!addon.resources.contains('meta') || addon.baseUrl.isEmpty) {
       return null;
