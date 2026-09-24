@@ -6,6 +6,7 @@ import 'package:debrify/services/stream_badge_matcher.dart';
 import 'package:debrify/services/stream_badges_service.dart';
 import 'package:debrify/theme/app_theme.dart';
 import 'package:debrify/theme/app_theme_scope.dart';
+import 'package:debrify/utils/platform_util.dart';
 import 'package:debrify/widgets/source_list_scroll_anchor.dart';
 import 'package:debrify/widgets/source_row.dart';
 import 'package:flutter/material.dart';
@@ -42,6 +43,11 @@ void main() {
     'focus-outside',
     'rapid',
     'image',
+    'focused-growth',
+    'focused-visible',
+    'focused-oversized',
+    'focused-spotlight',
+    'focused-reversal',
   ]) {
     testWidgets('late source badge layout respects $mode viewport ownership', (
       tester,
@@ -50,6 +56,8 @@ void main() {
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
+      PlatformUtil.debugSetAndroidTvCached(true);
+      addTearDown(() => PlatformUtil.debugSetAndroidTvCached(null));
       final svc = StreamBadgesService.instance;
       svc.resetProfileScope();
       addTearDown(svc.resetProfileScope);
@@ -86,7 +94,9 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           home: AppThemeScope(
-            theme: AppThemes.legacy,
+            theme: mode == 'focused-spotlight'
+                ? AppThemes.byId('spotlight')
+                : AppThemes.legacy,
             child: Scaffold(
               body: Column(
                 children: [
@@ -107,6 +117,7 @@ void main() {
                           onTap: () {},
                           isTelevision: true,
                           showPlayPill: true,
+                          cinemaLayout: mode == 'focused-spotlight',
                         ),
                       ),
                     ),
@@ -117,7 +128,9 @@ void main() {
           ),
         ),
       );
-      nodes[5].requestFocus();
+      final focusedOnly = mode.startsWith('focused-');
+      var selected = focusedOnly && mode != 'focused-visible' ? 7 : 5;
+      nodes[selected].requestFocus();
       await tester.pumpAndSettle();
       if (mode == 'image') {
         final badges = [
@@ -137,7 +150,6 @@ void main() {
         }
         await tester.pumpAndSettle();
       }
-      var selected = 5;
       if (mode == 'moving' || mode == 'rapid') {
         nodes[6].requestFocus();
         await tester.pump();
@@ -158,7 +170,7 @@ void main() {
       final beforeOffset = scroll.offset;
       final beforeTop = tester.getTopLeft(find.text('Movie $selected')).dy;
       final badges = [
-        for (var i = 0; i < 15; i++)
+        for (var i = 0; i < (mode == 'focused-oversized' ? 100 : 15); i++)
           StreamBadgeRule(
             id: '$i',
             groupId: 'test',
@@ -177,11 +189,21 @@ void main() {
         picture.dispose();
         imageReady.complete(ImageInfo(image: image!));
       } else {
-        for (final pending in matcher.requests.values.toList()) {
+        final pendingMatches = focusedOnly
+            ? [matcher.requests['Movie $selected']!]
+            : matcher.requests.values.toList();
+        for (final pending in pendingMatches) {
           pending.complete(
             StreamBadgeMatchResult(StreamBadgeMatchStatus.resolved, badges),
           );
         }
+      }
+      if (mode == 'focused-reversal') {
+        // Let the growth queue its correction, then change selection before
+        // that correction runs. It must not pull focus back to the old row.
+        await tester.pump();
+        selected = 6;
+        nodes[selected].requestFocus();
       }
       await tester.pumpAndSettle();
       if (mode == 'manual' || mode == 'focus-outside') {
@@ -195,6 +217,14 @@ void main() {
         final afterTop = tester.getTopLeft(find.text('Movie $selected')).dy;
         expect(afterTop, greaterThan(40));
         expect(afterTop, lessThan(700));
+        if (mode == 'focused-growth' || mode == 'focused-spotlight') {
+          expect(tester.getBottomRight(row).dy, lessThanOrEqualTo(800));
+          expect(scroll.offset, greaterThan(beforeOffset));
+        } else if (mode == 'focused-visible') {
+          expect(scroll.offset, closeTo(beforeOffset, 0.01));
+        } else if (mode == 'focused-oversized') {
+          expect(tester.getTopLeft(row).dy, closeTo(40, 1));
+        }
         if (mode == 'idle' || mode == 'image') {
           expect(afterTop, closeTo(beforeTop, 1));
         }

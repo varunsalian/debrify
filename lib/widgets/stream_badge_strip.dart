@@ -86,39 +86,43 @@ class _StreamBadgeStripState extends State<StreamBadgeStrip> {
   Widget build(BuildContext context) {
     if (widget.badges.isEmpty) return const SizedBox.shrink();
     final generation = _generation;
-    return Stack(
-      children: [
-        AnimatedOpacity(
-          duration: const Duration(milliseconds: 140),
-          opacity: _revealed ? 1 : 0,
-          child: Wrap(
-            spacing: widget.spacing,
-            runSpacing: widget.spacing,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              for (final b in widget.badges)
-                StreamBadgeChip(
-                  rule: b,
-                  height: widget.height,
-                  onImageReady: b.imageUrl == null
-                      ? null
-                      : () => _ready(b.imageUrl!, generation),
-                ),
-            ],
+    // Focus fills and transforms repaint their source row on every DPAD move.
+    // Retain the static badge layer instead of repainting every chip with it.
+    return RepaintBoundary(
+      child: Stack(
+        children: [
+          AnimatedOpacity(
+            duration: const Duration(milliseconds: 140),
+            opacity: _revealed ? 1 : 0,
+            child: Wrap(
+              spacing: widget.spacing,
+              runSpacing: widget.spacing,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                for (final b in widget.badges)
+                  StreamBadgeChip(
+                    rule: b,
+                    height: widget.height,
+                    onImageReady: b.imageUrl == null
+                        ? null
+                        : () => _ready(b.imageUrl!, generation),
+                  ),
+              ],
+            ),
           ),
-        ),
-        if (!_revealed)
-          Positioned.fill(
-            child: IgnorePointer(
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: .06),
-                  borderRadius: BorderRadius.circular(4),
+          if (!_revealed)
+            Positioned.fill(
+              child: IgnorePointer(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: .06),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
                 ),
               ),
             ),
-          ),
-      ],
+        ],
+      ),
     );
   }
 }
