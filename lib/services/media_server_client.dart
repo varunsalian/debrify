@@ -310,6 +310,66 @@ class MediaServerClient {
     );
   }
 
+  // Jellyfin does not implement Emby's AnyProviderIdEquals. Scan lightweight
+  // metadata pages and verify IDs locally; never retain the unrelated library.
+  Future<List<Map<String, dynamic>>> _jellyfinItems(
+    MediaServerAccount account,
+    String path,
+    Map<String, String> query,
+    bool Function(Map<String, dynamic>) matches,
+    Future<void> Function()? authorize,
+  ) async {
+    const pageSize = 500;
+    final found = <Map<String, dynamic>>[];
+    final pageBoundaries = <String>{};
+    final deadline = DateTime.now().add(const Duration(seconds: 25));
+    var start = 0;
+    while (true) {
+      if (DateTime.now().isAfter(deadline)) {
+        throw const MediaServerException(
+          'Server search timed out. Please retry.',
+        );
+      }
+      final data = await _request(
+        account.baseUrl,
+        path,
+        deviceId: account.deviceId,
+        kind: account.kind,
+        token: account.token,
+        query: {
+          ...query,
+          'UserId': account.userId,
+          'StartIndex': '$start',
+          'Limit': '$pageSize',
+          'EnableTotalRecordCount': 'true',
+        },
+        authorize: authorize,
+      );
+      final page = data['Items'];
+      if (page is! List || page.any((item) => item is! Map<String, dynamic>)) {
+        throw const MediaServerException(
+          'The server returned an invalid library response.',
+        );
+      }
+      if (page.isEmpty) return found;
+      // Protect against servers/proxies that ignore StartIndex and repeat pages.
+      final boundary = jsonEncode([
+        page.first['Id'],
+        page.last['Id'],
+        page.length,
+      ]);
+      if (!pageBoundaries.add(boundary)) {
+        throw const MediaServerException(
+          'The server repeated a library page. Please retry or check the server.',
+        );
+      }
+      found.addAll(page.cast<Map<String, dynamic>>().where(matches));
+      start += page.length;
+      final total = data['TotalRecordCount'];
+      if (total is num ? start >= total : page.length < pageSize) return found;
+    }
+  }
+
   /// Exact provider IDs only. Avoid fuzzy guesses, remakes and alternate
   /// anime numbering: missing metadata should produce no match, not a wrong one.
   Future<List<Map<String, dynamic>>> findItems(
@@ -331,16 +391,7 @@ class MediaServerClient {
       return [];
     }
     final providerId = provider == 'imdb' ? id : id.split(':').last;
-    final matches =
-        await _items(account, 'Users/${_segment(account.userId)}/Items', {
-          'Recursive': 'true',
-          'IncludeItemTypes': isMovie ? 'Movie' : 'Series',
-          'AnyProviderIdEquals': '$provider.$providerId',
-          'Fields': 'ProviderIds,MediaSources,MediaStreams',
-          'EnableImages': 'false',
-          'EnableUserData': 'false',
-        }, authorize);
-    final exact = matches.where((item) {
+    bool matchesIdentity(Map<String, dynamic> item) {
       final ids = item['ProviderIds'];
       return item['Type'] == (isMovie ? 'Movie' : 'Series') &&
           ids is Map &&
@@ -349,34 +400,72 @@ class MediaServerClient {
                 entry.key.toString().toLowerCase() == provider &&
                 entry.value.toString() == providerId,
           );
-    }).toList();
+    }
+
+    final path = 'Users/${_segment(account.userId)}/Items';
+    final query = {
+      'Recursive': 'true',
+      'IncludeItemTypes': isMovie ? 'Movie' : 'Series',
+      'EnableImages': 'false',
+      'EnableUserData': 'false',
+    };
+    final exact = account.kind == MediaServerKind.jellyfin
+        ? await _jellyfinItems(
+            account,
+            path,
+            {
+              ...query,
+              'Fields': 'ProviderIds',
+              'Has${provider[0].toUpperCase()}${provider.substring(1)}Id':
+                  'true',
+              'SortBy': 'SortName',
+              'SortOrder': 'Ascending',
+            },
+            matchesIdentity,
+            authorize,
+          )
+        : (await _items(account, path, {
+            ...query,
+            'AnyProviderIdEquals': '$provider.$providerId',
+            'Fields': 'ProviderIds,MediaSources,MediaStreams',
+          }, authorize)).where(matchesIdentity).toList();
     if (isMovie) {
       return exact.where((item) => item['IsPlaceHolder'] != true).toList();
     }
     final episodes = <Map<String, dynamic>>[];
     for (final series in exact) {
-      final found = await _items(
-        account,
-        'Shows/${_segment(series['Id'] as String)}/Episodes',
-        {
-          'Season': '$season',
+      final path = 'Shows/${_segment(series['Id'] as String)}/Episodes';
+      final query = {
+        'Season': '$season',
+        // PlaybackInfo supplies streams after matching. Avoid downloading every
+        // episode's versions/tracks while scanning a large Jellyfin season.
+        if (account.kind == MediaServerKind.emby)
           'Fields': 'MediaSources,MediaStreams',
-          'IsMissing': 'false',
-          'EnableImages': 'false',
-          'EnableUserData': 'false',
-        },
-        authorize,
-      );
-      episodes.addAll(
-        found.where(
-          (item) =>
-              item['Type'] == 'Episode' &&
-              item['ParentIndexNumber'] == season &&
-              item['IndexNumber'] == episode &&
-              item['IsMissing'] != true &&
-              item['IsPlaceHolder'] != true,
-        ),
-      );
+        'IsMissing': 'false',
+        'EnableImages': 'false',
+        'EnableUserData': 'false',
+      };
+      bool matchesEpisode(Map<String, dynamic> item) =>
+          item['Type'] == 'Episode' &&
+          item['ParentIndexNumber'] == season &&
+          item['IndexNumber'] == episode &&
+          item['IsMissing'] != true &&
+          item['IsPlaceHolder'] != true;
+      final found = account.kind == MediaServerKind.jellyfin
+          ? await _jellyfinItems(
+              account,
+              path,
+              query,
+              matchesEpisode,
+              authorize,
+            )
+          : (await _items(
+              account,
+              path,
+              query,
+              authorize,
+            )).where(matchesEpisode).toList();
+      episodes.addAll(found);
     }
     return episodes;
   }

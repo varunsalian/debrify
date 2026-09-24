@@ -254,10 +254,7 @@ void main() {
   test('movie matching independently verifies IDs and type', () async {
     final client = MediaServerClient(
       client: MockClient((request) async {
-        expect(
-          request.url.queryParameters['AnyProviderIdEquals'],
-          'imdb.tt123',
-        );
+        expect(request.url.queryParameters['HasImdbId'], 'true');
         expect(request.url.queryParameters['IncludeItemTypes'], 'Movie');
         return jsonResponse({
           'Items': [
@@ -410,6 +407,193 @@ void main() {
     );
     client.close();
   });
+
+  test(
+    'Jellyfin scans beyond 1000 items and preserves early and late versions',
+    () async {
+      final offsets = <int>[];
+      final client = MediaServerClient(
+        client: MockClient((request) async {
+          final q = request.url.queryParameters;
+          expect(q.containsKey('AnyProviderIdEquals'), isFalse);
+          expect(q['Fields'], 'ProviderIds');
+          expect(q['HasImdbId'], 'true');
+          final start = int.parse(q['StartIndex']!);
+          offsets.add(start);
+          // Simulate a server that caps pages at 100 despite our larger request.
+          final count = start == 1100 ? 1 : 100;
+          return jsonResponse({
+            'TotalRecordCount': 1101,
+            'Items': List.generate(
+              count,
+              (i) => {
+                'Id': 'movie${start + i}',
+                'Type': 'Movie',
+                'ProviderIds': {
+                  'Imdb': [0, 1100].contains(start + i) ? 'tt123' : 'tt999',
+                },
+              },
+            ),
+          });
+        }),
+      );
+      addTearDown(client.close);
+      final items = await client.findItems(account, id: 'tt123', isMovie: true);
+      expect(items.map((i) => i['Id']), ['movie0', 'movie1100']);
+      expect(offsets, List.generate(12, (i) => i * 100));
+    },
+  );
+
+  test('Jellyfin retains all exact episode versions across pages', () async {
+    final client = MediaServerClient(
+      client: MockClient((request) async {
+        if (request.url.path.endsWith('/Items')) {
+          expect(request.url.queryParameters['HasTvdbId'], 'true');
+          return jsonResponse({
+            'Items': [
+              {
+                'Id': 'series1',
+                'Type': 'Series',
+                'ProviderIds': {'Tvdb': '42'},
+              },
+            ],
+          });
+        }
+          final start = int.parse(request.url.queryParameters['StartIndex']!);
+          return jsonResponse({
+            'TotalRecordCount': 1100,
+          'Items': List.generate(
+            start == 1000 ? 100 : 500,
+            (i) => {
+              'Id': 'episode${start + i}',
+              'Type': 'Episode',
+              'ParentIndexNumber': 4,
+              'IndexNumber': [0, 1099].contains(start + i) ? 8 : 7,
+            },
+          ),
+        });
+      }),
+    );
+    addTearDown(client.close);
+    final items = await client.findItems(
+      account,
+      id: 'tvdb:42',
+      isMovie: false,
+      season: 4,
+      episode: 8,
+    );
+    expect(items.map((i) => i['Id']), ['episode0', 'episode1099']);
+  });
+
+  test(
+    'Jellyfin rejects repeated pages instead of looping or duplicating',
+    () async {
+      var calls = 0;
+      final client = MediaServerClient(
+        client: MockClient((request) async {
+          calls++;
+          return jsonResponse({
+            'TotalRecordCount': 2000,
+            'Items': [
+              {
+                'Id': 'same',
+                'Type': 'Movie',
+                'ProviderIds': {'Imdb': 'tt123'},
+              },
+            ],
+          });
+        }),
+      );
+      addTearDown(client.close);
+      await expectLater(
+        client.findItems(account, id: 'tt123', isMovie: true),
+        throwsA(
+          isA<MediaServerException>().having(
+            (e) => e.message,
+            'message',
+            contains('repeated a library page'),
+          ),
+        ),
+      );
+      expect(calls, 2);
+    },
+  );
+
+  test('Jellyfin stops when authorization is revoked between pages', () async {
+    var calls = 0;
+    final client = MediaServerClient(
+      client: MockClient((request) async {
+        calls++;
+        return jsonResponse({
+          'TotalRecordCount': 2000,
+          'Items': [
+            {
+              'Id': 'same',
+              'Type': 'Movie',
+              'ProviderIds': {'Imdb': 'tt123'},
+            },
+          ],
+        });
+      }),
+    );
+    addTearDown(client.close);
+    await expectLater(
+      client.findItems(
+        account,
+        id: 'tt123',
+        isMovie: true,
+        authorize: () async {
+          if (calls > 0) throw const MediaServerException('Access revoked');
+        },
+      ),
+      throwsA(
+        isA<MediaServerException>().having(
+          (e) => e.message,
+          'message',
+          'Access revoked',
+        ),
+      ),
+    );
+    expect(calls, 1);
+  });
+
+  test(
+    'Emby retains its provider-filtered query and verifies returned IDs',
+    () async {
+      const emby = MediaServerAccount(
+        kind: MediaServerKind.emby,
+        baseUrl: 'https://server.example/emby/',
+        userId: 'user1',
+        token: 'test',
+        serverId: 'server1',
+        deviceId: 'device1',
+      );
+      final client = MediaServerClient(
+        client: MockClient((request) async {
+          expect(request.url.queryParameters['AnyProviderIdEquals'], 'tmdb.42');
+          expect(request.url.queryParameters.containsKey('HasTmdbId'), isFalse);
+          expect(request.url.queryParameters['Limit'], '100');
+          return jsonResponse({
+            'Items': [
+              {
+                'Id': 'right',
+                'Type': 'Movie',
+                'ProviderIds': {'Tmdb': '42'},
+              },
+              {
+                'Id': 'wrong',
+                'Type': 'Movie',
+                'ProviderIds': {'Tmdb': '99'},
+              },
+            ],
+          });
+        }),
+      );
+      addTearDown(client.close);
+      final items = await client.findItems(emby, id: 'tmdb:42', isMovie: true);
+      expect(items.map((i) => i['Id']), ['right']);
+    },
+  );
 
   test(
     'playback excludes remote, opening-required and transcoding-only sources',
