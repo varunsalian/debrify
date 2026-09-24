@@ -188,6 +188,13 @@ class ExternalPlayerService {
     final preferredPlayer =
         ExternalPlayerExtension.fromStorageKey(preferredPlayerKey);
 
+    // Let Launch Services resolve Infuse's registered URL scheme, including
+    // installations outside the standard Applications directories. Never send
+    // its video URL to the default browser when Infuse cannot be opened.
+    if (preferredPlayer == ExternalPlayer.infuse) {
+      return await launchWithPlayer(url, preferredPlayer, title: title);
+    }
+
     // Try preferred player first
     if (preferredPlayer != ExternalPlayer.systemDefault) {
       final installed = await isPlayerInstalled(preferredPlayer);
@@ -210,6 +217,10 @@ class ExternalPlayerService {
   }) async {
     if (!Platform.isMacOS) {
       return await _launchWithUrlLauncher(url);
+    }
+
+    if (player == ExternalPlayer.infuse) {
+      return await _launchMacOSInfuse(url);
     }
 
     try {
@@ -243,6 +254,24 @@ class ExternalPlayerService {
             'Failed to open external player: $e');
       }
     }
+  }
+
+  static Future<ExternalPlayerLaunchResult> _launchMacOSInfuse(
+    String url,
+  ) async {
+    const failureMessage =
+        'Could not open Infuse. Check that Infuse is installed and try again.';
+    try {
+      final uri = Uri.parse(iOSExternalPlayer.infuse.buildLaunchUrl(url));
+      final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      if (opened) {
+        return ExternalPlayerLaunchResult.succeeded(ExternalPlayer.infuse);
+      }
+    } catch (_) {
+      // Report the failure without exposing a potentially signed video URL or
+      // falling back to the browser.
+    }
+    return ExternalPlayerLaunchResult.failed(failureMessage);
   }
 
   /// Launch with system default (open url)
