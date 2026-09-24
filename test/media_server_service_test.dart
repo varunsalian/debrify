@@ -47,6 +47,9 @@ void main() {
   var unavailable = false;
   var extraBrokenMovie = false;
   var unsupportedPlayback = false;
+  var paginatedMovies = false;
+  var timeoutLookupPage = false;
+  int? episodeEnd;
   var failureStatus = 503;
   Map<String, dynamic> videoMetadata = {};
   List<Map<String, dynamic>> audioStreams = [];
@@ -90,6 +93,9 @@ void main() {
     unavailable = false;
     extraBrokenMovie = false;
     unsupportedPlayback = false;
+    paginatedMovies = false;
+    timeoutLookupPage = false;
+    episodeEnd = null;
     failureStatus = 503;
     videoMetadata = {};
     audioStreams = [];
@@ -125,6 +131,28 @@ void main() {
         } else if (request.url.path.endsWith('/Items')) {
           final movie =
               request.url.queryParameters['IncludeItemTypes'] == 'Movie';
+          if (movie && paginatedMovies) {
+            final offset = int.parse(
+              request.url.queryParameters['StartIndex']!,
+            );
+            if (offset == 1 && timeoutLookupPage) {
+              throw TimeoutException('synthetic');
+            }
+            return http.Response(
+              jsonEncode({
+                'TotalRecordCount': 2,
+                'Items': [
+                  {
+                    'Id': 'movie$offset',
+                    'Name': 'Example',
+                    'Type': 'Movie',
+                    'ProviderIds': {'Imdb': 'tt123'},
+                  },
+                ],
+              }),
+              200,
+            );
+          }
           data = {
             'Items': [
               if (movie && extraBrokenMovie)
@@ -156,6 +184,7 @@ void main() {
                 'Type': 'Episode',
                 'ParentIndexNumber': 1,
                 'IndexNumber': episodeNumber,
+                if (episodeEnd != null) 'IndexNumberEnd': episodeEnd,
               },
             ],
           };
@@ -1545,6 +1574,46 @@ void main() {
         throwsA(isA<ResourceAuthorizationException>()),
       );
       expect(requestCount, greaterThan(0));
+    },
+  );
+
+  test(
+    'partial lookup publishes playable sources with warning and retry completes',
+    () async {
+      await connect();
+      paginatedMovies = true;
+      timeoutLookupPage = true;
+      final first = await MediaServerService.search(id: 'tt123', isMovie: true);
+      expect(first['torrents'], hasLength(2));
+      expect(jsonEncode(first['addonErrors']), contains('Search incomplete'));
+      await DirectSourceAuthorization.authorize(
+        (first['torrents'] as List).first,
+      );
+      timeoutLookupPage = false;
+      final retry = await MediaServerService.search(id: 'tt123', isMovie: true);
+      expect(retry['torrents'], hasLength(4));
+      expect(retry['addonErrors'], isEmpty);
+    },
+  );
+
+  test(
+    'combined episode source labels its range and tracks selected episode',
+    () async {
+      await connect();
+      episodeEnd = 2;
+      final result = await MediaServerService.search(
+        id: 'tt123',
+        isMovie: false,
+        season: 1,
+        episode: 2,
+      );
+      final sources = result['torrents'] as List<Torrent>;
+      expect(sources, hasLength(2));
+      expect(
+        sources.first.streamDescription,
+        contains('Combined episodes 1–2'),
+      );
+      expect(MediaServerService.watchTargetFor(sources.first)?.episode, 2);
     },
   );
 

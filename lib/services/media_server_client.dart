@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
+import 'package:crypto/crypto.dart';
 
 import '../models/media_server.dart';
 import '../models/media_server_library.dart';
@@ -15,10 +16,16 @@ class MediaServerClient {
   MediaServerClient({
     http.Client? client,
     this.timeout = const Duration(seconds: 12),
-  }) : _client = client ?? http.Client();
+    this.lookupBudget = const Duration(seconds: 12),
+    DateTime Function()? lookupClock,
+  }) : _client = client ?? http.Client(),
+       _lookupClock = lookupClock ?? DateTime.now;
 
   final http.Client _client;
   final Duration timeout;
+  final Duration lookupBudget;
+  final DateTime Function() _lookupClock;
+  static final _lookupCache = <(Object, String), _LookupPageState>{};
   void close() => _client.close();
 
   static Uri normalizeBaseUrl(String value) {
@@ -91,6 +98,7 @@ class MediaServerClient {
     Map<String, dynamic>? body,
     Future<void> Function()? authorize,
     bool allowEmptyResponse = false,
+    Duration? requestTimeout,
   }) async {
     await authorize?.call();
     final request =
@@ -126,7 +134,7 @@ class MediaServerClient {
           stream.statusCode,
           headers: stream.headers,
         );
-      })().timeout(timeout);
+      })().timeout(requestTimeout ?? timeout);
       await authorize?.call();
       if (response.statusCode == 401) {
         throw const MediaServerException(
@@ -160,7 +168,7 @@ class MediaServerClient {
       rethrow;
     } on TimeoutException {
       outcome = 'timeout';
-      throw const MediaServerException(
+      throw const _LookupTimeout(
         'Server timed out. Check its address and network connection.',
       );
     } on FormatException {
@@ -269,105 +277,127 @@ class MediaServerClient {
     }
   }
 
-  Future<List<Map<String, dynamic>>> _items(
-    MediaServerAccount account,
-    String path,
-    Map<String, String> query,
-    Future<void> Function()? authorize,
-  ) async {
-    final items = <Map<String, dynamic>>[];
-    // A bounded paginated query, not a full library download. Server-side
-    // filters are verified again by the caller before anything is playable.
-    for (var start = 0; start < 1000; start += 100) {
-      final data = await _request(
-        account.baseUrl,
-        path,
-        deviceId: account.deviceId,
-        kind: account.kind,
-        token: account.token,
-        query: {
-          ...query,
-          'UserId': account.userId,
-          'StartIndex': '$start',
-          'Limit': '100',
-        },
-        authorize: authorize,
-      );
-      final page = data['Items'];
-      if (page is! List) {
-        throw const MediaServerException(
-          'The server returned an invalid library response.',
-        );
-      }
-      items.addAll(page.whereType<Map<String, dynamic>>());
-      final total = data['TotalRecordCount'];
-      if (page.length < 100 || (total is num && start + page.length >= total)) {
-        return items;
-      }
-    }
-    throw const MediaServerException(
-      'The server returned too many matches. Check its metadata IDs.',
-    );
-  }
-
-  // Jellyfin does not implement Emby's AnyProviderIdEquals. Scan lightweight
-  // metadata pages and verify IDs locally; never retain the unrelated library.
-  Future<List<Map<String, dynamic>>> _jellyfinItems(
+  // Jellyfin has no exact provider-ID query. Cache only verified matches and
+  // a continuation offset, not a copy of the user's whole library. Each caller
+  // supplies its profile/connection revision scope; credentials are hashed.
+  Future<List<Map<String, dynamic>>> _lookupPages(
     MediaServerAccount account,
     String path,
     Map<String, String> query,
     bool Function(Map<String, dynamic>) matches,
-    Future<void> Function()? authorize,
-  ) async {
-    const pageSize = 500;
-    final found = <Map<String, dynamic>>[];
-    final pageBoundaries = <String>{};
-    final deadline = DateTime.now().add(const Duration(seconds: 25));
-    var start = 0;
-    while (true) {
-      if (DateTime.now().isAfter(deadline)) {
-        throw const MediaServerException(
-          'Server search timed out. Please retry.',
-        );
-      }
-      final data = await _request(
-        account.baseUrl,
-        path,
-        deviceId: account.deviceId,
-        kind: account.kind,
-        token: account.token,
-        query: {
-          ...query,
-          'UserId': account.userId,
-          'StartIndex': '$start',
-          'Limit': '$pageSize',
-          'EnableTotalRecordCount': 'true',
-        },
-        authorize: authorize,
-      );
-      final page = data['Items'];
-      if (page is! List || page.any((item) => item is! Map<String, dynamic>)) {
-        throw const MediaServerException(
-          'The server returned an invalid library response.',
-        );
-      }
-      if (page.isEmpty) return found;
-      // Protect against servers/proxies that ignore StartIndex and repeat pages.
-      final boundary = jsonEncode([
-        page.first['Id'],
-        page.last['Id'],
-        page.length,
-      ]);
-      if (!pageBoundaries.add(boundary)) {
-        throw const MediaServerException(
-          'The server repeated a library page. Please retry or check the server.',
-        );
-      }
-      found.addAll(page.cast<Map<String, dynamic>>().where(matches));
-      start += page.length;
-      final total = data['TotalRecordCount'];
-      if (total is num ? start >= total : page.length < pageSize) return found;
+    Future<void> Function()? authorize, {
+    required DateTime deadline,
+    required String identity,
+    Object? cacheScope,
+    void Function()? onIncomplete,
+  }) async {
+    await authorize?.call();
+    final now = _lookupClock();
+    _lookupCache.removeWhere(
+      (_, entry) => now.difference(entry.created) > const Duration(minutes: 1),
+    );
+    final cacheKey = cacheScope == null
+        ? null
+        : (
+            cacheScope,
+            sha256
+                .convert(
+                  utf8.encode(
+                    jsonEncode([account.toJson(), path, query, identity]),
+                  ),
+                )
+                .toString(),
+          );
+    final saved = cacheKey == null ? null : _lookupCache[cacheKey];
+    final state = saved?.copy() ?? _LookupPageState(now);
+    if (state.complete) {
+      await authorize?.call();
+      return state.items;
     }
+    final pageSize = account.kind == MediaServerKind.jellyfin ? 500 : 100;
+    try {
+      while (true) {
+        await authorize?.call();
+        final remaining = deadline.difference(_lookupClock());
+        if (remaining <= Duration.zero) {
+          throw const _LookupTimeout('Search budget exhausted');
+        }
+        final data = await _request(
+          account.baseUrl,
+          path,
+          deviceId: account.deviceId,
+          kind: account.kind,
+          token: account.token,
+          query: {
+            ...query,
+            'UserId': account.userId,
+            'StartIndex': '${state.offset}',
+            'Limit': '$pageSize',
+            'EnableTotalRecordCount': 'true',
+          },
+          authorize: authorize,
+          requestTimeout: remaining < timeout ? remaining : timeout,
+        );
+        final page = data['Items'];
+        if (page is! List ||
+            page.any(
+              (item) => item is! Map<String, dynamic> || item['Id'] is! String,
+            )) {
+          throw const MediaServerException(
+            'The server returned an invalid library response.',
+          );
+        }
+        if (page.isEmpty) {
+          state.complete = true;
+          break;
+        }
+        final boundary = jsonEncode([
+          page.first['Id'],
+          page.last['Id'],
+          page.length,
+        ]);
+        if (!state.boundaries.add(boundary)) {
+          throw const MediaServerException(
+            'The server repeated a library page. Please retry or check the server.',
+          );
+        }
+        final known = state.items.map((item) => item['Id']).toSet();
+        state.items.addAll(
+          page.cast<Map<String, dynamic>>().where(
+            (item) => matches(item) && known.add(item['Id']),
+          ),
+        );
+        state.offset += page.length;
+        final total = data['TotalRecordCount'];
+        if (total is num ? state.offset >= total : page.length < pageSize) {
+          state.complete = true;
+          break;
+        }
+      }
+    } on _LookupTimeout {
+      // Authorization failures must never be converted to partial success.
+      await authorize?.call();
+      if (onIncomplete == null) rethrow;
+      onIncomplete();
+    } catch (_) {
+      if (cacheKey != null) _lookupCache.remove(cacheKey);
+      rethrow;
+    }
+    await authorize?.call();
+    if (cacheKey != null &&
+        state.items.length <= 2000 &&
+        state.boundaries.length <= 2000) {
+      // Fixed creation time prevents a frequently used entry from living forever.
+      // Empty completed lookups are not cached: new additions remain discoverable.
+      _lookupCache.remove(cacheKey);
+      if (!state.complete || state.items.isNotEmpty) {
+        while (_lookupCache.length >= 32) {
+          _lookupCache.remove(_lookupCache.keys.first);
+        }
+        _lookupCache[cacheKey] = state.copy();
+      }
+    }
+    return state.items;
   }
 
   /// Exact provider IDs only. Avoid fuzzy guesses, remakes and alternate
@@ -379,7 +409,10 @@ class MediaServerClient {
     int? season,
     int? episode,
     Future<void> Function()? authorize,
+    Object? cacheScope,
+    void Function()? onIncomplete,
   }) async {
+    final deadline = _lookupClock().add(lookupBudget);
     final provider = RegExp(r'^tt\d+$').hasMatch(id)
         ? 'imdb'
         : RegExp(r'^tmdb:\d+$').hasMatch(id)
@@ -409,26 +442,28 @@ class MediaServerClient {
       'EnableImages': 'false',
       'EnableUserData': 'false',
     };
-    final exact = account.kind == MediaServerKind.jellyfin
-        ? await _jellyfinItems(
-            account,
-            path,
-            {
-              ...query,
-              'Fields': 'ProviderIds',
-              'Has${provider[0].toUpperCase()}${provider.substring(1)}Id':
-                  'true',
-              'SortBy': 'SortName',
-              'SortOrder': 'Ascending',
-            },
-            matchesIdentity,
-            authorize,
-          )
-        : (await _items(account, path, {
-            ...query,
-            'AnyProviderIdEquals': '$provider.$providerId',
-            'Fields': 'ProviderIds,MediaSources,MediaStreams',
-          }, authorize)).where(matchesIdentity).toList();
+    final exact = await _lookupPages(
+      account,
+      path,
+      {
+        ...query,
+        if (account.kind == MediaServerKind.jellyfin) ...{
+          'Fields': 'ProviderIds',
+          'Has${provider[0].toUpperCase()}${provider.substring(1)}Id': 'true',
+          'SortBy': 'SortName',
+          'SortOrder': 'Ascending',
+        } else ...{
+          'AnyProviderIdEquals': '$provider.$providerId',
+          'Fields': 'ProviderIds,MediaSources,MediaStreams',
+        },
+      },
+      matchesIdentity,
+      authorize,
+      deadline: deadline,
+      identity: id,
+      cacheScope: cacheScope,
+      onIncomplete: onIncomplete,
+    );
     if (isMovie) {
       return exact.where((item) => item['IsPlaceHolder'] != true).toList();
     }
@@ -448,23 +483,25 @@ class MediaServerClient {
       bool matchesEpisode(Map<String, dynamic> item) =>
           item['Type'] == 'Episode' &&
           item['ParentIndexNumber'] == season &&
-          item['IndexNumber'] == episode &&
+          item['IndexNumber'] is int &&
+          episode! >= (item['IndexNumber'] as int) &&
+          episode <=
+              (item['IndexNumberEnd'] is int
+                  ? item['IndexNumberEnd'] as int
+                  : item['IndexNumber'] as int) &&
           item['IsMissing'] != true &&
           item['IsPlaceHolder'] != true;
-      final found = account.kind == MediaServerKind.jellyfin
-          ? await _jellyfinItems(
-              account,
-              path,
-              query,
-              matchesEpisode,
-              authorize,
-            )
-          : (await _items(
-              account,
-              path,
-              query,
-              authorize,
-            )).where(matchesEpisode).toList();
+      final found = await _lookupPages(
+        account,
+        path,
+        query,
+        matchesEpisode,
+        authorize,
+        deadline: deadline,
+        identity: '$id:$season:$episode',
+        cacheScope: cacheScope,
+        onIncomplete: onIncomplete,
+      );
       episodes.addAll(found);
     }
     return episodes;
@@ -736,4 +773,22 @@ class MediaServerClient {
     'MediaSourceId': sourceId,
     'DeviceId': account.deviceId,
   });
+}
+
+class _LookupTimeout extends MediaServerException {
+  const _LookupTimeout(super.message);
+}
+
+class _LookupPageState {
+  _LookupPageState(this.created);
+  final DateTime created;
+  int offset = 0;
+  bool complete = false;
+  final items = <Map<String, dynamic>>[];
+  final boundaries = <String>{};
+  _LookupPageState copy() => _LookupPageState(created)
+    ..offset = offset
+    ..complete = complete
+    ..items.addAll(items.map((item) => Map<String, dynamic>.from(item)))
+    ..boundaries.addAll(boundaries);
 }
