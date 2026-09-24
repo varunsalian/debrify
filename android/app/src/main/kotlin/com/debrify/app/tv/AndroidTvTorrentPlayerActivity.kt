@@ -19099,6 +19099,15 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private fun setupBackPressHandler() {
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
+                // System Back can arrive without a KeyEvent (e.g. remote input).
+                if (linePickerOverlay?.isVisible == true) {
+                    linePickerOverlay?.hide()
+                    return
+                }
+                if (syncOverlay?.isVisible == true) {
+                    syncOverlay?.hide()
+                    return
+                }
                 // If IPTV guide is visible, hide it first
                 if (iptvGuideVisible) {
                     hideIptvGuide()
