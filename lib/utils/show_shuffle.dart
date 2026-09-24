@@ -5,12 +5,13 @@ typedef ShuffleEpisode = (int, int);
 
 bool isShuffleEpisodeEligible(Map<String, dynamic> episode, {DateTime? now}) {
   final season = episode['season'];
-  final number = episode['number'];
+  final number = episode['number'] ?? episode['episode'];
   if (season is! int || number is! int || season <= 0 || number <= 0) {
     return false;
   }
   final air = DateTime.tryParse(
-    (episode['airstamp'] ?? episode['airdate'] ?? '').toString(),
+    (episode['airstamp'] ?? episode['airdate'] ?? episode['released'] ?? '')
+        .toString(),
   );
   // Unknown dates remain playable; positively future-dated episodes do not.
   return air == null || !air.isAfter(now ?? DateTime.now());

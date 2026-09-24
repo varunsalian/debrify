@@ -4,6 +4,7 @@ import 'package:debrify/services/native_series_metadata_service.dart';
 import 'package:debrify/services/tmdb_metadata_repository.dart';
 import 'package:debrify/services/stremio_service.dart';
 import 'package:debrify/services/next_episode_service.dart';
+import 'package:debrify/services/storage_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -11,6 +12,32 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  test(
+    'saved tracker title restores built-in metadata and canonical progress',
+    () async {
+      SharedPreferences.setMockInitialValues({});
+      final saved = StorageService.withMyWatchlistSource(
+        const StremioMeta(
+          id: 'tt0118360',
+          imdbId: 'tt0118360',
+          type: 'series',
+          name: 'Johnny Bravo',
+        ),
+        NativeSeriesMetadataService.addon,
+      );
+      await StorageService.setMyWatchlistItem(saved, true);
+      final restored = (await StorageService.getMyWatchlistItems()).single;
+      final addon = NativeSeriesMetadataService.addonForItem(restored);
+      expect(addon.id, NativeSeriesMetadataService.addon.id);
+      expect(addon.baseUrl, isEmpty);
+      final scoped = await StremioService.instance.scopeSeriesProgress(
+        restored,
+        addon,
+      );
+      expect(scoped.progressId, 'tt0118360');
+    },
+  );
 
   test(
     'TMDB outage falls back to canonical Trakt episodes and advances seasons',
