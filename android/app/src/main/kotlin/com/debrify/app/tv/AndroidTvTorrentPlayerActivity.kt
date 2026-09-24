@@ -2787,7 +2787,11 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
         // Start with text off until the selected audio is known. This also
         // prevents a file's default/forced track flashing before policy runs.
-        if (playerPreferences.getBoolean("subtitle_only_foreign_audio", false)) {
+        // Wait for exact regional matching; ExoPlayer can treat pt-PT as a
+        // partial match for pt-BR during its initial track selection.
+        if (playerPreferences.getBoolean("subtitle_only_foreign_audio", false) ||
+            playerPreferences.getBoolean("subtitle_forced_only", false) ||
+            defaultSubtitleLang?.equals("pt-BR", ignoreCase = true) == true) {
             paramsBuilder?.setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
         }
         trackSelector?.parameters = paramsBuilder?.build()!!
@@ -2839,7 +2843,10 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
         // Wrap with DefaultDataSource.Factory for local file/content URI support
         protectedStreamClient = ProtectedStreamHttp.client(networkTimeoutMs)
-        val vodHttpFactory = ProtectedStreamHttp.dataSourceFactory(protectedStreamClient)
+        val vodHttpFactory = VodHttpDataSource.Factory(
+            httpDataSourceFactory,
+            ProtectedStreamHttp.dataSourceFactory(protectedStreamClient),
+        )
         val upstreamDataSourceFactory = DefaultDataSource.Factory(
             this, if (isIptvMode) httpDataSourceFactory else vodHttpFactory,
         )
@@ -4798,7 +4805,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 .setTrackTypeDisabled(
                     C.TRACK_TYPE_TEXT,
                     playerPreferences.getString("player_default_subtitle_language", null) == "off" ||
-                        playerPreferences.getBoolean("subtitle_only_foreign_audio", false),
+                        playerPreferences.getBoolean("subtitle_only_foreign_audio", false) ||
+                        playerPreferences.getBoolean("subtitle_forced_only", false),
                 )
                 .build()
         }
@@ -6903,9 +6911,11 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                     supported = group.isTrackSupported(i),
                     selected = group.isTrackSelected(i),
                     matchesLanguage = LanguageMapper.matchesLanguage(targetLanguage, format.language) ||
-                        LanguageMapper.matchesLanguage(targetLanguage, format.label) ||
-                        LanguageMapper.matchesLanguage(targetLanguage, format.id),
+                        (!playerPreferences.getBoolean("subtitle_forced_only", false) &&
+                            (LanguageMapper.matchesLanguage(targetLanguage, format.label) ||
+                                LanguageMapper.matchesLanguage(targetLanguage, format.id))),
                     defaultTrack = format.selectionFlags and C.SELECTION_FLAG_DEFAULT != 0,
+                    forcedTrack = format.selectionFlags and C.SELECTION_FLAG_FORCED != 0,
                     undeclaredHlsCaption = isUndeclaredHlsCaption(
                         isHls = currentPlayer.currentManifest is HlsManifest,
                         mimeType = format.sampleMimeType,
@@ -6926,12 +6936,18 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 preferredAudio = playerPreferences.getString("player_default_audio_language", null),
                 selectedAudio = selectedAudioLanguage(tracks),
             ),
+            forcedOnly = playerPreferences.getBoolean("subtitle_forced_only", false),
             candidates = candidates,
             sourcePriority = SubtitleSettings.getSubtitleSourcePriority(this),
             addonDiscoveryReady = subtitleAddonDiscoveryReady,
             addons = addonSubtitleResults.map { slot ->
                 val eligible = slot.subtitles.indices.filter { slot.subtitles[it].url !in failedSubtitleUrls }
-                val matching = eligible.filter { LanguageMapper.matchesLanguage(targetLanguage, slot.subtitles[it].lang) }
+                val matching = eligible.filter {
+                    val subtitle = slot.subtitles[it]
+                    LanguageMapper.matchesLanguage(targetLanguage, subtitle.lang) ||
+                        (targetLanguage.equals("pt-BR", ignoreCase = true) &&
+                            LanguageMapper.matchesLanguage(targetLanguage, subtitle.label))
+                }
                 AddonSubtitleCandidate(
                     addonId = slot.addon.priorityId,
                     loading = slot.status == AddonSubtitleStatus.LOADING,

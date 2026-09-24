@@ -1,6 +1,6 @@
 import 'dart:convert';
-import 'dart:io';
 
+import 'package:debrify/models/advanced_search_selection.dart';
 import 'package:debrify/models/stremio_addon.dart';
 import 'package:debrify/services/secret_vault.dart';
 import 'package:debrify/services/simkl/simkl_service.dart';
@@ -12,104 +12,156 @@ import 'package:debrify/theme/app_theme_scope.dart';
 import 'package:debrify/widgets/episodes_panel.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-class _LocalHttp extends HttpOverrides {}
-
 void main() {
-  for (final isTelevision in [false, true]) {
-    testWidgets(
-      'Simkl episode menu keeps watched action without rating (TV=$isTelevision)',
-      (tester) async {
-        SharedPreferences.setMockInitialValues({});
-        SecretVault.debugReset(deviceIdOverride: 'simkl-menu-test');
-        addTearDown(SecretVault.debugReset);
-        final show = StremioMeta(
-          id: 'simkl-menu-$isTelevision',
-          type: 'series',
-          name: 'Test Show',
-        );
-        late StremioAddon addon;
-        await tester.runAsync(
-          () => HttpOverrides.runWithHttpOverrides(() async {
-            // Fake credentials only. A non-IMDb fixture avoids tracker reads;
-            // the menu still resolves real auth and watched-destination policy.
-            await StorageService.setSimklAccessToken('test-only-token');
-            await StorageService.setTrackingScrobbleTargets({
-              TrackingSource.simkl,
-            });
-            expect(await SimklService.instance.isAuthenticated(), isTrue);
-            final server = await HttpServer.bind(
-              InternetAddress.loopbackIPv4,
-              0,
-            );
-            server.listen((request) async {
-              request.response.write(
-                jsonEncode({
+  for (final native in [false, true]) {
+    for (final isTelevision in [false, true]) {
+      testWidgets(
+        'Simkl ticks, menu and Sources (TV=$isTelevision, native=$native)',
+        (tester) async {
+          SharedPreferences.setMockInitialValues({});
+          SecretVault.debugReset(deviceIdOverride: 'simkl-menu-test');
+          SimklService.instance.resetProfileScope();
+          addTearDown(SecretVault.debugReset);
+          addTearDown(SimklService.instance.resetProfileScope);
+          final id = native ? 'tmdb:237243' : 'tt1234567';
+          final ids = native ? {'tmdb': 237243} : {'imdb': id};
+          final show = StremioMeta(
+            id: id,
+            imdbId: native ? null : id,
+            type: 'series',
+            name: 'Test Show',
+          );
+          final addon = StremioAddon(
+            id: 'simkl-menu-$native-$isTelevision',
+            name: 'Test',
+            baseUrl: 'https://fixture.invalid',
+            manifestUrl: 'https://fixture.invalid/manifest.json',
+            resources: const ['meta'],
+            types: const ['series'],
+          );
+          AdvancedSearchSelection? selected;
+          await http.runWithClient(
+            () async {
+              await tester.runAsync(() async {
+                await StorageService.setSimklAccessToken('test-only-token');
+                await StorageService.setTrackingScrobbleTargets({
+                  TrackingSource.simkl,
+                });
+                expect(
+                  await StremioService.instance.fetchSeriesMeta(addon, id),
+                  hasLength(1),
+                );
+              });
+              await tester.pumpWidget(
+                MaterialApp(
+                  home: AppThemeScope(
+                    theme: AppThemes.legacy,
+                    child: Scaffold(
+                      body: EpisodesPanel(
+                        show: show,
+                        addon: addon,
+                        isTelevision: isTelevision,
+                        onItemSelected: (value) => selected = value,
+                        contentBuilder: (context, view) => view.episodes.isEmpty
+                            ? const SizedBox()
+                            : Column(
+                                children: [
+                                  Text(
+                                    'progress: ${view.progressOf(view.episodes.single)}',
+                                  ),
+                                  TextButton(
+                                    onPressed: () =>
+                                        view.options(view.episodes.single),
+                                    child: const Text('Episode options'),
+                                  ),
+                                ],
+                              ),
+                      ),
+                    ),
+                  ),
+                ),
+              );
+              for (var i = 0; i < 20; i++) {
+                await tester.runAsync(
+                  () => SimklService.instance.isAuthenticated(),
+                );
+                await tester.pump(const Duration(milliseconds: 50));
+              }
+              expect(find.text('progress: 100.0'), findsOneWidget);
+              await tester.tap(find.text('Episode options'));
+              await tester.pumpAndSettle();
+              expect(find.text('Rate on Simkl'), findsNothing);
+              expect(find.text('Mark as Unwatched'), findsOneWidget);
+              expect(
+                find.textContaining('Simkl and this device'),
+                findsOneWidget,
+              );
+              expect(find.text('Play'), findsOneWidget);
+              await tester.tap(find.text('Sources'));
+              await tester.pumpAndSettle();
+              expect(selected?.imdbId, id);
+              expect(selected?.season, 1);
+              expect(selected?.episode, 1);
+              expect(selected?.hasStremioEpisodeIdentity, isFalse);
+              expect(tester.takeException(), isNull);
+              await tester.pumpWidget(const SizedBox());
+            },
+            () => MockClient((request) async {
+              if (request.url.host.contains('tvmaze')) {
+                return http.Response('{}', 404);
+              }
+              Object body;
+              if (request.url.host == 'fixture.invalid') {
+                body = {
                   'meta': {
                     'videos': [
-                      {'season': 1, 'episode': 1, 'title': 'Pilot'},
+                      {
+                        'id': '$id:1:1',
+                        'season': 1,
+                        'episode': 1,
+                        'title': 'Pilot',
+                      },
                     ],
                   },
-                }),
-              );
-              await request.response.close();
-            });
-            final base = 'http://127.0.0.1:${server.port}';
-            addon = StremioAddon(
-              id: 'simkl-menu-$isTelevision',
-              name: 'Test',
-              baseUrl: base,
-              manifestUrl: '$base/manifest.json',
-              resources: const ['meta'],
-              types: const ['series'],
-            );
-            try {
-              expect(
-                await StremioService.instance.fetchSeriesMeta(addon, show.id),
-                hasLength(1),
-              );
-            } finally {
-              await server.close(force: true);
-            }
-          }, _LocalHttp()),
-        );
-        await tester.pumpWidget(
-          MaterialApp(
-            home: AppThemeScope(
-              theme: AppThemes.legacy,
-              child: Scaffold(
-                body: EpisodesPanel(
-                  show: show,
-                  addon: addon,
-                  isTelevision: isTelevision,
-                  contentBuilder: (context, view) => view.episodes.isEmpty
-                      ? const SizedBox()
-                      : TextButton(
-                          onPressed: () => view.options(view.episodes.single),
-                          child: const Text('Episode options'),
-                        ),
-                ),
-              ),
-            ),
-          ),
-        );
-        for (var i = 0; i < 20; i++) {
-          // Credential decryption uses real async work, not the widget clock.
-          await tester.runAsync(() => SimklService.instance.isAuthenticated());
-          await tester.pump(const Duration(milliseconds: 50));
-        }
-        await tester.tap(find.text('Episode options'));
-        await tester.pumpAndSettle();
-
-        expect(find.text('Rate on Simkl'), findsNothing);
-        expect(find.text('Mark as Watched'), findsOneWidget);
-        expect(find.text('On Simkl and this device'), findsOneWidget);
-        expect(find.text('Play'), findsOneWidget);
-        expect(find.text('Sources'), findsOneWidget);
-        expect(tester.takeException(), isNull);
-        await tester.pumpWidget(const SizedBox());
-      },
-    );
+                };
+              } else if (request.url.path == '/sync/watched') {
+                expect(jsonDecode(request.body), [
+                  {...ids, 'type': 'show'},
+                ]);
+                body = [
+                  {
+                    'result': true,
+                    'seasons': [
+                      {
+                        'number': 1,
+                        'episodes': [
+                          {'number': 1, 'watched': true},
+                        ],
+                      },
+                    ],
+                  },
+                ];
+              } else if (request.url.path == '/sync/all-items/all/all') {
+                body = {
+                  'shows': [
+                    {
+                      'show': {'title': 'Test Show', 'ids': ids},
+                      'status': 'watching',
+                    },
+                  ],
+                };
+              } else {
+                body = [];
+              }
+              return http.Response(jsonEncode(body), 200);
+            }),
+          );
+        },
+      );
+    }
   }
 }

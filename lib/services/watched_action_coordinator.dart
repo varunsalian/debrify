@@ -1,3 +1,4 @@
+import '../models/media_identity.dart';
 import 'episode_tracker_snapshot_revision.dart';
 import '../models/custom_series_identity.dart';
 import 'local_series_completion_service.dart';
@@ -42,7 +43,7 @@ class WatchedActionCoordinator {
     required bool watched,
     Set<TrackingSource> forceTargets = const <TrackingSource>{},
   }) async {
-    final id = imdbId.trim();
+    final id = MediaIdentity.progressId(imdbId.trim(), contentType);
     if (id.isEmpty) return const WatchedActionResult(['this device']);
     final series = contentType == 'series' || contentType == 'show';
     if (series) {
@@ -57,9 +58,9 @@ class WatchedActionCoordinator {
     }
 
     if (CustomSeriesIdentity.isCustom(id)) return const WatchedActionResult([]);
-    final policy = await TrackingSourcePolicy.load();
+    final policy = (await TrackingSourcePolicy.load()).forContent(id);
     final failures = <String>[];
-    if (_writes(policy, forceTargets, TrackingSource.trakt) &&
+    if (!policy.nativeIdentity && _writes(policy, forceTargets, TrackingSource.trakt) &&
         await TraktService.instance.isAuthenticated()) {
       final ok = watched
           ? await TraktService.instance.addToHistory(id, contentType)
@@ -76,7 +77,7 @@ class WatchedActionCoordinator {
         // is an active rewatch), so clearing the paused session is what takes
         // the title OFF Simkl's Continue Watching — fold the result in, and
         // keep this write behind the same Scrobble gate as the mark itself.
-        ok = await SimklService.instance.deletePlaybackForImdb(id);
+        ok = await SimklService.instance.deletePlaybackForImdb(id, contentType: contentType);
       }
       if (!ok) failures.add('Simkl');
     }
@@ -121,9 +122,9 @@ class WatchedActionCoordinator {
 
     if (CustomSeriesIdentity.isCustom(imdbId)) return const WatchedActionResult([]);
 
-    final policy = await TrackingSourcePolicy.load();
+    final policy = (await TrackingSourcePolicy.load()).forContent(imdbId);
     final failures = <String>[];
-    if (_writes(policy, forceTargets, TrackingSource.trakt) &&
+    if (!policy.nativeIdentity && _writes(policy, forceTargets, TrackingSource.trakt) &&
         await TraktService.instance.isAuthenticated()) {
       final ok = watched
           ? await TraktService.instance.markEpisodeWatched(

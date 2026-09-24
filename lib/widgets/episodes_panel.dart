@@ -1,3 +1,4 @@
+import '../models/media_identity.dart';
 import '../services/metadata_preferences_service.dart';
 import '../services/diagnostic_log.dart';
 import '../services/profiles/profile_runtime.dart';
@@ -339,6 +340,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
   /// watched/unwatched, rate) is only offered when this is true.
   bool _traktAuthenticated = false;
   bool get _isTraktAuthenticated => _traktAuthenticated &&
+      !MediaIdentity.isNative((_selectedShow ?? widget.show).progressId) &&
       !CustomSeriesIdentity.isCustom((_selectedShow ?? widget.show).imdbId);
 
   /// Whether Simkl is connected, for watched-action destinations and options.
@@ -347,6 +349,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
   bool get _isSimklAuthenticated => _simklAuthenticated &&
       !CustomSeriesIdentity.isCustom((_selectedShow ?? widget.show).imdbId);
   bool get _isMdblistAuthenticated => _mdblistAuthenticated &&
+      !MediaIdentity.isNative((_selectedShow ?? widget.show).progressId) &&
       !CustomSeriesIdentity.isCustom((_selectedShow ?? widget.show).imdbId);
 
   // MDBList can acknowledge a completed scrobble just before the player route
@@ -423,7 +426,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
     StremioMeta show,
     int generation,
   ) async {
-    final policy = (await TrackingSourcePolicy.load()).forContent(show.imdbId);
+    final policy = (await TrackingSourcePolicy.load()).forContent(show.progressId);
     if (!mounted || generation != _episodeModeGeneration) return;
     _trackingPolicy = policy;
     // Direct-source mode: the host owns progress (URL-keyed player positions
@@ -442,7 +445,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
       return;
     }
 
-    final imdbId = show.effectiveImdbId;
+    final imdbId = show.progressId;
     if (imdbId == null) return;
 
     // Ticks and bars BOTH follow the Progress source (2026-08-27 decision —
@@ -547,7 +550,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
       }
     }
 
-    if (!CustomSeriesIdentity.isCustom(imdbId) && await _mdblistService.isAuthenticated()) {
+    if (MediaIdentity.isImdb(imdbId) && await _mdblistService.isAuthenticated()) {
       if (policy.progressFrom(TrackingSource.mdblist)) {
         try {
           final result = await _mdblistService.fetchShowEpisodeProgress(imdbId);
@@ -740,7 +743,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
   /// menu row's subtitle, so what the row promises IS what the action does.
   List<String> _watchedSyncTargets({required bool watched}) {
     final show = _selectedShow;
-    final imdb = show == null ? '' : (show.effectiveImdbId ?? show.id);
+    final imdb = show == null ? '' : (show.progressId ?? show.id);
     final targets = <String>[
       if (_isTraktAuthenticated &&
           _trackingPolicy.scrobbles(TrackingSource.trakt))
@@ -775,7 +778,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
   }) async {
     final show = _selectedShow;
     if (show == null) return;
-    final showImdbId = show.effectiveImdbId ?? show.id;
+    final showImdbId = show.progressId ?? show.id;
     final key = '${episode.season}-${episode.number}';
     final targets = _watchedSyncTargets(watched: watched);
     final result = await WatchedActionCoordinator.setEpisodeWatched(
@@ -844,7 +847,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
   ) async {
     final show = _selectedShow;
     if (show == null) return;
-    final showImdbId = show.effectiveImdbId ?? show.id;
+    final showImdbId = show.progressId ?? show.id;
     bool success = false;
     String actionLabel = '';
 
@@ -884,7 +887,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
   ) async {
     final show = _selectedShow;
     if (show == null) return;
-    final imdb = show.effectiveImdbId ?? show.id;
+    final imdb = show.progressId ?? show.id;
     if (!imdb.startsWith('tt')) return;
     final ids = MdblistMediaIds(imdb: imdb);
     final key = '${episode.season}-${episode.number}';
@@ -940,7 +943,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
     if (!mounted) return;
     widget.onBeforeTerminalDispatch?.call();
     final selection = AdvancedSearchSelection(
-      imdbId: show.effectiveImdbId ?? show.id,
+      imdbId: show.progressId ?? show.id,
       isSeries: true,
       title: show.name,
       year: show.year,
@@ -971,7 +974,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
 
     // 1) Addon meta endpoint — skip when the addon is a stub (no base URL),
     //    which is the case for Trakt-sourced items.
-    if (widget.addon.baseUrl.isNotEmpty ||
+    if (MediaIdentity.isNative(show.id) || widget.addon.baseUrl.isNotEmpty ||
         widget.addon.manifestUrl.isNotEmpty) {
       try {
         final videos = await _stremioService.fetchSeriesMeta(
@@ -987,8 +990,8 @@ class EpisodesPanelState extends State<EpisodesPanel> {
 
     // 2) Trakt public seasons API (no auth required; keyed off the IMDb id).
     if (CustomSeriesIdentity.isCustom(show.imdbId)) return [];
-    final traktId = show.effectiveImdbId ?? show.id;
-    if (traktId.isNotEmpty) {
+    final traktId = show.progressId ?? show.id;
+    if (MediaIdentity.isImdb(traktId)) {
       try {
         final raw = await _traktService.fetchShowSeasons(traktId);
         // Dedupe by season number: a malformed response can yield >1 season
@@ -1101,7 +1104,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
       }
       return;
     }
-    final trackingPolicy = (await TrackingSourcePolicy.load()).forContent(show.imdbId);
+    final trackingPolicy = (await TrackingSourcePolicy.load()).forContent(show.progressId);
     if (!mounted || generation != _episodeModeGeneration) return;
     _trackingPolicy = trackingPolicy;
 
@@ -1144,7 +1147,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
           _isDirectSource || !trackingPolicy.progressFrom(TrackingSource.trakt)
           ? Future<({int season, int episode})?>.value(null)
           : _traktService
-                .fetchNextEpisode(show.effectiveImdbId ?? show.id)
+                .fetchNextEpisode(show.progressId ?? show.id)
                 .catchError((Object e) {
                   debugPrint('EpisodesPanel: next-episode fetch failed: $e');
                   return null;
@@ -1173,7 +1176,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
         return;
       }
 
-      final imdbId = show.effectiveImdbId;
+      final imdbId = show.progressId;
       if (!_isDirectSource && imdbId != null && imdbId.isNotEmpty) {
         unawaited(
           LocalSeriesCompletionService.instance.recordEpisodeInventory(
@@ -1233,7 +1236,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
           trackingPolicy.progressFrom(TrackingSource.local) &&
           effectiveSeason == null &&
           effectiveEpisode == null) {
-        final imdbId = show.effectiveImdbId;
+        final imdbId = show.progressId;
         if (imdbId != null) {
           final lastPlayed = await StorageService.getLastPlayedEpisodeByImdbId(
             imdbId,
@@ -1244,7 +1247,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
             effectiveEpisode = lastPlayed['episode'] as int?;
           }
         }
-        if (!CustomSeriesIdentity.isCustom(show.imdbId) && effectiveSeason == null && effectiveEpisode == null) {
+        if (!MediaIdentity.isNative(show.progressId) && !CustomSeriesIdentity.isCustom(show.imdbId) && effectiveSeason == null && effectiveEpisode == null) {
           final byTitle = await StorageService.getLastPlayedEpisode(
             seriesTitle: show.name,
           );
@@ -1384,8 +1387,8 @@ class EpisodesPanelState extends State<EpisodesPanel> {
     );
     if (hasRealRating) return;
 
-    final imdbId = show.effectiveImdbId ?? show.id;
-    if (imdbId.isEmpty) return;
+    final imdbId = show.progressId ?? show.id;
+    if (!MediaIdentity.isImdb(imdbId)) return;
 
     try {
       final raw = await _traktService.fetchShowSeasons(imdbId);
@@ -1657,7 +1660,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
     if (show == null || widget.onItemSelected == null) return;
 
     var selection = AdvancedSearchSelection(
-      imdbId: show.effectiveImdbId ?? show.id,
+      imdbId: show.progressId ?? show.id,
       isSeries: true,
       title: show.name,
       year: show.year,
@@ -1705,7 +1708,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
     if (show == null) return;
 
     var selection = AdvancedSearchSelection(
-      imdbId: show.effectiveImdbId ?? show.id,
+      imdbId: show.progressId ?? show.id,
       isSeries: true,
       title: show.name,
       year: show.year,
@@ -2232,6 +2235,10 @@ class EpisodesPanelState extends State<EpisodesPanel> {
       if (CustomSeriesIdentity.isCustom(show.imdbId)) {
         connected.fillRange(1, connected.length, false);
       }
+      if (MediaIdentity.isNative(show.progressId)) {
+        connected[1] = false;
+        connected[3] = false;
+      }
       if (!mounted) return;
       final providers = [TrackingSource.local, TrackingSource.trakt, TrackingSource.simkl, TrackingSource.mdblist];
       final names = ['locally', 'on Trakt', 'on Simkl', 'on MDBList'];
@@ -2248,11 +2255,11 @@ class EpisodesPanelState extends State<EpisodesPanel> {
       final episodeNumbers = season.episodes.map((e) => e.number).toList();
       final statuses = await Future.wait([
         for (var i = 0; i < providers.length; i++)
-          connected[i] ? SeasonWatchedService.isWatched(show.effectiveImdbId ?? show.id,
+          connected[i] ? SeasonWatchedService.isWatched(show.progressId ?? show.id,
             show.name, number, episodeNumbers, providers[i]) : Future<bool?>.value(null),
       ]);
       if (!mounted) return;
-      final id = show.effectiveImdbId ?? show.id;
+      final id = show.progressId ?? show.id;
       final retryTargets = [for (final provider in providers)
         _seasonRetries.pending(id, number, provider)];
       final targets = [for (var i = 0; i < providers.length; i++)

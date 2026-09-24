@@ -3044,6 +3044,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     const subtitleLanguageLabels = [
       ...audioLanguageLabels,
+      'portuguese brazil',
+      'brazilian portuguese',
+      'pt-br',
       'off',
       'estonian',
       'croatian',

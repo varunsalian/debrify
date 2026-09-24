@@ -62,7 +62,8 @@ data class StremioSubtitle(
             "baq" to "Basque", "geo" to "Georgian", "mac" to "Macedonian",
             "bur" to "Burmese", "wel" to "Welsh",
             // OpenSubtitles-specific codes
-            "pob" to "Portuguese (BR)", "pb" to "Portuguese (BR)",
+            "pob" to "Portuguese (Brazil)", "pb" to "Portuguese (Brazil)",
+            "pt-br" to "Portuguese (Brazil)", "por-br" to "Portuguese (Brazil)",
             // ISO 639-1 codes (2-letter)
             "en" to "English", "es" to "Spanish", "pt" to "Portuguese",
             "fr" to "French", "de" to "German", "it" to "Italian",

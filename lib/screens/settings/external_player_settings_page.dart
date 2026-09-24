@@ -116,6 +116,7 @@ class _ExternalPlayerSettingsPageState
       ContentDisplayMatchMode.systemDefault;
   bool _startPortrait = false; // Phone only, opt-in
   bool _subtitleOnlyForeignAudio = false;
+  bool _subtitleForcedOnly = false;
   bool _subtitleAutoSync = false; // Native players only, experimental opt-in
   int _movieCompletionThreshold =
       StorageService.defaultLocalCompletionThreshold;
@@ -157,6 +158,7 @@ class _ExternalPlayerSettingsPageState
   final FocusNode _iptvDecoderFocusNode = FocusNode();
   final FocusNode _startPortraitFocusNode = FocusNode();
   final FocusNode _subtitleOnlyForeignAudioFocusNode = FocusNode();
+  final FocusNode _subtitleForcedOnlyFocusNode = FocusNode();
   final FocusNode _subtitleAutoSyncFocusNode = FocusNode();
   final FocusNode _movieCompletionThresholdFocusNode = FocusNode();
   final FocusNode _episodeCompletionThresholdFocusNode = FocusNode();
@@ -185,6 +187,7 @@ class _ExternalPlayerSettingsPageState
   String _iptvDecoderMode = 'auto';
   bool _startPortraitFocused = false;
   bool _subtitleOnlyForeignAudioFocused = false;
+  bool _subtitleForcedOnlyFocused = false;
   bool _subtitleAutoSyncFocused = false;
   bool _movieCompletionThresholdFocused = false;
   bool _episodeCompletionThresholdFocused = false;
@@ -348,6 +351,13 @@ class _ExternalPlayerSettingsPageState
             _subtitleOnlyForeignAudioFocusNode.hasFocus;
       });
     });
+    _subtitleForcedOnlyFocusNode.addListener(() {
+      if (!mounted) return;
+      setState(() {
+        _subtitleForcedOnlyFocused =
+            _subtitleForcedOnlyFocusNode.hasFocus;
+      });
+    });
     _subtitleAutoSyncFocusNode.addListener(() {
       if (!mounted) return;
       setState(() {
@@ -461,6 +471,7 @@ class _ExternalPlayerSettingsPageState
     _iptvDecoderFocusNode.dispose();
     _startPortraitFocusNode.dispose();
     _subtitleOnlyForeignAudioFocusNode.dispose();
+    _subtitleForcedOnlyFocusNode.dispose();
     _subtitleAutoSyncFocusNode.dispose();
     _movieCompletionThresholdFocusNode.dispose();
     _episodeCompletionThresholdFocusNode.dispose();
@@ -603,6 +614,7 @@ class _ExternalPlayerSettingsPageState
       final contentDisplayMatchMode =
           await StorageService.getContentDisplayMatchMode();
       final startPortrait = await StorageService.getPlayerStartPortrait();
+      final subtitleForcedOnly = await StorageService.getSubtitleForcedOnly();
       final subtitleOnlyForeignAudio =
           await StorageService.getSubtitleOnlyForeignAudio();
       final subtitleAutoSync =
@@ -674,6 +686,7 @@ class _ExternalPlayerSettingsPageState
         _iptvDecoderMode = iptvDecoderMode;
         _startPortrait = startPortrait;
         _subtitleOnlyForeignAudio = subtitleOnlyForeignAudio;
+        _subtitleForcedOnly = subtitleForcedOnly;
         _subtitleAutoSync = subtitleAutoSync;
         _movieCompletionThreshold = movieCompletionThreshold;
         _episodeCompletionThreshold = episodeCompletionThreshold;
@@ -1195,6 +1208,11 @@ class _ExternalPlayerSettingsPageState
     await StorageService.setSubtitleOnlyForeignAudio(enabled);
   }
 
+  Future<void> _setSubtitleForcedOnly(bool enabled) async {
+    setState(() => _subtitleForcedOnly = enabled);
+    await StorageService.setSubtitleForcedOnly(enabled);
+  }
+
   Future<void> _setSubtitleAutoSync(bool enabled) async {
     setState(() => _subtitleAutoSync = enabled);
     await StorageService.setSubtitleAutoSyncEnabled(enabled);
@@ -1413,6 +1431,7 @@ class _ExternalPlayerSettingsPageState
     ('de', 'German'),
     ('it', 'Italian'),
     ('pt', 'Portuguese'),
+    ('pt-BR', 'Portuguese (Brazil)'),
     ('ru', 'Russian'),
     ('ja', 'Japanese'),
     ('ko', 'Korean'),
@@ -2966,6 +2985,20 @@ class _ExternalPlayerSettingsPageState
             onChanged: _setSubtitleOnlyForeignAudio,
             focusNode: _subtitleOnlyForeignAudioFocusNode,
             isFocused: _subtitleOnlyForeignAudioFocused,
+          ),
+
+          const SizedBox(height: 4),
+          _buildCheckboxTile(
+            context,
+            title: 'Forced subtitles only',
+            subtitle:
+                'Automatically use embedded tracks marked forced in your Default Subtitle language '
+                '(English if unset). No match means off; Default Subtitle Off disables it. '
+                'Overrides Subtitles when audio differs; manual choices take priority.',
+            value: _subtitleForcedOnly,
+            onChanged: _setSubtitleForcedOnly,
+            focusNode: _subtitleForcedOnlyFocusNode,
+            isFocused: _subtitleForcedOnlyFocused,
           ),
 
           // Only platforms whose bundled native player is

@@ -22,6 +22,7 @@ class NativePlayerPreferencesTest {
         .put("player_default_subtitle_language", "off")
         .put("player_night_mode_index", 3)
         .put("subtitle_only_foreign_audio", true)
+        .put("subtitle_forced_only", true)
 
     @Before fun reset() {
         prefs.edit().clear().commit()
@@ -49,6 +50,7 @@ class NativePlayerPreferencesTest {
             assertEquals("off", settings.getString("player_default_subtitle_language", null))
             assertEquals(3L, settings.getLong("player_night_mode_index", 0))
             assertTrue(settings.getBoolean("subtitle_only_foreign_audio", false))
+            assertTrue(settings.getBoolean("subtitle_forced_only", false))
         }
     }
 

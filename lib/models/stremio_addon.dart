@@ -1,3 +1,4 @@
+import 'media_identity.dart';
 import 'dart:convert';
 
 import 'package:crypto/crypto.dart';
@@ -422,8 +423,15 @@ class StremioMeta {
   /// Check if this has a resolved IMDB ID (either from id or imdb_id/links)
   bool get hasValidImdbId => imdbId != null;
 
-  /// The effective IMDB ID for torrent search — resolved from imdb_id/links fields
+  /// The resolved IMDb/custom-series ID, preserving the existing API contract.
   String? get effectiveImdbId => imdbId;
+
+  /// Tracking/playback identity for titles with a supported native provider ID.
+  /// Keep native IDs out of [imdbId] so IMDb-only consumers cannot misuse them.
+  String? get progressId {
+    final value = imdbId ?? (MediaIdentity.isNative(id) ? id : null);
+    return value == null ? null : MediaIdentity.progressId(value, type);
+  }
 
   /// Check if this has a valid ID (any non-empty ID, not just IMDB)
   bool get hasValidId => id.isNotEmpty;

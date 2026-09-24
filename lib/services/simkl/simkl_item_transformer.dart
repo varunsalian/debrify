@@ -1,3 +1,4 @@
+import '../../models/media_identity.dart';
 import '../../models/stremio_addon.dart';
 
 /// Transforms Simkl API items into [StremioMeta] objects.
@@ -13,9 +14,8 @@ class SimklItemTransformer {
   SimklItemTransformer._();
 
   /// Transform a single Simkl API item into a [StremioMeta].
-  /// Returns null if the item lacks a valid IMDb ID — Simkl's anime entries
-  /// are sometimes only identified by MAL/AniDB ids, which this app's
-  /// IMDb-centric model (shared with the Trakt integration) can't represent.
+  /// Returns null only when no supported provider identity is available.
+  /// Prefer IMDb, then TMDB, then Simkl; never match different shows by title.
   ///
   /// Simkl items show up in three shapes depending on the endpoint:
   ///  - `/sync/all-items`, `/sync/ratings`: `{ "show": {...} }` or
@@ -48,8 +48,9 @@ class SimklItemTransformer {
     if (content == null) return null;
 
     final ids = content['ids'] as Map<String, dynamic>? ?? {};
-    final imdbId = ids['imdb'] as String?;
-    if (imdbId == null || !imdbId.startsWith('tt')) return null;
+    final identity = MediaIdentity.preferred(ids);
+    if (identity == null) return null;
+    final imdbId = MediaIdentity.isImdb(identity) ? identity : null;
 
     // Anime is wrapped exactly like a TV show (`{"show": {...}}`) with an
     // explicit `anime_type` sibling field distinguishing an anime movie from
@@ -96,11 +97,13 @@ class SimklItemTransformer {
     // Fall back to Stremio's metahub CDN (same as the Trakt transformer) when
     // Simkl doesn't supply an image at all, so a miss here fails safe (a
     // generic poster) instead of a broken image.
-    poster ??= 'https://images.metahub.space/poster/medium/$imdbId/img';
-    fanart ??= 'https://images.metahub.space/background/medium/$imdbId/img';
+    if (imdbId != null) {
+      poster ??= 'https://images.metahub.space/poster/medium/$imdbId/img';
+      fanart ??= 'https://images.metahub.space/background/medium/$imdbId/img';
+    }
 
     return StremioMeta(
-      id: imdbId,
+      id: identity,
       imdbId: imdbId,
       type: internalType,
       name: content['title'] as String? ?? 'Unknown',
@@ -151,7 +154,7 @@ class SimklItemTransformer {
   }
 
   /// Transform a list of Simkl API items into [StremioMeta] objects.
-  /// Items without a valid IMDb ID are skipped.
+  /// Items without a supported provider identity are skipped.
   static List<StremioMeta> transformList(
     List<dynamic> items, {
     String? inferredType,

@@ -1,3 +1,4 @@
+import '../models/media_identity.dart';
 import 'dart:async';
 import '../models/custom_series_identity.dart';
 import 'stremio_service.dart';
@@ -73,7 +74,7 @@ class WatchedStatusService extends ChangeNotifier {
   }
 
   bool isWatched(String imdbId, String contentType) {
-    final id = imdbId.trim().toLowerCase();
+    final id = MediaIdentity.progressId(imdbId.trim().toLowerCase(), contentType.toLowerCase());
     if (id.isEmpty) return false;
     if (contentType.toLowerCase() == 'series') {
       return _localSeries.contains(id) ||
@@ -88,7 +89,7 @@ class WatchedStatusService extends ChangeNotifier {
   }
 
   bool isWatchedForTicks(String imdbId, String contentType) {
-    final id = imdbId.trim().toLowerCase();
+    final id = MediaIdentity.progressId(imdbId.trim().toLowerCase(), contentType.toLowerCase());
     if (id.isEmpty) return false;
     final series = contentType.toLowerCase() == 'series';
     return _isWatchedForTicks(id, series);

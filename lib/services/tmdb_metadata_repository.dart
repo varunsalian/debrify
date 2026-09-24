@@ -275,7 +275,7 @@ class TmdbMetadataRepository {
       _ => null,
     };
     if (type == null) return null;
-    final direct = RegExp(r'^tmdb:(\d+)$').firstMatch(item.id);
+    final direct = RegExp(r'^tmdb:(?:movie:)?(\d+)$').firstMatch(item.id);
     if (direct != null) {
       final id = int.tryParse(direct.group(1)!);
       return id != null && id > 0 ? (type: type, id: id) : null;

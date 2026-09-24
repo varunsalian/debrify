@@ -1,3 +1,4 @@
+import '../models/media_identity.dart';
 import 'episode_tracker_snapshot_revision.dart';
 import '../models/custom_series_identity.dart';
 import 'local_series_completion_service.dart';
@@ -61,6 +62,7 @@ class SeriesProgressResetService {
     bool isMovie = false,
     MdblistService? mdblistService,
   }) async {
+    id = MediaIdentity.progressId(id, isMovie ? 'movie' : 'series');
     final failures = <String>[];
     Future<void> attempt(String label, Future<bool> Function() action) async {
       try {
@@ -89,7 +91,7 @@ class SeriesProgressResetService {
       EpisodeTrackerSnapshotRevision.invalidateTitle('local', id);
       return failures;
     }
-    if (provider == null || provider == TrackingSource.trakt)
+    if (!MediaIdentity.isNative(id) && (provider == null || provider == TrackingSource.trakt))
       await attempt('Trakt', () async {
         final service = TraktService.instance;
         final token = await StorageService.getTraktAccessToken();
@@ -125,10 +127,9 @@ class SeriesProgressResetService {
       await attempt('Simkl', () async {
         final service = SimklService.instance;
         if (!await service.isAuthenticated()) return provider == null;
-        final history = isMovie
-            ? await service.markUnwatched(id, 'movie')
-            : await service.clearSeriesHistory(id);
-        final playback = await service.deletePlaybackForImdb(id);
+        if (isMovie) return service.removeFromListAndPlayback(id, 'movie');
+        final history = await service.clearSeriesHistory(id);
+        final playback = await service.deletePlaybackForImdb(id, contentType: 'series');
         if (history && playback && !isMovie)
           await StorageService.saveEpisodeSimklProgress(
             imdbId: id,
@@ -136,7 +137,7 @@ class SeriesProgressResetService {
           );
         return history && playback;
       });
-    if (provider == null || provider == TrackingSource.mdblist)
+    if (!MediaIdentity.isNative(id) && (provider == null || provider == TrackingSource.mdblist))
       await attempt('MDBList', () async {
         final service = mdblistService ?? MdblistService.instance;
         if (!await service.isAuthenticated()) return provider == null;

@@ -210,6 +210,7 @@ class ProfilePreferences implements SharedPreferences {
     'debrify_tv_player_style',
     'subtitle_auto_sync_enabled',
     'subtitle_only_foreign_audio',
+    'subtitle_forced_only',
     'player_default_aspect_index_tv',
     'player_night_mode_index',
     'player_system_audio_effects',

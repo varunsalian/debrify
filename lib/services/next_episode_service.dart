@@ -1,3 +1,5 @@
+import '../models/media_identity.dart';
+import 'native_series_metadata_service.dart';
 import 'package:flutter/foundation.dart';
 import 'stremio_service.dart';
 import '../models/stremio_addon.dart';
@@ -24,16 +26,18 @@ class NextEpisodeService {
         return next == null ? null : (season: next.season, episode: next.episode);
       }
       final addons = await stremioService.getEnabledAddons();
-      if (addons.isEmpty) return null;
+      if (addons.isEmpty && !MediaIdentity.isNative(imdbId)) return null;
 
       // Find first addon with meta support
       final addon = addons.cast<StremioAddon?>().firstWhere(
         (a) => a?.resources.contains('meta') == true,
         orElse: () => null,
       );
-      if (addon == null) return null;
+      if (addon == null && !MediaIdentity.isNative(imdbId)) return null;
 
-      final episodes = await stremioService.fetchSeriesMeta(addon, imdbId);
+      final episodes = MediaIdentity.isNative(imdbId)
+          ? await NativeSeriesMetadataService.instance.episodes(imdbId)
+          : await stremioService.fetchSeriesMeta(addon!, imdbId);
       if (episodes == null || episodes.isEmpty) return null;
 
       // Sort episodes by season then episode number

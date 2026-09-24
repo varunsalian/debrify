@@ -47,6 +47,7 @@ import 'services/discover_prefs.dart';
 import 'services/hide_watched_prefs.dart';
 import 'services/stream_badges_service.dart';
 import 'services/iptv_catalog_db.dart';
+import 'services/iptv_catalog_diagnostics.dart';
 import 'services/iptv_catalog_refresh_service.dart';
 import 'services/profiles/local_backup/local_backup_archive.dart'
     show LocalBackupScratch;
@@ -861,17 +862,19 @@ Future<void> _resolveStartupChannel() async {
 
 Future<void> _prewarmIptvCatalogDb() async {
   if (kIsWeb) return;
+  var stage = 'prewarm_load_playlists';
   try {
     // Most users never configure IPTV. Do not create a database or compete
     // with Home startup IO unless a stored source could actually use the
     // paged catalog.
     if ((await StorageService.getIptvPlaylists()).isEmpty) return;
+    stage = 'prewarm_open';
     await IptvCatalogDb.open();
-  } catch (_) {
+  } catch (error, stack) {
     // Prewarming is an optimization. The IPTV page retries through the same
     // open path and owns the user-visible error/loading state if it still
     // cannot initialize.
-    debugPrint('IPTV catalog prewarm failed');
+    logIptvCatalogFailure(stage, error, stack);
   }
 }
 

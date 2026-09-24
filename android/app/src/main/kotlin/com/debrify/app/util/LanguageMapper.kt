@@ -5,6 +5,20 @@ package com.debrify.app.util
  * Handles ISO 639-1, ISO 639-2, regional variants, and common language names.
  */
 object LanguageMapper {
+    // Plain "pt"/"por" metadata does not identify the Brazilian variant.
+    private val brazilianPortugueseVariants = setOf(
+        "pt-br", "por-br", "ptbr", "pob", "pb",
+        "brazilian portuguese", "portuguese (brazil)", "portuguese (br)",
+        "português (brasil)", "portugues (brasil)",
+        "português brasileiro", "portugues brasileiro"
+    )
+
+    private fun isBrazilianPortuguese(value: String): Boolean {
+        val normalized = value.lowercase().trim().replace('_', '-').replace(
+            Regex("[- ](sdh|forced|cc|full|commentary|descriptive|ad|hi|sub|subs|subtitle|subtitles)$"), ""
+        )
+        return normalized in brazilianPortugueseVariants
+    }
 
     /**
      * Comprehensive language code mapping.
@@ -90,6 +104,9 @@ object LanguageMapper {
 
         val targetLower = targetLang.lowercase().trim()
         val trackLower = trackLang.lowercase().trim()
+        if (targetLower == "pt-br" || targetLower == "pt_br") {
+            return isBrazilianPortuguese(trackLower)
+        }
 
         // Direct match
         if (targetLower == trackLower) return true
@@ -156,6 +173,10 @@ object LanguageMapper {
      */
     @JvmStatic
     fun getLanguageVariantsForExoPlayer(langCode: String): List<String> {
+        if (langCode.equals("pt-BR", ignoreCase = true) ||
+            langCode.equals("pt_BR", ignoreCase = true)) {
+            return listOf("pt-BR", "por-BR", "pob", "pb")
+        }
         val canonical = reverseLookup[langCode.lowercase()] ?: langCode.lowercase()
         val variants = languageVariants[canonical] ?: return listOf(langCode)
 

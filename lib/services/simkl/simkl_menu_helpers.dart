@@ -149,7 +149,7 @@ Future<void> handleSimklMenuAction(
   int? presetRating,
 }) async {
   final simklService = SimklService.instance;
-  final imdbId = item.effectiveImdbId ?? item.id;
+  final imdbId = item.progressId ?? item.id;
   final type = item.type;
   bool success = false;
   String actionLabel = '';
@@ -184,18 +184,14 @@ Future<void> handleSimklMenuAction(
       actionLabel = 'Marked Dropped on Simkl';
       success = await simklService.addToList(imdbId, type, 'dropped');
       // As above — the session-clear is what removes it, so fold the result in.
-      if (success) success = await simklService.deletePlaybackForImdb(imdbId);
+      if (success) success = await simklService.deletePlaybackForImdb(imdbId, contentType: type);
     case SimklItemMenuAction.removeFromList:
       if (!context.mounted ||
           !await confirmSimklTitleRemoval(context, item.name)) {
         return;
       }
       actionLabel = 'Removed from Simkl';
-      success = await simklService.removeFromList(imdbId, type);
-      // Library removal does not clear Simkl's separately stored paused
-      // playback sessions. Clear every matching movie/episode session too so
-      // an untracked title cannot immediately reappear in Continue Watching.
-      if (success) success = await simklService.deletePlaybackForImdb(imdbId);
+      success = await simklService.removeFromListAndPlayback(imdbId, type);
     case SimklItemMenuAction.removeFromContinueWatching:
       if (type == 'series') {
         // A still-"watching" series shows in the paused row (its session) and
@@ -206,13 +202,13 @@ Future<void> handleSimklMenuAction(
         // it in the row, so it must not flip the action to "failed").
         actionLabel = 'Removed — moved to On Hold on Simkl';
         success = await simklService.addToList(imdbId, type, 'hold');
-        if (success) await simklService.deletePlaybackForImdb(imdbId);
+        if (success) await simklService.deletePlaybackForImdb(imdbId, contentType: type);
       } else {
         // Movie: no watching/up-next status to change (a paused movie is
         // plantowatch/none, which the row still shows), so clearing the paused
         // session is what removes it — its result IS the success.
         actionLabel = 'Removed from Continue Watching';
-        success = await simklService.deletePlaybackForImdb(imdbId);
+        success = await simklService.deletePlaybackForImdb(imdbId, contentType: type);
       }
     case SimklItemMenuAction.rate:
       if (!context.mounted) return;

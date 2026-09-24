@@ -131,8 +131,10 @@ class StremioSubtitle {
       'bur': 'Burmese',
       'wel': 'Welsh',
       // OpenSubtitles-specific codes
-      'pob': 'Portuguese (BR)',
-      'pb': 'Portuguese (BR)',
+      'pob': 'Portuguese (Brazil)',
+      'pb': 'Portuguese (Brazil)',
+      'pt-br': 'Portuguese (Brazil)',
+      'por-br': 'Portuguese (Brazil)',
       // 2-letter codes (ISO 639-1)
       'en': 'English',
       'es': 'Spanish',

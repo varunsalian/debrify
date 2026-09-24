@@ -56,7 +56,7 @@ Future<void> showClearProviderProgressDialog(
   var success = false;
   try {
     success = (await SeriesProgressResetService.clearProvider(
-      item.effectiveImdbId ?? item.id,
+      item.progressId ?? item.id,
       item.name,
       provider: provider,
       isMovie: isMovie,

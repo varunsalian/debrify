@@ -2,6 +2,7 @@ package com.debrify.app.tv
 
 import androidx.media3.common.MediaItem
 import androidx.media3.datasource.DataSpec
+import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.hls.HlsMediaSource
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import android.net.Uri
@@ -19,10 +20,17 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [28])
 class ProtectedStreamHttpTest {
+    private fun playbackFactory(client: okhttp3.OkHttpClient) = VodHttpDataSource.Factory(
+        DefaultHttpDataSource.Factory()
+            .setAllowCrossProtocolRedirects(true)
+            .setDefaultRequestProperties(mapOf("User-Agent" to ProtectedStreamHttp.userAgent)),
+        ProtectedStreamHttp.dataSourceFactory(client),
+    )
+
     @Test fun playbackSendsExactlyOneUserAgentMatchingDiscovery() {
         MockWebServer().use { server ->
             val client = ProtectedStreamHttp.client(5000)
-            val factory = ProtectedStreamHttp.dataSourceFactory(client)
+            val factory = playbackFactory(client)
             for (key in listOf("User-Agent", "user-agent", "uSeR-aGeNt", null)) {
                 val headers = if (key == null) emptyMap() else mapOf(key to "RequiredAgent/1.0")
                 val expected = if (key == null) ProtectedStreamHttp.userAgent else "RequiredAgent/1.0"
@@ -48,7 +56,7 @@ class ProtectedStreamHttpTest {
                 origin.enqueue(MockResponse().setResponseCode(302).setHeader("Location", "/same"))
                 origin.enqueue(MockResponse().setResponseCode(307).setHeader("Location", destination.url("/video")))
                 destination.enqueue(MockResponse().setResponseCode(206).setBody("data").setHeader("Content-Range", "bytes 10-13/100"))
-                val source = ProtectedStreamHttp.dataSourceFactory(ProtectedStreamHttp.client(5000)).createDataSource()
+                val source = playbackFactory(ProtectedStreamHttp.client(5000)).createDataSource()
                 try {
                     source.open(DataSpec.Builder().setUri(Uri.parse(origin.url("/start").toString()))
                         .setPosition(10).setLength(4).setHttpRequestHeaders(secrets).build())

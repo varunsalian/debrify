@@ -1,3 +1,4 @@
+import '../models/media_identity.dart';
 import '../models/subtitle_source_priority.dart';
 import '../models/custom_series_identity.dart';
 import '../models/home_collection.dart';
@@ -2669,6 +2670,13 @@ class StorageService {
           .whereType<Map<String, dynamic>>()
           .map((e) => Map<String, dynamic>.from(e))
           .toList();
+      for (final item in items) {
+        final id = item['imdbId'];
+        final type = item['contentType'];
+        if (id is String && type is String) {
+          item['imdbId'] = MediaIdentity.progressId(id, type);
+        }
+      }
       items.sort(
         (a, b) => ((b['updatedAt'] as int?) ?? 0).compareTo(
           (a['updatedAt'] as int?) ?? 0,
@@ -2690,6 +2698,7 @@ class StorageService {
     String? addonId,
     String? year,
   }) async {
+    imdbId = MediaIdentity.progressId(imdbId, contentType);
     // Server-owned titles reopen through Discover, not catalog lookup.
     if (imdbId.startsWith('medialibrary:')) return;
     final prefs = await ProfilePreferences.instance();
@@ -2706,7 +2715,9 @@ class StorageService {
     }
 
     // Remove existing entry with same IMDB ID
-    items.removeWhere((e) => e['imdbId'] == imdbId);
+    items.removeWhere((e) => MediaIdentity.progressId(
+      e['imdbId'] as String? ?? '', e['contentType'] as String? ?? '',
+    ) == imdbId);
 
     // Add at front
     items.insert(0, {
@@ -2740,7 +2751,10 @@ class StorageService {
           .toList();
       final before = items.length;
       items.removeWhere(
-        (e) => (e['imdbId'] as String?)?.trim().toLowerCase() == normalized,
+        (e) => MediaIdentity.progressId(
+          (e['imdbId'] as String? ?? '').trim().toLowerCase(),
+          e['contentType'] as String? ?? '',
+        ) == normalized,
       );
       if (items.length == before) return;
       await _saveContinueWatchingItems(items);
@@ -2791,7 +2805,7 @@ class StorageService {
     final stored = prefs.getStringList(_finishedMoviesKey) ?? const <String>[];
     return {
       for (final raw in stored)
-        if (raw.trim().isNotEmpty) raw.trim().toLowerCase(),
+        if (raw.trim().isNotEmpty) MediaIdentity.progressId(raw.trim().toLowerCase(), 'movie'),
     };
   }
 
@@ -2799,6 +2813,7 @@ class StorageService {
   static Future<Set<String>> getFinishedMovieIds() => _getFinishedMovieIds();
 
   static Future<bool> isMovieFinished(String imdbId) async {
+    imdbId = MediaIdentity.progressId(imdbId, 'movie');
     final normalized = imdbId.trim().toLowerCase();
     if (normalized.isEmpty) return false;
     return (await _getFinishedMovieIds()).contains(normalized);
@@ -2808,6 +2823,7 @@ class StorageService {
   /// and clear its resumable state. The finished record itself remains so the
   /// detail action can accurately read "Rewatch".
   static Future<void> markMovieAsFinished(String imdbId) async {
+    imdbId = MediaIdentity.progressId(imdbId, 'movie');
     final normalized = imdbId.trim().toLowerCase();
     if (normalized.isEmpty) return;
 
@@ -2827,6 +2843,7 @@ class StorageService {
   /// Start a local rewatch. The caller saves a fresh resume point afterwards,
   /// so only the completed marker is removed here.
   static Future<void> unmarkMovieAsFinished(String imdbId) async {
+    imdbId = MediaIdentity.progressId(imdbId, 'movie');
     final normalized = imdbId.trim().toLowerCase();
     if (normalized.isEmpty) return;
 
@@ -2935,7 +2952,7 @@ class StorageService {
       if (raw is! Map) return false;
       final storedId = raw['imdbId']?.toString().trim().toLowerCase();
       return storedId == id ||
-          (!CustomSeriesIdentity.isCustom(id) && (storedId == null || storedId.isEmpty) &&
+          (!_requiresExactProgressIdentity(id) && (storedId == null || storedId.isEmpty) &&
               raw['type'] == 'series' &&
               raw['title']?.toString().trim().toLowerCase() ==
                   title.trim().toLowerCase());
@@ -3018,7 +3035,7 @@ class StorageService {
       if (seriesTitle != null) _seriesProgressKey(seriesTitle, stableId),
     };
     final videoAliases = <String>{
-      if (resumeId != null) CustomSeriesIdentity.isCustom(stableId)
+      if (resumeId != null) _requiresExactProgressIdentity(stableId)
           ? 'video_${stableId}_${resumeId.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_')}'
           : alias('video', resumeId),
     };
@@ -3137,8 +3154,11 @@ class StorageService {
   }
 
   /// Save playback state for series content
+  static bool _requiresExactProgressIdentity(String? id) =>
+      CustomSeriesIdentity.isCustom(id) || MediaIdentity.isNative(id);
+
   static String _seriesProgressKey(String title, String? id) =>
-      (CustomSeriesIdentity.isCustom(id) ||
+      (_requiresExactProgressIdentity(id) ||
               (id?.startsWith('medialibrary:') ?? false))
           ? 'series_$id'
           : 'series_${title.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_')}';
@@ -3352,8 +3372,8 @@ class StorageService {
       final storedTitle = raw['title']?.toString().trim().toLowerCase();
       final matchesStableId = storedId == normalized;
       final matchesLegacyTitle =
-          !CustomSeriesIdentity.isCustom(normalized) &&
-          !CustomSeriesIdentity.isCustom(storedId) &&
+          !_requiresExactProgressIdentity(normalized) &&
+          !_requiresExactProgressIdentity(storedId) &&
           normalizedTitle != null &&
           normalizedTitle.isNotEmpty &&
           storedTitle == normalizedTitle;
@@ -3535,7 +3555,7 @@ class StorageService {
       }
     }
     if (result.isNotEmpty) return result;
-    if (!CustomSeriesIdentity.isCustom(imdbId) && seriesTitle != null && seriesTitle.isNotEmpty) {
+    if (!_requiresExactProgressIdentity(imdbId) && seriesTitle != null && seriesTitle.isNotEmpty) {
       // Only ID-less legacy records may provide title fallback. A matching
       // display title does not make another IMDb series the same show.
       final index = await getFinishedSeriesEpisodeIndex();
@@ -3864,7 +3884,7 @@ class StorageService {
     required String seriesTitle,
     String? imdbId,
   }) async {
-    if (CustomSeriesIdentity.isCustom(imdbId) ||
+    if (_requiresExactProgressIdentity(imdbId) ||
         (imdbId?.startsWith('medialibrary:') ?? false)) {
       return getEpisodeProgressByImdbId(imdbId!);
     }
@@ -3901,7 +3921,7 @@ class StorageService {
     required String seriesTitle,
     String? imdbId,
   }) async {
-    if (CustomSeriesIdentity.isCustom(imdbId) ||
+    if (_requiresExactProgressIdentity(imdbId) ||
         (imdbId?.startsWith('medialibrary:') ?? false)) {
       return getFinishedEpisodesByImdbId(imdbId: imdbId!);
     }
@@ -3968,7 +3988,7 @@ class StorageService {
     int? recoveryUpdatedAtMs,
   }) async {
     final map = await _getPlaybackStateMap();
-    final key = (CustomSeriesIdentity.isCustom(imdbId) ||
+    final key = (_requiresExactProgressIdentity(imdbId) ||
             (imdbId?.startsWith('medialibrary:') ?? false))
         ? 'video_${imdbId}_${videoTitle.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_')}'
         : 'video_${videoTitle.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_')}';
@@ -3997,7 +4017,7 @@ class StorageService {
     String? contentIdentity,
   }) async {
     final map = await _getPlaybackStateMap();
-    final key = (CustomSeriesIdentity.isCustom(contentIdentity) ||
+    final key = (_requiresExactProgressIdentity(contentIdentity) ||
             (contentIdentity?.startsWith('medialibrary:') ?? false))
         ? 'video_${contentIdentity}_${videoTitle.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_')}'
         : 'video_${videoTitle.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_')}';
@@ -9459,6 +9479,17 @@ class StorageService {
   static Future<void> setSubtitleAutoSyncEnabled(bool enabled) async {
     final prefs = await ProfilePreferences.instance();
     await prefs.setBool(_subtitleAutoSyncKey, enabled);
+  }
+
+  /// Automatically select only explicitly forced embedded subtitle tracks.
+  static Future<bool> getSubtitleForcedOnly() async {
+    final prefs = await ProfilePreferences.instance();
+    return prefs.getBool('subtitle_forced_only') ?? false;
+  }
+
+  static Future<void> setSubtitleForcedOnly(bool enabled) async {
+    final prefs = await ProfilePreferences.instance();
+    await prefs.setBool('subtitle_forced_only', enabled);
   }
 
   /// Opt-in: automatically show subtitles only for a known audio language

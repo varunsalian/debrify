@@ -32,6 +32,7 @@ internal data class EmbeddedSubtitleCandidate(
     val matchesLanguage: Boolean,
     val defaultTrack: Boolean,
     val undeclaredHlsCaption: Boolean = false,
+    val forcedTrack: Boolean = false,
 )
 
 internal sealed class SubtitleAutoSelection {
@@ -61,11 +62,20 @@ internal fun chooseAutomaticSubtitle(
     addons: List<AddonSubtitleCandidate> = emptyList(),
     addonDiscoveryReady: Boolean = true,
     audioAllowsSubtitles: Boolean = true,
+    forcedOnly: Boolean = false,
 ): SubtitleAutoSelection {
     if (manualSelection || suppressed || preference == "off") {
         return SubtitleAutoSelection.Keep
     }
     if (!tracksReady) return SubtitleAutoSelection.Wait
+    if (forcedOnly) {
+        val index = candidates.indices.firstOrNull {
+            val candidate = candidates[it]
+            candidate.supported && !candidate.undeclaredHlsCaption &&
+                candidate.forcedTrack && candidate.matchesLanguage
+        }
+        return index?.let { SubtitleAutoSelection.Embedded(it) } ?: SubtitleAutoSelection.Off
+    }
     if (!audioAllowsSubtitles) return SubtitleAutoSelection.Off
     if (addonSelected) return SubtitleAutoSelection.Keep
     val eligible = candidates.indices.filter {

@@ -529,6 +529,10 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
             }
             if (playbackState == Player.STATE_READY) {
                 hasEverBeenReady = true;
+                if (playerPreferences.getBoolean("subtitle_forced_only", false) ||
+                    "pt-BR".equalsIgnoreCase(playerPreferences.getString("player_default_subtitle_language", null))) {
+                    ensureDefaultSubtitleSelected();
+                }
                 hideBufferingIndicator();
                 if (startFromRandom && !randomApplied) {
                     maybeSeekRandomly();
@@ -565,7 +569,9 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
 
         @Override
         public void onTracksChanged(Tracks tracks) {
-            if (playerPreferences.getBoolean("subtitle_only_foreign_audio", false)) {
+            if (playerPreferences.getBoolean("subtitle_only_foreign_audio", false) ||
+                playerPreferences.getBoolean("subtitle_forced_only", false) ||
+                "pt-BR".equalsIgnoreCase(playerPreferences.getString("player_default_subtitle_language", null))) {
                 ensureDefaultSubtitleSelected();
             }
             // The unified menu's audio-track marker is derived live from
@@ -868,7 +874,11 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
             paramsBuilder.setPreferredTextLanguages(englishVariants.toArray(new String[0]));
         }
 
-        if (playerPreferences.getBoolean("subtitle_only_foreign_audio", false)) {
+        // Wait for exact regional matching; ExoPlayer may initially treat
+        // pt-PT as a partial match for pt-BR.
+        if (playerPreferences.getBoolean("subtitle_only_foreign_audio", false) ||
+                playerPreferences.getBoolean("subtitle_forced_only", false) ||
+                "pt-BR".equalsIgnoreCase(defaultSubtitleLang)) {
             paramsBuilder.setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true);
         }
         trackSelector.setParameters(paramsBuilder.build());
@@ -2481,7 +2491,8 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
     private void resetSubtitleState() {
         stopExternalSubtitleRendering();
         userManuallySelectedSubtitle = false;
-        if (trackSelector != null && playerPreferences.getBoolean("subtitle_only_foreign_audio", false)) {
+        if (trackSelector != null && (playerPreferences.getBoolean("subtitle_only_foreign_audio", false) ||
+                playerPreferences.getBoolean("subtitle_forced_only", false))) {
             trackSelector.setParameters(trackSelector.buildUponParameters()
                     .clearOverridesOfType(C.TRACK_TYPE_TEXT)
                     .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true).build());
@@ -3572,6 +3583,10 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
     /** Both auto-selection entry points enforce the selected audio policy. */
     private boolean applyAutomaticSubtitleAudioPolicy() {
         if (userManuallySelectedSubtitle) return false;
+        if (playerPreferences.getBoolean("subtitle_forced_only", false)) {
+            applyForcedSubtitleOnly();
+            return false;
+        }
         boolean allowed = SubtitleAutoSelectionKt.audioAllowsAutomaticSubtitles(
                 playerPreferences.getBoolean("subtitle_only_foreign_audio", false),
                 playerPreferences.getString("player_default_audio_language", null),
@@ -3588,6 +3603,36 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
                     .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true).build());
         }
         return false;
+    }
+
+    private void applyForcedSubtitleOnly() {
+        if (player == null || trackSelector == null || player.getPlaybackState() != Player.STATE_READY) return;
+        String language = playerPreferences.getString("player_default_subtitle_language", "en");
+        TrackOption match = null;
+        if (!"off".equals(language)) {
+            for (TrackOption option : collectTrackOptions(C.TRACK_TYPE_TEXT)) {
+                Format format = option.group.getMediaTrackGroup().getFormat(option.trackIndex);
+                if (option.group.isTrackSupported(option.trackIndex) &&
+                        (format.selectionFlags & C.SELECTION_FLAG_FORCED) != 0 &&
+                        LanguageMapper.matchesLanguage(language, format.language)) {
+                    match = option;
+                    break;
+                }
+            }
+        }
+        if (currentStremioSubtitleIndex >= 0 || externalSubtitleActive) {
+            stopExternalSubtitleRendering();
+            currentStremioSubtitleIndex = -1;
+        }
+        embeddedSubtitleSelected = match != null;
+        if (match != null && match.group.isTrackSelected(match.trackIndex)) return;
+        if (match == null && trackSelector.getParameters().disabledTrackTypes.contains(C.TRACK_TYPE_TEXT)) return;
+        DefaultTrackSelector.Parameters.Builder builder = trackSelector.buildUponParameters()
+                .clearOverridesOfType(C.TRACK_TYPE_TEXT)
+                .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, match == null);
+        if (match != null) builder.setOverrideForType(new TrackSelectionOverride(
+                match.group.getMediaTrackGroup(), match.trackIndex));
+        trackSelector.setParameters(builder.build());
     }
 
     private void ensureDefaultSubtitleSelected() {
@@ -3631,16 +3676,15 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         // Search for subtitle track matching the preferred language
         TrackOption matchingTrack = null;
         for (TrackOption option : subtitleTracks) {
-            String label = option.label;
-
             // Get track format to extract language and id
             Format format = option.group.getMediaTrackGroup().getFormat(option.trackIndex);
             String language = format.language;
             String id = format.id;
 
             // Check if track matches the preferred language using robust matching
+            // Use the raw label; the menu label appends a translated language.
             if (LanguageMapper.matchesLanguage(targetLang, language) ||
-                LanguageMapper.matchesLanguage(targetLang, label) ||
+                LanguageMapper.matchesLanguage(targetLang, format.label) ||
                 LanguageMapper.matchesLanguage(targetLang, id)) {
                 matchingTrack = option;
                 android.util.Log.d("TorboxTvPlayer", "Found matching subtitle for '" + targetLang + "': label=" + option.label + " id=" + format.id + " lang=" + format.language);
@@ -3702,7 +3746,9 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         for (int i = 0; i < stremioSubtitles.size(); i++) {
             StremioSubtitle sub = stremioSubtitles.get(i);
             if (failedSubtitleUrls.contains(sub.getUrl())) continue;  // parsed to zero cues
-            if (LanguageMapper.matchesLanguage(targetLang, sub.getLang())) {
+            if (LanguageMapper.matchesLanguage(targetLang, sub.getLang()) ||
+                ("pt-BR".equalsIgnoreCase(targetLang) &&
+                    LanguageMapper.matchesLanguage(targetLang, sub.getLabel()))) {
                 android.util.Log.d("TorboxTvPlayer", "Auto-selecting addon subtitle: " + sub.getDisplayName() + " (" + sub.getLang() + ")");
                 loadStremioSubtitle(sub);
                 currentStremioSubtitleIndex = i;

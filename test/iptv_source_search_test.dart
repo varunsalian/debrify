@@ -492,6 +492,126 @@ void main() {
     );
   });
 
+  for (final id in ['tmdb:237243', 'simkl:2274121']) {
+    test(
+      'native $id quick-play discovers and resolves the IPTV episode',
+      () async {
+        ingest('series', [
+          IptvChannel(
+            name: 'Big Brother (2023)',
+            url: 'series:revival-$id',
+            contentType: 'series',
+            attributes: {'series_id': 'revival-$id'},
+          ),
+        ]);
+        final rules = QuickPlayRules.debrifyDefault(isMovie: false);
+        Future<List<Torrent>> search(
+          QuickPlayRules value, {
+          String? identity,
+        }) => TorrentPlaybackService.searchIptvForQuickPlay(
+          identity ?? id,
+          'Big Brother',
+          '2023',
+          false,
+          4,
+          6,
+          value,
+          null,
+        );
+        var requests = 0;
+        await http.runWithClient(
+          () async {
+            for (final mode in QuickPlaySourceMode.values) {
+              final candidates = await search(rules.copyWith(sourceMode: mode));
+              if (mode == QuickPlaySourceMode.torrentsOnly) {
+                expect(candidates, isEmpty);
+              } else {
+                expect(candidates, hasLength(1));
+                expect(
+                  IptvSourceSearch.isDeferredXtreamSeries(candidates.single),
+                  isTrue,
+                );
+              }
+            }
+            expect(
+              requests,
+              0,
+            ); // Discovery does not eagerly request episode URLs.
+            expect(
+              await search(rules.copyWith(allowDirectLinks: false)),
+              isEmpty,
+            );
+            for (final invalid in [
+              'tmdb:invalid',
+              'tmdb:0',
+              'simkl:-1',
+              'custom:237243',
+            ]) {
+              expect(await search(rules, identity: invalid), isEmpty);
+            }
+            final descriptor = (await search(rules)).single;
+            final resolved = await IptvSourceSearch.resolveXtreamSeriesEpisode(
+              descriptor,
+            );
+            expect(resolved.status, IptvEpisodeResolutionStatus.resolved);
+            expect(resolved.source?.directUrl, endsWith('/revival-s4e6.mp4'));
+            expect(requests, 1);
+          },
+          () => MockClient((request) async {
+            requests++;
+            expect(request.url.queryParameters['action'], 'get_series_info');
+            return http.Response(
+              jsonEncode({
+                'episodes': {
+                  '4': [
+                    {'id': 'revival-s4e6', 'episode_num': 6},
+                  ],
+                },
+              }),
+              200,
+            );
+          }),
+        );
+      },
+    );
+  }
+
+  test(
+    'native movie progress IDs retain IPTV quick-play restrictions',
+    () async {
+      ingest('vod', [
+        for (final title in ['Dune (2021)', 'Dune (1984)', 'Dune'])
+          IptvChannel(
+            name: title,
+            url: 'https://panel.test/movie/${Uri.encodeComponent(title)}.mp4',
+            contentType: 'vod',
+          ),
+      ]);
+      for (final id in ['tmdb:438631', 'tmdb:movie:438631', 'simkl:100']) {
+        final rules = QuickPlayRules.debrifyDefault(isMovie: true);
+        Future<List<Torrent>> search(QuickPlayRules value) =>
+            TorrentPlaybackService.searchIptvForQuickPlay(
+              id,
+              'Dune',
+              '2021',
+              true,
+              null,
+              null,
+              value,
+              null,
+            );
+        expect((await search(rules)).single.name, 'Dune (2021)');
+        expect(await search(rules.copyWith(allowDirectLinks: false)), isEmpty);
+        expect(
+          await search(
+            rules.copyWith(sourceMode: QuickPlaySourceMode.torrentsOnly),
+          ),
+          isEmpty,
+        );
+      }
+    },
+  );
+
   test('lazy Xtream resolution reports a missing episode', () async {
     ingest('series', [
       IptvChannel(

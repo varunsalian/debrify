@@ -62,7 +62,9 @@ abstract final class SubtitleSourcePriority {
     if (language == 'off') return [];
     final tracks = subtitles.where((s) => s.url.isNotEmpty).toList();
     final preferred = tracks.where(
-      (s) => LanguageMapper.matchesLanguage(language ?? 'en', s.lang),
+      (s) => LanguageMapper.matchesLanguage(language ?? 'en', s.lang) ||
+          (language?.toLowerCase() == 'pt-br' &&
+              LanguageMapper.matchesLanguage('pt-BR', s.label)),
     );
     return [
       ...preferred,

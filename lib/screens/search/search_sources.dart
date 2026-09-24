@@ -472,7 +472,9 @@ class _SourcesScreenState extends State<_SourcesScreen> {
     if (_imdbId.isEmpty) return;
     try {
       final stremio = StremioService.instance;
-      final metaAddon = await stremio.firstMetaCapableAddon();
+      final metaAddon = MediaIdentity.isNative(_imdbId) && !widget.selection.hasStremioEpisodeIdentity
+          ? NativeSeriesMetadataService.addon
+          : await stremio.firstMetaCapableAddon();
       if (metaAddon == null) return;
       final videos = await stremio.fetchSeriesMeta(metaAddon, _imdbId);
       if (videos == null || !mounted) return;
