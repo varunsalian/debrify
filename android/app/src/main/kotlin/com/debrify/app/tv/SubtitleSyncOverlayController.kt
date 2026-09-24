@@ -53,10 +53,18 @@ class SubtitleSyncOverlayController(
 
     fun dispatchKey(event: KeyEvent): Boolean {
         if (!isVisible) return false
+        // Consume the whole dismiss gesture. Hiding on DOWN lets its UP escape
+        // to the activity's Back handler after the overlay has been removed.
+        if (event.keyCode == KeyEvent.KEYCODE_BACK ||
+            event.keyCode == KeyEvent.KEYCODE_ESCAPE
+        ) {
+            if (event.action == KeyEvent.ACTION_UP && !event.isCanceled) hide()
+            return true
+        }
+
         if (event.action != KeyEvent.ACTION_DOWN) return true
 
         return when (event.keyCode) {
-            KeyEvent.KEYCODE_BACK -> { hide(); true }
             KeyEvent.KEYCODE_DPAD_LEFT -> {
                 step(-SubtitleSettings.SYNC_OFFSET_STEP_MS)
                 true

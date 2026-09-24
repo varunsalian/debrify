@@ -5928,6 +5928,15 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
             @Override
             public void handleOnBackPressed() {
+                // System Back may bypass dispatchKeyEvent on some remotes.
+                if (linePickerOverlay != null && linePickerOverlay.isVisible()) {
+                    linePickerOverlay.hide();
+                    return;
+                }
+                if (syncOverlay != null && syncOverlay.isVisible()) {
+                    syncOverlay.hide();
+                    return;
+                }
                 if (isUnifiedGuideVisible()) {
                     hideUnifiedGuide();
                     return;

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../models/series_playlist.dart';
 import '../models/custom_series_identity.dart';
+import '../models/media_identity.dart';
 import '../services/episode_info_service.dart';
 import '../services/episode_tracker_snapshot_service.dart';
 import '../services/storage_service.dart';
@@ -314,16 +315,18 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
 
     // Try to get show ID from: 1) SeriesPlaylist, 2) saved mapping, 3) IMDB lookup
     final isCustom = CustomSeriesIdentity.isCustom(_effectiveImdbId);
-    if (isCustom && allEpisodes.isEmpty) {
+    final isNative = MediaIdentity.isNative(_effectiveImdbId);
+    if ((isCustom || isNative) && allEpisodes.isEmpty) {
       await widget.seriesPlaylist.fetchEpisodeInfo(imdbId: _effectiveImdbId);
       allEpisodes = widget.seriesPlaylist.fullTvmazeEpisodes;
     }
-    int? showId = isCustom ? null :
-        widget.seriesPlaylist.tvmazeShowId ?? await _getOverrideShowId();
+    int? showId = (isCustom || isNative)
+        ? null
+        : widget.seriesPlaylist.tvmazeShowId ?? await _getOverrideShowId();
 
     // If no show ID yet but we have IMDB ID, do IMDB lookup
     final effectiveImdbId = _effectiveImdbId;
-    if (!isCustom && showId == null && effectiveImdbId != null) {
+    if (!isCustom && !isNative && showId == null && effectiveImdbId != null) {
       try {
         final showInfo = await TVMazeService.lookupByImdbId(effectiveImdbId);
         if (showInfo != null && showInfo['id'] != null) {
@@ -402,7 +405,8 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
               break;
             }
           }
-        } else if (!CustomSeriesIdentity.isCustom(_effectiveImdbId)) {
+        } else if (!CustomSeriesIdentity.isCustom(_effectiveImdbId) &&
+            !MediaIdentity.isNative(_effectiveImdbId)) {
           // Fall back to searching by series title
           episodeData = await EpisodeInfoService.getEpisodeInfo(
             widget.seriesPlaylist.seriesTitle!,

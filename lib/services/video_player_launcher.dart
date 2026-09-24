@@ -3776,11 +3776,12 @@ class VideoPlayerLauncher {
           webDavPath: webDavPath,
         );
 
-        // Get discovered IMDB ID from TVMaze (may have been extracted from externals).
-        final discoveredImdbId = seriesPlaylist.imdbId ?? contentImdbId;
+        // Metadata may decorate playback, but must not replace the identity
+        // selected in the catalog with a title-search match for another show.
+        final discoveredImdbId = contentImdbId ?? seriesPlaylist.imdbId;
         if (discoveredImdbId != null) payload.imdbId = discoveredImdbId;
         debugPrint(
-          'TVMazeAsync: Discovered IMDB ID from TVMaze: $discoveredImdbId',
+          'TVMazeAsync: Playback tracking identity: $discoveredImdbId',
         );
 
         Future<

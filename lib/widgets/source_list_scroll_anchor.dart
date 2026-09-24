@@ -22,6 +22,7 @@ class SourceListScrollAnchorState extends State<SourceListScrollAnchor> {
   bool _animating = false;
   int _run = 0;
   double _pendingDelta = 0;
+  bool _focusedHeightChanged = false;
   bool _correctionScheduled = false;
 
   bool get _ownsFocus =>
@@ -36,6 +37,7 @@ class SourceListScrollAnchorState extends State<SourceListScrollAnchor> {
     _index = index;
     _manual = false;
     _pendingDelta = 0;
+    _focusedHeightChanged = false;
     _scheduleAlign();
   }
 
@@ -91,35 +93,40 @@ class SourceListScrollAnchorState extends State<SourceListScrollAnchor> {
   }
 
   void rowHeightChanged(int index, double delta) {
-    if (!_ownsFocus ||
-        _index == null ||
-        index > _index! ||
-        (index == _index && !_animating)) {
+    if (!_ownsFocus || _index == null || index > _index!) {
       return;
     }
     if (index < _index!) _pendingDelta += delta;
+    if (index == _index) _focusedHeightChanged = true;
     if (_correctionScheduled) return;
     _correctionScheduled = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _correctionScheduled = false;
       final delta = _pendingDelta;
+      final focusedHeightChanged = _focusedHeightChanged;
       _pendingDelta = 0;
+      _focusedHeightChanged = false;
       // focusRow resets the accumulated delta when selection changes. If a
       // new row gains focus in this frame, apply only its subsequent deltas.
-      if (!_ownsFocus) return;
+      if (!_ownsFocus || (delta == 0 && !focusedHeightChanged)) return;
       final position = Scrollable.maybeOf(_rowContext!)?.position;
       if (position == null || !position.hasContentDimensions) return;
       final resume = _animating;
       if (resume) ++_run;
-      position.jumpTo(
-        (position.pixels + delta).clamp(
-          position.minScrollExtent,
-          position.maxScrollExtent,
-        ),
-      );
-      if (resume) {
+      // Compensate only for rows ABOVE the selection. A zero-distance jump
+      // cancels an active scroll and needlessly restarts it on badge updates.
+      if (delta != 0) {
+        position.jumpTo(
+          (position.pixels + delta).clamp(
+            position.minScrollExtent,
+            position.maxScrollExtent,
+          ),
+        );
+      }
+      if (resume || focusedHeightChanged) {
         // A lazy focused row can be remounted by the correction. Align after
-        // that layout and invalidate the old animation's completion callback.
+        // that layout. The focused row can also grow AFTER scrolling stops:
+        // recheck its edges, leaving an already-visible row exactly in place.
         _scheduleAlign();
         WidgetsBinding.instance.ensureVisualUpdate();
       }
@@ -140,6 +147,7 @@ class SourceListScrollAnchorState extends State<SourceListScrollAnchor> {
           _animating = false;
           ++_run;
           _pendingDelta = 0;
+          _focusedHeightChanged = false;
         }
         return false;
       },

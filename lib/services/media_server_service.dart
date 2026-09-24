@@ -385,6 +385,11 @@ class MediaServerService {
           .toSet();
       final description = [
         quality,
+        if (!isMovie &&
+            item['IndexNumberEnd'] is int &&
+            item['IndexNumber'] is int &&
+            (item['IndexNumberEnd'] as int) > (item['IndexNumber'] as int))
+          'Combined episodes ${item['IndexNumber']}–${item['IndexNumberEnd']}',
         ...rangeTags,
         ...languageTags,
         if (codec is String) codec.toUpperCase(),
@@ -541,6 +546,7 @@ class MediaServerService {
           }
 
           final account = MediaServerAccount.fromJson(record);
+          var lookupIncomplete = false;
           final items = await client.findItems(
             account,
             id: id,
@@ -548,6 +554,12 @@ class MediaServerService {
             season: season,
             episode: episode,
             authorize: check,
+            cacheScope: (
+              scope,
+              resourceId,
+              record['_connectionResourceRevision'],
+            ),
+            onIncomplete: () => lookupIncomplete = true,
           );
           final batch = <Torrent>[];
           var failedItems = 0;
@@ -593,7 +605,9 @@ class MediaServerService {
           searchComplete = true;
           await check();
           streams.addAll(batch);
-          final warning = failedItems > 0
+          final warning = lookupIncomplete
+              ? 'Search incomplete. Showing verified sources found so far; retry to continue searching.'
+              : failedItems > 0
               ? 'Some matching items could not be checked. Retry or test this server in Settings.'
               : unsupportedItems > 0
               ? 'Some matching items have no supported original-file stream. Remote streams and transcoding are not supported.'

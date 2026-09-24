@@ -417,6 +417,56 @@ void main() {
   group('the Android TV lite body', () {
     setUp(ParallaxTravel.resetForTest);
 
+    for (final androidTv in [true, false]) {
+      testWidgets(
+        'source rows use static focus only on Android TV: $androidTv',
+        (tester) async {
+          PlatformUtil.debugSetAndroidTvCached(androidTv);
+          addTearDown(() => PlatformUtil.debugSetAndroidTvCached(null));
+          final theme = themeWith(FocusExpression.parallax);
+          const contentKey = ValueKey('source-content');
+          Widget build(bool focused) => host(
+            theme,
+            ParallaxRichScope(
+              child: ParallaxFocus(
+                shape: ParallaxShape.sourceRow,
+                focused: focused,
+                radius: BorderRadius.circular(14),
+                child: const SizedBox(key: contentKey, width: 700, height: 180),
+              ),
+            ),
+          );
+          await tester.pumpWidget(build(false));
+          final restingRect = tester.getRect(find.byKey(contentKey));
+          for (final focused in [true, false, true, false]) {
+            await tester.pumpWidget(build(focused));
+            if (androidTv) {
+              expect(ParallaxFocus.debugLiveBodies, 0);
+              expect(tester.binding.transientCallbackCount, 0);
+              expect(tester.getRect(find.byKey(contentKey)), restingRect);
+              final box = tester.widget<DecoratedBox>(
+                find.descendant(
+                  of: find.byType(ParallaxFocus),
+                  matching: find.byType(DecoratedBox),
+                ),
+              );
+              final decoration = box.decoration as BoxDecoration;
+              expect(decoration.boxShadow, isNull);
+              expect(
+                (decoration.border as Border).top.color,
+                focused ? theme.core.focus : Colors.transparent,
+              );
+            } else {
+              expect(ParallaxFocus.debugLiveBodies, 1);
+              expect(tester.binding.transientCallbackCount, greaterThan(0));
+              await tester.pumpAndSettle();
+            }
+          }
+          await tester.pumpWidget(const SizedBox());
+        },
+      );
+    }
+
     testWidgets('rich TV keeps the finished highlight but uses a cheap move', (
       tester,
     ) async {
