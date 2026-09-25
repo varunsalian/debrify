@@ -244,6 +244,7 @@ flutter:
     - assets/images/home_midnight_rain.jpg
     - assets/images/home_moonlit_ocean.jpg
     - assets/images/tmdb-logo.png
+    - assets/images/webdav_sync_guide_qr.png
     - assets/images/profile_avatars/
     - assets/splash_logo.png
     - assets/config/app_remote_config.json

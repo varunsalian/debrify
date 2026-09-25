@@ -6,7 +6,9 @@ import 'widgets/sync_device_tile.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../models/webdav_item.dart';
 import '../../services/analytics_service.dart';
@@ -19,6 +21,8 @@ import '../../services/webdav_sync/webdav_sync_runtime.dart';
 import '../../services/webdav_sync/webdav_sync_scheduler.dart';
 import '../../services/webdav_sync/webdav_sync_setup_authorization.dart';
 import '../../services/webdav_sync/webdav_sync_setup_service.dart';
+import '../../utils/platform_util.dart';
+import '../../utils/tv_keys.dart';
 import '../../widgets/tv_text_field.dart';
 import '../../widgets/webdav_sync/webdav_foreground_sync.dart';
 import '../webdav_sync/webdav_sync_login_screen.dart';
@@ -50,6 +54,9 @@ class SyncAndMigratePage extends StatefulWidget {
 
 class _SyncAndMigratePageState extends State<SyncAndMigratePage>
     with WidgetsBindingObserver {
+  // Keep the bundled QR code in sync with this URL.
+  static const _setupGuideUrl = 'https://debrify.tv/guides/webdav-sync/';
+
   late final WebDavSyncSetupService _syncService;
   late final WebDavSyncSetupAuthorization _syncAuthorization;
   late final WebDavSyncConnectController _syncConnectController;
@@ -69,6 +76,7 @@ class _SyncAndMigratePageState extends State<SyncAndMigratePage>
   Future<void>? _statusLoading;
   bool _statusReadFailed = false;
   bool _tvSyncLaunching = false;
+  bool _guideOpen = false;
   _DebrifyTvSyncOperation? _tvSyncOperation;
   WebDavSyncTvManualAvailability _tvManualAvailability =
       WebDavSyncTvManualAvailability.inactive;
@@ -274,6 +282,74 @@ class _SyncAndMigratePageState extends State<SyncAndMigratePage>
     } catch (_) {
       // Active sync remains usable offline; manual Sync now surfaces errors.
       if (mounted) setState(() => _statusReadFailed = true);
+    }
+  }
+
+  Future<void> _openSetupGuide() async {
+    if (_guideOpen) return;
+    _guideOpen = true;
+    try {
+      if (!PlatformUtil.isTelevision) {
+        try {
+          if (await launchUrl(
+            Uri.parse(_setupGuideUrl),
+            mode: LaunchMode.externalApplication,
+          )) {
+            return;
+          }
+        } on PlatformException {
+          // The readable link and QR code also work without a browser.
+        } on MissingPluginException {
+          // Some platforms do not provide a URL launcher.
+        }
+      }
+      if (!mounted) return;
+      await showSettingsDialog<void>(
+        context: context,
+        builder: (dialogContext) => TvHeldKeyGuard(
+          child: AlertDialog(
+            title: const Text('WebDAV Sync setup guide'),
+            scrollable: true,
+            content: SizedBox(
+              width: 360,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    'Scan with your phone or open the link below for '
+                    'Koofr setup, app passwords and connecting your devices.',
+                  ),
+                  const SizedBox(height: 20),
+                  Image.asset(
+                    'assets/images/webdav_sync_guide_qr.png',
+                    width: 200,
+                    height: 200,
+                    filterQuality: FilterQuality.none,
+                    semanticLabel: 'QR code for the WebDAV Sync setup guide',
+                  ),
+                  const SizedBox(height: 16),
+                  if (PlatformUtil.isTelevision)
+                    const Text(_setupGuideUrl, textAlign: TextAlign.center)
+                  else
+                    const SelectableText(
+                      _setupGuideUrl,
+                      textAlign: TextAlign.center,
+                    ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                autofocus: true,
+                onPressed: () => Navigator.of(dialogContext).pop(),
+                child: const Text('Close'),
+              ),
+            ],
+          ),
+        ),
+      );
+    } finally {
+      _guideOpen = false;
     }
   }
 
@@ -1005,6 +1081,18 @@ class _SyncAndMigratePageState extends State<SyncAndMigratePage>
                     !_syncBusy && !_logoutPending && _syncActivation != null,
                 onTap: _syncNow,
               ),
+            SettingsTile(
+              icon: Icons.menu_book_rounded,
+              title: 'Setup guide',
+              subtitle: 'Koofr setup, app passwords and connecting devices',
+              trailing: Icon(
+                PlatformUtil.isTelevision
+                    ? Icons.qr_code_rounded
+                    : Icons.open_in_new_rounded,
+                size: 20,
+              ),
+              onTap: _openSetupGuide,
+            ),
           ],
         ),
         if (active && !_logoutPending) ...[
