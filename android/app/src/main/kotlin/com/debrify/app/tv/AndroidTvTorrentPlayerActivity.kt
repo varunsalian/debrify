@@ -1646,6 +1646,15 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                     }
                 }
                 Player.STATE_ENDED -> {
+                    // An unvalidated AIOStreams clip is not the programme's
+                    // completion. Keep its EOF out of progress and slot advance.
+                    if (isStremioTvMode && startupSourcesExhausted) return
+                    if (isStremioTvMode && startupFailoverCursor?.committed == false &&
+                        manualSourceSwitchSnapshot == null && !manualSourceRestoreInProgress
+                    ) {
+                        failStartupCandidate("ended-before-commit")
+                        return
+                    }
                     iptvTuneDiagnostics.onPlaybackEnded(lastRealPositionMs)
                     hideBufferingIndicator()
                     if (manualSourceRestoreInProgress) return
@@ -6742,6 +6751,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             if (attemptNumber >= PIKPAK_MAX_RETRIES) {
                 // All retries exhausted
                 android.util.Log.e("AndroidTvPlayer", "PikPak: All retry attempts exhausted. Video failed to load.")
+                cancelPikPakGateReprepare()
 
                 // Clear state synchronously
                 isPikPakRetrying = false
@@ -6817,6 +6827,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 val currentPlayer = player
                 if (currentPlayer != null && (currentPlayer.playbackState == Player.STATE_READY || currentPlayer.duration > 0)) {
                     android.util.Log.d("AndroidTvPlayer", "PikPak: Video metadata loaded successfully - file is ready!")
+                    cancelPikPakGateReprepare()
 
                     // CRITICAL FIX: Clear retry state IMMEDIATELY when video loads
                     // This prevents race conditions and ensures UI updates instantly
@@ -6840,6 +6851,13 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                     checkHandler.removeCallbacks(this)
                     onComplete(false)
                     return
+                }
+
+                // Stremio TV has no VOD startup gate. A cold-storage error
+                // still needs a new request; polling an IDLE player alone
+                // cannot make the file ready. Keep the retry engine's bound.
+                if (isStremioTvMode && currentPlayer?.playerError != null) {
+                    schedulePikPakGateReprepare(retryId)
                 }
 
                 // Continue checking
@@ -6884,6 +6902,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         pikPakRetryId++
         isPikPakRetrying = false
         pikPakRetryCount = 0
+        cancelPikPakGateReprepare()
 
         // Remove any pending retry callbacks
         pikPakRetryHandler.removeCallbacksAndMessages(null)
@@ -16786,6 +16805,9 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             sendIptvProgress(completed)
             return
         }
+        // Failure closes the startup cursor before activity teardown reports
+        // its final checkpoint. A rejected channel must stay untracked.
+        if (isStremioTvMode && startupSourcesExhausted) return
         // READY and isPlaying may arrive before the video renderer produces a
         // frame. Do not persist/scrobble a candidate the startup gate has not
         // committed.
@@ -17167,9 +17189,22 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             startupLog("event=bypass reason=missing_payload")
             return
         }
-        if (isIptvMode || stremioSources.isEmpty() || model.items.isEmpty()) {
+        val source = stremioSources.getOrNull(currentStremioSourceIndex)
+        val validateChannelSlate = isStremioTvMode && isAioStreamsSource(
+            addonId = source?.addonId,
+            sourceName = source?.source,
+            displayName = source?.name,
+            url = source?.directUrl,
+        )
+        // AIOStreams may return a decodable error clip. Retain its validation
+        // and progress suppression, but armStartupCandidate leaves channel
+        // opens without the VOD deadline. Manual picks keep their own gate.
+        if (isIptvMode || (isStremioTvMode && !validateChannelSlate) ||
+            stremioSources.isEmpty() || model.items.isEmpty()
+        ) {
             val reason = when {
                 isIptvMode -> "iptv"
+                isStremioTvMode -> "stremio_tv"
                 stremioSources.isEmpty() -> "no_sources"
                 else -> "no_items"
             }
@@ -17420,8 +17455,10 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 failStartupCandidate("timeout")
             }
         }
-        startupFailoverTimeout = timeout
-        progressHandler.postDelayed(timeout, STARTUP_FAILOVER_TIMEOUT_MS)
+        startupFailoverTimeout = if (isStremioTvMode) null else timeout
+        if (!isStremioTvMode) {
+            progressHandler.postDelayed(timeout, STARTUP_FAILOVER_TIMEOUT_MS)
+        }
         val attempt = startupFailoverCursor?.attempts ?: 1
         // Mirrors the Dart gate copy: a debrid-direct first open is loading
         // the user's own source, not "checking" candidates. Failover retries
@@ -17453,7 +17490,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         startupLog(
             "event=candidate_open attempt=$attempt " +
                 "generation=$generation ${startupSourceFields(sourceIndex)} " +
-                "timeoutMs=$STARTUP_FAILOVER_TIMEOUT_MS",
+                "timeoutMs=${if (isStremioTvMode) "none" else STARTUP_FAILOVER_TIMEOUT_MS}",
         )
     }
 
@@ -17473,8 +17510,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 SystemClock.elapsedRealtime() - startupFirstFrameAtElapsedMs < 1_000L)
         ) {
             // Some progressive sources publish their timeline just after the
-            // first frame. Keep the shield up until it is known; the main
-            // watchdog remains the upper bound if it never resolves.
+            // first frame. Give duration its existing one-second grace; this
+            // does not impose a network startup deadline on channel playback.
             if (startupFirstFrameAtElapsedMs == 0L) {
                 startupFirstFrameAtElapsedMs = SystemClock.elapsedRealtime()
                 startupLog(
@@ -17665,18 +17702,30 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private fun currentPlaybackItemIsPikPak(): Boolean =
         isPikPakPlaybackItem(payload?.items?.getOrNull(currentIndex))
 
+    private fun cancelPikPakGateReprepare() {
+        pikPakGateReprepare?.let { progressHandler.removeCallbacks(it) }
+        pikPakGateReprepare = null
+    }
+
     // After a player error ExoPlayer sits in IDLE and the PikPak retry
     // engine (which only monitors readiness) can never see metadata arrive.
     // A spaced re-prepare re-issues the HTTP request — which is also what
     // re-triggers PikPak's cold-storage warmup server-side. Guarded at fire
-    // time so a committed/failed gate or a non-PikPak item drops it.
-    private fun schedulePikPakGateReprepare() {
+    // time so a completed gate/retry or a replacement media item drops it.
+    private fun schedulePikPakGateReprepare(retryId: Int? = null) {
         if (pikPakGateReprepare != null) return
+        val retryPlayer = player
+        val retryToken = pikPakRetryId
+        val mediaGeneration = mediaPreparationGeneration
         val reprepare = Runnable {
             pikPakGateReprepare = null
             val gateActive = startupFailoverCursor?.committed == false ||
                 manualSourceSwitchSnapshot != null
-            if (!gateActive || !currentPlaybackItemIsPikPak()) return@Runnable
+            val channelRetryActive = isStremioTvMode && retryId == pikPakRetryId
+            if (isFinishing || isDestroyed || player !== retryPlayer ||
+                retryToken != pikPakRetryId || mediaGeneration != mediaPreparationGeneration ||
+                (!gateActive && !channelRetryActive) || !currentPlaybackItemIsPikPak()
+            ) return@Runnable
             if (player?.playerError == null) return@Runnable
             startupLog("event=pikpak_reprepare")
             player?.prepare()
