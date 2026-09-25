@@ -1,3 +1,4 @@
+import 'adjacent_episode_resolver.dart';
 import 'stream_badges_service.dart';
 import 'stream_badge_matcher.dart';
 import 'player_visibility.dart';
@@ -859,6 +860,8 @@ class AndroidTvPlayerBridge {
               );
             }
             return result;
+          } on EpisodeGuideUnavailable {
+            throw PlatformException(code: 'episode_guide_unavailable');
           } on PlatformException {
             rethrow;
           } catch (e) {

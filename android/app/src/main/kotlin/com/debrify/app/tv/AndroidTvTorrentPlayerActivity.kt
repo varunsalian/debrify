@@ -16946,9 +16946,9 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     }
 
     /** The guide episode adjacent to the current item (specials excluded). */
-    private fun guideAdjacent(model: PlaybackPayload, currentItem: PlaybackItem?, direction: Int): SeasonEpisode? {
+    private fun guideAdjacent(model: PlaybackPayload, currentItem: PlaybackItem?, direction: Int, allowResolverFallback: Boolean = false): SeasonEpisode? {
         // Custom catalogs own navigation even when the ordinary guide is loaded.
-        if (hasAdjacentEpisodeResolver) return null
+        if (hasAdjacentEpisodeResolver && !allowResolverFallback) return null
         val s = currentItem?.season ?: return null
         val e = currentItem.episode ?: return null
         val eps = model.guideEpisodes
@@ -16959,6 +16959,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         if (idx < 0) return null
         val t = idx + direction
         if (t < 0 || t >= eps.size) return null
+        if (direction > 0 && !eps[t].shuffleEligible) return null
         return SeasonEpisode(eps[t].season, eps[t].episode)
     }
 
@@ -17098,6 +17099,18 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                     runOnUiThread {
                         episodeFetchInFlight = false
                         if (token != stremioResolutionToken) return@runOnUiThread
+                        if (yieldEpisodeFetchToQueuedShuffle()) return@runOnUiThread
+                        if (errorCode == "episode_guide_unavailable") {
+                            val model = payload
+                            val current = model?.items?.getOrNull(currentIndex)
+                            if (model != null && current?.season == currentSeason && current.episode == currentEpisode) {
+                                val target = guideAdjacent(model, current, direction, allowResolverFallback = true)
+                                if (target != null) {
+                                    requestEpisodeFetch(target.season, target.episode, autoAdvance = autoAdvance)
+                                    return@runOnUiThread
+                                }
+                            }
+                        }
                         showStatusPillTransient("No playable $directionLabel episode found")
                     }
                 }

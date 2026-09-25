@@ -28,10 +28,27 @@ class NativeSeriesMetadataService {
 
   /// Share one canonical guide policy across details, Sources and next episode.
   /// Native provider IDs cannot be looked up on Trakt without an IMDb mapping.
-  Future<List<Map<String, dynamic>>> episodesWithFallback(String id) async {
-    if (!MediaIdentity.isImdb(id)) return episodes(id);
+  Future<List<Map<String, dynamic>>> episodesWithFallback(
+    String id, {
+    int? afterSeason,
+    int? afterEpisode,
+    int direction = 1,
+  }) async {
+    if (!MediaIdentity.isImdb(id)) {
+      return episodes(
+        id,
+        afterSeason: afterSeason,
+        afterEpisode: afterEpisode,
+        direction: direction,
+      );
+    }
     try {
-      final rows = await episodes(id);
+      final rows = await episodes(
+        id,
+        afterSeason: afterSeason,
+        afterEpisode: afterEpisode,
+        direction: direction,
+      );
       if (rows.isNotEmpty) return rows;
     } catch (_) {
       // An unavailable TMDB build/network must not block the public fallback.
@@ -57,7 +74,12 @@ class NativeSeriesMetadataService {
     ];
   }
 
-  Future<List<Map<String, dynamic>>> episodes(String id) async {
+  Future<List<Map<String, dynamic>>> episodes(
+    String id, {
+    int? afterSeason,
+    int? afterEpisode,
+    int direction = 1,
+  }) async {
     if (!MediaIdentity.isNative(id) && !MediaIdentity.isImdb(id)) return [];
     var number = id.split(':').last;
     if (id.startsWith('simkl:')) {
@@ -90,6 +112,40 @@ class NativeSeriesMetadataService {
       if (identity == null) return [];
       number = identity.id.toString();
     }
+    if (afterSeason != null && afterEpisode != null) {
+      final current = await _seasonEpisodes(id, number, afterSeason);
+      if (!current.any((row) => row['episode'] == afterEpisode)) return [];
+      if (afterSeason > 0 &&
+          current.any(
+            (row) => direction > 0
+                ? (row['episode'] as int) > afterEpisode
+                : (row['episode'] as int) < afterEpisode,
+          )) {
+        return current;
+      }
+      final detail = await _tmdb.get('tv/$number');
+      final adjacentSeasons =
+          (detail['seasons'] as List? ?? const [])
+              .whereType<Map>()
+              .map((row) => row['season_number'])
+              .whereType<int>()
+              .where(
+                (season) =>
+                    season > 0 &&
+                    (direction > 0
+                        ? season > afterSeason
+                        : season < afterSeason),
+              )
+              .toSet()
+              .toList()
+            ..sort();
+      for (final season
+          in direction > 0 ? adjacentSeasons : adjacentSeasons.reversed) {
+        final rows = await _seasonEpisodes(id, number, season);
+        if (rows.isNotEmpty) return [...current, ...rows];
+      }
+      return current;
+    }
     final detail = await _tmdb.get('tv/$number');
     final seasons =
         (detail['seasons'] as List? ?? const [])
@@ -104,34 +160,43 @@ class NativeSeriesMetadataService {
     // Bound fan-out; the repository also shares requests and caches responses.
     for (var offset = 0; offset < seasons.length; offset += 4) {
       final batch = await Future.wait(
-        seasons.skip(offset).take(4).map((season) async {
-          final data = await _tmdb.get('tv/$number/season/$season');
-          return <Map<String, dynamic>>[
-            for (final row
-                in (data['episodes'] as List? ?? const []).whereType<Map>())
-              if (row['episode_number'] is int &&
-                  row['episode_number'] > 0 &&
-                  row['season_number'] == season)
-                {
-                  'id': '$id:$season:${row['episode_number']}',
-                  'season': season,
-                  'episode': row['episode_number'],
-                  'title': row['name'],
-                  'overview': row['overview'],
-                  'released': row['air_date'],
-                  if (row['still_path'] is String)
-                    'thumbnail': TmdbMetadataRepository.image(
-                      row['still_path'],
-                      size: 'w300',
-                    ),
-                },
-          ];
-        }),
+        seasons
+            .skip(offset)
+            .take(4)
+            .map((season) => _seasonEpisodes(id, number, season)),
       );
       for (final rows in batch) {
         out.addAll(rows);
       }
     }
     return out;
+  }
+
+  Future<List<Map<String, dynamic>>> _seasonEpisodes(
+    String id,
+    String number,
+    int season,
+  ) async {
+    final data = await _tmdb.get('tv/$number/season/$season');
+    return [
+      for (final row
+          in (data['episodes'] as List? ?? const []).whereType<Map>())
+        if (row['episode_number'] is int &&
+            row['episode_number'] > 0 &&
+            row['season_number'] == season)
+          {
+            'id': '$id:$season:${row['episode_number']}',
+            'season': season,
+            'episode': row['episode_number'],
+            'title': row['name'],
+            'overview': row['overview'],
+            'released': row['air_date'],
+            if (row['still_path'] is String)
+              'thumbnail': TmdbMetadataRepository.image(
+                row['still_path'],
+                size: 'w300',
+              ),
+          },
+    ];
   }
 }

@@ -475,11 +475,11 @@ class _SourcesScreenState extends State<_SourcesScreen> {
       final builtIn = !widget.selection.hasStremioEpisodeIdentity &&
           (MediaIdentity.isNative(_imdbId) ||
               widget.meta.addonId == NativeSeriesMetadataService.addon.id);
-      final metaAddon = builtIn
-          ? NativeSeriesMetadataService.addon
-          : await stremio.firstMetaCapableAddon();
-      if (metaAddon == null) return;
-      final videos = await stremio.fetchSeriesMeta(metaAddon, _imdbId);
+      final videos = await stremio.fetchSourcesSeriesGuide(
+        imdbId: _imdbId,
+        catalogItem: widget.meta.catalogItem,
+        builtIn: builtIn,
+      );
       if (videos == null || !mounted) return;
       unawaited(
         LocalSeriesCompletionService.instance.recordRawEpisodeInventory(

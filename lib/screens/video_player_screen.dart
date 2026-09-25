@@ -6033,8 +6033,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     if (se.season == null || se.episode == null) return false;
     var next = _adjacentEpisode(se.season!, se.episode!, 1);
     if (next == null) {
-      final resolved = await widget.seriesSourceFetcher?.resolveAdjacentEpisode
-          ?.call(se.season!, se.episode!, 1);
+      final resolved = await _resolveAdjacentWithCachedGuide(
+        se.season!,
+        se.episode!,
+        1,
+      );
       if (resolved != null) next = (resolved.season, resolved.episode);
     }
     if (next == null &&
@@ -10117,10 +10120,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
             ? _adjacentEpisode(se.season!, se.episode!, -1)
             : null;
         if (prev == null && se.season != null && se.episode != null) {
-          final resolved = await widget
-              .seriesSourceFetcher
-              ?.resolveAdjacentEpisode
-              ?.call(se.season!, se.episode!, -1);
+          final resolved = await _resolveAdjacentWithCachedGuide(
+            se.season!, se.episode!, -1,
+          );
           if (resolved != null) prev = (resolved.season, resolved.episode);
         }
         if (prev != null) {
@@ -14391,28 +14393,47 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     return outcome;
   }
 
-  /// The episode adjacent to (season, episode) in the show's full TVMaze
-  /// list (specials excluded); null when unknown or out of range.
-  (int, int)? _adjacentEpisode(int season, int episode, int direction) {
+  /// Resolve with the origin first; only an unavailable guide permits fallback.
+  Future<({int season, int episode})?> _resolveAdjacentWithCachedGuide(
+    int season,
+    int episode,
+    int direction,
+  ) async {
+    final resolver = widget.seriesSourceFetcher?.resolveAdjacentEpisode;
+    if (resolver == null) return null;
+    return resolveAdjacentWithGuideFallback(
+      resolver: resolver,
+      season: season,
+      episode: episode,
+      direction: direction,
+      cachedGuide: () {
+        final target = _adjacentEpisode(
+          season,
+          episode,
+          direction,
+          allowResolverFallback: true,
+        );
+        return target == null ? null : (season: target.$1, episode: target.$2);
+      },
+    );
+  }
+
+  (int, int)? _adjacentEpisode(
+    int season,
+    int episode,
+    int direction, {
+    bool allowResolverFallback = false,
+  }) {
     // Custom catalogs own their episode order, even after TVMaze fills the guide.
-    if (widget.seriesSourceFetcher?.resolveAdjacentEpisode != null) return null;
+    if (!allowResolverFallback &&
+        widget.seriesSourceFetcher?.resolveAdjacentEpisode != null)
+      return null;
     final full = _seriesPlaylist?.fullTvmazeEpisodes.isNotEmpty == true
         ? _seriesPlaylist!.fullTvmazeEpisodes
         : (_syntheticGuidePlaylist?.fullTvmazeEpisodes ??
               const <Map<String, dynamic>>[]);
-    if (full.isEmpty) return null;
-    final eps = <(int, int)>[
-      for (final m in full)
-        if (m['season'] is int &&
-            m['number'] is int &&
-            (m['season'] as int) > 0)
-          ((m['season'] as int), (m['number'] as int)),
-    ]..sort((a, b) => a.$1 != b.$1 ? a.$1 - b.$1 : a.$2 - b.$2);
-    final idx = eps.indexWhere((p) => p.$1 == season && p.$2 == episode);
-    if (idx < 0) return null;
-    final target = idx + direction;
-    if (target < 0 || target >= eps.length) return null;
-    return eps[target];
+    final target = cachedGuideAdjacentEpisode(full, season, episode, direction);
+    return target == null ? null : (target.season, target.episode);
   }
 
   void _prepareNextDirectEpisode() {

@@ -87,7 +87,35 @@ void main() {
             addonId: NativeSeriesMetadataService.addon.id,
           );
           expect(
-            TorrentPlaybackService.seriesFetcherFor(meta: meta),
+            TorrentPlaybackService.seriesFetcherFor(
+              meta: meta,
+            )?.resolveAdjacentEpisode,
+            isNotNull,
+          );
+          // Exercise the callback shared by Flutter and the Android TV bridge,
+          // not merely its presence: a forward-only resolver breaks Previous.
+          final resolve = TorrentPlaybackService.seriesFetcherFor(
+            meta: meta,
+          )!.resolveAdjacentEpisode!;
+          expect(await tester.runAsync(() => resolve(2, 3, -1)), (
+            season: 1,
+            episode: 1,
+          ));
+          expect(await tester.runAsync(() => resolve(1, 1, -1)), isNull);
+          expect(await tester.runAsync(() => resolve(1, 1, 1)), (
+            season: 2,
+            episode: 3,
+          ));
+          expect(
+            TorrentPlaybackService.seriesFetcherFor(
+              meta: const PlaybackMeta.catalog(
+                imdbId: 'tt0118360',
+                contentType: 'series',
+                season: 2,
+                episode: 3,
+                addonId: 'ordinary-catalog',
+              ),
+            )?.resolveAdjacentEpisode,
             isNotNull,
           );
           final args = TorrentPlaybackService.playerArgsForTesting(meta);

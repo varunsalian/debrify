@@ -3170,6 +3170,32 @@ class StremioService {
     return null;
   }
 
+  /// The Sources season menu keeps an origin's own IDs only when that origin
+  /// can serve a series guide. Catalog-only origins use a metadata provider's
+  /// IMDb lookup instead of sending their private catalog ID to another addon.
+  Future<List<Map<String, dynamic>>?> fetchSourcesSeriesGuide({
+    required String imdbId,
+    StremioMeta? catalogItem,
+    bool builtIn = false,
+  }) async {
+    if (builtIn) {
+      return fetchSeriesMeta(NativeSeriesMetadataService.addon, imdbId);
+    }
+    bool supportsGuide(StremioAddon addon, String id) =>
+        addon.supportsMeta && addon.baseUrl.isNotEmpty &&
+        (addon.types.isEmpty || addon.types.contains('series')) &&
+        addon.supportsContentId(id);
+    final origin = catalogItem?.sourceAddon;
+    if (origin != null && supportsGuide(origin, catalogItem!.id)) {
+      return fetchSeriesMeta(origin, catalogItem.id);
+    }
+    if (CustomSeriesIdentity.isCustom(imdbId)) return null;
+    for (final addon in await getEnabledAddons()) {
+      if (supportsGuide(addon, imdbId)) return fetchSeriesMeta(addon, imdbId);
+    }
+    return null;
+  }
+
   /// First enabled addon that can serve meta (episode listings / season
   /// numbers). Shared so the episodes panel, detail screens, and the Sources
   /// screen's Season chip pick meta addons with one rule.
