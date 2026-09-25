@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:debrify/models/webdav_item.dart';
 import 'package:debrify/screens/settings/sync_and_migrate_page.dart';
@@ -21,7 +20,9 @@ import 'package:debrify/services/webdav_sync/webdav_sync_setup_service.dart';
 import 'package:debrify/theme/app_theme.dart';
 import 'package:debrify/theme/app_theme_adapter.dart';
 import 'package:debrify/theme/app_theme_scope.dart';
+import 'package:debrify/utils/platform_util.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -40,8 +41,21 @@ void main() {
   late _FakeTransport transport;
   late WebDavSyncSetupService service;
   late _AllowAuthorization authorization;
+  const urlLauncher = MethodChannel('plugins.flutter.io/url_launcher');
+  final launchCalls = <MethodCall>[];
+  var browserAvailable = true;
+  Object? launchError;
 
   setUp(() {
+    launchCalls.clear();
+    browserAvailable = true;
+    launchError = null;
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(urlLauncher, (call) async {
+          launchCalls.add(call);
+          if (launchError case final error?) throw error;
+          return browserAvailable;
+        });
     SharedPreferences.setMockInitialValues(const <String, Object>{});
     DeviceKeyProvider.debugInstallCipher(
       MemoryDeviceSecretCipher(List<int>.filled(32, 9)),
@@ -68,6 +82,12 @@ void main() {
   });
 
   tearDown(DeviceKeyProvider.debugReset);
+  tearDown(() {
+    PlatformUtil.debugSetAndroidTvCached(null);
+    PlatformUtil.debugSetTvOS(null);
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(urlLauncher, null);
+  });
 
   Future<void> pumpPage(
     WidgetTester tester, {
@@ -136,6 +156,81 @@ void main() {
     await store.promoteStaged(active.id);
   }
 
+  testWidgets('setup guide opens the browser before connecting', (
+    tester,
+  ) async {
+    await pumpPage(tester, enabled: true);
+    await tester.tap(find.text('Setup guide'));
+    await tester.pumpAndSettle();
+
+    expect(launchCalls, hasLength(1));
+    expect(launchCalls.single.method, 'launch');
+    final arguments = launchCalls.single.arguments as Map;
+    expect(arguments['url'], 'https://debrify.tv/guides/webdav-sync/');
+    expect(arguments['useSafariVC'], isFalse);
+    expect(arguments['useWebView'], isFalse);
+    expect(find.byType(AlertDialog), findsNothing);
+    expect(find.text('Not connected'), findsOneWidget);
+  });
+
+  for (final failure in ['unavailable', 'platform error', 'missing plugin']) {
+    testWidgets('setup guide stays accessible when browser is $failure', (
+      tester,
+    ) async {
+      browserAvailable = false;
+      launchError = switch (failure) {
+        'platform error' => PlatformException(code: 'launch_failed'),
+        'missing plugin' => MissingPluginException(),
+        _ => null,
+      };
+      await pumpPage(tester, enabled: true, size: const Size(390, 844));
+      await tester.tap(find.text('Setup guide'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(AlertDialog), findsOneWidget);
+      expect(find.byType(Image), findsOneWidget);
+      expect(
+        find.text('https://debrify.tv/guides/webdav-sync/'),
+        findsOneWidget,
+      );
+      expect(tester.takeException(), isNull);
+      await tester.tap(find.text('Close'));
+      await tester.pumpAndSettle();
+      expect(find.byType(AlertDialog), findsNothing);
+    });
+  }
+
+  for (final appleTv in [false, true]) {
+    testWidgets(
+      'guide works with the remote on ${appleTv ? 'Apple' : 'Android'} TV',
+      (tester) async {
+        PlatformUtil.debugSetAndroidTvCached(!appleTv);
+        PlatformUtil.debugSetTvOS(appleTv);
+        await pumpPage(tester, enabled: true);
+        final row = find.widgetWithText(SettingsTile, 'Setup guide');
+        final surface = tester.widget<InkWell>(
+          find.descendant(of: row, matching: find.byType(InkWell)),
+        );
+        surface.focusNode!.requestFocus();
+        await tester.pump();
+        await tester.sendKeyDownEvent(LogicalKeyboardKey.enter);
+        await tester.pumpAndSettle();
+        await tester.sendKeyRepeatEvent(LogicalKeyboardKey.enter);
+        await tester.pumpAndSettle();
+        await tester.sendKeyUpEvent(LogicalKeyboardKey.enter);
+
+        expect(launchCalls, isEmpty);
+        expect(find.byType(AlertDialog), findsOneWidget);
+        expect(find.byType(Image).hitTestable(), findsOneWidget);
+        expect(tester.takeException(), isNull);
+        await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+        await tester.pumpAndSettle();
+        expect(find.byType(AlertDialog), findsNothing);
+        expect(surface.focusNode!.hasFocus, isTrue);
+      },
+    );
+  }
+
   for (final size in [const Size(390, 844), const Size(800, 360)]) {
     testWidgets('sync settings and logout remain usable at $size', (
       tester,
@@ -153,6 +248,7 @@ void main() {
       expect(find.text('Restore backup from WebDAV'), findsNothing);
       for (final label in [
         'Sync now',
+        'Setup guide',
         'Connected devices',
         'Log out',
         'Sync channels now',

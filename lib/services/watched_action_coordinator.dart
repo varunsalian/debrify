@@ -60,7 +60,7 @@ class WatchedActionCoordinator {
     if (CustomSeriesIdentity.isCustom(id)) return const WatchedActionResult([]);
     final policy = (await TrackingSourcePolicy.load()).forContent(id);
     final failures = <String>[];
-    if (!policy.nativeIdentity && _writes(policy, forceTargets, TrackingSource.trakt) &&
+    if (_writes(policy, forceTargets, TrackingSource.trakt) &&
         await TraktService.instance.isAuthenticated()) {
       final ok = watched
           ? await TraktService.instance.addToHistory(id, contentType)
@@ -81,10 +81,10 @@ class WatchedActionCoordinator {
       }
       if (!ok) failures.add('Simkl');
     }
-    if (id.startsWith('tt') &&
+    if ((MediaIdentity.isImdb(id) || MediaIdentity.isNative(id)) &&
         _writes(policy, forceTargets, TrackingSource.mdblist) &&
         await MdblistService.instance.isAuthenticated()) {
-      final ids = MdblistMediaIds(imdb: id);
+      final ids = MdblistMediaIds.forContent(id);
       final type = series ? 'show' : 'movie';
       final ok = watched
           ? await MdblistService.instance.markWatched(ids, type)
@@ -124,7 +124,7 @@ class WatchedActionCoordinator {
 
     final policy = (await TrackingSourcePolicy.load()).forContent(imdbId);
     final failures = <String>[];
-    if (!policy.nativeIdentity && _writes(policy, forceTargets, TrackingSource.trakt) &&
+    if (_writes(policy, forceTargets, TrackingSource.trakt) &&
         await TraktService.instance.isAuthenticated()) {
       final ok = watched
           ? await TraktService.instance.markEpisodeWatched(
@@ -161,10 +161,10 @@ class WatchedActionCoordinator {
       }
       if (!ok) failures.add('Simkl');
     }
-    if (imdbId.startsWith('tt') &&
+    if ((MediaIdentity.isImdb(imdbId) || MediaIdentity.isNative(imdbId)) &&
         _writes(policy, forceTargets, TrackingSource.mdblist) &&
         await MdblistService.instance.isAuthenticated()) {
-      final ids = MdblistMediaIds(imdb: imdbId);
+      final ids = MdblistMediaIds.forContent(imdbId);
       final ok = watched
           ? await MdblistService.instance.markWatched(
               ids,

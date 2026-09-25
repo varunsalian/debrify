@@ -5,13 +5,16 @@ import 'package:http/http.dart' as http;
 
 import '../../models/tracking_source.dart';
 import '../storage_service.dart';
+import '../tracker_identity_service.dart';
 import '../episode_tracker_snapshot_revision.dart';
 import '../../models/profiles/profile_policy.dart';
 import '../profiles/profile_async_authorization.dart';
 import '../profiles/profile_credential_facade.dart';
+import '../profiles/profile_runtime.dart';
 import 'mdblist_discover_models.dart';
 import 'mdblist_models.dart';
 import 'mdblist_transport.dart';
+import '../../models/media_identity.dart';
 
 /// Feature flag — MDBList is unfinished, so its Settings entry is hidden for
 /// the alpha. Flip to `true` to re-expose it. (Deliberately not `const` so the
@@ -953,6 +956,30 @@ class MdblistService {
     double progress, {
     ProfileAsyncAuthorization? capability,
   }) async {
+    final scope = ProfileRuntime.scope.value;
+    capability ??= await _captureCapability();
+    final contentId = target.ids.contentId;
+    final originalTarget = target;
+    if (contentId != null) {
+      final ids = await TrackerIdentityService.instance.resolve(
+        contentId,
+        target.isEpisode ? 'series' : 'movie',
+      );
+      if (ids == null) {
+        return const MdblistResult.failure(MdblistResultKind.notFound);
+      }
+      final mapped = MdblistMediaIds.fromJson(ids);
+      target = target.isEpisode
+          ? MdblistScrobbleTarget.episode(
+              mapped,
+              season: target.season!,
+              episode: target.episode!,
+            )
+          : MdblistScrobbleTarget.movie(mapped);
+    }
+    if (scope != ProfileRuntime.scope.value) {
+      return const MdblistResult.failure(MdblistResultKind.denied);
+    }
     final payload = target.payload(progress);
     if (payload == null) {
       return const MdblistResult.failure(MdblistResultKind.malformedResponse);
@@ -970,7 +997,7 @@ class MdblistService {
       if (target.isEpisode) {
         EpisodeTrackerSnapshotRevision.invalidateTitle(
           'mdblist',
-          target.ids.imdb,
+          originalTarget.ids.contentId ?? originalTarget.ids.imdb,
         );
       }
       playbackRevision.value++;
@@ -1058,7 +1085,7 @@ class MdblistService {
     int? rating,
     String? timestampField,
   }) {
-    if (ids.isEmpty) return null;
+    if (ids.toJson().isEmpty) return null;
     final timestamp = DateTime.now().toUtc().toIso8601String();
     final attributes = <String, dynamic>{
       if (rating != null) 'rating': rating,
@@ -1099,6 +1126,18 @@ class MdblistService {
     int? rating,
     String? timestampField,
   }) async {
+    final scope = ProfileRuntime.scope.value;
+    final capability = await _captureCapability();
+    final originalId = ids.contentId ?? ids.imdb;
+    if (ids.contentId case final String contentId) {
+      final resolved = await TrackerIdentityService.instance.resolve(
+        contentId,
+        type == 'movie' ? 'movie' : 'series',
+      );
+      if (resolved == null) return false;
+      ids = MdblistMediaIds.fromJson(resolved);
+    }
+    if (scope != ProfileRuntime.scope.value) return false;
     final payload = _singleTitlePayload(
       ids,
       type,
@@ -1108,7 +1147,12 @@ class MdblistService {
       timestampField: timestampField,
     );
     if (payload == null) return false;
-    final response = await _trackerRequest('POST', path, body: payload);
+    final response = await _trackerRequest(
+      'POST',
+      path,
+      body: payload,
+      capability: capability,
+    );
     final success = response.isSuccess;
     if (success) {
       // Both '/sync/{bucket}' and '/sync/{bucket}/remove' change that bucket's
@@ -1125,7 +1169,7 @@ class MdblistService {
     if (success &&
         (type == 'episode' || type == 'series' || type == 'show') &&
         (path == '/sync/watched' || path == '/sync/watched/remove')) {
-      EpisodeTrackerSnapshotRevision.invalidateTitle('mdblist', ids.imdb);
+      EpisodeTrackerSnapshotRevision.invalidateTitle('mdblist', originalId);
     }
     if (success) {
       libraryRevision.value++;
@@ -1401,11 +1445,34 @@ class MdblistService {
     String type,
   ) => _mapRequest('GET', '/tmdb/${type == 'series' ? 'show' : type}/$tmdbId/');
 
+  Future<MdblistResult<Map<String, dynamic>>> resolveContent(
+    String id,
+    String type,
+  ) async {
+    final ids = await TrackerIdentityService.instance.resolve(id, type);
+    if (ids == null) {
+      return const MdblistResult.failure(MdblistResultKind.notFound);
+    }
+    if (ids['imdb'] case final String imdb) return resolveImdb(imdb, type);
+    final provider = ids.keys.single;
+    final result = await _mapRequest(
+      'GET',
+      '/$provider/${type == 'series' ? 'show' : 'movie'}/${ids[provider]}/',
+    );
+    final resolvedIds = result.data?['ids'];
+    if (result.isSuccess &&
+        (resolvedIds is! Map<String, dynamic> ||
+            !TrackerIdentityService.matches(ids, resolvedIds))) {
+      return const MdblistResult.failure(MdblistResultKind.malformedResponse);
+    }
+    return result;
+  }
+
   Future<MdblistTitleStatus?> fetchTitleStatus(
     String imdbId,
     String type,
   ) async {
-    final resolved = await resolveImdb(imdbId, type);
+    final resolved = await resolveContent(imdbId, type);
     if (!resolved.isSuccess) return null;
     final ids = resolved.data?['ids'];
     final rawTmdb = ids is Map ? ids['tmdb'] : null;
@@ -1470,8 +1537,15 @@ class MdblistService {
   Future<MdblistResult<Map<String, double>>> fetchShowEpisodeProgress(
     String imdbId,
   ) async {
+    final wanted = await TrackerIdentityService.instance.resolve(
+      imdbId,
+      'series',
+    );
+    if (wanted == null) {
+      return const MdblistResult.failure(MdblistResultKind.notFound);
+    }
     final reads = await Future.wait([
-      resolveImdb(imdbId, 'series'),
+      resolveContent(imdbId, 'series'),
       fetchPlaybackSessions(),
     ]);
     final resolved = reads[0] as MdblistResult<Map<String, dynamic>>;
@@ -1480,7 +1554,7 @@ class MdblistService {
     if (playback.isUsable) {
       for (final session in playback.data!) {
         if (!session.isEpisode ||
-            session.imdbId?.toLowerCase() != imdbId.toLowerCase() ||
+            !TrackerIdentityService.matches(wanted, session.ids.toJson()) ||
             session.season == null ||
             session.episode == null ||
             !session.isResumable) {
@@ -1522,10 +1596,17 @@ class MdblistService {
   /// Returns the authenticated user's episode ratings for one show, keyed as
   /// `season-episode`. The sync API has emitted both flattened episode rows
   /// and nested show/season payloads over its lifetime, so accept both shapes
-  /// while still requiring the parent IMDb id to match.
+  /// while still requiring the exact parent identity to match.
   Future<MdblistResult<Map<String, int>>> fetchShowEpisodeRatings(
     String imdbId,
   ) async {
+    final wanted = await TrackerIdentityService.instance.resolve(
+      imdbId,
+      'series',
+    );
+    if (wanted == null) {
+      return const MdblistResult.failure(MdblistResultKind.notFound);
+    }
     final snapshot = await fetchSyncSnapshot('ratings', mediaType: 'episode');
     if (!snapshot.isUsable) {
       return MdblistResult.failure(
@@ -1535,7 +1616,6 @@ class MdblistService {
       );
     }
 
-    final wanted = imdbId.trim().toLowerCase();
     final ratings = <String, int>{};
 
     int? integer(dynamic value) {
@@ -1543,7 +1623,7 @@ class MdblistService {
       return int.tryParse(value?.toString() ?? '');
     }
 
-    String? parentImdb(Map<dynamic, dynamic> row) {
+    bool matchesParent(Map<dynamic, dynamic> row) {
       final show = row['show'];
       final candidates = <dynamic>[
         if (show is Map) show['ids'],
@@ -1551,12 +1631,14 @@ class MdblistService {
         row['ids'],
       ];
       for (final candidate in candidates) {
-        if (candidate is Map) {
-          final imdb = candidate['imdb']?.toString().trim().toLowerCase();
-          if (imdb != null && imdb.isNotEmpty) return imdb;
+        if (candidate is Map && wanted.keys.any(candidate.containsKey)) {
+          return TrackerIdentityService.matches(
+            wanted,
+            Map<String, dynamic>.from(candidate),
+          );
         }
       }
-      return null;
+      return false;
     }
 
     void addEpisode(Map<dynamic, dynamic> row, int? inheritedSeason) {
@@ -1586,7 +1668,7 @@ class MdblistService {
     void addNested(Map<dynamic, dynamic> row) {
       final show = row['show'];
       final owner = show is Map ? show : row;
-      if (parentImdb(row) != wanted && parentImdb(owner) != wanted) return;
+      if (!matchesParent(row) && !matchesParent(owner)) return;
       final seasons = owner['seasons'];
       if (seasons is List) {
         for (final seasonValue in seasons.whereType<Map>()) {
@@ -1831,13 +1913,19 @@ class MdblistService {
       if (row['movie'] is! Map) continue;
       final id = imdbOf(row);
       if (id != null && id.isNotEmpty) movies.add(id);
+      final ids = (row['movie'] as Map)['ids'];
+      movies.addAll(
+        MediaIdentity.aliases(
+          ids,
+        ).map((id) => MediaIdentity.progressId(id, 'movie')),
+      );
     }
     // `/sync/watched` does not include the computed `completed` field; that
     // belongs to `/sync/state/show/{provider}`. More importantly, a show
     // completed episode-by-episode may exist only in the episode snapshot, not
     // as a whole-show watched row. Use parent show IDs from both snapshots as
     // candidates, then batch their authoritative state 100 at a time.
-    final imdbByMdblistId = <String, String>{};
+    final identitiesByMdblistId = <String, Set<String>>{};
     void addShowCandidate(Map<String, dynamic> row) {
       final episode = row['episode'];
       final nestedShow = episode is Map ? episode['show'] : null;
@@ -1847,11 +1935,14 @@ class MdblistService {
       final imdb = ids is Map
           ? ids['imdb']?.toString().trim().toLowerCase()
           : null;
-      if (mdblistId != null &&
-          mdblistId.isNotEmpty &&
-          imdb != null &&
-          imdb.isNotEmpty) {
-        imdbByMdblistId[mdblistId] = imdb;
+      final identities = {
+        if (imdb != null && imdb.isNotEmpty) imdb,
+        ...MediaIdentity.aliases(ids),
+      };
+      if (mdblistId != null && mdblistId.isNotEmpty && identities.isNotEmpty) {
+        identitiesByMdblistId
+            .putIfAbsent(mdblistId, () => {})
+            .addAll(identities);
       }
     }
 
@@ -1861,7 +1952,7 @@ class MdblistService {
     }
 
     final series = <String>{};
-    final mdblistIds = imdbByMdblistId.keys.toList(growable: false);
+    final mdblistIds = identitiesByMdblistId.keys.toList(growable: false);
     for (var offset = 0; offset < mdblistIds.length; offset += 100) {
       final end = (offset + 100).clamp(0, mdblistIds.length);
       final batch = mdblistIds.sublist(offset, end);
@@ -1875,8 +1966,8 @@ class MdblistService {
       if (!states.isSuccess) return null;
       for (final entry in states.data!.entries) {
         if (entry.value.completed != true) continue;
-        final imdb = imdbByMdblistId[entry.key.toString()];
-        if (imdb != null) series.add(imdb);
+        final identities = identitiesByMdblistId[entry.key.toString()];
+        if (identities != null) series.addAll(identities);
       }
     }
     return (movies: movies, series: series);

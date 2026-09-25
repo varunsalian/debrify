@@ -25,6 +25,7 @@ import '../../services/profiles/profile_runtime.dart';
 import '../../services/main_page_bridge.dart';
 import '../../services/profiles/profile_creation_service.dart';
 import '../../utils/platform_util.dart';
+import '../../utils/tv_keys.dart';
 import '../../widgets/profiles/profile_art.dart';
 import '../../widgets/profiles/profile_avatar_view.dart';
 import '../../widgets/tv_text_field.dart';
@@ -87,7 +88,7 @@ class EditProfileScreen extends StatefulWidget {
 }
 
 class _EnsureVisibleOnFocus extends StatelessWidget {
-  const _EnsureVisibleOnFocus({required this.child});
+  const _EnsureVisibleOnFocus({super.key, required this.child});
 
   final Widget child;
 
@@ -112,7 +113,7 @@ class _EnsureVisibleOnFocus extends StatelessWidget {
 /// ListTiles from focus traversal, which used to leave the active Admin's
 /// Access page with no way to advance (and therefore no way to scroll).
 class _TvReadOnlyScrollAnchor extends StatefulWidget {
-  const _TvReadOnlyScrollAnchor({required this.child});
+  const _TvReadOnlyScrollAnchor({super.key, required this.child});
 
   final Widget child;
 
@@ -140,9 +141,7 @@ class _TvReadOnlyScrollAnchorState extends State<_TvReadOnlyScrollAnchor> {
         }
       },
       onKeyEvent: (_, event) {
-        if (event is KeyDownEvent &&
-            (event.logicalKey == LogicalKeyboardKey.select ||
-                event.logicalKey == LogicalKeyboardKey.enter)) {
+        if (isActivateOrSpaceKey(event.logicalKey)) {
           return KeyEventResult.handled;
         }
         return KeyEventResult.ignored;
@@ -168,17 +167,17 @@ class _TvActionSurface extends StatefulWidget {
     required this.child,
     required this.onPressed,
     this.selected = false,
+    this.autofocus = false,
     this.focusNode,
     this.onKeyEvent,
-    this.onFocusChange,
   });
 
   final Widget child;
   final VoidCallback? onPressed;
   final bool selected;
+  final bool autofocus;
   final FocusNode? focusNode;
   final KeyEventResult Function(FocusNode, KeyEvent)? onKeyEvent;
-  final ValueChanged<bool>? onFocusChange;
 
   @override
   State<_TvActionSurface> createState() => _TvActionSurfaceState();
@@ -194,7 +193,15 @@ class _TvActionSurfaceState extends State<_TvActionSurface> {
     return Focus(
       canRequestFocus: false,
       skipTraversal: true,
-      onKeyEvent: widget.onKeyEvent,
+      onKeyEvent: (node, event) {
+        final result = widget.onKeyEvent?.call(node, event);
+        if (result != null && result != KeyEventResult.ignored) return result;
+        if (isActivateOrSpaceKey(event.logicalKey)) {
+          if (event is KeyDownEvent) widget.onPressed?.call();
+          return KeyEventResult.handled;
+        }
+        return KeyEventResult.ignored;
+      },
       child: AnimatedScale(
         scale: _focused ? 1.025 : 1,
         duration: const Duration(milliseconds: 120),
@@ -221,10 +228,10 @@ class _TvActionSurfaceState extends State<_TvActionSurface> {
           ),
           clipBehavior: Clip.antiAlias,
           child: InkWell(
+            autofocus: widget.autofocus,
             focusNode: widget.focusNode,
             onFocusChange: (focused) {
               if (_focused != focused) setState(() => _focused = focused);
-              widget.onFocusChange?.call(focused);
               if (focused) {
                 Scrollable.ensureVisible(
                   context,
@@ -250,119 +257,71 @@ class _TvActionSurfaceState extends State<_TvActionSurface> {
   }
 }
 
-class _TvAutoLockField extends StatefulWidget {
+/// Left/right remain pane navigation; OK opens the value picker.
+class _TvAutoLockField extends StatelessWidget {
   const _TvAutoLockField({required this.value, required this.onChanged});
 
   final int value;
   final ValueChanged<int> onChanged;
-
-  @override
-  State<_TvAutoLockField> createState() => _TvAutoLockFieldState();
-}
-
-class _TvAutoLockFieldState extends State<_TvAutoLockField> {
-  static const _values = <int>[0, 5, 15, 30, 60];
-  bool _focused = false;
-
-  String get _label => switch (widget.value) {
-    0 => 'Never',
-    5 => 'After 5 minutes',
-    15 => 'After 15 minutes',
-    30 => 'After 30 minutes',
-    60 => 'After 1 hour',
-    _ => 'Never',
+  static const _labels = <int, String>{
+    0: 'Never',
+    5: 'After 5 minutes',
+    15: 'After 15 minutes',
+    30: 'After 30 minutes',
+    60: 'After 1 hour',
   };
 
-  void _move(int delta) {
-    final current = _values.indexOf(widget.value);
-    final next = (current + delta).clamp(0, _values.length - 1);
-    if (next != current) widget.onChanged(_values[next]);
-  }
-
   @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    return Focus(
-      canRequestFocus: false,
-      skipTraversal: true,
-      onKeyEvent: (_, event) {
-        if (event is! KeyDownEvent) return KeyEventResult.ignored;
-        if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
-          _move(-1);
-          return KeyEventResult.handled;
-        }
-        if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
-          _move(1);
-          return KeyEventResult.handled;
-        }
-        return KeyEventResult.ignored;
-      },
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 120),
-        decoration: BoxDecoration(
-          color: colors.surfaceContainerHighest,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-            color: _focused ? colors.primary : Colors.transparent,
-            width: 3,
+  Widget build(BuildContext context) => _TvActionSurface(
+    key: const ValueKey('tv-profile-auto-lock'),
+    onPressed: () async {
+      final selected = await showDialog<int>(
+        context: context,
+        builder: (context) => TvHeldKeyGuard(
+          child: SimpleDialog(
+            title: const Text('Auto-lock'),
+            children: [
+              for (final entry in _labels.entries)
+                ListTile(
+                  autofocus: entry.key == value,
+                  selected: entry.key == value,
+                  title: Text(entry.value),
+                  trailing: entry.key == value ? const Icon(Icons.check) : null,
+                  onTap: () => Navigator.pop(context, entry.key),
+                ),
+            ],
           ),
-          boxShadow: _focused
-              ? [
-                  BoxShadow(
-                    color: colors.primary.withValues(alpha: .25),
-                    blurRadius: 16,
-                  ),
-                ]
-              : null,
         ),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(14),
-          onFocusChange: (focused) {
-            setState(() => _focused = focused);
-            if (focused) {
-              Scrollable.ensureVisible(
-                context,
-                alignment: .65,
-                duration: const Duration(milliseconds: 180),
-                curve: Curves.easeOutCubic,
-              );
-            }
-          },
-          onTap: () => _move(1),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+      );
+      if (selected != null && context.mounted) onChanged(selected);
+    },
+    child: Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+      child: Row(
+        children: [
+          Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   'Auto-lock',
-                  style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                    color: _focused ? colors.primary : null,
-                  ),
+                  style: Theme.of(context).textTheme.labelLarge,
                 ),
                 const SizedBox(height: 8),
-                Row(
-                  children: [
-                    const Icon(Icons.chevron_left_rounded, size: 30),
-                    Expanded(
-                      child: Text(
-                        _label,
-                        textAlign: TextAlign.center,
-                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
-                    const Icon(Icons.chevron_right_rounded, size: 30),
-                  ],
+                Text(
+                  _labels[value] ?? _labels[0]!,
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
                 ),
               ],
             ),
           ),
-        ),
+          const Icon(Icons.expand_more_rounded, size: 30),
+        ],
       ),
-    );
-  }
+    ),
+  );
 }
 
 /// Immutable save input. The form is also focus/pointer locked while saving,
@@ -420,11 +379,14 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   /// control existed at all.
   bool _policyTouched = false;
 
-  /// True while a rail UP/DOWN move is transferring focus between rail
-  /// items. Distinguishes deliberate rail movement from focus ENTERING the
-  /// rail from the content pane, where geometric traversal may land on
-  /// whichever tab is nearest — not the current section's.
-  bool _railMoveInProgress = false;
+  final _tvContentFocus = FocusNode(
+    debugLabel: 'Edit profile content',
+    canRequestFocus: false,
+    skipTraversal: true,
+  );
+  final _tvBackFocus = FocusNode(debugLabel: 'Edit profile back');
+  FocusNode? _tvLastContentFocus;
+  int _tvFocusRequest = 0;
 
   // Where downloads/remote started, so their paired features (recordings,
   // remoteTransfer) follow the toggle only when the answer actually MOVED —
@@ -606,6 +568,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     for (final node in _tvTabFocusNodes) {
       node.dispose();
     }
+    _tvContentFocus.dispose();
+    _tvBackFocus.dispose();
     _name.dispose();
     _pin
       ..clear()
@@ -1001,6 +965,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     } on ProfileAvatarRejected catch (rejected) {
       if (!mounted) return;
       setState(() => _saving = false);
+      _restoreTvSaveFocus();
       // The one failure with a user-actionable cause: name it instead of the
       // generic message.
       ScaffoldMessenger.of(
@@ -1009,10 +974,22 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     } catch (_) {
       if (!mounted) return;
       setState(() => _saving = false);
+      _restoreTvSaveFocus();
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Could not save this profile')),
       );
     }
+  }
+
+  void _restoreTvSaveFocus() {
+    if (!PlatformUtil.isTelevision) return;
+    // Saving temporarily disables every form focus node. Re-enable them in
+    // layout before restoring the remote's position after an error.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && !_saving && ModalRoute.of(context)?.isCurrent == true) {
+        _tvTabFocusNodes.last.requestFocus();
+      }
+    });
   }
 
   Future<ProfileAuthorizationContext> _applyResourceGrants(
@@ -1359,6 +1336,30 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       child: Scaffold(
         appBar: AppBar(
           toolbarHeight: 64,
+          leading: Navigator.of(context).canPop()
+              ? Focus(
+                  canRequestFocus: false,
+                  onKeyEvent: (_, event) {
+                    final direction = _tvDirection(event);
+                    if (direction == null) return KeyEventResult.ignored;
+                    if (direction == TraversalDirection.down ||
+                        direction == TraversalDirection.right) {
+                      _tvTabFocusNodes[_tvSection.index].requestFocus();
+                    }
+                    return KeyEventResult.handled;
+                  },
+                  child: IconButton(
+                    focusNode: _tvBackFocus,
+                    tooltip: MaterialLocalizations.of(
+                      context,
+                    ).backButtonTooltip,
+                    onPressed: _saving
+                        ? null
+                        : () => Navigator.maybePop(context),
+                    icon: const BackButtonIcon(),
+                  ),
+                )
+              : null,
           title: Text(
             widget.profile == null ? 'Create profile' : 'Edit profile',
             style: Theme.of(
@@ -1385,15 +1386,45 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                           _buildTvSectionRail(colors),
                           const SizedBox(width: 18),
                           Expanded(
-                            child: switch (_tvSection) {
-                              _TvProfileSection.profile =>
-                                _buildTvProfileSection(),
-                              _TvProfileSection.pages => _buildTvPagesSection(),
-                              _TvProfileSection.lock => _buildTvLockSection(),
-                              _TvProfileSection.access =>
-                                _buildTvAccessSection(),
-                              _TvProfileSection.data => _buildTvDataSection(),
-                            },
+                            child: Focus(
+                              focusNode: _tvContentFocus,
+                              onKeyEvent: (_, event) {
+                                // Let text editing and the TV keyboard consume
+                                // caret keys; field edge callbacks own exits.
+                                if (FocusManager.instance.primaryFocus?.context
+                                        ?.findAncestorWidgetOfExactType<
+                                          EditableText
+                                        >() !=
+                                    null) {
+                                  return KeyEventResult.ignored;
+                                }
+                                final direction = _tvDirection(event);
+                                if (direction == null) {
+                                  return KeyEventResult.ignored;
+                                }
+                                _moveTvContent(direction);
+                                return KeyEventResult.handled;
+                              },
+                              // OK enters the pane on key-down; its remaining
+                              // repeats must not activate a stock form control.
+                              child: TvHeldKeyGuard(
+                                child: KeyedSubtree(
+                                  key: ValueKey(_tvSection),
+                                  child: switch (_tvSection) {
+                                    _TvProfileSection.profile =>
+                                      _buildTvProfileSection(),
+                                    _TvProfileSection.pages =>
+                                      _buildTvPagesSection(),
+                                    _TvProfileSection.lock =>
+                                      _buildTvLockSection(),
+                                    _TvProfileSection.access =>
+                                      _buildTvAccessSection(),
+                                    _TvProfileSection.data =>
+                                      _buildTvDataSection(),
+                                  },
+                                ),
+                              ),
+                            ),
                           ),
                         ],
                       ),
@@ -1423,15 +1454,14 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       required VoidCallback? onPressed,
       Key? key,
       bool selected = false,
-      ValueChanged<bool>? onFocusChange,
     }) => SizedBox(
       height: 56,
       child: _TvActionSurface(
         key: key,
         selected: selected,
+        autofocus: index == 0,
         focusNode: _tvTabFocusNodes[index],
         onKeyEvent: (_, event) => _handleTvRailKey(index, event),
-        onFocusChange: onFocusChange,
         onPressed: onPressed,
         child: child,
       ),
@@ -1460,84 +1490,183 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: colors.outlineVariant.withValues(alpha: .45)),
       ),
-      child: Column(
-        children: [
-          for (var index = 0; index < tabs.length; index++) ...[
-            railItem(
-              index: index,
-              key: ValueKey('tv-profile-tab-${tabs[index].$1.name}'),
-              selected: _tvSection == tabs[index].$1,
-              // Sections switch on focus so DPAD browsing previews each pane;
-              // onPressed keeps touch/click working (and moves focus with the
-              // tap, so section and focus can never diverge on hybrid
-              // touch+DPAD devices).
-              onFocusChange: (focused) =>
-                  _onRailItemFocused(index, focused, tabs[index].$1),
-              onPressed: () {
-                setState(() => _tvSection = tabs[index].$1);
-                _tvTabFocusNodes[index].requestFocus();
-              },
-              child: railLabel(tabs[index].$2, tabs[index].$3),
+      child: LayoutBuilder(
+        builder: (context, constraints) => SingleChildScrollView(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minHeight: constraints.maxHeight),
+            child: IntrinsicHeight(
+              child: Column(
+                children: [
+                  for (var index = 0; index < tabs.length; index++) ...[
+                    railItem(
+                      index: index,
+                      key: ValueKey('tv-profile-tab-${tabs[index].$1.name}'),
+                      selected: _tvSection == tabs[index].$1,
+                      // Up/down previews sections; OK or a click enters the pane.
+                      onPressed: () {
+                        _selectTvSection(tabs[index].$1);
+                        _tvTabFocusNodes[index].requestFocus();
+                        _focusTvContent();
+                      },
+                      child: railLabel(tabs[index].$2, tabs[index].$3),
+                    ),
+                    const SizedBox(height: 8),
+                  ],
+                  const Spacer(),
+                  railItem(
+                    index: saveIndex,
+                    key: const ValueKey('tv-profile-save'),
+                    onPressed: _saving ? null : _save,
+                    child: railLabel(
+                      Icons.check_rounded,
+                      _saving ? 'SAVING…' : 'SAVE',
+                    ),
+                  ),
+                ],
+              ),
             ),
-            const SizedBox(height: 8),
-          ],
-          const Spacer(),
-          railItem(
-            index: saveIndex,
-            key: const ValueKey('tv-profile-save'),
-            onFocusChange: (focused) =>
-                _onRailItemFocused(saveIndex, focused, null),
-            onPressed: _saving ? null : _save,
-            child: railLabel(Icons.check_rounded, _saving ? 'SAVING…' : 'SAVE'),
           ),
-        ],
+        ),
       ),
     );
   }
 
-  KeyEventResult _handleTvRailKey(int index, KeyEvent event) {
-    // KeyRepeatEvent deliberately excluded: every rail hop rebuilds the
-    // content pane, and a held DPAD sweeping five heavyweight panes at
-    // auto-repeat rate is exactly the frame cost low-end TVs can't absorb.
-    if (event is! KeyDownEvent) return KeyEventResult.ignored;
-    final delta = switch (event.logicalKey) {
-      LogicalKeyboardKey.arrowUp => -1,
-      LogicalKeyboardKey.arrowDown => 1,
-      // RIGHT falls through to directional traversal, which enters the
-      // content pane; LEFT is swallowed so focus can't escape the screen.
-      LogicalKeyboardKey.arrowLeft => 0,
+  TraversalDirection? _tvDirection(KeyEvent event) {
+    if (event is KeyUpEvent) return null;
+    return switch (event.logicalKey) {
+      LogicalKeyboardKey.arrowUp => TraversalDirection.up,
+      LogicalKeyboardKey.arrowDown => TraversalDirection.down,
+      LogicalKeyboardKey.arrowLeft => TraversalDirection.left,
+      LogicalKeyboardKey.arrowRight => TraversalDirection.right,
       _ => null,
     };
-    if (delta == null) return KeyEventResult.ignored;
-    if (delta == 0) return KeyEventResult.handled;
+  }
 
-    final target = (index + delta).clamp(0, _tvTabFocusNodes.length - 1);
-    if (target == index) return KeyEventResult.handled;
-    _railMoveInProgress = true;
-    _tvTabFocusNodes[target].requestFocus();
+  KeyEventResult _handleTvRailKey(int index, KeyEvent event) {
+    final direction = _tvDirection(event);
+    if (direction == null) return KeyEventResult.ignored;
+    switch (direction) {
+      case TraversalDirection.left:
+        _tvFocusRequest++;
+        break;
+      case TraversalDirection.right:
+        if (index < _TvProfileSection.values.length) {
+          _selectTvSection(_TvProfileSection.values[index]);
+        }
+        _focusTvContent();
+      case TraversalDirection.up:
+      case TraversalDirection.down:
+        _tvFocusRequest++;
+        final delta = direction == TraversalDirection.up ? -1 : 1;
+        final target = (index + delta).clamp(0, _tvTabFocusNodes.length - 1);
+        if (index == 0 && delta < 0 && Navigator.of(context).canPop()) {
+          _tvBackFocus.requestFocus();
+        } else {
+          // Select synchronously: a quick RIGHT must never enter the old pane.
+          if (target < _TvProfileSection.values.length) {
+            _selectTvSection(_TvProfileSection.values[target]);
+          }
+          _tvTabFocusNodes[target].requestFocus();
+        }
+    }
     return KeyEventResult.handled;
   }
 
-  /// Rail focus is only a section switch when it came from WITHIN the rail
-  /// (UP/DOWN, or a tap that moved focus). Focus entering from the content
-  /// pane is geometric — LEFT from deep in a scrolled list lands on
-  /// whichever tab is vertically nearest — so it is redirected to the
-  /// current section's tab instead of silently swapping the pane the user
-  /// was editing.
-  void _onRailItemFocused(int index, bool focused, _TvProfileSection? section) {
-    if (!focused) return;
-    final cameFromRail = _railMoveInProgress;
-    _railMoveInProgress = false;
-    if (section != null && _tvSection == section) return;
-    if (cameFromRail) {
-      if (section != null) setState(() => _tvSection = section);
-      return;
-    }
-    final home = _TvProfileSection.values.indexOf(_tvSection);
-    if (home == index) return;
+  void _selectTvSection(_TvProfileSection section) {
+    if (_tvSection == section) return;
+    _tvLastContentFocus = null;
+    _tvFocusRequest++;
+    setState(() => _tvSection = section);
+  }
+
+  List<FocusNode> get _tvContentStops => _tvContentFocus.traversalDescendants
+      .where((node) => node is! FocusScopeNode && !node.rect.size.isEmpty)
+      .toList();
+
+  void _requestTvContentFocus(FocusNode node) {
+    _tvLastContentFocus = node;
+    FocusTraversalPolicy.defaultTraversalRequestFocusCallback(
+      node,
+      alignment: .35,
+      duration: const Duration(milliseconds: 180),
+      curve: Curves.easeOutCubic,
+    );
+  }
+
+  void _focusTvContent() {
+    if (_saving) return;
+    final section = _tvSection;
+    final request = ++_tvFocusRequest;
+    // Section changes rebuild the pane. Resolve its live controls after layout,
+    // including conditional controls and async Access rows.
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _tvTabFocusNodes[home].requestFocus();
+      if (!mounted ||
+          _saving ||
+          _tvSection != section ||
+          request != _tvFocusRequest ||
+          ModalRoute.of(context)?.isCurrent == false) {
+        return;
+      }
+      final stops = _tvContentStops;
+      if (stops.isEmpty) return; // Empty/loading panes leave focus on the rail.
+      if (stops.contains(_tvLastContentFocus)) {
+        _requestTvContentFocus(_tvLastContentFocus!);
+        return;
+      }
+      stops.sort((a, b) {
+        final vertical = a.rect.top.compareTo(b.rect.top);
+        return vertical == 0 ? a.rect.left.compareTo(b.rect.left) : vertical;
+      });
+      _requestTvContentFocus(stops.first);
     });
+    WidgetsBinding.instance.ensureVisualUpdate();
+  }
+
+  void _returnToTvRail() {
+    _tvFocusRequest++;
+    final focused = FocusManager.instance.primaryFocus;
+    if (_tvContentStops.contains(focused)) _tvLastContentFocus = focused;
+    _tvTabFocusNodes[_tvSection.index].requestFocus();
+  }
+
+  void _moveTvContent(TraversalDirection direction) {
+    final current = FocusManager.instance.primaryFocus;
+    if (current == null || !_tvContentFocus.hasFocus) return;
+    final rect = current.rect;
+    final horizontal =
+        direction == TraversalDirection.left ||
+        direction == TraversalDirection.right;
+    final forward =
+        direction == TraversalDirection.right ||
+        direction == TraversalDirection.down;
+    final candidates = _tvContentStops.where((node) {
+      if (node == current) return false;
+      final other = node.rect;
+      // Horizontal movement belongs to the current visual row. Default
+      // traversal can otherwise jump diagonally into a distant form field.
+      final sameRow =
+          (other.center.dy - rect.center.dy).abs() <
+          (other.height < rect.height ? other.height : rect.height) / 2;
+      if (horizontal != sameRow) return false;
+      final delta = horizontal
+          ? other.center.dx - rect.center.dx
+          : other.center.dy - rect.center.dy;
+      return forward ? delta > 1 : delta < -1;
+    }).toList();
+    candidates.sort((a, b) {
+      final aDelta = a.rect.center - rect.center;
+      final bDelta = b.rect.center - rect.center;
+      final main = horizontal
+          ? aDelta.dx.abs().compareTo(bDelta.dx.abs())
+          : aDelta.dy.abs().compareTo(bDelta.dy.abs());
+      return main != 0 ? main : aDelta.dx.abs().compareTo(bDelta.dx.abs());
+    });
+    if (candidates.isNotEmpty) {
+      _requestTvContentFocus(candidates.first);
+    } else if (direction == TraversalDirection.left) {
+      _returnToTvRail();
+    }
+    // Other outer edges stay put rather than wrapping to the rail or AppBar.
   }
 
   Widget _buildTvPagesSection() {
@@ -1747,8 +1876,13 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                   Text('Name', style: Theme.of(context).textTheme.titleMedium),
                   const SizedBox(height: 8),
                   TvTextField(
+                    key: const ValueKey('tv-profile-name'),
                     controller: _name,
-                    autofocus: true,
+                    onLeftArrow: _returnToTvRail,
+                    onRightArrow: () =>
+                        _moveTvContent(TraversalDirection.right),
+                    onUpArrow: () => _moveTvContent(TraversalDirection.up),
+                    onDownArrow: () => _moveTvContent(TraversalDirection.down),
                     onChanged: (_) => setState(() {}),
                     inputFormatters: <TextInputFormatter>[
                       LengthLimitingTextInputFormatter(40),
@@ -1856,6 +1990,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       child: Tooltip(
         message: label,
         child: _TvActionSurface(
+          key: ValueKey('tv-profile-avatar-$keyName'),
           selected: selected,
           onPressed: () => setState(() {
             _avatarKey = keyName;
@@ -1886,6 +2021,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       UserProfileRole.child: ('Kid', 'Limited content', Icons.child_care),
     };
     Widget card(UserProfileRole role) => _TvActionSurface(
+      key: ValueKey('tv-profile-role-${role.name}'),
       selected: _role == role,
       onPressed: () => _setRole(role),
       child: Padding(
@@ -1970,7 +2106,12 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
               ),
               const SizedBox(height: 24),
               TvTextField(
+                key: const ValueKey('tv-profile-pin'),
                 controller: _pin,
+                onLeftArrow: _returnToTvRail,
+                onRightArrow: () => _moveTvContent(TraversalDirection.right),
+                onUpArrow: () => _moveTvContent(TraversalDirection.up),
+                onDownArrow: () => _moveTvContent(TraversalDirection.down),
                 keyboardType: TextInputType.number,
                 obscureText: true,
                 inputFormatters: <TextInputFormatter>[
@@ -2418,6 +2559,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         else
           for (final engine in engines)
             _tvAccessFocusRow(
+              key: ValueKey('tv-profile-engine-${engine.id}'),
               interactive: !ownEditor,
               child: CheckboxListTile(
                 value: _selectedEngines.contains(engine.id),
@@ -2443,11 +2585,15 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     );
   }
 
-  Widget _tvAccessFocusRow({required bool interactive, required Widget child}) {
+  Widget _tvAccessFocusRow({
+    Key? key,
+    required bool interactive,
+    required Widget child,
+  }) {
     if (!PlatformUtil.isTelevision) return child;
     return interactive
-        ? _EnsureVisibleOnFocus(child: child)
-        : _TvReadOnlyScrollAnchor(child: child);
+        ? _EnsureVisibleOnFocus(key: key, child: child)
+        : _TvReadOnlyScrollAnchor(key: key, child: child);
   }
 
   /// The order and membership of the Access groups. Anything a future type
@@ -2570,14 +2716,13 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     final interactive = resource.ownerProfileId != widget.profile?.id;
     return [
       _tvAccessFocusRow(
+        key: ValueKey('tv-profile-connection-${resource.id}'),
         interactive: interactive,
         child: CheckboxListTile(
           value: _selectedResources.contains(resource.id),
           title: Text(resource.label),
           subtitle: Text(
-            resource.needsReconnect
-                ? 'Reconnect required'
-                : resource.type.name,
+            resource.needsReconnect ? 'Reconnect required' : resource.type.name,
           ),
           secondary:
               widget.profile != null &&

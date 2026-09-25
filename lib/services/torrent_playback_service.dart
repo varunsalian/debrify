@@ -10,6 +10,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'android_local_source_service.dart';
 import 'next_episode_service.dart';
+import 'native_series_metadata_service.dart';
 import 'profiles/profile_runtime.dart';
 
 import 'package:android_intent_plus/android_intent.dart';
@@ -85,6 +86,7 @@ class PlaybackMeta {
   final String? posterUrl;
   final String? year;
   final String? addonId; // originating Stremio addon (resume / next-episode)
+  final StremioMeta? catalogItem; // Exact catalog ID and addon configuration for navigation.
   final String? stremioAddonId;
   final String? stremioAddonKey;
   final String? stremioCatalogId;
@@ -118,6 +120,7 @@ class PlaybackMeta {
     this.posterUrl,
     this.year,
     this.addonId,
+    this.catalogItem,
     this.stremioAddonId,
     this.stremioAddonKey,
     this.stremioCatalogId,
@@ -142,6 +145,7 @@ class PlaybackMeta {
     this.posterUrl,
     this.year,
     this.addonId,
+    this.catalogItem,
     this.stremioAddonId,
     this.stremioAddonKey,
     this.stremioCatalogId,
@@ -3132,7 +3136,12 @@ class TorrentPlaybackService {
                   ? null
                   : (season: target.season, episode: target.episode);
             }
-          : null,
+          : (s, e, direction) => NextEpisodeService.findAdjacentEpisode(
+              imdbId, s, e, direction: direction,
+              reportGuideUnavailable: true,
+              preferBuiltIn: meta.addonId == NativeSeriesMetadataService.addon.id,
+              catalogItem: meta.catalogItem, originAddonId: meta.addonId,
+            ),
       season: season,
       episode: episode,
       pinnedDirectCandidates: (s, e, {onPreferredMissing}) async* {
@@ -3214,7 +3223,11 @@ class TorrentPlaybackService {
               ? null
               : (season: target.season, episode: target.episode);
         } else {
-          final target = await NextEpisodeService.findNextEpisode(imdbId, s, e);
+          final target = await NextEpisodeService.findNextEpisode(
+            imdbId, s, e,
+            preferBuiltIn: meta.addonId == NativeSeriesMetadataService.addon.id,
+            catalogItem: meta.catalogItem, originAddonId: meta.addonId,
+          );
           next = target == null
               ? null
               : (season: target.season, episode: target.episode);
@@ -6034,6 +6047,7 @@ class TorrentPlaybackService {
         posterUrl: meta.posterUrl,
         year: meta.year,
         addonId: meta.addonId,
+        catalogItem: meta.catalogItem,
         stremioAddonId: meta.stremioAddonId,
         stremioAddonKey: meta.stremioAddonKey,
         stremioCatalogId: meta.stremioCatalogId,

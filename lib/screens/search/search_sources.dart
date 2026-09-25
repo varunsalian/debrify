@@ -465,18 +465,21 @@ class _SourcesScreenState extends State<_SourcesScreen> {
     } catch (_) {}
   }
 
-  /// Fetch the show's season numbers from the first meta-capable addon for the
-  /// Season chip menu. Best-effort: on failure the chip menu falls back to
-  /// seasons derived from the current results' coverage info.
+  /// Preserve built-in metadata for tracker titles in the Season chip menu.
+  /// Other titles retain the addon lookup. On failure, derive seasons from
+  /// the current results' coverage info.
   Future<void> _loadSeasons() async {
     if (_imdbId.isEmpty) return;
     try {
       final stremio = StremioService.instance;
-      final metaAddon = MediaIdentity.isNative(_imdbId) && !widget.selection.hasStremioEpisodeIdentity
-          ? NativeSeriesMetadataService.addon
-          : await stremio.firstMetaCapableAddon();
-      if (metaAddon == null) return;
-      final videos = await stremio.fetchSeriesMeta(metaAddon, _imdbId);
+      final builtIn = !widget.selection.hasStremioEpisodeIdentity &&
+          (MediaIdentity.isNative(_imdbId) ||
+              widget.meta.addonId == NativeSeriesMetadataService.addon.id);
+      final videos = await stremio.fetchSourcesSeriesGuide(
+        imdbId: _imdbId,
+        catalogItem: widget.meta.catalogItem,
+        builtIn: builtIn,
+      );
       if (videos == null || !mounted) return;
       unawaited(
         LocalSeriesCompletionService.instance.recordRawEpisodeInventory(

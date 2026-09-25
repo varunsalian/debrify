@@ -32,21 +32,16 @@ class TrackingSourcePolicy {
         )
       : MediaIdentity.isNative(id)
       ? TrackingSourcePolicy(
-          scrobbleTargets: scrobbleTargets
-              .where(
-                (s) => s == TrackingSource.simkl || s == TrackingSource.local,
-              )
-              .toSet(),
+          scrobbleTargets: scrobbleTargets,
+          // Trakt/MDBList resume selection still consumes IMDb-only feeds.
+          // Keep the existing local fallback until those readers support native
+          // identities; this does not disable writes or Smart progress reads.
           progressSource:
               progressSource == WatchProgressSource.trakt ||
                   progressSource == WatchProgressSource.mdblist
               ? WatchProgressSource.local
               : progressSource,
-          homeTickSources: homeTickSources
-              .where(
-                (s) => s == TrackingSource.simkl || s == TrackingSource.local,
-              )
-              .toSet(),
+          homeTickSources: homeTickSources,
           nativeIdentity: true,
         )
       : this;
@@ -84,17 +79,13 @@ class TrackingSourcePolicy {
 
   /// Smart preserves the legacy merged/recency behavior. A dedicated source
   /// admits only itself; local means data written by this Debrify profile.
-  bool progressFrom(TrackingSource source) =>
-      (!nativeIdentity ||
-          source == TrackingSource.local ||
-          source == TrackingSource.simkl) &&
-      switch (progressSource) {
-        WatchProgressSource.smart => true,
-        WatchProgressSource.local => source == TrackingSource.local,
-        WatchProgressSource.trakt => source == TrackingSource.trakt,
-        WatchProgressSource.simkl => source == TrackingSource.simkl,
-        WatchProgressSource.mdblist => source == TrackingSource.mdblist,
-      };
+  bool progressFrom(TrackingSource source) => switch (progressSource) {
+    WatchProgressSource.smart => true,
+    WatchProgressSource.local => source == TrackingSource.local,
+    WatchProgressSource.trakt => source == TrackingSource.trakt,
+    WatchProgressSource.simkl => source == TrackingSource.simkl,
+    WatchProgressSource.mdblist => source == TrackingSource.mdblist,
+  };
 
   bool homeTicksFrom(TrackingSource source) => homeTickSources.contains(source);
 
@@ -109,6 +100,18 @@ class TrackingSourcePolicy {
   }
 
   bool get forcesLocalCompletion => progressSource == WatchProgressSource.local;
+
+  /// Scrobbling support is independent of Continue Watching ownership.
+  /// Trakt/MDBList CW feeds still require IMDb IDs; native titles must retain
+  /// their existing Simkl/local owner even while we send those trackers writes.
+  bool usesLocalCompletionTracking({
+    required bool traktScrobble,
+    required bool simklScrobble,
+    required bool mdblistScrobble,
+  }) =>
+      forcesLocalCompletion ||
+      (!simklScrobble &&
+          (nativeIdentity || (!traktScrobble && !mdblistScrobble)));
 
   bool get isSmart => progressSource == WatchProgressSource.smart;
 }

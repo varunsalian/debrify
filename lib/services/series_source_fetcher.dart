@@ -1,3 +1,5 @@
+import 'adjacent_episode_resolver.dart';
+export 'adjacent_episode_resolver.dart';
 import '../models/torrent.dart';
 
 /// One search for a series-source category ("season/series packs" or
@@ -37,13 +39,6 @@ typedef AddonPackSearch =
 /// resolve. Manual source browsing intentionally exposes every result, while
 /// automatic Next/Previous must skip a direct URL that is positively dead.
 typedef SeriesSourceCandidateValidator = Future<bool> Function(Torrent source);
-
-typedef AdjacentEpisodeResolver =
-    Future<({int season, int episode})?> Function(
-      int season,
-      int episode,
-      int direction,
-    );
 
 /// An applicable addon, as the sheets' rail needs it.
 class SourceAddonRef {

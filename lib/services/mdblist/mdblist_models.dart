@@ -1,3 +1,5 @@
+import '../../models/media_identity.dart';
+
 enum MdblistResultKind {
   success,
   partial,
@@ -71,7 +73,27 @@ class MdblistMediaIds {
   final int? tvdb;
   final String? mdblist;
 
-  const MdblistMediaIds({this.imdb, this.tmdb, this.tvdb, this.mdblist});
+  /// Original playback identity; never serialized as an MDBList API ID.
+  final String? contentId;
+
+  const MdblistMediaIds({
+    this.imdb,
+    this.tmdb,
+    this.tvdb,
+    this.mdblist,
+    this.contentId,
+  });
+
+  factory MdblistMediaIds.forContent(String id) {
+    if (MediaIdentity.isImdb(id)) return MdblistMediaIds(imdb: id);
+    if (MediaIdentity.isNative(id)) {
+      return MdblistMediaIds(
+        contentId: id,
+        tmdb: id.startsWith('tmdb:') ? int.parse(id.split(':').last) : null,
+      );
+    }
+    return const MdblistMediaIds();
+  }
 
   factory MdblistMediaIds.fromJson(Map<String, dynamic>? json) {
     int? integer(Object? value) => value is num
@@ -95,7 +117,7 @@ class MdblistMediaIds {
     if (mdblist != null && mdblist!.isNotEmpty) 'mdblist': mdblist,
   };
 
-  bool get isEmpty => toJson().isEmpty;
+  bool get isEmpty => toJson().isEmpty && contentId == null;
 }
 
 class MdblistScrobbleTarget {
@@ -116,7 +138,7 @@ class MdblistScrobbleTarget {
       !ids.isEmpty && (!isEpisode || (season != null && episode != null));
 
   Map<String, dynamic>? payload(double progress) {
-    if (!isValid) return null;
+    if (!isValid || ids.toJson().isEmpty) return null;
     // MDBList rejects scrobble progress with more than two decimal places.
     // Keep this guard at the payload boundary so direct service callers are as
     // safe as the higher-level playback session.
@@ -221,6 +243,15 @@ class MdblistPlaybackSession {
     this.season,
     this.episode,
   });
+
+  MdblistMediaIds get ids {
+    final title = raw[isEpisode ? 'show' : 'movie'];
+    final values = title is Map ? title['ids'] : null;
+    return MdblistMediaIds.fromJson({
+      if (imdbId != null) 'imdb': imdbId,
+      if (values is Map) ...Map<String, dynamic>.from(values),
+    });
+  }
 
   bool get isResumable => progress > 0 && progress < 80;
 

@@ -3,6 +3,7 @@ import '../services/metadata_preferences_service.dart';
 import '../services/diagnostic_log.dart';
 import '../services/profiles/profile_runtime.dart';
 import '../services/metadata_episode_service.dart';
+import '../services/native_series_metadata_service.dart';
 import 'dart:async';
 
 import 'package:cached_network_image/cached_network_image.dart';
@@ -339,17 +340,18 @@ class EpisodesPanelState extends State<EpisodesPanel> {
   /// Discover/catalog without Trakt, so the Trakt-only episode menu (mark
   /// watched/unwatched, rate) is only offered when this is true.
   bool _traktAuthenticated = false;
-  bool get _isTraktAuthenticated => _traktAuthenticated &&
-      !MediaIdentity.isNative((_selectedShow ?? widget.show).progressId) &&
+  bool get _isTraktAuthenticated =>
+      _traktAuthenticated &&
       !CustomSeriesIdentity.isCustom((_selectedShow ?? widget.show).imdbId);
 
   /// Whether Simkl is connected, for watched-action destinations and options.
   bool _simklAuthenticated = false;
   bool _mdblistAuthenticated = false;
-  bool get _isSimklAuthenticated => _simklAuthenticated &&
+  bool get _isSimklAuthenticated =>
+      _simklAuthenticated &&
       !CustomSeriesIdentity.isCustom((_selectedShow ?? widget.show).imdbId);
-  bool get _isMdblistAuthenticated => _mdblistAuthenticated &&
-      !MediaIdentity.isNative((_selectedShow ?? widget.show).progressId) &&
+  bool get _isMdblistAuthenticated =>
+      _mdblistAuthenticated &&
       !CustomSeriesIdentity.isCustom((_selectedShow ?? widget.show).imdbId);
 
   // MDBList can acknowledge a completed scrobble just before the player route
@@ -550,7 +552,8 @@ class EpisodesPanelState extends State<EpisodesPanel> {
       }
     }
 
-    if (MediaIdentity.isImdb(imdbId) && await _mdblistService.isAuthenticated()) {
+    if ((MediaIdentity.isImdb(imdbId) || MediaIdentity.isNative(imdbId)) &&
+        await _mdblistService.isAuthenticated()) {
       if (policy.progressFrom(TrackingSource.mdblist)) {
         try {
           final result = await _mdblistService.fetchShowEpisodeProgress(imdbId);
@@ -752,7 +755,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
           _trackingPolicy.scrobbles(TrackingSource.simkl))
         'Simkl',
       if (_isMdblistAuthenticated &&
-          imdb.startsWith('tt') &&
+          (MediaIdentity.isImdb(imdb) || MediaIdentity.isNative(imdb)) &&
           _trackingPolicy.scrobbles(TrackingSource.mdblist))
         'MDBList',
       'this device',
@@ -888,8 +891,8 @@ class EpisodesPanelState extends State<EpisodesPanel> {
     final show = _selectedShow;
     if (show == null) return;
     final imdb = show.progressId ?? show.id;
-    if (!imdb.startsWith('tt')) return;
-    final ids = MdblistMediaIds(imdb: imdb);
+    if (!MediaIdentity.isImdb(imdb) && !MediaIdentity.isNative(imdb)) return;
+    final ids = MdblistMediaIds.forContent(imdb);
     final key = '${episode.season}-${episode.number}';
     bool success;
     String label;
@@ -953,11 +956,9 @@ class EpisodesPanelState extends State<EpisodesPanel> {
     widget.onItemSelected?.call(selection);
   }
 
-  /// Build the season list for [show], preferring the addon's meta endpoint
-  /// (real Stremio/catalog addons) and falling back to Trakt's public seasons
-  /// API. Discover→Trakt items carry a stub addon with no `baseUrl`, so their
-  /// addon meta fetch returns nothing — Trakt is the only source that has their
-  /// episodes. Returns an empty list only if neither source yields episodes.
+  /// Build the season list from the title's own addon or built-in guide.
+  /// The built-in guide includes its own Trakt fallback; other addons and
+  /// placeholder sources fall back to Trakt here.
   Future<List<TraktSeason>> _fetchSeasons(StremioMeta show) async {
     // 0) Direct-source mode: the loader is the only season source — a failure
     //    surfaces the retry panel rather than falling through to fetchers
@@ -972,9 +973,9 @@ class EpisodesPanelState extends State<EpisodesPanel> {
       }
     }
 
-    // 1) Addon meta endpoint — skip when the addon is a stub (no base URL),
-    //    which is the case for Trakt-sourced items.
-    if (MediaIdentity.isNative(show.id) || widget.addon.baseUrl.isNotEmpty ||
+    // 1) The title's own addon, or built-in metadata for tracker cards.
+    if (widget.addon.id == NativeSeriesMetadataService.addon.id ||
+        MediaIdentity.isNative(show.id) || widget.addon.baseUrl.isNotEmpty ||
         widget.addon.manifestUrl.isNotEmpty) {
       try {
         final videos = await _stremioService.fetchSeriesMeta(
@@ -982,7 +983,10 @@ class EpisodesPanelState extends State<EpisodesPanel> {
           show.id,
         );
         final seasons = _groupVideosIntoSeasons(videos);
-        if (seasons.isNotEmpty) return seasons;
+        if (seasons.isNotEmpty ||
+            widget.addon.id == NativeSeriesMetadataService.addon.id) {
+          return seasons;
+        }
       } catch (e) {
         debugPrint('EpisodesPanel: addon meta fetch failed: $e');
       }

@@ -1,6 +1,7 @@
 import '../services/native_series_metadata_service.dart';
 import '../models/media_identity.dart';
 import '../widgets/random_playback_dialog.dart';
+import '../utils/show_shuffle.dart';
 import '../widgets/clear_pinned_sources_button.dart';
 import '../widgets/recoverable_network_image.dart';
 import '../models/metadata_card_artwork.dart';
@@ -4994,6 +4995,9 @@ class _SearchScreenState extends State<SearchScreen>
   /// Prefers the stored source addon; falls back to any homepage addon, then a
   /// minimal placeholder so Play still works even if the addon is gone.
   StremioAddon _addonForContinue(String? addonId) {
+    if (addonId == NativeSeriesMetadataService.addon.id) {
+      return NativeSeriesMetadataService.addon;
+    }
     for (final addon in _addonsById.values) {
       if (addon.sourceBindingKey == addonId || addon.portableConfigurationKey == addonId) return addon;
     }
@@ -5032,6 +5036,10 @@ class _SearchScreenState extends State<SearchScreen>
       return;
     }
     if (section is HomeListSection) {
+      if (section.simklList != null) {
+        _openSimklItem(item, heroTag: heroTag);
+        return;
+      }
       _openItem(
         item,
         _addonForContinue(item.sourceAddon?.id),
@@ -5136,14 +5144,14 @@ class _SearchScreenState extends State<SearchScreen>
   /// Open a plain Simkl-list title (Discover's Simkl Trending/watchlist lists) —
   /// a normal catalog detail, no resume. The CW list uses [_openSimklCwItem]
   /// instead, so a title browsed fresh here never opens mid-episode.
-  void _openSimklItem(StremioMeta item) {
-    _openItem(item, _addonForContinue(item.sourceAddon?.id));
+  void _openSimklItem(StremioMeta item, {String? heroTag}) {
+    _openItem(item, NativeSeriesMetadataService.addonForItem(item), heroTag: heroTag);
   }
 
   /// Quick-play a plain Simkl-list title like any other catalog item (no
   /// resume). The CW list uses [_playSimklCwItem].
   void _playSimklItem(StremioMeta item) {
-    _onCatalogPlay(item, _addonForContinue(item.sourceAddon?.id));
+    _onCatalogPlay(item, NativeSeriesMetadataService.addonForItem(item));
   }
 
   // ── Trakt Continue Watching ───────────────────────────────────────────────
@@ -5879,7 +5887,7 @@ class _SearchScreenState extends State<SearchScreen>
     final cw = _simklByImdb[_simklCardKey(item)];
     _openItem(
       item,
-      _addonForContinue(item.sourceAddon?.id),
+      NativeSeriesMetadataService.addonForItem(item),
       initialSeason: (cw != null && !cw.isMovie) ? cw.season : null,
       initialEpisode: (cw != null && !cw.isMovie) ? cw.episode : null,
     );
@@ -5889,11 +5897,13 @@ class _SearchScreenState extends State<SearchScreen>
   /// selection carrying the paused season/episode + Simkl progress percent and
   /// plays it, mirroring the Trakt quick-play.
   Future<void> _playSimklCwItem(StremioMeta item) async {
+    _activeAddonId = NativeSeriesMetadataService.addonForItem(item).id;
+    _capturePlayArt(item);
     final cw = _simklByImdb[_simklCardKey(item)];
     if (cw == null) {
       // Not in the CW map (a See-All grid title that fell out of the list) —
       // play it like a plain catalog title; three-way resume still applies.
-      await _onCatalogPlay(item, _addonForContinue(item.sourceAddon?.id));
+      await _onCatalogPlay(item, NativeSeriesMetadataService.addonForItem(item));
       return;
     }
     _playSelection(SimklContinueWatchingService.instance.selectionForItem(cw));
@@ -13625,8 +13635,12 @@ class _SearchScreenState extends State<SearchScreen>
                         isMdblistSource: isMdblistSource,
                       )
                     : null,
-                onItemSelected: _browseSelection,
-                onQuickPlay: _playSelection,
+                onItemSelected: (selection) => _browseSelection(
+                  selection, metadataAddonId: addon.id, catalogItem: item.withSourceAddon(addon),
+                ),
+                onQuickPlay: (selection) => _playSelection(
+                  selection, metadataAddonId: addon.id, catalogItem: item.withSourceAddon(addon),
+                ),
                 onBrowsePrimaryEpisodeSources: (promised) => _onCatalogPlay(
                   item,
                   addon,
@@ -13638,7 +13652,10 @@ class _SearchScreenState extends State<SearchScreen>
                   browseSourcesOnly: true,
                 ),
                 boundSourceCount: _boundCountFor,
-                onSelectSource: _handleEditOrSelectSource,
+                onSelectSource: (show) {
+                  _activeAddonId = addon.id;
+                  return _handleEditOrSelectSource(show.withSourceAddon(addon));
+                },
                 traktMenuOptions: options,
                 traktMenuBuilder: buildMenuOptions,
                 // Live Trakt status (in watchlist / collection / watched /
@@ -13857,9 +13874,10 @@ class _SearchScreenState extends State<SearchScreen>
       if (imdb != null) await _removeFromTraktContinueWatching(imdb);
       return;
     }
+    _activeAddonId = addon.id;
     await handleTraktMenuAction(
       context,
-      item,
+      item.withSourceAddon(addon),
       action,
       // "Select Source" when nothing is bound → straight to the picker; when a
       // source is already bound → the rich edit dialog (list / reorder / remove
@@ -14461,9 +14479,10 @@ class _SearchScreenState extends State<SearchScreen>
     );
   }
 
-  /// Resolve a meta-capable addon (for episode listings): the preferred addon
-  /// if it serves meta, otherwise the first enabled addon that does.
+  /// Keep the built-in guide for tracker titles. Otherwise use the preferred
+  /// addon if it serves meta, then the first enabled addon that does.
   Future<StremioAddon?> _metaAddonFor(StremioAddon preferred) async {
+    if (preferred.id == NativeSeriesMetadataService.addon.id) return preferred;
     if (preferred.resources.contains('meta') && preferred.baseUrl.isNotEmpty) {
       return preferred;
     }
@@ -14532,9 +14551,15 @@ class _SearchScreenState extends State<SearchScreen>
     final contentId = (metaAddon != null && metaAddon.id == addon.id)
         ? item.id
         : (imdb ?? item.id);
-    final videos = metaAddon == null
-        ? null
-        : await _stremio.fetchSeriesMeta(metaAddon, contentId);
+    List<Map<String, dynamic>>? videos;
+    try {
+      videos = metaAddon == null
+          ? null
+          : await _stremio.fetchSeriesMeta(metaAddon, contentId);
+    } catch (_) {
+      if (mounted) _snack('Could not load episodes. Please retry.');
+      return;
+    }
     if (!mounted) return;
     if (videos != null && imdb != null) {
       unawaited(
@@ -14554,6 +14579,7 @@ class _SearchScreenState extends State<SearchScreen>
       final eRaw = v['number'] ?? v['episode'];
       final e = eRaw is num ? eRaw.toInt() : null;
       if (e == null) continue;
+      if (!isShuffleEpisodeEligible({...v, 'season': s, 'number': e})) continue;
       final videoId = StremioService.randomEpisodeVideoId(
         catalogId: contentId,
         imdbId: imdb,
@@ -14592,7 +14618,7 @@ class _SearchScreenState extends State<SearchScreen>
         videoId: pick.videoId,
       );
     }
-    _playSelection(selection);
+    _playSelection(selection, metadataAddonId: addon.id, catalogItem: item.withSourceAddon(addon));
   }
 
   // Catalog Play = auto-best in-tab; Sources = manual list in-tab. For a series
@@ -14692,9 +14718,9 @@ class _SearchScreenState extends State<SearchScreen>
       resolving?.dismiss();
       if (cancelled) return;
       if (browseSourcesOnly) {
-        _browseSelection(selection);
+        _browseSelection(selection, metadataAddonId: addon.id, catalogItem: item.withSourceAddon(addon));
       } else {
-        await _playSelection(selection);
+        await _playSelection(selection, metadataAddonId: addon.id, catalogItem: item.withSourceAddon(addon));
       }
     }
 
@@ -14753,6 +14779,8 @@ class _SearchScreenState extends State<SearchScreen>
         final r = await _reconcileSeriesResume(
           item,
           isTraktSource: isTraktSource,
+          preferBuiltIn: addon.id == NativeSeriesMetadataService.addon.id,
+          catalogItem: item.withSourceAddon(addon),
         );
         if (!mounted || cancelled) return;
         // The caller's button already promised an episode the reconciler can't
@@ -15019,6 +15047,8 @@ class _SearchScreenState extends State<SearchScreen>
             playId,
             season,
             episode,
+            preferBuiltIn: addon.id == NativeSeriesMetadataService.addon.id,
+          catalogItem: item.withSourceAddon(addon),
           );
           next = resolved == null
               ? null
@@ -15146,16 +15176,17 @@ class _SearchScreenState extends State<SearchScreen>
       int? sourcePrio,
     })
   >
-  _reconcileSeriesResume(StremioMeta item, {bool isTraktSource = false}) async {
+  _reconcileSeriesResume(StremioMeta item, {bool isTraktSource = false, bool preferBuiltIn = false, StremioMeta? catalogItem}) async {
     final trackingPolicy = (await TrackingSourcePolicy.load()).forContent(item.progressId);
     final ttId = item.imdbId ?? (item.id.startsWith('tt') ? item.id : '');
     final playId = ttId.isNotEmpty ? ttId : (item.progressId ?? item.id);
     final nowMs = DateTime.now().millisecondsSinceEpoch;
-    final rev = _seriesResumeRev(
+    final progressRev = _seriesResumeRev(
       playId,
       isTraktSource,
       trackingPolicy.progressSource,
     );
+    final rev = '$progressRev:$preferBuiltIn:${catalogItem?.sourceAddon?.sourceBindingKey}:${catalogItem?.id}';
     final hit = _seriesResumeCache[playId];
     if (hit != null && nowMs - hit.atMs < 45000 && hit.rev == rev) {
       debugPrint(
@@ -15390,6 +15421,8 @@ class _SearchScreenState extends State<SearchScreen>
           playId,
           season,
           episode,
+          preferBuiltIn: preferBuiltIn,
+          catalogItem: catalogItem,
         ).timeout(const Duration(seconds: 4), onTimeout: () => null);
         // A tracker-frontier backup is safe ONLY when it is the winner's direct
         // successor. A frontier can be seasons ahead during a rewatch; trusting
@@ -15712,6 +15745,8 @@ class _SearchScreenState extends State<SearchScreen>
       final r = await _reconcileSeriesResume(
         item,
         isTraktSource: isTraktSource,
+        preferBuiltIn: addon.id == NativeSeriesMetadataService.addon.id,
+          catalogItem: item.withSourceAddon(addon),
       );
       if (!mounted) return (started: false, season: null, episode: null);
       debugPrint(
@@ -15783,6 +15818,7 @@ class _SearchScreenState extends State<SearchScreen>
           isTraktSource: isTraktSource,
           isMdblistSource: isMdblistSource,
         ),
+        metadataAddonId: addon.id, catalogItem: item.withSourceAddon(addon),
       );
     }
   }
@@ -15908,14 +15944,21 @@ class _SearchScreenState extends State<SearchScreen>
               isMdblistSource: isMdblistSource,
               // EpisodesScreen pops itself (and the detail route) before firing
               // these, so we're back on the Search screen when they run.
-              onQuickPlay: _playSelection,
-              onItemSelected: _browseSelection,
+              onQuickPlay: (selection) => _playSelection(
+                selection, metadataAddonId: addon.id, catalogItem: item.withSourceAddon(addon),
+              ),
+              onItemSelected: (selection) => _browseSelection(
+                selection, metadataAddonId: addon.id, catalogItem: item.withSourceAddon(addon),
+              ),
               // "Select Source" button: manage/pin sources via the same picker
               // the detail screen uses (edit dialog when already bound, else the
               // Torrent Search / Local / RD / TorBox picker) for a consistent
               // entry point.
               boundSourceCount: _boundCountFor,
-              onSelectSource: _handleEditOrSelectSource,
+              onSelectSource: (show) {
+                _activeAddonId = addon.id;
+                return _handleEditOrSelectSource(show.withSourceAddon(addon));
+              },
             ),
           ),
         )
@@ -15952,7 +15995,7 @@ class _SearchScreenState extends State<SearchScreen>
           MaterialPageRoute(
             builder: (_) => _SourcesScreen(
               selection: sel,
-              meta: _metaFor(sel),
+              meta: _metaFor(sel, catalogItem: show),
               isTelevision: widget.isTelevision,
               bindMode: true,
             ),
@@ -15992,7 +16035,7 @@ class _SearchScreenState extends State<SearchScreen>
           MaterialPageRoute(
             builder: (_) => _SourcesScreen(
               selection: sel,
-              meta: _metaFor(sel),
+              meta: _metaFor(sel, catalogItem: show),
               isTelevision: widget.isTelevision,
               bindMode: true,
               keywordSeed: seed,
@@ -16004,7 +16047,7 @@ class _SearchScreenState extends State<SearchScreen>
 
   /// Auto-best in-tab play: search torrents for the selection, pick the best
   /// instantly-playable source, and play — never leaving the Search tab.
-  PlaybackMeta _metaFor(AdvancedSearchSelection sel) => PlaybackMeta.catalog(
+  PlaybackMeta _metaFor(AdvancedSearchSelection sel, {String? addonId, StremioMeta? catalogItem}) => PlaybackMeta.catalog(
     initialContinuousShuffle: sel.initialContinuousShuffle,
     // Preserve native tracking identity; TrackingSourcePolicy filters out
     // destinations that only accept IMDb. Arbitrary channel IDs stay untracked.
@@ -16015,7 +16058,8 @@ class _SearchScreenState extends State<SearchScreen>
     title: sel.title,
     posterUrl: sel.posterUrl,
     year: sel.year,
-    addonId: _activeAddonId,
+    addonId: catalogItem?.sourceAddon?.id ?? addonId ?? _activeAddonId,
+    catalogItem: catalogItem,
     stremioAddonId: sel.stremioAddonId,
     stremioAddonKey: sel.stremioAddonKey,
     stremioCatalogId: sel.stremioCatalogId,
@@ -16084,7 +16128,10 @@ class _SearchScreenState extends State<SearchScreen>
   /// Catalog auto-best play — the service picks the provider, shows the real
   /// cinematic overlay, searches, and plays (with source list + content
   /// metadata so the in-player Sources switcher + Continue Watching work).
-  Future<void> _playSelection(AdvancedSearchSelection sel) async {
+  Future<void> _playSelection(AdvancedSearchSelection sel, {String? metadataAddonId, StremioMeta? catalogItem}) async {
+    // The originating detail can remain underneath a recommendation detail.
+    // Capture its provider for delayed Sources handoffs as well as this launch.
+    final addonId = metadataAddonId ?? _activeAddonId;
     // Playback is about to change every resume signal — never let a
     // pre-playback reconciled answer survive into the post-playback reads.
     _seriesResumeCache.clear();
@@ -16106,12 +16153,14 @@ class _SearchScreenState extends State<SearchScreen>
         isMovie: !sel.isSeries,
         season: sel.season,
         episode: sel.episode,
-        meta: _metaFor(sel),
+        meta: _metaFor(sel, addonId: addonId, catalogItem: catalogItem),
         // This is the user's own Play press, so it honors "Play button opens".
         // The selection already carries the exact season/episode the button was
         // going to play, so the manual list opens on that episode — no next-up
         // resolution here, and no way for the list to disagree with the button.
-        openSourcePicker: () => _browseSelection(sel, forcePlayOnTap: true),
+        openSourcePicker: () => _browseSelection(
+          sel, forcePlayOnTap: true, metadataAddonId: addonId, catalogItem: catalogItem,
+        ),
       );
     } finally {
       MainPageBridge.removeExternalPlayerLaunchListener(onExternal);
@@ -16140,6 +16189,8 @@ class _SearchScreenState extends State<SearchScreen>
     // Set only by the Play-button hand-off: the press already said "play", so
     // the row the user picks must not re-ask via the post-torrent action.
     bool forcePlayOnTap = false,
+    String? metadataAddonId,
+    StremioMeta? catalogItem,
   }) {
     // Every route into the manual list lands here — the Play-button hand-off,
     // the movie Sources button, and the episode long-press — so this is where
@@ -16152,13 +16203,14 @@ class _SearchScreenState extends State<SearchScreen>
       _snack('No IMDb match to find sources for "${sel.title}".');
       return;
     }
+    final meta = _metaFor(sel, addonId: metadataAddonId, catalogItem: catalogItem);
     Navigator.of(context)
         .push(
           MaterialPageRoute(
             builder: (_) => TvHeldKeyGuard(
               child: _SourcesScreen(
                 selection: sel,
-                meta: _metaFor(sel),
+                meta: meta,
                 isTelevision: widget.isTelevision,
                 forcePlayOnTap: forcePlayOnTap,
               ),

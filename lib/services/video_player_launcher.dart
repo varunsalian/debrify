@@ -587,6 +587,32 @@ class VideoPlayerLauncher {
     return states.map((state) => state.positionMs).toList();
   }
 
+  @visibleForTesting
+  static Future<Map<String, dynamic>> debugNativePlaybackSession(
+    VideoPlayerLaunchArgs args,
+    List<Map<String, dynamic>> updates, {
+    MdblistService? mdblistService,
+  }) async {
+    final built = await _AndroidTvPlaybackPayloadBuilder(args).build();
+    if (built == null) throw StateError('Native payload could not be built');
+    final payload = built.payload;
+    final initial = payload.toMap();
+    _traktLastScrobbleAction = null;
+    _traktLastKnownProgress = 0;
+    _traktLastKnownSeason = null;
+    _traktLastKnownEpisode = null;
+    try {
+      await _initializeNativeMdblist(payload, service: mdblistService);
+      for (final update in updates) {
+        await _handleProgressUpdate(payload, update);
+      }
+    } finally {
+      await _handlePlaybackFinished(payload);
+      _clearResolvedStreams(built.entries.map((entry) => entry.resumeId));
+    }
+    return initial;
+  }
+
   /// The external app needs its own temporary grant for this exact document.
   /// Debrify's persisted folder/file permission is not shared across apps.
   static AndroidIntent androidExternalVideoIntent(String url) => AndroidIntent(
@@ -950,7 +976,8 @@ class VideoPlayerLauncher {
           initialSubtitles: args.initialSubtitles,
         );
         // Clean up any existing local Continue Watching entry (Trakt tracks it now)
-        if (!trackingPolicy.forcesLocalCompletion) {
+        if (!trackingPolicy.forcesLocalCompletion &&
+            !trackingPolicy.nativeIdentity) {
           await StorageService.removeContinueWatchingItem(args.contentImdbId!);
         }
       }
@@ -1103,7 +1130,8 @@ class VideoPlayerLauncher {
       debugPrint(
         '[MDBListDiag] launch tracking enabled imdb=${args.contentImdbId}',
       );
-      if (!trackingPolicy.forcesLocalCompletion) {
+      if (!trackingPolicy.forcesLocalCompletion &&
+          !trackingPolicy.nativeIdentity) {
         await StorageService.removeContinueWatchingItem(args.contentImdbId!);
       }
     }
@@ -1121,10 +1149,11 @@ class VideoPlayerLauncher {
     // it applies to both the native-TV and in-app players.
     if (args.contentImdbId != null &&
         args.contentType != null &&
-        (trackingPolicy.forcesLocalCompletion ||
-            (!args.traktScrobble &&
-                !args.simklScrobble &&
-                !args.mdblistScrobble)) &&
+        trackingPolicy.usesLocalCompletionTracking(
+          traktScrobble: args.traktScrobble,
+          simklScrobble: args.simklScrobble,
+          mdblistScrobble: args.mdblistScrobble,
+        ) &&
         args.stremioTvChannels == null) {
       await StorageService.saveContinueWatchingItem(
         imdbId: args.contentImdbId!,
@@ -1376,12 +1405,14 @@ class VideoPlayerLauncher {
               progress,
               season: s,
               episode: e,
+              contentType: args.contentType,
             );
             await TraktService.instance.scrobblePause(
               imdbId,
               progress,
               season: s,
               episode: e,
+              contentType: args.contentType,
             );
           } catch (err) {
             debugPrint('ExternalPlayer: Trakt CW seed failed: $err');
@@ -1408,7 +1439,7 @@ class VideoPlayerLauncher {
       if (args.mdblistScrobble)
         () async {
           try {
-            final ids = MdblistMediaIds(imdb: imdbId);
+            final ids = MdblistMediaIds.forContent(imdbId);
             final target = isSeries
                 ? MdblistScrobbleTarget.episode(ids, season: s!, episode: e!)
                 : MdblistScrobbleTarget.movie(ids);
@@ -3432,8 +3463,7 @@ class VideoPlayerLauncher {
 
       if (!launched) {
         unawaited(serverWatch.close());
-        await result.payload.mdblistSession?.close();
-        result.payload.mdblistSession = null;
+        await _closeNativeMdblist(result.payload);
         resolver.dispose();
         return false;
       }
@@ -3459,8 +3489,7 @@ class VideoPlayerLauncher {
       return true;
     } catch (e) {
       unawaited(serverWatch.close());
-      await builtPayload?.mdblistSession?.close();
-      if (builtPayload != null) builtPayload.mdblistSession = null;
+      if (builtPayload != null) await _closeNativeMdblist(builtPayload);
       debugPrint('VideoPlayerLauncher: Android TV launch failed: $e');
       playbackResolver?.dispose();
       if (e is NativePlayerSettingsUnavailable) rethrow;
@@ -4111,13 +4140,11 @@ class VideoPlayerLauncher {
   /// scrobbled to Simkl — [SimklService._scrobble] would send the show id in a
   /// movie-shaped body, recording a bogus movie on the account. A movie
   /// legitimately reports (null, null), so this only blocks the series case.
-  /// (Trakt has the same latent gap; guard is Simkl-only per the no-touch-Trakt
-  /// convention.)
   static bool _simklSeriesSEUnresolved(
     _AndroidTvPlaybackPayload payload,
     Map<String, dynamic> progress,
   ) {
-    if (payload.contentType != _PlaybackContentType.series) return false;
+    if (payload.trackingContentType != 'series') return false;
     return progress['season'] == null || progress['episode'] == null;
   }
 
@@ -4128,8 +4155,8 @@ class VideoPlayerLauncher {
   }) {
     final imdbId = payload.imdbId;
     if (imdbId == null || imdbId.isEmpty) return null;
-    final ids = MdblistMediaIds(imdb: imdbId);
-    if (payload.contentType != _PlaybackContentType.series) {
+    final ids = MdblistMediaIds.forContent(imdbId);
+    if (payload.trackingContentType != 'series') {
       return MdblistScrobbleTarget.movie(ids);
     }
     if (season == null || episode == null) return null;
@@ -4137,27 +4164,53 @@ class VideoPlayerLauncher {
   }
 
   static Future<void> _initializeNativeMdblist(
-    _AndroidTvPlaybackPayload payload,
-  ) async {
-    if (!payload.mdblistScrobble || !kMdblistEnabled) return;
+    _AndroidTvPlaybackPayload payload, {
+    MdblistService? service,
+  }) async {
+    service ??= MdblistService.instance;
+    if (!payload.mdblistScrobble || !service.networkEnabled) return;
     if (payload.items.isEmpty) return;
-    final index = payload.startIndex.clamp(0, payload.items.length - 1);
-    final item = payload.items.isEmpty ? null : payload.items[index];
-    final target = _nativeMdblistTarget(
-      payload,
-      season: item?.season,
-      episode: item?.episode,
-    );
-    if (target == null) return;
-    final capability = await MdblistService.instance
-        .capturePlaybackCapability();
-    payload.mdblistSeason = item?.season;
-    payload.mdblistEpisode = item?.episode;
-    payload.mdblistSession = MdblistScrobbleSession.forService(
-      service: MdblistService.instance,
+    // Capture authorization at launch even if episode coordinates arrive later.
+    // Session creation then stays synchronous and bound to this playback account.
+    final capability = await service.capturePlaybackCapability();
+    final playbackService = service;
+    payload.mdblistSessionFactory = (target) => MdblistScrobbleSession.forService(
+      service: playbackService,
       target: target,
       capability: capability,
     );
+    final index = payload.startIndex.clamp(0, payload.items.length - 1);
+    final item = payload.items[index];
+    final target = _nativeMdblistTarget(
+      payload,
+      season: item.season,
+      episode: item.episode,
+    );
+    if (target != null) _ensureNativeMdblistSession(payload, target);
+  }
+
+  static MdblistScrobbleSession? _ensureNativeMdblistSession(
+    _AndroidTvPlaybackPayload payload,
+    MdblistScrobbleTarget target,
+  ) {
+    if (payload.mdblistSession != null) return payload.mdblistSession;
+    final create = payload.mdblistSessionFactory;
+    if (create == null) return null;
+    payload.mdblistSeason = target.season;
+    payload.mdblistEpisode = target.episode;
+    return payload.mdblistSession = create(target);
+  }
+
+  static Future<void> _closeNativeMdblist(
+    _AndroidTvPlaybackPayload payload,
+  ) async {
+    // A late frame must not create another session after playback has ended.
+    payload.mdblistSessionFactory = null;
+    final session = payload.mdblistSession;
+    payload.mdblistSession = null;
+    payload.mdblistSeason = null;
+    payload.mdblistEpisode = null;
+    await session?.close();
   }
 
   static Future<void> _handleProgressUpdate(
@@ -4185,11 +4238,11 @@ class VideoPlayerLauncher {
       // intentionally clear it.
       final locallyTrackedMovie =
           payload.localCompletionTracking &&
+          payload.trackingContentType == 'movie' &&
           payload.contentType == _PlaybackContentType.single &&
           payload.imdbId != null &&
           payload.imdbId!.isNotEmpty;
-      if (locallyTrackedMovie) {
-        if (payload.localMovieCompletionRecorded) return;
+      if (locallyTrackedMovie && !payload.localMovieCompletionRecorded) {
         final movieProgress = durationMs > 0
             ? positionMs * 100 / durationMs
             : 0.0;
@@ -4208,12 +4261,18 @@ class VideoPlayerLauncher {
               StorageService.removeVideoResume(resumeId),
           ]);
           payload.localMovieCompletionRecorded = true;
-          return;
         }
       }
 
       // Trakt scrobble for Android TV player (movies and series)
-      if (payload.traktScrobble && payload.imdbId != null && durationMs > 0) {
+      if (payload.traktScrobble &&
+          payload.imdbId != null &&
+          durationMs > 0 &&
+          TraktService.isScrobbleReady(
+            contentType: payload.trackingContentType,
+            season: progress['season'] as int?,
+            episode: progress['episode'] as int?,
+          )) {
         // Treat buffering as still playing — ExoPlayer sets isPlaying=false during buffer
         final isPlaying =
             progress['isPlaying'] == true || progress['isBuffering'] == true;
@@ -4221,10 +4280,10 @@ class VideoPlayerLauncher {
         final imdbId = payload.imdbId!;
         // For series, read season/episode from Kotlin progress update
         // For non-series, ignore parsed values — avoids filename false positives (e.g. "5.1" surround → S5E1)
-        final season = payload.contentType == _PlaybackContentType.series
+        final season = payload.trackingContentType == 'series'
             ? progress['season'] as int?
             : null;
-        final episode = payload.contentType == _PlaybackContentType.series
+        final episode = payload.trackingContentType == 'series'
             ? progress['episode'] as int?
             : null;
 
@@ -4241,6 +4300,7 @@ class VideoPlayerLauncher {
             _traktLastKnownProgress,
             season: _traktLastKnownSeason,
             episode: _traktLastKnownEpisode,
+            contentType: payload.trackingContentType,
           );
           _traktLastScrobbleAction = 'stop';
         }
@@ -4264,6 +4324,7 @@ class VideoPlayerLauncher {
             traktProgress,
             season: season,
             episode: episode,
+            contentType: payload.trackingContentType,
           );
         } else if (isPlaying &&
             _traktLastScrobbleAction != 'start' &&
@@ -4276,6 +4337,7 @@ class VideoPlayerLauncher {
               traktProgress,
               season: season,
               episode: episode,
+              contentType: payload.trackingContentType,
             );
           } else {
             _traktLastScrobbleAction = 'start';
@@ -4284,6 +4346,7 @@ class VideoPlayerLauncher {
               traktProgress,
               season: season,
               episode: episode,
+              contentType: payload.trackingContentType,
             );
             // Start heartbeat timer to checkpoint progress every 2 minutes
             _traktHeartbeatTimer?.cancel();
@@ -4299,6 +4362,7 @@ class VideoPlayerLauncher {
                   _traktLastKnownProgress,
                   season: _traktLastKnownSeason,
                   episode: _traktLastKnownEpisode,
+                  contentType: payload.trackingContentType,
                 );
                 debugPrint(
                   'Trakt: Heartbeat stop at ${_traktLastKnownProgress.toStringAsFixed(1)}% (>80%)',
@@ -4314,6 +4378,7 @@ class VideoPlayerLauncher {
                 _traktLastKnownProgress,
                 season: _traktLastKnownSeason,
                 episode: _traktLastKnownEpisode,
+                contentType: payload.trackingContentType,
               );
               debugPrint(
                 'Trakt: Heartbeat scrobble at ${_traktLastKnownProgress.toStringAsFixed(1)}%',
@@ -4335,6 +4400,7 @@ class VideoPlayerLauncher {
               traktProgress,
               season: season,
               episode: episode,
+              contentType: payload.trackingContentType,
             );
           } else {
             _traktLastScrobbleAction = 'pause';
@@ -4343,6 +4409,7 @@ class VideoPlayerLauncher {
               traktProgress,
               season: season,
               episode: episode,
+              contentType: payload.trackingContentType,
             );
           }
         }
@@ -4361,10 +4428,10 @@ class VideoPlayerLauncher {
             progress['isPlaying'] == true || progress['isBuffering'] == true;
         final simklProgress = (positionMs / durationMs * 100).clamp(0.0, 100.0);
         final imdbId = payload.imdbId!;
-        final season = payload.contentType == _PlaybackContentType.series
+        final season = payload.trackingContentType == 'series'
             ? progress['season'] as int?
             : null;
-        final episode = payload.contentType == _PlaybackContentType.series
+        final episode = payload.trackingContentType == 'series'
             ? progress['episode'] as int?
             : null;
 
@@ -4495,34 +4562,33 @@ class VideoPlayerLauncher {
         }
       }
 
-      final mdblistSession = payload.mdblistSession;
-      if (mdblistSession != null && durationMs > 0) {
+      if (durationMs > 0) {
         final isPlaying =
             progress['isPlaying'] == true || progress['isBuffering'] == true;
-        final season = payload.contentType == _PlaybackContentType.series
+        final season = payload.trackingContentType == 'series'
             ? progress['season'] as int?
             : null;
-        final episode = payload.contentType == _PlaybackContentType.series
+        final episode = payload.trackingContentType == 'series'
             ? progress['episode'] as int?
             : null;
-        if (payload.contentType != _PlaybackContentType.series ||
-            (season != null && episode != null)) {
+        final target = _nativeMdblistTarget(
+          payload,
+          season: season,
+          episode: episode,
+        );
+        final mdblistSession = target == null
+            ? null
+            : _ensureNativeMdblistSession(payload, target);
+        if (mdblistSession != null) {
           if (season != payload.mdblistSeason ||
               episode != payload.mdblistEpisode) {
-            final next = _nativeMdblistTarget(
-              payload,
-              season: season,
-              episode: episode,
+            await mdblistSession.switchTarget(
+              target!,
+              position: Duration(milliseconds: positionMs),
+              duration: Duration(milliseconds: durationMs),
             );
-            if (next != null) {
-              await mdblistSession.switchTarget(
-                next,
-                position: Duration(milliseconds: positionMs),
-                duration: Duration(milliseconds: durationMs),
-              );
-              payload.mdblistSeason = season;
-              payload.mdblistEpisode = episode;
-            }
+            payload.mdblistSeason = season;
+            payload.mdblistEpisode = episode;
           } else {
             mdblistSession.seek(
               Duration(milliseconds: positionMs),
@@ -4538,6 +4604,10 @@ class VideoPlayerLauncher {
           }
         }
       }
+
+      // Local completion suppresses resume persistence only. Remote trackers
+      // must still receive the threshold frame and all later progress/exit data.
+      if (locallyTrackedMovie && payload.localMovieCompletionRecorded) return;
 
       if (payload.contentType == _PlaybackContentType.series) {
         final season = progress['season'] as int?;
@@ -4691,6 +4761,7 @@ class VideoPlayerLauncher {
         _traktLastKnownProgress,
         season: _traktLastKnownSeason,
         episode: _traktLastKnownEpisode,
+        contentType: payload.trackingContentType,
       );
     }
     _traktLastScrobbleAction = null;
@@ -4708,7 +4779,7 @@ class VideoPlayerLauncher {
     _simklHeartbeatTimer?.cancel();
     _simklHeartbeatTimer = null;
     final simklSeriesUnresolved =
-        payload.contentType == _PlaybackContentType.series &&
+        payload.trackingContentType == 'series' &&
         (_simklLastKnownSeason == null || _simklLastKnownEpisode == null);
     if (payload.simklScrobble &&
         payload.imdbId != null &&
@@ -4726,10 +4797,7 @@ class VideoPlayerLauncher {
     _simklLastKnownProgress = 0.0;
     _simklLastKnownSeason = null;
     _simklLastKnownEpisode = null;
-    await payload.mdblistSession?.close();
-    payload.mdblistSession = null;
-    payload.mdblistSeason = null;
-    payload.mdblistEpisode = null;
+    await _closeNativeMdblist(payload);
   }
 
   static Future<String> _resolveEntryUrl(
@@ -4891,6 +4959,10 @@ enum _PlaybackContentType { single, collection, series }
 
 class _AndroidTvPlaybackPayload {
   final _PlaybackContentType contentType;
+  final String? declaredContentType;
+  String get trackingContentType =>
+      declaredContentType ??
+      (contentType == _PlaybackContentType.series ? 'series' : 'movie');
   final String title;
   final String? subtitle;
   final List<_AndroidTvPlaybackItem> items;
@@ -4921,11 +4993,12 @@ class _AndroidTvPlaybackPayload {
   final bool mdblistScrobble;
   final double? mdblistProgressPercent;
   MdblistScrobbleSession? mdblistSession;
+  MdblistScrobbleSession Function(MdblistScrobbleTarget)? mdblistSessionFactory;
   int? mdblistSeason;
   int? mdblistEpisode;
 
-  /// Local-only completion settings. Tracker sessions deliberately omit this
-  /// path and continue to use the trackers' own completion rules.
+  /// Local completion can coexist with scrobbling. Its threshold controls
+  /// local resume persistence; trackers keep their own completion rules.
   final bool localCompletionTracking;
   final int movieCompletionThreshold;
   final int episodeCompletionThreshold;
@@ -4940,6 +5013,7 @@ class _AndroidTvPlaybackPayload {
 
   _AndroidTvPlaybackPayload({
     required this.contentType,
+    this.declaredContentType,
     required this.title,
     required this.subtitle,
     required this.items,
@@ -5336,12 +5410,15 @@ class _AndroidTvPlaybackPayloadBuilder {
             isMovie: contentType != _PlaybackContentType.series,
           )
         : null;
-    final trackingPolicy = (await TrackingSourcePolicy.load()).forContent(args.contentImdbId);
+    final trackingPolicy = (await TrackingSourcePolicy.load()).forContent(
+      args.contentImdbId,
+    );
     final localCompletionTracking =
-        (trackingPolicy.forcesLocalCompletion ||
-            (!args.traktScrobble &&
-                !args.simklScrobble &&
-                !args.mdblistScrobble)) &&
+        trackingPolicy.usesLocalCompletionTracking(
+          traktScrobble: args.traktScrobble,
+          simklScrobble: args.simklScrobble,
+          mdblistScrobble: args.mdblistScrobble,
+        ) &&
         args.stremioTvChannels == null &&
         args.iptvChannels == null;
     final completionThresholds = localCompletionTracking
@@ -5608,6 +5685,7 @@ class _AndroidTvPlaybackPayloadBuilder {
 
     final payload = _AndroidTvPlaybackPayload(
       contentType: contentType,
+      declaredContentType: args.contentType,
       title: args.title,
       subtitle: args.subtitle,
       items: items,
@@ -6056,6 +6134,8 @@ class _AndroidTvPlaybackPayloadBuilder {
     final lastEpisode =
         hadExplicitTarget || !trackingPolicy.progressFrom(TrackingSource.local)
         ? null
+        : trackingPolicy.nativeIdentity && args.contentImdbId != null
+        ? await StorageService.getLastPlayedEpisodeByImdbId(args.contentImdbId!)
         : await StorageService.getLastPlayedEpisode(
             seriesTitle: playlist.seriesTitle ?? 'Unknown Series',
           );

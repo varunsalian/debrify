@@ -2785,8 +2785,10 @@ class StremioService {
     StremioAddon addon,
     String contentId,
   ) async {
-    if (MediaIdentity.isNative(contentId) && addon.baseUrl.isEmpty) {
-      return NativeSeriesMetadataService.instance.episodes(contentId);
+    if (addon.baseUrl.isEmpty &&
+        (MediaIdentity.isNative(contentId) ||
+            addon.id == NativeSeriesMetadataService.addon.id)) {
+      return NativeSeriesMetadataService.instance.episodesWithFallback(contentId);
     }
     if (!addon.resources.contains('meta') || addon.baseUrl.isEmpty) {
       return null;
@@ -3164,6 +3166,32 @@ class StremioService {
       if (candidate.season != season || candidate.episode != episode) {
         return candidate;
       }
+    }
+    return null;
+  }
+
+  /// The Sources season menu keeps an origin's own IDs only when that origin
+  /// can serve a series guide. Catalog-only origins use a metadata provider's
+  /// IMDb lookup instead of sending their private catalog ID to another addon.
+  Future<List<Map<String, dynamic>>?> fetchSourcesSeriesGuide({
+    required String imdbId,
+    StremioMeta? catalogItem,
+    bool builtIn = false,
+  }) async {
+    if (builtIn) {
+      return fetchSeriesMeta(NativeSeriesMetadataService.addon, imdbId);
+    }
+    bool supportsGuide(StremioAddon addon, String id) =>
+        addon.supportsMeta && addon.baseUrl.isNotEmpty &&
+        (addon.types.isEmpty || addon.types.contains('series')) &&
+        addon.supportsContentId(id);
+    final origin = catalogItem?.sourceAddon;
+    if (origin != null && supportsGuide(origin, catalogItem!.id)) {
+      return fetchSeriesMeta(origin, catalogItem.id);
+    }
+    if (CustomSeriesIdentity.isCustom(imdbId)) return null;
+    for (final addon in await getEnabledAddons()) {
+      if (supportsGuide(addon, imdbId)) return fetchSeriesMeta(addon, imdbId);
     }
     return null;
   }

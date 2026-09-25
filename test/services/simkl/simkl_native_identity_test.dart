@@ -306,7 +306,7 @@ void main() {
     );
   });
 
-  test('native tracking excludes IMDb-only destinations', () {
+  test('native tracking preserves configured destinations', () {
     const original = TrackingSourcePolicy(
       scrobbleTargets: {
         TrackingSource.trakt,
@@ -318,8 +318,10 @@ void main() {
     );
     final policy = original.forContent('tmdb:237243');
     expect(policy.scrobbles(TrackingSource.simkl), isTrue);
-    expect(policy.scrobbles(TrackingSource.trakt), isFalse);
-    expect(policy.progressFrom(TrackingSource.trakt), isFalse);
+    expect(policy.scrobbles(TrackingSource.trakt), isTrue);
+    expect(policy.scrobbles(TrackingSource.mdblist), isTrue);
+    expect(policy.progressFrom(TrackingSource.trakt), isTrue);
+    expect(policy.progressFrom(TrackingSource.mdblist), isTrue);
     expect(policy.progressFrom(TrackingSource.simkl), isTrue);
   });
 }

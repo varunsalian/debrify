@@ -1406,7 +1406,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   // untrusted replacement and must not update local completion or any tracker.
   bool _manualSourceGateActive = false;
   bool get _validationGateActive =>
-      _startupGateActive || _manualSourceGateActive;
+      _startupGateActive ||
+      _manualSourceGateActive ||
+      (_stremioTvStartupWatch?.blocksProgress ?? false);
   String _startupGateMessage = 'Checking stream…';
   // Blocks the autosave from filing a near-zero position over a deep resume
   // point while a requested resume seek has not landed. See ResumeWriteGuard.
@@ -1420,6 +1422,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   // releasing the guard — the guard must survive through the outgoing
   // checkpoint save, which the verifier must not outlive.
   int _resumeVerifyEpoch = 0;
+  final DeferredStartupSeek _stremioTvStartupSeek = DeferredStartupSeek();
+  ChannelStartupWatch? _stremioTvStartupWatch;
   bool _isPlaying = false;
   // True while the activity is shrunk into a Picture-in-Picture window; the
   // build collapses all interactive/decorative chrome so only the video shows.
@@ -1810,9 +1814,15 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   bool _forceLocalCompletionTracking = false;
 
   Future<void> _loadTrackingPolicy() async {
-    final policy = (await TrackingSourcePolicy.load()).forContent(_effectiveContentImdbId);
+    final policy = (await TrackingSourcePolicy.load()).forContent(
+      _effectiveContentImdbId,
+    );
     if (!mounted) return;
-    _forceLocalCompletionTracking = policy.forcesLocalCompletion;
+    _forceLocalCompletionTracking = policy.usesLocalCompletionTracking(
+      traktScrobble: widget.traktScrobble,
+      simklScrobble: widget.simklScrobble,
+      mdblistScrobble: widget.mdblistScrobble,
+    );
     // A very short item can cross its completion threshold before this async
     // profile read returns. Re-evaluate immediately so This-device mode never
     // misses the forced-local rule merely because scrobbling is also enabled.
@@ -2083,6 +2093,13 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     final imdbId = widget.contentImdbId!;
     final progress = _traktProgress();
     final se = _traktSeasonEpisode();
+    if (!TraktService.isScrobbleReady(
+      contentType: widget.contentType,
+      season: se.season,
+      episode: se.episode,
+    )) {
+      return;
+    }
     // Trakt rejects start/pause when progress > 80% — send stop instead
     if ((action == 'start' || action == 'pause') && progress > 80) {
       action = 'stop';
@@ -2096,6 +2113,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           progress,
           season: se.season,
           episode: se.episode,
+          contentType: widget.contentType,
         );
         break;
       case 'pause':
@@ -2104,6 +2122,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           progress,
           season: se.season,
           episode: se.episode,
+          contentType: widget.contentType,
         );
         break;
       case 'stop':
@@ -2112,6 +2131,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           progress,
           season: se.season,
           episode: se.episode,
+          contentType: widget.contentType,
         );
         break;
     }
@@ -2130,6 +2150,13 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       final imdbId = widget.contentImdbId!;
       final progress = _traktProgress();
       final se = _traktSeasonEpisode();
+      if (!TraktService.isScrobbleReady(
+        contentType: widget.contentType,
+        season: se.season,
+        episode: se.episode,
+      )) {
+        return;
+      }
       // Trakt rejects start/pause above 80% — send stop and end heartbeat
       if (progress > 80) {
         _traktLastScrobbleAction = 'stop';
@@ -2138,6 +2165,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           progress,
           season: se.season,
           episode: se.episode,
+          contentType: widget.contentType,
         );
         debugPrint(
           'Trakt: Heartbeat stop at ${progress.toStringAsFixed(1)}% (>80%)',
@@ -2152,6 +2180,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         progress,
         season: se.season,
         episode: se.episode,
+        contentType: widget.contentType,
       );
       debugPrint(
         'Trakt: Heartbeat scrobble at ${progress.toStringAsFixed(1)}%',
@@ -2187,6 +2216,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   /// the Trakt-specific early returns below — the handover happens whether or
   /// not Trakt is connected.
   void _traktScrobbleSeek(Duration seekTarget) {
+    _stremioTvStartupSeek.cancel();
     _resumeWriteGuard.noteUserSeek();
     if (_validationGateActive) return;
     if (!_traktScrobbleEnabled || widget.contentImdbId == null) return;
@@ -2198,6 +2228,13 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           100.0,
         );
     final se = _traktSeasonEpisode();
+    if (!TraktService.isScrobbleReady(
+      contentType: widget.contentType,
+      season: se.season,
+      episode: se.episode,
+    )) {
+      return;
+    }
     // Trakt rejects start above 80% — send stop instead
     if (progress > 80) {
       _traktLastScrobbleAction = 'stop';
@@ -2206,6 +2243,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         progress,
         season: se.season,
         episode: se.episode,
+        contentType: widget.contentType,
       );
       _stopTraktHeartbeat();
     } else {
@@ -2215,6 +2253,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         progress,
         season: se.season,
         episode: se.episode,
+        contentType: widget.contentType,
       );
       _startTraktHeartbeat();
     }
@@ -2405,7 +2444,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   MdblistScrobbleTarget? _mdblistTarget() {
     final imdbId = widget.contentImdbId;
     if (imdbId == null || imdbId.isEmpty) return null;
-    final ids = MdblistMediaIds(imdb: imdbId);
+    final ids = MdblistMediaIds.forContent(imdbId);
     if (widget.contentType == 'movie') {
       return MdblistScrobbleTarget.movie(ids);
     }
@@ -3513,63 +3552,60 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         // of A/V drift.)
         final hasExternalAudio =
             widget.audioUrl != null && widget.audioUrl!.isNotEmpty;
+        final isStremioTv = _effectiveStremioTvChannels?.isNotEmpty == true;
+        final deferStremioTvStart =
+            isStremioTv && initialUrl.isNotEmpty && !widget.startFromRandom;
+        var directOpenCompleted = false;
+        int? directOpenEpoch;
         try {
-          final plainOpen =
-              initialUrl.isNotEmpty && (hasExternalAudio || launchIsLiveIptv);
-          final opened = plainOpen
-              ? await (() async {
-                  await _openMedia(
-                    mk.Media(initialUrl, httpHeaders: _activeHttpHeaders),
-                    play: !hasExternalAudio,
-                    desiredPlay: true,
-                    liveStream: launchIsLiveIptv,
-                  );
-                  return true;
-                })()
-              : await _openInitialVodWithFailover(
-                  initialUrl,
-                  httpHeaders: _activeHttpHeaders,
-                  initialAttemptAlreadyFailed: initialRankedAttemptFailed,
-                );
+          final opened = await StartupStreamPolicy.openInitialMedia(
+            hasResolvedUrl: initialUrl.isNotEmpty,
+            hasExternalAudio: hasExternalAudio,
+            isLiveIptv: launchIsLiveIptv,
+            // Stremio TV owns channel selection and slot changes. As on native
+            // TV, a slow channel must not hit the VOD gate's one-attempt limit.
+            isStremioTv: isStremioTv,
+            openDirect: () async {
+              final opening = _openMedia(
+                mk.Media(initialUrl, httpHeaders: _activeHttpHeaders),
+                play: !hasExternalAudio,
+                desiredPlay: true,
+                liveStream: launchIsLiveIptv,
+                // Subscribe before open: media-kit reports failures later.
+                beforeOpen: isStremioTv
+                    ? () {
+                        _watchStremioTvStartup(initialUrl);
+                        if (deferStremioTvStart) {
+                          _stremioTvStartupSeek.arm(
+                            widget.startAtPercent,
+                            epoch: _resumeVerifyEpoch,
+                          );
+                        }
+                        return true;
+                      }
+                    : null,
+              );
+              directOpenEpoch = _resumeVerifyEpoch;
+              await opening;
+              directOpenCompleted = true;
+            },
+            openValidated: () => _openInitialVodWithFailover(
+              initialUrl,
+              httpHeaders: _activeHttpHeaders,
+              initialAttemptAlreadyFailed: initialRankedAttemptFailed,
+            ),
+          );
           if (!opened) {
-            if (mounted) {
-              final canRecover = widget.onStartupSourcesExhausted != null;
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(
-                    canRecover
-                        ? 'Saved source failed. Looking for another source…'
-                        : 'No playable source could be started.',
-                  ),
-                ),
-              );
-              // Keep hold of this exact route: a dialog may briefly cover the
-              // player while the failure message is visible. Wait for that
-              // dialog to leave, but abandon the pending pop if the player
-              // itself was dismissed, so an underlying detail route can never
-              // be popped by this delayed callback.
-              final playerRoute = ModalRoute.of(context);
-              await Future<void>.delayed(
-                Duration(milliseconds: canRecover ? 250 : 900),
-              );
-              while (mounted && playerRoute?.isActive == true) {
-                if (playerRoute?.isCurrent == true) break;
-                await Future<void>.delayed(const Duration(milliseconds: 50));
-              }
-              if (mounted && playerRoute?.isCurrent == true) {
-                if (canRecover) {
-                  Navigator.of(
-                    context,
-                  ).pop(<String, dynamic>{'startupSourcesExhausted': true});
-                } else {
-                  Navigator.of(context).maybePop();
-                }
-              }
-            }
+            await _reportStartupFailure();
             return;
           }
           // Wait for duration-dependent resume and random-start calculations.
           await _waitForVideoReady();
+          if (!mounted ||
+              _screenDisposed ||
+              (isStremioTv && _stremioTvStartupWatch?.hasFailed == true)) {
+            return;
+          }
           if (hasExternalAudio) {
             await _setExternalAudioTrack(widget.audioUrl!);
           }
@@ -3584,7 +3620,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
               await _maybeRestoreResume(verifyLanding: true);
             }
           } else if (widget.startAtPercent != null) {
-            final offset = _percentStartOffset(_duration);
+            final offset = deferStremioTvStart
+                ? null
+                : _percentStartOffset(_duration);
             if (offset != null) {
               // An explicit promised start position, exposed to the same
               // startup seek failure as a stored resume.
@@ -3602,6 +3640,18 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           _setStartupGateActive(false);
           _resumeTrackingAfterValidationGate();
         } catch (e) {
+          if (isStremioTv &&
+              !directOpenCompleted &&
+              directOpenEpoch == _resumeVerifyEpoch) {
+            final watch = _stremioTvStartupWatch;
+            if (watch != null) {
+              watch.fail();
+            } else {
+              await _reportStartupFailure(
+                isCurrent: () => directOpenEpoch == _resumeVerifyEpoch,
+              );
+            }
+          }
           _setStartupGateActive(false);
           // A late throw (seek/track restore) can land after a successful
           // open — playback proceeds, so re-arm tracking or the start
@@ -3623,6 +3673,91 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
     // Preload episode information if this is a series
     _episodeMetadataReady ??= _preloadEpisodeInfo();
+  }
+
+  void _watchStremioTvStartup(String url) {
+    _stremioTvStartupWatch?.dispose();
+    final epoch = _resumeVerifyEpoch;
+    final instance = _playerInstanceGeneration;
+    final mediaGeneration = _decoderProbeGeneration;
+    final sources = _effectiveSources;
+    final source =
+        sources != null &&
+            _currentSourceIndex >= 0 &&
+            _currentSourceIndex < sources.length
+        ? sources[_currentSourceIndex]
+        : null;
+    final sourceName = [source?.source, source?.addonDisplayName, source?.name]
+        .whereType<String>()
+        .join(' ');
+    final isAioStreams = StartupStreamPolicy.isAioStreams(
+      addonId: source?.stremioAddonId,
+      sourceName: sourceName,
+      url: url,
+    );
+    bool isCurrent() =>
+        mounted &&
+        !_screenDisposed &&
+        epoch == _resumeVerifyEpoch &&
+        instance == _playerInstanceGeneration;
+    _stremioTvStartupWatch = ChannelStartupWatch(
+      errors: _player.stream.error,
+      widths: _player.stream.width,
+      positions: _player.stream.position,
+      durations: _player.stream.duration,
+      completed: _player.stream.completed,
+      addonId: source?.stremioAddonId,
+      sourceName: sourceName,
+      url: url,
+      isCurrent: isCurrent,
+      onReady: () {
+        if (isCurrent() && isAioStreams) {
+          _resumeTrackingAfterValidationGate();
+        }
+      },
+      // Do not depend on which error-stream subscription runs first. The
+      // renderer listener owns recoverable output errors; the new backend
+      // installs its own watch and can still report an unrecoverable failure.
+      shouldDeferError: (error) =>
+          AndroidRendererStartupFallback.isRendererFailure(error) &&
+          _canFallbackExplicitRenderer(
+            instanceGeneration: instance,
+            mediaGeneration: mediaGeneration,
+          ),
+      onFailure: () {
+        _stremioTvStartupSeek.cancel();
+        unawaited(_reportStartupFailure(isCurrent: isCurrent));
+      },
+    );
+  }
+
+  Future<void> _reportStartupFailure({bool Function()? isCurrent}) async {
+    bool current() => mounted && !_screenDisposed && (isCurrent?.call() ?? true);
+    if (!current()) return;
+    final canRecover = widget.onStartupSourcesExhausted != null;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          canRecover
+              ? 'Saved source failed. Looking for another source…'
+              : 'No playable source could be started.',
+        ),
+      ),
+    );
+    // A covering dialog may leave later. Only close this player route, and
+    // abandon the failure if the viewer has since selected different media.
+    final playerRoute = ModalRoute.of(context);
+    await Future<void>.delayed(Duration(milliseconds: canRecover ? 250 : 900));
+    while (current() && playerRoute?.isActive == true) {
+      if (playerRoute?.isCurrent == true) break;
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+    }
+    if (!mounted || !current() || playerRoute?.isCurrent != true) return;
+    if (canRecover) {
+      Navigator.of(context).pop(<String, dynamic>{'startupSourcesExhausted': true});
+    } else {
+      Navigator.of(context).maybePop();
+    }
   }
 
   void _bindPlayerInstanceSubscriptions(
@@ -3732,6 +3867,18 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       if (!isCurrent()) return;
       final hadDuration = _duration > Duration.zero;
       _duration = d;
+      final startupOffset = _stremioTvStartupSeek.take(
+        d,
+        epoch: _resumeVerifyEpoch,
+      );
+      if (startupOffset != null) {
+        unawaited(
+          _seekForResume(startupOffset.inMilliseconds, verifyLanding: true)
+              .catchError((Object error) {
+                debugPrint('Player: Stremio TV startup seek failed: $error');
+              }),
+        );
+      }
       _updateMdblistPosition();
       // `playing=true` commonly arrives before libmpv publishes duration. In
       // that ordering the playing listener cannot arm MDBList, and no second
@@ -4136,30 +4283,42 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     );
   }
 
+  bool _canFallbackExplicitRenderer({
+    required int instanceGeneration,
+    required int mediaGeneration,
+  }) =>
+      AndroidRendererStartupFallback.shouldArm(
+        isAndroid: Platform.isAndroid,
+        isAndroidTv: PlatformUtil.isAndroidTvCached,
+        mode: _androidVideoRendererMode,
+        alreadyValidated: _rendererValidatedForSession,
+        fallbackInProgress: _rendererFallbackInProgress,
+      ) &&
+      mounted &&
+      instanceGeneration == _playerInstanceGeneration &&
+      mediaGeneration == _decoderProbeGeneration &&
+      _activeOpenedMedia != null &&
+      !_isRecording &&
+      !_iptvErrorsMuted &&
+      !_isTransitioning;
+
   Future<void> _fallbackExplicitRendererToAutomatic({
     required int instanceGeneration,
     required int mediaGeneration,
     required String reason,
   }) async {
-    if (!AndroidRendererStartupFallback.shouldArm(
-          isAndroid: Platform.isAndroid,
-          isAndroidTv: PlatformUtil.isAndroidTvCached,
-          mode: _androidVideoRendererMode,
-          alreadyValidated: _rendererValidatedForSession,
-          fallbackInProgress: _rendererFallbackInProgress,
-        ) ||
-        !mounted ||
-        instanceGeneration != _playerInstanceGeneration ||
-        mediaGeneration != _decoderProbeGeneration ||
-        _activeOpenedMedia == null ||
-        _isRecording ||
-        _iptvErrorsMuted ||
-        _isTransitioning) {
+    if (!_canFallbackExplicitRenderer(
+      instanceGeneration: instanceGeneration,
+      mediaGeneration: mediaGeneration,
+    )) {
       return;
     }
 
     _rendererFallbackInProgress = true;
     _rendererStartupGuardToken++;
+    final startupEpoch = _resumeVerifyEpoch;
+    final restartChannelWatch = _stremioTvStartupWatch?.isPending == true;
+    int? recoveryOpenEpoch;
     final media = _activeOpenedMedia!;
     final oldPlayer = _player;
     final oldState = oldPlayer.state;
@@ -4246,7 +4405,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           hasExternalAudio || (!isLive && resumePosition > Duration.zero);
       final playOnOpen =
           shouldResumePlayback && !_pausedByLifecycle && !needsPreparation;
-      await _openMedia(
+      // Navigation during the rebuild wins over this old media's restart.
+      if (startupEpoch != _resumeVerifyEpoch) return;
+      final reopening = _openMedia(
         media,
         play: playOnOpen,
         desiredPlay: shouldResumePlayback,
@@ -4254,7 +4415,16 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         // this a live channel would silently lose its ffmpeg reconnect
         // options at the renderer fallback (codex round 2, finding 16).
         liveStream: isLive,
+        preserveStartupEpoch: startupEpoch,
+        beforeOpen: restartChannelWatch
+            ? () {
+                _watchStremioTvStartup(media.uri);
+                return true;
+              }
+            : null,
       );
+      recoveryOpenEpoch = _resumeVerifyEpoch;
+      await reopening;
       if (needsPreparation) await _waitForVideoReady();
       if (!mounted) return;
       await _player.setRate(rate);
@@ -4288,6 +4458,17 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         'status=failed platform=android backend=libmpv '
         'requested_renderer=direct_surface fallback=automatic',
       );
+      final failureEpoch = recoveryOpenEpoch ?? startupEpoch;
+      if (restartChannelWatch && failureEpoch == _resumeVerifyEpoch) {
+        final watch = _stremioTvStartupWatch;
+        if (watch?.hasFailed != true) {
+          watch?.dispose();
+          _stremioTvStartupSeek.cancel();
+          unawaited(_reportStartupFailure(
+            isCurrent: () => failureEpoch == _resumeVerifyEpoch,
+          ));
+        }
+      }
     } finally {
       _rendererFallbackInProgress = false;
     }
@@ -4482,7 +4663,17 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _releasePlayerDiagnostic('generation=$generation $fields');
   }
 
-  void _beginMediaGeneration() {
+  void _beginMediaGeneration({int? preserveStartupEpoch}) {
+    if (preserveStartupEpoch == null) {
+      _stremioTvStartupSeek.cancel();
+    } else {
+      _stremioTvStartupSeek.carryTo(
+        fromEpoch: preserveStartupEpoch,
+        toEpoch: _resumeVerifyEpoch,
+      );
+    }
+    _stremioTvStartupWatch?.dispose();
+    _stremioTvStartupWatch = null;
     _decoderProbeGeneration++;
     _decoderProbeToken++;
     _rendererStartupGuardToken++;
@@ -4581,6 +4772,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     EpisodePlaybackRequest? request,
     bool Function()? beforeOpen,
     Torrent? source,
+    int? preserveStartupEpoch,
   }) async {
     if (request?.isCurrent == false) return;
     final watchEpoch = ++_watchOpenEpoch;
@@ -4608,7 +4800,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // that re-protects (_seekForResume) re-arms AFTER it.
     _resumeVerifyEpoch++;
     _resumeWriteGuard.clear();
-    _beginMediaGeneration();
+    _beginMediaGeneration(preserveStartupEpoch: preserveStartupEpoch);
     // Live IPTV (Phase 2, Layer 1): ffmpeg-level reconnect. mpv's default
     // reconnect covers only seekable inputs — a live/streamed input NEVER
     // reconnects without reconnect_streamed. Repairs happen inside the
@@ -6033,8 +6225,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     if (se.season == null || se.episode == null) return false;
     var next = _adjacentEpisode(se.season!, se.episode!, 1);
     if (next == null) {
-      final resolved = await widget.seriesSourceFetcher?.resolveAdjacentEpisode
-          ?.call(se.season!, se.episode!, 1);
+      final resolved = await _resolveAdjacentWithCachedGuide(
+        se.season!,
+        se.episode!,
+        1,
+      );
       if (resolved != null) next = (resolved.season, resolved.episode);
     }
     if (next == null &&
@@ -10117,10 +10312,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
             ? _adjacentEpisode(se.season!, se.episode!, -1)
             : null;
         if (prev == null && se.season != null && se.episode != null) {
-          final resolved = await widget
-              .seriesSourceFetcher
-              ?.resolveAdjacentEpisode
-              ?.call(se.season!, se.episode!, -1);
+          final resolved = await _resolveAdjacentWithCachedGuide(
+            se.season!, se.episode!, -1,
+          );
           if (resolved != null) prev = (resolved.season, resolved.episode);
         }
         if (prev != null) {
@@ -11648,6 +11842,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
   @override
   void dispose() {
+    _stremioTvStartupWatch?.dispose();
+    _stremioTvStartupSeek.cancel();
     _observeServerWatch();
     unawaited(_serverWatch.close());
     _watchOpenEpoch++;
@@ -14391,28 +14587,47 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     return outcome;
   }
 
-  /// The episode adjacent to (season, episode) in the show's full TVMaze
-  /// list (specials excluded); null when unknown or out of range.
-  (int, int)? _adjacentEpisode(int season, int episode, int direction) {
+  /// Resolve with the origin first; only an unavailable guide permits fallback.
+  Future<({int season, int episode})?> _resolveAdjacentWithCachedGuide(
+    int season,
+    int episode,
+    int direction,
+  ) async {
+    final resolver = widget.seriesSourceFetcher?.resolveAdjacentEpisode;
+    if (resolver == null) return null;
+    return resolveAdjacentWithGuideFallback(
+      resolver: resolver,
+      season: season,
+      episode: episode,
+      direction: direction,
+      cachedGuide: () {
+        final target = _adjacentEpisode(
+          season,
+          episode,
+          direction,
+          allowResolverFallback: true,
+        );
+        return target == null ? null : (season: target.$1, episode: target.$2);
+      },
+    );
+  }
+
+  (int, int)? _adjacentEpisode(
+    int season,
+    int episode,
+    int direction, {
+    bool allowResolverFallback = false,
+  }) {
     // Custom catalogs own their episode order, even after TVMaze fills the guide.
-    if (widget.seriesSourceFetcher?.resolveAdjacentEpisode != null) return null;
+    if (!allowResolverFallback &&
+        widget.seriesSourceFetcher?.resolveAdjacentEpisode != null)
+      return null;
     final full = _seriesPlaylist?.fullTvmazeEpisodes.isNotEmpty == true
         ? _seriesPlaylist!.fullTvmazeEpisodes
         : (_syntheticGuidePlaylist?.fullTvmazeEpisodes ??
               const <Map<String, dynamic>>[]);
-    if (full.isEmpty) return null;
-    final eps = <(int, int)>[
-      for (final m in full)
-        if (m['season'] is int &&
-            m['number'] is int &&
-            (m['season'] as int) > 0)
-          ((m['season'] as int), (m['number'] as int)),
-    ]..sort((a, b) => a.$1 != b.$1 ? a.$1 - b.$1 : a.$2 - b.$2);
-    final idx = eps.indexWhere((p) => p.$1 == season && p.$2 == episode);
-    if (idx < 0) return null;
-    final target = idx + direction;
-    if (target < 0 || target >= eps.length) return null;
-    return eps[target];
+    final target = cachedGuideAdjacentEpisode(full, season, episode, direction);
+    return target == null ? null : (target.season, target.episode);
   }
 
   void _prepareNextDirectEpisode() {
@@ -15251,6 +15466,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                                     // NOW, not at drag end, or the landing
                                     // verifier could re-issue its target and
                                     // yank playback mid-drag.
+                                    _stremioTvStartupSeek.cancel();
                                     _resumeWriteGuard.noteUserSeek();
                                   },
                                   onSeekBarChanged: (v) {

@@ -63,4 +63,37 @@ void main() {
     );
     expect(eligible({'season': 1, 'number': 1}), isTrue);
   });
+
+  test(
+    'raw TMDB and addon guides exclude upcoming episodes from initial shuffle',
+    () {
+      final now = DateTime.utc(2026, 9, 25);
+      for (final field in ['number', 'episode']) {
+        expect(
+          isShuffleEpisodeEligible({
+            'season': 1,
+            field: 3,
+            'released': '2026-09-26T00:00:00Z',
+          }, now: now),
+          isFalse,
+        );
+        expect(
+          isShuffleEpisodeEligible({
+            'season': 1,
+            field: 3,
+            'released': '2026-09-24',
+          }, now: now),
+          isTrue,
+        );
+        expect(
+          isShuffleEpisodeEligible({'season': 1, field: 3}, now: now),
+          isTrue,
+        );
+        expect(
+          isShuffleEpisodeEligible({'season': 1, field: 0}, now: now),
+          isFalse,
+        );
+      }
+    },
+  );
 }
