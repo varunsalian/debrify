@@ -1810,9 +1810,15 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   bool _forceLocalCompletionTracking = false;
 
   Future<void> _loadTrackingPolicy() async {
-    final policy = (await TrackingSourcePolicy.load()).forContent(_effectiveContentImdbId);
+    final policy = (await TrackingSourcePolicy.load()).forContent(
+      _effectiveContentImdbId,
+    );
     if (!mounted) return;
-    _forceLocalCompletionTracking = policy.forcesLocalCompletion;
+    _forceLocalCompletionTracking = policy.usesLocalCompletionTracking(
+      traktScrobble: widget.traktScrobble,
+      simklScrobble: widget.simklScrobble,
+      mdblistScrobble: widget.mdblistScrobble,
+    );
     // A very short item can cross its completion threshold before this async
     // profile read returns. Re-evaluate immediately so This-device mode never
     // misses the forced-local rule merely because scrobbling is also enabled.
@@ -2083,6 +2089,13 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     final imdbId = widget.contentImdbId!;
     final progress = _traktProgress();
     final se = _traktSeasonEpisode();
+    if (!TraktService.isScrobbleReady(
+      contentType: widget.contentType,
+      season: se.season,
+      episode: se.episode,
+    )) {
+      return;
+    }
     // Trakt rejects start/pause when progress > 80% — send stop instead
     if ((action == 'start' || action == 'pause') && progress > 80) {
       action = 'stop';
@@ -2096,6 +2109,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           progress,
           season: se.season,
           episode: se.episode,
+          contentType: widget.contentType,
         );
         break;
       case 'pause':
@@ -2104,6 +2118,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           progress,
           season: se.season,
           episode: se.episode,
+          contentType: widget.contentType,
         );
         break;
       case 'stop':
@@ -2112,6 +2127,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           progress,
           season: se.season,
           episode: se.episode,
+          contentType: widget.contentType,
         );
         break;
     }
@@ -2130,6 +2146,13 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       final imdbId = widget.contentImdbId!;
       final progress = _traktProgress();
       final se = _traktSeasonEpisode();
+      if (!TraktService.isScrobbleReady(
+        contentType: widget.contentType,
+        season: se.season,
+        episode: se.episode,
+      )) {
+        return;
+      }
       // Trakt rejects start/pause above 80% — send stop and end heartbeat
       if (progress > 80) {
         _traktLastScrobbleAction = 'stop';
@@ -2138,6 +2161,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           progress,
           season: se.season,
           episode: se.episode,
+          contentType: widget.contentType,
         );
         debugPrint(
           'Trakt: Heartbeat stop at ${progress.toStringAsFixed(1)}% (>80%)',
@@ -2152,6 +2176,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         progress,
         season: se.season,
         episode: se.episode,
+        contentType: widget.contentType,
       );
       debugPrint(
         'Trakt: Heartbeat scrobble at ${progress.toStringAsFixed(1)}%',
@@ -2198,6 +2223,13 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           100.0,
         );
     final se = _traktSeasonEpisode();
+    if (!TraktService.isScrobbleReady(
+      contentType: widget.contentType,
+      season: se.season,
+      episode: se.episode,
+    )) {
+      return;
+    }
     // Trakt rejects start above 80% — send stop instead
     if (progress > 80) {
       _traktLastScrobbleAction = 'stop';
@@ -2206,6 +2238,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         progress,
         season: se.season,
         episode: se.episode,
+        contentType: widget.contentType,
       );
       _stopTraktHeartbeat();
     } else {
@@ -2215,6 +2248,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         progress,
         season: se.season,
         episode: se.episode,
+        contentType: widget.contentType,
       );
       _startTraktHeartbeat();
     }
@@ -2405,7 +2439,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   MdblistScrobbleTarget? _mdblistTarget() {
     final imdbId = widget.contentImdbId;
     if (imdbId == null || imdbId.isEmpty) return null;
-    final ids = MdblistMediaIds(imdb: imdbId);
+    final ids = MdblistMediaIds.forContent(imdbId);
     if (widget.contentType == 'movie') {
       return MdblistScrobbleTarget.movie(ids);
     }

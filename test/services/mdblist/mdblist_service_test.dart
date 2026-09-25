@@ -759,7 +759,7 @@ void main() {
     test('merges paused and watched episode progress for one show', () async {
       final service = serviceWith((request) async {
         switch (request.url.path) {
-          case '/imdb/show/tt-show/':
+          case '/imdb/show/tt1234567/':
             return http.Response(
               jsonEncode({
                 'ids': {'tmdb': 55},
@@ -774,7 +774,7 @@ void main() {
                   'type': 'episode',
                   'progress': '42.5',
                   'show': {
-                    'ids': {'imdb': 'tt-show'},
+                    'ids': {'imdb': 'tt1234567'},
                   },
                   'episode': {'season': 1, 'number': 2},
                 },
@@ -796,7 +796,7 @@ void main() {
         }
       });
 
-      final result = await service.fetchShowEpisodeProgress('tt-show');
+      final result = await service.fetchShowEpisodeProgress('tt1234567');
       expect(result.kind, MdblistResultKind.success);
       expect(result.data, {'1-1': 100.0, '1-2': 42.5});
     });
@@ -806,7 +806,7 @@ void main() {
       () async {
         final service = serviceWith((request) async {
           switch (request.url.path) {
-            case '/imdb/show/tt-show/':
+            case '/imdb/show/tt1234567/':
               return http.Response(
                 jsonEncode({
                   'ids': {'tmdb': 55},
@@ -830,7 +830,7 @@ void main() {
           }
         });
 
-        final result = await service.fetchShowEpisodeProgress('tt-show');
+        final result = await service.fetchShowEpisodeProgress('tt1234567');
 
         expect(result.kind, MdblistResultKind.partial);
         expect(result.isComplete, isFalse);
@@ -844,7 +844,7 @@ void main() {
         final paths = <String>[];
         final service = serviceWith((request) async {
           paths.add(request.url.path);
-          if (request.url.path == '/imdb/movie/tt-movie/') {
+          if (request.url.path == '/imdb/movie/tt7654321/') {
             return http.Response(
               jsonEncode({
                 'ids': {'tmdb': 99},
@@ -867,10 +867,10 @@ void main() {
             200,
           );
         });
-        final status = await service.fetchTitleStatus('tt-movie', 'movie');
+        final status = await service.fetchTitleStatus('tt7654321', 'movie');
         expect(status?.inWatchlist, isTrue);
         expect(status?.rating, 8);
-        expect(paths, ['/imdb/movie/tt-movie/', '/sync/state/movie/tmdb']);
+        expect(paths, ['/imdb/movie/tt7654321/', '/sync/state/movie/tmdb']);
       },
     );
 
@@ -882,14 +882,14 @@ void main() {
           jsonEncode({
             'episodes': [
               {
-                'ids': {'imdb': 'tt-show'},
+                'ids': {'imdb': 'tt1234567'},
                 'season': 1,
                 'episode': 2,
                 'rating': 8,
               },
               {
                 'show': {
-                  'ids': {'imdb': 'tt-show'},
+                  'ids': {'imdb': 'tt1234567'},
                   'seasons': [
                     {
                       'number': 3,
@@ -913,7 +913,7 @@ void main() {
         );
       });
 
-      final result = await service.fetchShowEpisodeRatings('TT-SHOW');
+      final result = await service.fetchShowEpisodeRatings('TT1234567');
       expect(result.kind, MdblistResultKind.success);
       expect(result.data, {'1-2': 8, '3-4': 9});
     });

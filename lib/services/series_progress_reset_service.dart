@@ -8,6 +8,7 @@ import 'mdblist/mdblist_service.dart';
 import 'profiles/profile_runtime.dart';
 import 'simkl/simkl_service.dart';
 import 'storage_service.dart';
+import 'tracker_identity_service.dart';
 import 'trakt/trakt_service.dart';
 import '../models/tracking_source.dart';
 
@@ -91,13 +92,18 @@ class SeriesProgressResetService {
       EpisodeTrackerSnapshotRevision.invalidateTitle('local', id);
       return failures;
     }
-    if (!MediaIdentity.isNative(id) && (provider == null || provider == TrackingSource.trakt))
+    if (provider == null || provider == TrackingSource.trakt)
       await attempt('Trakt', () async {
         final service = TraktService.instance;
         final token = await StorageService.getTraktAccessToken();
         if (token == null || token.isEmpty) return provider == null;
         // Credentials exist: failed refresh is a failed reset, not disconnection.
         if (!await service.isAuthenticated()) return false;
+        final wanted = await TrackerIdentityService.instance.resolve(
+          id,
+          isMovie ? 'movie' : 'series',
+        );
+        if (wanted == null) return false;
         final sessions = await service.fetchPlaybackItemsOrNull(
           isMovie ? 'movies' : 'episodes',
         );
@@ -106,7 +112,13 @@ class SeriesProgressResetService {
           final kind = isMovie ? 'movie' : 'show';
           if (row is! Map || row[kind] is! Map) continue;
           final ids = row[kind]['ids'];
-          if (ids is! Map || ids['imdb'] != id) continue;
+          if (ids is! Map ||
+              !TrackerIdentityService.matches(
+                wanted,
+                Map<String, dynamic>.from(ids),
+              )) {
+            continue;
+          }
           if (row['id'] is! num) {
             ok = false;
             continue;
@@ -129,7 +141,10 @@ class SeriesProgressResetService {
         if (!await service.isAuthenticated()) return provider == null;
         if (isMovie) return service.removeFromListAndPlayback(id, 'movie');
         final history = await service.clearSeriesHistory(id);
-        final playback = await service.deletePlaybackForImdb(id, contentType: 'series');
+        final playback = await service.deletePlaybackForImdb(
+          id,
+          contentType: 'series',
+        );
         if (history && playback && !isMovie)
           await StorageService.saveEpisodeSimklProgress(
             imdbId: id,
@@ -137,33 +152,39 @@ class SeriesProgressResetService {
           );
         return history && playback;
       });
-    if (!MediaIdentity.isNative(id) && (provider == null || provider == TrackingSource.mdblist))
+    if (provider == null || provider == TrackingSource.mdblist)
       await attempt('MDBList', () async {
         final service = mdblistService ?? MdblistService.instance;
         if (!await service.isAuthenticated()) return provider == null;
+        final wanted = await TrackerIdentityService.instance.resolve(
+          id,
+          isMovie ? 'movie' : 'series',
+        );
+        if (wanted == null) return false;
+        final targetIds = MdblistMediaIds.forContent(id);
         final sessions = await service.fetchPlaybackSessions();
         var ok = sessions.isSuccess;
         for (final row in sessions.data ?? <MdblistPlaybackSession>[]) {
-          if (row.isEpisode == isMovie || row.imdbId != id) continue;
+          if (row.isEpisode == isMovie ||
+              !TrackerIdentityService.matches(wanted, row.ids.toJson())) {
+            continue;
+          }
           if (!isMovie && (row.season == null || row.episode == null)) {
             ok = false;
             continue;
           }
           final result = await service.scrobbleClear(
             isMovie
-                ? MdblistScrobbleTarget.movie(MdblistMediaIds(imdb: id))
+                ? MdblistScrobbleTarget.movie(targetIds)
                 : MdblistScrobbleTarget.episode(
-                    MdblistMediaIds(imdb: id),
+                    targetIds,
                     season: row.season!,
                     episode: row.episode!,
                   ),
           );
           if (!result.isSuccess) ok = false;
         }
-        if (!await service.markUnwatched(
-          MdblistMediaIds(imdb: id),
-          isMovie ? 'movie' : 'show',
-        ))
+        if (!await service.markUnwatched(targetIds, isMovie ? 'movie' : 'show'))
           ok = false;
         MdblistContinueWatchingService.instance.invalidate();
         if (ok && !isMovie)

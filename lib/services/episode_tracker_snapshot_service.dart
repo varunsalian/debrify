@@ -11,6 +11,7 @@ import 'simkl/simkl_service.dart';
 import 'storage_service.dart';
 import 'trakt/trakt_service.dart';
 import 'tracking_source_policy.dart';
+import 'tracker_identity_service.dart';
 
 class _EpisodeSnapshotCacheEntry {
   final DateTime expiresAt;
@@ -614,6 +615,11 @@ class EpisodeTrackerSnapshotService {
         ttl: Duration.zero,
         force: force,
         load: () => _refreshCoordinator.serialize(operationKey, () async {
+          final wanted = await _runBound(
+            authorization,
+            () => TrackerIdentityService.instance.resolve(imdbId, 'series'),
+          );
+          if (wanted == null) return null;
           final result = await _runBound(
             authorization,
             service.fetchPlaybackSessions,
@@ -629,7 +635,7 @@ class EpisodeTrackerSnapshotService {
           };
           for (final session in result.data!) {
             if (!session.isEpisode ||
-                session.imdbId?.toLowerCase() != imdbId.toLowerCase() ||
+                !TrackerIdentityService.matches(wanted, session.ids.toJson()) ||
                 session.season == null ||
                 session.episode == null ||
                 !session.isResumable) {

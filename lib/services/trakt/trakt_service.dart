@@ -15,6 +15,8 @@ import '../profiles/profile_credential_facade.dart';
 import '../storage_service.dart';
 import 'trakt_calendar_service.dart';
 import 'trakt_constants.dart';
+import '../../models/media_identity.dart';
+import '../tracker_identity_service.dart';
 
 /// The user's Trakt relationship to a single title — used to render a
 /// state-aware detail page (in watchlist / collection / watched / rating)
@@ -97,6 +99,7 @@ class TraktService {
 
   /// Clears every account-scoped process cache at a profile boundary.
   void resetProfileScope() {
+    _nativeShowIds.clear();
     _invalidateLibraryCache();
     _deviceAuthorizations.clear();
     TraktCalendarService.instance.invalidate();
@@ -726,12 +729,27 @@ class TraktService {
     }
   }
 
+  /// A series needs both coordinates before any player updates its scrobble
+  /// state. Missing coordinates must never turn a TV ID into a movie ID.
+  static bool isScrobbleReady({
+    required String? contentType,
+    int? season,
+    int? episode,
+  }) =>
+      contentType == 'movie' ||
+      (contentType == 'series' &&
+          season != null &&
+          season > 0 &&
+          episode != null &&
+          episode > 0);
+
   /// Scrobble: notify Trakt that playback has started.
   Future<bool> scrobbleStart(
     String imdbId,
     double progress, {
     int? season,
     int? episode,
+    String? contentType,
   }) async {
     return _scrobble(
       '/scrobble/start',
@@ -739,6 +757,7 @@ class TraktService {
       progress,
       season: season,
       episode: episode,
+      contentType: contentType,
     );
   }
 
@@ -748,6 +767,7 @@ class TraktService {
     double progress, {
     int? season,
     int? episode,
+    String? contentType,
   }) async {
     return _scrobble(
       '/scrobble/pause',
@@ -755,6 +775,7 @@ class TraktService {
       progress,
       season: season,
       episode: episode,
+      contentType: contentType,
     );
   }
 
@@ -764,6 +785,7 @@ class TraktService {
     double progress, {
     int? season,
     int? episode,
+    String? contentType,
   }) async {
     return _scrobble(
       '/scrobble/stop',
@@ -771,6 +793,7 @@ class TraktService {
       progress,
       season: season,
       episode: episode,
+      contentType: contentType,
     );
   }
 
@@ -780,30 +803,48 @@ class TraktService {
     double progress, {
     int? season,
     int? episode,
+    String? contentType,
   }) async {
+    final scope = ProfileRuntime.scope.value;
+    if (MediaIdentity.isNative(imdbId) &&
+        (!(await StorageService.getTrackingScrobbleTargets()).contains(
+              TrackingSource.trakt,
+            ) ||
+            !await isAuthenticated())) {
+      return false;
+    }
     // Treat 0 as null — Kotlin TV player sends 0 for movies instead of null
     if (season != null && season <= 0) season = null;
     if (episode != null && episode <= 0) episode = null;
-    // Refuse to scrobble if only one of season/episode is set — would send
-    // a movie body with a show IMDB ID, corrupting Trakt history.
-    if ((season == null) != (episode == null)) {
-      debugPrint('Trakt: Skipping scrobble with incomplete episode data');
+    // Preserve implicit IMDb movie calls, but native IDs without a media type
+    // are ambiguous unless the progress key explicitly names the movie namespace.
+    final type =
+        contentType ??
+        (season != null || episode != null
+            ? 'series'
+            : !MediaIdentity.isNative(imdbId) ||
+                  imdbId.startsWith('tmdb:movie:')
+            ? 'movie'
+            : null);
+    if (!isScrobbleReady(contentType: type, season: season, episode: episode)) {
       return false;
     }
+    if (type == 'movie') {
+      season = null;
+      episode = null;
+    }
+    final ids = await _idsForContent(imdbId, type!);
+    if (ids == null || scope != ProfileRuntime.scope.value) return false;
     final Map<String, dynamic> body;
     if (season != null && episode != null) {
       body = {
-        'show': {
-          'ids': {'imdb': imdbId},
-        },
+        'show': {'ids': ids},
         'episode': {'season': season, 'number': episode},
         'progress': progress,
       };
     } else {
       body = {
-        'movie': {
-          'ids': {'imdb': imdbId},
-        },
+        'movie': {'ids': ids},
         'progress': progress,
       };
     }
@@ -853,9 +894,12 @@ class TraktService {
     String type, {
     Map<String, dynamic>? extraItemFields,
   }) async {
+    type = type == 'show' ? 'series' : type;
+    final ids = await _idsForContent(imdbId, type);
+    if (ids == null) return false;
     final apiKey = type == 'series' ? 'shows' : 'movies';
     final item = <String, dynamic>{
-      'ids': {'imdb': imdbId},
+      'ids': ids,
       if (extraItemFields != null) ...extraItemFields,
     };
     final body = {
@@ -926,6 +970,8 @@ class TraktService {
     int episode, {
     Map<String, dynamic>? extraEpisodeFields,
   }) async {
+    final ids = await _idsForContent(showImdbId, 'series');
+    if (ids == null) return false;
     final ep = <String, dynamic>{
       'number': episode,
       if (extraEpisodeFields != null) ...extraEpisodeFields,
@@ -933,7 +979,7 @@ class TraktService {
     final body = {
       'shows': [
         {
-          'ids': {'imdb': showImdbId},
+          'ids': ids,
           'seasons': [
             {
               'number': season,
@@ -1626,6 +1672,9 @@ class TraktService {
       final ids = movie?['ids'] as Map<String, dynamic>?;
       final imdbId = (ids?['imdb'] as String?)?.trim().toLowerCase();
       if (imdbId != null && imdbId.isNotEmpty) result[imdbId] = 100.0;
+      for (final id in MediaIdentity.aliases(ids)) {
+        result[MediaIdentity.progressId(id, 'movie')] = 100.0;
+      }
     }
     return result;
   }
@@ -1651,8 +1700,10 @@ class TraktService {
   /// downloading the user's entire watched-show history merely to label one
   /// title's Trakt pill.
   Future<bool?> fetchShowFullyWatchedOrNull(String showId) async {
+    final resolvedShowId = await _showId(showId);
+    if (resolvedShowId == null) return null;
     final response = await _authenticatedGet(
-      '/shows/$showId/progress/watched?hidden=false&specials=false&count_specials=false',
+      '/shows/$resolvedShowId/progress/watched?hidden=false&specials=false&count_specials=false',
     );
     if (response == null || response.statusCode != 200) return null;
     try {
@@ -1684,7 +1735,7 @@ class TraktService {
       final ids = show?['ids'] as Map<String, dynamic>?;
       final imdbId = ids?['imdb'] as String?;
       final aired = (show?['aired_episodes'] as num?)?.toInt() ?? 0;
-      if (imdbId == null || imdbId.isEmpty || aired <= 0) continue;
+      if (aired <= 0) continue;
       final watched = <String>{};
       final seasons = item['seasons'] as List<dynamic>? ?? const [];
       for (final rawSeason in seasons) {
@@ -1698,7 +1749,12 @@ class TraktService {
           if (episode != null && episode > 0) watched.add('$season-$episode');
         }
       }
-      if (watched.length >= aired) result.add(imdbId.toLowerCase());
+      if (watched.length >= aired) {
+        if (imdbId != null && imdbId.isNotEmpty) {
+          result.add(imdbId.toLowerCase());
+        }
+        result.addAll(MediaIdentity.aliases(ids));
+      }
     }
     return result;
   }
@@ -1738,6 +1794,59 @@ class TraktService {
     return all;
   }
 
+  Future<Map<String, dynamic>?> _idsForContent(String id, String type) async {
+    final scope = ProfileRuntime.scope.value;
+    final ids = await TrackerIdentityService.instance.resolve(id, type);
+    return scope == ProfileRuntime.scope.value ? ids : null;
+  }
+
+  final _nativeShowIds = <String, ({DateTime at, String id})>{};
+
+  Future<String?> _showId(String id) async {
+    if (!MediaIdentity.isNative(id)) return id;
+    final scope = ProfileRuntime.scope.value;
+    final hit = _nativeShowIds[id];
+    if (hit != null &&
+        DateTime.now().difference(hit.at) < const Duration(minutes: 15)) {
+      return hit.id;
+    }
+    final ids = await _idsForContent(id, 'series');
+    if (ids == null) return null;
+    if (ids['imdb'] case final String imdb) return imdb;
+    final provider = ids.keys.single;
+    final response = await _authenticatedGet(
+      '/search/$provider/${ids[provider]}?type=show',
+    );
+    if (response?.statusCode != 200 || scope != ProfileRuntime.scope.value) {
+      return null;
+    }
+    try {
+      final rows = jsonDecode(response!.body);
+      if (rows is! List) return null;
+      final matches = <int>{};
+      for (final row in rows.whereType<Map>()) {
+        if (row['type'] != 'show') continue;
+        final show = row['show'];
+        final candidate = show is Map ? show['ids'] : null;
+        if (candidate is! Map<String, dynamic> ||
+            !TrackerIdentityService.matches(ids, candidate)) {
+          continue;
+        }
+        final trakt = MediaIdentity.positiveInt(candidate['trakt']);
+        if (trakt != null) matches.add(trakt);
+      }
+      if (matches.length != 1) return null;
+      final result = matches.single.toString();
+      if (_nativeShowIds.length >= 128) {
+        _nativeShowIds.remove(_nativeShowIds.keys.first);
+      }
+      _nativeShowIds[id] = (at: DateTime.now(), id: result);
+      return result;
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// Fetch watched episode keys for a specific show.
   /// Uses the per-show progress endpoint (much smaller than /sync/watched/shows).
   /// Returns a set of `"season-episode"` strings (e.g. `"1-5"`) for completed episodes.
@@ -1752,7 +1861,11 @@ class TraktService {
   /// callers use that distinction to retain their last complete value instead
   /// of replacing it with a false empty history during an outage.
   Future<Set<String>?> fetchWatchedShowEpisodesOrNull(String showId) async {
-    final response = await _authenticatedGet('/shows/$showId/progress/watched');
+    final resolvedShowId = await _showId(showId);
+    if (resolvedShowId == null) return null;
+    final response = await _authenticatedGet(
+      '/shows/$resolvedShowId/progress/watched',
+    );
     if (response == null || response.statusCode != 200) {
       debugPrint(
         'Trakt: fetchWatchedShowEpisodes failed (${response?.statusCode})',
@@ -1812,7 +1925,11 @@ class TraktService {
   /// Fetch the next episode to watch for a show.
   /// Returns (season, episode) or null if show is complete / not started / error.
   Future<({int season, int episode})?> fetchNextEpisode(String showId) async {
-    final response = await _authenticatedGet('/shows/$showId/progress/watched');
+    final resolvedShowId = await _showId(showId);
+    if (resolvedShowId == null) return null;
+    final response = await _authenticatedGet(
+      '/shows/$resolvedShowId/progress/watched',
+    );
     return _parseNextEpisode(response);
   }
 
@@ -1853,6 +1970,8 @@ class TraktService {
   Future<Map<String, double>?> fetchEpisodePlaybackProgressOrNull(
     String showImdbId,
   ) async {
+    final ids = await _idsForContent(showImdbId, 'series');
+    if (ids == null) return null;
     // Trakt caps explicitly paginated endpoints at 250. Request the applied
     // maximum rather than 1000 so a missing pagination header plus 250 items
     // is correctly recognized as potentially truncated, not a short page.
@@ -1874,7 +1993,11 @@ class TraktService {
 
       try {
         final decoded = jsonDecode(response.body);
-        final parsed = debugParseEpisodePlaybackProgress(decoded, showImdbId);
+        final parsed = debugParseEpisodePlaybackProgress(
+          decoded,
+          showImdbId,
+          expectedIds: ids,
+        );
         if (parsed == null) {
           debugPrint('Trakt: episode playback incomplete payload page=$page');
           return null;
@@ -1921,8 +2044,9 @@ class TraktService {
   @visibleForTesting
   static Map<String, double>? debugParseEpisodePlaybackProgress(
     Object? decoded,
-    String showImdbId,
-  ) {
+    String showImdbId, {
+    Map<String, dynamic>? expectedIds,
+  }) {
     if (decoded is! List<dynamic>) return null;
     final target = showImdbId.trim().toLowerCase();
     if (target.isEmpty) return null;
@@ -1934,10 +2058,11 @@ class TraktService {
       if (show is! Map<String, dynamic>) return null;
       final ids = show['ids'];
       if (ids is! Map<String, dynamic>) return null;
-      final imdb = ids['imdb'];
-      // IMDb can legitimately be absent for an unrelated Trakt item. It
-      // cannot identify the target show, so it contributes nothing.
-      if (imdb is! String || imdb.trim().toLowerCase() != target) continue;
+      final wanted =
+          expectedIds ?? TrackerIdentityService.directIds(target, 'series');
+      if (wanted == null || !TrackerIdentityService.matches(wanted, ids)) {
+        continue;
+      }
 
       final episode = rawItem['episode'];
       final progressValue = rawItem['progress'];

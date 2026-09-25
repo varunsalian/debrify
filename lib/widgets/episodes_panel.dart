@@ -340,17 +340,18 @@ class EpisodesPanelState extends State<EpisodesPanel> {
   /// Discover/catalog without Trakt, so the Trakt-only episode menu (mark
   /// watched/unwatched, rate) is only offered when this is true.
   bool _traktAuthenticated = false;
-  bool get _isTraktAuthenticated => _traktAuthenticated &&
-      !MediaIdentity.isNative((_selectedShow ?? widget.show).progressId) &&
+  bool get _isTraktAuthenticated =>
+      _traktAuthenticated &&
       !CustomSeriesIdentity.isCustom((_selectedShow ?? widget.show).imdbId);
 
   /// Whether Simkl is connected, for watched-action destinations and options.
   bool _simklAuthenticated = false;
   bool _mdblistAuthenticated = false;
-  bool get _isSimklAuthenticated => _simklAuthenticated &&
+  bool get _isSimklAuthenticated =>
+      _simklAuthenticated &&
       !CustomSeriesIdentity.isCustom((_selectedShow ?? widget.show).imdbId);
-  bool get _isMdblistAuthenticated => _mdblistAuthenticated &&
-      !MediaIdentity.isNative((_selectedShow ?? widget.show).progressId) &&
+  bool get _isMdblistAuthenticated =>
+      _mdblistAuthenticated &&
       !CustomSeriesIdentity.isCustom((_selectedShow ?? widget.show).imdbId);
 
   // MDBList can acknowledge a completed scrobble just before the player route
@@ -551,7 +552,8 @@ class EpisodesPanelState extends State<EpisodesPanel> {
       }
     }
 
-    if (MediaIdentity.isImdb(imdbId) && await _mdblistService.isAuthenticated()) {
+    if ((MediaIdentity.isImdb(imdbId) || MediaIdentity.isNative(imdbId)) &&
+        await _mdblistService.isAuthenticated()) {
       if (policy.progressFrom(TrackingSource.mdblist)) {
         try {
           final result = await _mdblistService.fetchShowEpisodeProgress(imdbId);
@@ -753,7 +755,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
           _trackingPolicy.scrobbles(TrackingSource.simkl))
         'Simkl',
       if (_isMdblistAuthenticated &&
-          imdb.startsWith('tt') &&
+          (MediaIdentity.isImdb(imdb) || MediaIdentity.isNative(imdb)) &&
           _trackingPolicy.scrobbles(TrackingSource.mdblist))
         'MDBList',
       'this device',
@@ -889,8 +891,8 @@ class EpisodesPanelState extends State<EpisodesPanel> {
     final show = _selectedShow;
     if (show == null) return;
     final imdb = show.progressId ?? show.id;
-    if (!imdb.startsWith('tt')) return;
-    final ids = MdblistMediaIds(imdb: imdb);
+    if (!MediaIdentity.isImdb(imdb) && !MediaIdentity.isNative(imdb)) return;
+    final ids = MdblistMediaIds.forContent(imdb);
     final key = '${episode.season}-${episode.number}';
     bool success;
     String label;

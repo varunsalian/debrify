@@ -65,6 +65,93 @@ void main() {
       expect(normalized.mdblistScrobble, isFalse);
     });
 
+    test('native tracking retains preferences and existing CW ownership', () {
+      const policy = TrackingSourcePolicy(
+        scrobbleTargets: {TrackingSource.trakt, TrackingSource.mdblist},
+        progressSource: WatchProgressSource.smart,
+        homeTickSources: {TrackingSource.trakt},
+      );
+      for (final id in ['tmdb:237243', 'simkl:2274121', 'tmdb:movie:237243']) {
+        final native = policy.forContent(id);
+        final flags = VideoPlayerLauncher.normalizeScrobbleFlags(
+          VideoPlayerLaunchArgs(
+            videoUrl: 'https://example.test/video',
+            title: 'Big Brother',
+            contentImdbId: id,
+            traktScrobble: true,
+            mdblistScrobble: true,
+          ),
+          native,
+        );
+        expect(flags.traktScrobble, isTrue);
+        expect(flags.mdblistScrobble, isTrue);
+        expect(native.progressFrom(TrackingSource.trakt), isTrue);
+        expect(native.progressFrom(TrackingSource.mdblist), isTrue);
+        expect(
+          native.usesLocalCompletionTracking(
+            traktScrobble: true,
+            simklScrobble: false,
+            mdblistScrobble: true,
+          ),
+          isTrue,
+        );
+        expect(
+          native.usesLocalCompletionTracking(
+            traktScrobble: true,
+            simklScrobble: true,
+            mdblistScrobble: true,
+          ),
+          isFalse,
+        );
+      }
+      expect(
+        policy
+            .forContent('tt1234567')
+            .usesLocalCompletionTracking(
+              traktScrobble: true,
+              simklScrobble: false,
+              mdblistScrobble: true,
+            ),
+        isFalse,
+      );
+      final custom = policy.forContent('medialibrary:123');
+      expect(custom.scrobbles(TrackingSource.trakt), isFalse);
+      expect(custom.scrobbles(TrackingSource.mdblist), isFalse);
+      expect(custom.progressFrom(TrackingSource.trakt), isFalse);
+    });
+
+    test(
+      'native dedicated tracker modes retain local resume without disabling writes',
+      () {
+        for (final mode in [
+          WatchProgressSource.trakt,
+          WatchProgressSource.mdblist,
+        ]) {
+          final policy = TrackingSourcePolicy(
+            scrobbleTargets: {TrackingSource.trakt, TrackingSource.mdblist},
+            progressSource: mode,
+            homeTickSources: {TrackingSource.trakt, TrackingSource.mdblist},
+          );
+          for (final id in [
+            'tmdb:237243',
+            'simkl:2274121',
+            'tmdb:movie:237243',
+          ]) {
+            final native = policy.forContent(id);
+            expect(native.progressFrom(TrackingSource.local), isTrue);
+            expect(native.guideProgressFrom(TrackingSource.local, 42), 42);
+            expect(native.scrobbles(TrackingSource.trakt), isTrue);
+            expect(native.scrobbles(TrackingSource.mdblist), isTrue);
+          }
+          expect(policy.forContent('tt1234567').progressSource, mode);
+          expect(
+            policy.forContent('tt1234567').progressFrom(TrackingSource.local),
+            isFalse,
+          );
+        }
+      },
+    );
+
     test('guide mask drops everything foreign — ticks included', () {
       // 2026-08-27 decision: episode-list ticks follow the Progress source
       // exactly like partial bars (supersedes ticks-always-merged).
