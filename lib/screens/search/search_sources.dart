@@ -61,7 +61,7 @@ class _SourcesScreen extends ConsumerStatefulWidget {
 class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
   bool _loading = true;
   String? get _error => _searchSubscription.read().error;
-  List<Torrent> _torrents = [];
+  List<Torrent> get _torrents => _resultsSubscription.read().displayed;
   List<IptvSourceResult> get _iptvSources => _searchSubscription.read().iptv;
 
   /// The rows actually rendered — [_torrents] after the redesign toolbar's
@@ -95,12 +95,16 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
       'season': widget.selection.season,
       'episode': widget.selection.episode,
       'bound_count': mounted ? _bound.length : _disposedBoundCount,
-      'results': _torrents.length,
+      'results': mounted ? _torrents.length : _disposedResultCount,
       'visible': _visible.length,
-      'match_index': selected == null ? -1 : _torrents.indexOf(selected),
+      'match_index': mounted
+          ? selected == null
+                ? -1
+                : _torrents.indexOf(selected)
+          : _disposedMatchIndex,
       'visible_index': selected == null ? -1 : _visible.indexOf(selected),
       'searching': mounted ? _searching : _disposedSearching,
-      'frozen': _streamFrozen,
+      'frozen': mounted ? _streamFrozen : _disposedFrozen,
       'rail_focus': _cinemaKey.currentState?.hasRailFocus ?? false,
       'filter_focus': _filterFocus.hasFocus,
       'pill_focus': _pillFocus.hasFocus,
@@ -333,10 +337,16 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
   /// toolbar use). Frozen ⇒ later arrivals buffer into [_pendingTorrents]
   /// behind the "+N new sources" pill instead of reshuffling the list under
   /// the user's finger/focus.
-  bool _streamFrozen = false;
+  late final ProviderSubscription<SourceResultsState> _resultsSubscription;
+  SourceResultsController get _resultsController =>
+      ref.read(sourceResultsProvider(_sourcesSession).notifier);
+  bool get _streamFrozen => _resultsSubscription.read().frozen;
+  bool _disposedFrozen = false;
+  int _disposedResultCount = 0;
+  int _disposedMatchIndex = -1;
 
   /// Post-processed FULL result set waiting behind the pill while frozen.
-  List<Torrent>? _pendingTorrents;
+  List<Torrent>? get _pendingTorrents => _resultsSubscription.read().pending;
 
   /// D-pad target for the "+N new sources" pill (UP from row 0 reaches it
   /// when visible; UP again reaches the toolbar funnel).
@@ -469,6 +479,17 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
         });
       },
     );
+    _resultsSubscription = ref.listenManual(
+      sourceResultsProvider(_sourcesSession),
+      (previous, next) {
+        if (!mounted) return;
+        if (_sourcesSession.owner != ProfileSessionMemory.captureOwner()) {
+          _visible = [];
+          _syncStreamNodes();
+        }
+        setState(() {});
+      },
+    );
     // Rebuild the toolbar when the funnel gains/loses focus so its D-pad
     // highlight tracks — Focus alone doesn't guarantee a parent rebuild.
     _filterFocus.addListener(_onFilterFocusChanged);
@@ -509,6 +530,12 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
 
   @override
   void dispose() {
+    _disposedFrozen = _streamFrozen;
+    _disposedResultCount = _torrents.length;
+    _disposedMatchIndex = _selectedDirect == null
+        ? -1
+        : _torrents.indexOf(_selectedDirect!);
+    _resultsSubscription.close();
     _disposedSearching = _searching;
     _searchSubscription.close();
     _retrySubscription.close();
@@ -544,8 +571,7 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
     // token only for focus and row-adoption callbacks.
     _cacheController.beginSearch();
     _retryController.beginSearch();
-    _streamFrozen = false;
-    _pendingTorrents = null;
+    _resultsController.beginSearch();
     if (mounted) setState(() => _loading = true);
     for (final n in _nodes) {
       n.dispose();
@@ -553,7 +579,6 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
     _nodes.clear();
     // An IPTV status can expose the body before the first non-empty batch.
     // Never retain rows whose focus nodes were just disposed.
-    _torrents = [];
     _visible = [];
     await _searchController.search(
       SourceSearchRequest(
@@ -594,8 +619,7 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
     if (prepared.cachedEpisodeInserted) {
       _logPickerSelection('cached_episode_inserted');
     }
-    if (_streamFrozen) {
-      _pendingTorrents = torrents;
+    if (_resultsController.bufferIfFrozen(torrents)) {
       _logPickerSelection('batch_buffered', {
         'pending_results': torrents.length,
       });
@@ -624,7 +648,7 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
         }
       }
     }
-    _torrents = torrents;
+    _resultsController.display(torrents);
     _updateSelectedDirect();
     _showCachedEpisodeSource = torrents.any(
       (t) => identical(t, _cachedEpisodeSource),
@@ -768,35 +792,16 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
   /// behind the pill instead.
   void _freezeStreaming() {
     ++_selectionFocusRun;
-    _streamFrozen = true;
+    _resultsController.freeze();
   }
 
-  /// Identity key for pending-row diffing (infohash when real, else the
-  /// name+URL pair addon streams are distinguished by).
-  static String _rowKey(Torrent t) => t.hasRealInfoHash && t.infohash.isNotEmpty
-      ? 'h:${t.infohash.toLowerCase()}'
-      : 'n:${t.name}|${t.directUrl ?? ''}';
-
-  /// Rows waiting behind the pill (0 hides it) — a SET difference, not a
-  /// length delta: episode curation can shrink the pending set below the
-  /// displayed length even when it carries genuinely new rows.
-  int get _pendingNewCount {
-    final p = _pendingTorrents;
-    if (p == null) return 0;
-    final shown = {for (final t in _torrents) _rowKey(t)};
-    var count = 0;
-    for (final t in p) {
-      if (!shown.contains(_rowKey(t))) count++;
-    }
-    return count;
-  }
+  int get _pendingNewCount => _resultsSubscription.read().pendingNewCount;
 
   /// Folds the parked result set into the list (pill tap / toolbar use) and
   /// refreshes the ⚡ badges for the fresh rows.
   void _adoptPending() {
     final p = _pendingTorrents;
     if (p == null) return;
-    _pendingTorrents = null;
     _applyStreamingResults(p);
     // Parked rows were already badged as their batches streamed in; this is a
     // cheap additive mop-up for any straggler hash (skips already-checked).
@@ -1589,8 +1594,7 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
     // complete set they can see.
     _freezeStreaming();
     if (_pendingTorrents != null) {
-      _torrents = _pendingTorrents!;
-      _pendingTorrents = null;
+      _resultsController.display(_pendingTorrents!);
       _maybeCheckCache();
     }
     final old = List<FocusNode>.from(_nodes);

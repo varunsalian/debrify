@@ -1,3 +1,5 @@
+import '../features/sources/application/source_results_controller.dart';
+import '../features/sources/models/source_results_state.dart';
 import '../features/sources/application/source_search_controller.dart';
 import '../features/sources/models/source_search_state.dart';
 import '../features/sources/application/source_result_preparation.dart';

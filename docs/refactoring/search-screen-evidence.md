@@ -1201,3 +1201,55 @@ controller cases**. The historical allowance remains unchanged and the helper
 still exits 1 for pre-existing failures. Full receipts:
 `.git/refactor-evidence/phase4c/full-search-state.jsonl`,
 `full-search-state-comparison.txt`, and `search-state-previous-checkpoint.txt`.
+
+
+### Phase 4C — Adopted/pending Sources result ownership
+
+Added the 60-line `SourceResultsController` and 31-line immutable
+`SourceResultsState`. The actual Sources view now reads adopted rows, pending rows,
+freeze state and the pending-row count from the session/view-owned Riverpod state.
+The replaced mutable fields and row-key/count implementation are removed. The
+controller has explicit begin, freeze, buffer and display actions and starts no
+IO. It rejects actions for retired owners and after disposal; scope invalidation
+clears its rows. Distinct views for the same title have independent state.
+
+Review preserved full-set replacement rather than pending-batch accumulation,
+empty pending replacements, case-insensitive real-hash keys and exact name/URL
+fallback keys. Repeated new identities still count once per pending row, as before.
+Adoption clears pending rows but remains frozen. New search clears both sets and
+resumes streaming. Lists are immutable snapshots with original Torrent identities.
+The screen captures old row focus before display/adoption, and retains toolbar
+projection, focus-node synchronization, loading visibility and cache/season actions.
+On scope retirement, its remaining projected list is cleared with focus nodes
+retired through the existing post-frame path. Post-disposal diagnostics capture
+only counts/index/boolean values before subscriptions close, not retained raw rows.
+
+Baseline Sources feature/cinema tests passed **155 tests**, and that integration
+suite passed after wiring. Final affected Sources/cinema/priority/season run
+passed **186 tests**, including nine controller cases for buffering/adoption,
+reset, immutable identity-preserving snapshots, smaller replacements, hashless
+keys/duplicate counts, repeated freeze/empty pending, view isolation, profile
+retirement and disposal. Existing cinema tests retain their focus and pending-row
+assertions. Final analysis remains at **864 diagnostics**, with no additions;
+architecture checks pass for **92 migrated files**. New files and changed screen
+methods are formatted, with no whole-file formatting. Diff checks pass.
+
+Sources is **2,782 lines**, parent **20,155**: subscription/disposal wiring replaces
+private state ownership rather than just reducing line count. Toolbar projection
+state and the remaining Sources actions/UI are still part of Phase 4C. Later
+phases and native/performance checks remain unfinished.
+Receipts: `.git/refactor-evidence/phase4c/result-state-before.txt`,
+`result-state-integration.txt`, `result-state-controller.txt`,
+`result-state-focused-final.txt`, `analyze-result-state.txt`, and
+`result-state-analyzer-comparison.txt`.
+
+
+The exact full-suite helper completed in **172,759 ms** with **7,756 successes**,
+the same **51 observed baseline failures** (22 failure/29 error) and **20 skips**.
+No original baseline test is newly failing, missing or skipped. All search-state
+checkpoint identities retain their outcomes, with **nine new passing tests**.
+The historical allowance file remains unchanged; the helper still exits 1 for
+pre-existing failures. Full receipts:
+`.git/refactor-evidence/phase4c/full-result-state.jsonl`,
+`full-result-state-comparison.txt`, and `result-state-previous-checkpoint.txt`.
+Phase 4C and later migration/device/performance gates remain open.
