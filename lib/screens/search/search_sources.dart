@@ -1675,55 +1675,16 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
   /// Derives the rendered list from [_torrents]: source-group filter →
   /// quality/rip/language filter → provider priority + stable dedupe →
   /// optional explicit field sort. "Addon order" is the default.
-  List<Torrent> _applyToolbar(List<Torrent> src) {
-    var list = src;
-    if (_sourceFilter != null) {
-      list = list
-          .where(
-            (t) =>
-                SourcePriority.keyForSource(
-                  t.source,
-                  aliases: _sourceAliases,
-                ) ==
-                _sourceFilter,
-          )
-          .toList();
-    }
-    // Size buckets are meaningless for series: addon packs report a single
-    // episode's size, so a size filter would match against a misleading
-    // number. Drop the facet before matching when browsing a series.
-    final effectiveFilters = widget.selection.isSeries
-        ? _filters.copyWith(sizes: const <SizeBucket>{})
-        : _filters;
-    list = TorrentFilterMatcher.apply(list, effectiveFilters);
-    list = SourcePriority.orderAndDedupe(
-      list,
-      _sourcePriority,
-      aliases: _sourceAliases,
-    );
-    if (_sortBy != 'source') {
-      list = List<Torrent>.from(list);
-      int cmp(Torrent a, Torrent b) {
-        switch (_sortBy) {
-          case 'name':
-            return a.displayTitle.toLowerCase().compareTo(
-              b.displayTitle.toLowerCase(),
-            );
-          case 'size':
-            return a.sizeBytes.compareTo(b.sizeBytes);
-          case 'seeders':
-            return a.seeders.compareTo(b.seeders);
-          case 'date':
-            return a.createdUnix.compareTo(b.createdUnix);
-          default:
-            return 0;
-        }
-      }
-
-      list.sort((a, b) => _sortAsc ? cmp(a, b) : cmp(b, a));
-    }
-    return list;
-  }
+  List<Torrent> _applyToolbar(List<Torrent> src) => projectSourceResults(
+    src,
+    sourceFilter: _sourceFilter,
+    sourceAliases: _sourceAliases,
+    isSeries: widget.selection.isSeries,
+    filters: _filters,
+    sourcePriority: _sourcePriority,
+    sortBy: _sortBy,
+    sortAsc: _sortAsc,
+  );
 
   /// Recompute [_visible] and rebuild [_nodes] in lock-step after a toolbar
   /// change (source pill, sort, or filter). The ListView stays mounted (no

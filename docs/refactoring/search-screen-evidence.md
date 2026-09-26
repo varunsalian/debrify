@@ -1058,3 +1058,40 @@ Phase 4C remains in progress: search/result state, provisional result accumulati
 filter/sort projection and pin/local-source actions remain. Rendering, scrolling
 and focus stay view-owned. Later Home/Discover/lifecycle phases and native/visual/
 performance checks remain outstanding.
+
+
+### Phase 4C — Sources toolbar result projection
+
+Moved the production `_applyToolbar` algorithm into the 63-line
+`application/source_result_projection.dart`. The widget passes explicit filter,
+provider configuration and sort values; it retains focus, buffering and render
+ownership. The result is an immutable list preserving the original Torrent
+identities. Reviewed all Sources list uses: neither `_visible` nor `_torrents`
+mutates its published list in place. Source filtering and quality facets still
+precede priority/deduplication, series still ignore only the size facet, and
+explicit field sorts run last. The old screen implementation and now-unused
+parent filter-matcher import are removed.
+
+Before extraction, the existing cinema focus, priority and season tests passed
+**32 tests**. After extraction, all Sources feature tests plus those three suites
+passed **160 tests**, including nine new projection cases. New coverage verifies
+alias filtering before cross-provider deduplication, eligible duplicate selection,
+series facet behavior, priority-selected identity before sorting, both directions
+for all four explicit sorts, stable provider order and immutable snapshots.
+Existing screen tests retain their focus and pending-results assertions.
+
+Analyzer comparison reports **864 diagnostics**, no additions, and only the same
+previously removed Sources curly-braces lint against the original baseline.
+Architecture checks pass for **87 migrated files**. New files are formatted;
+diff review/check passes. Sources is **2,892 lines**; parent stays **20,150**.
+Receipts: `.git/refactor-evidence/phase4c/projection-before.txt`,
+`projection-focused.txt`, `analyze-projection.txt` and
+`projection-analyzer-comparison.txt`. The full suite was not rerun for this bounded
+pure-policy extraction; the latest full run remains the retry checkpoint above.
+
+Review identified the shared matcher's transitive UI imports and priority helper's
+legacy service dependencies. Their pure calls remain shared to avoid classifier
+changes during extraction; the plan explicitly requires separating these before
+the final boundary audit. Phase 4C remains open for search/result state, streamed
+result preparation, pin/local actions and presentation extraction. Later phases,
+native behavior and performance checks are also still pending.

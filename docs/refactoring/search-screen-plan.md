@@ -440,6 +440,14 @@ adapters may preserve their current APIs; list any new transitional adapter's pa
 reason, remaining coupling, and removal milestone when introducing it. Revisit
 exceptions at each phase; retire resolved ones.
 
+The keyword filter and Sources toolbar projection reuse the existing pure calls in
+`lib/utils/torrent_filter_matcher.dart` and `lib/services/source_priority.dart`.
+Those legacy files retain transitive UI/service dependencies (including quality
+classification in `torrent_result_row.dart`). Keep behavior during extraction,
+then separate their pure classification/ordering dependencies before the phase-8
+boundary audit. Passing the current direct-import guard does not close this
+transitive dependency exception.
+
 | Phase | Status | Revision, checks, and remaining work |
 | --- | --- | --- |
 | 0: Baseline | Automated baseline reviewed; device checks pending | `aa3d5643`: 7,387 pass / 51 fail / 20 skipped; 865 analyzer diagnostics; ownership/behavior inventory recorded in implementation evidence |
@@ -448,7 +456,7 @@ exceptions at each phase; retire resolved ones.
 | 3: Lists/suggestions | Implemented and reviewed | Riverpod 3.4.3 and Lists controller wired; 23 new tests pass; full suite 7,450 pass / same 51 baseline failures / 20 skipped, no missing tests, analyzer unchanged; device checks pending |
 | 4A: Catalog search | Implemented and reviewed | Riverpod state, streaming/TV batching, source settings and dialog wired; 35 new tests pass; affected suite retains the same three baseline failures, analyzer unchanged; device checks pending |
 | 4B: Keyword search | Implemented and reviewed | Application/data state, settings/defaults, selection and snapshot ownership wired; full suite 7,600 pass / same 51 failures / 20 skips, analyzer unchanged. Focus/navigation wrappers remain in the registered legacy screen (20,138 lines) for later presentation/bridge phases; device checks pending |
-| 4C: Source selection | In progress | Season policies, guide state/inventory, startup settings, saved-source loading, cache checks, initial requests and individual addon retries extracted. Retry slice: 201 affected passes; full suite 7,721 successes, same 51 failures/20 skips; no new analyzer diagnostics. Search/results state, pin/local actions and focus ownership remain; Sources part 2,931 lines |
+| 4C: Source selection | In progress | Season policies, guide state/inventory, startup settings, saved-source loading, cache checks, initial requests, individual addon retries and toolbar projection extracted. Projection slice: 160 affected passes and no new analyzer diagnostics; latest full suite remains the retry checkpoint (7,721 successes, same 51 failures/20 skips). Search/results state, pin/local actions and focus ownership remain; Sources part 2,892 lines |
 | 5: Home data | Not started | Preserve paging, snapshots, profiles, tracker semantics |
 | 6: Discover/layouts | Not started | Inventory and retain current variants |
 | 7: Hero/handoff/lifecycle | Not started | Native/device checks required where affected |

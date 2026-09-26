@@ -1,3 +1,4 @@
+import '../features/sources/application/source_result_projection.dart';
 import '../features/sources/data/source_search_api.dart';
 import '../features/sources/application/source_retry_controller.dart';
 import '../features/sources/application/source_search_dependencies.dart';
@@ -144,7 +145,6 @@ import '../utils/continue_watching_presentation.dart';
 import '../utils/dialog_tap_guard.dart';
 import '../utils/episode_progress_merge.dart';
 import '../utils/format_tag_detector.dart';
-import '../utils/torrent_filter_matcher.dart';
 import '../utils/tv_keys.dart';
 import '../utils/tv_search_focus_handoff.dart';
 import '../services/app_route_observer.dart';
