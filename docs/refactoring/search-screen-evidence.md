@@ -2795,3 +2795,68 @@ Receipts: `full-local-retirement.jsonl`,
 `local-retirement-verified-previous-checkpoint.txt` in the same evidence directory.
 The historical helper still exits nonzero for the original failures. Phase 4C
 and the full migration remain in progress.
+
+### Phase 4C — source copy-link operation
+
+Moved copy eligibility, deferred IPTV episode resolution and clipboard sequencing
+into the stateless `data/source_link_copier.dart` (**65 lines**). It takes ordinary
+function dependencies, publishes a typed outcome and retains no links, requests
+or profile state. The **14-line** Riverpod composition file supplies the existing
+IPTV predicate/resolver and the **5-line** shared system clipboard adapter. This
+needs no notifier, repository hierarchy or additional state owner. The platform
+adapter is included in the measured migration source set.
+
+The production Sources screen now dispatches the operation and renders the
+original progress/outcome messages. Its replaced episode-target predicate,
+resolution and native clipboard body were removed; the Sources part is now
+**1,812 lines**, still an explicit interim exception with other responsibilities
+remaining. Row/menu visibility, target validation (including its case-insensitive
+episode identifier), link selection through `Torrent.copyLink`, missing versus
+unavailable outcomes and the platform method payload are preserved. No automatic
+retry, deduplication or new exception swallowing was added. Existing unlocalized
+messages retain their scoped legacy-copy exception.
+
+Separately from the structural move, copy actions now use the originating Sources
+profile/session as well as view lifetime. A retired entry does no work; retirement
+during deferred resolution prevents the clipboard call, and retirement during an
+already-issued clipboard write suppresses success feedback. The native write
+itself cannot be rolled back. The legacy IPTV resolver's internal authorization
+and network behavior were not changed; its transitive boundary still requires
+the phase-8 audit.
+
+Baseline: **365 Sources tests pass**, including three new real-screen cases for
+direct/magnet copying and a linkless menu action. Those use the actual clipboard
+method channel adapter, substituted only at the platform channel. A fourth
+real-screen case captures a row callback, clears the profile session and invokes
+it: the original screen fails by writing its old link; the three active cases
+still pass. The guarded implementation passes all four.
+
+**Fifteen operation tests** cover eligibility, direct/magnet links, missing target
+and link, the three resolution statuses, ordered/awaited clipboard writing,
+retirement before and during work, and unchanged resolution/clipboard exception
+propagation without retries. **Five injected real-screen tests** cover deferred
+success, profile retirement, route/view disposal, missing episode and unavailable
+episode, checking clipboard writes and existing visible messages. The provider is
+only immutable app-scoped wiring; all action ownership is supplied per invocation.
+
+All **386 Sources tests pass**. Analyzer retains **863 diagnostics**, with no new
+identities. Architecture checks pass **123 migrated files**; new files and touched
+legacy methods are formatted, with no whole-file legacy formatting. Diff checks
+pass. Receipts under `.git/refactor-evidence/phase4c/`:
+`copy-link-before.txt`, `copy-link-retirement-red.txt`,
+`copy-link-focused.txt`, `copy-link-ownership.txt`,
+`copy-link-affected.txt`, `analyze-copy-link.txt` and
+`copy-link-analyzer-comparison.txt`.
+Native/device checks and the remaining Sources/later migration phases remain open.
+
+Full-suite review: **8,026 successes / the same 51 failures / 20 skips**.
+Every preceding checkpoint outcome is preserved, and all **24 new tests** pass.
+Original-baseline and prior-checkpoint identity comparisons find no new failures,
+missing tests or new skips. The final analyzer run (including the last added
+retirement test) retains **863 diagnostics** and no new identities. Receipts:
+`full-copy-link.jsonl`, `full-copy-link-comparison.txt`,
+`copy-link-previous-checkpoint.txt`, `analyze-copy-link-final.txt` and
+`copy-link-final-analyzer-comparison.txt` in the same evidence directory.
+The baseline helper's nonzero exit remains due to the original failures; its
+allowances are unchanged. Phase 4C remains open for the remaining presentation,
+focus and legacy action boundaries, with the original later phases still required.

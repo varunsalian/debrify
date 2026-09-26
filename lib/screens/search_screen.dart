@@ -1,3 +1,5 @@
+import '../features/sources/application/source_link_dependencies.dart';
+import '../features/sources/data/source_link_copier.dart';
 import '../features/sources/presentation/source_binding_bridge.dart';
 import '../features/sources/presentation/source_row_reveal.dart';
 import '../features/sources/application/source_selection_match.dart';

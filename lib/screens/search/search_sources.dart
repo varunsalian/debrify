@@ -774,46 +774,32 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
     );
   }
 
-  bool _hasDeferredEpisodeTarget(Torrent torrent) =>
-      torrent.seasonNumber != null &&
-      RegExp(
-        r'^S\d+E\d+$',
-        caseSensitive: false,
-      ).hasMatch(torrent.episodeIdentifier ?? '');
-
   bool _canCopySource(Torrent torrent) =>
-      torrent.copyLink != null ||
-      (IptvSourceSearch.isDeferredXtreamSeries(torrent) &&
-          _hasDeferredEpisodeTarget(torrent));
+      ref.read(sourceLinkCopierProvider).canCopy(torrent);
 
   Future<void> _copySourceLink(Torrent torrent) async {
-    if (IptvSourceSearch.isDeferredXtreamSeries(torrent)) {
-      if (!_hasDeferredEpisodeTarget(torrent)) {
-        _snack('Choose an episode before copying its IPTV link.');
-        return;
-      }
-      _snack('Finding this IPTV episode…');
-      final resolution = await IptvSourceSearch.resolveXtreamSeriesEpisode(
-        torrent,
-      );
-      if (!mounted) return;
-      if (resolution.source == null) {
-        _snack(
-          resolution.status == IptvEpisodeResolutionStatus.missing
-              ? '${torrent.episodeIdentifier ?? 'This episode'} is not available in this IPTV series.'
-              : 'Could not check this IPTV series. Try again.',
+    bool active() =>
+        mounted && _sourcesSession.owner == ProfileSessionMemory.captureOwner();
+    final result = await ref
+        .read(sourceLinkCopierProvider)
+        .copy(
+          torrent,
+          canContinue: active,
+          onResolving: () => _snack('Finding this IPTV episode…'),
         );
-        return;
-      }
-      torrent = resolution.source!;
-    }
-    final link = torrent.copyLink;
-    if (link == null) {
-      _snack('No link available for this source.');
-      return;
-    }
-    await Clipboard.setData(ClipboardData(text: link));
-    if (mounted) _snack('Link copied to clipboard');
+    if (!active()) return;
+    final message = switch (result) {
+      SourceLinkCopyResult.copied => 'Link copied to clipboard',
+      SourceLinkCopyResult.chooseEpisode =>
+        'Choose an episode before copying its IPTV link.',
+      SourceLinkCopyResult.missingEpisode =>
+        '${torrent.episodeIdentifier ?? 'This episode'} is not available in this IPTV series.',
+      SourceLinkCopyResult.unavailableEpisode =>
+        'Could not check this IPTV series. Try again.',
+      SourceLinkCopyResult.noLink => 'No link available for this source.',
+      SourceLinkCopyResult.retired => null,
+    };
+    if (message != null) _snack(message);
   }
 
   Future<void> _pin(Torrent t) async {

@@ -15,6 +15,7 @@ FEATURES = ("search", "home", "discover", "sources")
 # The original screen/parts are tracked temporary exceptions in the phase plan;
 # add a retained facade here once its migration is complete.
 EXTRACTED_ELSEWHERE: tuple[str, ...] = (
+    "lib/core/platform/system_clipboard.dart",
     "lib/ui/core/see_all_link.dart",
     "lib/ui/core/source_metadata_labels.dart",
     "lib/models/series_source.dart",
