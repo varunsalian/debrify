@@ -1,8 +1,5 @@
 import '../features/sources/presentation/sources_screen.dart';
 import '../ui/core/source_metadata_labels.dart';
-import '../features/sources/data/source_search_api.dart';
-import '../features/sources/application/source_search_dependencies.dart';
-import '../features/sources/data/service_source_search_repository.dart';
 import '../features/search/application/keyword_snapshot_dependencies.dart';
 import '../features/search/data/keyword_snapshot_repository.dart';
 import '../features/search/models/keyword_snapshot.dart';
@@ -118,7 +115,6 @@ import '../services/tv_hero_artwork_quality_controller.dart';
 import '../services/tvos_top_shelf_service.dart';
 import '../services/torrent_bulk_add_service.dart';
 import '../services/torrent_playback_service.dart';
-import '../services/torrent_service.dart';
 import '../services/simkl/simkl_continue_watching_service.dart';
 import '../services/trakt/trakt_continue_watching_service.dart';
 import '../services/trakt/trakt_service.dart';

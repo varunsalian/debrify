@@ -9,7 +9,7 @@ import 'dart:io';
 
 import 'package:debrify/models/advanced_search_selection.dart';
 import 'package:debrify/models/torrent.dart';
-import 'package:debrify/screens/search_screen.dart';
+import 'features/sources/fixtures/sources_screen_factory.dart';
 import 'package:debrify/services/torrent_playback_service.dart';
 import 'package:debrify/services/torrent_service.dart';
 import 'package:debrify/services/series_source_service.dart';

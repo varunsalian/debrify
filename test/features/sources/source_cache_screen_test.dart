@@ -5,7 +5,7 @@ import 'package:debrify/features/sources/models/source_presentation_settings.dar
 import 'package:debrify/features/sources/application/source_cache_dependencies.dart';
 import 'package:debrify/models/advanced_search_selection.dart';
 import 'package:debrify/models/torrent.dart';
-import 'package:debrify/screens/search_screen.dart';
+import 'fixtures/sources_screen_factory.dart';
 import 'package:debrify/services/torrent_playback_service.dart';
 import 'package:debrify/theme/app_theme.dart';
 import 'package:debrify/theme/app_theme_scope.dart';

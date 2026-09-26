@@ -14,7 +14,7 @@ import 'package:debrify/features/sources/presentation/source_playback_bridge.dar
 import 'package:debrify/models/advanced_search_selection.dart';
 import 'package:debrify/models/series_source.dart';
 import 'package:debrify/models/torrent.dart';
-import 'package:debrify/screens/search_screen.dart';
+import 'sources_screen_factory.dart';
 import 'package:debrify/services/profiles/profile_session_memory.dart';
 import 'package:debrify/services/torrent_playback_service.dart';
 import 'package:debrify/theme/app_theme.dart';

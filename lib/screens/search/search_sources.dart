@@ -1,34 +1,5 @@
 part of '../search_screen.dart';
 
-/// Exercises the real source screen with controllable engine batches.
-@visibleForTesting
-Widget sourcesScreenForTesting({
-  required AdvancedSearchSelection selection,
-  required PlaybackMeta meta,
-  required Future<Map<String, dynamic>> Function(SearchBatchCallback onBatch)
-  search,
-  SourceAddonRetry? retry,
-  bool bindMode = false,
-  bool forcePlayOnTap = false,
-}) => ProviderScope(
-  overrides: [
-    sourceSearchRepositoryProvider.overrideWith(
-      (ref, session) => ServiceSourceSearchRepository(
-        owner: session.owner,
-        searchOverride: search,
-        retryAddon: retry,
-      ),
-    ),
-  ],
-  child: SourcesScreen(
-    selection: selection,
-    meta: meta,
-    isTelevision: true,
-    bindMode: bindMode,
-    forcePlayOnTap: forcePlayOnTap,
-  ),
-);
-
 /// The Discover glass stage's still backdrop: the focused (rail-shown) title's
 /// backdrop drawn full-frame behind both panes, veiled by [_DiscoverStageVeils]
 /// above it. Adoption is dwell-debounced (~380ms) so rapid DPAD arrowing never

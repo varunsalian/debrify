@@ -7,7 +7,7 @@ import 'package:debrify/features/sources/data/source_settings_repository.dart';
 import 'package:debrify/features/sources/models/source_presentation_settings.dart';
 import 'package:debrify/models/advanced_search_selection.dart';
 import 'package:debrify/models/torrent.dart';
-import 'package:debrify/screens/search_screen.dart';
+import 'fixtures/sources_screen_factory.dart';
 import 'package:debrify/services/iptv_source_search.dart';
 import 'package:debrify/services/profiles/profile_session_memory.dart';
 import 'package:debrify/services/torrent_playback_service.dart';

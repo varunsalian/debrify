@@ -4370,3 +4370,45 @@ Receipts: `full-standalone-view.jsonl`, `full-standalone-view-comparison.txt` an
 `full-standalone-view-previous-checkpoint.txt`. Final formatting/diff/architecture
 checks pass; no failure allowances changed. The standalone move is verified by
 host tests; native, performance, CI and remaining boundary gates stay open.
+
+
+### Phase 4C — move the Sources testing factory deliberately
+
+Moved sourcesScreenForTesting into the 36-line test fixture
+`test/features/sources/fixtures/sources_screen_factory.dart`; all ten importing
+caller/fixture files now reference it there. Its actual SourcesScreen,
+ProviderScope repository override, owner, defaults and retry/search forwarding
+are unchanged. The search argument uses the existing structurally identical
+LegacySourceSearchOverride typedef instead of importing the legacy service alias.
+All repository callers migrated together, so no production re-export is needed.
+
+The Search library no longer imports Sources search repository implementation,
+API aliases or dependency wiring for test-only construction. The old Sources
+part now contains only Discover visuals (**436 → 407 lines**); its remaining tail
+is byte-for-byte unchanged. Source comparisons also prove that the factory body
+is unchanged apart from the callback typedef and all ten caller files change
+imports only. No assertions, fixtures' behavior or test coverage were removed.
+
+Baseline and affected run: **512 Sources/cinema-focus tests pass**. The analyzer
+identified three unused Sources imports, then the remaining torrent-service alias
+import after that cleanup; after removing all four,
+**863 diagnostics** remain with no added identities. **163 migrated files** pass
+architecture checks. The helper is normally formatted; existing test files were
+not mass-formatted. The plan's test-factory relocation item is satisfied; remaining
+phase-4C ownership/boundary and native gates still require their own evidence.
+
+Receipts under `.git/refactor-evidence/phase4c/`: `testing-factory-before.txt`,
+`testing-factory-after.txt`, `testing-factory-callers.txt`,
+`testing-factory-review.txt`, `analyze-testing-factory.txt`,
+`analyze-testing-factory-final.txt` and
+`testing-factory-analyzer-comparison.txt`. Full-suite results follow below.
+
+Full suite: **8,149 successes / the same 51 failures / 20 skips**. Every previous
+checkpoint identity/outcome is preserved; original-baseline comparison finds no
+new failures, missing tests or new skips. Receipts:
+`full-testing-factory.jsonl`, `full-testing-factory-comparison.txt` and
+`full-testing-factory-previous-checkpoint.txt`. The subsequent unused-import-only
+cleanup passes the final analyzer comparison in `analyze-testing-factory-clean.txt`
+and `testing-factory-clean-analyzer-comparison.txt`; earlier diagnostic receipts
+remain recorded. Final diff/format/architecture checks pass, with no allowance
+changes. Remaining phase-4C and broader migration/native/performance gates stay open.
