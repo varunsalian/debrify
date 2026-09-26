@@ -1,3 +1,6 @@
+import '../features/home/models/home_catalog_session.dart';
+import '../features/home/application/home_catalog_controller.dart';
+import '../features/home/models/home_catalog_state.dart';
 import '../features/home/application/home_catalog_dependencies.dart';
 import '../features/home/data/home_catalog_repository.dart';
 import '../features/home/application/home_catalog_plan.dart';
@@ -852,17 +855,15 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   /// latched here and consumed by [_restoreHome].
   bool _pendingBoardReload = false;
 
-  // Board infinite scroll. Every (addon, catalog) pair is enumerated up front in
-  // [_boardRefs] (cheap — manifest metadata, no network), then fetched in batches
-  // as the user nears the bottom. [_boardCursor] is the next ref to load; it
-  // persists across a search detour so returning to the board keeps its place.
-  final List<(StremioAddon, StremioAddonCatalog)> _boardRefs = [];
-  int _boardCursor = 0;
-  // Updated only when a full board or additional page has been accepted.
-  // Refreshes mutate live references, so even overlapping refreshes must use
-  // this independent snapshot of the board that is actually displayed.
-  HomeBoardSnapshot<(StremioAddon, StremioAddonCatalog), StremioAddon>?
-      _committedBoard;
+  // Riverpod owns inventory, reservation and the last accepted snapshot for
+  // this view. Search detours retain the subscription and its cursor.
+  late final HomeCatalogController _homeCatalogController;
+  late final ProviderSubscription<HomeCatalogState> _homeCatalogSubscription;
+  List<HomeCatalogReference> get _boardRefs =>
+      _homeCatalogController.current.references;
+  int get _boardCursor => _homeCatalogController.current.cursor;
+  HomeCatalogSnapshot? get _committedBoard =>
+      _homeCatalogController.current.committed;
   bool _boardLoadingMore = false;
   late final ScrollController _boardScroll;
 
@@ -1848,6 +1849,19 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         : null;
     final restoredHome = homeSnapshot != null &&
         homeSnapshot.hideWatched == HideWatchedPrefs.enabled;
+    // Seed cached state in provider construction so the first return frame
+    // does not mutate a provider during initState or wait for another frame.
+    final homeSession = HomeCatalogSession(
+      owner: _profileSessionOwner,
+      viewIdentity: Object(),
+      initialBoard: restoredHome && keywordSnapshot == null
+          ? homeSnapshot.board : null,
+    );
+    _homeCatalogSubscription = ref.listenManual(
+      homeCatalogProvider(homeSession),
+      (previous, next) {},
+    );
+    _homeCatalogController = ref.read(homeCatalogProvider(homeSession).notifier);
     _homeLastScroll = restoredHome && !widget.isTelevision
         ? homeSnapshot.scrollOffset : 0;
     _boardScroll = ScrollController(initialScrollOffset: _homeLastScroll);
@@ -2346,8 +2360,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     _hideHomeCatalogAddonNames = snapshot.hideCatalogAddonNames;
     _hideHomeCollectionNames = snapshot.hideCollectionNames;
     _homeSections = snapshot.sections;
-    _committedBoard = snapshot.board;
-    _boardCursor = snapshot.board.restore(_boardRefs, _addonsById);
+    _addonsById
+      ..clear()
+      ..addAll(snapshot.board.addons);
     _loading = false;
     _spotlightEntryRevealed = true;
     if (snapshot.heroResolutionPending) {
@@ -2563,6 +2578,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     _heroTint.dispose();
     _searchController.dispose();
     ProfileRuntime.scope.removeListener(_onSearchProfileChanged);
+    _homeCatalogSubscription.close();
     _listsSubscription.close();
     _catalogSubscription.close();
     _keywordResultsSubscription.close();
@@ -2899,7 +2915,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   }
 
   void _commitBoardSnapshot() {
-    _committedBoard = HomeBoardSnapshot(_boardRefs, _boardCursor, _addonsById);
+    _homeCatalogController.commit(_addonsById);
   }
 
   Future<void> _load({bool preserveVisibleRows = false}) async {
@@ -2972,10 +2988,12 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
           final recovery = progress?.hasPublished == true
               ? _committedBoard : previousBoard;
           if (recovery != null) {
-            _boardCursor = recovery.restore(_boardRefs, _addonsById);
+            _homeCatalogController.restore(recovery);
+            _addonsById
+              ..clear()
+              ..addAll(recovery.addons);
           } else {
-            _boardRefs.clear();
-            _boardCursor = 0;
+            _homeCatalogController.install(const []);
           }
         },
         load: () async {
@@ -3003,8 +3021,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
           _homeCollections = collections;
           _homeCollectionsSig = collectionsSig;
           if (progress != null) {
-            _boardRefs.clear();
-            _boardCursor = 0;
+            _homeCatalogController.install(const []);
             _addonsById.clear();
             _commitBoardSnapshot();
             progress.collections(_buildCollectionSections());
@@ -3056,10 +3073,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
             ),
             rowOrder: _homeRowOrderActive ? _homeRowOrder : null,
           );
-          _boardRefs
-            ..clear()
-            ..addAll(plan.references);
-          _boardCursor = 0;
+          _homeCatalogController.install(plan.references);
           _addonsById
             ..clear()
             ..addAll(plan.addonsById);
@@ -3227,9 +3241,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     final scope = ProfileRuntime.scope.value;
     bool current() =>
         mounted && gen == _boardLoadGen && scope == ProfileRuntime.scope.value;
-    final end = (_boardCursor + n).clamp(0, _boardRefs.length);
-    final slice = _boardRefs.sublist(_boardCursor, end);
-    _boardCursor = end;
+    final slice = _homeCatalogController.reserve(n);
     return _homeCatalogRepository.fetchBatch(
       slice,
       previousRows: previousRows,

@@ -430,6 +430,45 @@ Evidence: `.git/refactor-evidence/phase5/catalog-batch-*`,
 `analyze-catalog-batch-*` and `full-catalog-batch*`.
 The remaining Home, device/performance and full migration gates remain open.
 
+Catalog inventory/cursor ownership now moves into the 68-line
+`application/home_catalog_controller.dart`, backed by the 33-line immutable
+`models/home_catalog_state.dart`. Its 25-line session key identifies the originating
+profile epoch and one view, with optional immutable bootstrap data. The auto-disposed
+Riverpod controller owns references, synchronous reservations and the accepted
+`HomeBoardSnapshot`; it does not fetch, persist, navigate or retry. The screen's
+manual subscription retains state while mounted, including covered routes, without
+adding broad rebuilds. Its compatibility getters read the single controller state;
+there is no duplicate mutable inventory or cursor. The shared Discover metadata map
+stays in the screen and is restored from the same accepted snapshot as before.
+
+Production initialization, refresh, progressive acceptance, vertical reservations,
+timeout recovery and cached returns all use this owner. Generation/profile acceptance,
+loading flags, row publication, route/focus decisions and the batch workflow remain
+in the screen for the next phase-5 slices. After provider disposal, pending legacy
+loops see an exhausted inventory and cannot read or mutate disposed Riverpod state.
+The screen is temporarily 20,122 lines: initialization and compatibility adapters
+remain until workflow extraction; this checkpoint establishes ownership rather than
+claiming the screen has met its final size target.
+
+Six controller tests cover disjoint bounded reservations, overlapping-refresh
+recovery, progressive commit points, immutable containers, separate views/profile
+epochs, disposal and construction-time return snapshots. The real SearchScreen
+provider-override test now observes the reserved state before a pending request and
+verifies no publication after disposal. Review caught five previously passing cached-
+return tests regressing: restoring state during initState tried to modify a provider
+while Flutter was building, and the legacy load aggregator swallowed that error.
+A diagnostic run confirmed the cause. Return state now seeds provider construction,
+without delaying the first frame or replaying requests. All 24 existing progressive
+pagination/return tests plus six new controller tests pass after that correction.
+A test fixture's initial record-to-session constructor mismatch was also corrected;
+raw failing runs are retained. Analyzer identities remain unchanged at 863;
+size/import checks pass for 189 migrated files. Targeted Home comparison: 260
+passes versus 254 before, identical 12 failure identities and one skip. Full suite:
+8,345 successes, unchanged 51 failures/20 skips, all previous outcomes preserved
+and six new successes. Evidence also includes `full-catalog-state*`.
+Evidence: `.git/refactor-evidence/phase5/catalog-state-*` and
+`analyze-catalog-state-*`. No full-phase or device/performance completion is claimed.
+
 ### 6. Discover and remaining layouts
 
 - Separate Discover selection/hydration from its grid/stage presentation. Preserve

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:debrify/features/home/application/home_catalog_dependencies.dart';
 import 'package:debrify/features/home/data/home_catalog_repository.dart';
 import 'package:debrify/models/stremio_addon.dart';
+import 'package:debrify/features/home/models/home_catalog_state.dart';
 import 'package:debrify/screens/search_screen.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/stremio_service.dart';
@@ -14,6 +15,19 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+final class CatalogObserver extends ProviderObserver {
+  final updates = <HomeCatalogState>[];
+
+  @override
+  void didUpdateProvider(
+    ProviderObserverContext context,
+    Object? previousValue,
+    Object? newValue,
+  ) {
+    if (newValue is HomeCatalogState) updates.add(newValue);
+  }
+}
 
 void main() {
   testWidgets('Home uses injected catalog access and retires pending rows', (
@@ -65,11 +79,13 @@ void main() {
         return response.future;
       },
     );
+    final observer = CatalogObserver();
     final client = MockClient((_) async => http.Response('[]', 200));
     await tester.runAsync(
       () => http.runWithClient(() async {
         await tester.pumpWidget(
           ProviderScope(
+            observers: [observer],
             overrides: [
               homeCatalogRepositoryProvider.overrideWithValue(repository),
             ],
@@ -87,6 +103,10 @@ void main() {
     expect(started.isCompleted, isTrue);
     expect(reads, 1);
     expect(requests, [(addon, catalog, 0)]);
+    expect(observer.updates.last.references, [(addon, catalog)]);
+    expect(observer.updates.last.cursor, 1);
+    expect(observer.updates.last.committed, isNull);
+    final updatesBeforeDisposal = observer.updates.length;
     await tester.pumpWidget(const SizedBox());
     await tester.runAsync(() async {
       response.complete([
@@ -99,6 +119,7 @@ void main() {
     await tester.pump(const Duration(seconds: 2));
     expect(reads, 1);
     expect(requests, [(addon, catalog, 0)]);
+    expect(observer.updates, hasLength(updatesBeforeDisposal));
     expect(tester.takeException(), isNull);
   });
 }
