@@ -2,7 +2,7 @@ import '../../../models/advanced_search_selection.dart';
 import '../../../models/torrent.dart';
 import '../../../models/series_source.dart';
 import '../../../services/source_priority.dart';
-import '../../../services/stremio_service.dart';
+import '../../../services/pinned_direct_stream_match.dart';
 import 'source_seasons.dart';
 
 /// Prepare a batch before it is displayed or parked as pending results.
@@ -62,7 +62,7 @@ import 'source_seasons.dart';
               b.stremioStreamIndex ?? 0,
             ),
           );
-    if (StremioService.selectPinnedDirectStream(
+    if (matchPinnedDirectStream(
           candidates,
           streamKey: pin.streamKey ?? '',
           streamIndex: pin.streamIndex ?? 0,

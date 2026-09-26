@@ -1,3 +1,4 @@
+import 'pinned_direct_stream_match.dart';
 import '../models/addon_search_status.dart';
 import '../models/media_identity.dart';
 import 'native_series_metadata_service.dart';
@@ -1577,30 +1578,12 @@ class StremioService {
     required String streamKey,
     required int streamIndex,
     String? bingeGroup,
-  }) {
-    if (bingeGroup != null && bingeGroup.isNotEmpty) {
-      final matches = direct
-          .where((t) => t.stremioBingeGroup == bingeGroup)
-          .toList();
-      // An explicit group disappearing is a miss, not permission to change groups.
-      if (matches.isEmpty) return null;
-      return matches.firstWhere(
-        (t) => t.stremioStreamKey == streamKey,
-        orElse: () => matches.first,
-      );
-    }
-    final profileMatches = direct
-        .where((torrent) => torrent.stremioStreamKey == streamKey)
-        .toList(growable: false);
-    if (profileMatches.length == 1) return profileMatches.single;
-    if (profileMatches.isNotEmpty) {
-      for (final torrent in profileMatches) {
-        if (torrent.stremioStreamIndex == streamIndex) return torrent;
-      }
-      return profileMatches.first;
-    }
-    return null;
-  }
+  }) => matchPinnedDirectStream(
+    direct,
+    streamKey: streamKey,
+    streamIndex: streamIndex,
+    bingeGroup: bingeGroup,
+  );
 
   /// Smart fallback for series search without specific season/episode
   ///

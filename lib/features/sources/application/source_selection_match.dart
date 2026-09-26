@@ -1,7 +1,6 @@
 import '../../../models/series_source.dart';
 import '../../../models/torrent.dart';
-import '../../../services/iptv_source_search.dart';
-import '../../../services/stremio_service.dart';
+import '../../../services/pinned_direct_stream_match.dart';
 
 class SourceSelectionMatch {
   SourceSelectionMatch(this.source, [Map<String, Object?>? diagnostics])
@@ -18,6 +17,7 @@ SourceSelectionMatch matchSelectedSource({
   required List<SeriesSource> saved,
   required List<Torrent> torrents,
   required String? Function(Torrent) mediaServerKeyFor,
+  required bool Function(Torrent) isIptvSource,
 }) {
   Torrent? selected;
   if (saved.isNotEmpty && saved.first.isMediaServer) {
@@ -32,7 +32,7 @@ SourceSelectionMatch matchSelectedSource({
   if (saved.isNotEmpty && saved.first.isIptvDirect) {
     final pin = saved.first;
     for (final candidate in torrents) {
-      if (IptvSourceSearch.owns(candidate) &&
+      if (isIptvSource(candidate) &&
           candidate.iptvPlaylistId == pin.iptvPlaylistId &&
           candidate.iptvCatalogType == pin.iptvCatalogType &&
           candidate.iptvEntryKey == pin.iptvEntryKey) {
@@ -58,7 +58,7 @@ SourceSelectionMatch matchSelectedSource({
           (a, b) =>
               (a.stremioStreamIndex ?? 0).compareTo(b.stremioStreamIndex ?? 0),
         );
-  selected = StremioService.selectPinnedDirectStream(
+  selected = matchPinnedDirectStream(
     candidates,
     streamKey: pin.streamKey ?? '',
     streamIndex: pin.streamIndex ?? 0,

@@ -3912,3 +3912,50 @@ Receipts: `full-iptv-result-model.jsonl`,
 `full-iptv-result-model-previous-checkpoint.txt`. The helper remains nonzero for
 existing failures; no allowances changed. Final formatting/diff/architecture
 checks pass. Phase 4C and later migration/native/performance/CI gates remain open.
+
+### Phase 4C — shared pinned-stream matching policy
+
+Extracted the pinned direct-stream selector into
+`lib/services/pinned_direct_stream_match.dart` (**34 lines**, imports only Torrent),
+registered in the measured architecture/size set. Sources selection and cached
+fallback preparation call it directly. The original static StremioService API
+remains a compatibility delegate, so browser selection and playback resolution
+continue to share one implementation. The service shrinks **3,720 → 3,703 lines**.
+
+Review matches the original selector signature/body after unindenting, removing
+`static` and renaming the entry point. An explicit missing binge group is still
+a miss; an existing group prefers the matching profile then its first candidate.
+Without a group, profile identity is required and response index only breaks
+profile ties. Original Torrent identity, caller ordering and miss behavior remain.
+All service content outside the selector is unchanged apart from the import.
+
+Selected-source matching also receives `isIptvSource` from the existing injected
+binding matcher, alongside its media-server identity lookup. The view captures
+that same adapter and supplies both functions. This removes both transport-service
+imports from the selected-source policy without a new factory, state owner or
+adapter. Candidate filtering/sorting, diagnostics and selection precedence remain
+unchanged. The new test supplies an ownership rule that differs from the legacy
+prefix, verifying the dependency is used and iteration stops at its first match.
+Sources part **1,528 → 1,530 lines** due to explicit dependency wiring.
+
+Baseline: **519 affected Sources/direct-stream tests pass**. After: **520 pass**.
+Existing direct reuse, binding, source selection and fallback preparation tests
+exercise both the compatibility API and direct policy callers. Analyzer retains
+**863 diagnostics**, no added identities; **147 migrated files** pass architecture
+checks. Changed code and the legacy view method are normally formatted without
+whole-file formatting. Remaining source-priority/filter transitive dependencies
+and later/native/performance/CI completion gates remain open.
+
+Receipts under `.git/refactor-evidence/phase4c/`:
+`pinned-stream-policy-before.txt`, `pinned-stream-policy-after.txt`,
+`analyze-pinned-stream-policy.txt`, `pinned-stream-policy-analyzer-comparison.txt`,
+`pinned-stream-policy-format.dart` and `pinned-stream-policy-review.txt`.
+
+Full-suite review: **8,142 successes / the same 51 failures / 20 skips**.
+Every prior checkpoint outcome is preserved, and the new injected-classifier case
+passes. Original-baseline comparison finds no new failures, missing tests or new
+skips. Receipts: `full-pinned-stream-policy.jsonl`,
+`full-pinned-stream-policy-comparison.txt` and
+`full-pinned-stream-policy-previous-checkpoint.txt`. The baseline helper remains
+nonzero for existing failures; no allowance changes. Final format/diff/architecture
+checks pass. Phase 4C and the remaining migration gates stay open.

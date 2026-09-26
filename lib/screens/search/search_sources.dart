@@ -140,10 +140,12 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
   }
 
   void _updateSelectedDirect() {
+    final matcher = ref.read(sourceBindingMatcherProvider);
     final match = matchSelectedSource(
       saved: _bound,
       torrents: _torrents,
-      mediaServerKeyFor: ref.read(sourceBindingMatcherProvider).mediaServerKeyFor,
+      mediaServerKeyFor: matcher.mediaServerKeyFor,
+      isIptvSource: matcher.isIptv,
     );
     _selectedDirect = match.source;
     if (match.diagnostics case final diagnostics?) {

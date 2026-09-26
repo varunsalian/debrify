@@ -53,6 +53,7 @@ SourceSelectionMatch match(List<SeriesSource> saved, List<Torrent> rows) =>
     matchSelectedSource(
       saved: saved,
       torrents: rows,
+      isIptvSource: (torrent) => torrent.source.startsWith('iptv:'),
       mediaServerKeyFor: (_) =>
           throw StateError('media lookup outside media branch'),
     );
@@ -79,6 +80,8 @@ void main() {
       final result = matchSelectedSource(
         saved: [saved],
         torrents: [miss, selected, ignored],
+        isIptvSource: (_) =>
+            throw StateError('IPTV lookup outside IPTV branch'),
         mediaServerKeyFor: (torrent) {
           visited.add(torrent);
           return identical(torrent, selected) ? saved.bindingKey : null;
@@ -138,4 +141,25 @@ void main() {
       'stream_identity_not_found',
     );
   });
+  test(
+    'IPTV selection uses injected ownership and stops at its first identity match',
+    () {
+      final misleading = row(source: 'iptv:ignored');
+      final selected = row(source: 'custom');
+      final ignored = row(source: 'custom');
+      final visited = <Torrent>[];
+      final result = matchSelectedSource(
+        saved: [pin(service: SeriesSource.iptvDirectService)],
+        torrents: [misleading, selected, ignored],
+        mediaServerKeyFor: (_) => throw StateError('Unexpected media lookup'),
+        isIptvSource: (candidate) {
+          visited.add(candidate);
+          return identical(candidate, selected);
+        },
+      );
+      expect(result.source, same(selected));
+      expect(visited, [same(misleading), same(selected)]);
+      expect(result.diagnostics!['reason'], 'matched');
+    },
+  );
 }
