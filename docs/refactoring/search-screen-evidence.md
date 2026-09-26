@@ -1626,3 +1626,44 @@ checkpoint outcomes are preserved; all nine pending-pill tests pass. No initial
 baseline identity is newly failing, missing or skipped. Receipts:
 `.git/refactor-evidence/phase4c/full-pending-pill.jsonl`,
 `full-pending-pill-comparison.txt`, `pending-pill-previous-checkpoint.txt`.
+
+
+### Phase 4C — Title and keyword Sources headers
+
+Extracted `SourceTitleHeader` (92 lines) and `SourceKeywordField` (44 lines),
+replacing the two original methods with actual widgets in `_sourcesBody`. Title
+visibility still requires redesign, non-keyword and non-cinema mode after loading
+and errors resolve. Keyword input remains above the loading/results area. The
+view supplies display strings/poster, its existing text controller, color scheme
+and submission callback; query state/lifecycle is not duplicated in the widgets.
+Sources is **2,481 lines**; parent **20,160**.
+
+Review mechanically compared the complete title render subtree against the prior
+method after parameter substitution: it is unchanged. The 128-pixel strip,
+640-pixel image decode cap, low filter quality, gapless playback, empty/error
+artwork behavior, gradient constants and title/subtitle overflow/styles remain.
+Keyword input still uses the existing TV-aware field, exact text dispatch,
+Search IME action and suffix button; two new executable cases verify both submit
+paths retain whitespace/case and leave the borrowed controller usable on unmount.
+
+The keyword field's unchanged bare radius moves with its guard: one permitted
+site transfers from the Sources manifest entry (3 → 2) to an extracted-residue
+entry (1). It has no shape-token sites to count as already swept, so only the
+bare-radius ratchet includes that entry. The existing swept-file assertions and
+490-call floor remain unchanged. No new radius allowance or app text was added.
+
+The confirming full-suite checkpoint immediately before this extraction passed
+7,809 tests with the same 51 baseline failures/20 skips. After extraction, the
+Sources/cinema/shape/TV-input affected group has **239 passes** and only the
+original-baseline `no swept file grows a new bare radius` failure. Both other
+shape checks pass; all Sources and TV-input cases pass. Final analyzer comparison
+remains **864 diagnostics with no additions**; architecture checks pass for
+**99 migrated files**. New files and the touched caller are normally formatted;
+diff checks pass. Receipts under `.git/refactor-evidence/phase4c/`:
+`headers-focused.txt`, `headers-widget.txt`, `headers-focused-final.txt`,
+`analyze-headers.txt`, `headers-analyzer-comparison.txt`,
+`analyze-headers-final.txt`, `headers-final-analyzer-comparison.txt`.
+
+The full suite was not rerun after this leaf extraction. Native/visual checks,
+remaining Sources UI/focus and binding boundaries, later phases and final
+performance/CI gates remain incomplete.

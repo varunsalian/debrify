@@ -1179,7 +1179,12 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
 
   Widget _sourcesBody(ColorScheme scheme, {bool cinema = false}) => Column(
     children: [
-      if (_keywordMode) _keywordSearchField(scheme),
+      if (_keywordMode)
+        SourceKeywordField(
+          scheme: scheme,
+          controller: _kwCtrl,
+          onSubmitted: _submitKeyword,
+        ),
       Expanded(
         child: _loading
             ? const Center(child: CircularProgressIndicator())
@@ -1188,7 +1193,11 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
             : Column(
                 children: [
                   if (_redesign && !_keywordMode && !cinema)
-                    _redesignHero(scheme),
+                    SourceTitleHeader(
+                      title: widget.selection.title,
+                      subtitle: widget.selection.formattedLabel,
+                      poster: widget.meta.posterUrl,
+                    ),
                   // Keep the toolbar when a season scope is available even
                   // with zero results — otherwise a no-result season would
                   // strand the user with no way to switch back.
@@ -2051,112 +2060,6 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
       u++;
     }
     return '${size.toStringAsFixed(size >= 100 || u == 0 ? 0 : 1)} ${units[u]}';
-  }
-
-  /// Backdrop hero for the redesigned Sources screen — the title over a dimmed
-  /// poster, matching the Stremio look. Non-keyword only (keyword search has no
-  /// single title to feature).
-  Widget _redesignHero(ColorScheme scheme) {
-    final app = AppThemeScope.of(context);
-    final bg = app.home.bg;
-    final poster = widget.meta.posterUrl;
-    return SizedBox(
-      height: 128,
-      width: double.infinity,
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          if (poster != null && poster.isNotEmpty)
-            Image.network(
-              poster,
-              fit: BoxFit.cover,
-              // Decode at a capped width — the hero is only a ~128px strip, so a
-              // full-res poster is wasted memory (and OOMs 2GB TV boxes).
-              cacheWidth: 640,
-              filterQuality: FilterQuality.low,
-              gaplessPlayback: true,
-              errorBuilder: (_, _, _) => const SizedBox.shrink(),
-            ),
-          DecoratedBox(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                // Byte-exact fades of the page ink: 0x59 and 0x8C of 0xFF.
-                colors: [
-                  app.fade(bg, 0x59 / 0xFF),
-                  app.fade(bg, 0x8C / 0xFF),
-                  bg,
-                ],
-                stops: const [0.0, 0.55, 1.0],
-              ),
-            ),
-          ),
-          Align(
-            alignment: Alignment.bottomLeft,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    widget.selection.title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: app.core.tx,
-                      fontSize: 20,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: -0.4,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    widget.selection.formattedLabel,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: app.fade(app.core.tx, 0.62),
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// Editable free-text search box shown at the top of the keyword-bind screen.
-  Widget _keywordSearchField(ColorScheme scheme) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 10, 12, 4),
-      child: TvTextField(
-        controller: _kwCtrl,
-        textInputAction: TextInputAction.search,
-        onSubmitted: _submitKeyword,
-        style: TextStyle(color: scheme.onSurface),
-        decoration: InputDecoration(
-          hintText: 'Search torrents by keyword',
-          prefixIcon: const Icon(Icons.search_rounded),
-          suffixIcon: IconButton(
-            tooltip: 'Search',
-            icon: const Icon(Icons.arrow_forward_rounded),
-            onPressed: () => _submitKeyword(_kwCtrl.text),
-          ),
-          filled: true,
-          fillColor: scheme.surfaceContainerHighest,
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide.none,
-          ),
-        ),
-      ),
-    );
   }
 
   Widget _centered(ColorScheme scheme, String text) => Center(

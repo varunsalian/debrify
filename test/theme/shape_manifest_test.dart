@@ -59,7 +59,7 @@ const Map<String, int> kShapeResidue = {
   'lib/screens/premiumize/premiumize_files_screen.dart': 6,
   'lib/screens/search/search_card_widgets.dart': 0,
   'lib/screens/search/search_hero_widgets.dart': 2,
-  'lib/screens/search/search_sources.dart': 3,
+  'lib/screens/search/search_sources.dart': 2,
   'lib/screens/search/search_stage_widgets.dart': 0,
   'lib/screens/search_screen.dart': 1,
   'lib/screens/see_all/catalog_see_all_screen.dart': 0,
@@ -119,6 +119,13 @@ const Map<String, int> kShapeResidue = {
   'lib/widgets/youtube/youtube_video_card.dart': 0,
 };
 
+// Extracted legacy pieces with bare radii but no shape-token sites of their own.
+// Keep their residue guarded without claiming they are already swept. Moving
+// the keyword field transfers one permitted site from search_sources.dart.
+const Map<String, int> kExtractedShapeResidue = {
+  'lib/features/sources/presentation/source_keyword_field.dart': 1,
+};
+
 /// Both spellings of a literal circular radius. `BorderRadius.all(
 /// Radius.circular(8))` is the same site wearing a different constructor, and
 /// counting only the short form would let a conversion be undone by rewriting
@@ -131,7 +138,7 @@ final _radius = RegExp(
 void main() {
   test('no swept file grows a new bare radius', () {
     final grew = <String>[];
-    for (final entry in kShapeResidue.entries) {
+    for (final entry in {...kShapeResidue, ...kExtractedShapeResidue}.entries) {
       final file = File(entry.key);
       if (!file.existsSync()) {
         fail('\${entry.key} is in the shape manifest but no longer exists — '
