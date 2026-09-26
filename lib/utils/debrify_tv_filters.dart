@@ -1,6 +1,6 @@
 import '../models/torrent_filter_state.dart';
 import '../services/storage_service.dart';
-import '../widgets/torrent_result_row.dart' show qualityTierForName;
+import 'torrent_quality.dart' show qualityTierForName;
 
 /// Debrify TV's playback filters, split by the level each one can actually be
 /// evaluated at:

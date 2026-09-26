@@ -8,8 +8,9 @@ import '../theme/app_theme_scope.dart';
 
 import '../models/torrent.dart';
 import '../models/torrent_filter_state.dart';
-import '../utils/source_quality.dart';
 import '../utils/tv_keys.dart';
+
+export '../utils/torrent_quality.dart';
 
 /// Compact torrent result row with quality color accent
 ///
@@ -606,34 +607,5 @@ class _TorrentResultRowState extends State<TorrentResultRow> {
         ),
       ],
     );
-  }
-}
-
-/// Extension to detect quality tier from torrent name
-extension TorrentQualityExtension on Torrent {
-  QualityTier get qualityTier => qualityTierForName(name);
-}
-
-/// Name-based quality classification, shared by the row badge (via
-/// [TorrentQualityExtension]) and quick-play's FilterLadder (which ranks by
-/// name). One implementation so the badge, the browse filter, and the play
-/// ladder can never disagree.
-QualityTier qualityTierForName(String name) {
-  switch (sourceQualityForName(name)) {
-    case SourceQuality.ultraHd:
-      return QualityTier.ultraHd;
-    case SourceQuality.fullHd:
-      return QualityTier.fullHd;
-    case SourceQuality.hd:
-      return QualityTier.hd;
-    case SourceQuality.sd:
-      return QualityTier.sd;
-    case null:
-      final lower = name.toLowerCase();
-      if (lower.contains('4096')) return QualityTier.ultraHd;
-      if (lower.contains('hd ') || lower.contains('hdrip')) {
-        return QualityTier.hd;
-      }
-      return QualityTier.sd;
   }
 }

@@ -3959,3 +3959,50 @@ skips. Receipts: `full-pinned-stream-policy.jsonl`,
 `full-pinned-stream-policy-previous-checkpoint.txt`. The baseline helper remains
 nonzero for existing failures; no allowance changes. Final format/diff/architecture
 checks pass. Phase 4C and the remaining migration gates stay open.
+
+### Phase 4C — filtering policies no longer depend on UI paths
+
+Moved `TorrentQualityExtension` and `qualityTierForName` from the result-row
+widget into `lib/utils/torrent_quality.dart` (**32 lines**). The widget re-exports
+those declarations for compatibility, while TorrentFilterMatcher, FilterLadder
+and Debrify TV filters now import the utility directly. The widget implementation
+is unchanged and its file shrinks **639 → 611 lines**. The quality policy is
+byte-for-byte identical to the original declarations.
+
+Moved the player-path LanguageMapper to `lib/utils/language_mapping.dart`, with
+a one-line export at the old path. Normal formatting expands the original 334
+lines to **464 lines**; review confirms the result equals the normally formatted
+original. This is one cohesive language alias/normalization/mapping responsibility,
+within the accepted 301–500 range. TorrentFilterMatcher now imports the shared
+path directly. No parsing rules, tables, fallback behavior or APIs changed.
+
+The extracted policies, compatibility facade and adopted matcher/source-quality/
+format-tag helpers join the measured source set. Shared registered utilities now
+receive data-layer import checks, so direct UI and state-framework imports fail
+the architecture guard. A recursive review of the actual matcher dependency graph
+finds only seven project model/utility files plus dart:collection and Flutter
+foundation; no UI or service dependency remains in that graph. This closes the
+filter-classification exception, not SourcePriority's separate service coupling.
+
+Baseline and after: **559 affected Sources/quality/language/filter-ladder tests
+pass**. Existing quality tests continue exercising the widget export while real
+filter callers use the shared utility; language tests similarly cover the old
+path. No new tests were added for unchanged policy relocations. Analyzer retains
+**863 diagnostics**, no added identities; **153 migrated files** pass architecture
+checks. Row/player rendering was not modified. Native/visual completion gates
+remain pending alongside the rest of phase 4C and later phases.
+
+Receipts under `.git/refactor-evidence/phase4c/`:
+`filter-policy-boundaries-before.txt`, `filter-policy-boundaries-after.txt`,
+`analyze-filter-policy-boundaries.txt`,
+`filter-policy-boundaries-analyzer-comparison.txt`,
+`filter-policy-language-original.dart` and `filter-policy-boundaries-review.txt`.
+
+Full-suite review: **8,142 successes / the same 51 failures / 20 skips**, with
+exactly the same test identities/outcomes as the preceding checkpoint.
+Original-baseline comparison finds no new failures, missing tests or new skips.
+Receipts: `full-filter-policy-boundaries.jsonl`,
+`full-filter-policy-boundaries-comparison.txt` and
+`full-filter-policy-boundaries-previous-checkpoint.txt`. The helper remains
+nonzero for existing failures; no allowance changes. Final format/diff/architecture
+checks pass. Phase 4C and remaining migration/native/performance/CI gates stay open.

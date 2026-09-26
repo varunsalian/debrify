@@ -1,7 +1,7 @@
 import '../models/torrent.dart';
 import '../models/torrent_filter_state.dart';
-import '../screens/video_player/utils/language_mapping.dart';
-import '../widgets/torrent_result_row.dart' show TorrentQualityExtension;
+import 'language_mapping.dart';
+import 'torrent_quality.dart' show TorrentQualityExtension;
 import 'format_tag_detector.dart';
 
 /// Pure, name-based torrent filter matching — a faithful copy of Home's

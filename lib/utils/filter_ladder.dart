@@ -1,7 +1,7 @@
 import '../models/torrent.dart';
 import '../models/torrent_filter_state.dart';
 import '../services/storage_service.dart';
-import '../widgets/torrent_result_row.dart' show qualityTierForName;
+import 'torrent_quality.dart' show qualityTierForName;
 import 'torrent_filter_matcher.dart';
 
 /// Quick-play's tiered filter preference (QUICK_PLAY_FILTERS_PLAN.md §3).
