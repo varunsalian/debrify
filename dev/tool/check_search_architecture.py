@@ -20,6 +20,14 @@ EXTRACTED_ELSEWHERE: tuple[str, ...] = (
     "lib/models/series_source.dart",
     "lib/models/cinema_source_provider.dart",
 )
+# Context-dependent legacy pickers are allowed only through this named bridge.
+# Phase 4C still owns the async preparation review; no persistence lives here.
+PRESENTATION_BRIDGE_IMPORTS = {
+    "lib/features/sources/presentation/source_binding_bridge.dart": {
+        "lib/services/iptv_source_search.dart",
+        "lib/services/torrent_playback_service.dart",
+    },
+}
 GENERATED_SUFFIXES = (".g.dart", ".freezed.dart")
 DIRECTIVES = re.compile(r"^\s*(?:import|export)\s+([^;]+);", re.MULTILINE)
 URIS = re.compile(r"['\"]([^'\"]+)['\"]")
@@ -62,7 +70,8 @@ def violations(path: Path) -> list[str]:
                 problems.append(f"{layer} depends on state/DI framework: {uri}")
             if layer == "presentation" and target.startswith((
                     "lib/services/", "package:http/", "package:shared_preferences/",
-                    "package:sqflite")):
+                    "package:sqflite")) and target not in (
+                        PRESENTATION_BRIDGE_IMPORTS.get(relative, set())):
                 problems.append(f"view directly imports data/platform API: {uri}")
             if target.startswith("package:provider/"):
                 problems.append(f"new feature DI must use Riverpod: {uri}")

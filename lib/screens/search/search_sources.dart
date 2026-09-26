@@ -816,33 +816,17 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
       return;
     }
     await _bindSource(
-      (saveBinding) => IptvSourceSearch.owns(t)
-          ? TorrentPlaybackService.bindIptvSource(
-              context,
-              t,
-              imdbId: _imdbId,
-              isMovie: _isMovie,
-              saveBinding: saveBinding,
-            )
-          : t.isDirectStream
-          ? TorrentPlaybackService.bindDirectSource(
-              context,
-              t,
-              imdbId: _imdbId,
-              isMovie: _isMovie,
-              saveBinding: saveBinding,
-              addonCatalogId: widget.selection.stremioCatalogId,
-              addonCatalogKey: widget.selection.stremioAddonKey,
-            )
-          : TorrentPlaybackService.bindSource(
-              context,
-              t,
-              imdbId: _imdbId,
-              isMovie: _isMovie,
-              saveBinding: saveBinding,
-              addonCatalogId: widget.selection.stremioCatalogId,
-              addonCatalogKey: widget.selection.stremioAddonKey,
-            ),
+      (saveBinding) => ref
+          .read(sourceBindingBridgeProvider)
+          .pin(
+            context,
+            t,
+            imdbId: _imdbId,
+            isMovie: _isMovie,
+            saveBinding: saveBinding,
+            addonCatalogId: widget.selection.stremioCatalogId,
+            addonCatalogKey: widget.selection.stremioAddonKey,
+          ),
     );
   }
 
@@ -854,14 +838,16 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
   }
 
   Future<void> _pinLocal() => _bindSource(
-    (saveBinding) => TorrentPlaybackService.bindLocalSource(
-      context,
-      imdbId: _imdbId,
-      isMovie: _isMovie,
-      saveBinding: saveBinding,
-      title: widget.selection.title,
-      year: widget.selection.year,
-    ),
+    (saveBinding) => ref
+        .read(sourceBindingBridgeProvider)
+        .pinLocal(
+          context,
+          imdbId: _imdbId,
+          isMovie: _isMovie,
+          saveBinding: saveBinding,
+          title: widget.selection.title,
+          year: widget.selection.year,
+        ),
   );
 
   Future<void> _bindSource(SourceBindingOperation operation) async {
@@ -944,7 +930,7 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
                     // Android/iOS (incl. Android TV) where local binding is unavailable, so
                     // it's never a dead-end D-pad stop.
                     if (_imdbId.isNotEmpty &&
-                        TorrentPlaybackService.localBindingAvailable)
+                        ref.read(sourceBindingBridgeProvider).localBindingAvailable)
                       IconButton(
                         tooltip: 'Pin an on-device file or folder',
                         icon: const Icon(Icons.folder_open_rounded),
@@ -981,7 +967,7 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
                     backLabel: _keywordMode ? 'Back' : 'Details',
                     headerAction:
                         _imdbId.isNotEmpty &&
-                            TorrentPlaybackService.localBindingAvailable
+                            ref.read(sourceBindingBridgeProvider).localBindingAvailable
                         ? IconButton(
                             tooltip: 'Pin an on-device file or folder',
                             icon: const Icon(Icons.folder_open_rounded),

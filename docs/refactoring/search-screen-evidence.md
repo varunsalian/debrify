@@ -2095,3 +2095,62 @@ Receipts under `.git/refactor-evidence/phase4c/`: `row-reveal-before.txt`,
 `row-reveal-analyzer-comparison.txt`. The last full-suite checkpoint remains the
 selected-source confirmation above; this bounded presentation slice reran the
 affected group. Phase 4C and the whole migration remain in progress.
+
+
+### Phase 4C — manual binding presentation bridge
+
+The Sources view now invokes its manual pin and local picker through
+`sourceBindingBridgeProvider`. Its stateless `SourceBindingBridge` (72 lines)
+retains IPTV-before-direct-before-torrent dispatch, all metadata arguments and
+the existing platform availability check. Every entry point requires the calling
+controller's guarded `SourceBindingWriter`; the bridge has no fallback writer,
+state, retained context or IO of its own. The existing controller still owns
+busy state and successful reload; the view retains external-link rejection and
+bind-mode navigation. Sources is 1,808 lines; parent 20,169. The legacy service's
+dialogs, authorization and provider preparation remain behind this explicit
+compatibility boundary. Their asynchronous profile ownership review is still
+required before phase 4C closes. Playback/download calls remain later work.
+
+The architecture guard permits exactly this bridge's two named service imports;
+an executable check using substituted import text confirms both imports are
+rejected in another presentation file and unrelated storage remains rejected in
+the bridge. This scoped allowance is documented in the plan. All **111 migrated
+files** pass size/import checks; new/changed Dart methods are formatted and diff
+checks pass. Analyzer retains **863 diagnostics**, with no new identities.
+
+Affected baseline: **302 passes / four failures**; final: **303 passes / the same
+four failures** in `manual_source_validation_contract_test.dart`: recovery probe
+selection, remaining-pin recovery, preferred-provider recovery, and exact-route
+startup recovery guards. These failures precede the change. The existing real
+Sources direct pin/unpin integration passes through the production bridge. The
+new local-picker override test proves no action occurs on build, the screen
+passes title/year/movie identity, and the bridge result saves through the real
+profile-owned repository exactly once. Controller/profile-race tests also remain
+passing. The test substitutes the picker; it does not claim native dialog parity.
+Receipts under `.git/refactor-evidence/phase4c/`: `binding-bridge-before.txt`,
+`binding-bridge-isolated.txt`, `binding-bridge-focused.txt`,
+`analyze-binding-bridge.txt`, `binding-bridge-analyzer-comparison.txt`.
+
+
+Async review identified a specific remaining preparation boundary: the legacy
+`_pickProvider` awaits configuration/dialog selection and then writes a remembered
+choice through `StorageService.setDefaultTorrentProvider`, which resolves profile
+preferences at that later call. Torrent pinning subsequently awaits magnet
+resolution before `_add` reads provider credentials. The guarded binding writer
+covers the final saved source, not those earlier preference/credential operations.
+These paths need originating-session tests and explicit capture/retirement guards
+before the manual binding review can close. Local picker scan/dialog completion
+also needs its view/session review. This slice leaves those legacy internals
+unchanged and does not claim that introducing a bridge resolves their ownership.
+
+
+Full integration comparison: **7,856 successes**, the same **51 baseline failures**
+(22 failure/29 error), and **20 skips**. No original-baseline test is newly failing,
+missing or skipped. Every selected-source confirmation checkpoint outcome is
+unchanged; all **five new identities** pass (four row-reveal tests and the local
+bridge test). Receipts: `.git/refactor-evidence/phase4c/full-binding-bridge.jsonl`,
+`full-binding-bridge-comparison.txt`, `binding-bridge-previous-checkpoint.txt`,
+and `binding-bridge-failure-comparison.txt`. The historical baseline helper still
+exits 1 because of the unchanged pre-existing failures. Native dialog/profile
+preparation, remaining Sources ownership, phases 5–8 and final performance/CI
+verification remain open.

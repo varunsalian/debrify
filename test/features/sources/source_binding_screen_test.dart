@@ -1,3 +1,5 @@
+import 'package:debrify/features/sources/presentation/source_binding_bridge.dart';
+import 'package:debrify/features/sources/application/source_binding_controller.dart';
 import 'package:debrify/features/sources/application/source_settings_dependencies.dart';
 import 'package:debrify/features/sources/application/saved_sources_dependencies.dart';
 import 'package:debrify/features/sources/data/saved_sources_repository.dart';
@@ -46,7 +48,93 @@ class SavingRepository implements SavedSourcesRepository {
   }
 }
 
+class LocalPickerBridge extends SourceBindingBridge {
+  ({String imdbId, bool isMovie, String title, String? year})? request;
+
+  @override
+  bool get localBindingAvailable => true;
+
+  @override
+  Future<bool> pinLocal(
+    BuildContext context, {
+    required String imdbId,
+    required bool isMovie,
+    required SourceBindingWriter saveBinding,
+    required String title,
+    String? year,
+  }) {
+    request = (imdbId: imdbId, isMovie: isMovie, title: title, year: year);
+    return saveBinding(
+      SeriesSource(
+        torrentHash: '',
+        torrentName: title,
+        debridService: SeriesSource.localService,
+        debridTorrentId: '',
+        boundAt: 123,
+        localPath: '/fixture/movie.mkv',
+      ),
+    );
+  }
+}
+
 void main() {
+  testWidgets(
+    'Sources local picker uses the injected bridge and guarded writer',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final bridge = LocalPickerBridge();
+      var saves = 0;
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            sourceBindingBridgeProvider.overrideWithValue(bridge),
+            savedSourcesRepositoryProvider.overrideWith(
+              (ref, session) => SavingRepository(
+                StoredSavedSourcesRepository(session),
+                () => saves++,
+              ),
+            ),
+            sourceSettingsRepositoryProvider.overrideWith(
+              (ref, key) => Settings(),
+            ),
+          ],
+          child: MaterialApp(
+            home: AppThemeScope(
+              theme: AppThemes.legacy,
+              child: sourcesScreenForTesting(
+                selection: const AdvancedSearchSelection(
+                  imdbId: 'tt-local-bridge',
+                  title: 'Local fixture',
+                  year: '2024',
+                  isSeries: false,
+                ),
+                meta: const PlaybackMeta(),
+                search: (_) async => {'torrents': <Torrent>[]},
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(bridge.request, isNull);
+      expect(saves, 0);
+      await tester.tap(find.byTooltip('Pin an on-device file or folder'));
+      await tester.pumpAndSettle();
+      expect(bridge.request, (
+        imdbId: 'tt-local-bridge',
+        isMovie: true,
+        title: 'Local fixture',
+        year: '2024',
+      ));
+      expect(saves, 1);
+      final bound = await SeriesSourceService.getSources('tt-local-bridge');
+      expect(bound, hasLength(1));
+      expect(bound.single.localPath, '/fixture/movie.mkv');
+      expect(bound.single.isLocal, isTrue);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
   testWidgets(
     'Sources direct pin reloads the row binding and unpin removes it',
     (tester) async {

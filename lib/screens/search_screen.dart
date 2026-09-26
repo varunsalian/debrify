@@ -1,3 +1,4 @@
+import '../features/sources/presentation/source_binding_bridge.dart';
 import '../features/sources/presentation/source_row_reveal.dart';
 import '../features/sources/application/source_selection_match.dart';
 import '../features/sources/presentation/source_status_widgets.dart';
