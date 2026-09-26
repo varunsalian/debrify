@@ -1702,3 +1702,54 @@ The most recent full-suite checkpoint remains `full-pending-pill.jsonl`
 filter-summary leaf extraction. No full-suite/native parity claim is made for
 these leaves. Remaining Sources toolbar/results/focus and manual binding
 boundaries, later phases and native/performance/CI checks remain open.
+
+
+### Phase 4C — Season, sort and filter toolbar controls
+
+Extracted `SourceToolbarControls` (217 lines) from the real Sources toolbar. It
+receives displayed season/sort/filter values, the borrowed filter FocusNode and
+narrow action/navigation callbacks. Season options remain a callback evaluated
+when the popup opens, rather than a potentially stale build-time snapshot. The
+view still checks accepted season changes before searching; sort and direction
+callbacks update the existing results controller then rebuild visible rows.
+Filter Down still checks pending-count first and otherwise focuses the current
+first row at event time. Provider projection/pills/retries remain in the view for
+a separate extraction. Sources is **2,242 lines**; parent **20,162**.
+
+Review preserves popup options/colors/initial values, season zero → null mapping,
+sort-direction visibility, spacing, chip rendering and theme tokens. The unused
+foreground parameter of the original chip helper was removed; the child still
+receives its original colors. The filter's outer Focus remains the sole focus
+target (`InkWell.canRequestFocus: false`), reacts only to KeyDownEvent, and keeps
+the existing view-owned focus listener and disposal. The moved three shape-token
+sites are registered with zero bare radii; the manifest still counts 490 calls.
+
+The affected Sources/cinema/shape baseline and post-wire group both have
+**223 passes** and the one original-baseline bare-radius failure. Seven new
+widget cases pass for lazy season options/all-season mapping, sorting and
+direction, four activation keys and filter Down, including ignored repeats/
+release and reusing the borrowed node after unmount. Architecture checks pass
+for **101 migrated files**. New files are formatted; diff checks pass. Receipts:
+`.git/refactor-evidence/phase4c/toolbar-controls-before.txt`,
+`toolbar-controls-focused.txt`, `toolbar-controls-widget.txt`,
+`analyze-toolbar-controls.txt`.
+
+A simultaneous final analyzer dependency preparation exited before analysis
+while deleting an iOS ephemeral `.packages` directory. The existing full-suite
+process remains the verification owner; it was not restarted. Analysis is
+repeated with `--no-pub` against the already resolved, unchanged dependencies.
+This is an environment preparation failure, not a parsed diagnostic result.
+
+Final analysis completed with **864 diagnostics and no added identities**. The
+confirming full suite has **7,820 successes**, the same **51 baseline failures**
+(22 failure/29 error), and **20 skips**. No initial-baseline identity is newly
+failing, missing or skipped. Every previous pending-pill checkpoint outcome is
+preserved; all **11 added tests** from headers, active-filter summary and toolbar
+controls pass. The historical helper allowance is unchanged and still exits 1
+for pre-existing failures. Final receipts:
+`.git/refactor-evidence/phase4c/analyze-toolbar-controls-complete.txt`,
+`toolbar-controls-complete-analyzer-comparison.txt`,
+`full-toolbar-controls.jsonl`, `full-toolbar-controls-comparison.txt`,
+`toolbar-controls-previous-checkpoint.txt`.
+Phase 4C provider rail, remaining Sources UI/focus and manual binding preparation
+boundaries, later phases, native/performance checks and final CI remain open.

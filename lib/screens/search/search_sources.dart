@@ -1422,7 +1422,6 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
   Widget _redesignToolbar(ColorScheme scheme, {bool showProviders = true}) {
     final app = AppThemeScope.of(context);
     final accent = app.home.chromeAccent;
-    final line = app.fade(app.core.tx, 0.08);
     final dim = app.fade(app.core.tx, 0.55);
 
     final sources = <String>{
@@ -1598,171 +1597,34 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
                 child: Text('IPTV · ${source.name}: ${source.message}',
                   style: TextStyle(color: scheme.error, fontSize: 12)),
               ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(12, 2, 12, 8),
-          child: Row(
-            children: [
-              // Season scope (pack-search mode): narrows the search to one
-              // season's packs, like the old Home's season dropdown.
-              if (_seasonChipVisible)
-                PopupMenuButton<int>(
-                  initialValue: _selectedSeason ?? 0,
-                  tooltip: 'Season',
-                  color: const Color(0xFF1E1B2C),
-                  onSelected: (v) {
-                    final next = v == 0 ? null : v;
-                    if (!_seasonsController.select(next)) return;
-                    unawaited(_runSearch());
-                  },
-                  itemBuilder: (_) => [
-                    const PopupMenuItem(value: 0, child: Text('All Seasons')),
-                    for (final s in _seasonMenuNumbers())
-                      PopupMenuItem(value: s, child: Text('Season $s')),
-                  ],
-                  child: _tbChip(
-                    _selectedSeason != null ? accent : line,
-                    dim,
-                    Text.rich(
-                      TextSpan(
-                        children: [
-                          TextSpan(
-                            text: 'Season  ',
-                            style: TextStyle(color: dim),
-                          ),
-                          TextSpan(
-                            text: _selectedSeason == null
-                                ? 'All'
-                                : '$_selectedSeason',
-                            style: const TextStyle(color: Color(0xFFF1F1F6)),
-                          ),
-                        ],
-                      ),
-                      style: const TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                ),
-              const Spacer(),
-              PopupMenuButton<String>(
-                initialValue: _sortBy,
-                tooltip: 'Sort',
-                color: const Color(0xFF1E1B2C),
-                onSelected: (v) {
-                  _resultsController.selectSort(v);
-                  _rebuildVisible();
-                },
-                itemBuilder: (_) => const [
-                  PopupMenuItem(value: 'source', child: Text('Addon order')),
-                  PopupMenuItem(value: 'name', child: Text('Name')),
-                  PopupMenuItem(value: 'size', child: Text('Size')),
-                  PopupMenuItem(value: 'seeders', child: Text('Seeders')),
-                  PopupMenuItem(value: 'date', child: Text('Date')),
-                ],
-                child: _tbChip(
-                  line,
-                  dim,
-                  Text.rich(
-                    TextSpan(
-                      children: [
-                        TextSpan(
-                          text: 'Sort  ',
-                          style: TextStyle(color: dim),
-                        ),
-                        TextSpan(
-                          text: _sortLabel(_sortBy),
-                          style: const TextStyle(color: Color(0xFFF1F1F6)),
-                        ),
-                      ],
-                    ),
-                    style: const TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 6),
-              if (_sortBy != 'source')
-                InkWell(
-                  borderRadius: app.shape.br(9),
-                  onTap: () {
-                    _resultsController.toggleSortDirection();
-                    _rebuildVisible();
-                  },
-                  child: _tbChip(
-                    line,
-                    dim,
-                    Icon(
-                      _sortAsc
-                          ? Icons.arrow_upward_rounded
-                          : Icons.arrow_downward_rounded,
-                      size: 16,
-                      color: dim,
-                    ),
-                  ),
-                ),
-              const SizedBox(width: 6),
-              Focus(
-                focusNode: _filterFocus,
-                onKeyEvent: (node, event) {
-                  if (event is! KeyDownEvent) return KeyEventResult.ignored;
-                  if (isActivateKey(event.logicalKey)) {
-                    unawaited(_openFilters());
-                    return KeyEventResult.handled;
-                  }
-                  // DOWN returns to pending arrivals first, then the list;
-                  // the funnel is the toolbar anchor.
-                  if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
-                    if (_pendingNewCount > 0) {
-                      _pillFocus.requestFocus();
-                    } else if (_nodes.isNotEmpty) {
-                      _nodes.first.requestFocus();
-                    }
-                    return KeyEventResult.handled;
-                  }
-                  return KeyEventResult.ignored;
-                },
-                child: Builder(
-                  builder: (_) {
-                    final focused = _filterFocus.hasFocus;
-                    final tint = (!_filters.isEmpty || focused) ? accent : dim;
-                    return InkWell(
-                      borderRadius: app.shape.br(9),
-                      // The outer Focus is the sole focus target; don't let the
-                      // InkWell add a competing node that breaks D-pad traversal.
-                      canRequestFocus: false,
-                      onTap: _openFilters,
-                      child: _tbChip(
-                        focused || !_filters.isEmpty ? accent : line,
-                        dim,
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              Icons.filter_list_rounded,
-                              size: 16,
-                              color: tint,
-                            ),
-                            const SizedBox(width: 5),
-                            Text(
-                              'Filter',
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                                color: tint,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              ),
-            ],
-          ),
+        SourceToolbarControls(
+          showSeason: _seasonChipVisible,
+          selectedSeason: _selectedSeason,
+          seasonMenuNumbers: _seasonMenuNumbers,
+          sortBy: _sortBy,
+          sortAsc: _sortAsc,
+          filtersActive: !_filters.isEmpty,
+          filterFocus: _filterFocus,
+          onSelectSeason: (next) {
+            if (!_seasonsController.select(next)) return;
+            unawaited(_runSearch());
+          },
+          onSelectSort: (value) {
+            _resultsController.selectSort(value);
+            _rebuildVisible();
+          },
+          onToggleDirection: () {
+            _resultsController.toggleSortDirection();
+            _rebuildVisible();
+          },
+          onOpenFilters: () => unawaited(_openFilters()),
+          onFilterDown: () {
+            if (_pendingNewCount > 0) {
+              _pillFocus.requestFocus();
+            } else if (_nodes.isNotEmpty) {
+              _nodes.first.requestFocus();
+            }
+          },
         ),
         if (!_filters.isEmpty)
           SourceActiveFilters(
@@ -1775,19 +1637,6 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
             },
           ),
       ],
-    );
-  }
-
-  Widget _tbChip(Color border, Color fg, Widget child) {
-    final app = AppThemeScope.of(context);
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
-      decoration: BoxDecoration(
-        color: app.fade(app.core.tx, 0.05),
-        border: Border.all(color: border),
-        borderRadius: app.shape.br(9),
-      ),
-      child: child,
     );
   }
 
@@ -1836,14 +1685,6 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
     final v = s.startsWith('stremio:') ? s.substring(8) : s;
     return v.isEmpty ? s : v[0].toUpperCase() + v.substring(1);
   }
-
-  static String _sortLabel(String v) => switch (v) {
-    'name' => 'Name',
-    'size' => 'Size',
-    'seeders' => 'Seeders',
-    'date' => 'Date',
-    _ => 'Addon order',
-  };
 
   /// Redesigned result row (flag-gated) — a [SourceRow] with format-logo badges
   /// for detail-screen Sources, or a compact quality-tag row for keyword search
