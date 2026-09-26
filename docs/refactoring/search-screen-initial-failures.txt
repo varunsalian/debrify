@@ -1,0 +1,53 @@
+# Observed before application edits at aa3d5643 on 2026-09-26.
+# Evidence only; does not replace or broaden test/known_failures.txt.
+test/android_tv_mdblist_progress_source_test.dart::Android TV fetched singleton carries MDBList episode resume progress
+test/android_tv_mdblist_progress_source_test.dart::Android TV full guide serializes merged tracker and local progress
+test/android_tv_mdblist_progress_source_test.dart::Android TV source switch carries MDBList episode resume progress
+test/android_tv_mdblist_progress_source_test.dart::Flutter player retains and consumes a TVMaze-discovered identity
+test/collection_native_browser_test.dart::Spotlight Home folder opens all rows directly: TargetPlatform.android TV false
+test/collection_native_browser_test.dart::Spotlight Home folder opens all rows directly: TargetPlatform.iOS TV false
+test/detail_theme_test.dart::no raw colour literals survive in the themed files detail_episode_cells.dart
+test/home_collections_regression_test.dart::Retry in tab B must remain on tab B
+test/home_collections_regression_test.dart::TV tabs Down from folder chip must focus a title
+test/home_collections_responsive_test.dart::duplicate sources sharing a catalog produce one rail
+test/home_collections_responsive_test.dart::opening a list preserves hidden Discover card details
+test/home_collections_responsive_test.dart::rows folder fits Size(1280.0, 720.0) and refreshes after removal
+test/home_collections_responsive_test.dart::rows folder fits Size(1920.0, 1080.0) and refreshes after removal
+test/home_collections_responsive_test.dart::rows folder fits Size(320.0, 568.0) and refreshes after removal
+test/home_collections_responsive_test.dart::rows folder fits Size(568.0, 320.0) and refreshes after removal
+test/home_collections_responsive_test.dart::rows folder fits Size(768.0, 1024.0) and refreshes after removal
+test/home_collections_responsive_test.dart::tabs folder fits Size(1280.0, 720.0) and refreshes after removal
+test/home_collections_responsive_test.dart::tabs folder fits Size(1920.0, 1080.0) and refreshes after removal
+test/home_collections_responsive_test.dart::tabs folder fits Size(768.0, 1024.0) and refreshes after removal
+test/manual_source_validation_contract_test.dart::bound startup recovery retains the preferred provider
+test/manual_source_validation_contract_test.dart::delayed startup recovery waits for the exact player route
+test/manual_source_validation_contract_test.dart::every saved-source launch preserves remaining-pin recovery
+test/manual_source_validation_contract_test.dart::recovery uses automatic probes without changing manual source resolution
+test/menu_dpad_repro_test.dart::subtitles pane roundtrip keeps rail DPAD alive
+test/playback_startup_view_test.dart::startup shield remains opaque and noninteractive in PiP
+test/profiles/profile_restore_coordinator_test.dart::sync bootstrap excludes appearance but explicit backup restores it
+test/profiles/profile_source_guard_test.dart::device reset stops and deletes Dart and native diagnostics
+test/profiles/profile_source_guard_test.dart::direct SharedPreferences opens stay inside reviewed adapters/stores
+test/search_title_suggestions_test.dart::unresolved suggestion submits Catalog title search (error: false)
+test/search_title_suggestions_test.dart::unresolved suggestion submits Catalog title search (error: true)
+test/series_parser_test.dart::SeriesParser Tests should NOT treat 4-letter release code as series
+test/series_parser_test.dart::SeriesParser Tests should NOT treat 4-letter release code mp4 as series
+test/series_parser_test.dart::SeriesParser Tests should NOT treat 5-letter release code with brackets as series
+test/series_parser_test.dart::SeriesParser Tests should NOT treat release code with quality tag as series
+test/series_parser_test.dart::cleanCollectionTitle Tests PHASE 2: should handle alternative season range - through
+test/series_parser_test.dart::cleanCollectionTitle Tests PHASE 2: should handle alternative season range - thru
+test/series_parser_test.dart::cleanCollectionTitle Tests should preserve numbers in show title like Beverly Hills 90210
+test/services/webdav_sync/webdav_sync_hot_merge_test.dart::appearance stays local through build, legacy merge and materialization
+test/spotlight_board_compact_test.dart::compact presentation the touch hero asks for a trailer immediately without paging the reel
+test/stream_badge_appearance_test.dart::loaded Color(alpha: 1.0000, red: 0.0000, green: 0.0000, blue: 0.0000, colorSpace: ColorSpace.sRGB) artwork keeps its pixels and fill on Color(alpha: 1.0000, red: 0.0902, green: 0.0745, blue: 0.1294, colorSpace: ColorSpace.sRGB)
+test/stream_badge_appearance_test.dart::loaded Color(alpha: 1.0000, red: 0.0000, green: 0.0000, blue: 0.0000, colorSpace: ColorSpace.sRGB) artwork keeps its pixels and fill on Color(alpha: 1.0000, red: 1.0000, green: 1.0000, blue: 1.0000, colorSpace: ColorSpace.sRGB)
+test/stream_badge_appearance_test.dart::loaded Color(alpha: 1.0000, red: 0.0000, green: 0.4784, blue: 0.0824, colorSpace: ColorSpace.sRGB) artwork keeps its pixels and fill on Color(alpha: 1.0000, red: 0.0902, green: 0.0745, blue: 0.1294, colorSpace: ColorSpace.sRGB)
+test/stream_badge_appearance_test.dart::loaded Color(alpha: 1.0000, red: 0.0000, green: 0.4784, blue: 0.0824, colorSpace: ColorSpace.sRGB) artwork keeps its pixels and fill on Color(alpha: 1.0000, red: 1.0000, green: 1.0000, blue: 1.0000, colorSpace: ColorSpace.sRGB)
+test/stream_badge_appearance_test.dart::loaded Color(alpha: 1.0000, red: 1.0000, green: 1.0000, blue: 1.0000, colorSpace: ColorSpace.sRGB) artwork keeps its pixels and fill on Color(alpha: 1.0000, red: 0.0902, green: 0.0745, blue: 0.1294, colorSpace: ColorSpace.sRGB)
+test/stream_badge_appearance_test.dart::loaded Color(alpha: 1.0000, red: 1.0000, green: 1.0000, blue: 1.0000, colorSpace: ColorSpace.sRGB) artwork keeps its pixels and fill on Color(alpha: 1.0000, red: 1.0000, green: 1.0000, blue: 1.0000, colorSpace: ColorSpace.sRGB)
+test/stream_badge_replacement_test.dart::player replaces built-in tags by configuration, match=false
+test/stream_badge_replacement_test.dart::player replaces built-in tags by configuration, match=true
+test/theme/app_looks_test.dart::the bundles are well-formed every setting a Look can change stays outside automatic sync
+test/theme/shape_manifest_test.dart::no swept file grows a new bare radius
+test/widget_test.dart::Debrify app smoke test
+test/xmltv_legacy_guide_retention_test.dart::a guide with nothing to import is still dropped

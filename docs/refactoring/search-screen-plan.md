@@ -1,6 +1,9 @@
 # Search screen incremental refactoring plan
 
-Status: planned; no application refactoring or test baseline run yet.
+Status: implementation started on `refactor/search-screen`; the automated baseline
+is recorded and phase 1 is in progress. Device verification remains pending.
+Reviews and actual results are recorded in the
+[implementation evidence](search-screen-evidence.md).
 
 Destination: [Debrify engineering practices](../../AGENTS.md). Every completed
 slice must follow those rules, particularly feature ownership, UI/logic separation,
@@ -439,7 +442,7 @@ exceptions at each phase; retire resolved ones.
 
 | Phase | Status | Revision, checks, and remaining work |
 | --- | --- | --- |
-| 0: Baseline | Not started | Analyzer/tests/device baseline pending; source inventory only completed |
+| 0: Baseline | Automated baseline reviewed; device checks pending | `aa3d5643`: 7,387 pass / 51 fail / 20 skipped; 865 analyzer diagnostics; ownership/behavior inventory recorded in implementation evidence |
 | 1: Keyword policies | Not started | First slice: keyword sorting |
 | 2: Leaf presentation | Not started | Choose one component after dependency inspection |
 | 3: Lists/suggestions | Not started | Install/wire Riverpod with first consumer; preserve title-search service |
