@@ -4412,3 +4412,46 @@ cleanup passes the final analyzer comparison in `analyze-testing-factory-clean.t
 and `testing-factory-clean-analyzer-comparison.txt`; earlier diagnostic receipts
 remain recorded. Final diff/format/architecture checks pass, with no allowance
 changes. Remaining phase-4C and broader migration/native/performance gates stay open.
+
+
+### Phase 4C — shared durable binding descriptor policy
+
+Extracted the shared descriptor builder into
+`lib/services/durable_source_binding.dart` (**85 lines**), importing only Torrent
+and SeriesSource models. Manual direct/IPTV pins and automatic validation/source
+switches already share this policy; all continue through the original legacy
+wrapper, which supplies the original classifiers, media-server binding resolver,
+provider mapping and entry-time timestamp. This is a prerequisite for moving the
+remaining manual binding UI, not a claim that that UI boundary is complete.
+
+Review retains media-server-before-IPTV-before-addon precedence, including a null
+media binding stopping fallback. Provenance rejection, stream-index default,
+catalog scope, raw infohash, provider mapping and time fields are unchanged.
+Transient playback URLs/headers never enter constructed addon/IPTV descriptors.
+The wrapper and all existing caller arguments remain compatible. All legacy
+implementation outside the descriptor method/import is byte-for-byte unchanged;
+the playback service shrinks **8,773 → 8,715 lines**, under its existing bounded
+phase-4C/7 exception. The new pure policy is registered in the measured source set.
+
+Baseline **549 Sources/addon/IPTV tests pass**; affected run **557 pass**, with
+eight new plain-policy cases covering precedence, null/empty provenance,
+credential exclusion, index defaults and raw torrent/provider/catalog identity.
+Existing manual-pin and automatic-switch cases exercise production delegation.
+Analyzer **863 diagnostics**, no added identities; **164 migrated files** pass
+size/import checks. New files and the changed legacy method are normally formatted;
+no whole-service formatting, DI registration or competing state owner was added.
+
+Receipts under `.git/refactor-evidence/phase4c/`: `durable-binding-before.txt`,
+`durable-binding-after.txt`, `analyze-durable-binding.txt`,
+`durable-binding-analyzer-comparison.txt`, `durable-binding-original.dart`,
+`durable-binding-wrapper-format.dart` and `durable-binding-review.txt`.
+Full-suite results follow below. Manual binding UI ownership and remaining
+migration/native/performance/CI gates stay open.
+
+Full suite: **8,157 successes / the same 51 failures / 20 skips**. All prior
+checkpoint identities/outcomes are preserved, with exactly eight new passing
+policy cases. Original-baseline comparison finds no new failures, missing tests
+or new skips. Receipts: `full-durable-binding.jsonl`,
+`full-durable-binding-comparison.txt` and
+`full-durable-binding-previous-checkpoint.txt`. Final formatting/diff/architecture
+checks pass; no allowances changed. Phase 4C and later gates remain open.

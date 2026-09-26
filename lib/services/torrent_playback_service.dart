@@ -1,3 +1,4 @@
+import 'durable_source_binding.dart';
 import '../models/playback_meta.dart';
 import '../features/sources/data/pikpak_source_preparation.dart';
 import '../features/sources/models/pikpak_prepared_source.dart';
@@ -6480,76 +6481,17 @@ class TorrentPlaybackService {
     String provider, {
     String? addonCatalogId,
     String? addonCatalogKey,
-  }) {
-    final now = DateTime.now().millisecondsSinceEpoch;
-    if (source.streamType == StreamType.directUrl) {
-      if (MediaServerService.owns(source)) return MediaServerService.bindingFor(source);
-      if (IptvSourceSearch.owns(source)) {
-        final playlistId = source.iptvPlaylistId;
-        final catalogType = source.iptvCatalogType;
-        final entryKey = source.iptvEntryKey;
-        if (playlistId == null ||
-            playlistId.isEmpty ||
-            catalogType == null ||
-            catalogType.isEmpty ||
-            entryKey == null ||
-            entryKey.isEmpty) {
-          return null;
-        }
-        return SeriesSource(
-          torrentHash: '',
-          torrentName: source.name,
-          debridService: SeriesSource.iptvDirectService,
-          debridTorrentId: '',
-          boundAt: now,
-          iptvPlaylistId: playlistId,
-          iptvCatalogType: catalogType,
-          iptvEntryKey: entryKey,
-        );
-      }
-      final addonId = source.stremioAddonId;
-      final addonKey = source.stremioAddonKey;
-      final streamKey = source.stremioStreamKey;
-      if (addonId == null ||
-          addonId.isEmpty ||
-          addonKey == null ||
-          addonKey.isEmpty ||
-          streamKey == null ||
-          streamKey.isEmpty) {
-        return null;
-      }
-      return SeriesSource(
-        torrentHash: '',
-        torrentName: source.name,
-        debridService: SeriesSource.addonDirectService,
-        debridTorrentId: '',
-        boundAt: now,
-        addonId: addonId,
-        addonKey: addonKey,
-        addonCatalogId: addonCatalogId,
-        addonCatalogKey: addonCatalogKey,
-        streamKey: streamKey,
-        bingeGroup: source.stremioBingeGroup,
-        streamIndex: source.stremioStreamIndex ?? 0,
-      );
-    }
-    if (source.streamType != StreamType.torrent ||
-        source.infohash.isEmpty ||
-        provider == SeriesSource.localService ||
-        provider == SeriesSource.addonDirectService ||
-        provider == SeriesSource.iptvDirectService) {
-      return null;
-    }
-    return SeriesSource(
-      torrentHash: source.infohash,
-      torrentName: source.name,
-      debridService: storedProviderKey(provider),
-      debridTorrentId: '',
-      boundAt: now,
-      addonCatalogId: addonCatalogId,
-      addonCatalogKey: addonCatalogKey,
-    );
-  }
+  }) => durableSourceBinding(
+    source,
+    provider,
+    now: DateTime.now().millisecondsSinceEpoch,
+    isMediaServer: MediaServerService.owns,
+    mediaServerBinding: MediaServerService.bindingFor,
+    isIptv: IptvSourceSearch.owns,
+    storedProviderKey: storedProviderKey,
+    addonCatalogId: addonCatalogId,
+    addonCatalogKey: addonCatalogKey,
+  );
 
   /// Launch the player. Passes the full source list + a resolver (so the player
   /// shows the in-player "Sources" switcher) and content metadata (so Continue
