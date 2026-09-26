@@ -1,7 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../models/advanced_search_selection.dart';
 import '../../../models/torrent.dart';
-import '../../../services/source_priority.dart';
+import '../../../services/source_ordering.dart';
 import '../../../models/addon_search_status.dart';
 import '../../../services/torrent_result_merge.dart';
 import '../data/source_search_repository.dart';
@@ -138,11 +138,11 @@ class SourceSearchController extends Notifier<SourceSearchState> {
       if (result == null || !active()) return;
       state = SourceSearchState(
         iptv: result.iptv,
-        addonStatuses: SourcePriority.orderBy(
+        addonStatuses: SourceOrdering.orderBy(
           result.addonStatuses
               .where(
                 (status) =>
-                    !SourcePriority.isRecommendationOnlyAddon(status.addonId),
+                    !SourceOrdering.isRecommendationOnlyAddon(status.addonId),
               )
               .toList(growable: false),
           (status) => status.sourceKey,

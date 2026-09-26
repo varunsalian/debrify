@@ -1,0 +1,193 @@
+import '../models/source_provider_ref.dart';
+import '../models/torrent.dart';
+
+/// Provider-priority ordering for search results.
+///
+/// The priority list is the user's arranged order of provider keys. An empty
+/// list means no explicit reordering: the caller's incoming order is retained.
+class SourceOrdering {
+  SourceOrdering._();
+
+  /// The visible Settings order: saved providers first, expanding legacy
+  /// addon names to their configurations, then new providers in default order.
+  static List<SourceProviderRef> orderedProviders(
+    List<SourceProviderRef> providers,
+    List<String> stored,
+  ) {
+    final byKey = {for (final p in providers) p.key: p};
+    final out = <SourceProviderRef>[];
+    for (final key in stored) {
+      final p = byKey.remove(key);
+      if (p != null) {
+        out.add(p);
+        continue;
+      }
+      // Older builds keyed Stremio priority by manifest name. Preserve that
+      // slot for every matching configuration, in install order; the next
+      // explicit reorder persists the new stable keys.
+      final legacyMatches = byKey.values
+          .where((provider) => provider.legacyKeys.contains(key))
+          .toList(growable: false);
+      for (final provider in legacyMatches) {
+        byKey.remove(provider.key);
+        out.add(provider);
+      }
+    }
+    out.addAll(byKey.values);
+    return out;
+  }
+
+  /// Put each addon's ready-to-play links ahead of that same addon's
+  /// torrent-backed rows. Rows from engines and other addons keep their
+  /// original slots, so this does not otherwise change relevance/provider
+  /// ordering. Explicit user-selected sorts are applied afterwards.
+  static List<Torrent> directAddonLinksFirst(List<Torrent> torrents) {
+    if (torrents.length < 2) return torrents;
+
+    final byAddon = <String, List<Torrent>>{};
+    for (final torrent in torrents) {
+      final key = torrent.source.trim().toLowerCase();
+      if (key.startsWith('stremio:')) {
+        byAddon.putIfAbsent(key, () => <Torrent>[]).add(torrent);
+      }
+    }
+    if (byAddon.isEmpty) return torrents;
+
+    var changed = false;
+    final reordered = <String, List<Torrent>>{};
+    for (final entry in byAddon.entries) {
+      final direct = entry.value
+          .where((torrent) => torrent.streamType == StreamType.directUrl)
+          .toList();
+      final remaining = entry.value
+          .where((torrent) => torrent.streamType != StreamType.directUrl)
+          .toList();
+      if (direct.isEmpty || remaining.isEmpty) continue;
+      final ordered = [...direct, ...remaining];
+      if (!changed) {
+        for (var i = 0; i < ordered.length; i++) {
+          if (!identical(ordered[i], entry.value[i])) {
+            changed = true;
+            break;
+          }
+        }
+      }
+      reordered[entry.key] = ordered;
+    }
+    if (!changed) return torrents;
+
+    final offsets = <String, int>{};
+    return [
+      for (final torrent in torrents)
+        if (reordered[torrent.source.trim().toLowerCase()] case final rows?)
+          rows[offsets.update(
+            torrent.source.trim().toLowerCase(),
+            (value) => value + 1,
+            ifAbsent: () => 0,
+          )]
+        else
+          torrent,
+    ];
+  }
+
+  /// Addons that use Stremio's stream resource exclusively to return detail
+  /// navigation links. They feed recommendation rails, not playable sources,
+  /// so they do not belong in scraper priority or source-status controls.
+  static bool isRecommendationOnlyAddon(String addonId) =>
+      addonId.trim().toLowerCase() == 'community.watch.next';
+
+  /// Normalize a [Torrent.source] value to a priority key. Addon rows carry
+  /// `stremio:name`; YAML engines stamp their engine id; indexer-manager
+  /// engines stamp their DISPLAY name, which [aliases] maps back to the id.
+  static String keyForSource(String source, {Map<String, String>? aliases}) {
+    final s = source.trim().toLowerCase();
+    if (s.isEmpty) return '';
+    if (s.startsWith('stremio:') ||
+        s.startsWith('iptv:') ||
+        s.startsWith('mediaserver:')) {
+      return s;
+    }
+    return aliases?[s] ?? 'engine:$s';
+  }
+
+  /// Stable, priority-primary reorder. Rows from providers earlier in
+  /// [priority] come first; rows from unlisted providers keep their relative
+  /// order after all listed ones. Returns [torrents] unchanged when the user
+  /// never customized the order.
+  static List<Torrent> order(
+    List<Torrent> torrents,
+    List<String> priority, {
+    Map<String, String>? aliases,
+  }) {
+    if (priority.isEmpty || torrents.length < 2) return torrents;
+    final rank = <String, int>{
+      for (var i = 0; i < priority.length; i++) priority[i]: i,
+    };
+    const unlisted = 1 << 20;
+    final indexed = List.generate(torrents.length, (i) => i);
+    indexed.sort((a, b) {
+      int sourceRank(Torrent torrent) {
+        final key = keyForSource(torrent.source, aliases: aliases);
+        return rank[key] ?? rank[aliases?[key]] ?? unlisted;
+      }
+
+      final ra = sourceRank(torrents[a]);
+      final rb = sourceRank(torrents[b]);
+      if (ra != rb) return ra - rb;
+      return a - b; // stable: preserve incoming order within a provider
+    });
+    return [for (final i in indexed) torrents[i]];
+  }
+
+  /// Provider-priority order followed by stable identity dedupe. The first
+  /// provider in [priority] wins a shared torrent hash; within each provider,
+  /// the exact returned sequence is retained. Direct/external rows already
+  /// carry transport-specific synthetic identities, so they remain distinct
+  /// from a real torrent row for the same stream.
+  static List<Torrent> orderAndDedupe(
+    List<Torrent> torrents,
+    List<String> priority, {
+    Map<String, String>? aliases,
+  }) {
+    final ordered = order(torrents, priority, aliases: aliases);
+    return dedupe(ordered);
+  }
+
+  /// Stable identity dedupe without changing the incoming order.
+  ///
+  /// This is separate from [orderAndDedupe] so callers can remove candidates
+  /// that fail strict eligibility checks before choosing which provider's
+  /// representation owns a shared torrent hash.
+  static List<Torrent> dedupe(List<Torrent> torrents) {
+    final seen = <String>{};
+    return [
+      for (final torrent in torrents)
+        if (seen.add(torrent.infohash.toLowerCase())) torrent,
+    ];
+  }
+
+  /// Ordering for bare provider keys (chips, addon strips). Same contract as
+  /// [order]: empty priority = unchanged.
+  static List<T> orderBy<T>(
+    List<T> values,
+    String Function(T) keyOf,
+    List<String> priority, {
+    Map<String, String>? aliases,
+  }) {
+    if (priority.isEmpty || values.length < 2) return values;
+    final rank = <String, int>{
+      for (var i = 0; i < priority.length; i++) priority[i]: i,
+    };
+    const unlisted = 1 << 20;
+    final indexed = List.generate(values.length, (i) => i);
+    indexed.sort((a, b) {
+      final aKey = keyOf(values[a]);
+      final bKey = keyOf(values[b]);
+      final ra = rank[aKey] ?? rank[aliases?[aKey]] ?? unlisted;
+      final rb = rank[bKey] ?? rank[aliases?[bKey]] ?? unlisted;
+      if (ra != rb) return ra - rb;
+      return a - b;
+    });
+    return [for (final i in indexed) values[i]];
+  }
+}

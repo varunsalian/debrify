@@ -2,7 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../models/torrent.dart';
 import '../../../models/torrent_filter_state.dart';
 import '../../../services/profiles/profile_session_memory.dart';
-import '../../../services/source_priority.dart';
+import '../../../services/source_ordering.dart';
 import '../models/source_presentation_settings.dart';
 import '../models/source_results_state.dart';
 import '../models/source_toolbar_state.dart';
@@ -107,7 +107,7 @@ class SourceResultsController extends Notifier<SourceResultsState> {
     if (selected == null ||
         fullSet.any(
           (torrent) =>
-              SourcePriority.keyForSource(torrent.source, aliases: aliases) ==
+              SourceOrdering.keyForSource(torrent.source, aliases: aliases) ==
               selected,
         )) {
       return false;

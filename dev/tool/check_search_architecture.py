@@ -15,6 +15,8 @@ FEATURES = ("search", "home", "discover", "sources")
 # The original screen/parts are tracked temporary exceptions in the phase plan;
 # add a retained facade here once its migration is complete.
 EXTRACTED_ELSEWHERE: tuple[str, ...] = (
+    "lib/models/source_provider_ref.dart",
+    "lib/services/source_ordering.dart",
     "lib/utils/torrent_quality.dart",
     "lib/utils/language_mapping.dart",
     "lib/screens/video_player/utils/language_mapping.dart",
@@ -65,7 +67,7 @@ def violations(path: Path) -> list[str]:
 
     layer = next((x for x in ("application", "data", "models", "presentation")
                   if x in path.parts), None)
-    if relative.startswith("lib/utils/"):
+    if relative.startswith(("lib/utils/", "lib/services/")):
         layer = "data"
     if relative.startswith(("lib/ui/", "lib/widgets/")):
         layer = "presentation"

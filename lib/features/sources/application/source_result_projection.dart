@@ -1,6 +1,6 @@
 import '../../../models/torrent.dart';
 import '../../../models/torrent_filter_state.dart';
-import '../../../services/source_priority.dart';
+import '../../../services/source_ordering.dart';
 import '../../../utils/torrent_filter_matcher.dart';
 
 /// Project Sources rows in toolbar order without changing the input or row
@@ -21,7 +21,7 @@ List<Torrent> projectSourceResults(
     list = list
         .where(
           (t) =>
-              SourcePriority.keyForSource(t.source, aliases: sourceAliases) ==
+              SourceOrdering.keyForSource(t.source, aliases: sourceAliases) ==
               sourceFilter,
         )
         .toList();
@@ -33,7 +33,7 @@ List<Torrent> projectSourceResults(
       ? filters.copyWith(sizes: const <SizeBucket>{})
       : filters;
   list = TorrentFilterMatcher.apply(list, effectiveFilters);
-  list = SourcePriority.orderAndDedupe(
+  list = SourceOrdering.orderAndDedupe(
     list,
     sourcePriority,
     aliases: sourceAliases,

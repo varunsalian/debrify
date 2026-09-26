@@ -1,7 +1,7 @@
 import '../../../models/advanced_search_selection.dart';
 import '../../../models/torrent.dart';
 import '../../../models/series_source.dart';
-import '../../../services/source_priority.dart';
+import '../../../services/source_ordering.dart';
 import '../../../services/pinned_direct_stream_match.dart';
 import 'source_seasons.dart';
 
@@ -22,7 +22,7 @@ import 'source_seasons.dart';
   // page. Keep the service's shared ranking untouched (Quick Play also uses
   // it), and invert the transport order only for this view. Explicit toolbar
   // sorts are applied later and therefore still win.
-  final sourceOrdered = SourcePriority.directAddonLinksFirst(raw);
+  final sourceOrdered = SourceOrdering.directAddonLinksFirst(raw);
   // Series pack/bind post-processing — ported from the old Home
   // (torrent_search_screen) so this list matches. For a specific episode
   // (episode drill-down), show EVERYTHING the episode-scoped query returned

@@ -1,7 +1,7 @@
 import '../../../models/cinema_source_provider.dart';
 import '../../../models/torrent.dart';
 import '../../../models/iptv_source_result.dart';
-import '../../../services/source_priority.dart';
+import '../../../services/source_ordering.dart';
 import '../../../models/addon_search_status.dart';
 import '../models/source_provider_option.dart';
 
@@ -67,11 +67,11 @@ SourceProviderProjection projectSourceProviders({
   };
   final sourceByKey = <String, String>{
     for (final source in sources.toList()..sort())
-      SourcePriority.keyForSource(source, aliases: aliases): source,
+      SourceOrdering.keyForSource(source, aliases: aliases): source,
     for (final source in iptv) source.key: source.key,
   };
   for (final torrent in torrents) {
-    final key = SourcePriority.keyForSource(torrent.source, aliases: aliases);
+    final key = SourceOrdering.keyForSource(torrent.source, aliases: aliases);
     labelsByKey.putIfAbsent(
       key,
       () =>
@@ -93,7 +93,7 @@ SourceProviderProjection projectSourceProviders({
     for (final key in retryByKey.keys)
       if (!sourceByKey.containsKey(key)) key,
   ];
-  final sortedKeys = SourcePriority.orderBy(
+  final sortedKeys = SourceOrdering.orderBy(
     providerKeys,
     (key) => key,
     priority,
@@ -150,7 +150,7 @@ List<CinemaSourceProvider> projectCinemaSourceProviders({
     names.putIfAbsent(status.sourceKey, () => status.name);
   }
   for (final t in torrents) {
-    final key = SourcePriority.keyForSource(t.source, aliases: aliases);
+    final key = SourceOrdering.keyForSource(t.source, aliases: aliases);
     counts[key] = (counts[key] ?? 0) + 1;
     names.putIfAbsent(
       key,
@@ -164,7 +164,7 @@ List<CinemaSourceProvider> projectCinemaSourceProviders({
     for (final source in iptv)
       if (source.retryableFailure) source.key: source.message,
   };
-  final keys = SourcePriority.orderBy(
+  final keys = SourceOrdering.orderBy(
     names.keys.toList()..sort(),
     (key) => key,
     priority,

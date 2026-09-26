@@ -4006,3 +4006,64 @@ Receipts: `full-filter-policy-boundaries.jsonl`,
 `full-filter-policy-boundaries-previous-checkpoint.txt`. The helper remains
 nonzero for existing failures; no allowance changes. Final format/diff/architecture
 checks pass. Phase 4C and remaining migration/native/performance/CI gates stay open.
+
+### Phase 4C — pure provider ordering separated from loading
+
+Moved the eight pure SourcePriority operations into
+`lib/services/source_ordering.dart` (**193 lines**), and SourceProviderRef into
+`lib/models/source_provider_ref.dart` (**17 lines**). Five Sources application
+consumers now call SourceOrdering directly. The original SourcePriority API
+(**301 → 144 lines**) delegates those methods and re-exports the descriptor,
+retaining its provider/alias loading methods for existing settings/repository
+callers. No new DI object, storage abstraction or duplicate ordering logic was added.
+
+Review compares all eight methods against the normally formatted original after
+renaming the utility class and adding braces around the same provider-prefix
+return. The descriptor and provider/alias loading bodies are byte-for-byte
+unchanged. Stable provider order, legacy aliases, direct-link prioritization,
+case-insensitive dedupe, original identities and unchanged-list fast paths are
+preserved. The repository's load/retirement/priority snapshot sequence is untouched.
+The new pure graph contains only SourceOrdering, Torrent and SourceProviderRef.
+
+Both files join the measured source set. Registered shared service files now
+receive data-layer import checks, alongside shared utilities; this strengthens
+the guard without allowing new UI/framework dependencies. The facade remains a
+legacy data-loading boundary, not an application-policy dependency. Descriptor
+constructor/legacy-key set semantics are preserved for compatibility; no collection
+contract was changed incidentally.
+
+Baseline and affected run: **563 Sources/priority/Quick Play tests pass**. Existing
+SourcePriority tests exercise the compatibility facade while real Sources tests
+exercise the new policy path. No duplicate test suite was added for moved methods.
+The first analyzer run found a missing-braces info exposed by formatting the
+extracted multi-line return condition; adding braces preserves the condition and
+returns and resolves it. Final analyzer: **863 diagnostics**, no added identities.
+**155 migrated files** pass architecture checks. New/extracted code and the now
+small facade are formatted. Phase 4C and later/native/performance/CI gates remain
+in progress.
+
+Receipts under `.git/refactor-evidence/phase4c/`: `source-ordering-before.txt`,
+`source-ordering-after.txt`, `analyze-source-ordering.txt` and
+`source-ordering-analyzer-comparison.txt` (initial lint retained),
+`analyze-source-ordering-final.txt`, `source-ordering-final-analyzer-comparison.txt`,
+`source-ordering-original.dart` and `source-ordering-review.txt`.
+
+Initial full-suite run: **8,141 successes / 52 failures / 20 skips**. The only
+changed prior outcome is the previously observed remote-transfer large-binary
+`.part` cleanup race (line 313). The transfer test and implementation are unchanged;
+inspection again finds completion published before awaited receipt journaling and
+file deletion. All 18 transfer tests pass in isolation. This is consistent with
+the earlier recorded intermittent failure; it is not accepted into any allowance.
+The full suite was repeated unchanged. Initial evidence is retained in
+`full-source-ordering.jsonl`, `full-source-ordering-comparison.txt`,
+`full-source-ordering-initial-previous-checkpoint.txt` and
+`source-ordering-transfer-isolated.txt`.
+
+Final unchanged repeat: **8,142 successes / the same 51 failures / 20 skips**.
+All test identities/outcomes match the previous checkpoint; original-baseline
+comparison finds no new failures, missing tests or new skips. The transfer case
+passes in this full run. Receipts: `full-source-ordering-verified.jsonl`,
+`full-source-ordering-verified-comparison.txt` and
+`full-source-ordering-verified-previous-checkpoint.txt`. Both full runs remain
+recorded. Final formatting/diff/architecture checks pass; no allowances changed.
+Phase 4C and remaining migration/native/performance/CI gates are still open.
