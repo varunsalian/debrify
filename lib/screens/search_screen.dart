@@ -1,3 +1,5 @@
+import '../features/home/application/home_catalog_dependencies.dart';
+import '../features/home/data/home_catalog_repository.dart';
 import '../features/home/application/home_catalog_plan.dart';
 import '../features/home/models/home_catalog_plan.dart';
 import '../features/home/application/home_catalog_preferences_dependencies.dart';
@@ -46,7 +48,6 @@ import '../services/metadata_provider_service.dart';
 import '../widgets/collections/collection_focus_art.dart';
 import '../widgets/collections/collection_focus_glow.dart';
 import '../widgets/see_all/discover_browsing_input.dart';
-import '../services/home_catalog_refresh.dart';
 import '../services/home_return_cache.dart';
 import '../services/home_load_deadline.dart';
 import '../services/home_load_progress.dart';
@@ -508,6 +509,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   int get _tabIndex => widget.searchMode ? 17 : (widget.discoverMode ? 18 : 15);
 
   final StremioService _stremio = StremioService.instance;
+  // Borrow the stateless dependency while Ref is live; pending batches may
+  // finish after this view is removed and still need their original guards.
+  late final HomeCatalogRepository _homeCatalogRepository;
 
   final TextEditingController _searchController = TextEditingController();
   late final _titleSearch = widget.titleSearch ?? TmdbTitleSearch();
@@ -1767,6 +1771,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     unawaited(_refreshMetadataFeaturePolicy());
     WidgetsBinding.instance.addObserver(this);
     _profileSessionOwner = ProfileSessionMemory.captureOwner();
+    _homeCatalogRepository = ref.read(homeCatalogRepositoryProvider);
     _keywordSnapshots = ref.read(
       keywordSnapshotRepositoryProvider(_profileSessionOwner),
     );
@@ -3038,7 +3043,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
             );
             if (!current()) return;
           }
-          final addons = await _stremio.getCatalogAddons();
+          final addons = await _homeCatalogRepository.readAddons();
           if (!current()) return;
           final plan = planHomeCatalogs(
             addons,
@@ -3212,41 +3217,26 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   /// [_boardCursor], and return the non-empty ones (order preserved). No-ops
   /// when [gen] is stale so a superseded load can't advance the fresh load's
   /// cursor.
-  Future<List<CatalogSection>> _fetchBoardBatch(int n, int gen, {
+  Future<List<CatalogSection>> _fetchBoardBatch(
+    int n,
+    int gen, {
     Map<String, CatalogSection> previousRows = const {},
     void Function(CatalogSection)? onSection,
-  }) async {
-    if (gen != _boardLoadGen) return const [];
+  }) => Future<List<CatalogSection>>.sync(() {
+    if (gen != _boardLoadGen) return const <CatalogSection>[];
     final scope = ProfileRuntime.scope.value;
-    bool current() => mounted && gen == _boardLoadGen &&
-        scope == ProfileRuntime.scope.value;
+    bool current() =>
+        mounted && gen == _boardLoadGen && scope == ProfileRuntime.scope.value;
     final end = (_boardCursor + n).clamp(0, _boardRefs.length);
     final slice = _boardRefs.sublist(_boardCursor, end);
     _boardCursor = end;
-    final results = await Future.wait(
-      slice.map((ref) async {
-        final (addon, catalog) = ref;
-        try {
-          final row = await loadHomeCatalogSection(
-            addon: addon,
-            catalog: catalog,
-            previous: previousRows[homeCatalogRowId(ref)],
-            isCurrent: current,
-            hides: WatchedFilter.predicate,
-            fetch: (skip, onRawCount) => _stremio.fetchCatalog(
-              addon, catalog, skip: skip, onRawCount: onRawCount,
-            ),
-          );
-          if (!current()) return null;
-          if (row != null) onSection?.call(row);
-          return row;
-        } catch (_) {
-          return null;
-        }
-      }),
+    return _homeCatalogRepository.fetchBatch(
+      slice,
+      previousRows: previousRows,
+      isCurrent: current,
+      onSection: onSection,
     );
-    return results.whereType<CatalogSection>().toList();
-  }
+  });
 
   /// After a batch lands, if the board still doesn't fill the viewport (so the
   /// user can't scroll to trigger more) keep pulling batches until it does or

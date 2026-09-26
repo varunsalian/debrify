@@ -396,6 +396,40 @@ outcome preserved and six new successes. Evidence:
 `full-catalog-plan*`. Batch fetching and catalog/pagination state ownership are next;
 Home/device/performance and the full migration gates remain open.
 
+Catalog batch access now uses a 54-line plain `data/home_catalog_repository.dart`
+and a 15-line Riverpod composition factory. Production addon discovery and parallel
+row fetching use the injected repository; the replaced inline fetch loop is removed.
+The repository reuses `loadHomeCatalogSection`, including cached-row identity,
+raw cursors, filtered-window bounds and resumable empty rows. Rows still publish in
+completion order and return in source order; each row reads the watched predicate
+separately. Existing per-row request and publication errors remain isolated.
+
+The screen captures the stateless dependency during initialization. Pending refresh
+loops may reach another batch after disposal, so they must not read a disposed Ref.
+Cursor reservation stays synchronous and guarded by the existing generation; the
+caller retains profile/mounted checks. `Future.sync` preserves early error wrapping
+without adding another async adoption boundary around the repository's existing
+batch completion. This is an intermediate data extraction, not completed ownership
+of board state: cursor/generation, committed snapshots, refresh and pagination still
+need their phase-5 application boundary. The shared Discover addon lookup must keep
+its existing behavior. SearchScreen remains under the documented temporary exception.
+
+Eight repository tests cover parallel completion/order, failed/empty neighbors,
+cached identity/cursors, retirement before/during requests, filtered raw windows,
+per-row predicate reads and callback-error isolation. A real SearchScreen test
+verifies the provider override serves discovery/fetching and that a pending result
+completes safely after removing the screen and its ProviderScope. Its initial fixture
+omitted a required catalog name; a later wait stalled on the widget test's fake async
+queue. The corrected fixture pumps that queue until the observed request starts.
+The analyzer's new test-only brace diagnostic was also fixed. Targeted result:
+254 successes versus 245 before, identical 12 failure identities and one skip.
+Analyzer identities remain 863; size/import checks pass for 186 migrated files.
+Full suite: 8,339 successes, unchanged 51 failures/20 skips; every preceding
+outcome is preserved and all nine new tests pass. SearchScreen is 20,110 lines.
+Evidence: `.git/refactor-evidence/phase5/catalog-batch-*`,
+`analyze-catalog-batch-*` and `full-catalog-batch*`.
+The remaining Home, device/performance and full migration gates remain open.
+
 ### 6. Discover and remaining layouts
 
 - Separate Discover selection/hydration from its grid/stage presentation. Preserve
