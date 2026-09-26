@@ -1624,16 +1624,16 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
       addonName: _showAddonLogos ? t.addonDisplayName : null,
       addonLogo: t.addonLogo,
       titleMaxLines: 6,
-      subtitle: _rowSubtitle(t),
+      subtitle: sourceRowSubtitle(t),
       focusNode: _nodes[i],
       isTelevision: widget.isTelevision,
       showPlayPill: !widget.bindMode && widget.isTelevision,
       formatTags: tags,
       badgeName: t.name,
       badgeDescription: t.badgeDescription,
-      qualityTag: tags.isEmpty ? _qualityLabel(t) : null,
+      qualityTag: tags.isEmpty ? sourceQualityLabel(t) : null,
       cacheLabel: _cacheLabel(t),
-      coverageBadge: _keywordMode ? null : _coverageLabel(t),
+      coverageBadge: _keywordMode ? null : sourceCoverageLabel(t),
       streamBadge: t.isExternalStream
           ? 'External'
           : t.isDirectStream
@@ -1666,78 +1666,6 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
         if (i < _nodes.length - 1) _nodes[i + 1].requestFocus();
       },
     );
-  }
-
-  /// `size · ↑seeders · ↓leechers · SOURCE` meta line for a redesigned row.
-  String _rowSubtitle(Torrent t) {
-    final parts = <String>[];
-    final sourceLabel = t.addonDisplayName ?? t.source;
-    if (t.isDirectStream || t.isExternalStream) {
-      if (t.sizeBytes > 0) parts.add(_fmtSize(t.sizeBytes));
-      if (sourceLabel.isNotEmpty) parts.add(sourceLabel.toUpperCase());
-      return parts.join(' · ');
-    }
-    if (t.sizeBytes > 0) parts.add(_fmtSize(t.sizeBytes));
-    if (t.seeders > 0) parts.add('↑ ${t.seeders}');
-    if (t.leechers > 0) parts.add('↓ ${t.leechers}');
-    if (sourceLabel.isNotEmpty) parts.add(sourceLabel.toUpperCase());
-    final date = _fmtDate(t.createdUnix);
-    if (date != null) parts.add(date);
-    return parts.join(' · ');
-  }
-
-  /// Relative upload date ("2d ago"), matching the classic row. Null when the
-  /// torrent carries no date.
-  static String? _fmtDate(int createdUnix) {
-    if (createdUnix <= 0) return null;
-    final then = DateTime.fromMillisecondsSinceEpoch(createdUnix * 1000);
-    final d = DateTime.now().difference(then);
-    if (d.inDays >= 365) return '${(d.inDays / 365).floor()}y ago';
-    if (d.inDays >= 30) return '${(d.inDays / 30).floor()}mo ago';
-    if (d.inDays >= 7) return '${(d.inDays / 7).floor()}w ago';
-    if (d.inDays >= 1) return '${d.inDays}d ago';
-    if (d.inHours >= 1) return '${d.inHours}h ago';
-    return 'Today';
-  }
-
-  static String? _qualityLabel(Torrent t) {
-    // Use the same resolution logic as the F badges (pixel tokens win over the
-    // loose UHD/4K keyword) so the compact/keyword quality pill stays consistent
-    // with them — the `qualityTier` extension mislabels "UHD BluRay 1080p".
-    final tags = FormatTagDetector.detect(t.name);
-    if (tags.contains(FormatTag.uhd4k)) return '4K';
-    if (tags.contains(FormatTag.fullHd)) return '1080p';
-    if (tags.contains(FormatTag.hd720)) return '720p';
-    return null; // SD / unknown — no pill
-  }
-
-  String? _coverageLabel(Torrent t) {
-    switch (t.coverageType) {
-      case 'completeSeries':
-        return 'Complete Series';
-      case 'multiSeasonPack':
-        return 'Multi-Season';
-      case 'seasonPack':
-        return t.seasonNumber != null
-            ? 'Season ${t.seasonNumber}'
-            : 'Season Pack';
-      case 'singleEpisode':
-        return t.episodeIdentifier;
-      default:
-        return null;
-    }
-  }
-
-  static String _fmtSize(int bytes) {
-    if (bytes <= 0) return '';
-    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
-    var size = bytes.toDouble();
-    var u = 0;
-    while (size >= 1024 && u < units.length - 1) {
-      size /= 1024;
-      u++;
-    }
-    return '${size.toStringAsFixed(size >= 100 || u == 0 ? 0 : 1)} ${units[u]}';
   }
 
   Widget _centered(ColorScheme scheme, String text) => Center(

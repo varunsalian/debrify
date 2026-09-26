@@ -1798,3 +1798,46 @@ The previous full-suite checkpoint remains `full-toolbar-controls.jsonl`
 (7,820 successes, same 51 failures/20 skips); this leaf uses affected checks.
 Remaining provider projection, Sources UI/focus, manual binding preparation,
 later phases and native/performance/CI gates are still open.
+
+
+### Phase 4C — Shared source-row metadata labels
+
+Extracted the 74-line `lib/ui/core/source_metadata_labels.dart` with pure
+subtitle, date, size, quality and coverage display functions. The real Sources
+row now uses these functions and the original methods are removed. Review and
+compilation exposed Keyword's calls into three private Sources methods; all
+four Keyword call sites now use the shared size/date/quality functions directly.
+The initial intermediate compilation failure was fixed before final verification.
+Keyword's separate subtitle assembly deliberately retains its trimmed, nonempty
+addon-name fallback, while Sources retains its existing null-only fallback.
+Sources is **2,087 lines**; parent **20,165**.
+
+The shared file is registered in the migrated-source architecture checker. Its
+transitive dependencies are the plain Torrent model and existing pure format-tag/
+source-quality helpers, with no UI context, Riverpod, data or platform services.
+Date formatting accepts an optional time for deterministic tests; production
+still samples `DateTime.now()` only for positive timestamps at the original
+formatting point. No persisted format or application text changed.
+
+Baseline affected Sources/cinema/row-focus group: **236 passes**. Final group
+plus the shared-label tests: **249 passes**. Thirteen new cases exercise upload
+age boundaries (including future timestamps), byte formatting and metadata order,
+empty/addon source precedence, direct/external omission of peer/date metadata,
+pixel quality precedence over loose UHD tokens, and pack/episode fallbacks.
+Final analyzer identities remain **864**, with no additions; architecture checks
+pass for **104 migrated files**. New files are normally formatted and diff checks
+pass. Receipts under `.git/refactor-evidence/phase4c/`:
+`row-labels-before.txt`, `row-labels-focused.txt` (intermediate missing Keyword
+call sites), `row-labels-focused-final.txt`, `analyze-row-labels-final.txt`,
+`row-labels-analyzer-comparison.txt`.
+
+The full-suite confirmation has **7,836 successes**, the same **51 baseline
+failures** (22 failure/29 error) and **20 skips**. No original-baseline identity
+is newly failing, missing or skipped. Every prior toolbar-controls checkpoint
+outcome is preserved, with **16 new passing identities** from the provider-strip
+and metadata-label slices. The historical allowance remains unchanged; the
+helper still exits 1 for pre-existing failures. Receipts:
+`.git/refactor-evidence/phase4c/full-row-labels.jsonl`,
+`full-row-labels-comparison.txt`, `row-labels-previous-checkpoint.txt`.
+Phase 4C provider projection, remaining Sources UI/focus and manual binding
+preparation, later phases and native/performance/CI gates remain incomplete.

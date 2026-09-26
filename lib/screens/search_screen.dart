@@ -1,3 +1,4 @@
+import '../ui/core/source_metadata_labels.dart';
 import '../features/sources/models/source_provider_option.dart';
 import '../features/sources/presentation/source_provider_strip.dart';
 import '../features/sources/presentation/source_toolbar_controls.dart';
@@ -16472,7 +16473,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
                               badgeName: t.name,
                               badgeDescription: t.badgeDescription,
                               qualityTag: tags.isEmpty
-                                  ? _SourcesScreenState._qualityLabel(t)
+                                  ? sourceQualityLabel(t)
                                   : null,
                               cacheLabel: labels.isEmpty
                                   ? null
@@ -16731,16 +16732,16 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         : t.source;
     if (t.isDirectStream || t.isExternalStream) {
       if (t.sizeBytes > 0) {
-        parts.add(_SourcesScreenState._fmtSize(t.sizeBytes));
+        parts.add(sourceSizeLabel(t.sizeBytes));
       }
       if (sourceLabel.isNotEmpty) parts.add(sourceLabel.toUpperCase());
       return parts.join(' · ');
     }
-    if (t.sizeBytes > 0) parts.add(_SourcesScreenState._fmtSize(t.sizeBytes));
+    if (t.sizeBytes > 0) parts.add(sourceSizeLabel(t.sizeBytes));
     if (t.seeders > 0) parts.add('↑ ${t.seeders}');
     if (t.leechers > 0) parts.add('↓ ${t.leechers}');
     if (sourceLabel.isNotEmpty) parts.add(sourceLabel.toUpperCase());
-    final date = _SourcesScreenState._fmtDate(t.createdUnix);
+    final date = sourceDateLabel(t.createdUnix);
     if (date != null) parts.add(date);
     return parts.join(' · ');
   }

@@ -16,6 +16,7 @@ FEATURES = ("search", "home", "discover", "sources")
 # add a retained facade here once its migration is complete.
 EXTRACTED_ELSEWHERE: tuple[str, ...] = (
     "lib/ui/core/see_all_link.dart",
+    "lib/ui/core/source_metadata_labels.dart",
     "lib/models/series_source.dart",
 )
 GENERATED_SUFFIXES = (".g.dart", ".freezed.dart")
