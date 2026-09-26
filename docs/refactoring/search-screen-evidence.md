@@ -3839,3 +3839,39 @@ and `merge-policy-wrapper-format.dart`. Changed files and the legacy wrapper are
 normally formatted; architecture/diff checks pass. No failure allowances changed;
 the baseline helper remains nonzero for existing failures. Phase 4C and later
 migration/native/performance/CI gates remain open.
+
+### Phase 4C — shared addon-status model boundary
+
+Moved `AddonSearchStatus` and its documentation byte-for-byte into
+`lib/models/addon_search_status.dart` (**36 lines**, no imports), registered in
+the measured architecture/size set. Search/retry controllers, provider projection,
+and search state/result models now import it directly. StremioService imports
+and re-exports that same declaration, preserving all existing import paths and
+type identity. No duplicate class, model conversion or API change was introduced.
+
+The retained Stremio service shrinks **3,754 → 3,720 lines**. Every declaration
+from `StremioAddonImportResult` onward is byte-for-byte unchanged. Its pre-existing
+installation/metadata/transport responsibilities remain behind legacy boundaries;
+this move does not claim their migration or resolve other pure-selector/IPTV
+transitive dependencies. The oversized retained-service scope is recorded in the
+plan for the final boundary review.
+
+Baseline and after: **494 Sources tests pass**. Existing retry completion,
+request-key, projection and real-screen cases cover the model's behavior and
+exercise the compatibility export. No new trivial model/structure tests were
+added for a byte-preserving relocation. Analyzer retains **863 diagnostics**,
+no added identities; **145 migrated files** pass architecture checks. Formatting
+and diff checks pass without mass-formatting the legacy service.
+
+Receipts under `.git/refactor-evidence/phase4c/`: `addon-status-before.txt`,
+`addon-status-after.txt`, `analyze-addon-status.txt`,
+`addon-status-analyzer-comparison.txt` and `addon-status-review.txt`.
+Phase 4C and later/native/performance/CI completion gates remain open.
+
+Full-suite review: **8,141 successes / the same 51 failures / 20 skips**, with
+exactly the same test identities and outcomes as the preceding checkpoint.
+Original-baseline comparison finds no new failures, missing tests or new skips.
+Receipts: `full-addon-status.jsonl`, `full-addon-status-comparison.txt` and
+`full-addon-status-previous-checkpoint.txt`. The baseline helper remains nonzero
+for existing failures; no allowances changed. Final format/diff/architecture
+checks pass. Phase 4C and the remaining migration gates stay open.

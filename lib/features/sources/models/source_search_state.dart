@@ -1,5 +1,5 @@
 import '../../../services/iptv_source_search.dart';
-import '../../../services/stremio_service.dart';
+import '../../../models/addon_search_status.dart';
 
 /// Request state for one Sources view. Rendered/frozen rows have a separate
 /// presentation lifetime; a final response does not imply immediate adoption.

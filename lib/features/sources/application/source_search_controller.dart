@@ -2,7 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../models/advanced_search_selection.dart';
 import '../../../models/torrent.dart';
 import '../../../services/source_priority.dart';
-import '../../../services/stremio_service.dart';
+import '../../../models/addon_search_status.dart';
 import '../../../services/torrent_result_merge.dart';
 import '../data/source_search_repository.dart';
 import '../models/source_search_request.dart';

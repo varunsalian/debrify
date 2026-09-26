@@ -2,7 +2,7 @@ import '../../../models/cinema_source_provider.dart';
 import '../../../models/torrent.dart';
 import '../../../services/iptv_source_search.dart';
 import '../../../services/source_priority.dart';
-import '../../../services/stremio_service.dart';
+import '../../../models/addon_search_status.dart';
 import '../models/source_provider_option.dart';
 
 class SourceProviderProjection {
