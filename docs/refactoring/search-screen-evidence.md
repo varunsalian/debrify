@@ -2384,3 +2384,55 @@ Receipts: `.git/refactor-evidence/phase4c/full-provider-credential.jsonl`,
 for its unchanged pre-existing failures. Phase 4C remains open for acquisition,
 local picker internals and remaining Sources responsibilities; later migration,
 native/device, performance and CI gates also remain incomplete.
+
+### Phase 4C — API-key acquisition continuation checks
+
+The manual torrent binding entry point now forwards its action check into `_add`.
+That existing provider pipeline checks at entry, passes the guard into all four
+API-key readers, and checks after each top-level await before a later request or
+resolved result can proceed. Real-Debrid, TorBox, Premiumize and AllDebrid continue
+to use the captured key for their backend calls. Premiumize's existing awaited
+cache condition is now a local boolean so retirement is checked before deciding
+whether to continue. Request payloads, playlist ordering, provider metadata and
+current-action results are unchanged. Automatic callers omit the callback and
+retain their previous behavior. No cancellation framework or additional state
+owner was added. Playback service is 8,953 lines under its recorded exception;
+Sources view/feature-controller sizes are unchanged.
+
+The cancellation error is contained by the manual binding handler's existing
+failure path; it dismisses the captured loader and rejects the retired action
+before displaying a message or saving. Provider not-cached exceptions still pass
+to their original captured-key cleanup handlers; checks only run after successful
+awaits and do not intercept that cleanup. Already-started backend operations are
+not rolled back by this change. Their internal work retains the supplied key.
+PikPak receives the entry check only: its separate session, polling and recursive
+listing/playlist path still needs review. Loader-route/native picker ownership
+and device verification also remain pending; retaining the old navigator cleanup
+is not proof for every profile/navigation scenario.
+
+Four real bridge tests use a scoped mock HTTP client with no external requests.
+Before implementation, **two passed / two failed**: retirement after TorBox create
+or details still issued the next request. Afterward **all four pass**, covering
+retirement after create/details/link, full active request order, cached-only magnet
+payload presence, binding metadata/save counts and loader removal. This directly
+verifies the production pipeline, not only an isolated cancellation helper.
+The tests preserve the already-issued request and stop later pipeline steps.
+
+Affected baseline: **346 passes / four failures**; final: **350 passes / the same
+four failures** in existing manual-source validation contracts. Analyzer retains
+**863 diagnostics**, with no new identities. Size/import checks pass for all
+**112 migrated files**; changed methods/test files are formatted and diff checks
+pass. Receipts under `.git/refactor-evidence/phase4c/`: `acquisition-before.txt`,
+`acquisition-red.txt`, `acquisition-green.txt`, `acquisition-focused.txt`,
+`acquisition-failure-comparison.txt`, `analyze-acquisition.txt`,
+`acquisition-analyzer-comparison.txt`. The remaining provider/native, Sources and
+later migration/performance/CI gates stay open.
+
+Full-suite review: **7,901 successes / the same 51 failures / 20 skips**. Every
+previous checkpoint test retains its outcome, and all four new bridge cases pass.
+The original-baseline comparison also finds no new failures, missing tests or new
+skips. Receipts: `.git/refactor-evidence/phase4c/full-acquisition.jsonl`,
+`full-acquisition-comparison.txt` and `acquisition-previous-checkpoint.txt` in the
+same directory. The historical baseline helper remains nonzero for the existing
+failures; its allowance was not changed. This completes this bounded continuation
+check, not phase 4C or the remaining native and migration gates.

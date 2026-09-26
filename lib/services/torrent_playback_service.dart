@@ -5480,7 +5480,12 @@ class TorrentPlaybackService {
     try {
       final magnet = await _magnetFor(torrent);
       if (magnet != null && (canContinue?.call() ?? true)) {
-        final r = await _add(provider, magnet, torrent);
+        final r = await _add(
+          provider,
+          magnet,
+          torrent,
+          canContinue: canContinue,
+        );
         if (r.playUrl != null && r.playUrl!.isNotEmpty) res = r;
       }
     } on TorrentNotCachedException catch (e) {
@@ -5757,14 +5762,27 @@ class TorrentPlaybackService {
   static Future<_Resolved> _add(
     String provider,
     String magnet,
-    Torrent torrent,
-  ) async {
+    Torrent torrent, {
+    bool Function()? canContinue,
+  }) async {
+    void checkCurrent() {
+      if (canContinue?.call() == false) {
+        throw StateError(
+          'Manual source acquisition belongs to a retired action',
+        );
+      }
+    }
+
+    checkCurrent();
     final title = torrent.displayTitle;
     switch (provider) {
       case 'debrid':
         {
-          final apiKey = (await StorageService.getApiKey()) ?? '';
+          final apiKey =
+              (await StorageService.getApiKey(canContinue: canContinue)) ?? '';
+          checkCurrent();
           final result = await DebridService.addTorrentToDebrid(apiKey, magnet);
+          checkCurrent();
           final playUrl = result['downloadLink'] as String?;
           final linksRaw = (result['links'] as List?) ?? const [];
           final filesRaw = (result['files'] as List?) ?? const [];
@@ -5791,6 +5809,7 @@ class TorrentPlaybackService {
           );
           void open() => MainPageBridge.openDebridOptions?.call(rd);
           final playlist = await _buildRdPlaylist(linksRaw, filesRaw, apiKey);
+          checkCurrent();
           if (playlist != null && playlist.length > 1) {
             var startIndex = playlist.indexWhere((e) => e.url.isNotEmpty);
             if (startIndex < 0) startIndex = 0;
@@ -5827,12 +5846,18 @@ class TorrentPlaybackService {
         }
       case 'torbox':
         {
-          final apiKey = (await StorageService.getTorboxApiKey()) ?? '';
+          final apiKey =
+              (await StorageService.getTorboxApiKey(
+                canContinue: canContinue,
+              )) ??
+              '';
+          checkCurrent();
           final resp = await TorboxService.createTorrent(
             apiKey: apiKey,
             magnet: magnet,
             addOnlyIfCached: true,
           );
+          checkCurrent();
           final ok =
               resp['success'] == true ||
               resp['error'].toString().contains('ALREADY_ADDED');
@@ -5848,6 +5873,7 @@ class TorrentPlaybackService {
               : null;
           if (torrentId == null) throw Exception('TorBox: no torrent id');
           final tt = await TorboxService.getTorrentById(apiKey, torrentId);
+          checkCurrent();
           final open = tt == null
               ? null
               : () => MainPageBridge.openTorboxFolder?.call(tt);
@@ -5865,6 +5891,7 @@ class TorrentPlaybackService {
                     torrentId: torrentId,
                     fileId: file.id,
                   );
+            checkCurrent();
             return _Resolved(
               title: title,
               playUrl: playUrl,
@@ -5882,6 +5909,7 @@ class TorrentPlaybackService {
             torrentId: torrentId,
             fileId: sorted[startIndex].id,
           );
+          checkCurrent();
           final entries = [
             for (var i = 0; i < sorted.length; i++)
               PlaylistEntry(
@@ -5906,11 +5934,19 @@ class TorrentPlaybackService {
         }
       case 'premiumize':
         {
-          final apiKey = (await StorageService.getPremiumizeApiKey()) ?? '';
-          if (!await PremiumizeService.isCached(apiKey, magnet)) {
+          final apiKey =
+              (await StorageService.getPremiumizeApiKey(
+                canContinue: canContinue,
+              )) ??
+              '';
+          checkCurrent();
+          final cached = await PremiumizeService.isCached(apiKey, magnet);
+          checkCurrent();
+          if (!cached) {
             throw const _PremiumizeNotCached();
           }
           final files = await PremiumizeService.directDownload(apiKey, magnet);
+          checkCurrent();
           void open() => MainPageBridge.openPremiumizeFolder?.call();
           final videos = files
               .where((f) => FileUtils.isVideoFile(f.path))
@@ -5954,11 +5990,17 @@ class TorrentPlaybackService {
         }
       case 'alldebrid':
         {
-          final apiKey = (await StorageService.getAllDebridApiKey()) ?? '';
+          final apiKey =
+              (await StorageService.getAllDebridApiKey(
+                canContinue: canContinue,
+              )) ??
+              '';
+          checkCurrent();
           final result = await AllDebridService.addMagnetAndResolveFiles(
             apiKey,
             magnet,
           );
+          checkCurrent();
           void open() => MainPageBridge.openAllDebridFolder?.call();
           final videos = result.files
               .where((f) => FileUtils.isVideoFile(f.path))
@@ -5970,6 +6012,7 @@ class TorrentPlaybackService {
             final playUrl = file == null
                 ? null
                 : await AllDebridService.unlockLink(apiKey, file.link);
+            checkCurrent();
             return _Resolved(
               title: title,
               playUrl: playUrl,
@@ -5985,6 +6028,7 @@ class TorrentPlaybackService {
             apiKey,
             sorted[startIndex].link,
           );
+          checkCurrent();
           final entries = [
             for (var i = 0; i < sorted.length; i++)
               PlaylistEntry(
