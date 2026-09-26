@@ -1970,3 +1970,32 @@ unchanged 51 failures/20 skips); this leaf uses affected checks. Native focus/
 performance parity is not inferred from widget tests. Remaining Sources focus/
 lifecycle, binding preparation, later phases and final native/performance/CI
 gates remain open.
+
+
+### Phase 4C — Sources status presentation
+
+Extracted `SourceSearchProgress` and `SourceStatusMessage` into the 56-line
+`source_status_widgets.dart`. The actual body now uses these widgets and the
+original helper methods are removed. The view retains loading/error/empty-state
+decisions and the existing error versus filtered-empty text. The progress strip
+still appears only while searching outside cinema layout. Its inherited app
+theme dependency remains in the widget; centered messages receive the same
+explicit onSurfaceVariant color from the view. Sources is **1,905 lines**;
+parent **20,166**.
+
+Review compared the original rendering: progress dimensions/stroke, padding,
+spacing, label/font/fade, and centered-message padding/alignment/color remain
+unchanged. No state, resource, dependency or application text was introduced.
+This mechanical leaf move reuses existing behavior coverage rather than adding
+implementation-mirroring tests.
+
+Affected Sources/cinema baseline and post-extraction runs both pass **240 tests**.
+Analyzer identities remain **863** with no additions. Architecture checks pass
+for **108 migrated files**; the new file and touched body are formatted and diff
+checks pass. Receipts under `.git/refactor-evidence/phase4c/`:
+`status-widgets-before.txt`, `status-widgets-focused.txt`,
+`analyze-status-widgets.txt`, `status-widgets-analyzer-comparison.txt`.
+The last full-suite checkpoint remains `full-cinema-projection.jsonl`
+(7,844 successes, same 51 failures/20 skips), before the results-pane and status
+leaves. Sources focus/lifecycle, binding preparation, later phases and final
+native/performance/CI verification remain open.

@@ -1145,7 +1145,10 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
         child: _loading
             ? const Center(child: CircularProgressIndicator())
             : _error != null
-            ? _centered(scheme, 'Search failed.\n$_error')
+            ? SourceStatusMessage(
+                color: scheme.onSurfaceVariant,
+                text: 'Search failed.\n$_error',
+              )
             : Column(
                 children: [
                   if (_redesign && !_keywordMode && !cinema)
@@ -1163,7 +1166,7 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
                           _iptvSources.isNotEmpty ||
                           _hasRetryableAddon))
                     _redesignToolbar(scheme, showProviders: !cinema),
-                  if (_searching && !cinema) _searchingStrip(),
+                  if (_searching && !cinema) const SourceSearchProgress(),
                   Expanded(
                     child: SourceResultsPane(
                       count: _visible.length,
@@ -1171,9 +1174,9 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
                       isTelevision: widget.isTelevision,
                       redesign: _redesign,
                       onUserScroll: _freezeStreaming,
-                      emptyBuilder: (_) => _centered(
-                        scheme,
-                        _torrents.isEmpty
+                      emptyBuilder: (_) => SourceStatusMessage(
+                        color: scheme.onSurfaceVariant,
+                        text: _torrents.isEmpty
                             ? 'No sources found.'
                             : 'No matches for your filters.',
                       ),
@@ -1247,32 +1250,6 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
     if (rows == null) return;
     _presentStreaming(rows, token);
     _maybeCheckCache(batch);
-  }
-
-  /// Slim "still searching" strip under the toolbar while engines are in
-  /// flight — rows are already usable, this just says more may arrive.
-  Widget _searchingStrip() {
-    final app = AppThemeScope.of(context);
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 2, 16, 6),
-      child: Row(
-        children: [
-          const SizedBox(
-            width: 11,
-            height: 11,
-            child: CircularProgressIndicator(strokeWidth: 1.6),
-          ),
-          const SizedBox(width: 8),
-          Text(
-            'Still searching sources…',
-            style: TextStyle(
-              fontSize: 11.5,
-              color: app.fade(app.core.tx, 0.55),
-            ),
-          ),
-        ],
-      ),
-    );
   }
 
   Widget _newSourcesPill() => SourcePendingResultsPill(
@@ -1519,17 +1496,6 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
       },
     );
   }
-
-  Widget _centered(ColorScheme scheme, String text) => Center(
-    child: Padding(
-      padding: const EdgeInsets.all(32),
-      child: Text(
-        text,
-        textAlign: TextAlign.center,
-        style: TextStyle(color: scheme.onSurfaceVariant),
-      ),
-    ),
-  );
 }
 
 /// The Discover glass stage's still backdrop: the focused (rail-shown) title's
