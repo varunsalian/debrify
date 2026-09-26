@@ -1,6 +1,6 @@
 import '../../../models/advanced_search_selection.dart';
 import '../../../models/torrent.dart';
-import '../../../services/series_source_service.dart';
+import '../../../models/series_source.dart';
 import '../../../services/source_priority.dart';
 import '../../../services/stremio_service.dart';
 import 'source_seasons.dart';

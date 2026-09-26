@@ -1,5 +1,5 @@
 import '../models/saved_sources_state.dart';
-import '../../../services/series_source_service.dart';
+import '../../../models/series_source.dart';
 
 abstract interface class SavedSourcesRepository {
   bool get isCurrent;

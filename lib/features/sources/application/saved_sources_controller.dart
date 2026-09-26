@@ -1,5 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../services/series_source_service.dart';
+import '../../../models/series_source.dart';
 import '../data/saved_sources_repository.dart';
 import '../models/saved_sources_state.dart';
 import '../models/sources_session.dart';

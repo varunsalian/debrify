@@ -1345,3 +1345,51 @@ The full suite was not repeated for this bounded adapter/action change; its late
 checkpoint remains the toolbar-state run above. Phase 4C pin/local binding and UI,
 later phases, native/performance checks and the final architecture audit remain
 unfinished.
+
+
+### Phase 4C — Shared binding value model
+
+Tracing pin/local-source calls confirmed that their value contract still lived
+inside the preferences service. Extracted `SeriesSource` into the shared
+`lib/models/series_source.dart` (198 lines), preserving its complete class body.
+The old service imports/re-exports the same type for existing callers and is now
+268 lines. Migrated Sources state, controller, repository contract and preparation
+policy import the model directly. The stored repository imports the model plus
+only `SeriesSourceService` from the service library. This closes the recorded
+model-to-storage dependency exception without migrating unrelated consumers or
+introducing a second binding representation.
+
+Reviewed all transitive model imports: dart:convert, crypto, the pure
+`MediaServerSource` value model and pure catalog-scope hash helper. No preferences,
+HTTP, platform, UI or Riverpod dependency remains in this value-model graph.
+Registered the extracted shared model in `EXTRACTED_ELSEWHERE` so its size/import
+requirements cannot disappear outside the feature directory. Architecture checks
+now cover **94 migrated files**. Legacy exports preserve source compatibility and
+all callers use the same Dart class identity.
+
+Existing provider-native binding, addon-direct binding and Sources feature tests
+passed **186 tests** both before and after extraction. No new behavior or storage
+format was introduced; a separate mechanical comparison proves the entire
+formatted class body is identical to the pre-extraction HEAD, covering key
+construction, hashing, JSON fields/defaults and matching methods in addition to
+the existing executable coverage. No assertions or failure allowance changed.
+Analysis remains **864 diagnostics** with no new identities. Changed Dart files
+are formatted and diff checks pass. Sources and parent remain **2,771/20,155 lines**.
+Receipts: `.git/refactor-evidence/phase4c/binding-model-before.txt`,
+`binding-model-focused.txt`, `binding-model-body-comparison.txt`,
+`analyze-binding-model.txt`, and `binding-model-analyzer-comparison.txt`.
+
+Pin/local UI workflows and their remaining data/platform boundaries are still
+outstanding. The other transitive-helper exceptions, later migration phases,
+native/performance validation and final CI audit remain open.
+
+
+The exact full-suite helper completed in **174,141 ms** with **7,767 successes**,
+the same **51 observed baseline failures** (22 failure/29 error) and **20 skips**.
+No baseline identity is newly failing, missing or skipped. All toolbar-state
+checkpoint outcomes are preserved; the six new passing identities are the unpin
+cases from the preceding slice. The historical allowance is unchanged and the
+helper still exits 1 for pre-existing failures. Full receipts:
+`.git/refactor-evidence/phase4c/full-binding-model.jsonl`,
+`full-binding-model-comparison.txt`, and `binding-model-previous-checkpoint.txt`.
+Phase 4C and later migration/device/performance gates remain incomplete.
