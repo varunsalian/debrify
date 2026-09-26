@@ -265,7 +265,6 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
   final bool _redesign = true;
 
   String get _imdbId => widget.selection.imdbId;
-  bool get _isMovie => !widget.selection.isSeries;
   SeriesSource? _bindingFor(Torrent torrent) =>
       ref.read(sourceBindingMatcherProvider).match(_bound, torrent);
 
@@ -606,172 +605,23 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
   bool get _sourceActionActive =>
       mounted && _sourcesSession.owner == ProfileSessionMemory.captureOwner();
 
-  void _play(Torrent t, int i) {
-    // Swallow a SELECT that leaks through as the row menu / provider picker
-    // closes on TV (armed via DialogTapGuard.markKeyAction in the menu).
-    if (DialogTapGuard.shouldIgnoreTap()) return;
-    _playNow(t, i);
-  }
-
-  void _playNow(Torrent t, int i) {
-    if (!_sourceActionActive) return;
-    _freezeStreaming();
-    unawaited(
-      ref
-          .read(sourcePlaybackBridgeProvider)
-          .play(
-            context,
-            t,
-            forcePlay: widget.forcePlayOnTap,
-            meta: widget.meta,
-            // The rendered list — [_visible] equals [_torrents] with the redesign
-            // off, but is the source-filtered/sorted list when on, so the index and
-            // the in-player Sources switcher stay in sync with what the user sees.
-            sources: _visible,
-            sourceIndex: i,
-            searchKeyword: widget.selection.title,
-          )
-          .then((_) => _reloadBound()),
-    );
-  }
-
-  void _snack(String message) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), behavior: SnackBarBehavior.floating),
-    );
-  }
-
-  bool _canCopySource(Torrent torrent) =>
-      ref.read(sourceLinkCopierProvider).canCopy(torrent);
-
-  Future<void> _copySourceLink(Torrent torrent) async {
-    bool active() => _sourceActionActive;
-    if (!active()) return;
-    final result = await ref
-        .read(sourceLinkCopierProvider)
-        .copy(
-          torrent,
-          canContinue: active,
-          onResolving: () => _snack('Finding this IPTV episode…'),
-        );
-    if (!active()) return;
-    final message = switch (result) {
-      SourceLinkCopyResult.copied => 'Link copied to clipboard',
-      SourceLinkCopyResult.chooseEpisode =>
-        'Choose an episode before copying its IPTV link.',
-      SourceLinkCopyResult.missingEpisode =>
-        '${torrent.episodeIdentifier ?? 'This episode'} is not available in this IPTV series.',
-      SourceLinkCopyResult.unavailableEpisode =>
-        'Could not check this IPTV series. Try again.',
-      SourceLinkCopyResult.noLink => 'No link available for this source.',
-      SourceLinkCopyResult.retired => null,
-    };
-    if (message != null) _snack(message);
-  }
-
-  Future<void> _pin(Torrent t) async {
-    if (!_sourceActionActive) return;
-    if (t.isExternalStream) {
-      _snack("External links can't be pinned as a playback source.");
-      return;
-    }
-    await _bindSource(
-      (saveBinding, canContinue) => ref
-          .read(sourceBindingBridgeProvider)
-          .pin(
-            context,
-            t,
-            imdbId: _imdbId,
-            isMovie: _isMovie,
-            saveBinding: saveBinding,
-            canContinue: canContinue,
-            addonCatalogId: widget.selection.stremioCatalogId,
-            addonCatalogKey: widget.selection.stremioAddonKey,
-          ),
-    );
-  }
-
-  Future<void> _unpin(SeriesSource source) async {
-    if (!_sourceActionActive) return;
-    await ref
-        .read(savedSourcesProvider(_sourcesSession).notifier)
-        .remove(source);
-  }
-
-  Future<void> _pinLocal() => _bindSource(
-    (saveBinding, canContinue) => ref
-        .read(sourceBindingBridgeProvider)
-        .pinLocal(
-          context,
-          imdbId: _imdbId,
-          isMovie: _isMovie,
-          saveBinding: saveBinding,
-          canContinue: canContinue,
-          title: widget.selection.title,
-          year: widget.selection.year,
-        ),
+  late final _actions = SourceActions(
+    ref: ref,
+    context: context,
+    session: _sourcesSession,
+    isMounted: () => mounted,
+    isActive: () => _sourceActionActive,
+    details: () => (
+      selection: widget.selection,
+      meta: widget.meta,
+      bindMode: widget.bindMode,
+      forcePlayOnTap: widget.forcePlayOnTap,
+    ),
+    readVisible: () => _visible,
+    freezeStreaming: _freezeStreaming,
+    bindingFor: _bindingFor,
+    reloadBound: _reloadBound,
   );
-
-  Future<void> _bindSource(SourceBindingOperation operation) async {
-    if (!_sourceActionActive) return;
-    final pickerRoute = ModalRoute.of(context);
-    final navigator = pickerRoute?.navigator;
-    final ready = await ref
-        .read(sourceBindingProvider(_sourcesSession).notifier)
-        .bind(operation, viewIsActive: () => mounted);
-    if (ready &&
-        widget.bindMode &&
-        mounted &&
-        _sourcesSession.owner == ProfileSessionMemory.captureOwner() &&
-        pickerRoute != null &&
-        navigator != null &&
-        navigator.mounted) {
-      if (pickerRoute.isCurrent) {
-        navigator.pop();
-      } else if (pickerRoute.isActive) {
-        // A delayed save closes this picker, never a newer route above it.
-        navigator.removeRoute(pickerRoute);
-      }
-    }
-  }
-
-  void _showRowMenu(Torrent t, int i) {
-    if (!_sourceActionActive) return;
-    _freezeStreaming();
-    final app = AppThemeScope.of(context);
-    final binding = _bindingFor(t);
-    final playback = ref.read(sourcePlaybackBridgeProvider);
-    final copier = ref.read(sourceLinkCopierProvider);
-    final policy = ref.read(sourceRowActionPolicyProvider);
-    showModalBottomSheet<void>(
-      context: context,
-      backgroundColor: app.home.sheetBg,
-      builder: (_) {
-        final actions = policy.project(
-          t,
-          canCopy: copier.canCopy,
-          supportsDownload: playback.supportsDownload,
-        );
-        return SourceRowActionsSheet(
-          app: app,
-          kind: actions.kind,
-          bound: binding != null,
-          onPlay: () => _playNow(t, i),
-          onTogglePin: actions.canPin
-              ? () => unawaited(binding != null ? _unpin(binding) : _pin(t))
-              : null,
-          onCopy: actions.canCopy ? () => unawaited(_copySourceLink(t)) : null,
-          onDownload: actions.canDownload
-              ? () {
-                  if (!_sourceActionActive) return;
-                  unawaited(playback.download(context, t));
-                }
-              : null,
-        );
-      },
-    );
-  }
 
   @override
   Widget build(BuildContext context) => buildSourceScreenFrame(
@@ -786,7 +636,7 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
     canPinLocal: () =>
         _imdbId.isNotEmpty &&
         ref.read(sourceBindingBridgeProvider).localBindingAvailable,
-    onPinLocal: () => unawaited(_pinLocal()),
+    onPinLocal: () => unawaited(_actions.pinLocal()),
     providers: () => _cinemaProviders,
     selectedProvider: _sourceFilter,
     onProviderSelected: _selectCinemaProvider,
@@ -877,15 +727,15 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
         qualityTier: t.qualityTier,
         onTap: () {
           if (widget.bindMode) {
-            unawaited(_pin(t));
+            unawaited(_actions.pin(t));
           } else {
-            _play(t, i);
+            _actions.play(t, i);
           }
         },
-        onLongPress: () => _showRowMenu(t, i),
-        onCopyMagnet: !_canCopySource(t)
+        onLongPress: () => _actions.showMenu(t, i),
+        onCopyMagnet: !_actions.canCopy(t)
             ? null
-            : () => unawaited(_copySourceLink(t)),
+            : () => unawaited(_actions.copyLink(t)),
         onNavigateUp: () {
           _freezeStreaming();
           if (i > 0) {
@@ -1093,15 +943,17 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
       isTelevision: widget.isTelevision,
       bindMode: widget.bindMode,
       cacheLabel: _cacheLabel(t),
-      onCopy: !_canCopySource(t) ? null : () => unawaited(_copySourceLink(t)),
+      onCopy: !_actions.canCopy(t)
+          ? null
+          : () => unawaited(_actions.copyLink(t)),
       onTap: () {
         if (widget.bindMode) {
-          unawaited(_pin(t));
+          unawaited(_actions.pin(t));
         } else {
-          _play(t, i);
+          _actions.play(t, i);
         }
       },
-      onLongPress: () => _showRowMenu(t, i),
+      onLongPress: () => _actions.showMenu(t, i),
       onNavigateUp: () {
         _freezeStreaming();
         if (i > 0) {

@@ -4112,3 +4112,45 @@ Receipts: `full-playback-meta-model.jsonl`,
 `full-playback-meta-model-previous-checkpoint.txt`. The baseline helper remains
 nonzero for existing failures; no allowance changes. Final formatting/diff/
 architecture checks pass. Phase 4C and later/native/performance/CI gates stay open.
+
+
+### Phase 4C — Sources action presentation
+
+Extracted play/copy/pin/unpin and row-menu presentation into the view-owned
+`SourceActions` (222 formatted lines). The production view dispatches to it;
+original methods are removed. Existing application controllers still own binding,
+persistence and link resolution; named presentation bridges own legacy playback
+and picker calls. The helper borrows the view context/ref/session and explicit
+live inputs, owns no focus/search state, and starts no effects on construction.
+
+Review retained tap suppression, freeze-before-play, rendered-list/index identity,
+post-play reload, copy continuation guards/messages, external-link pin rejection,
+and menu capability projection inside the modal builder. Widget details are read
+live, including after binding awaits. The captured originating picker route alone
+is popped/removed after success; mounted/profile checks and navigator ownership
+remain in place. Existing real-screen tests exercise these paths and origin
+retirement; no duplicate implementation-shaped tests were added.
+
+Baseline: **495 Sources tests pass**. Initial extraction checks caught a mechanical
+`navigator.mounted` rename and five unused parent imports. Those are fixed; the
+initial failing receipts remain recorded. Final affected run: **495 pass**;
+analyzer **863 diagnostics**, no new identities; **158 migrated files** pass
+size/import checks. Full-suite comparison is recorded below.
+Receipts under `.git/refactor-evidence/phase4c/`: `action-presentation-before.txt`,
+`action-presentation-after.txt`, `analyze-action-presentation.txt`,
+`action-presentation-fixed.txt`, `analyze-action-presentation-fixed.txt`,
+`action-presentation-analyzer-comparison.txt` and the formatting review stubs.
+
+Phase 4C remains open: the Sources view still needs further cohesive extraction
+before its standalone feature move. Discover backdrop components in the same
+legacy part remain phase-6 scope. Native, performance, CI and full-library
+retirement gates are not satisfied by this action extraction.
+
+Full suite: **8,142 successes / the same 51 failures / 20 skips**. Every test
+identity/outcome matches the previous checkpoint; no added failures, missing
+tests or new skips against the original baseline. Receipts:
+`full-action-presentation.jsonl`, `full-action-presentation-comparison.txt` and
+`full-action-presentation-previous-checkpoint.txt`. No failure allowance changed.
+The Sources part shrinks **1,530 → 1,382 lines**. Only changed methods were checked
+through a formatter stub; the final row-callback wrap is whitespace-only. The
+unrelated existing provider getter formatting was left untouched.
