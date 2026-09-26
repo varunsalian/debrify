@@ -864,3 +864,63 @@ Phase 4C remains in progress:
 search/results, retry orchestration, availability-cache checks and pin/local actions
 still need extraction, followed by remaining Home/Discover/lifecycle work and native,
 visual/performance checks. Saved-source focus/reveal remains view-owned.
+
+
+### Phase 4C source cache checks (implemented and reviewed)
+
+`SourceCacheController` (126 lines) owns the Sources workflow's cache generations,
+provider flags, immutable badge maps and post-success hash memoization. The screen
+now dispatches configuration, new-search reset and batch/completion/adopt checks;
+it no longer holds provider credentials, maps or checked-hash sets. Its old
+cache-check implementation is removed. `DebridSourceCacheRepository` (91 lines)
+reads the same six preferences concurrently and owns the credential-bearing
+session. Calls retain the original TorBox and Premiumize protocols, with no new
+retry framework or dependency. Profile ownership and disposal reject stale work;
+a late failure also cannot dispatch the next provider under an incoming profile.
+
+This remains a Sources-specific controller because its observed behavior differs
+from keyword cache filtering: only real hashes are eligible; hashes are trimmed
+and lowercased; duplicates and overlapping in-flight dispatch remain allowed;
+TorBox runs before Premiumize; short Premiumize responses mean false for missing
+positions; badge maps merge across batches. Hashes become memoized only after
+both enabled providers succeed. A failure retains the other provider's badges
+and allows a later batch or completion sweep to retry. A new search clears badges
+and memoization without reloading credentials; a pending initial configuration
+still applies and causes the screen to sweep the current rows.
+
+The immutable state carries an explicit repaint revision to preserve the original
+notification timing. Provider map updates are immediately readable, but the screen
+requests a repaint after both sequential attempts finish, just as the old method
+did. Reset/configuration do not add independent repaints. This does not introduce a
+second copy of badge state in the widget or reorder/filter rows when badges arrive.
+
+The initial 12 affected screen/startup tests passed before extraction. The final
+combined affected run has **112 passes**. New controller cases cover normalization,
+synthetic/blank hashes, duplicates, sequential notification timing, short responses,
+partial failures and retry eligibility, additive badges, query resets, overlapping
+configuration, late configuration and profile/disposal/dependency retirement of
+both success and failure. Data tests verify each enabled/preference/key requirement,
+credential snapshots and RPC arguments, and rejection before retired dispatch.
+A real Sources widget test proves configuration arriving after results sweeps both
+rows, renders `TB | PM` for the cached result, preserves row order and retains row-
+zero focus. Unrelated startup settings are injected so that test does not depend on
+filesystem engine initialization. Existing cached-episode and streaming-focus tests
+remain in the affected run.
+
+Analyzer comparison has no additions and the previously removed Sources lint,
+leaving **864 diagnostics**. Architecture checks cover **79 migrated files**;
+formatting/diff checks pass. Sources is **3,014 lines**, its parent **20,145**.
+Receipts are `.git/refactor-evidence/phase4c/cache-before.txt`,
+`cache-complete-focused.txt`, `cache-screen-integration-fixed.txt`,
+`analyze-cache-final.txt` and `cache-final-analyzer-comparison.txt`.
+The exact full helper completed in **173,283 ms** with **7,688 successes**, the
+same **51 observed baseline failures** (22 failure/29 error outcomes), and
+**20 skips**. Identity comparison finds no new failures, missing baseline tests
+or newly skipped cases. The historical helper allowance is unchanged and still
+exits 1. Full receipts are `.git/refactor-evidence/phase4c/full-cache.jsonl`,
+`full-cache.helper.txt` and `full-cache-comparison.txt`.
+
+Phase 4C remains in progress. Results/search state, individual retries and pin/local
+source actions still need extraction; focus, rendering and scrolling stay in the
+view. Later Home/Discover/lifecycle phases and native/visual/performance checks
+remain outstanding.

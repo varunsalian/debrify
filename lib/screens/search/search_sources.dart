@@ -310,22 +310,9 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
   List<String> get _sourcePriority => _settings.priority.providers;
   Map<String, String> get _sourceAliases => _settings.priority.aliases;
 
-  // --- cached-availability badges (redesign only): checked async after results
-  // arrive, only for TorBox / Premiumize when their cache-check pref is on and
-  // the provider is configured. Maps: infohash(lowercased) -> isCached. ---
-  bool _tbCacheOn = false;
-  bool _pmCacheOn = false;
-  String? _tbKey;
-  String? _pmKey;
-  Map<String, bool>? _tbCache;
-  Map<String, bool>? _pmCache;
-  int _cacheToken = 0;
-
-  /// Infohashes already dispatched to a provider cache-check for the current
-  /// [_cacheToken] generation. Streaming batches accumulate cumulatively, so
-  /// this lets each batch check only the hashes an earlier batch hasn't —
-  /// no provider hash is ever queried twice per search.
-  final Set<String> _cacheChecked = {};
+  late final ProviderSubscription<SourceCacheState> _cacheSubscription;
+  SourceCacheController get _cacheController =>
+      ref.read(sourceCacheProvider(_sourcesSession).notifier);
 
   // --- streaming search: rows appear per engine as each one finishes, instead
   // of waiting for the slowest engine's timeout. ---
@@ -455,6 +442,14 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
         });
       },
     );
+    _cacheSubscription = ref.listenManual(
+      sourceCacheProvider(_sourcesSession),
+      (previous, next) {
+        if (mounted && previous?.repaintRevision != next.repaintRevision) {
+          setState(() {});
+        }
+      },
+    );
     // Rebuild the toolbar when the funnel gains/loses focus so its D-pad
     // highlight tracks — Focus alone doesn't guarantee a parent rebuild.
     _filterFocus.addListener(_onFilterFocusChanged);
@@ -495,6 +490,7 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
 
   @override
   void dispose() {
+    _cacheSubscription.close();
     _disposedBoundCount = _bound.length;
     _savedSourcesSubscription.close();
     _settingsSubscription.close();
@@ -526,10 +522,7 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
     // New search → reset the cache generation: drop the previous set's badges
     // and checked-hash memo so streaming batches re-check from scratch. The
     // bumped token also invalidates any still-in-flight check from the old set.
-    _cacheToken++;
-    _cacheChecked.clear();
-    _tbCache = null;
-    _pmCache = null;
+    _cacheController.beginSearch();
     _searching = true;
     _streamFrozen = false;
     _pendingTorrents = null;
@@ -2272,101 +2265,17 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
     if (mounted) setState(() {});
   }
 
-  /// Resolve which providers to cache-check: the pref is on, the integration is
-  /// enabled, and a key is present. Only TorBox and Premiumize expose a
-  /// pre-check API (RD/AllDebrid discover cachedness only by adding).
   Future<void> _loadCacheConfig() async {
-    final r = await Future.wait([
-      StorageService.getTorboxCacheCheckEnabled(),
-      StorageService.getTorboxIntegrationEnabled(),
-      StorageService.getTorboxApiKey(),
-      StorageService.getPremiumizeCacheCheckEnabled(),
-      StorageService.getPremiumizeIntegrationEnabled(),
-      StorageService.getPremiumizeApiKey(),
-    ]);
-    final tbKey = r[2] as String?;
-    final pmKey = r[5] as String?;
-    if (!mounted) return;
-    _tbCacheOn =
-        (r[0] as bool) && (r[1] as bool) && (tbKey?.isNotEmpty ?? false);
-    _pmCacheOn =
-        (r[3] as bool) && (r[4] as bool) && (pmKey?.isNotEmpty ?? false);
-    _tbKey = tbKey;
-    _pmKey = pmKey;
-    _maybeCheckCache();
+    if (await _cacheController.configure() && mounted) _maybeCheckCache();
   }
 
-  /// Kick an additive cache check iff the redesign is on and a provider is
-  /// checkable. [rows] scopes the check to a specific set (a streaming batch);
-  /// null sweeps the whole current list. Called from every path that adds rows
-  /// (each batch, search completion, adopt) — [_runCacheCheck] skips hashes an
-  /// earlier call already dispatched, so it's cheap to over-call.
   void _maybeCheckCache([List<Torrent>? rows]) {
-    if (!_redesign || (!_tbCacheOn && !_pmCacheOn)) return;
-    unawaited(_runCacheCheck(rows ?? _torrents));
+    if (!mounted || !_redesign) return;
+    unawaited(_cacheController.check(rows ?? _torrents));
   }
 
-  /// Non-blocking: results are already rendered; this fills the cache maps for
-  /// the not-yet-confirmed hashes in [rows] and setStates to add the ⚡ badges.
-  /// MERGES into the maps (never replaces) so earlier batches' badges survive;
-  /// the [_cacheToken] generation guards against a stale search applying. A hash
-  /// enters [_cacheChecked] only after every enabled provider resolved for it,
-  /// so a thrown check leaves it retryable by a later batch or the finish sweep.
-  Future<void> _runCacheCheck(List<Torrent> rows) async {
-    final token = _cacheToken;
-    final list = <String>[];
-    for (final t in rows) {
-      if (!t.hasRealInfoHash) continue;
-      final h = t.infohash.trim().toLowerCase();
-      // contains (not add): memoize post-success below, not on dispatch.
-      if (h.isEmpty || _cacheChecked.contains(h)) continue;
-      list.add(h);
-    }
-    if (list.isEmpty) return;
-
-    // "Done" = provider not enabled (nothing to do) OR its check succeeded.
-    bool tbDone = !(_tbCacheOn && _tbKey != null);
-    bool pmDone = !(_pmCacheOn && _pmKey != null);
-    if (_tbCacheOn && _tbKey != null) {
-      try {
-        final cached = await TorboxService.checkCachedTorrents(
-          apiKey: _tbKey!,
-          infoHashes: list,
-        );
-        if (!mounted || token != _cacheToken) return;
-        (_tbCache ??= {}).addAll({for (final h in list) h: cached.contains(h)});
-        tbDone = true;
-      } catch (_) {}
-    }
-    if (_pmCacheOn && _pmKey != null) {
-      try {
-        final res = await PremiumizeService.checkCache(_pmKey!, list);
-        if (!mounted || token != _cacheToken) return;
-        (_pmCache ??= {}).addAll({
-          for (var i = 0; i < list.length; i++)
-            list[i]: i < res.length && res[i],
-        });
-        pmDone = true;
-      } catch (_) {}
-    }
-    // Only memoize hashes every enabled provider resolved; a failed provider
-    // leaves them out so the finish sweep re-queries them.
-    if (tbDone && pmDone) _cacheChecked.addAll(list);
-    if (mounted && token == _cacheToken) setState(() {});
-  }
-
-  /// `TB`, `PM`, or `TB | PM` for a cached torrent; null when not cached / not
-  /// yet checked / no real infohash.
-  String? _cacheLabel(Torrent t) {
-    if (!t.hasRealInfoHash) return null;
-    final h = t.infohash.trim().toLowerCase();
-    if (h.isEmpty) return null;
-    final labels = <String>[
-      if (_tbCacheOn && (_tbCache?[h] ?? false)) 'TB',
-      if (_pmCacheOn && (_pmCache?[h] ?? false)) 'PM',
-    ];
-    return labels.isEmpty ? null : labels.join(' | ');
-  }
+  String? _cacheLabel(Torrent torrent) =>
+      _cacheSubscription.read().label(torrent);
 
   Future<void> _openFilters() async {
     final result = await showDialog<TorrentFilterState>(
