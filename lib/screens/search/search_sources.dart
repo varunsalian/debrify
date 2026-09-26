@@ -279,8 +279,11 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
   bool _sortAsc = false;
   String? _sourceFilter; // null = all sources; else a normalized provider key
 
-  bool _useAddonText = false;
-  bool _showAddonLogos = false;
+  late final ProviderSubscription<SourcePresentationSettings>
+      _settingsSubscription;
+  SourcePresentationSettings get _settings => _settingsSubscription.read();
+  bool get _useAddonText => _settings.useAddonText;
+  bool get _showAddonLogos => _settings.showAddonLogos;
   final _cinemaKey = GlobalKey<CinemaSourcesLayoutState>();
   int _lastCinemaSource = 0;
 
@@ -300,8 +303,8 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
   /// The user's Quick Play "Addon Priority" order for this tab (empty =
   /// never customized = keep the shipped provider ordering). Also
   /// orders the source pills and their retry states.
-  List<String> _sourcePriority = const [];
-  Map<String, String> _sourceAliases = const {};
+  List<String> get _sourcePriority => _settings.priority.providers;
+  Map<String, String> get _sourceAliases => _settings.priority.aliases;
 
   // --- cached-availability badges (redesign only): checked async after results
   // arrive, only for TorBox / Premiumize when their cache-check pref is on and
@@ -430,6 +433,12 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
         if (mounted) setState(() {});
       },
     );
+    _settingsSubscription = ref.listenManual(
+      sourceSettingsProvider(_sourcesSession),
+      (previous, next) {
+        if (mounted) setState(() {});
+      },
+    );
     // Rebuild the toolbar when the funnel gains/loses focus so its D-pad
     // highlight tracks — Focus alone doesn't guarantee a parent rebuild.
     _filterFocus.addListener(_onFilterFocusChanged);
@@ -444,42 +453,14 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
     // user-interaction path, which froze streaming and parked every later
     // batch behind the "+N new sources" pill.
     await Future.wait([
-      _loadSourcePriority(),
+      ref.read(sourceSettingsProvider(_sourcesSession).notifier).load(),
       _reloadBound(),
-      _loadAddonText(),
     ]);
-    if (!mounted) return;
+    if (!mounted ||
+        _sourcesSession.owner != ProfileSessionMemory.captureOwner()) {
+      return;
+    }
     await _runSearch();
-  }
-
-  Future<void> _loadAddonText() async {
-    final value = await StorageService.getUseAddonTextFormatting();
-    final logos = await StorageService.getShowAddonLogos();
-    if (mounted)
-      setState(() {
-        _useAddonText = value;
-        _showAddonLogos = logos;
-      });
-  }
-
-  Future<void> _loadSourcePriority() async {
-    try {
-      final rules = await StorageService.getQuickPlayRules(
-        isMovie: !widget.selection.isSeries,
-      );
-      final aliases = await SourcePriority.sourceAliases();
-      if (!mounted) return;
-      final providers = await SourcePriority.providers();
-      if (!mounted) return;
-      _sourcePriority = [
-        for (final provider in SourcePriority.orderedProviders(
-          providers,
-          rules.sourcePriority,
-        ))
-          provider.key,
-      ];
-      _sourceAliases = aliases;
-    } catch (_) {}
   }
 
   List<int> _seasonMenuNumbers() => sourceSeasonMenu(
@@ -498,6 +479,7 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
 
   @override
   void dispose() {
+    _settingsSubscription.close();
     _seasonsSubscription.close();
     _kwCtrl.dispose();
     _resultsScroll.dispose();

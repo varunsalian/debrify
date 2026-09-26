@@ -754,3 +754,46 @@ Receipts are `.git/refactor-evidence/phase4c/full-guide.jsonl`,
 progress: Sources results/search, retries, cache and pin/local-source actions
 still require extraction. Later phases and native/visual/performance checks
 remain outstanding.
+
+
+### Phase 4C startup settings (implemented and reviewed)
+
+`SourceSettingsController` (62 lines) owns immutable provider priority/aliases and
+addon text/logo settings. `StoredSourceSettingsRepository` (60 lines) retains the
+existing movie/series Quick Play selection, alias lookup, provider enumeration and
+ordering, preference keys and defaults. The production Sources screen now reads
+these values from a view/session-specific Riverpod subscription; the two old data
+loading methods and mutable fields are removed. The screen owns subscription
+cleanup and starts the search only after the existing bound-source load and both
+settings branches finish. A retired startup cannot launch a search.
+
+The controller starts no IO during construction. Priority and appearance load
+concurrently, preserving sequential reads inside each branch. Priority failure
+continues with default ordering; appearance failure retains its existing error
+propagation. Partial completion preserves the other branch's state. Generations,
+disposal and live profile ownership reject late publication. The repository uses
+the captured scope and checks live ownership before subsequent service calls.
+It borrows existing services and introduces no preference writes or schema change.
+
+Before extraction the ten Sources screen tests passed. The final affected run has
+**66 passing tests**, including existing Sources focus/streaming/cache selection,
+source ordering, previous Sources slices and new controller, real preference and
+actual screen startup cases. Both completion orders, overlapping loads, failure
+behavior, immutable publication, profile/disposal/dependency retirement and the
+search startup barrier are covered. The retiring-screen test uses bounded pumps:
+its loading spinner intentionally continues until the handoff removes the route.
+Analyzer identity comparison has **no additions and one removed legacy curly-brace
+lint**, leaving **864 diagnostics**. Formatting/diff checks pass. Architecture
+checks cover **69 migrated files**; Sources is 3,131 lines and its parent 20,144.
+Receipts are `.git/refactor-evidence/phase4c/bound-before.txt`,
+`settings-complete-focused.txt`, `analyze-settings-complete.txt` and
+`settings-comparison.txt`. The latest full-suite checkpoint remains the preceding
+season-guide integration (7,628 successes, same 51 failures and 20 skips); this
+settings slice uses the affected suite and analyzer comparison.
+
+Review of the next saved-source boundary found `SeriesSourceService.getSources`
+also migrates legacy single-object records and custom catalog pins, including
+cleanup/tombstone writes. Its extraction must cover those actual commit paths and
+profile retirement, not assume the lookup is read-only. That work, Sources
+results/retries/cache/pin actions, later phases and native/performance checks remain
+outstanding. Phase 4C is still in progress.
