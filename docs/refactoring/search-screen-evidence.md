@@ -2727,3 +2727,71 @@ baseline comparison finds no new failures, missing tests or new skips. Receipts:
 the same directory. The historical helper remains nonzero for the unchanged
 existing failures; its allowances were not modified. Phase 4C remains in progress
 for picker continuation/native ownership and the remaining Sources work.
+
+### Phase 4C — local binding action retirement
+
+The existing manual binding action check now passes through local movie/series
+selection, native picker returns, directory scans, file metadata reads and
+follow-up dialog returns. Retired actions return without another dialog, scan,
+source publication or save. Android's existing caught-error snackbars also check
+ownership; its progress route retains the existing exact-route cleanup in
+`finally`. Already-issued native calls and filesystem reads are allowed to settle.
+
+This is an intentional lifecycle correction, separate from the preceding
+presentation extraction. Callers omitting the optional callback retain their
+previous behavior, API arguments, ordering and error handling. No DI framework,
+retry, new state owner or persisted format was added. The file operations remain
+plain data functions; the compatibility coordinator remains temporarily in the
+legacy service at **445 lines**, with Android UI/native orchestration still to
+migrate. The data file is **166 lines**.
+
+Six bridge tests exercise actual local binding with a substituted native directory
+picker and real temporary files. They cover retirement during the mode sheet,
+movie/series directory selection and profile reset, plus current movie/series
+saves. Against the previous implementation, the two active cases pass and all
+four retirement cases fail; with the continuation checks, all six pass. The
+directory cases explicitly wait for the native picker to start before retiring,
+so modal closing animation cannot turn them into entry-guard tests.
+
+Thirteen data tests cover current, already-retired and pending scan results for
+video inventories, episode inventories and matching folders. Controlled file
+existence/stat futures verify that retirement prevents the next metadata read or
+source publication while an active action preserves the source. These supplement
+existing ordering, immutable output and metadata tests.
+
+The Sources test directory passes **362 tests**. Analyzer retains **863
+diagnostics**, with no new identities against the original baseline. The scoped
+architecture check passes **120 migrated files**; formatting and diff checks pass.
+Receipts under `.git/refactor-evidence/phase4c/`:
+`local-retirement-reviewed-red.txt`, `local-current-green.txt`,
+`local-retirement-affected.txt`, `analyze-local-retirement.txt` and
+`local-retirement-analyzer-comparison.txt`.
+
+Review traced each introduced asynchronous continuation and preserved the
+unguarded branches. Desktop bridge tests do not execute Dart's Android platform
+branch; Android native/UI behavior still needs device verification. Existing
+desktop layout and Android service tests remain part of the full-suite gate.
+The broader Sources presentation, native ownership, and all later phases remain
+open.
+
+Full-suite investigation: the first run had **8,001 successes / 52 failures /
+20 skips**, including a new observation of
+`self_profile_settings_page_test.dart::identity save persists without changing access`
+reading the old name after its fixed-duration wait. The unchanged profile test
+file then passed all **five cases** independently. Review found the edited
+local-binding methods are outside this profile identity-save path and introduce
+no shared initialization/storage change. Timing sensitivity is a plausible
+explanation, not an established root cause; the first receipt is retained.
+
+The unchanged repeat full run finished with **8,002 successes / the original
+51 failures / 20 skips**. Every prior checkpoint outcome is preserved, including
+the profile save test; all **19 new tests** pass. Both original-baseline and
+previous-checkpoint identity comparisons pass, with no missing tests or new skips.
+No test, timeout or failure allowance was changed to obtain this result.
+Receipts: `full-local-retirement.jsonl`,
+`local-retirement-profile-investigation.txt`,
+`full-local-retirement-verified.jsonl`,
+`full-local-retirement-verified-comparison.txt` and
+`local-retirement-verified-previous-checkpoint.txt` in the same evidence directory.
+The historical helper still exits nonzero for the original failures. Phase 4C
+and the full migration remain in progress.

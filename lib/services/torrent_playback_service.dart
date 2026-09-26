@@ -5713,12 +5713,14 @@ class TorrentPlaybackService {
       source = await LocalBoundSourceService.pickMovieSource(
         context,
         title: title,
+        canContinue: canContinue,
         year: year,
       );
     } else {
       source = await LocalBoundSourceService.pickSeriesSource(
         context,
         title: title,
+        canContinue: canContinue,
       );
     }
     if (source == null || !context.mounted || !active()) return false;

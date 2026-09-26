@@ -41,7 +41,10 @@ class LocalBoundSourceService {
     BuildContext context, {
     required String title,
     String? year,
+    bool Function()? canContinue,
   }) async {
+    bool active() => canContinue?.call() ?? true;
+    if (canContinue != null && (!context.mounted || !active())) return null;
     if (isLocalBindingDisabled) {
       _showSnack(context, mobileDisabledReason, isError: true);
       return null;
@@ -52,14 +55,15 @@ class LocalBoundSourceService {
       androidFolderSelection: Platform.isAndroid,
     );
 
-    if (mode == null || !context.mounted) return null;
+    if (mode == null || !context.mounted || !active()) return null;
 
     return switch (mode) {
-      LocalMoviePickMode.file => _pickFile(context),
+      LocalMoviePickMode.file => _pickFile(context, canContinue: canContinue),
       LocalMoviePickMode.folder => _pickFromFolder(
         context,
         title: title,
         year: year,
+        canContinue: canContinue,
       ),
     };
   }
@@ -67,27 +71,37 @@ class LocalBoundSourceService {
   static Future<SeriesSource?> pickSeriesSource(
     BuildContext context, {
     required String title,
+    bool Function()? canContinue,
   }) async {
+    bool active() => canContinue?.call() ?? true;
+    if (canContinue != null && (!context.mounted || !active())) return null;
     if (isLocalBindingDisabled) {
       _showSnack(context, mobileDisabledReason, isError: true);
       return null;
     }
 
-    if (Platform.isAndroid) return _pickAndroidSeries(context, title);
+    if (Platform.isAndroid) {
+      return _pickAndroidSeries(context, title, canContinue: canContinue);
+    }
 
     final path = await FilePicker.platform.getDirectoryPath();
     if (path == null || path.trim().isEmpty) return null;
-    if (!context.mounted) return null;
+    if (!context.mounted || !active()) return null;
 
     final seriesFolder = await _resolveSeriesFolder(
       context,
       path,
       title: title,
+      canContinue: canContinue,
     );
-    if (seriesFolder == null) return null;
+    if (seriesFolder == null || !active()) return null;
 
     final resolvedPath = seriesFolder.path;
-    final episodes = await scanSeriesFolder(resolvedPath);
+    final episodes = await scanLocalSeriesFolder(
+      resolvedPath,
+      canContinue: canContinue,
+    );
+    if (!active()) return null;
     if (episodes.isEmpty) {
       if (context.mounted) {
         _showSnack(context, 'No episodes found in that folder', isError: true);
@@ -96,6 +110,7 @@ class LocalBoundSourceService {
     }
 
     final stat = await seriesFolder.stat();
+    if (!active()) return null;
     final folderName = localPathName(resolvedPath).isNotEmpty
         ? localPathName(resolvedPath)
         : title;
@@ -122,29 +137,51 @@ class LocalBoundSourceService {
   static String? get localDisabledReason =>
       isLocalBindingDisabled ? mobileDisabledReason : null;
 
-  static Future<SeriesSource?> _pickFile(BuildContext context) async {
-    if (Platform.isAndroid) return _pickAndroidMovie(context, folder: false);
+  static Future<SeriesSource?> _pickFile(
+    BuildContext context, {
+    bool Function()? canContinue,
+  }) async {
+    bool active() => canContinue?.call() ?? true;
+    if (canContinue != null && (!context.mounted || !active())) return null;
+    if (Platform.isAndroid) {
+      return _pickAndroidMovie(
+        context,
+        folder: false,
+        canContinue: canContinue,
+      );
+    }
     final result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
       allowedExtensions: _videoExtensions,
       allowMultiple: false,
       withData: false,
     );
+    if (!active()) return null;
     final path = result?.files.single.path;
     if (path == null || path.trim().isEmpty) return null;
-    return localSourceFromFile(File(path));
+    return localSourceFromFile(File(path), canContinue: canContinue);
   }
 
   static Future<SeriesSource?> _pickFromFolder(
     BuildContext context, {
     required String title,
     String? year,
+    bool Function()? canContinue,
   }) async {
-    if (Platform.isAndroid) return _pickAndroidMovie(context, folder: true);
+    bool active() => canContinue?.call() ?? true;
+    if (canContinue != null && (!context.mounted || !active())) return null;
+    if (Platform.isAndroid) {
+      return _pickAndroidMovie(context, folder: true, canContinue: canContinue);
+    }
     final path = await FilePicker.platform.getDirectoryPath();
+    if (!active()) return null;
     if (path == null || path.trim().isEmpty) return null;
 
-    final candidates = await scanLocalVideoFolder(path);
+    final candidates = await scanLocalVideoFolder(
+      path,
+      canContinue: canContinue,
+    );
+    if (!active()) return null;
     if (candidates.isEmpty) {
       if (context.mounted) {
         _showSnack(
@@ -158,18 +195,24 @@ class LocalBoundSourceService {
 
     final matched = matchLocalMovieFiles(candidates, title: title, year: year);
     if (matched != null) {
-      return localSourceFromFile(matched.file);
+      return localSourceFromFile(matched.file, canContinue: canContinue);
     }
 
     if (!context.mounted) return null;
     final selected = await showLocalFileChoice(context, candidates);
-    return selected == null ? null : localSourceFromFile(selected.file);
+    if (!active()) return null;
+    return selected == null
+        ? null
+        : localSourceFromFile(selected.file, canContinue: canContinue);
   }
 
   static Future<List<LocalSourceDocument>> _scanAndroidFolder(
     BuildContext context,
-    String uri,
-  ) async {
+    String uri, {
+    bool Function()? canContinue,
+  }) async {
+    bool active() => canContinue?.call() ?? true;
+    if (canContinue != null && (!context.mounted || !active())) return const [];
     final navigator = Navigator.of(context);
     final progress = DialogRoute<void>(
       context: context,
@@ -189,7 +232,8 @@ class LocalBoundSourceService {
     );
     unawaited(navigator.push(progress));
     try {
-      return await AndroidLocalSourceService.videos(uri);
+      final videos = await AndroidLocalSourceService.videos(uri);
+      return active() ? videos : const [];
     } finally {
       if (navigator.mounted && progress.isActive) {
         navigator.removeRoute(progress);
@@ -200,10 +244,13 @@ class LocalBoundSourceService {
   static Future<SeriesSource?> _pickAndroidMovie(
     BuildContext context, {
     required bool folder,
+    bool Function()? canContinue,
   }) async {
+    bool active() => canContinue?.call() ?? true;
+    if (canContinue != null && (!context.mounted || !active())) return null;
     try {
       final picked = await AndroidLocalSourceService.pick(directory: folder);
-      if (picked == null || !context.mounted) return null;
+      if (picked == null || !context.mounted || !active()) return null;
       if (!folder) {
         if (picked.isDirectory || !FileUtils.isVideoFile(picked.name)) {
           _showSnack(context, 'Please select a video file.', isError: true);
@@ -211,8 +258,12 @@ class LocalBoundSourceService {
         }
         return picked.toSource();
       }
-      final videos = await _scanAndroidFolder(context, picked.uri);
-      if (!context.mounted) return null;
+      final videos = await _scanAndroidFolder(
+        context,
+        picked.uri,
+        canContinue: canContinue,
+      );
+      if (!context.mounted || !active()) return null;
       if (videos.isEmpty) {
         _showSnack(
           context,
@@ -247,9 +298,10 @@ class LocalBoundSourceService {
           ],
         ),
       );
+      if (!active()) return null;
       return selected?.toSource();
     } on PlatformException catch (error) {
-      if (context.mounted) {
+      if (context.mounted && active()) {
         _showSnack(
           context,
           error.message ?? 'Local source could not be opened.',
@@ -257,21 +309,31 @@ class LocalBoundSourceService {
         );
       }
     } on LocalSourceUnavailable catch (error) {
-      if (context.mounted) _showSnack(context, error.message, isError: true);
+      if (context.mounted && active()) {
+        _showSnack(context, error.message, isError: true);
+      }
     }
     return null;
   }
 
   static Future<SeriesSource?> _pickAndroidSeries(
     BuildContext context,
-    String title,
-  ) async {
+    String title, {
+    bool Function()? canContinue,
+  }) async {
+    bool active() => canContinue?.call() ?? true;
+    if (canContinue != null && (!context.mounted || !active())) return null;
     try {
       final folder = await AndroidLocalSourceService.pick(directory: true);
-      if (folder == null || !context.mounted) return null;
-      final videos = await _scanAndroidFolder(context, folder.uri);
+      if (folder == null || !context.mounted || !active()) return null;
+      final videos = await _scanAndroidFolder(
+        context,
+        folder.uri,
+        canContinue: canContinue,
+      );
+      if (!active()) return null;
       final episodes = AndroidLocalSourceService.episodes(videos);
-      if (!context.mounted) return null;
+      if (!context.mounted || !active()) return null;
       if (episodes.isEmpty) {
         _showSnack(
           context,
@@ -301,9 +363,10 @@ class LocalBoundSourceService {
           ],
         ),
       );
+      if (!active()) return null;
       return confirmed == true ? folder.toSource() : null;
     } on PlatformException catch (error) {
-      if (context.mounted) {
+      if (context.mounted && active()) {
         _showSnack(
           context,
           error.message ?? 'Local folder could not be opened.',
@@ -311,7 +374,9 @@ class LocalBoundSourceService {
         );
       }
     } on LocalSourceUnavailable catch (error) {
-      if (context.mounted) _showSnack(context, error.message, isError: true);
+      if (context.mounted && active()) {
+        _showSnack(context, error.message, isError: true);
+      }
     }
     return null;
   }
@@ -320,15 +385,24 @@ class LocalBoundSourceService {
     BuildContext context,
     String pickedPath, {
     required String title,
+    bool Function()? canContinue,
   }) async {
+    bool active() => canContinue?.call() ?? true;
+    if (canContinue != null && (!context.mounted || !active())) return null;
     final pickedFolder = Directory(pickedPath);
     if (!await pickedFolder.exists()) return null;
+    if (!active()) return null;
 
     if (localSeriesFolderMatchScore(localPathName(pickedPath), title) > 0) {
       return pickedFolder;
     }
 
-    final matches = await matchingLocalSeriesFolders(pickedPath, title: title);
+    final matches = await matchingLocalSeriesFolders(
+      pickedPath,
+      title: title,
+      canContinue: canContinue,
+    );
+    if (!active()) return null;
     if (matches.isEmpty) {
       if (context.mounted) {
         await showLocalSeriesFolderHelp(
@@ -350,6 +424,7 @@ class LocalBoundSourceService {
       title: title,
       candidates: matches,
     );
+    if (!active()) return null;
     return selected?.directory;
   }
 
@@ -367,5 +442,4 @@ class LocalBoundSourceService {
       ),
     );
   }
-
 }

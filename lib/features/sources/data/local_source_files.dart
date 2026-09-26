@@ -6,8 +6,14 @@ import '../../../utils/series_parser.dart';
 import '../models/local_source_file.dart';
 import 'local_source_file_rules.dart';
 
-Future<List<LocalSeriesEpisodeFile>> scanLocalSeriesFolder(String path) async {
-  final candidates = await scanLocalVideoFolder(path);
+Future<List<LocalSeriesEpisodeFile>> scanLocalSeriesFolder(
+  String path, {
+  bool Function()? canContinue,
+}) async {
+  bool active() => canContinue?.call() ?? true;
+  if (!active()) return const [];
+  final candidates = await scanLocalVideoFolder(path, canContinue: canContinue);
+  if (!active()) return const [];
   if (candidates.isEmpty) return const [];
 
   final relativeNames = candidates
@@ -52,18 +58,26 @@ Future<List<LocalSeriesEpisodeFile>> scanLocalSeriesFolder(String path) async {
   return List.unmodifiable(episodes);
 }
 
-Future<List<LocalVideoCandidate>> scanLocalVideoFolder(String path) async {
+Future<List<LocalVideoCandidate>> scanLocalVideoFolder(
+  String path, {
+  bool Function()? canContinue,
+}) async {
+  bool active() => canContinue?.call() ?? true;
+  if (!active()) return const [];
   final root = Directory(path);
   if (!await root.exists()) return const [];
+  if (!active()) return const [];
 
   final candidates = <LocalVideoCandidate>[];
   try {
     await for (final entity in root.list(recursive: true, followLinks: false)) {
+      if (!active()) return const [];
       if (entity is! File) continue;
       final name = localPathName(entity.path);
       if (!FileUtils.isVideoFile(name)) continue;
       try {
         final stat = await entity.stat();
+        if (!active()) return const [];
         candidates.add(
           LocalVideoCandidate(
             file: entity,
@@ -77,9 +91,10 @@ Future<List<LocalVideoCandidate>> scanLocalVideoFolder(String path) async {
       }
     }
   } catch (_) {
-    return List.unmodifiable(candidates);
+    return active() ? List.unmodifiable(candidates) : const [];
   }
 
+  if (!active()) return const [];
   candidates.sort((a, b) => b.sizeBytes.compareTo(a.sizeBytes));
   return List.unmodifiable(candidates);
 }
@@ -87,7 +102,10 @@ Future<List<LocalVideoCandidate>> scanLocalVideoFolder(String path) async {
 Future<List<LocalSeriesFolderCandidate>> matchingLocalSeriesFolders(
   String pickedPath, {
   required String title,
+  bool Function()? canContinue,
 }) async {
+  bool active() => canContinue?.call() ?? true;
+  if (!active()) return const [];
   final root = Directory(pickedPath);
   final candidates = <LocalSeriesFolderCandidate>[];
   try {
@@ -95,6 +113,7 @@ Future<List<LocalSeriesFolderCandidate>> matchingLocalSeriesFolders(
       recursive: false,
       followLinks: false,
     )) {
+      if (!active()) return const [];
       if (entity is! Directory) continue;
       final folderName = localPathName(entity.path);
       final score = localSeriesFolderMatchScore(folderName, title);
@@ -108,8 +127,9 @@ Future<List<LocalSeriesFolderCandidate>> matchingLocalSeriesFolders(
       );
     }
   } catch (_) {
-    return List.unmodifiable(candidates);
+    return active() ? List.unmodifiable(candidates) : const [];
   }
+  if (!active()) return const [];
   candidates.sort((a, b) {
     final scoreCompare = b.score.compareTo(a.score);
     if (scoreCompare != 0) return scoreCompare;
@@ -118,12 +138,19 @@ Future<List<LocalSeriesFolderCandidate>> matchingLocalSeriesFolders(
   return List.unmodifiable(candidates);
 }
 
-Future<SeriesSource?> localSourceFromFile(File file) async {
+Future<SeriesSource?> localSourceFromFile(
+  File file, {
+  bool Function()? canContinue,
+}) async {
+  bool active() => canContinue?.call() ?? true;
+  if (!active()) return null;
   if (!await file.exists()) return null;
+  if (!active()) return null;
   final name = localPathName(file.path);
   if (!FileUtils.isVideoFile(name)) return null;
 
   final stat = await file.stat();
+  if (!active()) return null;
   return SeriesSource(
     torrentHash: SeriesSource.localSourceHash(file.path),
     torrentName: name,
