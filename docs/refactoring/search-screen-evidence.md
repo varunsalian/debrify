@@ -2436,3 +2436,64 @@ skips. Receipts: `.git/refactor-evidence/phase4c/full-acquisition.jsonl`,
 same directory. The historical baseline helper remains nonzero for the existing
 failures; its allowance was not changed. This completes this bounded continuation
 check, not phase 4C or the remaining native and migration gates.
+
+
+### Phase 4C — PikPak preparation data boundary
+
+Moved PikPak add/task polling, file-readiness polling and recursive video listing
+from the legacy playback service to `pikpak_source_preparation.dart` (172 lines).
+The plain operation receives API functions, an optional wait function and the live
+action check. It has no Flutter, Riverpod or authentication-service dependency.
+The production `_addPikPak` caller supplies the existing API instance; automatic
+callers omit cancellation as before. `PikPakPreparedSource` and `PikPakSourceVideo`
+(24 lines) publish final scalar fields and an unmodifiable video list; raw provider
+maps remain in the decoding boundary. The shared playlist builder consumes these
+descriptors and preserves single/multiple-file names, sizes, IDs and series order.
+Its provider-native bound caller now decodes its existing records at that boundary.
+The obsolete polling and recursive methods were removed, reducing the playback
+service from **8,953 to 8,868 lines** under its existing temporary exception.
+
+Preserved seven task attempts, five file-detail attempts, two-second waits, the
+90-percent task shortcut, fallback after task-read errors, detail retries, hard
+failure propagation, depth-five cutoff, partial recursive results, video MIME
+filtering and case-insensitive path ordering. No pagination policy changed: the
+existing folder-list API invocation remains the same. Failed/still-processing
+results map to the original private exceptions and messages. The injected wait
+exists for deterministic timing checks, not a new runtime scheduler.
+
+Manual retirement is checked before/after waits and requests, after recursive
+returns, on swallowed-reader-error paths and at playlist preparation/return.
+Cancellation is explicitly rethrown through the existing tolerant listing/polling
+paths. Already-issued API requests and shared authentication/token-refresh retries
+are not cancelled or rolled back; the caller stops subsequent preparation steps.
+The native route/loader ownership and shared service internals remain separate
+open work. No device or performance parity is inferred from these tests.
+
+Verification: **23 data tests** cover readiness, timing, bounded retries, hard and
+transient failures, folder order/depth/partial results, immutable snapshots,
+retirement at each operation boundary and the unguarded automatic contract.
+**Nine real bridge tests** use scoped mock HTTP responses with fixture credentials
+and no external requests. They cover retirement after add/task/details/folder/link,
+active single-video and season-pack saves, first-episode link selection, original
+request payload, loader removal and the two original failure messages. Against the
+previous pipeline these yield **five passes / four failures**; after integration
+all nine pass. The four failures demonstrate extra requests after retirement.
+
+Affected baseline: **281 passes / four failures**; final: **313 passes / the same
+four manual-source contract failures**. Analysis remains **863 diagnostics** with
+no new identities. Size/import checks pass for **114 migrated files**. New files
+and touched legacy methods are formatted, and diff checks pass. Receipts under
+`.git/refactor-evidence/phase4c/`: `pikpak-before.txt`,
+`pikpak-preparation-tests.txt`, `pikpak-bridge-red.txt`, `pikpak-focused.txt`,
+`pikpak-failure-comparison.txt`, `analyze-pikpak.txt` and
+`pikpak-analyzer-comparison.txt`. Phase 4C and all subsequent outstanding migration,
+CI, native/device and performance gates remain open.
+
+Full-suite review: **7,933 successes / the same 51 failures / 20 skips**. All
+previous checkpoint outcomes are unchanged; all **32 newly added cases** pass.
+The original-baseline comparison finds no new failures, missing tests or new
+skips. Receipts: `.git/refactor-evidence/phase4c/full-pikpak.jsonl`,
+`full-pikpak-comparison.txt` and `pikpak-previous-checkpoint.txt` in that directory.
+The historical helper still returns nonzero for unchanged existing failures, and
+its allowance was not modified. This verifies this extraction's automated gates;
+the migration and native/performance/CI completion audit remains open.
