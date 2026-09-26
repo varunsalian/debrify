@@ -448,6 +448,17 @@ present, retains scoped-season menus, and preserves alias reconciliation.
 Results/seasons providers now declare their existing dependencies for correct
 nested scoping. The view's loading/cache/focus completion tail is unchanged.
 
+Pending DI scope audit: a nested settings-repository override reuses an already
+initialized parent `SourceSettingsController` on pinned Riverpod 3.4.3. Declaring
+the controller's dependencies and the repository's empty dependency list did
+not fix that reproduction; both attempted changes were reverted. The earlier
+explicit results/saved-controller override tests do not establish automatic
+transitive scoping for every family. Before phase 4C/8 completion, establish and
+test a supported scope strategy for existing parent instances and sibling scopes,
+including settings, rather than assuming dependency metadata alone proves
+isolation. See the evidence log's settings-scope audit; no SDK change is authorized
+by this finding.
+
 Source batch preparation now reads live search/saved state and the scoped IPTV
 classifier in `application/source_batch_preparation.dart` (47 lines). This
 stateless operation retains no rows and rejects retired profiles/scopes. The

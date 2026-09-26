@@ -3531,3 +3531,37 @@ missing tests or new skips. Receipts: `full-completion-owner.jsonl`,
 `full-completion-owner-previous-checkpoint.txt` in the same evidence directory.
 The baseline helper remains nonzero for original failures; no allowances changed.
 Final diff/format/architecture checks pass. Phase 4C remains in progress.
+
+### Phase 4C — settings scope audit (unresolved)
+
+After checkpoint `a108abbb`, the nine existing settings-controller tests pass.
+A new local reproduction initializes and listens to the parent controller, then
+creates a child container overriding the settings repository family. Reading the
+same session's settings controller in the child returns the identical parent
+controller, violating the intended independent repository/state ownership.
+
+Declaring the controller's repository/session dependencies does not fix the test.
+Also declaring `dependencies: const []` on the repository family still does not
+fix it. The attempted application changes and failing checked-in test were reverted;
+the complete reproduction and patch remain in local evidence. This is an open
+scope limitation, not a successful fix. Existing explicit controller-override
+coverage must not be generalized to automatic transitive family scoping.
+
+Inspection of the installed Riverpod 3.4.3 source provides a likely explanation:
+`ClassFamily.call` creates instances with null dependency metadata, and
+`ProviderDirectory.from` retains parent pointers unless marked as transitive.
+This is an inference from the implementation; the identical-controller assertion
+is the direct behavioral evidence. Do not upgrade or patch Riverpod incidentally.
+The next scope review must test an explicit ownership strategy with an already
+initialized parent and sibling scopes before claiming feature-wide DI isolation.
+
+Receipts under `.git/refactor-evidence/phase4c/`: `settings-scope-before.txt`
+(9 passes), `settings-scope-reproduction.txt` (9 passes, new isolation case fails),
+`settings-scope-after.txt` (461 Sources passes, only the new isolation case fails),
+`settings-scope-fixed.txt` (the additional repository metadata still fails),
+`settings-scope-reproduction.dart`, `settings-scope-attempt.patch`, and
+`settings-scope-analyzer-comparison.txt` (no added analyzer identities).
+Application/test sources are restored to the verified checkpoint. No full-suite
+rerun is needed for this documentation-only outcome; its last full result remains
+8,101 successes / 51 existing failures / 20 skips. Phase 4C and later gates remain
+open.
