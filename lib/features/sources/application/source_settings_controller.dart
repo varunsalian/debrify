@@ -6,12 +6,21 @@ import '../models/sources_session.dart';
 import 'source_seasons_dependencies.dart';
 import 'source_settings_dependencies.dart';
 
+// In nested scopes, override this controller as well as its repository. With
+// pinned Riverpod 3.4.3, a repository-only override can reuse a parent instance.
 final sourceSettingsProvider = NotifierProvider.autoDispose
     .family<
       SourceSettingsController,
       SourcePresentationSettings,
       SourcesSession
-    >(SourceSettingsController.new, retry: (count, error) => null);
+    >(
+      SourceSettingsController.new,
+      retry: (count, error) => null,
+      dependencies: [
+        sourceSettingsRepositoryProvider,
+        sourcesSessionActiveProvider,
+      ],
+    );
 
 class SourceSettingsController extends Notifier<SourcePresentationSettings> {
   SourceSettingsController(this.session);

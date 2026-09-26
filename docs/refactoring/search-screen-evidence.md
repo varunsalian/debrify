@@ -3565,3 +3565,45 @@ Application/test sources are restored to the verified checkpoint. No full-suite
 rerun is needed for this documentation-only outcome; its last full result remains
 8,101 successes / 51 existing failures / 20 skips. Phase 4C and later gates remain
 open.
+
+### Phase 4C — explicit settings scope ownership
+
+The follow-up establishes a supported settings scope contract without changing
+Riverpod or adding a scope framework: override the controller along with the
+repository in a nested scope. The production settings provider now declares its
+existing repository/session dependencies. Its state and loading implementation
+remain unchanged. A provider-adjacent comment records why repository-only
+transitive scoping is insufficient on the pinned version.
+
+Two new behavior tests exercise both whole-family and session-instance controller
+overrides. They start with an initialized/listened parent, create two siblings,
+verify controller identities through each container, concurrently load three
+repositories, publish different settings, and dispose one child before finishing
+parent/sibling loads. Both tests fail before the metadata change (a parent lookup
+returns a different controller), and both pass afterward. These are explicit-scope
+tests, not a claim that the earlier repository-only reproduction is fixed. That
+limitation remains documented, with its original evidence preserved.
+
+Baseline: nine settings tests pass. After integration: eleven settings tests and
+all 463 tests under `test/features/sources` pass. Analyzer remains at 863 diagnostics
+with no new identities; 139 migrated files pass architecture checks. The production
+app retains its existing single root ProviderScope and distinct view/session keys.
+No package, UI, query, timing or persistence behavior was changed. The broader
+family-scope audit and remaining phase 4C/5–8/native/performance/CI work stay open.
+
+Receipts in `.git/refactor-evidence/phase4c/`:
+`settings-explicit-scope-before.txt`, `settings-explicit-scope-reproduction.txt`,
+`settings-explicit-scope-after.txt`, `settings-explicit-scope-sources.txt`,
+`analyze-settings-explicit-scope.txt` and
+`settings-explicit-scope-analyzer-comparison.txt`.
+
+Full-suite verification: **8,103 successes / the same 51 failures / 20 skips**.
+Every outcome from the prior completed checkpoint is preserved, and both new
+explicit-scope tests pass. Original-baseline comparison also reports no new
+failures, missing tests or new skips. Receipts: `full-settings-explicit-scope.jsonl`,
+`full-settings-explicit-scope-comparison.txt`,
+`full-settings-explicit-scope-previous-checkpoint.txt` and
+`settings-explicit-scope-review.txt`. The baseline helper's nonzero exit remains
+attributable to existing failures; no allowances were changed. Changed code is
+formatted and diff/architecture checks pass. This resolves explicit settings
+scope ownership, not automatic repository-only scoping or the broader migration.
