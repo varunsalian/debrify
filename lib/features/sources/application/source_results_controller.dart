@@ -14,6 +14,7 @@ final sourceResultsProvider = NotifierProvider.autoDispose
     .family<SourceResultsController, SourceResultsState, SourcesSession>(
       SourceResultsController.new,
       retry: (count, error) => null,
+      dependencies: [sourcesSessionActiveProvider],
     );
 
 /// Owns when prepared rows become adopted results. Rendering and focus stay

@@ -14,6 +14,10 @@ final sourceSeasonsProvider = NotifierProvider.autoDispose
     .family<SourceSeasonsController, SourceSeasonsState, SourcesSession>(
       SourceSeasonsController.new,
       retry: (count, error) => null,
+      dependencies: [
+        sourceSeasonsRepositoryProvider,
+        sourcesSessionActiveProvider,
+      ],
     );
 
 class SourceSeasonsController extends Notifier<SourceSeasonsState> {

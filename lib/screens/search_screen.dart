@@ -1,3 +1,4 @@
+import '../features/sources/application/source_search_completion.dart';
 import '../features/sources/application/source_batch_preparation.dart';
 import '../features/sources/application/source_picker_diagnostics.dart';
 import '../features/sources/application/source_binding_match_dependencies.dart';

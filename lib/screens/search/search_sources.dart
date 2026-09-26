@@ -555,23 +555,18 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
   /// Completion-only steps: season snapshot, cache badges, TV focus anchor.
   void _finishSearch(int token) {
     if (!mounted || token != _searchToken) return;
-    final sel = _effectiveSelection;
-    // Snapshot the chip-menu fallback seasons from unscoped results only —
-    // a season-scoped set is already filtered and would collapse the menu.
-    // Use the FULL set even when part of it is parked behind the pill.
-    final fullSet = _pendingTorrents ?? _torrents;
-    if (_seasonChipVisible && sel.season == null) {
-      _seasonsController.acceptResults(fullSet, unscoped: true);
-    }
-    // A source-group pill selected for a previous search may not exist in the
-    // new result set — checked ONLY here, against the authoritative full set:
-    // an early batch that merely hasn't delivered that source yet must not
-    // silently clear the user's filter mid-stream.
-    if (_resultsController.reconcileProvider(fullSet, _sourceAliases)) {
-      if (_pendingTorrents == null) {
-        _visible = _redesign ? _applyToolbar(_torrents) : _torrents;
-        _syncStreamNodes();
-      }
+    final result = ref
+        .read(sourceSearchCompletionProvider)
+        .complete(
+          _sourcesSession,
+          selection: _effectiveSelection,
+          hasSeasonScope: _seasonChipVisible,
+          aliases: _sourceAliases,
+        );
+    if (result == SourceCompletionResult.retired) return;
+    if (result == SourceCompletionResult.rebuildProjection) {
+      _visible = _redesign ? _applyToolbar(_torrents) : _torrents;
+      _syncStreamNodes();
     }
     // Final result set: sweep any hash not yet dispatched by a streaming batch
     // (non-blocking). In-flight batch checks share this generation and merge as

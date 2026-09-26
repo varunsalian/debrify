@@ -3482,3 +3482,52 @@ missing tests or new skips. Receipts: `full-preparation-owner-verified.jsonl`,
 for original failures; no allowances changed. Changed code is formatted, including
 a whitespace-only formatting pass of the modified legacy method; diff checks pass.
 Phase 4C and the full migration remain in progress.
+
+### Phase 4C — completion-only application bookkeeping
+
+Moved final season-fallback snapshotting and provider-filter reconciliation into
+`application/source_search_completion.dart` (**46 lines**). The stateless operation
+reads the existing results state and updates the existing seasons/results
+controllers; it owns no duplicate rows/state, starts no metadata load and dispatches
+no UI effects. It returns a typed keep/rebuild/retired outcome. The real view uses
+that outcome for visible projection/node synchronization, then executes its
+unchanged loading transition, cache sweep and focus-anchor tail.
+
+The full set remains pending rows when present, otherwise displayed rows.
+Only unscoped eligible season searches update the fallback menu; scoped results
+cannot collapse it. Provider reconciliation uses that same authoritative set and
+current aliases. Pending state is re-read only after a changed provider filter,
+matching the original short circuit; pending rows are never adopted here. The
+operation rejects retired profiles/provider scopes before reads; the view retains
+its mounted and query-token guard. Results/seasons providers declare their existing
+dependencies so nested overrides have the correct owner. Their state/action
+implementations are unchanged. Sources part **1,543 → 1,538 lines**.
+
+Baseline **468 affected passes**; after integration **476 passes**. Eight new
+isolated-container tests cover parked/full-set reconciliation without adoption,
+menu retention for season-scoped and ineligible searches, projection rebuilding
+only when needed, preserved sort state, alias-resolved provider selection,
+nested results overrides without parent mutation, and separate profile/scope
+retirement. Existing real-screen completion/focus/season and binding cases pass.
+The metadata repository fake throws if completion attempts IO, so these tests
+also verify completion does not start a guide request.
+
+Review confirms the view loading/cache/focus tail is byte-for-byte unchanged,
+with final bookkeeping order and effective-selection inputs preserved. New code
+and the changed legacy method are formatted without whole-file formatting.
+Analyzer retains **863 diagnostics**, no new identities; **139 migrated files**
+pass architecture checks. Diff checks pass; no failure allowances changed.
+Receipts under `.git/refactor-evidence/phase4c/`: `completion-owner-before.txt`,
+`completion-owner-new.txt`, `completion-owner-after.txt`,
+`completion-owner-original.txt`, `completion-owner-extraction-review.txt`,
+`analyze-completion-owner.txt` and `completion-owner-analyzer-comparison.txt`.
+Phase 4C and later migration/native/performance/CI gates remain in progress.
+
+Full-suite review: **8,101 successes / the same 51 failures / 20 skips**.
+Every prior checkpoint outcome is preserved and all eight new completion cases
+pass. Original-baseline and preceding-checkpoint comparisons find no new failures,
+missing tests or new skips. Receipts: `full-completion-owner.jsonl`,
+`full-completion-owner-comparison.txt` and
+`full-completion-owner-previous-checkpoint.txt` in the same evidence directory.
+The baseline helper remains nonzero for original failures; no allowances changed.
+Final diff/format/architecture checks pass. Phase 4C remains in progress.
