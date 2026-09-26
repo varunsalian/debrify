@@ -1,3 +1,5 @@
+import '../features/search/application/keyword_search_controller.dart';
+import '../features/search/models/keyword_search_state.dart';
 import '../features/search/application/keyword_cache_controller.dart';
 import '../features/search/models/keyword_cache_state.dart';
 import '../features/search/presentation/keyword_sources_dialog.dart';
@@ -598,9 +600,13 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   String? _activeAddonId;
 
   // Keyword torrent-search state (submit-based).
-  bool _kwLoading = false;
-  String? _kwError;
-  String _kwQuery = '';
+  late final ProviderSubscription<KeywordSearchState> _keywordSearchSubscription;
+  KeywordSearchController get _keywordSearchController =>
+      ref.read(keywordSearchProvider(_searchSession).notifier);
+  KeywordSearchState get _keywordSearchState => _keywordSearchSubscription.read();
+  bool get _kwLoading => _keywordSearchState.loading;
+  String? get _kwError => _keywordSearchState.error;
+  String get _kwQuery => _keywordSearchState.query;
   List<Torrent> _kwAll = []; // unfiltered results from the last search
   List<Torrent> _kwResults = []; // filtered + sorted view actually rendered
   final List<FocusNode> _kwNodes = [];
@@ -641,18 +647,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   bool _kwSelectionMode = false;
   final Set<String> _kwSelected = {}; // selected torrent infohashes
 
-  /// Monotonic token so a slow earlier keyword search can't clobber a newer one.
-  int _kwSearchToken = 0;
-
-  // ── Streaming keyword search (per-engine batches, Sources-list parity) ──
-  /// Raw per-engine batches accumulated this search; merged provisionally so
-  /// first rows paint as soon as the fastest engine answers.
-  final List<List<Torrent>> _kwBatches = [];
-
-  /// True while the awaited search is still in flight (drives the "still
-  /// searching" strip). Distinct from [_kwLoading], which only covers the
-  /// full-screen loader up to the FIRST batch.
-  bool _kwSearching = false;
+  int get _kwSearchToken => _keywordSearchState.request;
+  bool get _kwSearching => _keywordSearchState.searching;
 
   /// Set on the first real user interaction (scroll drag, row DPAD nav, row
   /// tap/long-press, toolbar use) — later arrivals then park in [_kwPending]
@@ -1818,6 +1814,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     _searchSession = SearchSession(
       owner: _profileSessionOwner,
       viewIdentity: Object(),
+      initialKeywordQuery: keywordSnapshot?.query ?? '',
       initialKeywordCache: keywordSnapshot == null
           ? const KeywordCacheState.empty()
           : KeywordCacheState(
@@ -1859,6 +1856,22 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         // Badges repaint without rebuilding focus nodes. Only the accepted
         // completion wrapper below asks for a cached-only row recomputation.
         if (mounted) setState(() {});
+      },
+    );
+    _keywordSearchSubscription = ref.listenManual(
+      keywordSearchProvider(_searchSession),
+      (previous, next) {
+        if (!mounted) return;
+        final results = next.results;
+        if (results != null) {
+          _presentKwStreaming(results, next.request);
+        }
+        if (next.status == KeywordSearchStatus.complete) {
+          _finishKeyword(next.request);
+        } else if (next.status == KeywordSearchStatus.failed) {
+          _searchSubmitFocus.cancel();
+        }
+        setState(() {});
       },
     );
     if (!widget.searchMode && !widget.discoverMode) _watchHomeReturnChanges();
@@ -2245,9 +2258,6 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         _sheetForced ||
         _searchController.text.isNotEmpty ||
         _searchFocusNode.hasFocus;
-    _kwSearchToken++;
-    _kwSearching = false;
-    _kwLoading = false;
     _mode = SearchMode.catalog;
     _clearQuery(); // clears the field, kw/lists state, and the catalog query
     _searchFocusNode.unfocus();
@@ -2344,7 +2354,6 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   bool _restoreKeywordState(_KwPreservedState? snap) {
     if (snap == null) return false;
     _mode = SearchMode.keyword;
-    _kwQuery = snap.query;
     _kwAll = snap.all;
     _kwResults = snap.results;
     _kwFilters = snap.filters;
@@ -2621,6 +2630,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     ProfileRuntime.scope.removeListener(_onSearchProfileChanged);
     _listsSubscription.close();
     _catalogSubscription.close();
+    _keywordSearchSubscription.close();
     _keywordCacheSubscription.close();
     _titleSearch.removeListener(_publishTitleSuggestions);
     _titleSearch.dispose();
@@ -12043,16 +12053,11 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   }
 
   void _clearKeywordSearch() {
-    _kwSearchToken++;
-    _keywordCacheController.clear(_kwSearchToken);
+    _keywordSearchController.clear();
     _disposeKwNodes();
     setState(() {
-      _kwSearching = false;
-      _kwLoading = false;
-      _kwQuery = '';
       _kwAll = [];
       _kwResults = [];
-      _kwError = null;
       _kwPending = null;
       _kwSelectionMode = false;
       _kwSelected.clear();
@@ -12262,18 +12267,13 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   bool _kwRefocusToolbar = false;
 
   Future<void> _runKeyword(String query, {bool refocusToolbar = false}) async {
-    if (query.isEmpty) return;
-    final token = ++_kwSearchToken;
-    _kwBatches.clear();
-    _kwSearching = true;
+    // Reject outgoing-view actions before changing its UI or resolving services.
+    if (query.isEmpty || !_keywordSearchController.isCurrent) return;
     _kwStreamFrozen = false;
     _kwPending = null;
     _kwProviderSeen.clear();
     _kwRefocusToolbar = refocusToolbar;
     setState(() {
-      _kwLoading = true;
-      _kwError = null;
-      _kwQuery = query;
       _kwDirectCounts = {};
       _kwTorrentCounts = {};
       _kwSelectedDirect = {};
@@ -12282,84 +12282,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       _kwSelected.clear();
       _kwSourceTab = null;
     });
-    try {
-      // Streaming: each engine's batch lands as soon as THAT engine finishes,
-      // so first rows show in seconds instead of after the slowest engine's
-      // timeout. Provisional merges use the same mergeSearchResults as the
-      // final result, so the list can never drift from what completion shows.
-      void onBatch(String source, List<Torrent> batch) {
-        if (!mounted || token != _kwSearchToken || batch.isEmpty) return;
-        // A timed-out engine's original future keeps running after the
-        // timeout fires — its late batch must not mutate the list after the
-        // awaited result already snapped it to the authoritative set.
-        if (!_kwSearching) return;
-        _kwBatches.add(batch);
-        _presentKwStreaming(
-          TorrentService.mergeSearchResults(_kwBatches),
-          token,
-        );
-        // Stamp TB/PM badges on this engine's rows as they land, and record the
-        // future so the completion sweep can await it before deciding cached-
-        // only mode (settling it mid-stream would flicker rows in/out).
-        _keywordCacheController.checkBatch(batch, token);
-      }
-
-      // Resolve cache-check gating BEFORE the search starts so streaming
-      // batches badge against fresh settings (a superseded search's config
-      // load is harmless — its batches fail the token guard anyway).
-      if (!await _keywordCacheController.begin(token)) return;
-      if (!mounted || token != _kwSearchToken) return;
-      final result = await TorrentService.searchAllEngines(
-        query,
-        onBatch: onBatch,
-      );
-      // Drop stale results if a newer search started while this was in flight.
-      if (!mounted || token != _kwSearchToken) return;
-      _kwSearching = false;
-      final torrents = (result['torrents'] as List).cast<Torrent>();
-      final engineErrors = result['engineErrors'];
-      final engineCounts = result['engineCounts'];
-      // No engine ran at all (empty counts AND errors) → the user has disabled
-      // every source. Point them at Sources instead of a bare "No results".
-      // (Both empty-result checks below can only fire when no batch arrived,
-      // so the full-screen loader is still up — never an error over rows.)
-      final noEngineRan =
-          (engineCounts is! Map || engineCounts.isEmpty) &&
-          (engineErrors is! Map || engineErrors.isEmpty);
-      if (torrents.isEmpty && noEngineRan) {
-        _searchSubmitFocus.cancel();
-        setState(() {
-          _kwError =
-              'No sources enabled. Turn on at least one source in '
-              'Sources, then try again.';
-          _kwLoading = false;
-        });
-        return;
-      }
-      // Every source errored and nothing came back → surface the failure
-      // instead of a misleading "No results" (searchAllEngines fails soft).
-      if (torrents.isEmpty && engineErrors is Map && engineErrors.isNotEmpty) {
-        _searchSubmitFocus.cancel();
-        setState(() {
-          _kwError =
-              'Search failed on all sources. Check your connection or '
-              'enabled sources and try again.';
-          _kwLoading = false;
-        });
-        return;
-      }
-      // The awaited result is authoritative — snap to it (or park it).
-      _presentKwStreaming(torrents, token);
-      _finishKeyword(token);
-    } catch (e) {
-      if (!mounted || token != _kwSearchToken) return;
-      _kwSearching = false;
-      _searchSubmitFocus.cancel();
-      setState(() {
-        _kwError = _friendlyKeywordError(e);
-        _kwLoading = false;
-      });
-    }
+    await _keywordSearchController.search(query);
   }
 
   /// Applies a (provisional or final) raw result set: recompute providers and
@@ -12382,7 +12305,6 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     }
     _kwAll = raw;
     _computeKwProviders(raw);
-    _kwLoading = false; // first batch replaces the full-screen loader
     _recomputeKeyword();
     _reanchorKwTab(tabAnchor);
     if (_kwToolbarVisible) {
@@ -12531,20 +12453,6 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       final idx = source.isEmpty ? 0 : _kwSourceList.indexOf(source) + 1;
       _focusKwTab(idx > 0 && idx < _kwTabNodes.length ? idx : 0);
     });
-  }
-
-  /// Turn a raw search exception into a short, human-readable message — matches
-  /// the old screen's network/timeout/generic buckets.
-  String _friendlyKeywordError(Object e) {
-    final msg = e.toString().replaceAll('Exception: ', '');
-    if (msg.contains('SocketException') || msg.contains('Failed host lookup')) {
-      return 'Network error. Please check your connection.';
-    }
-    if (msg.contains('TimeoutException')) {
-      return 'Search timed out. Please try again.';
-    }
-    if (msg.length > 100) return 'Search failed. Please try again.';
-    return msg;
   }
 
   // ── Bulk selection (keyword results) ──────────────────────────────────────

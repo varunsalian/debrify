@@ -440,3 +440,78 @@ workflow/action generation and initial-action profile guard, streaming/freeze/ad
 filtered/sorted results and selections, default-filter reads, and full snapshot
 ownership. Focus/scroll and legacy navigation effects will remain in presentation.
 Device/visual/performance checks are still pending, not inferred from these tests.
+
+### Phase 4B request orchestration (implemented and reviewed)
+
+The production keyword action now delegates to
+`lib/features/search/application/keyword_search_controller.dart` (118 lines).
+It owns the query, loading/searching/error state, request generation, provisional
+batch accumulation and authoritative engine completion. The screen's mutable
+request fields, `_kwBatches`, service dispatch and error mapping are removed.
+`keyword_search_state.dart` publishes immutable result containers;
+`keyword_search_result.dart` gives the service completion a typed boundary.
+`keyword_search_dependencies.dart` wires the narrow repository and disables retries.
+`engine_keyword_search_repository.dart` borrows `TorrentService.searchAllEngines`
+and its existing deterministic merge, limits, authorization and retry/timeout
+behavior. Raw maps stay inside this adapter. Calls retain the originating scope,
+and an outgoing owner is rejected before dispatch and before publishing a batch.
+
+The request controller retains the cache notifier through its provider dependency.
+An explicit search still resolves cache settings before starting engines, presents
+each accepted batch before asking for its badges, and rejects empty, superseded or
+post-completion batches. Completion publishes the authoritative list exactly once.
+The screen subscription invokes the existing presentation/focus wrapper and cache
+completion sweep in that order. A clear invalidates the request and cache work.
+Closing the Home search sheet uses this same clear; its redundant second token
+increment is gone, with one monotonic generation still rejecting every old callback.
+Initial outgoing-view actions are rejected before resetting presentation controls.
+
+Query restoration uses immutable per-view bootstrap data in `SearchSession`, just
+as the preceding cache slice does. It does not call a notifier action from widget
+construction. Dependency rebuilds do not restore the bootstrap again. The borrowed
+static full snapshot store, variant matching, default-view suppression and scroll
+restoration retain their existing ownership and timing.
+
+The legacy screen still owns the frozen displayed projection (`_kwAll`, pending
+arrivals, filters/sort/provider choices and bulk selection), focus and scrolling.
+This is a registered temporary phase-4B boundary, not the final architecture:
+move the projection's application state next, leaving only focus/layout/navigation
+in presentation. The latest engine publication has one owner in Riverpod; the
+frozen projection intentionally may display an earlier accepted result until adopt.
+Full snapshot and default-filter data extraction also remain in phase 4B.
+
+Focused review evidence includes **23 controller tests**, **nine adapter tests**,
+and **four new actual-screen streaming tests**. They cover cache-before-engine
+ordering; incremental merge and final replacement; late timed-out callbacks;
+query/configuration replacement; clear, disposal and profile handoff; dependency
+replacement without bootstrap replay; independent views in one profile; disabled,
+failed and partially successful engines; immutable lists and exact query/source
+handoff; captured scope and rejected outgoing dispatch; and the unchanged error
+messages. The screen cases cover first streamed paint, frozen live source counts,
+identity-preserving adoption, final invalid-source clearing, old-query rejection
+and profile clearing. The four prior actual-screen cache/focus/remount tests also
+pass through the real engine adapter. The pre-extraction affected run had all
+11 existing streaming-policy/cache-screen tests passing.
+
+Draft test corrections did not change production behavior: source ids use the
+legacy lowercased `Torrent.source`; the existing loading animation's uncancellable
+3s/7s message futures must be drained after widget disposal; invalidating a provider
+that returns the identical dependency does not constitute dependency replacement;
+and the existing `replaceAll('Exception: ', '')` also strips that substring from
+some exception type names. Tests now explicitly retain that latter legacy behavior
+rather than silently fixing it during extraction. These failed draft receipts and
+corrected runs are retained in `.git/refactor-evidence/phase4b/stream-*.txt`.
+
+Analyzer comparison after implementation and tests has no added or removed
+identities/multiplicities (the same 865). The architecture guard covers 44 migrated
+application files, all below 300 lines. The main screen is now 20,479 lines.
+The full suite completed in 174,270 ms: **7,563 passing identities, the same
+51 baseline failures (22 failures plus 29 errors), and 20 skipped**, with no new
+failures, missing identities or newly skipped previously passing tests. The
+historical helper still exits 1 because its nine-failure allowance is stale; the
+actual observed-baseline identity comparison passes. Receipts are
+`.git/refactor-evidence/phase4b/full-stream.jsonl`, `full-stream-comparison.txt`,
+`analyze-stream-final.txt` and `stream-analyzer-final-comparison.txt`. Formatting
+and diff checks pass. This request slice's automated review is complete; phase 4B
+and the overall migration remain in progress. Device/visual/performance checks
+remain pending.

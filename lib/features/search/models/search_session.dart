@@ -10,11 +10,13 @@ class SearchSession {
   // Immutable bootstrap data for this one view identity. It is not a second
   // live state owner and never changes the identity of an existing workflow.
   final KeywordCacheState initialKeywordCache;
+  final String initialKeywordQuery;
 
   const SearchSession({
     required this.owner,
     required this.viewIdentity,
     this.initialKeywordCache = const KeywordCacheState.empty(),
+    this.initialKeywordQuery = '',
   });
 
   @override

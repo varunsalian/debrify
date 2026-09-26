@@ -1,0 +1,243 @@
+import 'dart:async';
+
+import 'package:debrify/features/search/application/keyword_cache_dependencies.dart';
+import 'package:debrify/features/search/application/keyword_search_dependencies.dart';
+import 'package:debrify/screens/search_screen.dart';
+import 'package:debrify/services/main_page_bridge.dart';
+import 'package:debrify/services/profiles/profile_runtime.dart';
+import 'package:debrify/services/profiles/profile_scope.dart';
+import 'package:debrify/services/profiles/profile_session_memory.dart';
+import 'package:debrify/services/stremio_service.dart';
+import 'package:debrify/widgets/cinema_sources_layout.dart';
+import 'package:debrify/widgets/tv_text_field.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import '../../../theme/golden_harness.dart' show disableRuntimeFonts;
+import '../fakes/fake_keyword_cache_repository.dart';
+import '../fakes/fake_keyword_search_repository.dart';
+import '../keyword_torrent_fixture.dart';
+
+void main() {
+  late FakeKeywordSearchRepository repository;
+  late FakeKeywordCacheRepository cache;
+  late MockClient client;
+
+  setUp(() {
+    disableRuntimeFonts();
+    ProfileRuntime.debugReset();
+    ProfileRuntime.initializeLegacy();
+    ProfileSessionMemory.clearAll();
+    SharedPreferences.setMockInitialValues({});
+    MainPageBridge.setActiveTab('search');
+    StremioService.instance.invalidateCache();
+    repository = FakeKeywordSearchRepository();
+    cache = FakeKeywordCacheRepository();
+    cache.session.torboxEnabled = false;
+    client = MockClient((_) async => http.Response('{}', 404));
+  });
+  tearDown(() {
+    for (final request in repository.requests) {
+      if (!request.completion.isCompleted) request.complete([]);
+    }
+    MainPageBridge.setActiveTab(null);
+    StremioService.instance.invalidateCache();
+    ProfileRuntime.debugReset();
+    client.close();
+  });
+
+  Future<void> drive(
+    WidgetTester tester,
+    FutureOr<void> Function() action,
+  ) async {
+    await tester.runAsync(
+      () => http.runWithClient(() async {
+        await action();
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+      }, () => client),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+  }
+
+  Future<void> submit(WidgetTester tester, String query) => drive(tester, () {
+    final field = tester.widget<TvTextField>(find.byType(TvTextField).first);
+    field.controller.text = query;
+    field.onSubmitted!(query);
+  });
+
+  Future<void> mount(WidgetTester tester) async {
+    tester.view.physicalSize = const Size(1200, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await drive(
+      tester,
+      () => tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            keywordSearchRepositoryProvider.overrideWith(
+              (ref, session) => repository,
+            ),
+            keywordCacheRepositoryProvider.overrideWith(
+              (ref, session) => cache,
+            ),
+          ],
+          child: const MaterialApp(home: SearchScreen(searchMode: true)),
+        ),
+      ),
+    );
+    await tester.tap(find.text('Keyword'));
+    await tester.pump();
+    await submit(tester, 'query');
+    expect(repository.requests.single.query, 'query');
+  }
+
+  CinemaSourcesLayout layout(WidgetTester tester) =>
+      tester.widget<CinemaSourcesLayout>(find.byType(CinemaSourcesLayout));
+
+  testWidgets(
+    'first batch paints; frozen arrivals adopt without losing row identity',
+    (tester) async {
+      await mount(tester);
+      final request = repository.requests.single;
+      final old = keywordTorrent('Original result', source: 'z', seeders: 1);
+      final added = keywordTorrent('New result', source: 'a', seeders: 20);
+      await drive(tester, () => request.onBatch('z', [old]));
+      expect(layout(tester).resultCount, 1);
+      expect(layout(tester).searching, isTrue);
+      layout(tester).onFocusResults();
+      await tester.pump();
+      expect(
+        layout(tester).isSourceFocused(),
+        isTrue,
+      ); // real interaction freezes
+      expect(FocusManager.instance.primaryFocus?.debugLabel, 'kw_0');
+      await drive(tester, () => request.onBatch('a', [added]));
+      expect(layout(tester).resultCount, 1);
+      expect(layout(tester).providers.map((provider) => provider.id), [
+        null,
+        'a',
+        'z',
+      ]);
+      expect(FocusManager.instance.primaryFocus?.debugLabel, 'kw_0');
+      await drive(tester, () => request.complete([added, old]));
+      expect(layout(tester).resultCount, 1);
+      expect(layout(tester).searching, isFalse);
+      layout(tester).onProviderSelected(null); // explicit action adopts pending
+      await tester.pump();
+      await tester.pump();
+      expect(layout(tester).resultCount, 2);
+      expect(FocusManager.instance.primaryFocus?.debugLabel, 'kw_1');
+      expect(tester.takeException(), isNull);
+      await drive(tester, () => tester.pumpWidget(const SizedBox()));
+      // The existing loader uses uncancellable delayed 3s/7s messages. Let its
+      // mounted guards run after disposal; this slice does not change it.
+      await tester.pump(const Duration(seconds: 7));
+    },
+  );
+
+  testWidgets(
+    'completion invalidates vanished source against full pending results',
+    (tester) async {
+      await mount(tester);
+      final request = repository.requests.single;
+      final a = keywordTorrent('Result A', source: 'a');
+      final b = keywordTorrent('Result B', source: 'b');
+      await drive(tester, () => request.onBatch('first', [a, b]));
+      layout(tester).onProviderSelected('b');
+      await tester.pump();
+      expect(layout(tester).selectedProvider, 'b');
+      expect(layout(tester).resultCount, 1);
+      await drive(tester, () => request.complete([a]));
+      expect(layout(tester).selectedProvider, isNull);
+      // Frozen displayed rows remain until explicit adoption, but the invalid
+      // source filter is removed immediately so All and its rows agree.
+      expect(layout(tester).resultCount, 2);
+      expect(layout(tester).providers.map((provider) => provider.id), [
+        null,
+        'a',
+      ]);
+      layout(tester).onProviderSelected(null);
+      await tester.pump();
+      expect(layout(tester).resultCount, 1);
+      expect(find.text('Result B'), findsNothing);
+      expect(tester.takeException(), isNull);
+      await drive(tester, () => tester.pumpWidget(const SizedBox()));
+      // The existing loader uses uncancellable delayed 3s/7s messages. Let its
+      // mounted guards run after disposal; this slice does not change it.
+      await tester.pump(const Duration(seconds: 7));
+    },
+  );
+
+  testWidgets('new query keeps late old batch and completion off screen', (
+    tester,
+  ) async {
+    await mount(tester);
+    final old = repository.requests.single;
+    await submit(tester, 'new query');
+    await drive(tester, () {
+      old.onBatch('late', [keywordTorrent('Old result')]);
+      old.complete([keywordTorrent('Old result')]);
+    });
+    expect(find.text('Old result'), findsNothing);
+    expect(find.byType(CinemaSourcesLayout), findsNothing);
+    await drive(
+      tester,
+      () => repository.requests.last.complete([keywordTorrent('New result')]),
+    );
+    expect(layout(tester).resultCount, 1);
+    expect(layout(tester).searching, isFalse);
+    expect(find.text('Old result'), findsNothing);
+    expect(cache.opens, 2);
+    expect(tester.takeException(), isNull);
+    await drive(tester, () => tester.pumpWidget(const SizedBox()));
+    // The existing loader uses uncancellable delayed 3s/7s messages. Let its
+    // mounted guards run after disposal; this slice does not change it.
+    await tester.pump(const Duration(seconds: 7));
+  });
+
+  testWidgets(
+    'profile handoff clears streamed rows and rejects outstanding completion',
+    (tester) async {
+      await mount(tester);
+      final request = repository.requests.single;
+      await drive(
+        tester,
+        () => request.onBatch('first', [keywordTorrent('Private result')]),
+      );
+      expect(layout(tester).resultCount, 1);
+      await drive(tester, () {
+        repository.isCurrent = false;
+        ProfileRuntime.initializeCommitted(
+          ProfileScope(
+            profileId: 'incoming',
+            dataGeneration: 1,
+            sessionEpoch: 2,
+          ),
+        );
+      });
+      await drive(tester, () {
+        request.onBatch('late', [keywordTorrent('Late private result')]);
+        request.complete([keywordTorrent('Private result')]);
+      });
+      expect(find.text('Private result'), findsNothing);
+      expect(find.text('Late private result'), findsNothing);
+      expect(
+        tester
+            .widget<TvTextField>(find.byType(TvTextField).first)
+            .controller
+            .text,
+        isEmpty,
+      );
+      expect(tester.takeException(), isNull);
+      await drive(tester, () => tester.pumpWidget(const SizedBox()));
+      // The existing loader uses uncancellable delayed 3s/7s messages. Let its
+      // mounted guards run after disposal; this slice does not change it.
+      await tester.pump(const Duration(seconds: 7));
+    },
+  );
+}
