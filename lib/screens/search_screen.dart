@@ -1,3 +1,4 @@
+import '../features/sources/application/source_picker_diagnostics.dart';
 import '../features/sources/application/source_binding_match_dependencies.dart';
 import '../features/sources/presentation/source_toolbar.dart';
 import '../features/sources/presentation/source_results_body.dart';
@@ -97,7 +98,6 @@ import '../services/profiles/connection_resource_service.dart';
 import 'dart:async';
 import '../models/media_server.dart';
 import 'media_server_library_panel.dart';
-import '../services/diagnostic_log.dart';
 import 'dart:convert';
 import 'dart:developer' as developer;
 import 'dart:math';

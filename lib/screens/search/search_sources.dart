@@ -106,6 +106,7 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
     onEvent: _logPickerSelection,
   );
   final int _pickerTraceId = DateTime.now().microsecondsSinceEpoch;
+  late final SourcePickerDiagnostics _pickerDiagnostics;
 
   void _logPickerSelection(
     String event, [
@@ -135,18 +136,7 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
       'provider_filter': mounted ? _sourceFilter != null : _disposedProviderFilter,
       ...detail,
     };
-    DiagnosticLog.instance.recordEvent(
-      source: 'source_selection',
-      event: 'picker_$event',
-      fields: fields.map(
-        (key, value) =>
-            MapEntry(key, value is String ? DiagnosticLabel(value) : value),
-      ),
-    );
-    // Scalars survive the privacy filter; no addon configuration or URLs.
-    debugPrint(
-      'SourcePicker: event=$event ${fields.entries.map((e) => '${e.key}=${e.value}').join(' ')}',
-    );
+    _pickerDiagnostics(event, fields);
   }
 
   void _updateSelectedDirect() {
@@ -282,6 +272,8 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
   @override
   void initState() {
     super.initState();
+    // Deferred reveal diagnostics can run after Ref/subscriptions are disposed.
+    _pickerDiagnostics = ref.read(sourcePickerDiagnosticsProvider);
     _query = widget.keywordSeed ?? '';
     _kwCtrl = TextEditingController(text: _query);
     _sourcesSession = SourcesSession(

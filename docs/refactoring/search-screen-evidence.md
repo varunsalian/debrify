@@ -3388,3 +3388,37 @@ missing tests or new skips. Receipts: `full-focus-coordination.jsonl`,
 `full-focus-coordination-previous-checkpoint.txt` in the same evidence directory.
 The baseline helper remains nonzero for original failures, with no allowance
 changes. Final diff/format/architecture review passes. Phase 4C remains in progress.
+
+### Phase 4C — picker diagnostics boundary
+
+Moved picker event emission into the existing
+`services/source_selection_diagnostics.dart` (**170 lines**, now registered in the
+migration's measured source set). Its structural-source-tracing responsibility
+already owns related playback/IPTV diagnostics; no duplicate logger or storage
+abstraction was introduced. The writer preserves DiagnosticLabel wrapping,
+`source_selection`/`picker_` event names, field order and console formatting.
+An **11-line** Riverpod composition file supplies the stateless callback.
+
+The view captures that callback in initState, before any asynchronous reveal can
+start. Delayed diagnostics therefore do not resolve Ref after disposal. Field
+collection remains byte-for-byte unchanged, including disposed subscription
+snapshots and detail precedence; the view still owns that presentation context.
+The old writer and the search library's now-unused direct DiagnosticLog import
+were removed. Sources part **1,551 → 1,543 lines**. No profile/private state is
+retained in the app-scoped callback, and no log schema or redaction policy changed.
+
+Existing affected Sources/focus/diagnostics tests pass **465 cases before and
+after**. Source comparison independently verifies the moved writer after
+whitespace normalization and unchanged field collection. Analyzer retains **863
+diagnostics**, with no new identities. Architecture checks pass **137 migrated
+files**, including the reused service. Formatting/diff checks pass. This small
+logging-boundary extraction uses the affected suite; the most recent full suite
+remains the preceding focus-coordination checkpoint (**8,088 successes / 51
+existing failures / 20 skips**), not a full-suite claim for this commit.
+
+Receipts under `.git/refactor-evidence/phase4c/`: `picker-diagnostics-before.txt`,
+`picker-diagnostics-after.txt`, `picker-diagnostics-original.txt`,
+`picker-diagnostics-extraction-review.txt`, `analyze-picker-diagnostics.txt` and
+`picker-diagnostics-analyzer-comparison.txt`. No test/failure allowances changed.
+Remaining Sources and later-phase work, native/performance and final CI gates
+remain open.

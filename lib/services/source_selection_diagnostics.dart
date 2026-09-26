@@ -151,3 +151,20 @@ String mediaServerPlayerErrorCategory(String message) {
   if (text.contains('decoder') || text.contains('codec')) return 'decoder';
   return 'player_error';
 }
+
+/// Picker focus/status tracing. Fields must contain only audited structural
+/// labels and scalars, never titles, URLs, credentials or provider configuration.
+void logSourcePickerEvent(String event, Map<String, Object?> fields) {
+  DiagnosticLog.instance.recordEvent(
+    source: 'source_selection',
+    event: 'picker_$event',
+    fields: fields.map(
+      (key, value) =>
+          MapEntry(key, value is String ? DiagnosticLabel(value) : value),
+    ),
+  );
+  // Scalars survive the privacy filter; no addon configuration or URLs.
+  debugPrint(
+    'SourcePicker: event=$event ${fields.entries.map((e) => '${e.key}=${e.value}').join(' ')}',
+  );
+}
