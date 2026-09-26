@@ -3329,3 +3329,62 @@ missing tests or new skips. Receipts: `full-binding-match.jsonl`,
 in the same evidence directory. The baseline helper remains nonzero for original
 failures, with no allowance changes. Final diff/format/architecture review passes.
 Phase 4C and the overall migration remain in progress.
+
+### Phase 4C — Sources focus coordination ownership
+
+Moved selected-row reveal coordination, generation invalidation, cinema remembered
+row and post-frame focus anchors into `presentation/source_results_focus.dart`
+(**160 lines**), one lazy view-owned coordinator. It borrows the existing scroll
+controller and row/filter/pill nodes. Mounted, search token, freeze, selected-row
+visibility, rail focus, empty-result recovery and TV mode remain live reads. The
+coordinator owns only reveal generation and remembered-row index; it creates no
+nodes, timers, subscriptions or application state. The original node/controller
+owners retain disposal order. Deferred work keeps the original mounted guards.
+
+The view still matches selected identity, adopts/reconciles results, resolves a
+previously focused torrent's new index, and owns search state. Generation
+invalidation remains at the same batch/freeze call sites; provider changes reset
+the remembered row at the same point. The existing lazy viewport walker remains
+unchanged. Streaming anchors still respect freeze/selected/control/rail state;
+completion retains its distinct existing guards and empty-season/retry filter
+recovery. Restoring a user-focused row still uses its resolved index after a frame.
+Original bodies/fields were removed; Sources part **1,636 → 1,551 lines**.
+
+Review compares reveal continuation checks, cancellation-reason precedence,
+mounted-row dispatch and focus-request diagnostics after explicit live-dependency
+substitution. TV mode is deliberately a live getter, including after await.
+Manual review verifies deferred scheduling, the distinct streaming/completion
+conditions and original identity restoration. Application/profile behavior was
+not broadened by adding a new focus-state provider.
+
+Affected baseline **452 passes**. Eleven new widget-host tests cover query,
+generation, freeze and view-retirement cancellation between frames; filter/pill/
+rail focus acquired while awaiting; preservation and restoration of a selected
+cinema row; live TV mode at reveal completion; selected/user focus protection;
+retired queued callbacks; and empty recovery eligibility. The first test draft
+needed an explicit type for its self-referencing fixture initializer. The empty
+recovery fixture then exposed unscheduled test frames: addPostFrameCallback does
+not itself schedule one. The production caller already schedules through setState;
+the fixture was corrected to explicitly drive frames without changing production
+timing. Debug receipts are retained. All **11 new tests pass**.
+
+After integration **463 affected tests pass**, including the existing actual-screen
+selected-row reveal, held keys, provider switching, streaming freeze and completion
+focus cases. Analyzer retains **863 diagnostics**, no new identities; architecture
+checks pass **135 migrated files**. Formatting/diff checks pass and no failure
+allowances changed. Receipts under `.git/refactor-evidence/phase4c/`:
+`focus-coordination-before.txt`, `focus-coordination-after.txt`,
+`focus-coordination-new.txt`, `focus-coordination-original.dart`,
+`focus-coordination-extraction-review.txt`, `focus-empty-debug.txt`,
+`focus-empty-debug2.txt`, `analyze-focus-coordination.txt` and
+`focus-coordination-analyzer-comparison.txt`. Phase 4C service/view completion,
+later phases, native/device performance comparisons and CI gates remain open.
+
+Full-suite review: **8,088 successes / the same 51 failures / 20 skips**.
+Every prior checkpoint outcome is preserved and all eleven new focus cases pass.
+Original-baseline and preceding-checkpoint comparisons find no new failures,
+missing tests or new skips. Receipts: `full-focus-coordination.jsonl`,
+`full-focus-coordination-comparison.txt` and
+`full-focus-coordination-previous-checkpoint.txt` in the same evidence directory.
+The baseline helper remains nonzero for original failures, with no allowance
+changes. Final diff/format/architecture review passes. Phase 4C remains in progress.

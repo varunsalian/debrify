@@ -90,7 +90,21 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
   Torrent? get _cachedEpisodeSource =>
       _savedSourcesSubscription.read().cachedEpisode;
   bool _showCachedEpisodeSource = false;
-  int _selectionFocusRun = 0;
+  late final _resultsFocus = SourceResultsFocus(
+    controller: _resultsScroll,
+    readNodes: () => _nodes,
+    filterFocus: _filterFocus,
+    pillFocus: _pillFocus,
+    isMounted: () => mounted,
+    searchToken: () => _searchToken,
+    isFrozen: () => _streamFrozen,
+    hasSelectedVisible: () => _visible.contains(_selectedDirect),
+    hasRailFocus: () => _cinemaKey.currentState?.hasRailFocus ?? false,
+    canRecoverEmpty: () => _seasonChipVisible || _hasRetryableAddon,
+    isTelevision: () => widget.isTelevision,
+    freeze: _freezeStreaming,
+    onEvent: _logPickerSelection,
+  );
   final int _pickerTraceId = DateTime.now().microsecondsSinceEpoch;
 
   void _logPickerSelection(
@@ -149,65 +163,11 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
 
   // Lazy rows have no Focus context until built. Walk the viewport until the
   // target mounts, then align precisely using its actual (variable) height.
-  Future<void> _revealSelectedDirect({bool preserveFocus = false}) async {
-    final run = ++_selectionFocusRun;
-    final token = _searchToken;
-    final target = _selectedDirect;
-    if (target == null) {
-      _logPickerSelection('reveal_skipped', {'reason': 'no_match'});
-      return;
-    }
-    final index = _visible.indexOf(target);
-    if (index < 0) {
-      _logPickerSelection('reveal_skipped', {'reason': 'match_not_visible'});
-      return;
-    }
-    _logPickerSelection('reveal_start');
-    await revealSourceRow(
-      index: index,
-      controller: _resultsScroll,
-      readNodes: () => _nodes,
-      canContinue: () =>
-          mounted &&
-          run == _selectionFocusRun &&
-          token == _searchToken &&
-          (preserveFocus || !_streamFrozen),
-      cancellationReason: () {
-        if (!mounted ||
-            run != _selectionFocusRun ||
-            token != _searchToken ||
-            (!preserveFocus && _streamFrozen) ||
-            _filterFocus.hasFocus ||
-            _pillFocus.hasFocus ||
-            (!preserveFocus &&
-                (_cinemaKey.currentState?.hasRailFocus ?? false)) ||
-            index >= _nodes.length) {
-          return !mounted
-              ? 'unmounted'
-              : run != _selectionFocusRun
-              ? 'newer_result_batch'
-              : token != _searchToken
-              ? 'new_search'
-              : _streamFrozen
-              ? 'user_interaction'
-              : _filterFocus.hasFocus
-              ? 'filter_focused'
-              : _pillFocus.hasFocus
-              ? 'new_results_focused'
-              : (_cinemaKey.currentState?.hasRailFocus ?? false)
-              ? 'sidebar_focused'
-              : 'missing_focus_node';
-        }
-        return null;
-      },
-      onRowMounted: (node) {
-        if (preserveFocus) _lastCinemaSource = index;
-        if (widget.isTelevision && !preserveFocus) node.requestFocus();
-      },
-      focusRequested: () => widget.isTelevision && !preserveFocus,
-      onEvent: _logPickerSelection,
-    );
-  }
+  Future<void> _revealSelectedDirect({bool preserveFocus = false}) =>
+      _resultsFocus.reveal(
+        _selectedDirect == null ? null : _visible.indexOf(_selectedDirect!),
+        preserveFocus: preserveFocus,
+      );
 
   // --- redesign toolbar state (unused when _redesign is false) ---
   SourceToolbarState get _toolbar => _resultsSubscription.read().toolbar;
@@ -221,7 +181,6 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
       _settingsSubscription;
   SourcePresentationSettings get _settings => _settingsSubscription.read();
   final _cinemaKey = GlobalKey<CinemaSourcesLayoutState>();
-  int _lastCinemaSource = 0;
 
   /// D-pad anchor for the redesigned toolbar: the filter funnel. Pressing UP
   /// from the first row focuses this on TV so the remote can reach the toolbar
@@ -535,7 +494,7 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
   /// across the reshuffle (a late engine can insert rows above the D-pad
   /// focus; without this the remote lands on a different torrent).
   void _applyStreamingResults(List<Torrent> torrents) {
-    ++_selectionFocusRun;
+    _resultsFocus.cancelReveal();
     // Identity-preserving refocus only makes sense for USER-placed focus —
     // i.e. after a freeze (adopt-pending / toolbar paths). During live
     // streaming the only focus is the programmatic TV anchor on row 0;
@@ -582,9 +541,7 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
                 t.infohash == focusedTorrent!.infohash),
       );
       if (idx >= 0) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted && idx < _nodes.length) _nodes[idx].requestFocus();
-        });
+        _resultsFocus.restoreAfterFrame(idx);
       }
     } else if (!_streamFrozen && _visible.contains(_selectedDirect)) {
       unawaited(_revealSelectedDirect());
@@ -592,20 +549,7 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
       // Live streaming on TV: keep the remote anchored to the TOP row (the
       // best-ranked source right now) — the anchor exists from the first
       // batch instead of waiting for the slowest engine.
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted ||
-            _nodes.isEmpty ||
-            _streamFrozen ||
-            _visible.contains(_selectedDirect)) {
-          return;
-        }
-        if (_filterFocus.hasFocus ||
-            _pillFocus.hasFocus ||
-            (_cinemaKey.currentState?.hasRailFocus ?? false)) {
-          return;
-        }
-        _nodes.first.requestFocus();
-      });
+      _resultsFocus.anchorStreamingAfterFrame();
     }
   }
 
@@ -648,29 +592,13 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
     // With ZERO rows (e.g. a season scope with no packs) anchor the filter
     // funnel instead so the remote can still reach the toolbar and recover.
     // Never steal focus the user already placed somewhere mid-stream.
-    if (widget.isTelevision) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        if (_visible.contains(_selectedDirect) ||
-            _nodes.any((n) => n.hasFocus) ||
-            _filterFocus.hasFocus ||
-            _pillFocus.hasFocus ||
-            (_cinemaKey.currentState?.hasRailFocus ?? false)) {
-          return;
-        }
-        if (_nodes.isNotEmpty) {
-          _nodes.first.requestFocus();
-        } else if (_seasonChipVisible || _hasRetryableAddon) {
-          _filterFocus.requestFocus();
-        }
-      });
-    }
+    _resultsFocus.anchorCompletionAfterFrame();
   }
 
   /// First real user interaction → stop live-reshuffling; buffer new arrivals
   /// behind the pill instead.
   void _freezeStreaming() {
-    ++_selectionFocusRun;
+    _resultsFocus.cancelReveal();
     _resultsController.freeze();
   }
 
@@ -889,21 +817,8 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
     providers: () => _cinemaProviders,
     selectedProvider: _sourceFilter,
     onProviderSelected: _selectCinemaProvider,
-    onFocusResults: () {
-      if (_nodes.isNotEmpty) {
-        _nodes[_lastCinemaSource.clamp(0, _nodes.length - 1)].requestFocus();
-      } else if (_filterFocus.context != null) {
-        _filterFocus.requestFocus();
-      }
-    },
-    isSourceFocused: () {
-      final index = _nodes.indexWhere((node) => node.hasFocus);
-      if (index >= 0) {
-        _lastCinemaSource = index;
-        _freezeStreaming();
-      }
-      return index >= 0;
-    },
+    onFocusResults: _resultsFocus.focusRememberedRow,
+    isSourceFocused: _resultsFocus.rememberFocusedRow,
     resultCount: _visible.length,
     searching: _loading || _searching,
     failed: _error != null,
@@ -921,7 +836,7 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
 
   void _selectCinemaProvider(String? key) {
     _resultsController.selectProvider(key);
-    _lastCinemaSource = 0;
+    _resultsFocus.resetRememberedRow();
     // The rail returns to row zero after changing providers. Mount that row
     // before Right can request its focus; a lazy list left at the previous
     // provider's offset has no attached focus target at index zero.

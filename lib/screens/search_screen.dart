@@ -9,7 +9,7 @@ import '../features/sources/presentation/source_playback_bridge.dart';
 import '../features/sources/application/source_link_dependencies.dart';
 import '../features/sources/data/source_link_copier.dart';
 import '../features/sources/presentation/source_binding_bridge.dart';
-import '../features/sources/presentation/source_row_reveal.dart';
+import '../features/sources/presentation/source_results_focus.dart';
 import '../features/sources/application/source_selection_match.dart';
 import '../ui/core/source_metadata_labels.dart';
 import '../features/sources/application/source_provider_projection.dart';
