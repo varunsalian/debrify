@@ -6,6 +6,7 @@ import 'package:debrify/features/sources/application/source_retry_controller.dar
 import 'package:debrify/features/sources/data/source_cache_repository.dart';
 import 'package:debrify/features/sources/application/source_search_controller.dart';
 import 'package:debrify/features/sources/application/source_search_dependencies.dart';
+import 'package:debrify/features/sources/application/source_seasons_dependencies.dart';
 import 'package:debrify/features/sources/data/source_search_repository.dart';
 import 'package:debrify/features/sources/models/source_search_request.dart';
 import 'package:debrify/features/sources/models/source_search_result.dart';
@@ -145,6 +146,141 @@ void main() {
     onRows: (batch, complete) => rows.add((batch, complete)),
     onBatchAccepted: cacheBatches.add,
   );
+
+  for (final wholeFamily in [false, true]) {
+    test(
+      'explicit search scopes retire batches and preserve sibling completion: family=$wholeFamily',
+      () async {
+        ProviderContainer scoped(
+          SearchRepository repository,
+        ) => ProviderContainer.test(
+          parent: container,
+          overrides: [
+            sourceSearchRepositoryProvider.overrideWith(
+              (ref, key) => repository,
+            ),
+            sourceCacheRepositoryProvider.overrideWith(
+              (ref, key) => CacheRepository(),
+            ),
+            sourcesSessionActiveProvider.overrideWith(
+              (ref, key) => container.read(sourcesSessionActiveProvider(key)),
+            ),
+            if (wholeFamily) ...[
+              sourceSearchProvider.overrideWith2(SourceSearchController.new),
+              sourceCacheProvider.overrideWith2(SourceCacheController.new),
+              sourceRetryProvider.overrideWith2(SourceRetryController.new),
+              sourceResultsProvider.overrideWith2(SourceResultsController.new),
+            ] else ...[
+              sourceSearchProvider(
+                session,
+              ).overrideWith(() => SourceSearchController(session)),
+              sourceCacheProvider(
+                session,
+              ).overrideWith(() => SourceCacheController(session)),
+              sourceRetryProvider(
+                session,
+              ).overrideWith(() => SourceRetryController(session)),
+              sourceResultsProvider(
+                session,
+              ).overrideWith(() => SourceResultsController(session)),
+            ],
+          ],
+        );
+        container.listen(sourceResultsProvider(session), (_, _) {});
+        final parentResults = container.read(
+          sourceResultsProvider(session).notifier,
+        );
+        final original = row('parent-selected');
+        parentResults.display([original]);
+        parentResults.freeze();
+        final firstRepository = SearchRepository(session);
+        final secondRepository = SearchRepository(session);
+        final first = scoped(firstRepository);
+        first.listen(sourceSearchProvider(session), (_, _) {});
+        final firstController = first.read(
+          sourceSearchProvider(session).notifier,
+        );
+        final second = scoped(secondRepository);
+        final secondState = second.listen(
+          sourceSearchProvider(session),
+          (_, _) {},
+        );
+        final secondController = second.read(
+          sourceSearchProvider(session).notifier,
+        );
+        expect(
+          container.read(sourceSearchProvider(session).notifier),
+          same(controller),
+        );
+        expect(
+          first.read(sourceSearchProvider(session).notifier),
+          same(firstController),
+        );
+        expect(firstController.prepareSearch(), isTrue);
+        expect(secondController.prepareSearch(), isTrue);
+        expect(container.read(sourceResultsProvider(session)).displayed, [
+          same(original),
+        ]);
+        expect(container.read(sourceResultsProvider(session)).frozen, isTrue);
+        final firstRows = <(List<Torrent>, bool)>[];
+        final secondRows = <(List<Torrent>, bool)>[];
+        final firstCache = <List<Torrent>>[];
+        final secondCache = <List<Torrent>>[];
+        Future<void> start(
+          SourceSearchController target,
+          List<(List<Torrent>, bool)> accepted,
+          List<List<Torrent>> cache,
+        ) => target.search(
+          SourceSearchRequest(selection: selection),
+          priority: [],
+          aliases: {},
+          onRows: (batch, complete) => accepted.add((batch, complete)),
+          onBatchAccepted: cache.add,
+        );
+        final parentSearch = search();
+        final firstSearch = start(firstController, firstRows, firstCache);
+        final secondSearch = start(secondController, secondRows, secondCache);
+        final firstCall = firstRepository.calls.single;
+        final secondCall = secondRepository.calls.single;
+        final early = row('early');
+        firstCall.batch('engine', [early]);
+        expect(firstRows.single.$1, [same(early)]);
+        expect(firstCache.single, [same(early)]);
+        expect(secondRows, isEmpty);
+        expect(rows, isEmpty);
+        first.dispose();
+        expect(firstCall.active(), isFalse);
+        expect(firstController.prepareSearch(), isFalse);
+        firstCall.batch('engine', [row('late')]);
+        firstCall.result.complete(
+          SourceSearchResult(torrents: [row('late-final')]),
+        );
+        await firstSearch;
+        expect(firstRows, hasLength(1));
+        expect(firstCache, hasLength(1));
+        expect(subscription.read().searching, isTrue);
+        expect(secondState.read().searching, isTrue);
+        final finalRow = row('sibling-final');
+        secondCall.batch('engine', [early]);
+        secondCall.result.complete(SourceSearchResult(torrents: [finalRow]));
+        await secondSearch;
+        expect(secondRows.last.$1, [same(finalRow)]);
+        expect(secondRows.last.$2, isTrue);
+        expect(secondCache.single, [same(early)]);
+        expect(secondState.read().searching, isFalse);
+        expect(subscription.read().searching, isTrue);
+        final parentFinal = row('parent-final');
+        repository.calls.single.result.complete(
+          SourceSearchResult(torrents: [parentFinal]),
+        );
+        await parentSearch;
+        expect(rows.single.$1, [same(parentFinal)]);
+        expect(subscription.read().searching, isFalse);
+        expect(secondRows, hasLength(2));
+        expect(firstRepository.calls, hasLength(1));
+      },
+    );
+  }
 
   test(
     'construction is inert; batches stream and final rows are authoritative',
