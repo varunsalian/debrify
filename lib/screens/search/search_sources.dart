@@ -1165,99 +1165,59 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
                     _redesignToolbar(scheme, showProviders: !cinema),
                   if (_searching && !cinema) _searchingStrip(),
                   Expanded(
-                    child: Stack(
-                      children: [
-                        Positioned.fill(
-                          child: _visible.isEmpty
-                              ? _centered(
-                                  scheme,
-                                  _torrents.isEmpty
-                                      ? 'No sources found.'
-                                      : 'No matches for your filters.',
-                                )
-                              : NotificationListener<ScrollNotification>(
-                                  // A user drag (not the programmatic
-                                  // ensureVisible scrolls) freezes live
-                                  // reshuffling.
-                                  onNotification: (n) {
-                                    if (n is ScrollStartNotification &&
-                                        n.dragDetails != null) {
-                                      _freezeStreaming();
-                                    }
-                                    return false;
-                                  },
-                                  child: SourceListScrollAnchor(
-                                    child: ListView.builder(
-                                      controller: _resultsScroll,
-                                      padding: EdgeInsets.symmetric(
-                                        // Spotlight expands the focused
-                                        // SourceRow beyond its layout box.
-                                        // At the top of the list there is no
-                                        // negative scroll extent to reveal
-                                        // it, so reserve TV focus room here.
-                                        vertical: widget.isTelevision ? 24 : 8,
-                                        horizontal: _redesign ? 10 : 0,
-                                      ),
-                                      cacheExtent: 1200,
-                                      itemCount: _visible.length,
-                                      itemBuilder: (context, i) {
-                                        final t = _visible[i];
-                                        if (_redesign) {
-                                          return _redesignRow(
-                                            t,
-                                            i,
-                                            cinema: cinema,
-                                          );
-                                        }
-                                        return TorrentResultRow(
-                                          torrent: t,
-                                          index: i,
-                                          focusNode: _nodes[i],
-                                          isTelevision: widget.isTelevision,
-                                          qualityTier: t.qualityTier,
-                                          onTap: () {
-                                            if (widget.bindMode) {
-                                              unawaited(_pin(t));
-                                            } else {
-                                              _play(t, i);
-                                            }
-                                          },
-                                          onLongPress: () => _showRowMenu(t, i),
-                                          onCopyMagnet: !_canCopySource(t)
-                                              ? null
-                                              : () => unawaited(
-                                                  _copySourceLink(t),
-                                                ),
-                                          onNavigateUp: () {
-                                            _freezeStreaming();
-                                            if (i > 0) {
-                                              _nodes[i - 1].requestFocus();
-                                            } else if (_pendingNewCount > 0) {
-                                              _pillFocus.requestFocus();
-                                            }
-                                          },
-                                          onNavigateDown: () {
-                                            _freezeStreaming();
-                                            if (i < _nodes.length - 1) {
-                                              _nodes[i + 1].requestFocus();
-                                            }
-                                          },
-                                        );
-                                      },
-                                    ),
-                                  ),
-                                ),
-                        ),
-                        // Frozen-mode arrivals wait behind this pill so
-                        // the list never reshuffles under the user.
-                        if (_pendingNewCount > 0)
-                          Positioned(
-                            top: 10,
-                            left: 0,
-                            right: 0,
-                            child: Center(child: _newSourcesPill()),
-                          ),
-                      ],
+                    child: SourceResultsPane(
+                      count: _visible.length,
+                      controller: _resultsScroll,
+                      isTelevision: widget.isTelevision,
+                      redesign: _redesign,
+                      onUserScroll: _freezeStreaming,
+                      emptyBuilder: (_) => _centered(
+                        scheme,
+                        _torrents.isEmpty
+                            ? 'No sources found.'
+                            : 'No matches for your filters.',
+                      ),
+                      pendingResults: _pendingNewCount > 0
+                          ? _newSourcesPill()
+                          : null,
+                      itemBuilder: (context, i) {
+                        final t = _visible[i];
+                        if (_redesign) {
+                          return _redesignRow(t, i, cinema: cinema);
+                        }
+                        return TorrentResultRow(
+                          torrent: t,
+                          index: i,
+                          focusNode: _nodes[i],
+                          isTelevision: widget.isTelevision,
+                          qualityTier: t.qualityTier,
+                          onTap: () {
+                            if (widget.bindMode) {
+                              unawaited(_pin(t));
+                            } else {
+                              _play(t, i);
+                            }
+                          },
+                          onLongPress: () => _showRowMenu(t, i),
+                          onCopyMagnet: !_canCopySource(t)
+                              ? null
+                              : () => unawaited(_copySourceLink(t)),
+                          onNavigateUp: () {
+                            _freezeStreaming();
+                            if (i > 0) {
+                              _nodes[i - 1].requestFocus();
+                            } else if (_pendingNewCount > 0) {
+                              _pillFocus.requestFocus();
+                            }
+                          },
+                          onNavigateDown: () {
+                            _freezeStreaming();
+                            if (i < _nodes.length - 1) {
+                              _nodes[i + 1].requestFocus();
+                            }
+                          },
+                        );
+                      },
                     ),
                   ),
                 ],

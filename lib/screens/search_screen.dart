@@ -1,3 +1,4 @@
+import '../features/sources/presentation/source_results_pane.dart';
 import '../ui/core/source_metadata_labels.dart';
 import '../features/sources/application/source_provider_projection.dart';
 import '../features/sources/presentation/source_provider_strip.dart';

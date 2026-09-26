@@ -1929,3 +1929,44 @@ failures. Receipts: `.git/refactor-evidence/phase4c/full-cinema-projection.jsonl
 `cinema-projection-previous-checkpoint.txt`.
 Remaining Sources UI/focus ownership and manual binding preparation, later
 phases, native/performance verification and final CI remain incomplete.
+
+
+### Phase 4C — Results pane and scrolling boundary
+
+Extracted the 71-line `SourceResultsPane`, wired into the actual Sources body.
+It owns the lazy-list/empty-state layout, existing scroll-anchor wrapper and
+pending-arrival overlay. The view supplies row/empty builders, the borrowed
+ScrollController, layout flags and a user-scroll callback; row actions, focus
+nodes, pending-result state and controller disposal retain their original owners.
+The replaced inline Stack/list wrapper is removed. Sources is **1,939 lines**;
+parent **20,165**.
+
+Review preserves Positioned.fill, empty versus filtered-empty messages, pending
+overlay placement, 24/8-pixel TV/touch vertical padding, 10/0-pixel redesign
+horizontal padding and the 1,200-pixel cache budget. Notifications continue to
+bubble; only ScrollStartNotification with nonnull drag details freezes arrivals.
+The deprecated cacheExtent argument moved with its existing diagnostic; it was
+replaced with `scrollCacheExtent: ScrollCacheExtent.pixels(1200)`, the exact
+conversion used by the installed Flutter 3.44.8 ScrollView implementation. CI
+is already pinned to that version and other app widgets use this API; no SDK/
+dependency upgrade is involved. The rendering import required by that API is
+explicit. Classic/redesigned row builders and navigation callbacks are retained.
+
+Affected Sources/cinema/row-focus/scroll-anchor baseline: **258 passes**. Final
+group: **259 passes**. One new boundary test verifies lazy construction, retained
+overlay with empty results, programmatic scrolling versus a real drag, parent
+notification delivery, and reuse of the view-owned controller after detachment.
+Final analyzer has **863 diagnostics**, no additions and one further removed
+legacy deprecation versus the previous checkpoint. Architecture checks pass for
+**107 migrated files**; new files and the touched body are formatted and diff
+checks pass. Receipts under `.git/refactor-evidence/phase4c/`:
+`results-pane-before.txt`, `results-pane-focused.txt`,
+`results-pane-focused-final.txt` (intermediate rendering import),
+`results-pane-complete.txt`, `analyze-results-pane-complete.txt`,
+`results-pane-complete-analyzer-comparison.txt`.
+
+Latest full suite remains `full-cinema-projection.jsonl` (7,844 successes,
+unchanged 51 failures/20 skips); this leaf uses affected checks. Native focus/
+performance parity is not inferred from widget tests. Remaining Sources focus/
+lifecycle, binding preparation, later phases and final native/performance/CI
+gates remain open.
