@@ -1141,3 +1141,63 @@ failures. Full receipts: `.git/refactor-evidence/phase4c/full-preparation.jsonl`
 Phase 4C remains in progress for search/result state, pin/local actions and Sources
 presentation. Later Home/Discover/lifecycle work, native checks, performance
 comparisons and the final architecture/CI audit are not yet complete.
+
+
+### Phase 4C — Sources search state and batch orchestration
+
+Added `SourceSearchController` (128 lines) and immutable `SourceSearchState`
+(19 lines), wired into the actual Sources view through a manual Riverpod
+subscription. The controller owns searching/error state, addon/IPTV outcomes,
+ordered status filtering, accumulated engine batches and retry-result merging.
+Production no longer stores competing copies of those fields or invokes the
+search repository directly. Accepted row callbacks hand results to the existing
+presentation path; cache callbacks retain batch timing. The controller starts no
+work during construction, disables automatic retries and retires work on request
+generation, dependency replacement, profile retirement and disposal.
+
+The view retains its mounted/token cancellation callback through the repository,
+including the auto-disposal grace period. It owns focus nodes, loading visibility,
+prepared/rendered/frozen rows and cache/season presentation actions. A disposed
+boolean is captured solely for already-scheduled focus diagnostics, avoiding a
+read from a closed subscription. No new retained credential or row snapshot is
+introduced for logging. Settings are immutable and loaded before search begins,
+so passing priority/aliases at invocation preserves their completion-time values.
+
+Review preserved the existing retry contract: retries merge accumulated batches,
+not final-only rows from the authoritative response. Final search completion
+still replaces provisional raw rows before preparation/buffering. Empty batches
+are ignored; empty successful retries clear failure state. Current errors keep
+IPTV outcomes and stop searching. Late batches after completion cannot publish.
+
+Baseline Sources feature/cinema suites passed **144 tests**. The same integration
+suite passed after wiring. Final affected Sources/cinema/priority/season run
+passed **177 tests**, including **11 new controller cases** for explicit startup,
+provisional/final behavior, status priority, rapid searches, current/stale errors,
+retry identity and accumulation, caller cancellation, profile retirement,
+disposal and dependency replacement. The initial dependency test returned the
+same repository instance after invalidation, so it did not cause a dependency
+change; the fixture now replaces the repository and retains the stale-callback
+assertions. No existing test assertions or failure allowance were changed.
+
+Analyzer identity comparison adds no diagnostics (**864**, same prior checkpoint).
+Architecture passes for **90 migrated files**. New files are formatted; changed
+screen blocks and diffs are reviewed. Sources is **2,778 lines**, parent **20,153**.
+Receipts: `.git/refactor-evidence/phase4c/search-state-before.txt`,
+`search-state-integration.txt`, `search-state-controller.txt` (fixture failure),
+`search-state-controller-final.txt`, `search-state-focused-final.txt`,
+`analyze-search-state-final.txt`, and `search-state-analyzer-comparison.txt`.
+
+The plan retains a concrete phase-8 exception for pure merge/priority operations
+still housed in legacy service files. Direct-import checks do not establish
+transitive purity. Rendered/frozen result state, pin/local actions, Sources UI,
+later phases and native/performance verification remain unfinished.
+
+
+The exact full helper completed in **172,731 ms** with **7,747 successes**, the
+same **51 observed baseline failures** (22 failure/29 error) and **20 skips**.
+No baseline identities are newly failing, missing or skipped. Every identity
+from the preparation checkpoint retains its outcome, with **11 new passing
+controller cases**. The historical allowance remains unchanged and the helper
+still exits 1 for pre-existing failures. Full receipts:
+`.git/refactor-evidence/phase4c/full-search-state.jsonl`,
+`full-search-state-comparison.txt`, and `search-state-previous-checkpoint.txt`.

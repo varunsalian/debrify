@@ -60,9 +60,9 @@ class _SourcesScreen extends ConsumerStatefulWidget {
 
 class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
   bool _loading = true;
-  String? _error;
+  String? get _error => _searchSubscription.read().error;
   List<Torrent> _torrents = [];
-  List<IptvSourceResult> _iptvSources = [];
+  List<IptvSourceResult> get _iptvSources => _searchSubscription.read().iptv;
 
   /// The rows actually rendered — [_torrents] after the redesign toolbar's
   /// source-group filter, quality/rip/language filter, and sort are applied.
@@ -99,7 +99,7 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
       'visible': _visible.length,
       'match_index': selected == null ? -1 : _torrents.indexOf(selected),
       'visible_index': selected == null ? -1 : _visible.indexOf(selected),
-      'searching': _searching,
+      'searching': mounted ? _searching : _disposedSearching,
       'frozen': _streamFrozen,
       'rail_focus': _cinemaKey.currentState?.hasRailFocus ?? false,
       'filter_focus': _filterFocus.hasFocus,
@@ -302,7 +302,8 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
   /// Per-addon outcomes for the current search — every APPLICABLE Stremio
   /// addon, including failed and zero-result ones (which the result list
   /// alone makes invisible). Drives the status strip under the toolbar.
-  List<AddonSearchStatus> _addonStatuses = [];
+  List<AddonSearchStatus> get _addonStatuses =>
+      _searchSubscription.read().addonStatuses;
 
   /// Addon ids with a retry in flight — their chip shows a spinner.
   late final ProviderSubscription<Set<String>> _retrySubscription;
@@ -322,14 +323,11 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
 
   // --- streaming search: rows appear per engine as each one finishes, instead
   // of waiting for the slowest engine's timeout. ---
-  /// Raw per-source batches accumulated for the CURRENT search token. Batches
-  /// retain each provider's response order; provider priority and stable
-  /// dedupe are applied when the rendered list is derived.
-  final List<List<Torrent>> _streamBatches = [];
-
-  /// True while engines are still in flight (drives the "Still searching…"
-  /// strip under the toolbar).
-  bool _searching = false;
+  late final ProviderSubscription<SourceSearchState> _searchSubscription;
+  SourceSearchController get _searchController =>
+      ref.read(sourceSearchProvider(_sourcesSession).notifier);
+  bool get _searching => _searchSubscription.read().searching;
+  bool _disposedSearching = false;
 
   /// Set on the first real interaction (drag scroll, row D-pad move, row menu,
   /// toolbar use). Frozen ⇒ later arrivals buffer into [_pendingTorrents]
@@ -462,6 +460,15 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
         if (mounted) setState(() {});
       },
     );
+    _searchSubscription = ref.listenManual(
+      sourceSearchProvider(_sourcesSession),
+      (previous, next) {
+        if (!mounted) return;
+        setState(() {
+          if (next.error != null || next.iptv.isNotEmpty) _loading = false;
+        });
+      },
+    );
     // Rebuild the toolbar when the funnel gains/loses focus so its D-pad
     // highlight tracks — Focus alone doesn't guarantee a parent rebuild.
     _filterFocus.addListener(_onFilterFocusChanged);
@@ -502,6 +509,8 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
 
   @override
   void dispose() {
+    _disposedSearching = _searching;
+    _searchSubscription.close();
     _retrySubscription.close();
     _cacheSubscription.close();
     _disposedBoundCount = _bound.length;
@@ -531,23 +540,13 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
   /// or leak its focus nodes.
   Future<void> _runSearch() async {
     final token = ++_searchToken;
-    _streamBatches.clear();
-    // New search → reset the cache generation: drop the previous set's badges
-    // and checked-hash memo so streaming batches re-check from scratch. The
-    // bumped token also invalidates any still-in-flight check from the old set.
+    // Search and cache/retry generations retire together; widgets retain the
+    // token only for focus and row-adoption callbacks.
     _cacheController.beginSearch();
     _retryController.beginSearch();
-    _searching = true;
     _streamFrozen = false;
     _pendingTorrents = null;
-    if (mounted) {
-      setState(() {
-        _loading = true;
-        _error = null;
-        _addonStatuses = const [];
-        _iptvSources = [];
-      });
-    }
+    if (mounted) setState(() => _loading = true);
     for (final n in _nodes) {
       n.dispose();
     }
@@ -556,78 +555,24 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
     // Never retain rows whose focus nodes were just disposed.
     _torrents = [];
     _visible = [];
-    try {
-      final sel = _effectiveSelection;
-      // Streaming: each engine's batch lands as soon as THAT engine finishes,
-      // so first rows show in seconds instead of after the slowest engine's
-      // timeout. Raw batches retain each provider's order; provider priority
-      // and stable dedupe are applied by the toolbar presentation below. The
-      // awaited result stays authoritative and snaps the list to it on
-      // completion.
-      void onBatch(String source, List<Torrent> batch) {
-        if (!mounted || token != _searchToken || batch.isEmpty) return;
-        // A timed-out engine's original future keeps running after the
-        // timeout fires — its late batch must not mutate the list after the
-        // awaited result already snapped it to the authoritative set.
-        if (!_searching) return;
-        _streamBatches.add(batch);
-        _presentStreaming(
-          TorrentService.mergeSearchResults(
-            _streamBatches,
-            preserveSourceOrder: true,
-          ),
-          token,
-        );
-        // Badge THIS engine's new rows as soon as it lands — additive, so the
-        // final sweep in _finishSearch only mops up any hash no batch carried.
-        _maybeCheckCache(batch);
-      }
-
-      final res = await ref
-          .read(sourceSearchRepositoryProvider(_sourcesSession))
-          .search(
-            SourceSearchRequest(
-              selection: sel,
-              keyword: _keywordMode ? _query : null,
-              availableSeasons: _availableSeasons,
-            ),
-            shouldContinue: () =>
-                mounted && token == _searchToken && _searching,
-            onBatch: onBatch,
-            onIptvResult: (result) {
-              if (!mounted || token != _searchToken || !_searching) return;
-              setState(() {
-                _iptvSources = [..._iptvSources, result];
-                _loading = false;
-              });
-            },
-          );
-      if (res == null || !mounted || token != _searchToken) return;
-      _iptvSources = res.iptv;
-      _searching = false;
-      // Keyword search runs engines only — no addon statuses to show.
-      // The strip follows the user's Addon Priority order when one is set.
-      _addonStatuses = SourcePriority.orderBy(
-        res.addonStatuses
-            .where(
-              (status) =>
-                  !SourcePriority.isRecommendationOnlyAddon(status.addonId),
-            )
-            .toList(growable: false),
-        (status) => status.sourceKey,
-        _sourcePriority,
-        aliases: _sourceAliases,
-      );
-      _presentStreaming(res.torrents, token);
-      _finishSearch(token);
-    } catch (e) {
-      if (!mounted || token != _searchToken) return;
-      setState(() {
-        _searching = false;
-        _error = e.toString();
-        _loading = false;
-      });
-    }
+    await _searchController.search(
+      SourceSearchRequest(
+        selection: _effectiveSelection,
+        keyword: _keywordMode ? _query : null,
+        availableSeasons: _availableSeasons,
+      ),
+      priority: _sourcePriority,
+      aliases: _sourceAliases,
+      shouldContinue: () => mounted && token == _searchToken,
+      onRows: (rows, complete) {
+        if (!mounted || token != _searchToken) return;
+        _presentStreaming(rows, token);
+        if (complete) _finishSearch(token);
+      },
+      onBatchAccepted: (batch) {
+        if (mounted && token == _searchToken) _maybeCheckCache(batch);
+      },
+    );
   }
 
   /// Post-processes a (provisional or final) raw result set exactly like the
@@ -1492,23 +1437,9 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
     final token = _searchToken;
     final batch = await _retryController.retry(_effectiveSelection, status);
     if (batch == null || !mounted || token != _searchToken) return;
-    setState(() {
-      _addonStatuses = [
-        for (final current in _addonStatuses)
-          current.requestKey == status.requestKey
-              ? status.withResult(batch.length)
-              : current,
-      ];
-    });
-    if (batch.isEmpty) return;
-    _streamBatches.add(batch);
-    _presentStreaming(
-      TorrentService.mergeSearchResults(
-        _streamBatches,
-        preserveSourceOrder: true,
-      ),
-      token,
-    );
+    final rows = _searchController.acceptRetry(status, batch);
+    if (rows == null) return;
+    _presentStreaming(rows, token);
     _maybeCheckCache(batch);
   }
 

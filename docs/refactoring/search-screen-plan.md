@@ -449,7 +449,10 @@ boundary audit. Passing the current direct-import guard does not close this
 transitive dependency exception. Sources result preparation also reuses the pure
 `StremioService.selectPinnedDirectStream` selector and the immutable `SeriesSource`
 record currently housed in a service file; separate those dependencies under the
-same phase-8 audit, preserving shared playback selection semantics.
+same phase-8 audit, preserving shared playback selection semantics. The Sources
+search controller also reuses the pure `TorrentService.mergeSearchResults`
+operation; separate its service imports under that audit without changing merge
+or deduplication behavior.
 
 | Phase | Status | Revision, checks, and remaining work |
 | --- | --- | --- |
@@ -459,7 +462,7 @@ same phase-8 audit, preserving shared playback selection semantics.
 | 3: Lists/suggestions | Implemented and reviewed | Riverpod 3.4.3 and Lists controller wired; 23 new tests pass; full suite 7,450 pass / same 51 baseline failures / 20 skipped, no missing tests, analyzer unchanged; device checks pending |
 | 4A: Catalog search | Implemented and reviewed | Riverpod state, streaming/TV batching, source settings and dialog wired; 35 new tests pass; affected suite retains the same three baseline failures, analyzer unchanged; device checks pending |
 | 4B: Keyword search | Implemented and reviewed | Application/data state, settings/defaults, selection and snapshot ownership wired; full suite 7,600 pass / same 51 failures / 20 skips, analyzer unchanged. Focus/navigation wrappers remain in the registered legacy screen (20,138 lines) for later presentation/bridge phases; device checks pending |
-| 4C: Source selection | In progress | Season policies, guide state/inventory, startup settings, saved-source loading, cache checks, initial requests, individual addon retries, toolbar projection and streamed-result preparation extracted. Preparation slice: 166 affected passes and no new analyzer diagnostics; full suite 7,736 successes, same 51 failures/20 skips, all prior checkpoint outcomes preserved. Search/results state, pin/local actions and focus ownership remain; Sources part 2,847 lines |
+| 4C: Source selection | In progress | Season policies, guide state/inventory, startup settings, saved-source loading, cache checks, initial requests, individual addon retries, toolbar projection, streamed-result preparation and search state/batch orchestration extracted. Search-state slice: 177 affected passes and no new analyzer diagnostics; full suite 7,747 successes, same 51 failures/20 skips, all prior checkpoint outcomes preserved. Rendered/frozen result state, pin/local actions and focus ownership remain; Sources part 2,778 lines |
 | 5: Home data | Not started | Preserve paging, snapshots, profiles, tracker semantics |
 | 6: Discover/layouts | Not started | Inventory and retain current variants |
 | 7: Hero/handoff/lifecycle | Not started | Native/device checks required where affected |
