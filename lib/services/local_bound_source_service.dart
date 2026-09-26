@@ -8,7 +8,7 @@ import '../features/sources/data/local_source_files.dart';
 import '../features/sources/models/local_source_file.dart';
 import '../features/sources/presentation/android_local_source_picker.dart';
 import '../features/sources/presentation/local_movie_pick_mode_sheet.dart';
-import '../features/sources/presentation/local_source_choice_dialogs.dart';
+import '../features/sources/presentation/desktop_local_source_picker.dart';
 import '../features/sources/presentation/local_series_folder_resolution.dart';
 import '../models/series_source.dart';
 import '../utils/file_utils.dart';
@@ -80,40 +80,27 @@ class LocalBoundSourceService {
       );
     }
 
-    final path = await pickLocalDirectory();
-    if (path == null || path.trim().isEmpty) return null;
-    if (!context.mounted || !active()) return null;
-
-    final seriesFolder = await resolveLocalSeriesFolder(
+    return pickDesktopSeriesFolder(
       context,
-      title: title,
-      pickedFolderName: localPathName(path),
-      lookup: () => lookupLocalSeriesFolders(
-        path,
+      pickDirectory: pickLocalDirectory,
+      resolve: (path) => resolveLocalSeriesFolder(
+        context,
         title: title,
+        pickedFolderName: localPathName(path),
+        lookup: () => lookupLocalSeriesFolders(
+          path,
+          title: title,
+          canContinue: canContinue,
+        ),
         canContinue: canContinue,
       ),
-      canContinue: canContinue,
-    );
-    if (seriesFolder == null || !active()) return null;
-
-    final resolvedPath = seriesFolder.path;
-    final episodes = await scanLocalSeriesFolder(
-      resolvedPath,
-      canContinue: canContinue,
-    );
-    if (!active()) return null;
-    if (episodes.isEmpty) {
-      if (context.mounted) {
-        _showSnack(context, 'No episodes found in that folder', isError: true);
-      }
-      return null;
-    }
-
-    return localSourceFromSeriesFolder(
-      seriesFolder,
-      title: title,
-      episodeCount: episodes.length,
+      scan: (path) => scanLocalSeriesFolder(path, canContinue: canContinue),
+      describe: (folder, count) => localSourceFromSeriesFolder(
+        folder,
+        title: title,
+        episodeCount: count,
+        canContinue: canContinue,
+      ),
       canContinue: canContinue,
     );
   }
@@ -158,37 +145,16 @@ class LocalBoundSourceService {
         canContinue: canContinue,
       );
     }
-    final path = await pickLocalDirectory();
-    if (!active()) return null;
-    if (path == null || path.trim().isEmpty) return null;
-
-    final candidates = await scanLocalVideoFolder(
-      path,
+    return pickDesktopMovieFolder(
+      context,
+      pickDirectory: pickLocalDirectory,
+      scan: (path) => scanLocalVideoFolder(path, canContinue: canContinue),
+      match: (candidates) =>
+          matchLocalMovieFiles(candidates, title: title, year: year),
+      describe: (candidate) =>
+          localSourceFromFile(candidate.file, canContinue: canContinue),
       canContinue: canContinue,
     );
-    if (!active()) return null;
-    if (candidates.isEmpty) {
-      if (context.mounted) {
-        _showSnack(
-          context,
-          'No video files found in that folder',
-          isError: true,
-        );
-      }
-      return null;
-    }
-
-    final matched = matchLocalMovieFiles(candidates, title: title, year: year);
-    if (matched != null) {
-      return localSourceFromFile(matched.file, canContinue: canContinue);
-    }
-
-    if (!context.mounted) return null;
-    final selected = await showLocalFileChoice(context, candidates);
-    if (!active()) return null;
-    return selected == null
-        ? null
-        : localSourceFromFile(selected.file, canContinue: canContinue);
   }
 
   static void _showSnack(
