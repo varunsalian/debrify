@@ -1,5 +1,5 @@
 import '../ui/core/source_metadata_labels.dart';
-import '../features/sources/models/source_provider_option.dart';
+import '../features/sources/application/source_provider_projection.dart';
 import '../features/sources/presentation/source_provider_strip.dart';
 import '../features/sources/presentation/source_toolbar_controls.dart';
 import '../features/sources/presentation/source_active_filters.dart';

@@ -1171,7 +1171,7 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
       unawaited(_revealSelectedDirect(preserveFocus: true));
     }
     for (final status in _addonStatuses) {
-      if (status.sourceKey == key && _statusActionable(status)) {
+      if (status.sourceKey == key && sourceStatusActionable(status)) {
         unawaited(_retryAddon(status));
       }
     }
@@ -1313,9 +1313,7 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
   /// Whether a chip is worth pressing: a failed addon retries, and a
   /// zero-result addon re-asks (transient upstream failures often read as
   /// empty rather than as an error).
-  bool _statusActionable(AddonSearchStatus s) => s.failed || s.count == 0;
-
-  bool get _hasRetryableAddon => _addonStatuses.any(_statusActionable);
+  bool get _hasRetryableAddon => _addonStatuses.any(sourceStatusActionable);
 
   /// Re-fetch ONE addon and fold whatever it returns into the list through
   /// the normal streaming-merge path — so retry results respect the same
@@ -1424,78 +1422,28 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
     final accent = app.home.chromeAccent;
     final dim = app.fade(app.core.tx, 0.55);
 
-    final sources = <String>{
-      for (final t in _torrents)
-        if (t.source.isNotEmpty) t.source,
-    };
-    final labelsByKey = <String, String>{
-      for (final status in _addonStatuses) status.sourceKey: status.name,
-    };
-    final sourceByKey = <String, String>{
-      for (final source in sources.toList()..sort())
-        SourcePriority.keyForSource(source, aliases: _sourceAliases): source,
-      for (final source in _iptvSources) source.key: source.key,
-    };
-    for (final torrent in _torrents) {
-      final key = SourcePriority.keyForSource(
-        torrent.source,
-        aliases: _sourceAliases,
-      );
-      labelsByKey.putIfAbsent(
-        key,
-        () => torrent.addonDisplayName ?? _providerLabel(torrent.source),
-      );
-    }
-    for (final source in _iptvSources) {
-      labelsByKey[source.key] = 'IPTV · ${source.name}';
-    }
-    final retryByKey = <String, AddonSearchStatus>{
-      for (final status in _addonStatuses)
-        if (_statusActionable(status) &&
-            !sourceByKey.containsKey(status.sourceKey))
-          status.sourceKey: status,
-    };
-    final providerKeys = <String>[
-      ...sourceByKey.keys,
-      for (final key in retryByKey.keys)
-        if (!sourceByKey.containsKey(key)) key,
-    ];
-    final sortedKeys = SourcePriority.orderBy(
-      providerKeys,
-      (key) => key,
-      _sourcePriority,
+    final providers = projectSourceProviders(
+      torrents: _torrents,
+      statuses: _addonStatuses,
+      iptv: _iptvSources,
+      priority: _sourcePriority,
       aliases: _sourceAliases,
+      retrying: _retryingAddons,
     );
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (showProviders && (sortedKeys.length > 1 || retryByKey.isNotEmpty ||
-            _iptvSources.any((s) => s.retryableFailure)))
+        if (showProviders && providers.visible)
           SourceProviderStrip(
-            options: [
-              for (final key in sortedKeys)
-                if (retryByKey[key] case final status?)
-                  SourceProviderOption(
-                    key: key,
-                    label: status.name,
-                    retryable: true,
-                    failed: status.failed,
-                    retrying: _retryingAddons.contains(status.requestKey),
-                  )
-                else if (sourceByKey[key] case final source?)
-                  SourceProviderOption(
-                    key: key,
-                    label: labelsByKey[key] ?? _providerLabel(source),
-                  ),
-            ],
-            showAll: sourceByKey.isNotEmpty,
+            options: providers.options,
+            showAll: providers.showAll,
             selectedKey: _sourceFilter,
             onSelect: (key) {
               _resultsController.selectProvider(key);
               _rebuildVisible();
             },
-            onRetry: (key) => unawaited(_retryAddon(retryByKey[key]!)),
+            onRetry: (key) => unawaited(_retryAddon(providers.retries[key]!)),
           ),
         if (showProviders)
           for (final entry in _mediaServerMessages.entries)
@@ -1591,17 +1539,8 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
     _rebuildVisible();
   }
 
-  String _providerLabel(String s) {
-    for (final source in _iptvSources) {
-      if (source.key == s) return 'IPTV · ${source.name}';
-    }
-    return _prettySource(s);
-  }
-
-  static String _prettySource(String s) {
-    final v = s.startsWith('stremio:') ? s.substring(8) : s;
-    return v.isEmpty ? s : v[0].toUpperCase() + v.substring(1);
-  }
+  String _providerLabel(String source) =>
+      sourceProviderLabel(source, iptv: _iptvSources);
 
   /// Redesigned result row (flag-gated) — a [SourceRow] with format-logo badges
   /// for detail-screen Sources, or a compact quality-tag row for keyword search

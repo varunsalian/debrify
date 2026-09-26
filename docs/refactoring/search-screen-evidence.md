@@ -1841,3 +1841,46 @@ helper still exits 1 for pre-existing failures. Receipts:
 `full-row-labels-comparison.txt`, `row-labels-previous-checkpoint.txt`.
 Phase 4C provider projection, remaining Sources UI/focus and manual binding
 preparation, later phases and native/performance/CI gates remain incomplete.
+
+
+### Phase 4C — Provider-strip projection
+
+Extracted `source_provider_projection.dart` (112 lines), wired into the actual
+Sources toolbar. The pure operation accepts current rows/statuses/IPTV metadata,
+priority/aliases and retry request keys, returning immutable options/retry map
+plus visibility/All eligibility. It owns no search state, performs no IO and
+uses no UI context or Riverpod. Selection/retry dispatch remains with the view
+and existing controllers. The original projection, label helper and actionable
+status predicate are removed; both toolbar and cinema retry checks use the
+shared predicate. Sources is **2,026 lines**; parent **20,165**.
+
+Review preserves alphabetical source traversal before priority ordering, alias
+collisions, status label precedence (including empty labels), IPTV's final label
+override, retry suppression when a source already has rows, last matching retry
+status identity, exact request-key busy state, and retry-only/single-IPTV-failure
+visibility. The label fallback retains its case-sensitive prefix handling and
+first matching IPTV entry. The projected list/map are unmodifiable.
+
+Existing `SourcePriority` pure calls and legacy `AddonSearchStatus`/
+`IptvSourceResult` types remain external dependencies, as in the migrated search
+state. Their transitive legacy service/UI graph is not claimed pure; separation
+remains part of the phase-8 boundary audit. No new service API or business side
+effect was introduced in this extraction.
+
+Affected baseline: **231 passes**. Final Sources/cinema group: **236 passes**.
+Five new policy cases cover grouping/precedence, retry eligibility/configuration,
+immutable results, single-provider visibility and IPTV override/failure behavior.
+Existing narrow production strip and cinema retry tests pass. Intermediate
+compilation exposed one remaining cinema reference to the old predicate; that
+call site was updated before final verification. Final analyzer has **864
+diagnostics with no new identities**. Architecture checks pass for **105
+migrated files**; new files are formatted and diff checks pass. Receipts under
+`.git/refactor-evidence/phase4c/`: `provider-projection-before.txt`,
+`provider-projection-focused.txt` (intermediate predicate reference),
+`provider-projection-focused-final.txt`, `analyze-provider-projection-final.txt`,
+`provider-projection-analyzer-comparison.txt`.
+
+The latest full-suite checkpoint remains `full-row-labels.jsonl` (7,836 successes,
+same 51 failures/20 skips); this slice uses affected checks. Cinema provider
+projection, remaining Sources UI/focus, manual binding preparation and later
+phases/native/performance/CI gates remain unfinished.
