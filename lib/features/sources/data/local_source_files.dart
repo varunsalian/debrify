@@ -164,3 +164,30 @@ Future<SeriesSource?> localSourceFromFile(
     localModifiedAt: stat.modified.millisecondsSinceEpoch,
   );
 }
+
+/// Describes a scanned series folder; the picker owns episode validation and UI.
+Future<SeriesSource?> localSourceFromSeriesFolder(
+  Directory folder, {
+  required String title,
+  required int episodeCount,
+  bool Function()? canContinue,
+}) async {
+  final resolvedPath = folder.path;
+  final stat = await folder.stat();
+  if (!(canContinue?.call() ?? true)) return null;
+  final folderName = localPathName(resolvedPath).isNotEmpty
+      ? localPathName(resolvedPath)
+      : title;
+  return SeriesSource(
+    torrentHash: SeriesSource.localSourceHash(resolvedPath),
+    torrentName: folderName,
+    debridService: SeriesSource.localService,
+    debridTorrentId: resolvedPath,
+    boundAt: DateTime.now().millisecondsSinceEpoch,
+    localPath: resolvedPath,
+    localUri: Uri.directory(resolvedPath).toString(),
+    localKind: SeriesSource.localKindSeriesFolder,
+    localSizeBytes: episodeCount,
+    localModifiedAt: stat.modified.millisecondsSinceEpoch,
+  );
+}

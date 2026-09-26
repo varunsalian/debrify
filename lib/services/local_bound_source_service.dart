@@ -1,8 +1,8 @@
 import 'dart:io';
 
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
+import '../features/sources/data/local_source_file_picker.dart';
 import '../features/sources/data/local_source_file_rules.dart';
 import '../features/sources/data/local_source_files.dart';
 import '../features/sources/models/local_source_file.dart';
@@ -28,21 +28,6 @@ class LocalBoundSourceService {
 
   static const String mobileDisabledReason =
       'Local source binding is not supported on iOS yet.';
-
-  static const List<String> _videoExtensions = [
-    'mp4',
-    'avi',
-    'mkv',
-    'mov',
-    'wmv',
-    'flv',
-    'webm',
-    'm4v',
-    '3gp',
-    'ts',
-    'mts',
-    'm2ts',
-  ];
 
   static Future<SeriesSource?> pickMovieSource(
     BuildContext context, {
@@ -95,7 +80,7 @@ class LocalBoundSourceService {
       );
     }
 
-    final path = await FilePicker.platform.getDirectoryPath();
+    final path = await pickLocalDirectory();
     if (path == null || path.trim().isEmpty) return null;
     if (!context.mounted || !active()) return null;
 
@@ -120,22 +105,11 @@ class LocalBoundSourceService {
       return null;
     }
 
-    final stat = await seriesFolder.stat();
-    if (!active()) return null;
-    final folderName = localPathName(resolvedPath).isNotEmpty
-        ? localPathName(resolvedPath)
-        : title;
-    return SeriesSource(
-      torrentHash: SeriesSource.localSourceHash(resolvedPath),
-      torrentName: folderName,
-      debridService: SeriesSource.localService,
-      debridTorrentId: resolvedPath,
-      boundAt: DateTime.now().millisecondsSinceEpoch,
-      localPath: resolvedPath,
-      localUri: Uri.directory(resolvedPath).toString(),
-      localKind: SeriesSource.localKindSeriesFolder,
-      localSizeBytes: episodes.length,
-      localModifiedAt: stat.modified.millisecondsSinceEpoch,
+    return localSourceFromSeriesFolder(
+      seriesFolder,
+      title: title,
+      episodeCount: episodes.length,
+      canContinue: canContinue,
     );
   }
 
@@ -161,16 +135,7 @@ class LocalBoundSourceService {
         canContinue: canContinue,
       );
     }
-    final result = await FilePicker.platform.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: _videoExtensions,
-      allowMultiple: false,
-      withData: false,
-    );
-    if (!active()) return null;
-    final path = result?.files.single.path;
-    if (path == null || path.trim().isEmpty) return null;
-    return localSourceFromFile(File(path), canContinue: canContinue);
+    return pickLocalVideoSource(canContinue: canContinue);
   }
 
   static Future<SeriesSource?> _pickFromFolder(
@@ -188,7 +153,7 @@ class LocalBoundSourceService {
         canContinue: canContinue,
       );
     }
-    final path = await FilePicker.platform.getDirectoryPath();
+    final path = await pickLocalDirectory();
     if (!active()) return null;
     if (path == null || path.trim().isEmpty) return null;
 
