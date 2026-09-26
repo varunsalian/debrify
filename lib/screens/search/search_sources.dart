@@ -8,6 +8,7 @@ Widget sourcesScreenForTesting({
   required Future<Map<String, dynamic>> Function(SearchBatchCallback onBatch)
   search,
   SourceAddonRetry? retry,
+  bool bindMode = false,
 }) => ProviderScope(
   overrides: [
     sourceSearchRepositoryProvider.overrideWith(
@@ -18,7 +19,12 @@ Widget sourcesScreenForTesting({
       ),
     ),
   ],
-  child: _SourcesScreen(selection: selection, meta: meta, isTelevision: true),
+  child: _SourcesScreen(
+    selection: selection,
+    meta: meta,
+    isTelevision: true,
+    bindMode: bindMode,
+  ),
 );
 
 class _SourcesScreen extends ConsumerStatefulWidget {
@@ -854,14 +860,24 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
 
   Future<void> _bindSource(SourceBindingOperation operation) async {
     if (!mounted) return;
+    final pickerRoute = ModalRoute.of(context);
+    final navigator = pickerRoute?.navigator;
     final ready = await ref
         .read(sourceBindingProvider(_sourcesSession).notifier)
         .bind(operation, viewIsActive: () => mounted);
     if (ready &&
         widget.bindMode &&
         mounted &&
-        _sourcesSession.owner == ProfileSessionMemory.captureOwner()) {
-      Navigator.of(context).pop();
+        _sourcesSession.owner == ProfileSessionMemory.captureOwner() &&
+        pickerRoute != null &&
+        navigator != null &&
+        navigator.mounted) {
+      if (pickerRoute.isCurrent) {
+        navigator.pop();
+      } else if (pickerRoute.isActive) {
+        // A delayed save closes this picker, never a newer route above it.
+        navigator.removeRoute(pickerRoute);
+      }
     }
   }
 

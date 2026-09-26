@@ -2556,3 +2556,48 @@ skips. Receipts: `.git/refactor-evidence/phase4c/full-loader.jsonl`,
 The historical helper remains nonzero for existing failures; no allowances were
 changed. Phase 4C remains in progress, with the view-level completion pop, local
 picker continuations and remaining Sources responsibilities still open.
+
+
+### Phase 4C — bind-mode Sources completion route
+
+The Sources view's delayed binding completion had the analogous route defect:
+a successful save/reload called `Navigator.pop()` on a newer route above the
+picker. The new real-screen navigation tests reproduce this: **five pass / one
+fails** on the prior implementation. The failing covered-route case keeps the
+Sources picker open and closes the newer route instead.
+
+`_bindSource` now captures the picker route and its owning navigator before the
+action. After the existing successful-result, bind-mode, mounted and profile/session
+checks, it pops that route normally if current or removes only that route if
+covered. A missing/inactive route or disposed navigator causes no navigation.
+No action state, persistence ordering, reload behavior or profile guard moved to
+the view. The test host's optional `bindMode` flag defaults to false, preserving
+existing tests while exercising the real production picker behavior. This keeps
+route ownership in presentation without adding a routing abstraction or DI layer.
+The retained Sources part is **1,826 lines**, including this test-host extension;
+its remaining UI/focus responsibilities still require extraction.
+
+Six real-screen tests cover normal picker completion, a newer route above it,
+already-removed picker, profile-session retirement, rejected save and ordinary
+non-binding Sources mode. They also assert save/reload counts and unchanged
+incoming-route identity. A controlled bridge and repository exercise the actual
+Riverpod action gate and screen completion path; no API/native picker is replaced
+in production. All **six pass** after the fix. Affected baseline **301 passes**;
+afterward **307 passes**, with no failures. Analyzer retains **863 diagnostics**
+with no new identities; migrated architecture checks pass **114 files**. New tests
+and the changed method are formatted; diff checks pass.
+
+Receipts under `.git/refactor-evidence/phase4c/`: `bind-route-before.txt`,
+`bind-route-red.txt`, `bind-route-focused.txt`, `analyze-bind-route.txt` and
+`bind-route-analyzer-comparison.txt`. This closes the reproduced view completion
+route defect, not the local-picker continuation or complete Sources migration.
+Native/device, performance and later CI/architecture gates remain outstanding.
+
+Full-suite review: **7,947 successes / the same 51 failures / 20 skips**. Every
+previous checkpoint outcome is preserved, and all **six new navigation cases**
+pass. The original-baseline comparison finds no new failures, missing tests or
+new skips. Receipts: `.git/refactor-evidence/phase4c/full-bind-route.jsonl`,
+`full-bind-route-comparison.txt` and `bind-route-previous-checkpoint.txt` in the
+same directory. The helper remains nonzero for unchanged historical failures;
+its allowances were not changed. Phase 4C and subsequent migration/native gates
+remain active.
