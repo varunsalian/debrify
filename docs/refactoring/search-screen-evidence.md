@@ -2931,3 +2931,68 @@ Receipts: `full-playback-bridge-verified.jsonl`,
 The historical helper still exits nonzero for the original failures. Phase 4C,
 the modal ownership/focus review, and the later native/performance/CI gates remain
 open.
+
+### Phase 4C — modal action ownership and filter input capture
+
+The modal review reproduced nine failures against the previous checkpoint:
+Play/Download could dispatch after a profile reset, Play/Copy/Download could read
+an unmounted view, stale row/filter callbacks could open UI after disposal, and
+row/filter builders could read a disposed Ref or closed provider subscription.
+These are intentional lifecycle fixes, not claimed behavior-neutral movement.
+
+The Sources view now checks one existing view/session ownership predicate before
+reading Ref/context or dispatching its explicit actions. Pin/unpin and local
+binding entry points use the same check while retaining their repository-level
+guards. The row sheet captures its stateless copy dependency when opened, so
+eligibility can still be evaluated on rebuild without reading the old view.
+Its active commands, labels, eligibility rules, theme capture and dismissal
+behavior remain unchanged; retired callbacks dismiss the sheet without dispatch.
+
+Moved the filter modal wrapper into
+`presentation/source_filters_dialog.dart` (**22 lines**), accepting its immutable
+opening filter state and series/movie display flag. Rebuilds no longer read the
+opening view's subscription. The caller rejects stale completion before reading
+or updating current filter state. The existing `TorrentFiltersSheet`, transparent
+Dialog, copy and modal defaults are retained; the replaced builder was removed.
+The legacy Sources part remains **1,820 lines** with other presentation/focus
+responsibilities still pending. No generic event system, new state owner or
+additional DI framework was introduced.
+
+**Nineteen real-screen cases pass**. Twelve exercise Play/Copy/Pin/Download with
+active, disposed and retired-profile owners; two rebuild row/filter modals after
+removing their originating route; three cover applying, cancelling and ignoring a
+retired filter result; two invoke captured open callbacks after disposal. Tests
+use real Navigator routes and a theme change to rebuild modals, with side effects
+recorded at the existing injected boundaries. The original implementation passes
+ten and fails nine of these exact final cases. ClearAll in the profile fixture
+retires action ownership without pretending to replace the Navigator/profile
+route or clear the currently rendered widgets.
+
+The initial 500-pixel-wide fixture also exposed an existing filter-header overflow
+under the widget-test font. The ownership fixture uses 560 pixels to isolate its
+lifecycle assertions; the layout observation is retained as an explicit pending
+layout verification item. No layout test was weakened or converted into an
+allowlisted failure. Active filter chips are tapped and their selected state is
+asserted before applying/cancelling.
+
+Affected existing baseline: **22 passes** across playback/copy/binding navigation.
+After the fix, **all 412 Sources tests pass**. Analyzer retains **863 diagnostics**
+with no new identities. Architecture checks pass **125 migrated files**; changed
+legacy methods/new files are formatted and diff checks pass. Receipts under
+`.git/refactor-evidence/phase4c/`: `modal-owner-before.txt`,
+`modal-owner-red.txt` (initial narrow fixture), `modal-owner-reviewed-red.txt`,
+`modal-owner-final-red.txt`, `modal-owner-affected.txt`,
+`analyze-modal-owner.txt` and `modal-owner-analyzer-comparison.txt`.
+
+This does not cancel native playback/download work that started while its owner
+was current; that deeper lifecycle audit remains phase 7. Sources focus and
+presentation work, native/device checks, the new layout follow-up and all later
+migration gates remain open.
+
+Full-suite review: **8,052 successes / the same 51 failures / 20 skips**.
+Every preceding checkpoint outcome is preserved, and all **19 new cases** pass.
+Original-baseline and previous-checkpoint comparisons find no new failures,
+missing tests or new skips. Receipts: `full-modal-owner.jsonl`,
+`full-modal-owner-comparison.txt` and `modal-owner-previous-checkpoint.txt` in
+the same evidence directory. The historical helper's nonzero result remains due
+to the original failures; no allowances were changed. Phase 4C remains in progress.

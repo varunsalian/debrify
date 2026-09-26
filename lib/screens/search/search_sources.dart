@@ -744,6 +744,9 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
 
   late final ProviderSubscription<bool> _bindingSubscription;
 
+  bool get _sourceActionActive =>
+      mounted && _sourcesSession.owner == ProfileSessionMemory.captureOwner();
+
   void _play(Torrent t, int i) {
     // Swallow a SELECT that leaks through as the row menu / provider picker
     // closes on TV (armed via DialogTapGuard.markKeyAction in the menu).
@@ -752,6 +755,7 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
   }
 
   void _playNow(Torrent t, int i) {
+    if (!_sourceActionActive) return;
     _freezeStreaming();
     unawaited(
       ref
@@ -783,8 +787,8 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
       ref.read(sourceLinkCopierProvider).canCopy(torrent);
 
   Future<void> _copySourceLink(Torrent torrent) async {
-    bool active() =>
-        mounted && _sourcesSession.owner == ProfileSessionMemory.captureOwner();
+    bool active() => _sourceActionActive;
+    if (!active()) return;
     final result = await ref
         .read(sourceLinkCopierProvider)
         .copy(
@@ -808,6 +812,7 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
   }
 
   Future<void> _pin(Torrent t) async {
+    if (!_sourceActionActive) return;
     if (t.isExternalStream) {
       _snack("External links can't be pinned as a playback source.");
       return;
@@ -829,7 +834,7 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
   }
 
   Future<void> _unpin(SeriesSource source) async {
-    if (!mounted) return;
+    if (!_sourceActionActive) return;
     await ref
         .read(savedSourcesProvider(_sourcesSession).notifier)
         .remove(source);
@@ -850,7 +855,7 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
   );
 
   Future<void> _bindSource(SourceBindingOperation operation) async {
-    if (!mounted) return;
+    if (!_sourceActionActive) return;
     final pickerRoute = ModalRoute.of(context);
     final navigator = pickerRoute?.navigator;
     final ready = await ref
@@ -873,10 +878,12 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
   }
 
   void _showRowMenu(Torrent t, int i) {
+    if (!_sourceActionActive) return;
     _freezeStreaming();
     final app = AppThemeScope.of(context);
     final binding = _bindingFor(t);
     final playback = ref.read(sourcePlaybackBridgeProvider);
+    final copier = ref.read(sourceLinkCopierProvider);
     final stream = t.isDirectStream || t.isExternalStream;
     showModalBottomSheet<void>(
       context: context,
@@ -897,14 +904,17 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
         onTogglePin: t.isExternalStream
             ? null
             : () => unawaited(binding != null ? _unpin(binding) : _pin(t)),
-        onCopy: stream || _canCopySource(t)
+        onCopy: stream || copier.canCopy(t)
             ? () => unawaited(_copySourceLink(t))
             : null,
         onDownload:
             stream &&
                 ProfilePolicyGuard.allowsSync(ProfileFeature.downloads) &&
                 playback.supportsDownload(t)
-            ? () => unawaited(playback.download(context, t))
+            ? () {
+                if (!_sourceActionActive) return;
+                unawaited(playback.download(context, t));
+              }
             : null,
       ),
     );
@@ -1326,19 +1336,13 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
       _cacheSubscription.read().label(torrent);
 
   Future<void> _openFilters() async {
-    final result = await showDialog<TorrentFilterState>(
-      context: context,
-      builder: (_) => Dialog(
-        backgroundColor: Colors.transparent,
-        child: TorrentFiltersSheet(
-          initialState: _filters,
-          sizeNote: widget.selection.isSeries
-              ? 'Not applied to series — pack sizes are per-episode.'
-              : 'Applies to movies only — ignored for series.',
-        ),
-      ),
+    if (!_sourceActionActive) return;
+    final result = await showSourceFiltersDialog(
+      context,
+      initialState: _filters,
+      isSeries: widget.selection.isSeries,
     );
-    if (!mounted || result == null || result == _filters) return;
+    if (!_sourceActionActive || result == null || result == _filters) return;
     _resultsController.setFilters(result);
     _rebuildVisible();
   }
