@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:debrify/features/sources/application/saved_sources_controller.dart';
 import 'package:debrify/features/sources/application/source_binding_controller.dart';
 import 'package:debrify/features/sources/application/saved_sources_dependencies.dart';
 import 'package:debrify/features/sources/data/saved_sources_repository.dart';
@@ -182,6 +183,112 @@ void main() {
     debridTorrentId: 'id',
     boundAt: 1,
   );
+
+  for (final wholeFamily in [false, true]) {
+    test(
+      'scoped binding closes retained writer without retiring siblings: family=$wholeFamily',
+      () async {
+        ProviderContainer scoped(
+          Repository repository,
+        ) => ProviderContainer.test(
+          parent: container,
+          overrides: [
+            savedSourcesRepositoryProvider.overrideWith(
+              (ref, key) => repository,
+            ),
+            if (wholeFamily) ...[
+              savedSourcesProvider.overrideWith2(SavedSourcesController.new),
+              sourceBindingProvider.overrideWith2(SourceBindingController.new),
+            ] else ...[
+              savedSourcesProvider(
+                session,
+              ).overrideWith(() => SavedSourcesController(session)),
+              sourceBindingProvider(
+                session,
+              ).overrideWith(() => SourceBindingController(session)),
+            ],
+          ],
+        );
+        final firstRepository = Repository();
+        final secondRepository = Repository();
+        final first = scoped(firstRepository);
+        first.listen(sourceBindingProvider(session), (_, _) {});
+        final firstController = first.read(
+          sourceBindingProvider(session).notifier,
+        );
+        final second = scoped(secondRepository);
+        final secondBusy = second.listen(
+          sourceBindingProvider(session),
+          (_, _) {},
+        );
+        final secondController = second.read(
+          sourceBindingProvider(session).notifier,
+        );
+        expect(
+          container.read(sourceBindingProvider(session).notifier),
+          same(controller),
+        );
+        expect(
+          first.read(sourceBindingProvider(session).notifier),
+          same(firstController),
+        );
+        final parentOperation = Completer<bool>();
+        final firstOperation = Completer<bool>();
+        final secondOperation = Completer<bool>();
+        late SourceBindingWriter parentWriter;
+        late SourceBindingWriter firstWriter;
+        late SourceBindingWriter secondWriter;
+        late bool Function() firstActive;
+        final parentBind = controller.bind((save, _) {
+          parentWriter = save;
+          return parentOperation.future;
+        }, viewIsActive: () => true);
+        final firstBind = firstController.bind((save, active) {
+          firstWriter = save;
+          firstActive = active;
+          return firstOperation.future;
+        }, viewIsActive: () => true);
+        final secondBind = secondController.bind((save, _) {
+          secondWriter = save;
+          return secondOperation.future;
+        }, viewIsActive: () => true);
+        first.dispose();
+        expect(firstActive(), isFalse);
+        expect(await firstWriter(pin), isFalse);
+        expect(firstRepository.saves, isEmpty);
+        firstOperation.complete(true);
+        expect(await firstBind, isFalse);
+        expect(firstRepository.reads, isEmpty);
+        expect(subscription.read(), isTrue);
+        expect(secondBusy.read(), isTrue);
+        expect(await secondWriter(pin), isTrue);
+        expect(secondRepository.saves, [same(pin)]);
+        expect(repository.saves, isEmpty);
+        secondOperation.complete(true);
+        await Future<void>.delayed(Duration.zero);
+        secondRepository.reads.single.complete(
+          SavedSourcesState(sources: [pin]),
+        );
+        expect(await secondBind, isTrue);
+        expect(secondBusy.read(), isFalse);
+        expect(subscription.read(), isTrue);
+        expect(second.read(savedSourcesProvider(session)).sources, [same(pin)]);
+        expect(container.read(savedSourcesProvider(session)).sources, isEmpty);
+        expect(await parentWriter(pin), isTrue);
+        parentOperation.complete(true);
+        await Future<void>.delayed(Duration.zero);
+        repository.reads.single.complete(SavedSourcesState(sources: [pin]));
+        expect(await parentBind, isTrue);
+        expect(subscription.read(), isFalse);
+        expect(repository.saves, [same(pin)]);
+        expect(container.read(savedSourcesProvider(session)).sources, [
+          same(pin),
+        ]);
+        expect(await secondWriter(pin), isFalse);
+        expect(secondRepository.saves, hasLength(1));
+      },
+    );
+  }
 
   for (final retirement in [
     'view',

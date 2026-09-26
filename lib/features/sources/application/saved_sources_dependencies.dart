@@ -7,4 +7,5 @@ final savedSourcesRepositoryProvider = Provider.autoDispose
     .family<SavedSourcesRepository, SourcesSession>(
       (ref, session) => StoredSavedSourcesRepository(session),
       retry: (count, error) => null,
+      dependencies: const [],
     );

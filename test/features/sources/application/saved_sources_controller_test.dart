@@ -76,6 +76,74 @@ void main() {
     controller = container.read(savedSourcesProvider(session).notifier);
   });
 
+  for (final wholeFamily in [false, true]) {
+    test(
+      'scoped removal retires reload while sibling persistence continues: family=$wholeFamily',
+      () async {
+        ProviderContainer scoped(Repository repository) =>
+            ProviderContainer.test(
+              parent: container,
+              overrides: [
+                savedSourcesRepositoryProvider.overrideWith(
+                  (ref, key) => repository,
+                ),
+                if (wholeFamily)
+                  savedSourcesProvider.overrideWith2(SavedSourcesController.new)
+                else
+                  savedSourcesProvider(
+                    session,
+                  ).overrideWith(() => SavedSourcesController(session)),
+              ],
+            );
+        final firstRepository = Repository();
+        final secondRepository = Repository();
+        final first = scoped(firstRepository);
+        first.listen(savedSourcesProvider(session), (_, _) {});
+        final firstController = first.read(
+          savedSourcesProvider(session).notifier,
+        );
+        final second = scoped(secondRepository);
+        final secondState = second.listen(
+          savedSourcesProvider(session),
+          (_, _) {},
+        );
+        final secondController = second.read(
+          savedSourcesProvider(session).notifier,
+        );
+        expect(
+          container.read(savedSourcesProvider(session).notifier),
+          same(controller),
+        );
+        expect(
+          first.read(savedSourcesProvider(session).notifier),
+          same(firstController),
+        );
+        final parentLoad = controller.reload();
+        final firstRemove = firstController.remove(loaded.sources.single);
+        final secondRemove = secondController.remove(loaded.sources.single);
+        first.dispose();
+        firstRepository.removals.single.$2.complete(true);
+        await Future<void>.delayed(Duration.zero);
+        expect(firstRepository.reads, isEmpty);
+        expect(await firstRemove, isFalse);
+        expect(await firstController.reload(), isFalse);
+        expect(await firstController.remove(loaded.sources.single), isFalse);
+        expect(firstRepository.removals, hasLength(1));
+        expect(secondRepository.reads, isEmpty);
+        expect(subscription.read().sources, isEmpty);
+        secondRepository.removals.single.$2.complete(true);
+        await Future<void>.delayed(Duration.zero);
+        secondRepository.reads.single.complete(SavedSourcesState());
+        expect(await secondRemove, isTrue);
+        repository.reads.single.complete(loaded);
+        expect(await parentLoad, isTrue);
+        expect(subscription.read().sources, loaded.sources);
+        expect(secondState.read().sources, isEmpty);
+        expect(firstRepository.reads, isEmpty);
+      },
+    );
+  }
+
   test('remove waits for persistence before reloading saved rows', () async {
     final pending = controller.remove(loaded.sources.single);
     expect(repository.removals.single.$1, same(loaded.sources.single));
