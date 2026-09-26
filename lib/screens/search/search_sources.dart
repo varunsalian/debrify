@@ -1352,94 +1352,20 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
     );
   }
 
-  /// The "+N new sources" pill: tap (or OK on TV) folds the parked arrivals
-  /// into the list; DOWN returns to the rows, UP reaches the toolbar funnel.
-  Widget _newSourcesPill() {
-    final app = AppThemeScope.of(context);
-    final accent = app.home.chromeAccent;
-    final n = _pendingNewCount;
-    return Focus(
-      focusNode: _pillFocus,
-      onKeyEvent: (node, e) {
-        if (e is! KeyDownEvent) return KeyEventResult.ignored;
-        if (isActivateKey(e.logicalKey)) {
-          _adoptPending();
-          if (_nodes.isNotEmpty) _nodes.first.requestFocus();
-          return KeyEventResult.handled;
-        }
-        if (e.logicalKey == LogicalKeyboardKey.arrowDown) {
-          if (_nodes.isNotEmpty) _nodes.first.requestFocus();
-          return KeyEventResult.handled;
-        }
-        if (e.logicalKey == LogicalKeyboardKey.arrowUp) {
-          // The toolbar funnel only exists in redesign mode — in the classic
-          // list _filterFocus is never attached, so let the key fall through
-          // rather than focusing a parentless node (dead D-pad stop).
-          if (_filterFocus.context != null) {
-            _filterFocus.requestFocus();
-            return KeyEventResult.handled;
-          }
-          return KeyEventResult.ignored;
-        }
-        return KeyEventResult.ignored;
-      },
-      child: ListenableBuilder(
-        listenable: _pillFocus,
-        builder: (context, _) {
-          final focused = _pillFocus.hasFocus;
-          return GestureDetector(
-            onTap: () {
-              _adoptPending();
-            },
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-              decoration: BoxDecoration(
-                color: focused ? app.core.tx : accent,
-                borderRadius: app.shape.brPill,
-                border: Border.all(
-                  color: focused ? app.core.tx : Colors.transparent,
-                  width: 1.5,
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.45),
-                    blurRadius: 14,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.arrow_upward_rounded,
-                    size: 14,
-                    // Same rule as the keyword pill: unfocused the fill is the
-                    // accent, so the ink is scored against it rather than
-                    // hardcoded white.
-                    color: focused
-                        ? const Color(0xFF17131F)
-                        : app.inkOn(accent),
-                  ),
-                  const SizedBox(width: 6),
-                  Text(
-                    '$n new source${n == 1 ? '' : 's'}',
-                    style: TextStyle(
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.w700,
-                      color: focused
-                          ? const Color(0xFF17131F)
-                          : app.inkOn(accent),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          );
-        },
-      ),
-    );
-  }
+  Widget _newSourcesPill() => SourcePendingResultsPill(
+    count: _pendingNewCount,
+    focusNode: _pillFocus,
+    onAdopt: _adoptPending,
+    onNavigateDown: () {
+      if (_nodes.isNotEmpty) _nodes.first.requestFocus();
+    },
+    onNavigateUp: () {
+      // Classic has no attached toolbar funnel: preserve normal key bubbling.
+      if (_filterFocus.context == null) return false;
+      _filterFocus.requestFocus();
+      return true;
+    },
+  );
 
   /// Derives the rendered list from [_torrents]: source-group filter →
   /// quality/rip/language filter → provider priority + stable dedupe →

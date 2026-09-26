@@ -1562,3 +1562,41 @@ binding-persistence checkpoint outcome is preserved, with **11 new passing
 identities**. The unchanged historical helper still exits 1 for pre-existing
 failures. Receipts: `.git/refactor-evidence/phase4c/full-row-actions.jsonl`,
 `full-row-actions-comparison.txt` and `row-actions-previous-checkpoint.txt`.
+
+
+### Phase 4C — Pending Sources pill presentation
+
+Extracted `SourcePendingResultsPill` (110 lines) and wired the existing Sources
+overlay to it. The widget receives the pending count, a borrowed focus node,
+adoption and row-navigation callbacks, and a toolbar-navigation callback that
+reports whether the key was handled. The view still owns adjacent row/filter
+nodes and their disposal; Riverpod remains the owner of pending results. The
+original inline rendering/key handler is removed. Sources is **2,578 lines**;
+parent **20,158**.
+
+Review preserved the Focus/ListenableBuilder/GestureDetector hierarchy, theme
+colors, geometry, pluralization and shadow. Select/Enter/numpad Enter/gamepad A
+adopt before requesting the current first row; Down only requests that row. Up
+checks toolbar attachment at event time and bubbles in Classic where no funnel
+is attached. Only KeyDownEvent triggers these actions, as before. Touch adopts
+without forcing row focus. Neither the widget nor its provider owns a second
+copy of result state or any focus-node lifetime. Unchanged text retains the
+documented localization exception.
+
+Baseline Sources, cinema-focus, row-focus lifecycle and scroll-anchor group:
+**227 passes**. The same group plus nine new widget cases: **236 passes**. The
+new cases exercise all four remote activation keys, touch versus key focus,
+Down, attached/absent toolbar Up, repeat/release handling and reuse of the same
+borrowed node after unmount. Existing real-screen frozen arrivals/cached fallback
+and retry/adoption tests continue to pass. No tests or assertions were removed.
+Analyzer comparison has **no added identities** (864 diagnostics); architecture
+checks pass for **97 migrated files**. New files and the replaced caller are
+formatted; diff checks pass. Receipts under `.git/refactor-evidence/phase4c/`:
+`pending-pill-before.txt`, `pending-pill-widget.txt`, `pending-pill-focused.txt`,
+`analyze-pending-pill.txt`, `pending-pill-analyzer-comparison.txt`.
+
+This leaf extraction uses the immediately preceding full-suite checkpoint
+(7,800 successes, unchanged 51 failures/20 skips); the full suite was not rerun
+for this slice. This is automated evidence only, not native input/visual parity.
+Phase 4C binding presentation/provider/native preparation, remaining UI/focus,
+later phases, device/performance checks and final CI remain open.
