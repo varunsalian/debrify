@@ -181,6 +181,88 @@ void main() {
     },
   );
 
+  for (final wholeFamily in [false, true]) {
+    test(
+      'scoped result buffers and selection retire independently: family=$wholeFamily',
+      () {
+        ProviderContainer scoped() => ProviderContainer.test(
+          parent: container,
+          overrides: [
+            sourcesSessionActiveProvider.overrideWith(
+              (ref, key) => container.read(sourcesSessionActiveProvider(key)),
+            ),
+            if (wholeFamily)
+              sourceResultsProvider.overrideWith2(SourceResultsController.new)
+            else
+              sourceResultsProvider(
+                session,
+              ).overrideWith(() => SourceResultsController(session)),
+          ],
+        );
+        final parentRow = row('parent');
+        controller.display([parentRow]);
+        controller.freeze();
+        controller.selectProvider('parent');
+        final first = scoped();
+        final firstState = first.listen(
+          sourceResultsProvider(session),
+          (_, _) {},
+        );
+        final firstController = first.read(
+          sourceResultsProvider(session).notifier,
+        );
+        final second = scoped();
+        final secondState = second.listen(
+          sourceResultsProvider(session),
+          (_, _) {},
+        );
+        final secondController = second.read(
+          sourceResultsProvider(session).notifier,
+        );
+        expect(
+          container.read(sourceResultsProvider(session).notifier),
+          same(controller),
+        );
+        expect(
+          first.read(sourceResultsProvider(session).notifier),
+          same(firstController),
+        );
+        final firstRow = row('first');
+        final pendingRow = row('pending');
+        final secondRow = row('second');
+        firstController.display([firstRow]);
+        firstController.freeze();
+        expect(firstController.bufferIfFrozen([pendingRow]), isTrue);
+        firstController.selectProvider('first');
+        secondController.display([secondRow]);
+        secondController.selectProvider('second');
+        expect(firstState.read().pending, [same(pendingRow)]);
+        expect(subscription.read().pending, isNull);
+        expect(secondState.read().pending, isNull);
+        first.dispose();
+        expect(firstController.bufferIfFrozen([row('late')]), isFalse);
+        firstController.beginSearch();
+        firstController.display([row('late')]);
+        firstController.selectProvider('late');
+        expect(subscription.read().displayed, [same(parentRow)]);
+        expect(subscription.read().toolbar.sourceFilter, 'parent');
+        expect(subscription.read().frozen, isTrue);
+        expect(secondState.read().displayed, [same(secondRow)]);
+        expect(secondState.read().toolbar.sourceFilter, 'second');
+        expect(secondState.read().frozen, isFalse);
+        secondController.freeze();
+        expect(secondController.bufferIfFrozen([pendingRow]), isTrue);
+        secondController.display(secondState.read().pending!);
+        expect(secondState.read().displayed, [same(pendingRow)]);
+        expect(secondState.read().pending, isNull);
+        expect(subscription.read().displayed, [same(parentRow)]);
+        controller.beginSearch();
+        expect(subscription.read().displayed, isEmpty);
+        expect(secondState.read().displayed, [same(pendingRow)]);
+      },
+    );
+  }
+
   test('disposed controller rejects actions without accessing state', () {
     container.dispose();
     controller.beginSearch();

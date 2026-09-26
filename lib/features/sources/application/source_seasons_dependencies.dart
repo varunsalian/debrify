@@ -14,9 +14,13 @@ final sourceSeasonsRepositoryProvider = Provider.autoDispose
     );
 
 final sourcesSessionActiveProvider = Provider.autoDispose
-    .family<bool, SourcesSession>((ref, session) {
-      void changed() => ref.invalidateSelf();
-      ProfileRuntime.scope.addListener(changed);
-      ref.onDispose(() => ProfileRuntime.scope.removeListener(changed));
-      return session.owner == ProfileSessionMemory.captureOwner();
-    }, retry: (count, error) => null);
+    .family<bool, SourcesSession>(
+      (ref, session) {
+        void changed() => ref.invalidateSelf();
+        ProfileRuntime.scope.addListener(changed);
+        ref.onDispose(() => ProfileRuntime.scope.removeListener(changed));
+        return session.owner == ProfileSessionMemory.captureOwner();
+      },
+      retry: (count, error) => null,
+      dependencies: const [],
+    );
