@@ -1,3 +1,4 @@
+import '../features/sources/presentation/iptv_source_binding.dart';
 import '../features/sources/presentation/direct_source_binding.dart';
 import 'durable_source_binding.dart';
 import '../models/playback_meta.dart';
@@ -5487,96 +5488,23 @@ class TorrentPlaybackService {
     required bool isMovie,
     Future<bool> Function(SeriesSource)? saveBinding,
     bool Function()? canContinue,
-  }) async {
-    bool active() => canContinue?.call() ?? true;
-    if (canContinue != null && (!context.mounted || !active())) return false;
-    logIptvSourceEvent(
-      'manual_pin_started',
-      source: torrent,
-      catalogType: isMovie ? 'vod' : 'series',
-    );
-    if (imdbId.isEmpty) {
-      logIptvSourceEvent(
-        'manual_pin_completed',
-        source: torrent,
-        outcome: 'imdb_missing',
-      );
-      _snack(context, 'No IMDb match — can\'t pin a source.');
-      return false;
-    }
-    try {
-      await DirectSourceAuthorization.authorize(torrent);
-    } catch (error) {
-      logIptvSourceEvent(
-        'manual_pin_completed',
-        source: torrent,
-        outcome: 'authorization_rejected',
-        error: error,
-      );
-      if (context.mounted && active()) {
-        _snack(context, 'IPTV connection changed. Search sources again.');
-      }
-      return false;
-    }
-    if (!context.mounted || !active()) {
-      logIptvSourceEvent(
-        'manual_pin_completed',
-        source: torrent,
-        outcome: context.mounted ? 'session_retired' : 'view_closed',
-      );
-      return false;
-    }
-    final source = _durableBindingForSource(
-      torrent,
-      SeriesSource.iptvDirectService,
-    );
-    if (source == null || !source.isIptvDirect) {
-      logIptvSourceEvent(
-        'manual_pin_completed',
-        source: torrent,
-        outcome: 'provenance_missing',
-      );
-      _snack(context, 'This IPTV source cannot be refreshed from its catalog.');
-      return false;
-    }
-    try {
-      if (!await _persistManualBinding(
-        source,
-        imdbId: imdbId,
-        isMovie: isMovie,
-        saveBinding: saveBinding,
-      )) {
-        logIptvSourceEvent(
-          'manual_pin_completed',
-          source: torrent,
-          outcome: 'session_retired',
-        );
-        return false;
-      }
-    } catch (error) {
-      logIptvSourceEvent(
-        'manual_pin_completed',
-        source: torrent,
-        outcome: 'storage_failed',
-        error: error,
-      );
-      rethrow;
-    }
-    logIptvSourceEvent(
-      'manual_pin_completed',
-      source: torrent,
-      outcome: 'saved',
-    );
-    if (context.mounted && active()) {
-      _snack(
-        context,
-        isMovie
-            ? 'IPTV movie source pinned.'
-            : 'IPTV series source pinned for every episode.',
-      );
-    }
-    return true;
-  }
+  }) => presentIptvSourceBinding(
+    context,
+    torrent,
+    imdbId: imdbId,
+    isMovie: isMovie,
+    canContinue: canContinue,
+    authorize: DirectSourceAuthorization.authorize,
+    describe: (source) =>
+        _durableBindingForSource(source, SeriesSource.iptvDirectService),
+    save: (source) => _persistManualBinding(
+      source,
+      imdbId: imdbId,
+      isMovie: isMovie,
+      saveBinding: saveBinding,
+    ),
+    log: logIptvSourceEvent,
+  );
 
   /// Pin an ON-DEVICE file (movie) or folder (series) as [imdbId]'s source via
   /// the shared local picker. Desktop-only — the picker shows its own

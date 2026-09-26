@@ -4506,3 +4506,46 @@ skips. Receipts: `full-direct-binding-ui.jsonl`,
 with no added identities (`analyze-direct-binding-ui-final.txt` and
 `direct-binding-ui-final-analyzer-comparison.txt`). Final diff/format/architecture
 checks pass; no allowances changed. Remaining migration gates stay open.
+
+
+### Phase 4C — IPTV binding presentation
+
+Moved IPTV pin interaction, feedback and outcome emission into the 98-line
+`presentation/iptv_source_binding.dart`. Its caller supplies authorization,
+descriptor creation, persistence and the existing typed diagnostic sink. The
+legacy public method returns the new presentation Future directly, preserving
+all Sources bridge and other callers without another async continuation or state
+owner. No transport, storage service or Riverpod dependency enters this function.
+
+Review retains the initial optional action guard; started event and missing-IMDb
+check before authorization; authorization error identity/feedback; distinct
+view-closed versus session-retired diagnostics after authorization; provenance
+rejection; save rejection, error logging/rethrow and saved outcome; and movie/
+series success messages with the original three-second duration. A successful
+save that finishes after retirement still returns true/logs saved without showing
+feedback; the application controller retains its separate completion guard.
+All legacy implementation outside the method/import remains byte-for-byte intact.
+
+Baseline **540 Sources/IPTV tests pass**; affected run **552 pass**. Twelve new
+widget cases cover each completion outcome and movie/series feedback, including
+retirement during authorization/save and unchanged storage exception identity.
+Existing real-pin/picker tests continue to exercise the production wrapper.
+Analyzer **863 diagnostics**, no added identities; **166 migrated files** pass
+size/import checks. New files are normally formatted; the changed legacy wrapper
+received only the formatter's two-line whitespace-only wrapping adjustment.
+
+Receipts under `.git/refactor-evidence/phase4c/`: `iptv-binding-ui-before.txt`,
+`iptv-binding-ui-after.txt`, `analyze-iptv-binding-ui.txt`,
+`iptv-binding-ui-analyzer-comparison.txt`, `iptv-binding-ui-original.dart`,
+`iptv-binding-ui-wrapper-{before,format}.dart` and `iptv-binding-ui-review.txt`.
+Full-suite results follow below. Local/debrid manual binding presentation and the
+remaining migration/native/performance/CI gates stay open.
+
+Full suite: **8,175 successes / the same 51 failures / 20 skips**. Every prior
+checkpoint outcome is preserved, with exactly the twelve new IPTV UI cases
+passing. Original-baseline comparison finds no new failures, missing tests or new
+skips. Receipts: `full-iptv-binding-ui.jsonl`,
+`full-iptv-binding-ui-comparison.txt` and
+`full-iptv-binding-ui-previous-checkpoint.txt`. Final formatting/diff/architecture
+checks pass; no allowances changed. The retained playback service is now
+**8,624 lines** (from 8,696). Remaining migration gates stay open.
