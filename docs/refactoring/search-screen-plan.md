@@ -1,7 +1,8 @@
 # Search screen incremental refactoring plan
 
 Status: implementation started on `refactor/search-screen`; the automated baseline
-and phases 1–2 are reviewed. Phase 3 is next. Device verification remains pending.
+and phases 1–3 are reviewed. Phase 4A catalog extraction is next; device checks remain pending.
+Device verification remains pending.
 Reviews and actual results are recorded in the
 [implementation evidence](search-screen-evidence.md).
 
@@ -101,8 +102,8 @@ Do not relocate every existing service/widget or pre-create empty directories.
 - Thin data adapters may call existing services while preserving storage and
   provider behavior. Do not implement new HTTP clients or persistence layers here.
 - Standardize on Riverpod (`flutter_riverpod`) for DI and migrated feature state.
-  It is not yet installed. Add a compatible stable version with the first production
-  controller integration, verify resolution, and commit the lockfile without
+  Phase 3 installs version 3.4.3 with the first production controller integration.
+  Verify resolution and commit the lockfile without
   unrelated dependency upgrades. The existing `provider` dependency is not the
   chosen DI system; audit it separately before removal.
 - Start with manually declared providers and `Notifier`/`AsyncNotifier` as needed;
@@ -445,7 +446,7 @@ exceptions at each phase; retire resolved ones.
 | 0: Baseline | Automated baseline reviewed; device checks pending | `aa3d5643`: 7,387 pass / 51 fail / 20 skipped; 865 analyzer diagnostics; ownership/behavior inventory recorded in implementation evidence |
 | 1: Keyword policies | Complete; reviewed | Sorting (`bd0c214e`), filtering and provider reconciliation wired; 32 new policy tests; final affected run 129 pass and the same two baseline suggestion failures; no new analyzer identities |
 | 2: Leaf presentation | Complete; reviewed | Category/See All (`146466b5`) and mode controls extracted; eight new widget tests; final affected run 29 pass / same three baseline failures, analyzer unchanged; complex cards/layouts remain phases 6–7 |
-| 3: Lists/suggestions | Not started | Install/wire Riverpod with first consumer; preserve title-search service |
+| 3: Lists/suggestions | Implemented and reviewed | Riverpod 3.4.3 and Lists controller wired; 23 new tests pass; full suite 7,450 pass / same 51 baseline failures / 20 skipped, no missing tests, analyzer unchanged; device checks pending |
 | 4A: Catalog search | Not started | Fan-out/publication, source settings, clear/restore, See All handoff |
 | 4B: Keyword search | Not started | State, streaming, engine settings, snapshots, bulk actions |
 | 4C: Source selection | Not started | State, season/retry, pinning, cache and focus contracts |

@@ -1,3 +1,4 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:debrify/models/metadata_preferences.dart';
 import 'package:debrify/screens/metadata_explore_page.dart';
 import 'package:debrify/screens/search_screen.dart';
@@ -48,10 +49,10 @@ void main() {
   ) => drive(
     tester,
     () => tester.pumpWidget(
-      MaterialApp(
+      ProviderScope(child: MaterialApp(
         navigatorKey: navigator,
         home: const SearchScreen(discoverMode: true),
-      ),
+      )),
     ),
   );
 

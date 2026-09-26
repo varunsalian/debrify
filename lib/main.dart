@@ -1,3 +1,4 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'services/webdav_sync/webdav_log_upload.dart';
 import 'services/cache_scratch_cleanup.dart';
 import 'services/debrify_image_cache.dart';
@@ -1111,15 +1112,20 @@ class _DebrifyAppState extends State<DebrifyApp> {
         // overlay inherits it, and excluded surfaces shadow it lower down
         // with a LegacyThemeBoundary. An open overlay restyles live on theme
         // change for free — it inherits from here, not from a capture.
-        Widget content = AppThemeScope(
-          theme: AppThemeController.instance.theme,
-          // The theme's whole-page texture — film grain, Blueprint's rule.
-          // INSIDE the scope so it can read the tokens, and self-gating on
-          // AppSurfaceState so it never paints over the frozen player or the
-          // launch ident (see app_texture.dart). It short-circuits to `child`
-          // for legacy and for the seventeen themes that declare neither, so
-          // the common path costs one build and no layer.
-          child: WebDavSaveStatus(child: AppTexture(child: child!)),
+        // This scope sits above the consuming Navigator, so pushed routes
+        // and dialogs inherit the same feature dependencies and state.
+        Widget content = ProviderScope(
+          retry: (count, error) => null,
+          child: AppThemeScope(
+            theme: AppThemeController.instance.theme,
+            // The theme's whole-page texture — film grain, Blueprint's rule.
+            // INSIDE the scope so it can read the tokens, and self-gating on
+            // AppSurfaceState so it never paints over the frozen player or the
+            // launch ident (see app_texture.dart). It short-circuits to `child`
+            // for legacy and for the seventeen themes that declare neither, so
+            // the common path costs one build and no layer.
+            child: WebDavSaveStatus(child: AppTexture(child: child!)),
+          ),
         );
         // Pointer input counts as presence too — an Apple TV remote's
         // trackpad and an attached mouse both arrive here rather than through

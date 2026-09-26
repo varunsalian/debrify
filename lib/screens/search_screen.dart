@@ -1,3 +1,7 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../features/search/application/lists_search_controller.dart';
+import '../features/search/models/lists_search_session.dart';
+import '../features/search/models/lists_search_state.dart';
 import '../features/search/models/search_mode.dart';
 import '../features/search/presentation/search_mode_toggle.dart';
 import '../features/home/presentation/category_tag.dart';
@@ -226,7 +230,7 @@ String? _seLabel(int? season, int? episode) {
 ///
 /// All playback (catalog auto-best, sources list, keyword) runs in-tab through
 /// the isolated [TorrentPlaybackService]; the Home engine is never invoked.
-class SearchScreen extends StatefulWidget {
+class SearchScreen extends ConsumerStatefulWidget {
   final bool isTelevision;
 
   /// Dedicated-search-tab mode (TV only). When true the screen is *only* the
@@ -256,7 +260,7 @@ class SearchScreen extends StatefulWidget {
   });
 
   @override
-  State<SearchScreen> createState() => _SearchScreenState();
+  ConsumerState<SearchScreen> createState() => _SearchScreenState();
 }
 
 /// Completed Home data; interactive resources belong to each screen instance.
@@ -530,7 +534,7 @@ class _EmptyFieldLeftAction extends Action<_SearchLeftIntent> {
   }
 }
 
-class _SearchScreenState extends State<SearchScreen>
+class _SearchScreenState extends ConsumerState<SearchScreen>
     with RouteAware, WidgetsBindingObserver {
   // Which nav tab this instance backs, for the TV content-focus handler: the
   // dedicated Search tab (17) or the Home-New board (15).
@@ -559,11 +563,15 @@ class _SearchScreenState extends State<SearchScreen>
   // Dedicated MDBList list-search state. Lists is its own Search mode; it
   // never runs as part of Catalog search. Each result card hands off via
   // MainPageBridge.pendingMdblistListOpen. One focus node per card.
-  String _listsQuery = '';
-  List<MdblistListChoice> _listsResults = const [];
-  bool _listsSearching = false;
-  String? _listsError;
-  int _listsToken = 0;
+  late final ListsSearchSession _listsSession;
+  late final ProviderSubscription<ListsSearchState> _listsSubscription;
+  ListsSearchState get _listsState => _listsSubscription.read();
+  ListsSearchController get _listsController =>
+      ref.read(listsSearchProvider(_listsSession).notifier);
+  String get _listsQuery => _listsState.query;
+  List<MdblistListChoice> get _listsResults => _listsState.results;
+  bool get _listsSearching => _listsState.searching;
+  String? get _listsError => _listsState.error;
   final List<FocusNode> _listsNodes = [];
   // Debounce for opening a list from the rail — one fast double-press must not
   // stack two pushed item screens (TV) / double-fire the handoff.
@@ -1844,11 +1852,23 @@ class _SearchScreenState extends State<SearchScreen>
     unawaited(_loadSourceTextFormatting());
     _titleSearch.addListener(_publishTitleSuggestions);
     _searchController.addListener(_onTitleSearchEditingChanged);
-    ProfileRuntime.scope.addListener(_cancelTitleSuggestions);
+    ProfileRuntime.scope.addListener(_onSearchProfileChanged);
     MetadataPreferencesService.revision.addListener(_metadataSettingsChanged);
     unawaited(_refreshMetadataFeaturePolicy());
     WidgetsBinding.instance.addObserver(this);
     _profileSessionOwner = ProfileSessionMemory.captureOwner();
+    _listsSession = ListsSearchSession(
+      owner: _profileSessionOwner,
+      viewIdentity: Object(),
+    );
+    // Retain state for this screen's mounted lifetime, including covered routes.
+    // Returning from a pushed list must not discard results or replay a request.
+    _listsSubscription = ref.listenManual(
+      listsSearchProvider(_listsSession),
+      (previous, next) {
+        if (mounted) setState(() {});
+      },
+    );
     if (!widget.searchMode && !widget.discoverMode) _watchHomeReturnChanges();
     final homeSnapshot = !widget.searchMode && !widget.discoverMode
         ? _homePreserved.take(_profileSessionOwner)
@@ -2293,18 +2313,11 @@ class _SearchScreenState extends State<SearchScreen>
     final auth = await MdblistService.instance.isAuthenticated();
     if (!mounted || auth == _isMdblistAuthenticated) return;
     final leaveLists = !auth && _mode == SearchMode.lists;
-    if (leaveLists) {
-      _listsToken++;
-      _disposeListsNodes();
-    }
+    if (leaveLists) _clearListsSearch();
     setState(() {
       _isMdblistAuthenticated = auth;
       if (leaveLists) {
         _mode = SearchMode.catalog;
-        _listsQuery = '';
-        _listsResults = const [];
-        _listsSearching = false;
-        _listsError = null;
       }
     });
     // A disconnect can remove the currently selected mode. Keep the shared
@@ -2616,7 +2629,8 @@ class _SearchScreenState extends State<SearchScreen>
     _heroLiveTakeover.dispose();
     _heroTint.dispose();
     _searchController.dispose();
-    ProfileRuntime.scope.removeListener(_cancelTitleSuggestions);
+    ProfileRuntime.scope.removeListener(_onSearchProfileChanged);
+    _listsSubscription.close();
     _titleSearch.removeListener(_publishTitleSuggestions);
     _titleSearch.dispose();
     _titleSuggestions.dispose();
@@ -12128,6 +12142,7 @@ class _SearchScreenState extends State<SearchScreen>
     _kwSearchToken++;
     _disposeKwNodes();
     _disposeListsNodes();
+    _listsController.clear();
     setState(() {
       _kwSearching = false;
       _kwLoading = false;
@@ -12139,11 +12154,6 @@ class _SearchScreenState extends State<SearchScreen>
       _kwPending = null;
       _kwSelectionMode = false;
       _kwSelected.clear();
-      _listsToken++; // cancel an in-flight lists search
-      _listsQuery = '';
-      _listsResults = const [];
-      _listsSearching = false;
-      _listsError = null;
     });
     _restoreHome();
   }
@@ -12164,16 +12174,17 @@ class _SearchScreenState extends State<SearchScreen>
     _listsNodes.clear();
   }
 
+  void _onSearchProfileChanged() {
+    _cancelTitleSuggestions();
+    if (_profileSessionOwner != ProfileSessionMemory.captureOwner()) {
+      _clearListsSearch();
+    }
+  }
+
   void _clearListsSearch() {
-    _listsToken++;
-    _disposeListsNodes();
     if (!mounted) return;
-    setState(() {
-      _listsQuery = '';
-      _listsResults = const [];
-      _listsSearching = false;
-      _listsError = null;
-    });
+    _disposeListsNodes();
+    _listsController.clear();
   }
 
   /// One focus node per result row, rebuilt to match the current result set.
@@ -12186,84 +12197,27 @@ class _SearchScreenState extends State<SearchScreen>
     }
   }
 
-  /// Search MDBList's public lists for the dedicated Lists mode. A generation
-  /// token prevents a late response from an earlier query or profile state
-  /// replacing the current result rail.
+  /// Keep route/focus effects in presentation; the notifier owns requests,
+  /// results, errors and stale-completion checks.
   Future<void> _runListsSearch(String query) async {
-    // Keep the runtime flag authoritative: when disabled, the selector omits
-    // Lists and no list-search request can be issued.
     if (!kMdblistEnabled) {
       _searchSubmitFocus.cancel();
       return;
     }
-    final q = query.trim();
-    final token = ++_listsToken;
-    if (q.isEmpty) {
+    if (query.trim().isEmpty) {
       _clearListsSearch();
       return;
     }
     _disposeListsNodes();
-    setState(() {
-      _listsQuery = q;
-      _listsResults = const [];
-      _listsSearching = true;
-      _listsError = null;
-    });
-    final connected = await MdblistService.instance.isAuthenticated();
-    if (!mounted || token != _listsToken) return;
-    if (!connected) {
-      _searchSubmitFocus.cancel();
-      setState(() {
-        _listsSearching = false;
-        _listsError = 'Connect MDBList in Settings to search public lists.';
-      });
-      return;
-    }
-    MdblistResult<List<MdblistListChoice>> result;
-    try {
-      result = await MdblistListSource.instance.searchListsResult(q);
-    } catch (_) {
-      result = const MdblistResult.failure(MdblistResultKind.transientFailure);
-    }
-    if (!mounted || token != _listsToken) return;
-    final results = result.data ?? const <MdblistListChoice>[];
-    setState(() {
-      _listsResults = results;
-      _listsSearching = false;
-      _listsError = result.isUsable ? null : _listsFailureMessage(result);
-      _ensureListsNodes();
-    });
+    final accepted = await _listsController.search(query);
+    if (!mounted || !accepted) return;
+    setState(_ensureListsNodes);
     if (_listsNodes.isEmpty) {
       _searchSubmitFocus.cancel();
     } else {
       _completeSearchSubmitFocus(_listsNodes.first);
     }
   }
-
-  String _listsFailureMessage(
-    MdblistResult<List<MdblistListChoice>> result,
-  ) => switch (result.kind) {
-    MdblistResultKind.unauthenticated =>
-      'Your MDBList connection has expired. Reconnect it in Settings.',
-    MdblistResultKind.denied =>
-      'MDBList denied this list search for the connected account.',
-    MdblistResultKind.rateLimited =>
-      result.retryAfter == null
-          ? 'MDBList rate limit reached. Try again later.'
-          : 'MDBList rate limit reached. Try again in '
-                '${(result.retryAfter!.inSeconds / 60).ceil().clamp(1, 9999)} minutes.',
-    MdblistResultKind.malformedResponse =>
-      'MDBList returned an unreadable list-search response. Try again.',
-    MdblistResultKind.notFound =>
-      'MDBList list search is currently unavailable.',
-    MdblistResultKind.conflict =>
-      'MDBList could not complete this list search. Try again.',
-    MdblistResultKind.disabled =>
-      'MDBList list search is disabled for this build.',
-    MdblistResultKind.transientFailure =>
-      'MDBList is not responding right now. Try again shortly.',
-    MdblistResultKind.success || MdblistResultKind.partial => '',
-  };
 
   /// Hand the picked list to the Discover tab, which opens it focused (with
   /// the ♥ like toggle). Mirrors the pendingCatalogDetailOpen handoff.

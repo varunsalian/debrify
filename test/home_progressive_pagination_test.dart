@@ -1,3 +1,4 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'dart:async';
 import 'dart:convert';
 
@@ -158,7 +159,7 @@ class HomeFixture {
       await StremioService.instance.getCatalogAddons();
       final theme = AppTheme.fromDetail(DetailThemes.byId('signal'));
       await tester.pumpWidget(
-        MaterialApp(
+        ProviderScope(child: MaterialApp(
           navigatorKey: navigator,
           theme: AppThemeAdapter.themed(theme, TextBrightness.bright),
           home: AppThemeScope(
@@ -167,7 +168,7 @@ class HomeFixture {
                 wrap?.call(SearchScreen(isTelevision: television)) ??
                 SearchScreen(isTelevision: television),
           ),
-        ),
+        )),
       );
     }, waitMs: 300);
     await pump(const Duration(milliseconds: 100));

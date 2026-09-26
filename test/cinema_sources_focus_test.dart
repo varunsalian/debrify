@@ -1,3 +1,4 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'package:debrify/models/stremio_addon.dart';
@@ -79,7 +80,7 @@ void main() {
       await tester.runAsync(() async {
         final searched = Completer<void>();
         await tester.pumpWidget(
-          MaterialApp(
+          ProviderScope(child: MaterialApp(
             home: AppThemeScope(
               theme: AppThemes.legacy,
               child: sourcesScreenForTesting(
@@ -103,7 +104,7 @@ void main() {
                 },
               ),
             ),
-          ),
+          )),
         );
         await searched.future.timeout(const Duration(seconds: 5));
       });
@@ -205,7 +206,7 @@ void main() {
         ),
       );
       await tester.pumpWidget(
-        MaterialApp(
+        ProviderScope(child: MaterialApp(
           theme: ThemeData.dark(),
           home: AppThemeScope(
             theme: AppThemes.legacy,
@@ -221,7 +222,7 @@ void main() {
               search: (_) async => {'torrents': results},
             ),
           ),
-        ),
+        )),
       );
       await tester.pumpAndSettle();
       expect(FocusManager.instance.primaryFocus?.debugLabel, 'src_30');
@@ -284,7 +285,7 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     await tester.pumpWidget(
-      MaterialApp(
+      ProviderScope(child: MaterialApp(
         theme: ThemeData.dark(),
         home: AppThemeScope(
           theme: AppThemes.legacy,
@@ -300,7 +301,7 @@ void main() {
             },
           ),
         ),
-      ),
+      )),
     );
     await tester.pumpAndSettle();
     expect(FocusManager.instance.primaryFocus?.debugLabel, 'src_0');
@@ -348,7 +349,7 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     await tester.pumpWidget(
-      MaterialApp(
+      ProviderScope(child: MaterialApp(
         theme: ThemeData.dark(),
         home: AppThemeScope(
           theme: AppThemes.legacy,
@@ -368,7 +369,7 @@ void main() {
             },
           ),
         ),
-      ),
+      )),
     );
     await tester.pumpAndSettle();
     final list = find.descendant(
@@ -419,7 +420,7 @@ void main() {
         final finished = Completer<Map<String, dynamic>>();
         SearchBatchCallback? onBatch;
         await tester.pumpWidget(
-          MaterialApp(
+          ProviderScope(child: MaterialApp(
             theme: ThemeData.dark(),
             home: AppThemeScope(
               theme: AppThemes.legacy,
@@ -436,7 +437,7 @@ void main() {
                 },
               ),
             ),
-          ),
+          )),
         );
         await tester.pump();
         expect(onBatch, isNotNull);

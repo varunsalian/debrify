@@ -1,3 +1,4 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'dart:async';
 import 'dart:convert';
 
@@ -91,7 +92,7 @@ void main() {
     await drive(
       tester,
       () => tester.pumpWidget(
-        MaterialApp(
+        ProviderScope(child: MaterialApp(
           home: (wrap ?? (Widget child) => child)(
             SearchScreen(
               isTelevision: television,
@@ -106,7 +107,7 @@ void main() {
                   }),
             ),
           ),
-        ),
+        )),
       ),
     );
     return (search: search, requests: requests);
@@ -148,7 +149,7 @@ void main() {
       ]}) : '{}', request.url.host == 'search.invalid' ? 200 : 404));
     await tester.runAsync(() => http.runWithClient(() async {
       await StremioService.instance.getCatalogAddons();
-      await tester.pumpWidget(const MaterialApp(home: SearchScreen(isTelevision: true, searchMode: true)));
+      await tester.pumpWidget(const ProviderScope(child: MaterialApp(home: SearchScreen(isTelevision: true, searchMode: true))));
       await Future<void>.delayed(const Duration(milliseconds: 300));
       await tester.pump();
       tester.widget<TvTextField>(find.byType(TvTextField).first).onSubmitted?.call('Result');

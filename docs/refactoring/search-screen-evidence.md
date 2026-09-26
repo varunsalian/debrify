@@ -30,6 +30,11 @@ before/after comparisons. No dependency changes have been made at baseline.
 - `flutter devices --machine`: macOS, an iPad on iOS 26.6, and Chrome are listed.
   Android TV/tvOS interaction and playback checks are pending. Device listing alone
   does not establish any visual, behavioral, or performance baseline.
+- Additional simulator discovery found the `debrify_tv` Android emulator and
+  shutdown Apple TV simulators on tvOS 26.5, plus iOS 26.4/26.5 simulators. These
+  are available candidates for the pending device work; they have not been run or
+  counted as passing checks. The local simulator inventory is saved beside baseline
+  receipts. The current Flutter fork supports plain `flutter emulators` output.
 
 ### Production surface and resource ownership
 
@@ -201,3 +206,83 @@ queries global profile policy.
   later phases. Remaining legacy counts: screen 20,796; cards part 926; hero part
   2,249; sources part 3,846; stage part 1,706. The original exceptions remain
   temporary; none is presented as the destination. Device checks remain pending.
+
+## Phase 3: Lists Riverpod integration (implemented and reviewed)
+
+Added `flutter_riverpod` 3.4.3 with manual provider declarations. Package resolution
+adds only `flutter_riverpod`, `riverpod`, `listen` and `state_notifier`; every
+previous lockfile entry is unchanged. The selected version was checked against
+the installed SDK and the publisher documentation:
+https://pub.dev/packages/flutter_riverpod
+https://riverpod.dev/docs/3.0_migration
+
+Ownership and production wiring:
+
+- `application/lists_search_controller.dart` owns query, immutable results,
+  loading/error state and action generations. The screen's former mutable fields,
+  request token and error-mapping implementation are removed; remaining getters
+  read the provider state, and UI code retains focus/navigation dispatch.
+- `application/lists_search_dependencies.dart` composes the narrow repository
+  contract and MDBList adapter. The adapter borrows existing services, checks the
+  captured profile/session before invoking them and retains the originating scope
+  across asynchronous credential reads. No service receives `Ref` or UI context.
+- `models/lists_search_session.dart` keys each family by captured profile/session
+  and one stable screen identity. Query changes belong to that workflow's action
+  generation; concurrent screens with equal queries remain independent.
+- Providers disable framework retries. A screen-owned `listenManual` subscription
+  preserves the existing mounted/covered-route lifetime, redraws from the single
+  state owner, and closes on disposal. It does not issue requests on build,
+  invalidate/re-listen, route return or ordinary widget rebuild.
+- `DebrifyApp` installs `ProviderScope` above its Navigator; no fallback container
+  is installed in Search. Twelve existing standalone test hosts are scoped. New
+  production-screen tests verify pushed/dialog consumers inherit the same state.
+- `TmdbTitleSearch` remains the existing injected, context-free debounce/query
+  owner; no second title-search engine/controller is added. Field composition,
+  suggestion callbacks, tab/mode cancellation and the existing resolver seam are
+  retained. Context-dependent detail dispatch remains the phase-7 presentation
+  bridge responsibility. The two baseline unresolved-suggestion failures remain
+  visible rather than being altered to make this migration green.
+
+Verification so far:
+
+- **14 controller tests**: explicit actions, immutable results, both request race
+  orders, stale auth, clear, profile expiry, auto-disposal, concurrent routes,
+  disconnect/reconnect, disabled mode, failure/no automatic retry and partial/rate
+  limit responses.
+- **2 real adapter tests**: asynchronous reads retain originating profile scope;
+  expired profile or lifecycle prevents subsequent credential/network dispatch.
+- **7 production-screen tests**: rebuild/route/dialog retention, covered completion,
+  mode return without duplicate requests, repeated visits disposing old families,
+  field clear, disconnect-to-Catalog/reconnect preserving text, and outgoing-profile
+  cancellation before route disposal. All **23 new tests pass**.
+- Existing Home/Search/Discover/Sources and app-smoke group: **79 pass**, the same
+  three baseline failures (unresolved suggestions and the app smoke test), no
+  missing or newly skipped identities. Full analyzer still has exactly the same
+  865 diagnostic identities/multiplicities. Thirteen migrated sources pass the
+  size/import checker; all remain below 300 lines.
+- The completed full-suite rerun has **7,450 passes, the same 51 baseline failures
+  and 20 skips**, with no missing or newly skipped identities. Analyzer identities
+  and multiplicities are unchanged. The historical helper still exits 1 because
+  its nine-name allowance predates the observed 51-name baseline; the actual
+  comparison passes. No native/visual/performance parity is claimed from these
+  checks. Raw receipts are under `.git/refactor-evidence/phase3/`.
+
+Phase-3 full-suite investigation:
+
+- The first integration run reached 7,448 passes and the same 51 ordinary baseline
+  failures, but stalled in `connection_secret_editor_repair_test.dart` during its
+  first IPTV credential repair. The sole remaining engine process was sampled;
+  after about ten minutes it was terminated to recover the runner output. The two
+  unfinished IPTV cases and teardown are recorded as three additional errors.
+  This run is **not** accepted as a clean comparison.
+- The unchanged credential-editor suite then passed all six scenarios in isolation
+  (13.7 seconds), including both IPTV repairs. A second complete helper run is
+  completed with incremental JSON capture, without repeating the stall.
+  No test assertions, failure allowances or credential-editor code were changed.
+
+Phase-3 review: production has one Lists state owner; the controller has no UI
+context, services retain their existing lifetime, and scope/read generations cover
+outgoing authentication as well as results. Rebuild, route, dialog, mode and
+profile tests exercise the actual screen. The existing title-search owner remains
+in use. The phase's structural/automated exit is met; device/visual/performance
+checks remain explicitly outstanding in the migration-wide behavior matrix.

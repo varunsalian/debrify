@@ -1,3 +1,4 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'dart:async';
 import 'dart:convert';
 
@@ -64,7 +65,7 @@ void main() {
         return http.Response('[]', 200);
       });
       await tester.runAsync(() => http.runWithClient(() async {
-        await tester.pumpWidget(MaterialApp(home: SearchScreen(isTelevision: android)));
+        await tester.pumpWidget(ProviderScope(child: MaterialApp(home: SearchScreen(isTelevision: android))));
         await Future<void>.delayed(const Duration(milliseconds: 5500));
       }, () => client));
       await tester.pump(const Duration(milliseconds: 100));
@@ -143,12 +144,12 @@ void main() {
           () => http.runWithClient(() async {
             await StremioService.instance.getCatalogAddons();
             await tester.pumpWidget(
-              MaterialApp(
+              ProviderScope(child: MaterialApp(
                 home: AppThemeScope(
                   theme: AppTheme.fromDetail(DetailThemes.byId('signal')),
                   child: const SearchScreen(isTelevision: true),
                 ),
-              ),
+              )),
             );
             await Future<void>.delayed(const Duration(milliseconds: 300));
             await tester.pump();
@@ -287,7 +288,7 @@ void main() {
               () => http.runWithClient(() async {
                 await StremioService.instance.getCatalogAddons();
                 await tester.pumpWidget(
-                  MaterialApp(
+                  ProviderScope(child: MaterialApp(
                     theme: AppThemeAdapter.themed(
                       AppTheme.fromDetail(DetailThemes.byId('signal')),
                       TextBrightness.bright,
@@ -297,7 +298,7 @@ void main() {
                       theme: AppTheme.fromDetail(DetailThemes.byId('signal')),
                       child: const SearchScreen(isTelevision: true),
                     ),
-                  ),
+                  )),
                 );
                 await Future<void>.delayed(const Duration(milliseconds: 300));
                 await tester.pump();
