@@ -669,3 +669,46 @@ baseline comparison passes. Final receipts are
 Phase 4B's application/data implementation and automated review are complete.
 Phase 4C, later Home/Discover/layout/lifecycle phases, CI wiring and native/visual/
 performance checks remain outstanding; the full migration is not complete.
+
+### Phase 4C season policy slice (implemented and reviewed)
+
+`lib/features/sources/application/source_seasons.dart` (104 lines) now owns source
+season-pack eligibility, coverage-derived fallback season numbers and menu
+precedence. The actual Sources screen calls these policies; its old filtering
+and derivation implementations are removed. IPTV ownership is passed as the
+existing predicate, keeping service access outside the pure policy. Movie and
+episode selections, bind-mode IPTV exceptions, provider order, complete/ranged/
+single-season packs, unknown coverage and legacy episode-name substring matching
+retain their behavior. Range expansion still permits at most 50 steps (51 season
+numbers), excludes nonpositive numbers and ignores malformed/wider ranges.
+Metadata seasons take precedence over fallback results; the selected season stays
+reachable when absent from either list. Metadata fetching, selected-season state
+and the rule to derive fallback seasons only at unscoped completion remain in the
+registered legacy screen until the next state/data extraction.
+
+The old `season_filter_test.dart` simulated a copy of the filtering algorithm.
+It now exercises the real production policy with its existing assertions intact.
+Fourteen new policy cases cover direct/episode/movie eligibility, the injected
+IPTV exception, order, coverage edge cases, matching quirks, range bounds and menu
+fallback without input mutation. One new actual Sources-screen case verifies a
+season-scoped search drops other-season packs and direct episode links, retains
+the correct pack/complete series in returned order, and starts focus on row zero.
+Existing selected/cached direct-source and streaming-focus tests remain passing.
+
+Before extraction, all 15 affected tests passed. The final affected run has
+**30 passing tests and no failures**. Analyzer identities/multiplicities are
+unchanged at **865**. A normalized-body comparison also proves the filtering body
+matches the original apart from whitespace/comments and the injected binding/
+IPTV ownership names. Formatting and diff checks pass; the architecture guard
+covers **58 migrated files**. The Sources part is now **3,167 lines**, and the
+main screen is **20,139 lines**. Receipts are in
+`.git/refactor-evidence/phase4c/season-before.txt`, `season-final-focused.txt`,
+`season-equivalence.txt`, `analyze-season.txt` and
+`season-analyzer-comparison.txt`.
+
+This is the first reviewed slice of phase 4C, not its completion. Source state,
+season-guide metadata/inventory side effects, individual retries, selected-source
+reveal, pin/local mutations and cache orchestration remain. The last full-suite
+checkpoint is still the preceding phase-4B run; this pure policy slice used the
+affected suite plus analyzer comparison. Native/visual/performance checks and all
+later migration phases remain pending.

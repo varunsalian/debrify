@@ -1,7 +1,7 @@
 # Search screen incremental refactoring plan
 
 Status: implementation started on `refactor/search-screen`; the automated baseline
-and phases 1–3 are reviewed. Phases 4A catalog and 4B keyword extraction are implemented and reviewed. Device checks remain pending.
+and phases 1–3 are reviewed. Phases 4A catalog and 4B keyword extraction are implemented and reviewed; phase 4C source selection is in progress. Device checks remain pending.
 Reviews and actual results are recorded in the
 [implementation evidence](search-screen-evidence.md).
 
@@ -448,7 +448,7 @@ exceptions at each phase; retire resolved ones.
 | 3: Lists/suggestions | Implemented and reviewed | Riverpod 3.4.3 and Lists controller wired; 23 new tests pass; full suite 7,450 pass / same 51 baseline failures / 20 skipped, no missing tests, analyzer unchanged; device checks pending |
 | 4A: Catalog search | Implemented and reviewed | Riverpod state, streaming/TV batching, source settings and dialog wired; 35 new tests pass; affected suite retains the same three baseline failures, analyzer unchanged; device checks pending |
 | 4B: Keyword search | Implemented and reviewed | Application/data state, settings/defaults, selection and snapshot ownership wired; full suite 7,600 pass / same 51 failures / 20 skips, analyzer unchanged. Focus/navigation wrappers remain in the registered legacy screen (20,138 lines) for later presentation/bridge phases; device checks pending |
-| 4C: Source selection | Not started | State, season/retry, pinning, cache and focus contracts |
+| 4C: Source selection | In progress | Season filtering/derivation/menu policies extracted and reviewed; 30 affected tests pass, analyzer unchanged. Source state, guide metadata/inventory, retries, pin/local mutations, cache and focus ownership remain; Sources part 3,167 lines |
 | 5: Home data | Not started | Preserve paging, snapshots, profiles, tracker semantics |
 | 6: Discover/layouts | Not started | Inventory and retain current variants |
 | 7: Hero/handoff/lifecycle | Not started | Native/device checks required where affected |
