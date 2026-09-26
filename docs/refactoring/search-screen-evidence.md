@@ -123,3 +123,32 @@ No new controller, dependency, mutable state owner or persistence was introduced
 - Review: the actual production call is wired, both duplicate methods are gone,
   focus syncing remains in presentation, and sort output still copies the input.
   No new or retired legacy structural exceptions. Next: filter/provider policies.
+
+## Phase 1, slice 2 and phase review: filters/providers
+
+Destinations: `keyword_filter.dart` and `keyword_providers.dart` beside the sorting
+policy (`bd0c214e`). The screen delegates filtering and provider reconciliation;
+all source-tab/count/rendering call sites use the same extracted source identity.
+The old cache predicate, classification and duplicate filter/count loops are gone.
+
+- 15 additional policy tests cover cached TB versus PM, lowercase-without-trim
+  hash keys, hashless download exemptions, independent direct/torrent groups,
+  empty-group semantics, source-tab intersection, existing attribute facets,
+  unticked-source retention, dedupe disappearance/reappearance and immutable
+  reconciliation results. Total new policy tests: **32**.
+- Affected policy, streaming, classifier, suggestion and source/search-focus run:
+  **129 pass**, the **same two baseline unresolved-suggestion failures**, no new
+  failures, no previously passing test skipped and no missing test identities.
+- Full analyzer: identical 865 diagnostic identities/multiplicities. Three
+  migrated application files pass the architecture check and stay under 100 lines
+  each. New files are formatted and the diff passes whitespace checks.
+- Phase review: filter ordering and empty-group/cache exceptions match the old
+  production algorithm. Reconciliation does not mutate its inputs; the screen
+  copies the returned selections into the existing sets in place so an open
+  provider dialog keeps its captured references. Focus syncing and streaming
+  freeze/adopt/snapshot timing remain under their existing owner for phase 4B.
+  The legacy `TorrentFilterMatcher` is reused, not rewritten. No UI/network state
+  entered the policies and no new structural exceptions were introduced.
+- Phase 1 exit is satisfied. The screen remains a registered legacy exception
+  (20,791 lines); its remaining workflows follow phases 2–8. Manual device and
+  native parity are still pending and are not inferred from these pure tests.

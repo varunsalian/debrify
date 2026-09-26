@@ -1,3 +1,5 @@
+import '../features/search/application/keyword_filter.dart';
+import '../features/search/application/keyword_providers.dart';
 import '../features/search/application/keyword_sort.dart';
 import '../services/native_series_metadata_service.dart';
 import '../models/media_identity.dart';
@@ -2481,7 +2483,7 @@ class _SearchScreenState extends State<SearchScreen>
         _kwPending = null;
         _kwAll = pending;
         if (_kwSourceTab != null &&
-            !pending.any((t) => _kwSourceOf(t) == _kwSourceTab)) {
+            !pending.any((t) => keywordSourceOf(t) == _kwSourceTab)) {
           _kwSourceTab = null;
         }
         _computeKwProviders(pending);
@@ -12549,7 +12551,7 @@ class _SearchScreenState extends State<SearchScreen>
     // the user's tab mid-stream, so this check only runs here.
     final full = _kwPending ?? _kwAll;
     if (_kwSourceTab != null &&
-        !full.any((t) => _kwSourceOf(t) == _kwSourceTab)) {
+        !full.any((t) => keywordSourceOf(t) == _kwSourceTab)) {
       _kwSourceTab = null;
       // Recompute over the DISPLAYED set even when arrivals are parked, so
       // the strip ("All" active) and the visible list can't disagree.
@@ -12595,7 +12597,7 @@ class _SearchScreenState extends State<SearchScreen>
     _kwAll = p;
     // A tab whose source lost every row to dedupe in the adopted set would
     // otherwise stay "active" over an empty list with no highlighted pill.
-    if (_kwSourceTab != null && !p.any((t) => _kwSourceOf(t) == _kwSourceTab)) {
+    if (_kwSourceTab != null && !p.any((t) => keywordSourceOf(t) == _kwSourceTab)) {
       _kwSourceTab = null;
     }
     _computeKwProviders(p);
@@ -12632,11 +12634,6 @@ class _SearchScreenState extends State<SearchScreen>
     return count;
   }
 
-  /// A torrent's source-tab bucket ('unknown' for empty sources, matching the
-  /// provider-filter grouping).
-  static String _kwSourceOf(Torrent t) =>
-      t.source.isNotEmpty ? t.source : 'unknown';
-
   /// The fullest known result set: parked arrivals when frozen, else the
   /// displayed set. The tab strip derives from THIS so it live-updates
   /// (counts tick, new source pills appear) even while the rows are frozen —
@@ -12645,7 +12642,7 @@ class _SearchScreenState extends State<SearchScreen>
 
   /// Distinct sources in [_kwFullSet], sorted — drives the tab strip.
   List<String> get _kwSourceList {
-    final s = <String>{for (final t in _kwFullSet) _kwSourceOf(t)};
+    final s = <String>{for (final t in _kwFullSet) keywordSourceOf(t)};
     final l = s.toList()..sort();
     return l;
   }
@@ -12771,10 +12768,6 @@ class _SearchScreenState extends State<SearchScreen>
     if (mounted && chose && _kwSelectionMode) _exitKwSelection();
   }
 
-  /// True when [t] is (or is treated as) a direct/external URL stream rather
-  /// than an addable torrent — used to bucket results into the provider groups.
-  bool _kwIsDirect(Torrent t) => t.isDirectStream || t.isExternalStream;
-
   /// Action menu for a keyword-result direct/external stream row (parity with
   /// the old direct-stream action dialog): Play/Open, Copy URL, Download.
   void _showKwStreamMenu(Torrent t, int i) {
@@ -12848,79 +12841,41 @@ class _SearchScreenState extends State<SearchScreen>
     if (mounted) _snack('Link copied to clipboard');
   }
 
-  /// Tally result counts per source, split into Direct vs Torrent groups, and
-  /// default every source to selected. Mirrors the old `_calculateStreamTypeCounts`.
+  /// Apply a pure provider reconciliation while keeping existing dialog-owned
+  /// selection references valid until keyword state migrates in phase 4B.
   void _computeKwProviders(List<Torrent> torrents) {
-    final direct = <String, int>{};
-    final torrent = <String, int>{};
-    for (final t in torrents) {
-      final src = _kwSourceOf(t);
-      final bucket = _kwIsDirect(t) ? direct : torrent;
-      bucket[src] = (bucket[src] ?? 0) + 1;
-    }
-    _kwDirectCounts = direct;
-    _kwTorrentCounts = torrent;
-    // Additive selection: a source never seen this search starts ticked, but
-    // one the user unticked stays unticked when a later engine's batch
-    // re-reports it — streaming recomputes must not wipe mid-search choices.
-    // ([_kwProviderSeen] resets per search, so the first call ticks all.)
-    for (final s in direct.keys) {
-      if (_kwProviderSeen.add('d:$s')) _kwSelectedDirect.add(s);
-    }
-    for (final s in torrent.keys) {
-      if (_kwProviderSeen.add('t:$s')) _kwSelectedTorrent.add(s);
-    }
-    // Prune sources that vanished from the merge (dedupe can reattribute a
-    // source's only row to a higher-seeded copy) — stale selections corrupt
-    // the Providers badge arithmetic and the dialog's All/None check. The
-    // seen-key goes too, so a source that REAPPEARS auto-ticks like new.
-    _kwSelectedDirect.removeWhere((s) => !direct.containsKey(s));
-    _kwSelectedTorrent.removeWhere((s) => !torrent.containsKey(s));
-    _kwProviderSeen.removeWhere(
-      (k) => k.startsWith('d:')
-          ? !direct.containsKey(k.substring(2))
-          : !torrent.containsKey(k.substring(2)),
+    final providers = reconcileKeywordProviders(
+      torrents,
+      selectedDirect: _kwSelectedDirect,
+      selectedTorrent: _kwSelectedTorrent,
+      seen: _kwProviderSeen,
     );
+    _kwDirectCounts = providers.directCounts;
+    _kwTorrentCounts = providers.torrentCounts;
+    _kwSelectedDirect
+      ..clear()
+      ..addAll(providers.selectedDirect);
+    _kwSelectedTorrent
+      ..clear()
+      ..addAll(providers.selectedTorrent);
+    _kwProviderSeen
+      ..clear()
+      ..addAll(providers.seen);
   }
 
-  /// TorBox-cached test used by the cached-only prefilter. Entries without a
-  /// real infohash but with a torrent URL (direct links) are always kept, since
-  /// they can't be cache-checked — matching the old screen.
-  bool _kwIsTorboxCached(Torrent t) {
-    if (!t.hasRealInfoHash && t.torrentUrl != null) return true;
-    // Key exactly as the cache map is built and as rows render badges
-    // (`infohash.toLowerCase()`, no trim) so the filter can't drop a torrent
-    // that still shows a TB badge.
-    final labels = _kwCache[t.infohash.toLowerCase()];
-    return labels != null && labels.contains('TB');
-  }
-
-  /// Re-apply cached-only + provider + tab + attribute filters and sort to the
-  /// last search's results, then sync focus nodes to the new length.
+  /// Re-apply keyword policies, then sync presentation-owned focus nodes.
   void _recomputeKeyword() {
-    Iterable<Torrent> base = _kwAll;
-    // 1) TorBox cached-only prefilter (when active).
-    if (_kwCachedOnly) {
-      base = base.where(_kwIsTorboxCached);
-    }
-    // 2) Provider (stream-type) multi-select. An empty group map means that
-    //    group has no providers, so it imposes no constraint on its members.
-    if (_kwDirectCounts.isNotEmpty || _kwTorrentCounts.isNotEmpty) {
-      base = base.where((t) {
-        final src = _kwSourceOf(t);
-        if (_kwIsDirect(t)) {
-          return _kwDirectCounts.isEmpty || _kwSelectedDirect.contains(src);
-        }
-        return _kwTorrentCounts.isEmpty || _kwSelectedTorrent.contains(src);
-      });
-    }
-    // 3) Source tab (single-select) narrows on top of the multi-select.
-    final tab = _kwSourceTab;
-    if (tab != null) {
-      base = base.where((t) => _kwSourceOf(t) == tab);
-    }
-    // 4) Quality / rip-source / language attribute filters.
-    final filtered = TorrentFilterMatcher.apply(base.toList(), _kwFilters);
+    final filtered = filterKeywordResults(
+      _kwAll,
+      cachedOnly: _kwCachedOnly,
+      cache: _kwCache,
+      directCounts: _kwDirectCounts,
+      torrentCounts: _kwTorrentCounts,
+      selectedDirect: _kwSelectedDirect,
+      selectedTorrent: _kwSelectedTorrent,
+      sourceTab: _kwSourceTab,
+      filters: _kwFilters,
+    );
     final sorted = sortKeywordResults(
       filtered,
       field: _kwSort,
@@ -17226,7 +17181,7 @@ class _SearchScreenState extends State<SearchScreen>
     if (cinema) {
       final counts = <String, int>{};
       for (final torrent in _kwFullSet) {
-        final source = _kwSourceOf(torrent);
+        final source = keywordSourceOf(torrent);
         counts[source] = (counts[source] ?? 0) + 1;
       }
       return CinemaSourcesLayout(
@@ -17406,7 +17361,7 @@ class _SearchScreenState extends State<SearchScreen>
 
   String _kwSourceLabel(String source) {
     for (final torrent in _kwFullSet) {
-      if (_kwSourceOf(torrent) != source) continue;
+      if (keywordSourceOf(torrent) != source) continue;
       final label = torrent.addonDisplayName?.trim();
       if (label != null && label.isNotEmpty) return label;
     }
@@ -17429,7 +17384,7 @@ class _SearchScreenState extends State<SearchScreen>
     final full = _kwFullSet;
     final counts = <String, int>{};
     for (final t in full) {
-      counts[_kwSourceOf(t)] = (counts[_kwSourceOf(t)] ?? 0) + 1;
+      counts[keywordSourceOf(t)] = (counts[keywordSourceOf(t)] ?? 0) + 1;
     }
     final total = sources.length + 1;
 
@@ -17549,7 +17504,7 @@ class _SearchScreenState extends State<SearchScreen>
     _kwFreezeAndAdopt();
     // The tapped source can vanish in the adopt (dedupe reattribution) — an
     // active tab no longer in the strip would strand an empty list.
-    if (source != null && !_kwAll.any((t) => _kwSourceOf(t) == source)) {
+    if (source != null && !_kwAll.any((t) => keywordSourceOf(t) == source)) {
       source = null;
     }
     if (_kwSourceTab != source) {
