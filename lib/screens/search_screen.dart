@@ -1,3 +1,4 @@
+import '../features/sources/application/source_selection_match.dart';
 import '../features/sources/presentation/source_status_widgets.dart';
 import '../features/sources/presentation/source_results_pane.dart';
 import '../ui/core/source_metadata_labels.dart';

@@ -1999,3 +1999,63 @@ The last full-suite checkpoint remains `full-cinema-projection.jsonl`
 (7,844 successes, same 51 failures/20 skips), before the results-pane and status
 leaves. Sources focus/lifecycle, binding preparation, later phases and final
 native/performance/CI verification remain open.
+
+
+### Phase 4C — Primary saved-source selection matching
+
+Extracted the 89-line `source_selection_match.dart`, wired through the existing
+`_updateSelectedDirect` entry point. Matching now returns the original Torrent
+instance plus immutable diagnostic fields; the view assigns the selected row
+and retains logging, focus, scrolling and lifecycle effects. Media-server
+binding-key lookup is an explicit callback supplied by the existing view boundary,
+called lazily only for the primary media-server pin. The replaced matching
+branches are removed. Sources is **1,845 lines**; parent **20,167**.
+
+Review preserves primary-pin precedence, first media/IPTV match, complete IPTV
+identity, exact addon configuration, candidate index ordering on a copied list,
+existing profile/binge selection behavior, and every diagnostic reason/count.
+The media branch still omits a match log. No network, persistence or focus side
+effect moved into the matcher. The existing Stremio selector and IPTV ownership
+helper remain legacy dependencies under the final transitive-boundary audit;
+this does not claim their whole service graph is pure or complete the binding
+preparation migration.
+
+Affected Sources/cinema/provider-native baseline: **246 passes**. Final group:
+**252 passes**. Six new cases exercise primary-only selection, explicit lazy
+media lookup, IPTV ownership/catalog matching, exact addon identity, stable
+input order and returned row identity, diagnostic reasons and strict binge-group
+misses. Initial addon fixtures omitted the model-required addon ID; the fixture
+was corrected without changing production behavior. Existing Sources selected
+source/focus/cached fallback cases remain passing. Analyzer identities stay at
+**863**, with no additions; architecture checks pass for **109 migrated files**.
+New files are formatted and diff checks pass. Receipts under
+`.git/refactor-evidence/phase4c/`: `selected-source-before.txt`,
+`selected-source-focused.txt` (invalid initial fixture),
+`selected-source-focused-final.txt`, `analyze-selected-source.txt`,
+`selected-source-analyzer-comparison.txt`.
+
+The first full run had one newly observed failure:
+`remote_reliable_transfer_test.dart::large binary file arrives intact with bounded
+progress blocks`. Transfer content/progress assertions passed, but a `.part` file
+remained during the immediate directory assertion. This is not added to the
+baseline allowance. The unchanged transfer service sets receipt phase `complete`
+before awaiting receipt journal IO and deleting the temporary file; sender
+completion can therefore race the assertion. All **18 isolated transfer tests
+pass** without changes. A confirming full run is required; the first failed run
+and identity comparison remain in evidence. Receipts:
+`.git/refactor-evidence/phase4c/full-selected-source.jsonl`,
+`full-selected-source-comparison.txt`, `selected-source-previous-checkpoint.txt`,
+`selected-source-transfer-isolated.txt`.
+
+The unchanged confirmation run has **7,851 successes**, the same **51 baseline
+failures** (22 failure/29 error), and **20 skips**. The transfer cleanup test
+passes. No original-baseline identity is newly failing, missing or skipped;
+every previous cinema-projection checkpoint outcome is preserved, with **seven
+new passing tests** from results-pane and selection matching. The first timing-
+dependent failure remains documented; neither its test nor service was changed.
+Receipts: `.git/refactor-evidence/phase4c/full-selected-source-confirmation.jsonl`,
+`full-selected-source-confirmation-comparison.txt`,
+`selected-source-confirmation-previous-checkpoint.txt`.
+The historical helper still exits 1 for its unchanged pre-existing failures.
+Sources focus/reveal/lifecycle ownership and binding preparation, later phases
+and native/performance/CI verification remain unfinished.

@@ -127,76 +127,16 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
   }
 
   void _updateSelectedDirect() {
-    _selectedDirect = null;
-    if (_bound.isNotEmpty && _bound.first.isMediaServer) {
-      for (final candidate in _torrents) {
-        if (MediaServerService.bindingFor(candidate)?.bindingKey == _bound.first.bindingKey) {
-          _selectedDirect = candidate;
-          break;
-        }
-      }
-      return;
-    }
-    if (_bound.isNotEmpty && _bound.first.isIptvDirect) {
-      final pin = _bound.first;
-      for (final candidate in _torrents) {
-        if (IptvSourceSearch.owns(candidate) &&
-            candidate.iptvPlaylistId == pin.iptvPlaylistId &&
-            candidate.iptvCatalogType == pin.iptvCatalogType &&
-            candidate.iptvEntryKey == pin.iptvEntryKey) {
-          _selectedDirect = candidate;
-          break;
-        }
-      }
-      _logPickerSelection('match', {
-        'reason': _selectedDirect == null ? 'iptv_entry_not_found' : 'matched',
-      });
-      return;
-    }
-    if (_bound.isEmpty || !_bound.first.isAddonDirect) {
-      _logPickerSelection('match', {
-        'reason': _bound.isEmpty ? 'no_saved_source' : 'primary_not_direct',
-      });
-      return;
-    }
-    final pin = _bound.first;
-    final candidates =
-        _torrents
-            .where((t) => t.isDirectStream && t.stremioAddonKey == pin.addonKey)
-            .toList()
-          ..sort(
-            (a, b) => (a.stremioStreamIndex ?? 0).compareTo(
-              b.stremioStreamIndex ?? 0,
-            ),
-          );
-    _selectedDirect = StremioService.selectPinnedDirectStream(
-      candidates,
-      streamKey: pin.streamKey ?? '',
-      streamIndex: pin.streamIndex ?? 0,
-      bingeGroup: pin.bingeGroup,
+    final match = matchSelectedSource(
+      saved: _bound,
+      torrents: _torrents,
+      mediaServerKeyFor: (torrent) =>
+          MediaServerService.bindingFor(torrent)?.bindingKey,
     );
-    final groupMatches = candidates
-        .where((t) => t.stremioBingeGroup == pin.bingeGroup)
-        .length;
-    final profileMatches = candidates
-        .where((t) => t.stremioStreamKey == pin.streamKey)
-        .length;
-    _logPickerSelection('match', {
-      'direct_results': _torrents.where((t) => t.isDirectStream).length,
-      'addon_matches': candidates.length,
-      'uses_binge_group': pin.bingeGroup?.isNotEmpty == true,
-      'group_matches': groupMatches,
-      'profile_matches': profileMatches,
-      'saved_stream_index': pin.streamIndex,
-      'matched_stream_index': _selectedDirect?.stremioStreamIndex,
-      'reason': _selectedDirect != null
-          ? 'matched'
-          : candidates.isEmpty
-          ? 'addon_configuration_not_found'
-          : pin.bingeGroup?.isNotEmpty == true
-          ? 'binge_group_not_found'
-          : 'stream_identity_not_found',
-    });
+    _selectedDirect = match.source;
+    if (match.diagnostics case final diagnostics?) {
+      _logPickerSelection('match', diagnostics);
+    }
   }
 
   // Lazy rows have no Focus context until built. Walk the viewport until the
