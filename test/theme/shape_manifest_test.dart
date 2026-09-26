@@ -35,6 +35,9 @@ import 'package:flutter_test/flutter_test.dart';
 /// The residue shrinks as `const` sites are opened up or `app` is threaded
 /// further. Update the entry when you do. RAISING one needs a reason.
 const Map<String, int> kShapeResidue = {
+  'lib/features/search/presentation/source_toggle_row.dart': 0,
+  'lib/features/search/presentation/source_action_chip.dart': 0,
+  'lib/features/search/presentation/source_dialog_shell.dart': 0,
   'lib/features/home/presentation/category_tag.dart': 0,
   'lib/features/search/presentation/search_mode_toggle.dart': 0,
   'lib/ui/core/see_all_link.dart': 0,

@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:debrify/features/search/application/lists_search_controller.dart';
 import 'package:debrify/features/search/application/lists_search_dependencies.dart';
-import 'package:debrify/features/search/models/lists_search_session.dart';
+import 'package:debrify/features/search/models/search_session.dart';
 import 'package:debrify/features/search/models/lists_search_state.dart';
 import 'package:debrify/services/mdblist/mdblist_list_source.dart';
 import 'package:debrify/services/mdblist/mdblist_models.dart';
@@ -19,7 +19,7 @@ typedef Result = MdblistResult<List<MdblistListChoice>>;
 void main() {
   late ProviderContainer container;
   late FakeListsSearchRepository repository;
-  late ListsSearchSession session;
+  late SearchSession session;
   late ListsSearchController controller;
   late ProviderSubscription<ListsSearchState> subscription;
   ListsSearchState current() => container.read(listsSearchProvider(session));
@@ -27,7 +27,7 @@ void main() {
 
   setUp(() {
     repository = FakeListsSearchRepository();
-    session = ListsSearchSession(
+    session = SearchSession(
       owner: ProfileSessionMemory.captureOwner(),
       viewIdentity: Object(),
     );
@@ -180,7 +180,7 @@ void main() {
   test(
     'same profile and query in different routes keep independent state',
     () async {
-      final otherSession = ListsSearchSession(
+      final otherSession = SearchSession(
         owner: session.owner,
         viewIdentity: Object(),
       );
@@ -194,7 +194,7 @@ void main() {
       expect(container.read(listsSearchProvider(otherSession)).results, [
         first,
       ]);
-      final sameKey = ListsSearchSession(
+      final sameKey = SearchSession(
         owner: session.owner,
         viewIdentity: session.viewIdentity,
       );

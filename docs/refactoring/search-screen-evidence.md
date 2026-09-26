@@ -226,7 +226,7 @@ Ownership and production wiring:
   contract and MDBList adapter. The adapter borrows existing services, checks the
   captured profile/session before invoking them and retains the originating scope
   across asynchronous credential reads. No service receives `Ref` or UI context.
-- `models/lists_search_session.dart` keys each family by captured profile/session
+- `models/search_session.dart` keys each family by captured profile/session
   and one stable screen identity. Query changes belong to that workflow's action
   generation; concurrent screens with equal queries remain independent.
 - Providers disable framework retries. A screen-owned `listenManual` subscription
@@ -286,3 +286,67 @@ outgoing authentication as well as results. Rebuild, route, dialog, mode and
 profile tests exercise the actual screen. The existing title-search owner remains
 in use. The phase's structural/automated exit is met; device/visual/performance
 checks remain explicitly outstanding in the migration-wide behavior matrix.
+
+## Phase 4A: Catalog search and source settings (implemented and reviewed)
+
+The production screen delegates catalog requests to `CatalogSearchController`;
+`CatalogSourcesController` owns dialog reads and immediate settings writes.
+`StremioCatalogSearchRepository` borrows the existing Stremio service and watched
+filter. Catalog query/loading/failure counters and the old request token have been
+removed from the screen. `SearchSession` is the existing Lists key renamed for its
+now-demonstrated reuse; the two search workflows still have separate state owners.
+
+- Catalog search preserves the ten-request limit, searchable-only catalogs,
+  disabled-addon filtering, one row per catalog, failure counts, raw first-page
+  cursor, query handoff, stable ordered TV batches and arrival-ordered non-TV rows.
+  Empty/watched-only responses remain single-shot. Framework retries stay disabled.
+- Results publish immutable row/list snapshots. `catalogSearchSection` is a small,
+  one-way temporary presentation adapter to the legacy Home renderer; it copies
+  item containers and cannot mutate the controller's published rows. Home retains
+  its existing paging/cache ownership until phase 5. `_restoreHome` still dispatches
+  deferred reloads and focus/hero effects remain in presentation.
+- The real adapter guards profile/session expiry before calls and after responses.
+  Settings acquire the original profile's preferences facade, then write outside
+  the captured-scope zone. This preserves the existing key/JSON format while the
+  facade's live-session checks reject a switch during its async mutation barrier;
+  neither the incoming profile nor deleted outgoing data receives that late write.
+- The Sources dialog has no service/persistence calls. It retains the original
+  loading/empty/text/layout behavior, immediate toggle/bulk saves, and Done/rerun
+  behavior. A profile subscription clears outgoing dialog state without initiating
+  another load. Accepted saves can finish after dismissal; errors are caught and
+  diagnosed without private values or automatic retries.
+- Three shared dialog presentation files replace the old coupled part definitions.
+  Catalog and Keyword both use them. Normalized body comparisons against phase-3
+  source prove only visibility/names/optional widget keys changed; shape manifest
+  follows their new paths with zero new bare-radius allowances.
+
+Verification and review:
+
+- Four new production-screen cases passed **before** extracting catalog search:
+  TV batching/order, non-TV streaming/order, replacement query and field clear.
+  After wiring, the screen suite has **eight passing cases**, adding actual Sources
+  persistence/requery, failure status, outgoing-profile clearing and deferred Home
+  settings reload. The last case verifies updated row membership on clear while
+  preserving cached contents/request counts, rather than demanding a needless fetch.
+- **14 controller tests** cover bounded fan-out, both publication styles, stale
+  completion/failure, filtering, no retry, empty/partial/total failure, separate
+  views, clearing, profile expiry and disposal. **Seven real adapter tests** cover
+  protocol/cursor/metadata provenance, projection non-mutation, watched filtering
+  without top-up, failure, stale results, exact persistence format and real profile
+  write barriers. **Six dialog tests** cover Select/pointer/bulk actions, immediate
+  saves, reopen/disposal, pending writes, expiry and outgoing data clearing.
+- Affected tests at the last broad pass: **190 success and the same three baseline
+  failures** (shape manifest and two unresolved title suggestions), no missing or
+  newly skipped identities. The two subsequently added Home/watched cases pass in
+  their focused suites. Full analyzer still matches all **865 diagnostic identities
+  and multiplicities**. The architecture checker covers **27 files**, all below
+  300 lines; `git diff --check` passes.
+- A draft screen test initially tried to open Sources after results hid the prompt;
+  it now exercises the actual prompt/dialog path, with an already-dispatched query
+  completing underneath. Another draft expected deferred Home reload to refetch;
+  inspection showed existing row-cache reuse, and it now verifies changed visible
+  membership plus unchanged request count. No app behavior or existing assertion
+  was changed to accommodate these fixture corrections.
+- Receipts: `.git/refactor-evidence/phase4a/`. Device/visual/performance checks remain
+  pending and are not inferred from widgets. Legacy sizes: screen **20,689** lines;
+  Sources part **3,347**; other remaining parts unchanged. Phase 4B/C and 5–8 remain.

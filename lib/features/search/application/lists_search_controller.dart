@@ -3,12 +3,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../services/mdblist/mdblist_list_source.dart';
 import '../../../services/mdblist/mdblist_models.dart';
 import '../data/lists_search_repository.dart';
-import '../models/lists_search_session.dart';
+import '../models/search_session.dart';
 import '../models/lists_search_state.dart';
 import 'lists_search_dependencies.dart';
 
 final listsSearchProvider = NotifierProvider.autoDispose
-    .family<ListsSearchController, ListsSearchState, ListsSearchSession>(
+    .family<ListsSearchController, ListsSearchState, SearchSession>(
       ListsSearchController.new,
       retry: (count, error) => null,
     );
@@ -16,7 +16,7 @@ final listsSearchProvider = NotifierProvider.autoDispose
 class ListsSearchController extends Notifier<ListsSearchState> {
   ListsSearchController(this.session);
 
-  final ListsSearchSession session;
+  final SearchSession session;
   late ListsSearchRepository _repository;
   int _generation = 0;
 

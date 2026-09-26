@@ -1,6 +1,12 @@
+import '../features/search/presentation/catalog_sources_dialog.dart';
+import '../features/search/presentation/source_toggle_row.dart';
+import '../features/search/presentation/source_dialog_shell.dart';
+import '../features/search/application/catalog_search_controller.dart';
+import '../features/search/models/catalog_search_state.dart';
+import '../features/search/presentation/catalog_search_projection.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../features/search/application/lists_search_controller.dart';
-import '../features/search/models/lists_search_session.dart';
+import '../features/search/models/search_session.dart';
 import '../features/search/models/lists_search_state.dart';
 import '../features/search/models/search_mode.dart';
 import '../features/search/presentation/search_mode_toggle.dart';
@@ -563,11 +569,11 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   // Dedicated MDBList list-search state. Lists is its own Search mode; it
   // never runs as part of Catalog search. Each result card hands off via
   // MainPageBridge.pendingMdblistListOpen. One focus node per card.
-  late final ListsSearchSession _listsSession;
+  late final SearchSession _searchSession;
   late final ProviderSubscription<ListsSearchState> _listsSubscription;
   ListsSearchState get _listsState => _listsSubscription.read();
   ListsSearchController get _listsController =>
-      ref.read(listsSearchProvider(_listsSession).notifier);
+      ref.read(listsSearchProvider(_searchSession).notifier);
   String get _listsQuery => _listsState.query;
   List<MdblistListChoice> get _listsResults => _listsState.results;
   bool get _listsSearching => _listsState.searching;
@@ -580,7 +586,11 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   SearchMode _mode = SearchMode.catalog;
 
   /// Committed catalog query (drives per-addon catalog search). Empty = board.
-  String _catalogQuery = '';
+  late final ProviderSubscription<CatalogSearchState> _catalogSubscription;
+  CatalogSearchState get _catalogState => _catalogSubscription.read();
+  CatalogSearchController get _catalogController =>
+      ref.read(catalogSearchProvider(_searchSession).notifier);
+  String get _catalogQuery => _catalogState.query;
   Timer? _catalogDebounce;
 
   /// The addon that produced the item currently being played/browsed, threaded
@@ -815,12 +825,11 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   // one-shot fade/rise entrance. Appends don't bump it.
   int _boardGen = 0;
   DateTime _boardAppliedAt = DateTime.fromMillisecondsSinceEpoch(0);
-  bool _catalogSearching = false;
-  int _catalogSearchToken = 0;
+  bool get _catalogSearching => _catalogState.searching;
   // Catalogs that errored (timeout / HTTP / network) during the current
   // catalog search — distinct from "returned no results". Drives the quiet
   // "N sources didn't respond" note so failing addons don't just vanish.
-  int _catalogSearchFailures = 0;
+  int get _catalogSearchFailures => _catalogState.failures;
 
   // Rows the user hid via Settings → Home Page → Home Rows (fixed-section
   // leaves like `cw:movies`/`trakt:shows`/`fav:iptv` and catalog leaves
@@ -1857,16 +1866,36 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     unawaited(_refreshMetadataFeaturePolicy());
     WidgetsBinding.instance.addObserver(this);
     _profileSessionOwner = ProfileSessionMemory.captureOwner();
-    _listsSession = ListsSearchSession(
+    _searchSession = SearchSession(
       owner: _profileSessionOwner,
       viewIdentity: Object(),
     );
     // Retain state for this screen's mounted lifetime, including covered routes.
     // Returning from a pushed list must not discard results or replay a request.
     _listsSubscription = ref.listenManual(
-      listsSearchProvider(_listsSession),
+      listsSearchProvider(_searchSession),
       (previous, next) {
         if (mounted) setState(() {});
+      },
+    );
+    _catalogSubscription = ref.listenManual(
+      catalogSearchProvider(_searchSession),
+      (previous, next) {
+        if (!mounted) return;
+        if (!widget.isTelevision && next.rows.isNotEmpty &&
+            !identical(previous?.rows, next.rows)) {
+          // Keep existing row nodes while new non-TV results stream in.
+          final previousCount = previous?.rows.length ?? 0;
+          final additions = next.rows.skip(previousCount)
+              .map(catalogSearchSection).toList();
+          if (previousCount == 0) {
+            _applySections(additions);
+          } else {
+            _appendSections(additions);
+          }
+        } else {
+          setState(() {});
+        }
       },
     );
     if (!widget.searchMode && !widget.discoverMode) _watchHomeReturnChanges();
@@ -2631,6 +2660,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     _searchController.dispose();
     ProfileRuntime.scope.removeListener(_onSearchProfileChanged);
     _listsSubscription.close();
+    _catalogSubscription.close();
     _titleSearch.removeListener(_publishTitleSuggestions);
     _titleSearch.dispose();
     _titleSuggestions.dispose();
@@ -6312,130 +6342,36 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   /// Cross-addon catalog search, grouped as one horizontal row per addon so it
   /// matches the board (not a merged grid).
   Future<void> _runCatalogSearch(String query) async {
-    final token = ++_catalogSearchToken;
-    setState(() {
-      _catalogQuery = query;
-      _catalogSearching = true;
-      _catalogSearchFailures = 0;
-    });
-    // If DPAD focus is sitting on a result card from the PREVIOUS query, pull it
-    // back to the search field before we clear the board below — otherwise
-    // disposing that card's FocusNode strands focus. Only reachable on TV, and
-    // only when a keystroke's debounce fires after the user jumped down into the
-    // old results; the soft keyboard was already up from that keystroke, so this
-    // doesn't pop a new one.
+    // Reclaim TV focus before disposing the previous result nodes.
     if (widget.isTelevision && !_searchFocusNode.hasFocus) {
       _searchFocusNode.requestFocus();
     }
-    // Clear the previous query's rows + hero up front. On phone/desktop results
-    // then STREAM into the fresh board as they arrive; on TV the board stays on
-    // its spinner until every catalog is in and lands in one shot (see below).
+    final completion = _catalogController.search(
+      query,
+      batchResults: widget.isTelevision,
+    );
     _applySections(const []);
-    try {
-      // Honour the per-addon toggles from the catalog Sources dialog: skip
-      // addons the user disabled for catalog search (empty set = all queried).
-      final disabledAddons =
-          await StorageService.getCatalogSearchDisabledAddons();
-      final addons = (await _stremio.getSearchableAddons())
-          .where((a) => !disabledAddons.contains(a.id))
-          .toList();
-      // One row PER searchable catalog (so Movies and Series land in separate
-      // categorised rows, like Stremio) instead of one merged row per addon.
-      final catalogTasks =
-          <({StremioAddon addon, StremioAddonCatalog catalog})>[];
-      for (final addon in addons) {
-        for (final catalog in addon.catalogs.where((c) => c.supportsSearch)) {
-          catalogTasks.add((addon: addon, catalog: catalog));
-        }
-      }
-      // On TV we deliberately DON'T lazy-stream rows in as they arrive: the
-      // incremental appends caused focus/scroll churn while surfing, so TV
-      // waits for every catalog and applies them in one shot below. Phone and
-      // desktop keep streaming — each row is applied AS IT ARRIVES.
-      // _appendSections grows the focus nodes without disposing existing ones,
-      // so streamed rows never jump focus.
-      //
-      // Bound the fan-out either way: with many installed addons this could
-      // otherwise fire hundreds of concurrent HTTP requests at once and exhaust
-      // sockets/memory on weak hardware.
-      final tv = widget.isTelevision;
-      var appliedFirst = false;
-      final raw = await mapWithConcurrency(catalogTasks, (entry) async {
-        List<StremioMeta> items;
-        var rawCount = 0;
-        try {
-          items = await _stremio.searchSingleCatalog(
-            entry.addon,
-            entry.catalog,
-            query,
-            throwOnError: true,
-            onRawCount: (c) => rawCount = c,
-          );
-        } catch (_) {
-          // Source failed (not "no results") — count it for the status note.
-          if (mounted && token == _catalogSearchToken) {
-            setState(() => _catalogSearchFailures++);
-          }
-          return null;
-        }
-        if (!mounted || token != _catalogSearchToken) return null;
-        // Search rows are single-shot (no top-up): a match that's been
-        // watched simply doesn't show.
-        items = WatchedFilter.apply(items);
-        if (items.isEmpty) return null;
-        final section = CatalogSection(
-          title: CatalogSection.rowTitle(entry.catalog),
-          addon: entry.addon,
-          catalog: entry.catalog,
-          items: items,
-          // Carry the query so "See all" keeps searching this catalog rather
-          // than browsing it (which would muddy results with non-matches).
-          query: query,
-          // Seed the paging cursor with the RAW page-1 count (not the
-          // invalid-id-filtered items.length), so See All's first search
-          // load-more offsets correctly instead of re-fetching page 1.
-          nextSkip: rawCount > 0 ? rawCount : items.length,
-        );
-        // TV: just collect it (applied together after the loop, in stable addon
-        // order). Non-TV: stream it into the board now.
-        if (!tv) {
-          if (!appliedFirst) {
-            // First arrival: full apply so the hero seeds from it (the board is
-            // empty at this point, so nothing focused gets disposed).
-            appliedFirst = true;
-            _applySections([section]);
-          } else {
-            _appendSections([section]);
-          }
-        }
-        return section;
-      });
-      if (!mounted || token != _catalogSearchToken) return;
-      // TV: apply the whole result set at once (mapWithConcurrency preserves
-      // input order, so rows land in addon order, not completion order).
-      if (tv) {
-        _applySections(raw.whereType<CatalogSection>().toList());
-      }
-      setState(() => _catalogSearching = false);
-      if (tv && _rowNodes.isNotEmpty && _rowNodes.first.isNotEmpty) {
+    final result = await completion;
+    if (!mounted || result == CatalogSearchCompletion.stale) return;
+    if (result == CatalogSearchCompletion.failed) {
+      _searchSubmitFocus.cancel();
+      return;
+    }
+    if (widget.isTelevision) {
+      // One stable batch, including empty results. Phone/desktop rows arrive
+      // through the subscription without replacing already focused rows.
+      _applySections(_catalogState.rows.map(catalogSearchSection).toList());
+      if (_rowNodes.isNotEmpty && _rowNodes.first.isNotEmpty) {
         _completeSearchSubmitFocus(_rowNodes.first.first);
-      } else if (tv) {
+      } else {
         _searchSubmitFocus.cancel();
       }
-    } catch (_) {
-      if (!mounted || token != _catalogSearchToken) return;
-      _searchSubmitFocus.cancel();
-      setState(() => _catalogSearching = false);
     }
   }
 
   /// Cancel any pending search and return to the homepage board.
   void _restoreHome() {
-    _catalogSearchToken++;
-    setState(() {
-      _catalogQuery = '';
-      _catalogSearching = false;
-    });
+    _catalogController.clear();
     // A settings/integration reload arrived mid-search and was deferred so it
     // couldn't stomp the results view — run it now instead of restoring the
     // stale cached board.
@@ -12178,6 +12114,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     _cancelTitleSuggestions();
     if (_profileSessionOwner != ProfileSessionMemory.captureOwner()) {
       _clearListsSearch();
+      final hadCatalogSearch = _catalogQuery.isNotEmpty || _catalogSearching;
+      _catalogController.clear();
+      if (hadCatalogSearch) _applySections(const []);
     }
   }
 
@@ -16900,7 +16839,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   Future<void> _openCatalogSources() async {
     await showDialog<void>(
       context: context,
-      builder: (_) => const _CatalogSourcesDialog(),
+      builder: (_) => CatalogSourcesDialog(session: _searchSession),
     );
     if (!mounted) return;
     if (_catalogQuery.isNotEmpty) {

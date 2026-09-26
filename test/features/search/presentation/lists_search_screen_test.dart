@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:debrify/features/search/application/lists_search_controller.dart';
 import 'package:debrify/features/search/application/lists_search_dependencies.dart';
-import 'package:debrify/features/search/models/lists_search_session.dart';
+import 'package:debrify/features/search/models/search_session.dart';
 import 'package:debrify/features/search/models/search_mode.dart';
 import 'package:debrify/features/search/presentation/search_mode_toggle.dart';
 import 'package:debrify/screens/search_screen.dart';
@@ -29,7 +29,7 @@ typedef Result = MdblistResult<List<MdblistListChoice>>;
 void main() {
   late FakeListsSearchRepository repository;
   late GlobalKey<NavigatorState> navigator;
-  late List<ListsSearchSession> sessions;
+  late List<SearchSession> sessions;
   late StateSetter rebuildScreen;
   late ProviderContainer container;
   late bool showScreen;
