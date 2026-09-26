@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../models/advanced_search_selection.dart';
 import '../../../models/torrent.dart';
 import '../../../services/source_priority.dart';
 import '../../../services/stremio_service.dart';
@@ -12,6 +13,8 @@ import 'source_seasons_dependencies.dart';
 import 'source_cache_controller.dart';
 import 'source_results_controller.dart';
 import 'source_retry_controller.dart';
+
+enum SourceRetryMode { ignore, restartSearch, addon }
 
 final sourceSearchProvider = NotifierProvider.autoDispose
     .family<SourceSearchController, SourceSearchState, SourcesSession>(
@@ -61,6 +64,39 @@ class SourceSearchController extends Notifier<SourceSearchState> {
     ref.read(sourceRetryProvider(session).notifier).beginSearch();
     ref.read(sourceResultsProvider(session).notifier).beginSearch();
     return true;
+  }
+
+  /// Media-server chips restart the whole search only when it is idle.
+  SourceRetryMode retryMode(AddonSearchStatus status) {
+    if (!ref.mounted || !_repository.isCurrent) return SourceRetryMode.ignore;
+    if (status.sourceKey.startsWith('mediaserver:')) {
+      return state.searching
+          ? SourceRetryMode.ignore
+          : SourceRetryMode.restartSearch;
+    }
+    return SourceRetryMode.addon;
+  }
+
+  /// Merge accepted addon retries through the same batch owner as live search.
+  /// The view still adopts rows and schedules their cache check, in that order.
+  Future<void> retryAddon(
+    AdvancedSearchSelection selection,
+    AddonSearchStatus status, {
+    required bool Function() shouldContinue,
+    required void Function(List<Torrent>) onRows,
+    required void Function(List<Torrent>) onBatchAccepted,
+  }) async {
+    final generation = _generation;
+    bool active() => _accept(generation) && shouldContinue();
+    if (!active() || retryMode(status) != SourceRetryMode.addon) return;
+    final batch = await ref
+        .read(sourceRetryProvider(session).notifier)
+        .retry(selection, status);
+    if (batch == null || !active()) return;
+    final rows = acceptRetry(status, batch);
+    if (rows == null) return;
+    onRows(rows);
+    onBatchAccepted(batch);
   }
 
   /// Explicit search action. Callbacks hand accepted rows to presentation and

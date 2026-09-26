@@ -3741,3 +3741,50 @@ skips. Receipts: `full-search-reset-owner.jsonl`,
 `search-reset-owner-review.txt`. The baseline helper remains nonzero for existing
 failures; no allowances changed. Changed code/method formatting, architecture and
 diff checks pass. Phase 4C and the remaining migration gates are still open.
+
+### Phase 4C — application-owned addon retry orchestration
+
+The existing search controller now owns synchronous `SourceRetryMode` selection
+and the accepted-addon retry workflow. Media-server chips restart the full search
+only while idle; retired/searching owners produce an ignored mode. Ordinary
+addon retries use the existing retry controller and are merged by the existing
+search batch owner only after repository/profile/generation and caller checks.
+The controller remains **183 lines** with no new state or presentation import.
+
+The real view handles the typed mode and supplies row/cache callbacks. This
+preserves synchronous media-server restart dispatch and the accepted retry's
+status → rows → cache sequence within one continuation, without an extra await
+between row presentation and cache dispatch. The callback implementation still
+owns view-token/mounted rejection and the same frozen/pending preparation path.
+An empty successful batch updates the addon status but dispatches no rows/cache;
+final-only search rows still do not become accumulated engine batches. The old
+inline merge/retry logic and unused retry-controller getter were removed. Sources
+part **1,524 → 1,528 lines**: the explicit mode switch makes the view slightly
+longer while removing its service-selection and merge orchestration decisions.
+
+Baseline: **484 Sources tests pass**. Final affected run: **494 pass**, including
+ten new cases for media-server idle/searching behavior, empty/nonempty completion,
+callback order, pre-dispatch caller retirement, pending view/query/profile/scope
+retirement, duplicate requests and failure. The query replacement case deliberately
+omits `prepareSearch` to independently prove that search generation rejects stale
+retry merging; existing preparation tests cover retry-generation reset separately.
+The original retry controller and existing acceptance/merge algorithm are unchanged.
+
+The first affected run had only one new-test failure: its scheduled microtask
+marker had not run when the test asserted the full event list. The test now waits
+for the marker, then asserts rows/cache preceded it. Production code was unchanged
+for that correction. Receipts preserve both runs: `retry-owner-before.txt`,
+`retry-owner-after.txt`, `retry-owner-verified.txt`, `retry-owner-generation.txt`,
+`retry-owner-format.dart`, `analyze-retry-owner.txt` and
+`retry-owner-analyzer-comparison.txt` under `.git/refactor-evidence/phase4c/`.
+Analyzer retains **863 diagnostics**, no added identities; **143 migrated files**
+pass architecture checks. Phase 4C and later/native/performance/CI gates stay open.
+
+Full-suite review: **8,134 successes / the same 51 failures / 20 skips**.
+Every prior checkpoint outcome is preserved, and all ten new retry cases pass.
+Original-baseline comparison finds no new failures, missing tests or new skips.
+Receipts: `full-retry-owner.jsonl`, `full-retry-owner-comparison.txt`,
+`full-retry-owner-previous-checkpoint.txt` and `retry-owner-review.txt`.
+The baseline helper remains nonzero for existing failures; no allowance changes.
+Changed code/method formatting, diff and architecture checks pass. Phase 4C and
+later/native/performance/CI gates remain in progress.

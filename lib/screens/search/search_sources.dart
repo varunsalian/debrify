@@ -186,8 +186,6 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
   /// Addon ids with a retry in flight — their chip shows a spinner.
   late final ProviderSubscription<Set<String>> _retrySubscription;
   Set<String> get _retryingAddons => _retrySubscription.read();
-  SourceRetryController get _retryController =>
-      ref.read(sourceRetryProvider(_sourcesSession).notifier);
 
   /// The user's Quick Play "Addon Priority" order for this tab (empty =
   /// never customized = keep the shipped provider ordering). Also
@@ -914,17 +912,23 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
   /// dedupe, series-pack post-processing, and the frozen-list "+N new
   /// sources" pill as any live batch.
   Future<void> _retryAddon(AddonSearchStatus status) async {
-    if (status.sourceKey.startsWith('mediaserver:')) {
-      if (!_searching) await _runSearch();
-      return;
+    switch (_searchController.retryMode(status)) {
+      case SourceRetryMode.ignore:
+        return;
+      case SourceRetryMode.restartSearch:
+        await _runSearch();
+        return;
+      case SourceRetryMode.addon:
+        break;
     }
     final token = _searchToken;
-    final batch = await _retryController.retry(_effectiveSelection, status);
-    if (batch == null || !mounted || token != _searchToken) return;
-    final rows = _searchController.acceptRetry(status, batch);
-    if (rows == null) return;
-    _presentStreaming(rows, token);
-    _maybeCheckCache(batch);
+    await _searchController.retryAddon(
+      _effectiveSelection,
+      status,
+      shouldContinue: () => mounted && token == _searchToken,
+      onRows: (rows) => _presentStreaming(rows, token),
+      onBatchAccepted: (batch) => _maybeCheckCache(batch),
+    );
   }
 
   Widget _newSourcesPill() => SourcePendingResultsPill(

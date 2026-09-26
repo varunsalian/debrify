@@ -469,4 +469,142 @@ void main() {
     ]);
     expect(container.read(sourceResultsProvider(session)).frozen, isTrue);
   });
+  Future<void> retryAddon({bool Function()? active}) => controller.retryAddon(
+    selection,
+    status('first'),
+    shouldContinue: active ?? () => true,
+    onRows: (batch) => rows.add((batch, false)),
+    onBatchAccepted: cacheBatches.add,
+  );
+
+  test(
+    'media-server retry restarts only when idle without an addon request',
+    () async {
+      final server = status('mediaserver:fixture');
+      expect(controller.retryMode(server), SourceRetryMode.restartSearch);
+      expect(controller.retryMode(status('first')), SourceRetryMode.addon);
+      final pending = search();
+      expect(controller.retryMode(server), SourceRetryMode.ignore);
+      await controller.retryAddon(
+        selection,
+        server,
+        shouldContinue: () => true,
+        onRows: (_) => fail('No addon rows'),
+        onBatchAccepted: (_) => fail('No addon cache'),
+      );
+      expect(repository.retries, isEmpty);
+      repository.calls.single.result.complete(SourceSearchResult());
+      await pending;
+      expect(controller.retryMode(server), SourceRetryMode.restartSearch);
+    },
+  );
+
+  for (final empty in [false, true]) {
+    test(
+      'retry completion publishes status then rows/cache without an async gap: empty=$empty',
+      () async {
+        final pendingSearch = search();
+        final early = row('early');
+        repository.calls.single.batch('engine', [early]);
+        repository.calls.single.result.complete(
+          SourceSearchResult(
+            torrents: [row('final-only')],
+            addonStatuses: [status('first')],
+          ),
+        );
+        await pendingSearch;
+        rows.clear();
+        cacheBatches.clear();
+        final events = <String>[];
+        final retryRow = row('retry');
+        final batch = empty ? <Torrent>[] : [retryRow];
+        final pendingRetry = controller.retryAddon(
+          selection,
+          status('first'),
+          shouldContinue: () => true,
+          onRows: (accepted) {
+            expect(subscription.read().addonStatuses.single.failed, isFalse);
+            expect(accepted, [same(early), same(retryRow)]);
+            expect(() => accepted.clear(), throwsUnsupportedError);
+            events.add('rows');
+            scheduleMicrotask(() => events.add('later'));
+          },
+          onBatchAccepted: (accepted) {
+            expect(accepted, same(batch));
+            events.add('cache');
+          },
+        );
+        repository.retries.single.complete(batch);
+        await pendingRetry;
+        // Let the sentinel run before checking that cache preceded it.
+        await Future<void>.delayed(Duration.zero);
+        expect(subscription.read().addonStatuses.single.failed, isFalse);
+        expect(events, empty ? isEmpty : ['rows', 'cache', 'later']);
+      },
+    );
+  }
+
+  test('retired view rejects retry before repository access', () async {
+    await retryAddon(active: () => false);
+    expect(repository.retries, isEmpty);
+    expect(rows, isEmpty);
+    expect(cacheBatches, isEmpty);
+  });
+
+  for (final retirement in ['view', 'query', 'profile', 'dispose']) {
+    test('$retirement retirement rejects retry merge and callbacks', () async {
+      var active = true;
+      final pending = retryAddon(active: () => active);
+      Future<void>? newer;
+      if (retirement == 'view') {
+        active = false;
+      } else if (retirement == 'query') {
+        // The search generation must reject stale merging even independently
+        // of the cache/retry preparation reset covered above.
+        newer = search();
+      } else if (retirement == 'profile') {
+        ProfileSessionMemory.clearAll();
+        addTearDown(ProfileSessionMemory.debugReset);
+      } else {
+        container.dispose();
+      }
+      repository.retries.single.complete([row('stale')]);
+      await pending;
+      expect(rows, isEmpty);
+      expect(cacheBatches, isEmpty);
+      if (newer != null) {
+        repository.calls.single.result.complete(SourceSearchResult());
+        await newer;
+      }
+      if (retirement == 'profile' || retirement == 'dispose') {
+        expect(
+          controller.retryMode(status('mediaserver:fixture')),
+          SourceRetryMode.ignore,
+        );
+      }
+    });
+  }
+
+  test(
+    'duplicate addon retry does not dispatch twice or adopt twice',
+    () async {
+      final pending = retryAddon();
+      await retryAddon();
+      expect(repository.retries, hasLength(1));
+      expect(rows, isEmpty);
+      final batch = [row('once')];
+      repository.retries.single.complete(batch);
+      await pending;
+      expect(rows, hasLength(1));
+      expect(cacheBatches, [same(batch)]);
+    },
+  );
+
+  test('failed addon retry dispatches neither rows nor cache', () async {
+    final pending = retryAddon();
+    repository.retries.single.completeError(StateError('fixture'));
+    await pending;
+    expect(rows, isEmpty);
+    expect(cacheBatches, isEmpty);
+  });
 }
