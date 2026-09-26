@@ -1,3 +1,4 @@
+import '../features/sources/presentation/source_result_row.dart';
 import '../features/sources/presentation/source_row_focus_nodes.dart';
 import '../features/sources/presentation/source_filters_dialog.dart';
 import '../features/sources/presentation/source_playback_bridge.dart';

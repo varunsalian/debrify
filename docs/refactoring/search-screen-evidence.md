@@ -3110,3 +3110,45 @@ failures, missing tests or new skips. Receipts: `full-row-focus.jsonl`,
 the same evidence directory. The baseline helper still exits nonzero for the
 original failures; its allowances were not changed. Final diff/architecture
 review passes. Phase 4C and the full migration remain in progress.
+
+### Phase 4C — detail/picker result-row composition
+
+Extracted the detail/picker row display mapping into
+`presentation/source_result_row.dart` (**66 lines**). It takes the row, immutable
+appearance settings, layout/selection flags, cache label, borrowed FocusNode and
+explicit action/navigation callbacks. It returns the existing `SourceRow`
+directly, preserving widget-tree depth, row state and existing interaction owners.
+Format versus compact rows, title/add-on metadata, quality/coverage/cache/stream
+badges, current-source state, cached-episode notice and TV play affordance retain
+their original expressions. Unchanged legacy copy remains under the plan's scoped
+localization exception.
+
+The real Sources caller uses the function; its old display mapping and now-unused
+appearance getters were removed. Action eligibility, bind/play dispatch, copy,
+long press and directional focus closures stay byte-for-byte unchanged in the
+view. No controller, provider, resource owner or data access was added. The
+original mutable Torrent is read synchronously, without retaining a competing
+presentation snapshot. The Sources part shrank **1,790 → 1,770 lines**.
+
+The existing affected suite passes **442 cases both before and after**. It covers
+production search/stream updates, retry/cache results, selected-source focus,
+copy/pin/playback wiring, modal ownership, held keys and node lifecycle. A source
+comparison additionally verifies every moved display expression after explicit
+argument renames and unchanged action closures; it supplements behavioral tests.
+No tests or failure allowances were altered. Architecture checks pass **129
+migrated files**. Shared `SourceRow` still contains legacy badge-service coupling;
+its transitive boundary review remains pending with the overall migration.
+
+Receipts under `.git/refactor-evidence/phase4c/`: `row-view-before.txt`,
+`row-view-after.txt`, `row-view-original.txt`, `row-view-extraction-review.txt`
+and `analyze-row-view.txt`. Sources composition/focus, later phases, native/device
+and performance validation, and final CI gates remain open.
+
+Full-suite review: **8,067 successes / the same 51 failures / 20 skips**.
+Every test outcome is identical to the preceding row-focus checkpoint; original
+baseline comparison also finds no new failures, missing tests or newly skipped
+cases. Analyzer remains at **863 diagnostics**, with no added identities.
+Receipts: `full-row-view.jsonl`, `full-row-view-comparison.txt`,
+`full-row-view-previous-checkpoint.txt` and `row-view-analyzer-comparison.txt`.
+The baseline helper remains nonzero for original failures; no allowances changed.
+Formatting, diff and architecture checks pass. Phase 4C remains in progress.

@@ -221,8 +221,6 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
   late final ProviderSubscription<SourcePresentationSettings>
       _settingsSubscription;
   SourcePresentationSettings get _settings => _settingsSubscription.read();
-  bool get _useAddonText => _settings.useAddonText;
-  bool get _showAddonLogos => _settings.showAddonLogos;
   final _cinemaKey = GlobalKey<CinemaSourcesLayoutState>();
   int _lastCinemaSource = 0;
 
@@ -1322,37 +1320,19 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
   /// and addon direct/external streams. Reuses the exact tap/pin/menu wiring of
   /// the classic row so behaviour is identical; only the presentation differs.
   Widget _redesignRow(Torrent t, int i, {bool cinema = false}) {
-    final isStream = t.isDirectStream || t.isExternalStream;
-    final tags = (_keywordMode || isStream)
-        ? const <FormatTag>[]
-        : FormatTagDetector.detect(t.name);
-    return SourceRow(
-      isCurrentSource: identical(t, _selectedDirect),
-      notice: _showCachedEpisodeSource && identical(t, _cachedEpisodeSource)
-          ? 'Last played source · Not returned by the latest search. Using its cached link.'
-          : null,
+    return buildSourceResultRow(
+      torrent: t,
       listIndex: i,
       cinemaLayout: cinema,
-      title: t.displayTitle,
-      addonText: _useAddonText ? t.addonPresentation : null,
-      addonName: _showAddonLogos ? t.addonDisplayName : null,
-      addonLogo: t.addonLogo,
-      titleMaxLines: 6,
-      subtitle: sourceRowSubtitle(t),
+      keywordMode: _keywordMode,
+      settings: _settings,
+      isCurrentSource: identical(t, _selectedDirect),
+      isCachedEpisode:
+          _showCachedEpisodeSource && identical(t, _cachedEpisodeSource),
       focusNode: _nodes[i],
       isTelevision: widget.isTelevision,
-      showPlayPill: !widget.bindMode && widget.isTelevision,
-      formatTags: tags,
-      badgeName: t.name,
-      badgeDescription: t.badgeDescription,
-      qualityTag: tags.isEmpty ? sourceQualityLabel(t) : null,
+      bindMode: widget.bindMode,
       cacheLabel: _cacheLabel(t),
-      coverageBadge: _keywordMode ? null : sourceCoverageLabel(t),
-      streamBadge: t.isExternalStream
-          ? 'External'
-          : t.isDirectStream
-          ? 'Direct'
-          : null,
       onCopy: !_canCopySource(t) ? null : () => unawaited(_copySourceLink(t)),
       onTap: () {
         if (widget.bindMode) {
