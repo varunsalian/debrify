@@ -4264,3 +4264,57 @@ Original-baseline comparison finds no new failures, missing tests or new skips.
 Receipts: `full-picker-trace.jsonl`, `full-picker-trace-comparison.txt` and
 `full-picker-trace-previous-checkpoint.txt`. No allowances changed. Final diff,
 formatting and architecture checks pass; remaining migration gates are open.
+
+
+### Phase 4C — rendered result and focus-transition coordination
+
+Extracted SourceResultsPresentation (**282 lines**) as the one per-view owner of
+the rendered row projection, selected-source marker and cached-episode marker.
+Existing Riverpod controllers remain the authoritative owners of results, pending
+batches, filters and saved data. The presentation component coordinates their
+updates with borrowed row nodes/focus operations; it creates no provider,
+subscription, focus node, scroll controller or asynchronous initialization.
+The view retains loading/rebuild effects and all resource/subscription disposal.
+
+Production streaming, completion, pending adoption, toolbar rebuilding, selected
+source matching and profile/query clearing now use this component. The replaced
+methods and three duplicate view fields are removed; view getters borrow the
+same rendered list/identities for row rendering and playback. Live callbacks
+preserve effective selection, bind mode, season eligibility, TV mode, mount state
+and search generation. The two small view focus callbacks remain tear-offs so
+constructing the borrowed focus coordinator does not recursively construct this
+presentation object.
+
+Review retains the exact transition sequence: capture user-focused torrent before
+adoption; display through the existing controller; update selected/cached markers;
+project and resize nodes; emit diagnostics; end loading; restore the user's row or
+apply the existing selected-source/TV anchor. Toolbar rebuilding still freezes,
+adopts pending rows and checks cache before projection, replaces nodes post-frame
+and keeps toolbar focus. Completion and profile/query retirement preserve their
+existing guards and node-reset order. No application policy or retry owner moved
+into this component.
+
+Baseline **501 Sources tests pass**; the initial affected run also passes all 501.
+The final expanded run passes **527 Sources/cinema-focus/badge-focus/focus-lifecycle
+tests**. The first analyzer identified the removed pending getter and three stale
+imports; those are cleaned up. Final analyzer: **863 diagnostics**, no added
+identities. **161 migrated files** pass size/import checks. Changed legacy methods
+pass a formatting stub; no whole-file formatting. The Sources part shrinks
+**1,249 → 1,064 lines**, including the still-pending Discover components.
+
+Receipts under `.git/refactor-evidence/phase4c/`:
+`results-presentation-before.txt`, `results-presentation-after.txt`,
+`results-presentation-focus.txt`, `analyze-results-presentation.txt`,
+`analyze-results-presentation-final.txt`,
+`results-presentation-analyzer-comparison.txt` and
+`results-presentation-format.dart`. Full-suite results follow below. The next
+structural milestone is the standalone Sources feature view; no claim is made
+that phase 4C, native/performance checks or the full library migration is complete.
+
+Full suite: **8,148 successes / the same 51 failures / 20 skips**. Every previous
+checkpoint identity/outcome is preserved. Original-baseline comparison finds no
+new failures, missing tests or new skips. Receipts:
+`full-results-presentation.jsonl`, `full-results-presentation-comparison.txt` and
+`full-results-presentation-previous-checkpoint.txt`. Final formatting, diff and
+architecture checks pass; no failure allowances changed. Phase 4C and later
+migration/native/performance/CI gates remain open.

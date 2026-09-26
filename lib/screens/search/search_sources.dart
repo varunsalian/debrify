@@ -76,7 +76,7 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
   /// source-group filter, quality/rip/language filter, and sort are applied.
   /// Equals [_torrents] when the redesign is off (no toolbar). [_nodes] is kept
   /// in lock-step with THIS list, never [_torrents].
-  List<Torrent> _visible = [];
+  List<Torrent> get _visible => _resultsPresentation.visible;
   final _rowFocus = SourceRowFocusNodes();
   List<FocusNode> get _nodes => _rowFocus.nodes;
   final ScrollController _resultsScroll = ScrollController(
@@ -84,10 +84,10 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
   );
   late final ProviderSubscription<SavedSourcesState> _savedSourcesSubscription;
   List<SeriesSource> get _bound => _savedSourcesSubscription.read().sources;
-  Torrent? _selectedDirect;
+  Torrent? get _selectedDirect => _resultsPresentation.selected;
   Torrent? get _cachedEpisodeSource =>
       _savedSourcesSubscription.read().cachedEpisode;
-  bool _showCachedEpisodeSource = false;
+  bool get _showCachedEpisodeSource => _resultsPresentation.showCachedEpisode;
   late final _resultsFocus = SourceResultsFocus(
     controller: _resultsScroll,
     readNodes: () => _nodes,
@@ -123,28 +123,6 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
     television: widget.isTelevision,
     detail: detail,
   );
-
-  void _updateSelectedDirect() {
-    final matcher = ref.read(sourceBindingMatcherProvider);
-    final match = matchSelectedSource(
-      saved: _bound,
-      torrents: _torrents,
-      mediaServerKeyFor: matcher.mediaServerKeyFor,
-      isIptvSource: matcher.isIptv,
-    );
-    _selectedDirect = match.source;
-    if (match.diagnostics case final diagnostics?) {
-      _logPickerSelection('match', diagnostics);
-    }
-  }
-
-  // Lazy rows have no Focus context until built. Walk the viewport until the
-  // target mounts, then align precisely using its actual (variable) height.
-  Future<void> _revealSelectedDirect({bool preserveFocus = false}) =>
-      _resultsFocus.reveal(
-        _selectedDirect == null ? null : _visible.indexOf(_selectedDirect!),
-        preserveFocus: preserveFocus,
-      );
 
   // --- redesign toolbar state (unused when _redesign is false) ---
   String? get _sourceFilter => _resultsSubscription.read().toolbar.sourceFilter;
@@ -187,16 +165,13 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
   bool get _searching => _searchSubscription.read().searching;
 
   /// Set on the first real interaction (drag scroll, row D-pad move, row menu,
-  /// toolbar use). Frozen ⇒ later arrivals buffer into [_pendingTorrents]
+  /// toolbar use). Frozen ⇒ later arrivals buffer as pending results
   /// behind the "+N new sources" pill instead of reshuffling the list under
   /// the user's finger/focus.
   late final ProviderSubscription<SourceResultsState> _resultsSubscription;
   SourceResultsController get _resultsController =>
       ref.read(sourceResultsProvider(_sourcesSession).notifier);
   bool get _streamFrozen => _resultsSubscription.read().frozen;
-
-  /// Post-processed FULL result set waiting behind the pill while frozen.
-  List<Torrent>? get _pendingTorrents => _resultsSubscription.read().pending;
 
   /// D-pad target for the "+N new sources" pill (UP from row 0 reaches it
   /// when visible; UP again reaches the toolbar funnel).
@@ -279,7 +254,7 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
         if (!mounted) return;
         setState(() {
           if (next.cacheUnavailable) _logPickerSelection('cache_unavailable');
-          _updateSelectedDirect();
+          _resultsPresentation.updateSelected();
           _logPickerSelection('saved_sources_loaded');
         });
       },
@@ -312,8 +287,7 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
       (previous, next) {
         if (!mounted) return;
         if (_sourcesSession.owner != ProfileSessionMemory.captureOwner()) {
-          _visible = [];
-          _syncStreamNodes();
+          _resultsPresentation.clearRetiredProfile();
         }
         setState(() {});
       },
@@ -386,10 +360,7 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
     // token only for focus and row-adoption callbacks.
     if (!_searchController.prepareSearch()) return;
     if (mounted) setState(() => _loading = true);
-    _rowFocus.resetForSearch();
-    // An IPTV status can expose the body before the first non-empty batch.
-    // Never retain rows whose focus nodes were just disposed.
-    _visible = [];
+    _resultsPresentation.resetForSearch();
     await _searchController.search(
       SourceSearchRequest(
         selection: _effectiveSelection,
@@ -401,162 +372,13 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
       shouldContinue: () => mounted && token == _searchToken,
       onRows: (rows, complete) {
         if (!mounted || token != _searchToken) return;
-        _presentStreaming(rows, token);
-        if (complete) _finishSearch(token);
+        _resultsPresentation.present(rows, token);
+        if (complete) _resultsPresentation.complete(token);
       },
       onBatchAccepted: (batch) {
         if (mounted && token == _searchToken) _maybeCheckCache(batch);
       },
     );
-  }
-
-  /// Post-processes a (provisional or final) raw result set exactly like the
-  /// pre-streaming search did, then either applies it to the list or — when
-  /// the user has started interacting ([_streamFrozen]) — parks it behind the
-  /// "+N new sources" pill so rows never reshuffle mid-read.
-  void _presentStreaming(List<Torrent> raw, int token) {
-    if (!mounted || token != _searchToken) return;
-    final prepared = ref
-        .read(sourceBatchPreparationProvider)
-        .prepare(
-          _sourcesSession,
-          raw,
-          selection: _effectiveSelection,
-          bindMode: widget.bindMode,
-        );
-    if (prepared == null) return;
-    final torrents = prepared.torrents;
-    if (prepared.cachedEpisodeInserted) {
-      _logPickerSelection('cached_episode_inserted');
-    }
-    if (_resultsController.bufferIfFrozen(torrents)) {
-      _logPickerSelection('batch_buffered', {
-        'pending_results': torrents.length,
-      });
-      if (mounted) setState(() {}); // pill count / banner update
-      return;
-    }
-    _applyStreamingResults(torrents);
-  }
-
-  /// Swaps the displayed result set, preserving the focused row BY IDENTITY
-  /// across the reshuffle (a late engine can insert rows above the D-pad
-  /// focus; without this the remote lands on a different torrent).
-  void _applyStreamingResults(List<Torrent> torrents) {
-    _resultsFocus.cancelReveal();
-    // Identity-preserving refocus only makes sense for USER-placed focus —
-    // i.e. after a freeze (adopt-pending / toolbar paths). During live
-    // streaming the only focus is the programmatic TV anchor on row 0;
-    // following it by identity would drag the viewport down as better rows
-    // insert above (review round: "the anchor is not user intent").
-    Torrent? focusedTorrent;
-    if (_streamFrozen) {
-      for (var i = 0; i < _nodes.length && i < _visible.length; i++) {
-        if (_nodes[i].hasFocus) {
-          focusedTorrent = _visible[i];
-          break;
-        }
-      }
-    }
-    _resultsController.display(torrents);
-    _updateSelectedDirect();
-    _showCachedEpisodeSource = torrents.any(
-      (t) => identical(t, _cachedEpisodeSource),
-    );
-    _visible = _redesign ? _applyToolbar(_torrents) : _torrents;
-    _syncStreamNodes();
-    _logPickerSelection('focus_decision', {
-      'reason': focusedTorrent != null
-          ? 'preserve_user_focus'
-          : _streamFrozen
-          ? 'user_interaction'
-          : _selectedDirect == null
-          ? 'no_match'
-          : !_visible.contains(_selectedDirect)
-          ? 'match_filtered_or_deduplicated'
-          : 'reveal_match',
-    });
-    if (mounted) {
-      setState(() {
-        _loading = false;
-      });
-    }
-    if (focusedTorrent != null) {
-      final idx = _visible.indexWhere(
-        (t) =>
-            identical(t, focusedTorrent) ||
-            (t.hasRealInfoHash &&
-                t.infohash.isNotEmpty &&
-                t.infohash == focusedTorrent!.infohash),
-      );
-      if (idx >= 0) {
-        _resultsFocus.restoreAfterFrame(idx);
-      }
-    } else if (!_streamFrozen && _visible.contains(_selectedDirect)) {
-      unawaited(_revealSelectedDirect());
-    } else if (widget.isTelevision && !_streamFrozen) {
-      // Live streaming on TV: keep the remote anchored to the TOP row (the
-      // best-ranked source right now) — the anchor exists from the first
-      // batch instead of waiting for the slowest engine.
-      _resultsFocus.anchorStreamingAfterFrame();
-    }
-  }
-
-  /// Grows/shrinks [_nodes] to match [_visible] without ever disposing the
-  /// focused node unanchored. Removed nodes are disposed POST-FRAME — their
-  /// row widgets are still mounted this frame, and unmounting a Focus widget
-  /// whose node is already disposed asserts (same rule _rebuildVisible
-  /// documents).
-  void _syncStreamNodes() => _rowFocus.resize(_visible.length);
-
-  /// Completion-only steps: season snapshot, cache badges, TV focus anchor.
-  void _finishSearch(int token) {
-    if (!mounted || token != _searchToken) return;
-    final result = ref
-        .read(sourceSearchCompletionProvider)
-        .complete(
-          _sourcesSession,
-          selection: _effectiveSelection,
-          hasSeasonScope: _seasonChipVisible,
-          aliases: _sourceAliases,
-        );
-    if (result == SourceCompletionResult.retired) return;
-    if (result == SourceCompletionResult.rebuildProjection) {
-      _visible = _redesign ? _applyToolbar(_torrents) : _torrents;
-      _syncStreamNodes();
-    }
-    // Final result set: sweep any hash not yet dispatched by a streaming batch
-    // (non-blocking). In-flight batch checks share this generation and merge as
-    // they land, so already-shown badges never flicker off.
-    setState(() {
-      _loading = false;
-    });
-    _maybeCheckCache();
-    // On TV give the D-pad an initial anchor when nothing is focused yet.
-    // With ZERO rows (e.g. a season scope with no packs) anchor the filter
-    // funnel instead so the remote can still reach the toolbar and recover.
-    // Never steal focus the user already placed somewhere mid-stream.
-    _resultsFocus.anchorCompletionAfterFrame();
-  }
-
-  /// First real user interaction → stop live-reshuffling; buffer new arrivals
-  /// behind the pill instead.
-  void _freezeStreaming() {
-    _resultsFocus.cancelReveal();
-    _resultsController.freeze();
-  }
-
-  int get _pendingNewCount => _resultsSubscription.read().pendingNewCount;
-
-  /// Folds the parked result set into the list (pill tap / toolbar use) and
-  /// refreshes the ⚡ badges for the fresh rows.
-  void _adoptPending() {
-    final p = _pendingTorrents;
-    if (p == null) return;
-    _applyStreamingResults(p);
-    // Parked rows were already badged as their batches streamed in; this is a
-    // cheap additive mop-up for any straggler hash (skips already-checked).
-    _maybeCheckCache();
   }
 
   void _submitKeyword(String q) {
@@ -632,7 +454,7 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
     if (_resultsScroll.hasClients) _resultsScroll.jumpTo(0);
     _rebuildVisible();
     if (_visible.contains(_selectedDirect)) {
-      unawaited(_revealSelectedDirect(preserveFocus: true));
+      unawaited(_resultsPresentation.revealSelected(preserveFocus: true));
     }
     for (final status in _addonStatuses) {
       if (status.sourceKey == key && sourceStatusActionable(status)) {
@@ -732,7 +554,7 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
       _effectiveSelection,
       status,
       shouldContinue: () => mounted && token == _searchToken,
-      onRows: (rows) => _presentStreaming(rows, token),
+      onRows: (rows) => _resultsPresentation.present(rows, token),
       onBatchAccepted: (batch) => _maybeCheckCache(batch),
     );
   }
@@ -740,42 +562,35 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
   Widget _newSourcesPill() => SourcePendingResultsPill(
     count: _pendingNewCount,
     focusNode: _pillFocus,
-    onAdopt: _adoptPending,
+    onAdopt: _resultsPresentation.adoptPending,
     onNavigateDown: _resultsFocus.pillDown,
     onNavigateUp: _resultsFocus.pillUp,
   );
 
-  /// Derives the rendered list from [_torrents]: source-group filter →
-  /// quality/rip/language filter → provider priority + stable dedupe →
-  /// optional explicit field sort. "Addon order" is the default.
-  List<Torrent> _applyToolbar(List<Torrent> src) =>
-      _resultsController.project(src, _settings.priority);
+  late final _resultsPresentation = SourceResultsPresentation(
+    ref: ref,
+    session: _sourcesSession,
+    focus: _resultsFocus,
+    rowFocus: _rowFocus,
+    selection: () => _effectiveSelection,
+    bindMode: () => widget.bindMode,
+    hasSeasonScope: () => _seasonChipVisible,
+    isTelevision: () => widget.isTelevision,
+    isMounted: () => mounted,
+    searchToken: () => _searchToken,
+    redesign: _redesign,
+    onChanged: (finishLoading) {
+      setState(() {
+        if (finishLoading) _loading = false;
+      });
+    },
+    checkCache: _maybeCheckCache,
+    onEvent: _logPickerSelection,
+  );
 
-  /// Recompute [_visible] and rebuild [_nodes] in lock-step after a toolbar
-  /// change (source pill, sort, or filter). The ListView stays mounted (no
-  /// loading flip), so the old nodes are disposed AFTER the rebuild frame —
-  /// letting each reused row State and its Focus widget migrate onto the new
-  /// node first (disposing mid-frame would assert / drop the listener).
-  ///
-  /// Deliberately does NOT move D-pad focus: this is always triggered from a
-  /// toolbar control (pill / sort / funnel) which keeps its own focus. Yanking
-  /// focus into the list would both disorient the user AND let the SELECT that
-  /// triggered the change land on the newly-focused first row — activating it
-  /// (adding the first result to the debrid) as an unwanted "double tap".
-  void _rebuildVisible() {
-    // Toolbar use is a deliberate reshuffle: freeze live streaming updates
-    // and fold any parked arrivals in first, so the user filters/sorts the
-    // complete set they can see.
-    _freezeStreaming();
-    if (_pendingTorrents != null) {
-      _resultsController.display(_pendingTorrents!);
-      _maybeCheckCache();
-    }
-    _visible = _applyToolbar(_torrents);
-    _updateSelectedDirect();
-    _rowFocus.replaceAll(_visible.length);
-    if (mounted) setState(() {});
-  }
+  void _freezeStreaming() => _resultsPresentation.freeze();
+  void _rebuildVisible() => _resultsPresentation.rebuildVisible();
+  int get _pendingNewCount => _resultsSubscription.read().pendingNewCount;
 
   late final _toolbarPresentation = SourceToolbarPresentation(
     context: context,

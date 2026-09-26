@@ -1,9 +1,8 @@
+import '../features/sources/presentation/source_results_presentation.dart';
 import '../features/sources/presentation/source_picker_trace.dart';
 import '../features/sources/presentation/source_toolbar_presentation.dart';
 import '../features/sources/presentation/source_actions.dart';
 import '../features/sources/application/source_startup.dart';
-import '../features/sources/application/source_search_completion.dart';
-import '../features/sources/application/source_batch_preparation.dart';
 import '../features/sources/application/source_picker_diagnostics.dart';
 import '../features/sources/application/source_binding_match_dependencies.dart';
 import '../features/sources/presentation/source_results_body.dart';
@@ -12,7 +11,6 @@ import '../features/sources/presentation/source_result_row.dart';
 import '../features/sources/presentation/source_row_focus_nodes.dart';
 import '../features/sources/presentation/source_binding_bridge.dart';
 import '../features/sources/presentation/source_results_focus.dart';
-import '../features/sources/application/source_selection_match.dart';
 import '../ui/core/source_metadata_labels.dart';
 import '../features/sources/application/source_provider_projection.dart';
 import '../features/sources/presentation/source_title_header.dart';
