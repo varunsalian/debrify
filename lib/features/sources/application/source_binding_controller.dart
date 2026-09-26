@@ -18,6 +18,11 @@ final sourceBindingProvider = NotifierProvider.autoDispose
     .family<SourceBindingController, bool, SourcesSession>(
       SourceBindingController.new,
       retry: (count, error) => null,
+      dependencies: [
+        savedSourcesProvider,
+        savedSourcesRepositoryProvider,
+        sourcesSessionActiveProvider,
+      ],
     );
 
 /// One shared action gate for torrent, direct/IPTV and local bindings.

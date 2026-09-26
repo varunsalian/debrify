@@ -1,3 +1,4 @@
+import '../features/sources/application/source_batch_preparation.dart';
 import '../features/sources/application/source_picker_diagnostics.dart';
 import '../features/sources/application/source_binding_match_dependencies.dart';
 import '../features/sources/presentation/source_toolbar.dart';
@@ -25,7 +26,6 @@ import '../features/sources/application/source_results_controller.dart';
 import '../features/sources/models/source_results_state.dart';
 import '../features/sources/application/source_search_controller.dart';
 import '../features/sources/models/source_search_state.dart';
-import '../features/sources/application/source_result_preparation.dart';
 import '../features/sources/data/source_search_api.dart';
 import '../features/sources/application/source_retry_controller.dart';
 import '../features/sources/application/source_search_dependencies.dart';

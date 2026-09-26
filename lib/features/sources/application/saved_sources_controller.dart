@@ -10,6 +10,10 @@ final savedSourcesProvider = NotifierProvider.autoDispose
     .family<SavedSourcesController, SavedSourcesState, SourcesSession>(
       SavedSourcesController.new,
       retry: (count, error) => null,
+      dependencies: [
+        savedSourcesRepositoryProvider,
+        sourcesSessionActiveProvider,
+      ],
     );
 
 class SavedSourcesController extends Notifier<SavedSourcesState> {

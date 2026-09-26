@@ -459,15 +459,15 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
   /// "+N new sources" pill so rows never reshuffle mid-read.
   void _presentStreaming(List<Torrent> raw, int token) {
     if (!mounted || token != _searchToken) return;
-    final prepared = prepareSourceResults(
-      raw,
-      selection: _effectiveSelection,
-      bindMode: widget.bindMode,
-      isIptvSource: IptvSourceSearch.owns,
-      searching: _searching,
-      cachedEpisodeSource: _cachedEpisodeSource,
-      bound: _bound,
-    );
+    final prepared = ref
+        .read(sourceBatchPreparationProvider)
+        .prepare(
+          _sourcesSession,
+          raw,
+          selection: _effectiveSelection,
+          bindMode: widget.bindMode,
+        );
+    if (prepared == null) return;
     final torrents = prepared.torrents;
     if (prepared.cachedEpisodeInserted) {
       _logPickerSelection('cached_episode_inserted');

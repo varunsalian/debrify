@@ -3422,3 +3422,63 @@ Receipts under `.git/refactor-evidence/phase4c/`: `picker-diagnostics-before.txt
 `picker-diagnostics-analyzer-comparison.txt`. No test/failure allowances changed.
 Remaining Sources and later-phase work, native/performance and final CI gates
 remain open.
+
+### Phase 4C — scoped batch preparation ownership
+
+Introduced `application/source_batch_preparation.dart` (**47 lines**) as a
+stateless application operation. It reads the current search state, saved-pin
+snapshot and injected IPTV classifier at batch arrival, then invokes the unchanged
+pure preparation policy. It rejects a retired profile or disposed provider scope
+before reading dependencies. The view supplies the effective selection/bind intent,
+retains query-generation checks, logs preparation outcomes and explicitly buffers
+or adopts after capturing focus. No result collection, query state or retention
+policy moved into a second state owner. The results-state controller is unchanged.
+The old view-level input assembly/import is removed; Sources part remains **1,543 lines** after formatting; this step separates input ownership rather than reducing its size.
+
+Scoped DI review matters here: a controller-family version reused a parent
+instance in the new nested-classifier test. The final stateless preparation
+provider resolves at the relevant dependency scope; that test remains and passes.
+A nested saved-state test exposed missing dependency metadata that allowed its
+child override to affect the parent. SavedSourcesProvider now declares its
+repository/session dependencies; SourceBindingProvider declares its saved-state,
+repository/session dependencies as its consumer. The latter declaration was
+required by existing binding tests after saved state became explicitly scoped.
+The stateless binding-matcher provider also explicitly supports scoping. No SDK,
+repository, persistence, retry or provider state implementation was changed.
+
+Five new isolated-container tests cover live search completion and cached fallback,
+no implicit display/buffering, immutable rows and retained identity, current saved
+snapshots, nested classifier and saved-state overrides with unchanged parent
+behavior, and profile/scope retirement. Existing real-screen tests exercise the
+actual scoped composition, including binding navigation, provider retry,
+selected-source focus, filtering and modal retirement.
+
+A clean committed-HEAD baseline passes **463 cases** (`preparation-owner-clean-before.txt`).
+An earlier attempted baseline overlapped the edit and produced a mixed-source
+compile failure; it is not used as evidence. The clean run restored the pending
+implementation afterward. After final integration **468 affected tests pass**.
+The missing binding dependency produced a failed affected receipt, retained as
+`preparation-owner-missing-binding-dependency.txt`; it was corrected without
+weakening assertions. The initial full run was deliberately stopped on that known
+regression before further code edits. Its incomplete JSON is not a comparison
+baseline; the final full run is `full-preparation-owner-verified`.
+
+Receipts under `.git/refactor-evidence/phase4c/` also include
+`preparation-owner-new.txt`, `preparation-owner-scope-debug.txt`,
+`preparation-owner-after.txt`, `full-preparation-owner-interrupted.txt` and
+`analyze-preparation-owner.txt`. Phase 4C orchestration/view completion, later
+phases and native/performance/CI completion gates remain open.
+
+Final verification: **468 affected passes**; analyzer remains **863 diagnostics**,
+with no added identities; **138 migrated files** pass architecture checks.
+The completed full suite has **8,093 successes / the same 51 failures / 20 skips**.
+Every previous full-checkpoint outcome is preserved and all five new tests pass.
+Original-baseline and preceding-checkpoint comparisons find no new failures,
+missing tests or new skips. Receipts: `full-preparation-owner-verified.jsonl`,
+`full-preparation-owner-comparison.txt`,
+`full-preparation-owner-previous-checkpoint.txt`,
+`preparation-owner-analyzer-comparison.txt` and
+`preparation-owner-extraction-review.txt`. The baseline helper remains nonzero
+for original failures; no allowances changed. Changed code is formatted, including
+a whitespace-only formatting pass of the modified legacy method; diff checks pass.
+Phase 4C and the full migration remain in progress.

@@ -11,4 +11,5 @@ final sourceBindingMatcherProvider = Provider<SourceBindingMatcher>(
         MediaServerService.bindingFor(torrent)?.bindingKey,
     isIptv: IptvSourceSearch.owns,
   ),
+  dependencies: const [],
 );
