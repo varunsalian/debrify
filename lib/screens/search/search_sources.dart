@@ -7,12 +7,14 @@ Widget sourcesScreenForTesting({
   required PlaybackMeta meta,
   required Future<Map<String, dynamic>> Function(SearchBatchCallback onBatch)
   search,
+  SourceAddonRetry? retry,
 }) => ProviderScope(
   overrides: [
     sourceSearchRepositoryProvider.overrideWith(
       (ref, session) => ServiceSourceSearchRepository(
         owner: session.owner,
         searchOverride: search,
+        retryAddon: retry,
       ),
     ),
   ],
@@ -303,7 +305,10 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
   List<AddonSearchStatus> _addonStatuses = [];
 
   /// Addon ids with a retry in flight — their chip shows a spinner.
-  final Set<String> _retryingAddons = {};
+  late final ProviderSubscription<Set<String>> _retrySubscription;
+  Set<String> get _retryingAddons => _retrySubscription.read();
+  SourceRetryController get _retryController =>
+      ref.read(sourceRetryProvider(_sourcesSession).notifier);
 
   /// The user's Quick Play "Addon Priority" order for this tab (empty =
   /// never customized = keep the shipped provider ordering). Also
@@ -451,6 +456,12 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
         }
       },
     );
+    _retrySubscription = ref.listenManual(
+      sourceRetryProvider(_sourcesSession),
+      (previous, next) {
+        if (mounted) setState(() {});
+      },
+    );
     // Rebuild the toolbar when the funnel gains/loses focus so its D-pad
     // highlight tracks — Focus alone doesn't guarantee a parent rebuild.
     _filterFocus.addListener(_onFilterFocusChanged);
@@ -491,6 +502,7 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
 
   @override
   void dispose() {
+    _retrySubscription.close();
     _cacheSubscription.close();
     _disposedBoundCount = _bound.length;
     _savedSourcesSubscription.close();
@@ -524,6 +536,7 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
     // and checked-hash memo so streaming batches re-check from scratch. The
     // bumped token also invalidates any still-in-flight check from the old set.
     _cacheController.beginSearch();
+    _retryController.beginSearch();
     _searching = true;
     _streamFrozen = false;
     _pendingTorrents = null;
@@ -533,7 +546,6 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
         _error = null;
         _addonStatuses = const [];
         _iptvSources = [];
-        _retryingAddons.clear();
       });
     }
     for (final n in _nodes) {
@@ -1522,66 +1534,27 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
       if (!_searching) await _runSearch();
       return;
     }
-    final requestKey = status.requestKey;
-    if (_retryingAddons.contains(requestKey)) return;
     final token = _searchToken;
-    setState(() => _retryingAddons.add(requestKey));
-    try {
-      final sel = _effectiveSelection;
-      var originVideoId = sel.stremioVideoId?.trim();
-      if (sel.hasStremioEpisodeIdentity &&
-          originVideoId?.isNotEmpty != true &&
-          sel.season != null &&
-          sel.episode != null) {
-        originVideoId = await StremioService.instance
-            .resolveSeriesEpisodeVideoId(
-              addonKey: sel.stremioAddonKey!,
-              addonId: sel.stremioAddonId,
-              catalogId: sel.stremioCatalogId!,
-              season: sel.season!,
-              episode: sel.episode!,
-            );
-      }
-      if (sel.hasStremioEpisodeIdentity &&
-          originVideoId?.isNotEmpty != true) {
-        if (mounted && token == _searchToken) {
-          setState(() => _retryingAddons.remove(requestKey));
-        }
-        return;
-      }
-      final batch = await StremioService.instance.retryAddonStreams(
-        addonId: requestKey,
-        type: sel.contentType ?? (sel.isSeries ? 'series' : 'movie'),
-        imdbId: sel.imdbId,
-        season: sel.season,
-        episode: sel.episode,
-        timeout: StremioService.manualRetryTimeout,
-        preserveOrder: true,
-        originVideoId: originVideoId,
-      );
-      if (!mounted || token != _searchToken) return;
-      setState(() {
-        _retryingAddons.remove(requestKey);
-        _addonStatuses = [
-          for (final s in _addonStatuses)
-            s.requestKey == requestKey ? status.withResult(batch.length) : s,
-        ];
-      });
-      if (batch.isEmpty) return;
-      _streamBatches.add(batch);
-      _presentStreaming(
-        TorrentService.mergeSearchResults(
-          _streamBatches,
-          preserveSourceOrder: true,
-        ),
-        token,
-      );
-      _maybeCheckCache(batch);
-    } catch (_) {
-      if (!mounted || token != _searchToken) return;
-      // Keep the failed state on the chip — it IS the error indicator.
-      setState(() => _retryingAddons.remove(requestKey));
-    }
+    final batch = await _retryController.retry(_effectiveSelection, status);
+    if (batch == null || !mounted || token != _searchToken) return;
+    setState(() {
+      _addonStatuses = [
+        for (final current in _addonStatuses)
+          current.requestKey == status.requestKey
+              ? status.withResult(batch.length)
+              : current,
+      ];
+    });
+    if (batch.isEmpty) return;
+    _streamBatches.add(batch);
+    _presentStreaming(
+      TorrentService.mergeSearchResults(
+        _streamBatches,
+        preserveSourceOrder: true,
+      ),
+      token,
+    );
+    _maybeCheckCache(batch);
   }
 
   /// Slim "still searching" strip under the toolbar while engines are in

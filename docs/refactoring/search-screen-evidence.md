@@ -1000,3 +1000,61 @@ Phase 4C remains in progress. The view still owns search/result state, provision
 batch accumulation and presentation coordination; initial request IO is now outside
 it. Individual retry orchestration and pin/local-source actions remain too. Later
 Home/Discover/lifecycle phases and native/visual/performance checks are outstanding.
+
+
+### Phase 4C individual addon retries (implemented and reviewed)
+
+`SourceRetryController` (65 lines) now owns the immutable set of in-flight addon
+configuration keys and its search generation. Explicit retries suppress duplicate
+taps for one configuration while permitting independent addons. New searches clear
+retry state; an old same-key completion cannot clear a newer retry. Errors clear
+the current busy state without automatic retry and leave the existing chip as the
+error indicator. Provider construction/recomputation does not dispatch requests.
+The view retains the media-server full-search branch, source-status presentation,
+stream merging, cache dispatch and frozen-result/focus behavior.
+
+`ServiceSourceSearchRepository` now exposes a typed retry operation as well as the
+initial search (240 lines total). It preserves configuration-specific request keys,
+content-type fallback, movie/series coordinates, the existing one-minute manual
+retry timeout, source order and exact custom video IDs. Missing custom IDs remain
+unavailable rather than being guessed. Profile/request checks after metadata
+resolution prevent a retired retry from starting the next RPC. Completed rows are
+immutable snapshots. Existing services retain transport and timeout ownership.
+
+The retry provider declares its scoped repository dependency so the existing test
+composition and production provider resolution agree. `sourcesScreenForTesting`
+keeps its existing required arguments and gains an optional retry RPC override;
+production widgets have no test callback field. The screen no longer owns a mutable
+retry set or directly invokes retry metadata/stream APIs.
+
+The 23 existing screen/initial-request tests passed before extraction. The final
+affected suite has **201 passes**, including the existing Sources, direct-episode,
+IPTV, streaming and source-priority tests. Nine new controller cases cover concurrent
+configuration keys, duplicate taps, failure, generation replacement and profile/
+disposal/dependency retirement of results and errors. Ten new data cases cover exact
+RPC arguments, custom IDs/resolution, stale resolution and stale failures. The real
+Sources widget test selects the failed provider using Select, repeats Select while
+busy, verifies one RPC, preserves actual rail focus, updates the status and holds
+recovered rows behind the pending-results button until adoption. Its first remote
+version used a mismatched generic ValueKey type; the corrected locator identifies
+the actual Focus node by debug label and retains all behavior assertions.
+
+Analyzer identity comparison has no additions and the previously removed Sources
+lint, remaining at **864 diagnostics**. Architecture checks cover **86 migrated
+files**; formatting and diff checks pass. Only changed screen blocks were formatted.
+Sources is **2,931 lines**, and the parent is **20,150**. Receipts:
+`.git/refactor-evidence/phase4c/retry-before.txt`, `retry-controller.txt`,
+`retry-new-tests.txt`, `retry-screen-remote.txt`, `retry-final-focused.txt`,
+`analyze-retry-complete.txt` and `retry-final-analyzer-comparison.txt`.
+The exact full helper completed in **172,369 ms** with **7,721 successes**, the
+same **51 baseline failures** (22 failure/29 error outcomes), and **20 skips**.
+No original baseline test is newly failing, missing or newly skipped. Every test
+from the previous request-confirmation checkpoint retains its outcome, with 20
+new passing identities. The historical helper allowance is unchanged and still
+exits 1. Full receipts are `.git/refactor-evidence/phase4c/full-retry.jsonl`,
+`full-retry-comparison.txt` and `retry-previous-checkpoint.txt`.
+
+Phase 4C remains in progress: search/result state, provisional result accumulation,
+filter/sort projection and pin/local-source actions remain. Rendering, scrolling
+and focus stay view-owned. Later Home/Discover/lifecycle phases and native/visual/
+performance checks remain outstanding.

@@ -7,4 +7,5 @@ final sourceSearchRepositoryProvider = Provider.autoDispose
     .family<SourceSearchRepository, SourcesSession>(
       (ref, session) => ServiceSourceSearchRepository(owner: session.owner),
       retry: (count, error) => null,
+      dependencies: const [],
     );

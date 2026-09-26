@@ -1,4 +1,5 @@
 import '../../../models/torrent.dart';
+import '../../../models/advanced_search_selection.dart';
 import '../../../services/iptv_source_search.dart';
 import '../models/source_search_request.dart';
 import '../models/source_search_result.dart';
@@ -7,6 +8,11 @@ typedef SourceSearchBatch = void Function(String source, List<Torrent> batch);
 
 abstract interface class SourceSearchRepository {
   bool get isCurrent;
+  Future<List<Torrent>?> retry(
+    AdvancedSearchSelection selection,
+    String requestKey, {
+    required bool Function() shouldContinue,
+  });
   Future<SourceSearchResult?> search(
     SourceSearchRequest request, {
     required SourceSearchBatch onBatch,

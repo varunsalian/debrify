@@ -1,3 +1,4 @@
+import '../../../models/advanced_search_selection.dart';
 import '../../../models/torrent.dart';
 import '../../../services/iptv_source_search.dart';
 import '../../../services/profiles/profile_runtime.dart';
@@ -17,12 +18,14 @@ class ServiceSourceSearchRepository implements SourceSearchRepository {
     this.iptvSearch = IptvSourceSearch.search,
     this.resolveVideo = _resolveVideo,
     this.searchOverride,
-  });
+    SourceAddonRetry? retryAddon,
+  }) : retryAddon = retryAddon ?? _retryAddon;
   final ProfileSessionOwner owner;
   final SourceKeywordSearch keywordSearch;
   final SourceImdbSearch imdbSearch;
   final SourceIptvSearch iptvSearch;
   final SourceVideoResolver resolveVideo;
+  final SourceAddonRetry retryAddon;
   // Compatibility for the existing sourcesScreenForTesting injection only.
   final LegacySourceSearchOverride? searchOverride;
 
@@ -152,6 +155,77 @@ class ServiceSourceSearchRepository implements SourceSearchRepository {
       rethrow;
     } finally {
       acceptingEvents = false;
+    }
+  }
+
+  static Future<List<Torrent>> _retryAddon({
+    required String addonId,
+    required String type,
+    required String imdbId,
+    int? season,
+    int? episode,
+    required Duration timeout,
+    required bool preserveOrder,
+    String? originVideoId,
+  }) => StremioService.instance.retryAddonStreams(
+    addonId: addonId,
+    type: type,
+    imdbId: imdbId,
+    season: season,
+    episode: episode,
+    timeout: timeout,
+    preserveOrder: preserveOrder,
+    originVideoId: originVideoId,
+  );
+
+  @override
+  Future<List<Torrent>?> retry(
+    AdvancedSearchSelection selection,
+    String requestKey, {
+    required bool Function() shouldContinue,
+  }) async {
+    bool active() => isCurrent && shouldContinue();
+    if (!active()) return null;
+    Future<List<Torrent>?> run() async {
+      var videoId = selection.stremioVideoId?.trim();
+      if (selection.hasStremioEpisodeIdentity &&
+          videoId?.isNotEmpty != true &&
+          selection.season != null &&
+          selection.episode != null) {
+        videoId = await resolveVideo(
+          addonKey: selection.stremioAddonKey!,
+          addonId: selection.stremioAddonId,
+          catalogId: selection.stremioCatalogId!,
+          season: selection.season!,
+          episode: selection.episode!,
+        );
+        if (!active()) return null;
+      }
+      if (selection.hasStremioEpisodeIdentity && videoId?.isNotEmpty != true) {
+        return null;
+      }
+      final rows = await retryAddon(
+        addonId: requestKey,
+        type:
+            selection.contentType ?? (selection.isSeries ? 'series' : 'movie'),
+        imdbId: selection.imdbId,
+        season: selection.season,
+        episode: selection.episode,
+        timeout: StremioService.manualRetryTimeout,
+        preserveOrder: true,
+        originVideoId: videoId,
+      );
+      return active() ? List.unmodifiable(rows) : null;
+    }
+
+    try {
+      final scope = owner.scope;
+      return await (scope == null
+          ? run()
+          : ProfileRuntime.withCapturedScope(scope, run));
+    } catch (_) {
+      if (!active()) return null;
+      rethrow;
     }
   }
 

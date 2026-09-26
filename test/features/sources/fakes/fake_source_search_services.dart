@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:debrify/models/torrent.dart';
 import 'package:debrify/features/sources/data/service_source_search_repository.dart';
 import 'package:debrify/features/sources/data/source_search_repository.dart';
 import 'package:debrify/services/iptv_source_search.dart';
@@ -8,6 +9,7 @@ class FakeSourceSearchServices {
   final main = Completer<Map<String, dynamic>>();
   final iptv = Completer<List<IptvSourceResult>>();
   final video = Completer<String?>();
+  final retryResult = Completer<List<Torrent>>();
   final calls = <String>[];
   final arguments = <String, Object?>{};
   SourceSearchBatch? batch;
@@ -62,6 +64,30 @@ class FakeSourceSearchServices {
           iptvResult = onResult;
           this.shouldContinue = shouldContinue;
           return iptv.future;
+        },
+    retryAddon:
+        ({
+          required addonId,
+          required type,
+          required imdbId,
+          season,
+          episode,
+          required timeout,
+          required preserveOrder,
+          originVideoId,
+        }) {
+          calls.add('retry');
+          arguments.addAll({
+            'retryKey': addonId,
+            'type': type,
+            'id': imdbId,
+            'season': season,
+            'episode': episode,
+            'timeout': timeout,
+            'preserve': preserveOrder,
+            'video': originVideoId,
+          });
+          return retryResult.future;
         },
     resolveVideo:
         ({
