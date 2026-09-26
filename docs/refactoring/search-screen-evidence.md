@@ -4318,3 +4318,55 @@ new failures, missing tests or new skips. Receipts:
 `full-results-presentation-previous-checkpoint.txt`. Final formatting, diff and
 architecture checks pass; no failure allowances changed. Phase 4C and later
 migration/native/performance/CI gates remain open.
+
+
+### Phase 4C — standalone Sources feature view
+
+Moved the actual SourcesScreen widget/state to
+`lib/features/sources/presentation/sources_screen.dart` (**678 normally formatted
+lines**), with explicit imports and no shared-library part dependency. All three
+production launch sites and the existing testing factory instantiate the public
+widget. Its optional key is the only constructor addition. The legacy Sources
+part shrinks **1,064 → 436 lines** and now retains only the testing factory and
+Discover visuals; those remain phase-6/8 responsibilities, not removed behavior.
+
+Responsibility review for the 501–800 range: the view owns composition, local
+loading/query state, subscriptions and resource lifetime. Existing bounded
+application controllers own search/retry/results/settings/binding state and data
+operations; presentation coordinators own actions, toolbar dispatch, rendered
+projection/focus transitions and diagnostics. No persistence/network/native API
+is imported directly. Remaining transitive integration audits and native gates
+are still required; being under the file ceiling does not close phase 4C.
+
+The direct profile-service read now goes through the 19-line application
+SourceSessionOwnership dependency, captured during initState. It evaluates the
+current owner at each capture/check rather than caching a boolean; the original
+owner-capture timing and mount/profile guards are preserved. A new test verifies
+lifecycle-only clears without scope/runtime changes and continued use of the
+captured reader after its container is disposed. This avoids treating the scope
+notifier as the sole source of lifecycle invalidation.
+
+Source comparison proves the entire view equals the normally formatted original
+after the explicit class/key/ownership substitutions. The remaining Discover tail
+is byte-for-byte unchanged; the test factory only changes the widget class name.
+The parent diff removes now-unused imports and renames exactly the three launch
+sites, without route/argument changes. Baseline/initial affected run: **527 tests
+pass**. Final affected Sources/focus run: **528 pass**. Initial analyzer findings
+were stale parent imports, one redundant view import and the newly public key
+lint; all are addressed. Final analyzer **863 diagnostics**, no added identities;
+**163 migrated files** pass size/import checks. No guard exceptions were added.
+
+Receipts under `.git/refactor-evidence/phase4c/`: `standalone-view-before.txt`,
+`standalone-view-after.txt`, `standalone-view-final.txt`,
+`analyze-standalone-view.txt`, `analyze-standalone-view-final.txt`,
+`standalone-view-analyzer-comparison.txt`, `standalone-view-expected.dart` and
+`standalone-view-review.txt`. Full-suite results follow below. Phase 4C and the
+remaining migration/native/performance/CI completion gates remain open.
+
+Full suite: **8,149 successes / the same 51 failures / 20 skips**. Every prior
+checkpoint outcome is preserved, with exactly the new ownership case passing.
+Original-baseline comparison finds no new failures, missing tests or new skips.
+Receipts: `full-standalone-view.jsonl`, `full-standalone-view-comparison.txt` and
+`full-standalone-view-previous-checkpoint.txt`. Final formatting/diff/architecture
+checks pass; no failure allowances changed. The standalone move is verified by
+host tests; native, performance, CI and remaining boundary gates stay open.

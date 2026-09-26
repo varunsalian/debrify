@@ -1,40 +1,8 @@
-import '../features/sources/presentation/source_results_presentation.dart';
-import '../features/sources/presentation/source_picker_trace.dart';
-import '../features/sources/presentation/source_toolbar_presentation.dart';
-import '../features/sources/presentation/source_actions.dart';
-import '../features/sources/application/source_startup.dart';
-import '../features/sources/application/source_picker_diagnostics.dart';
-import '../features/sources/application/source_binding_match_dependencies.dart';
-import '../features/sources/presentation/source_results_body.dart';
-import '../features/sources/presentation/source_screen_frame.dart';
-import '../features/sources/presentation/source_result_row.dart';
-import '../features/sources/presentation/source_row_focus_nodes.dart';
-import '../features/sources/presentation/source_binding_bridge.dart';
-import '../features/sources/presentation/source_results_focus.dart';
+import '../features/sources/presentation/sources_screen.dart';
 import '../ui/core/source_metadata_labels.dart';
-import '../features/sources/application/source_provider_projection.dart';
-import '../features/sources/presentation/source_title_header.dart';
-import '../features/sources/presentation/source_keyword_field.dart';
-import '../features/sources/presentation/source_pending_results_pill.dart';
-import '../features/sources/application/source_binding_controller.dart';
-import '../features/sources/application/source_results_controller.dart';
-import '../features/sources/models/source_results_state.dart';
-import '../features/sources/application/source_search_controller.dart';
-import '../features/sources/models/source_search_state.dart';
 import '../features/sources/data/source_search_api.dart';
-import '../features/sources/application/source_retry_controller.dart';
 import '../features/sources/application/source_search_dependencies.dart';
 import '../features/sources/data/service_source_search_repository.dart';
-import '../features/sources/models/source_search_request.dart';
-import '../features/sources/application/source_cache_controller.dart';
-import '../features/sources/models/source_cache_state.dart';
-import '../features/sources/application/saved_sources_controller.dart';
-import '../features/sources/models/saved_sources_state.dart';
-import '../features/sources/application/source_settings_controller.dart';
-import '../features/sources/models/source_presentation_settings.dart';
-import '../features/sources/application/source_seasons_controller.dart';
-import '../features/sources/models/source_seasons_state.dart';
-import '../features/sources/models/sources_session.dart';
 import '../features/search/application/keyword_snapshot_dependencies.dart';
 import '../features/search/data/keyword_snapshot_repository.dart';
 import '../features/search/models/keyword_snapshot.dart';
@@ -70,7 +38,6 @@ import '../widgets/recoverable_network_image.dart';
 import '../models/metadata_card_artwork.dart';
 import '../models/hero_metadata_presentation.dart';
 import '../services/profiles/profile_runtime.dart';
-import '../services/iptv_source_search.dart';
 import 'metadata_explore_page.dart';
 import '../widgets/metadata_presentation_mixin.dart';
 import '../models/metadata_preferences.dart';
@@ -184,7 +151,6 @@ import '../widgets/source_row.dart';
 import '../widgets/cinema_sources_layout.dart';
 import '../widgets/source_list_scroll_anchor.dart';
 import '../widgets/torrent_filters_sheet.dart';
-import '../widgets/torrent_result_row.dart';
 import '../widgets/tv_text_field.dart';
 import '../widgets/text_field_suggestions.dart';
 import '../widgets/metadata_title_navigation.dart';
@@ -15312,7 +15278,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     Navigator.of(context)
         .push(
           MaterialPageRoute(
-            builder: (_) => _SourcesScreen(
+            builder: (_) => SourcesScreen(
               selection: sel,
               meta: _metaFor(sel, catalogItem: show),
               isTelevision: widget.isTelevision,
@@ -15352,7 +15318,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     Navigator.of(context)
         .push(
           MaterialPageRoute(
-            builder: (_) => _SourcesScreen(
+            builder: (_) => SourcesScreen(
               selection: sel,
               meta: _metaFor(sel, catalogItem: show),
               isTelevision: widget.isTelevision,
@@ -15527,7 +15493,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         .push(
           MaterialPageRoute(
             builder: (_) => TvHeldKeyGuard(
-              child: _SourcesScreen(
+              child: SourcesScreen(
                 selection: sel,
                 meta: meta,
                 isTelevision: widget.isTelevision,
