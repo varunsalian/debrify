@@ -7,4 +7,5 @@ final sourceCacheRepositoryProvider = Provider.autoDispose
     .family<SourceCacheRepository, SourcesSession>(
       (ref, session) => DebridSourceCacheRepository(owner: session.owner),
       retry: (count, error) => null,
+      dependencies: const [],
     );

@@ -10,6 +10,7 @@ final sourceSeasonsRepositoryProvider = Provider.autoDispose
     .family<SourceSeasonsRepository, SourcesSession>(
       (ref, session) => StremioSourceSeasonsRepository(session),
       retry: (count, error) => null,
+      dependencies: const [],
     );
 
 final sourcesSessionActiveProvider = Provider.autoDispose

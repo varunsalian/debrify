@@ -148,6 +148,82 @@ void main() {
     });
   }
 
+  for (final wholeFamily in [false, true]) {
+    test(
+      'explicit season scopes isolate menus and inventory: family=$wholeFamily',
+      () async {
+        start();
+        ProviderContainer scoped(Repository repository) =>
+            ProviderContainer.test(
+              parent: container,
+              overrides: [
+                sourceSeasonsRepositoryProvider.overrideWith(
+                  (ref, key) => repository,
+                ),
+                if (wholeFamily)
+                  sourceSeasonsProvider.overrideWith2(
+                    SourceSeasonsController.new,
+                  )
+                else
+                  sourceSeasonsProvider(
+                    session,
+                  ).overrideWith(() => SourceSeasonsController(session)),
+              ],
+            );
+        final firstRepository = Repository();
+        final secondRepository = Repository();
+        final first = scoped(firstRepository);
+        first.listen(sourceSeasonsProvider(session), (_, _) {});
+        final firstController = first.read(
+          sourceSeasonsProvider(session).notifier,
+        );
+        final second = scoped(secondRepository);
+        final secondState = second.listen(
+          sourceSeasonsProvider(session),
+          (_, _) {},
+        );
+        final secondController = second.read(
+          sourceSeasonsProvider(session).notifier,
+        );
+        expect(
+          container.read(sourceSeasonsProvider(session).notifier),
+          same(controller),
+        );
+        expect(
+          first.read(sourceSeasonsProvider(session).notifier),
+          same(firstController),
+        );
+        expect(secondController, isNot(same(firstController)));
+        final parentLoad = controller.load();
+        final firstLoad = firstController.load();
+        final secondLoad = secondController.load();
+        final retiredGuide = Guide([9]);
+        first.dispose();
+        firstRepository.requests.single.complete(retiredGuide);
+        await firstLoad;
+        expect(retiredGuide.records, 0);
+        expect(subscription.read().available, isEmpty);
+        expect(secondState.read().available, isEmpty);
+        final secondGuide = Guide([3, 4]);
+        secondRepository.requests.single.complete(secondGuide);
+        await secondLoad;
+        expect(secondState.read().available, [3, 4]);
+        expect(subscription.read().available, isEmpty);
+        expect(secondGuide.records, 1);
+        secondGuide.recorded.complete();
+        final parentGuide = Guide([1, 2]);
+        repository.requests.single.complete(parentGuide);
+        await parentLoad;
+        expect(subscription.read().available, [1, 2]);
+        expect(parentGuide.records, 1);
+        parentGuide.recorded.complete();
+        secondController.select(4);
+        expect(secondState.read().selected, 4);
+        expect(subscription.read().selected, 2);
+      },
+    );
+  }
+
   test('metadata failure preserves selection and does not retry', () async {
     start();
     final pending = controller.load();

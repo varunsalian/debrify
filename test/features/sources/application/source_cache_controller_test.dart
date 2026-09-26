@@ -235,6 +235,83 @@ void main() {
     }
   }
 
+  for (final wholeFamily in [false, true]) {
+    test(
+      'explicit cache scopes isolate badges and retirement: family=$wholeFamily',
+      () async {
+        ProviderContainer scoped(FakeSourceCacheRepository repository) =>
+            ProviderContainer.test(
+              parent: container,
+              overrides: [
+                sourceCacheRepositoryProvider.overrideWith(
+                  (ref, key) => repository,
+                ),
+                if (wholeFamily)
+                  sourceCacheProvider.overrideWith2(SourceCacheController.new)
+                else
+                  sourceCacheProvider(
+                    session,
+                  ).overrideWith(() => SourceCacheController(session)),
+              ],
+            );
+        final parentCache = await configure();
+        final firstRepository = FakeSourceCacheRepository();
+        final secondRepository = FakeSourceCacheRepository();
+        final first = scoped(firstRepository);
+        first.listen(sourceCacheProvider(session), (_, _) {});
+        final firstController = first.read(
+          sourceCacheProvider(session).notifier,
+        );
+        final second = scoped(secondRepository);
+        final secondState = second.listen(
+          sourceCacheProvider(session),
+          (_, _) {},
+        );
+        final secondController = second.read(
+          sourceCacheProvider(session).notifier,
+        );
+        expect(
+          container.read(sourceCacheProvider(session).notifier),
+          same(controller),
+        );
+        expect(
+          first.read(sourceCacheProvider(session).notifier),
+          same(firstController),
+        );
+        expect(secondController, isNot(same(firstController)));
+        final firstCache = FakeSourceCacheSession();
+        final secondCache = FakeSourceCacheSession(premiumizeEnabled: false);
+        final firstConfig = firstController.configure();
+        final secondConfig = secondController.configure();
+        firstRepository.opens.single.complete(firstCache);
+        secondRepository.opens.single.complete(secondCache);
+        expect(await firstConfig, isTrue);
+        expect(await secondConfig, isTrue);
+        final parentCheck = controller.check([row('shared')]);
+        final firstCheck = firstController.check([row('shared')]);
+        final secondCheck = secondController.check([row('shared')]);
+        first.dispose();
+        firstCache.tb.single.$2.complete({'shared'});
+        await firstCheck;
+        expect(firstCache.pm, isEmpty);
+        expect(subscription.read().torbox, isEmpty);
+        expect(secondState.read().torbox, isEmpty);
+        secondCache.tb.single.$2.complete({'shared'});
+        await secondCheck;
+        expect(secondState.read().label(row('shared')), 'TB');
+        expect(subscription.read().torbox, isEmpty);
+        parentCache.tb.single.$2.complete({});
+        await Future<void>.delayed(Duration.zero);
+        parentCache.pm.single.$2.complete([true]);
+        await parentCheck;
+        expect(subscription.read().label(row('shared')), 'PM');
+        secondController.beginSearch();
+        expect(secondState.read().torbox, isEmpty);
+        expect(subscription.read().label(row('shared')), 'PM');
+      },
+    );
+  }
+
   test('older configuration cannot replace the latest one', () async {
     final old = controller.configure();
     await configure(tb: false, pm: false);
