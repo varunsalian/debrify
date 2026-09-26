@@ -1,3 +1,6 @@
+import 'package:debrify/features/search/application/keyword_defaults_dependencies.dart';
+import 'package:debrify/models/torrent_filter_state.dart';
+import '../fakes/fake_keyword_defaults_repository.dart';
 import 'dart:async';
 
 import 'package:debrify/features/search/application/keyword_cache_dependencies.dart';
@@ -25,6 +28,7 @@ import '../keyword_torrent_fixture.dart';
 void main() {
   late FakeKeywordSearchRepository repository;
   late FakeKeywordCacheRepository cache;
+  late FakeKeywordDefaultsRepository defaults;
   late MockClient client;
 
   setUp(() {
@@ -37,6 +41,7 @@ void main() {
     StremioService.instance.invalidateCache();
     repository = FakeKeywordSearchRepository();
     cache = FakeKeywordCacheRepository();
+    defaults = FakeKeywordDefaultsRepository()..delayed = false;
     cache.session.torboxEnabled = false;
     client = MockClient((_) async => http.Response('{}', 404));
   });
@@ -70,26 +75,24 @@ void main() {
     field.onSubmitted!(query);
   });
 
+  Widget application() => ProviderScope(
+    overrides: [
+      keywordDefaultsRepositoryProvider.overrideWith(
+        (ref, session) => defaults,
+      ),
+      keywordSearchRepositoryProvider.overrideWith(
+        (ref, session) => repository,
+      ),
+      keywordCacheRepositoryProvider.overrideWith((ref, session) => cache),
+    ],
+    child: const MaterialApp(home: SearchScreen(searchMode: true)),
+  );
+
   Future<void> mount(WidgetTester tester) async {
     tester.view.physicalSize = const Size(1200, 900);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
-    await drive(
-      tester,
-      () => tester.pumpWidget(
-        ProviderScope(
-          overrides: [
-            keywordSearchRepositoryProvider.overrideWith(
-              (ref, session) => repository,
-            ),
-            keywordCacheRepositoryProvider.overrideWith(
-              (ref, session) => cache,
-            ),
-          ],
-          child: const MaterialApp(home: SearchScreen(searchMode: true)),
-        ),
-      ),
-    );
+    await drive(tester, () => tester.pumpWidget(application()));
     await tester.tap(find.text('Keyword'));
     await tester.pump();
     await submit(tester, 'query');
@@ -98,6 +101,78 @@ void main() {
 
   CinemaSourcesLayout layout(WidgetTester tester) =>
       tester.widget<CinemaSourcesLayout>(find.byType(CinemaSourcesLayout));
+
+  testWidgets(
+    'frozen final snapshot retains authoritative raw rows and legacy displayed rows',
+    (tester) async {
+      await mount(tester);
+      final request = repository.requests.single;
+      final old = keywordTorrent('Old row', source: 'one');
+      final added = keywordTorrent('Added row', source: 'two');
+      await drive(tester, () => request.onBatch('first', [old]));
+      layout(tester).onFocusResults();
+      await tester.pump();
+      expect(layout(tester).isSourceFocused(), isTrue);
+      await drive(tester, () => request.complete([old, added]));
+      expect(layout(tester).resultCount, 1);
+      await drive(tester, () => tester.pumpWidget(const SizedBox()));
+      await drive(tester, () => tester.pumpWidget(application()));
+      expect(layout(tester).resultCount, 1);
+      expect(layout(tester).providers.first.count, 2);
+      expect(layout(tester).providersEnabled, isTrue);
+      expect(layout(tester).searching, isFalse);
+      expect(repository.requests, hasLength(1));
+      expect(defaults.reads, hasLength(1));
+      await tester.tap(find.textContaining('Sort ·'));
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.tap(find.text('Relevance'));
+      await tester.pump();
+      await tester.tap(find.text('Done'));
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(layout(tester).resultCount, 2);
+      expect(tester.takeException(), isNull);
+      await drive(tester, () => tester.pumpWidget(const SizedBox()));
+      await tester.pump(const Duration(seconds: 7));
+    },
+  );
+
+  testWidgets(
+    'late defaults filter fast rows and restore without another read or search',
+    (tester) async {
+      defaults.delayed = true;
+      await mount(tester);
+      expect(defaults.reads, hasLength(1));
+      final request = repository.requests.single;
+      final hd = keywordTorrent('Result.1080p');
+      final uhd = keywordTorrent('Result.2160p');
+      await drive(tester, () => request.onBatch('first', [hd, uhd]));
+      expect(layout(tester).resultCount, 2);
+      await drive(
+        tester,
+        () => defaults.reads.single.complete(
+          TorrentFilterState(qualities: {QualityTier.fullHd}),
+        ),
+      );
+      expect(layout(tester).resultCount, 1);
+      await drive(tester, () => request.complete([hd, uhd]));
+      expect(layout(tester).resultCount, 1);
+      await drive(tester, () => tester.pumpWidget(const SizedBox()));
+      await drive(tester, () => tester.pumpWidget(application()));
+      expect(layout(tester).resultCount, 1);
+      expect(defaults.reads, hasLength(1));
+      expect(repository.requests, hasLength(1));
+      expect(
+        tester
+            .widget<TvTextField>(find.byType(TvTextField).first)
+            .controller
+            .text,
+        'query',
+      );
+      expect(tester.takeException(), isNull);
+      await drive(tester, () => tester.pumpWidget(const SizedBox()));
+      await tester.pump(const Duration(seconds: 7));
+    },
+  );
 
   testWidgets(
     'open provider dialog clears outgoing choices and rejects retained callbacks',

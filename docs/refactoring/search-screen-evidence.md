@@ -590,3 +590,82 @@ This slice's automated review is complete. Phase 4B still needs the default-filt
 read boundary and full snapshot storage/consume ownership; legacy presentation
 and navigation/playback bridges remain scheduled in their later phases. Native,
 visual and performance checks remain pending. The full migration is not complete.
+
+### Phase 4B defaults and snapshot boundary (implemented and reviewed)
+
+`StoredKeywordDefaultsRepository` reads the existing five JSON preferences under
+the originating profile scope, in the same order, retaining exact enum-name
+matching, input order and unknown-value handling. `KeywordResultsController` now
+owns explicit default loading, nonempty-user-choice precedence, nonfatal failure
+and generation checks for replacement/disposal. Late defaults can still filter
+an already completed fast search; clearing a query does not cancel this startup
+preference. Empty choices retain the legacy eligibility for saved defaults. No
+read starts from provider construction/recomputation, and restored keyword views
+still skip the startup action. The screen only synchronizes focus nodes after an
+accepted result; its preference reads and enum parsing loops are gone.
+
+`KeywordSnapshot` replaces `_KwPreservedState`. The screen retains a plain
+`KeywordSnapshotRepository` resolved before constructing its SearchSession, so
+neither snapshot consumption nor disposal requires a provider-state mutation.
+`MemoryKeywordSnapshotRepository` borrows one static `ProfileSessionMemory` store,
+keyed by its captured owner with explicit tab-variant matching. Wrong-variant
+reads retain the entry, matching reads consume it once, and a denied matching
+snapshot is still consumed. An outgoing adapter cannot read or overwrite a newer
+incoming snapshot. Lifecycle clear invalidates retained values and old adapters.
+
+Snapshot preparation still folds pending authoritative raw rows while retaining
+the legacy displayed filtered rows. The model retains query, filters, sort,
+provider choices, source tab, badges/cached-only state and scroll offset; it drops
+transient freeze, pending, bulk selection and provider-seen state exactly as the
+old snapshot did. It reuses unchanged immutable result lists. Restoration seeds
+the three existing keyword providers without starting a search, reading settings,
+recomputing filters or allocating another process-lifetime store.
+
+Focused checks pass: **nine defaults-controller tests**, **five real preference
+adapter tests**, **seven snapshot-repository tests**, and **12 actual keyword
+screen cases** (33 total). New screen cases cover late defaults filtering fast
+rows followed by remount without another settings read/search, and a frozen final
+snapshot restoring its legacy displayed rows while keeping all authoritative raw
+rows available for the next deliberate sort. Repository tests cover all five
+preference keys, malformed data, captured profile reads through a handoff,
+consume-once/variant/policy rules, 100 adapters borrowing the same store, lifecycle
+clear, late outgoing writes/reads and immutable snapshot choices. Existing query,
+cache, focus, source-dialog/profile and restoration screen cases remain passing.
+
+The profile source-text guard moved its store/take/store checks to the real
+adapter and retains the old raw-static prohibition, adds the new raw-static
+prohibition and asserts captured-owner/stale-write guards. Its migrated test
+passes; running that whole guard file still reports the same two unrelated
+observed-baseline failures (direct SharedPreferences inventory and diagnostic
+reset source lookup). No assertion or known-failure allowance was removed.
+
+#### Phase 4B automated exit audit
+
+| Required responsibility | Production owner and verification |
+| --- | --- |
+| Engine streaming, request replacement and failures | `KeywordSearchController` + `EngineKeywordSearchRepository`; request/adapter tests and real screen streaming cases |
+| Frozen arrivals, filters/sort/source choices and bulk selection | `KeywordResultsController` with phase-1 policies; controller tests plus actual provider/sort/All/None/Cancel controls |
+| Cache configuration, batches, retries and completion filtering | `KeywordCacheController` + `DebridKeywordCacheRepository`; cache/controller/adapter/focus/remount tests |
+| Source settings, defaults and immediate writes, including indexer engines | `KeywordSourcesController` + `EngineKeywordSourcesRepository` and dialog; combined registry/indexer and real preference mutation tests |
+| Saved filter defaults and user-choice precedence | `StoredKeywordDefaultsRepository` + explicit results-controller action; data, race and real screen restoration tests |
+| Full keyword snapshot ownership and restoration | `MemoryKeywordSnapshotRepository`, `KeywordSnapshot`, pure fold and immutable bootstrap; variant/profile/lifecycle/repeated-adapter and real remount cases |
+| Legacy focus/scroll and navigation/playback effects | Existing presentation wrappers retain ordering and arguments; executable focus/selection coverage above; bridge extraction remains phase 7 |
+
+The implementation audit covers phase 4B's application/data migration, not the
+entire Search/Home/Discover library or device parity. The main screen is 20,138
+lines; the largest keyword controller is 260 lines. All 57 migrated files pass
+the architecture guard, and formatting/diff checks pass.
+
+The final full suite completed in 170,355 ms: **7,600 passing identities, the same
+51 observed-baseline failures (22 failures and 29 errors), and 20 skipped**. There
+are no new failures, missing identities or newly skipped previously passing tests.
+Analyzer identities/multiplicities remain the same **865**. The historical helper
+still exits 1 because its nine-failure allowance is stale; the actual observed
+baseline comparison passes. Final receipts are
+`.git/refactor-evidence/phase4b/full-defaults-snapshot.jsonl`,
+`full-defaults-snapshot-comparison.txt` and
+`analyze-defaults-snapshot-complete.txt`.
+
+Phase 4B's application/data implementation and automated review are complete.
+Phase 4C, later Home/Discover/layout/lifecycle phases, CI wiring and native/visual/
+performance checks remain outstanding; the full migration is not complete.

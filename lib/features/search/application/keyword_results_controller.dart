@@ -1,3 +1,5 @@
+import '../data/keyword_defaults_repository.dart';
+import 'keyword_defaults_dependencies.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../models/torrent.dart';
@@ -26,10 +28,14 @@ class KeywordResultsController extends Notifier<KeywordResultsState> {
   final SearchSession session;
   late KeywordSearchRepository _repository;
   bool _initialized = false;
+  late KeywordDefaultsRepository _defaults;
+  int _defaultsGeneration = 0;
 
   @override
   KeywordResultsState build() {
     _repository = ref.watch(keywordSearchRepositoryProvider(session));
+    _defaults = ref.watch(keywordDefaultsRepositoryProvider(session));
+    ref.onDispose(() => _defaultsGeneration++);
     final active = ref.watch(searchSessionActiveProvider(session));
     final initial = !_initialized && active
         ? session.initialKeywordResults
@@ -39,6 +45,28 @@ class KeywordResultsController extends Notifier<KeywordResultsState> {
   }
 
   bool get _current => ref.mounted && _repository.isCurrent;
+
+  /// Explicit startup action. A late read may filter an already completed
+  /// search, but must not replace nonempty restored/user-selected filters.
+  Future<bool> loadDefaults() async {
+    if (!_current || !_defaults.isCurrent) return false;
+    final generation = ++_defaultsGeneration;
+    try {
+      final filters = await _defaults.load();
+      if (!_current ||
+          !_defaults.isCurrent ||
+          generation != _defaultsGeneration ||
+          filters.isEmpty ||
+          !state.filters.isEmpty) {
+        return false;
+      }
+      _publish(state.copyWith(filters: filters));
+      return true;
+    } catch (_) {
+      // Defaults have always been non-fatal, with no automatic retry.
+      return false;
+    }
+  }
 
   void begin() {
     if (!_current) return;

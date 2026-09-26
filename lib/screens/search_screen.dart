@@ -1,3 +1,6 @@
+import '../features/search/application/keyword_snapshot_dependencies.dart';
+import '../features/search/data/keyword_snapshot_repository.dart';
+import '../features/search/models/keyword_snapshot.dart';
 import '../features/search/presentation/keyword_providers_dialog.dart';
 import '../features/search/presentation/keyword_source_label.dart';
 import '../features/search/application/keyword_result_snapshot.dart';
@@ -293,47 +296,6 @@ typedef _HomePreservedState = ({
   DateTime loadedAt,
   double scrollOffset,
 });
-
-/// Snapshot of an in-progress keyword search, preserved across a tab switch so
-/// returning restores results + scroll instead of a blank prompt — the nav
-/// rebuilds [SearchScreen] fresh on every switch (main.dart `_buildPage`).
-/// Mirrors the old `TorrentSearchScreen._preservedState`. Keyed by [variant] so
-/// a keyword search started on the Home-New board never restores into the
-/// dedicated Search tab (both are [SearchScreen] instances).
-class _KwPreservedState {
-  final String variant;
-  final String query;
-  final List<Torrent> all;
-  final List<Torrent> results;
-  final TorrentFilterState filters;
-  final String sort;
-  final bool sortAsc;
-  final Map<String, List<String>> cache;
-  final bool cachedOnly;
-  final Map<String, int> directCounts;
-  final Map<String, int> torrentCounts;
-  final Set<String> selectedDirect;
-  final Set<String> selectedTorrent;
-  final String? sourceTab;
-  final double scrollOffset;
-  const _KwPreservedState({
-    required this.variant,
-    required this.query,
-    required this.all,
-    required this.results,
-    required this.filters,
-    required this.sort,
-    required this.sortAsc,
-    required this.cache,
-    required this.cachedOnly,
-    required this.directCounts,
-    required this.torrentCounts,
-    required this.selectedDirect,
-    required this.selectedTorrent,
-    required this.sourceTab,
-    required this.scrollOffset,
-  });
-}
 
 /// Fixed Discover sources; installed addons are appended dynamically (key
 /// 'a:{addonId}').
@@ -693,7 +655,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   final List<FocusNode> _kwTabNodes = [];
 
   /// Scroll controller for the keyword results list, so we can preserve/restore
-  /// the scroll position across a tab switch (see [_KwPreservedState]).
+  /// the scroll position across a tab switch (see [KeywordSnapshot]).
   final ScrollController _kwScroll = ScrollController();
 
   /// Last observed keyword-list scroll offset, captured live (the controller is
@@ -703,11 +665,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   /// Set on restore; the keyword list jumps here once laid out, then clears.
   double? _pendingKwScroll;
 
-  /// Snapshot of the most recently disposed keyword search, kept alive across
-  /// a same-profile tab rebuild. The holder rejects content from another
-  /// profile/session and participates in profile lifecycle cleanup.
-  static final ProfileSessionMemory<_KwPreservedState> _kwPreserved =
-      ProfileSessionMemory<_KwPreservedState>();
+  // Retain the plain snapshot adapter: disposal must not resolve WidgetRef.
+  late final KeywordSnapshotRepository _keywordSnapshots;
 
   static final _homePreserved = HomeReturnCache<_HomePreservedState>();
   static bool _homeReturnListenersInstalled = false;
@@ -1813,34 +1772,17 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     unawaited(_refreshMetadataFeaturePolicy());
     WidgetsBinding.instance.addObserver(this);
     _profileSessionOwner = ProfileSessionMemory.captureOwner();
+    _keywordSnapshots = ref.read(
+      keywordSnapshotRepositoryProvider(_profileSessionOwner),
+    );
     final keywordSnapshot = _takeKeywordSnapshot();
     _searchSession = SearchSession(
       owner: _profileSessionOwner,
       viewIdentity: Object(),
       initialKeywordQuery: keywordSnapshot?.query ?? '',
-      initialKeywordResults: keywordSnapshot == null
-          ? null
-          : KeywordResultsState(
-              all: keywordSnapshot.all,
-              results: keywordSnapshot.results,
-              filters: keywordSnapshot.filters,
-              sort: keywordSnapshot.sort,
-              sortAscending: keywordSnapshot.sortAsc,
-              sourceTab: keywordSnapshot.sourceTab,
-              providers: KeywordProviders(
-                directCounts: keywordSnapshot.directCounts,
-                torrentCounts: keywordSnapshot.torrentCounts,
-                selectedDirect: keywordSnapshot.selectedDirect,
-                selectedTorrent: keywordSnapshot.selectedTorrent,
-                seen: {},
-              ),
-            ),
-      initialKeywordCache: keywordSnapshot == null
-          ? const KeywordCacheState.empty()
-          : KeywordCacheState(
-              badges: keywordSnapshot.cache,
-              cachedOnly: keywordSnapshot.cachedOnly,
-            ),
+      initialKeywordResults: keywordSnapshot?.projection,
+      initialKeywordCache:
+          keywordSnapshot?.cache ?? const KeywordCacheState.empty(),
     );
     // Retain state for this screen's mounted lifetime, including covered routes.
     // Returning from a pushed list must not discard results or replay a request.
@@ -2363,26 +2305,24 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
 
   /// Consume the borrowed snapshot once, before constructing providers. Seed
   /// their initial state instead of mutating them during widget initialization.
-  _KwPreservedState? _takeKeywordSnapshot() {
+  KeywordSnapshot? _takeKeywordSnapshot() {
     if (widget.isTelevision && !widget.searchMode && !widget.discoverMode) {
       return null;
     }
-    final snapshot = _kwPreserved.take(
-      _profileSessionOwner,
-      where: (value) => value.variant == _variantKey && value.query.isNotEmpty,
+    return _keywordSnapshots.take(
+      _variantKey,
+      allowed: ProfilePolicyGuard.allowsSync(ProfileFeature.keywordSearch),
     );
-    return ProfilePolicyGuard.allowsSync(ProfileFeature.keywordSearch)
-        ? snapshot : null;
   }
 
   /// Restore presentation fields before the first build, retaining default-view
   /// suppression and scroll timing. Cache state is already seeded in its owner.
-  bool _restoreKeywordState(_KwPreservedState? snap) {
+  bool _restoreKeywordState(KeywordSnapshot? snap) {
     if (snap == null) return false;
     _mode = SearchMode.keyword;
     _searchController.text = snap.query;
     _disposeKwNodes();
-    for (var i = 0; i < snap.results.length; i++) {
+    for (var i = 0; i < snap.projection.results.length; i++) {
       _kwNodes.add(FocusNode(debugLabel: 'kw_$i'));
     }
     _syncKwTabNodes();
@@ -2507,23 +2447,12 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       final projection = keywordResultsSnapshot(
         _keywordResultsSubscription.read(),
       );
-      _kwPreserved.store(
-        _profileSessionOwner,
-        _KwPreservedState(
+      _keywordSnapshots.store(
+        KeywordSnapshot(
           variant: _variantKey,
           query: _kwQuery,
-          all: projection.all,
-          results: projection.results,
-          filters: projection.filters,
-          sort: projection.sort,
-          sortAsc: projection.sortAscending,
-          cache: _kwCache,
-          cachedOnly: _kwCachedOnly,
-          directCounts: projection.providers.directCounts,
-          torrentCounts: projection.providers.torrentCounts,
-          selectedDirect: projection.providers.selectedDirect,
-          selectedTorrent: projection.providers.selectedTorrent,
-          sourceTab: projection.sourceTab,
+          projection: projection,
+          cache: _keywordCacheSubscription.read(),
           scrollOffset: _kwLastScroll,
         ),
       );
@@ -12184,81 +12113,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     MainPageBridge.switchTab?.call(MainTab.discover);
   }
 
-  /// Seed the keyword filter set from the user's saved defaults (Settings →
-  /// default quality/rip-source/language filters), matching the old search
-  /// screen's `_loadDefaultFilters`. Runs once at init; only applies when at
-  /// least one default is configured so an empty default keeps filters off.
   Future<void> _loadDefaultKeywordFilters() async {
-    try {
-      final qualities = await StorageService.getDefaultFilterQualities();
-      final sources = await StorageService.getDefaultFilterRipSources();
-      final languages = await StorageService.getDefaultFilterLanguages();
-      final sizes = await StorageService.getDefaultFilterSizes();
-      final ranges = await StorageService.getDefaultFilterDynamicRanges();
-      if (!mounted) return;
-
-      final qualitySet = <QualityTier>{};
-      final sourceSet = <RipSourceCategory>{};
-      final languageSet = <AudioLanguage>{};
-      final sizeSet = <SizeBucket>{};
-      final rangeSet = <DynamicRange>{};
-      for (final q in qualities) {
-        for (final e in QualityTier.values) {
-          if (e.name == q) qualitySet.add(e);
-        }
-      }
-      for (final s in sources) {
-        for (final e in RipSourceCategory.values) {
-          if (e.name == s) sourceSet.add(e);
-        }
-      }
-      for (final l in languages) {
-        for (final e in AudioLanguage.values) {
-          if (e.name == l) languageSet.add(e);
-        }
-      }
-      for (final s in sizes) {
-        for (final e in SizeBucket.values) {
-          if (e.name == s) sizeSet.add(e);
-        }
-      }
-      for (final r in ranges) {
-        for (final e in DynamicRange.values) {
-          if (e.name == r) rangeSet.add(e);
-        }
-      }
-
-      if (qualitySet.isEmpty &&
-          sourceSet.isEmpty &&
-          languageSet.isEmpty &&
-          sizeSet.isEmpty &&
-          rangeSet.isEmpty) {
-        return;
-      }
-      // If the user already picked filters while these async reads were in
-      // flight, don't clobber their choice with the saved defaults.
-      if (_kwFilters.qualities.isNotEmpty ||
-          _kwFilters.ripSources.isNotEmpty ||
-          _kwFilters.languages.isNotEmpty ||
-          _kwFilters.sizes.isNotEmpty ||
-          _kwFilters.dynamicRanges.isNotEmpty) {
-        return;
-      }
-      _keywordResultsController.setFilters(
-        TorrentFilterState(
-          qualities: qualitySet,
-          ripSources: sourceSet,
-          languages: languageSet,
-          sizes: sizeSet,
-          dynamicRanges: rangeSet,
-        ),
-      );
-      // If results are already on screen (defaults resolved after a fast
-      // search), re-apply so the seeded filters take effect immediately.
-      if (_kwAll.isNotEmpty) _syncKeywordResults();
-    } catch (_) {
-      // Non-fatal: fall back to no default filters.
-    }
+    final changed = await _keywordResultsController.loadDefaults();
+    if (mounted && changed && _kwAll.isNotEmpty) _syncKeywordResults();
   }
 
   /// One-shot: restore DPAD focus to the toolbar at the FIRST streamed paint
