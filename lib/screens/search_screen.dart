@@ -1,3 +1,8 @@
+import '../features/search/presentation/keyword_providers_dialog.dart';
+import '../features/search/presentation/keyword_source_label.dart';
+import '../features/search/application/keyword_result_snapshot.dart';
+import '../features/search/application/keyword_results_controller.dart';
+import '../features/search/models/keyword_results_state.dart';
 import '../features/search/application/keyword_search_controller.dart';
 import '../features/search/models/keyword_search_state.dart';
 import '../features/search/application/keyword_cache_controller.dart';
@@ -15,9 +20,7 @@ import '../features/search/models/search_mode.dart';
 import '../features/search/presentation/search_mode_toggle.dart';
 import '../features/home/presentation/category_tag.dart';
 import '../ui/core/see_all_link.dart';
-import '../features/search/application/keyword_filter.dart';
 import '../features/search/application/keyword_providers.dart';
-import '../features/search/application/keyword_sort.dart';
 import '../services/native_series_metadata_service.dart';
 import '../models/media_identity.dart';
 import '../widgets/random_playback_dialog.dart';
@@ -607,8 +610,12 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   bool get _kwLoading => _keywordSearchState.loading;
   String? get _kwError => _keywordSearchState.error;
   String get _kwQuery => _keywordSearchState.query;
-  List<Torrent> _kwAll = []; // unfiltered results from the last search
-  List<Torrent> _kwResults = []; // filtered + sorted view actually rendered
+  late final ProviderSubscription<KeywordResultsState> _keywordResultsSubscription;
+  KeywordResultsController get _keywordResultsController =>
+      ref.read(keywordResultsProvider(_searchSession).notifier);
+  KeywordResultsState get _keywordResults => _keywordResultsSubscription.read();
+  List<Torrent> get _kwAll => _keywordResults.all;
+  List<Torrent> get _kwResults => _keywordResults.results;
   final List<FocusNode> _kwNodes = [];
   final _kwCinemaKey = GlobalKey<CinemaSourcesLayoutState>();
   int _lastKeywordCinemaSource = 0;
@@ -619,11 +626,11 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     5,
     (i) => FocusNode(debugLabel: 'kw_tb_$i'),
   );
-  TorrentFilterState _kwFilters = const TorrentFilterState.empty();
-  String _kwSort = 'relevance';
+  TorrentFilterState get _kwFilters => _keywordResults.filters;
+  String get _kwSort => _keywordResults.sort;
   // Sort direction for _kwSort (ignored for 'relevance', which is engine order).
   // Defaults follow each field's natural direction; the sort dialog can flip it.
-  bool _kwSortAsc = false;
+  bool get _kwSortAsc => _keywordResults.sortAscending;
   late final ProviderSubscription<KeywordCacheState> _keywordCacheSubscription;
   KeywordCacheController get _keywordCacheController =>
       ref.read(keywordCacheProvider(_searchSession).notifier);
@@ -633,10 +640,11 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   // screen: results are grouped into "Direct" (direct/external URL streams) and
   // "Torrent" providers by their [Torrent.source], each independently filterable
   // by which sources are ticked. Empty count maps mean "no such group".
-  Map<String, int> _kwDirectCounts = {}; // source → count (direct/external)
-  Map<String, int> _kwTorrentCounts = {}; // source → count (torrents)
-  Set<String> _kwSelectedDirect = {};
-  Set<String> _kwSelectedTorrent = {};
+  Map<String, int> get _kwDirectCounts => _keywordResults.providers.directCounts;
+  Map<String, int> get _kwTorrentCounts => _keywordResults.providers.torrentCounts;
+  Set<String> get _kwSelectedDirect => _keywordResults.providers.selectedDirect;
+  Set<String> get _kwSelectedTorrent =>
+      _keywordResults.providers.selectedTorrent;
 
   /// True when the results list is being narrowed to TorBox-cached torrents
   /// only (TorBox is the sole usable debrid provider and its cache-check is on)
@@ -644,8 +652,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   bool get _kwCachedOnly => _keywordCacheSubscription.read().cachedOnly;
 
   // Bulk-selection state for keyword results (mirrors Home's multi-select).
-  bool _kwSelectionMode = false;
-  final Set<String> _kwSelected = {}; // selected torrent infohashes
+  bool get _kwSelectionMode => _keywordResults.selectionMode;
+  Set<String> get _kwSelected => _keywordResults.selected;
 
   int get _kwSearchToken => _keywordSearchState.request;
   bool get _kwSearching => _keywordSearchState.searching;
@@ -653,11 +661,11 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   /// Set on the first real user interaction (scroll drag, row DPAD nav, row
   /// tap/long-press, toolbar use) — later arrivals then park in [_kwPending]
   /// behind the "+N new results" pill instead of reshuffling the list.
-  bool _kwStreamFrozen = false;
+  bool get _kwStreamFrozen => _keywordResults.frozen;
 
   /// Full (unfiltered) result set parked while frozen; adopted by the pill,
   /// any toolbar action, or a source-tab tap.
-  List<Torrent>? _kwPending;
+  List<Torrent>? get _kwPending => _keywordResults.pending;
 
   /// DPAD focus for the "+N new results" pill.
   final FocusNode _kwPillFocus = FocusNode(debugLabel: 'kw_pill');
@@ -681,13 +689,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
 
   /// Source tab strip (All / per-source), single-select on top of the
   /// Providers multi-select. Null = All.
-  String? _kwSourceTab;
+  String? get _kwSourceTab => _keywordResults.sourceTab;
   final List<FocusNode> _kwTabNodes = [];
-
-  /// Provider-group keys ('d:src' / 't:src') already offered this search — a
-  /// NEW source auto-selects into the provider filter, but a source the user
-  /// unticked stays unticked when a later batch re-reports it.
-  final Set<String> _kwProviderSeen = {};
 
   /// Scroll controller for the keyword results list, so we can preserve/restore
   /// the scroll position across a tab switch (see [_KwPreservedState]).
@@ -1815,6 +1818,23 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       owner: _profileSessionOwner,
       viewIdentity: Object(),
       initialKeywordQuery: keywordSnapshot?.query ?? '',
+      initialKeywordResults: keywordSnapshot == null
+          ? null
+          : KeywordResultsState(
+              all: keywordSnapshot.all,
+              results: keywordSnapshot.results,
+              filters: keywordSnapshot.filters,
+              sort: keywordSnapshot.sort,
+              sortAscending: keywordSnapshot.sortAsc,
+              sourceTab: keywordSnapshot.sourceTab,
+              providers: KeywordProviders(
+                directCounts: keywordSnapshot.directCounts,
+                torrentCounts: keywordSnapshot.torrentCounts,
+                selectedDirect: keywordSnapshot.selectedDirect,
+                selectedTorrent: keywordSnapshot.selectedTorrent,
+                seen: {},
+              ),
+            ),
       initialKeywordCache: keywordSnapshot == null
           ? const KeywordCacheState.empty()
           : KeywordCacheState(
@@ -1855,6 +1875,12 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       (previous, next) {
         // Badges repaint without rebuilding focus nodes. Only the accepted
         // completion wrapper below asks for a cached-only row recomputation.
+        if (mounted) setState(() {});
+      },
+    );
+    _keywordResultsSubscription = ref.listenManual(
+      keywordResultsProvider(_searchSession),
+      (previous, next) {
         if (mounted) setState(() {});
       },
     );
@@ -2354,16 +2380,6 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   bool _restoreKeywordState(_KwPreservedState? snap) {
     if (snap == null) return false;
     _mode = SearchMode.keyword;
-    _kwAll = snap.all;
-    _kwResults = snap.results;
-    _kwFilters = snap.filters;
-    _kwSort = snap.sort;
-    _kwSortAsc = snap.sortAsc;
-    _kwDirectCounts = snap.directCounts;
-    _kwTorrentCounts = snap.torrentCounts;
-    _kwSelectedDirect = snap.selectedDirect;
-    _kwSelectedTorrent = snap.selectedTorrent;
-    _kwSourceTab = snap.sourceTab;
     _searchController.text = snap.query;
     _disposeKwNodes();
     for (var i = 0; i < snap.results.length; i++) {
@@ -2488,36 +2504,26 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         _kwQuery.isNotEmpty &&
         _kwResults.isNotEmpty &&
         !_kwSearching) {
-      // Fold a parked (pill) final set into the snapshot — pure field updates,
-      // safe in dispose — so restore doesn't resurrect a stale subset while
-      // silently dropping the authoritative result.
-      final pending = _kwPending;
-      if (pending != null) {
-        _kwPending = null;
-        _kwAll = pending;
-        if (_kwSourceTab != null &&
-            !pending.any((t) => keywordSourceOf(t) == _kwSourceTab)) {
-          _kwSourceTab = null;
-        }
-        _computeKwProviders(pending);
-      }
+      final projection = keywordResultsSnapshot(
+        _keywordResultsSubscription.read(),
+      );
       _kwPreserved.store(
         _profileSessionOwner,
         _KwPreservedState(
           variant: _variantKey,
           query: _kwQuery,
-          all: _kwAll,
-          results: _kwResults,
-          filters: _kwFilters,
-          sort: _kwSort,
-          sortAsc: _kwSortAsc,
+          all: projection.all,
+          results: projection.results,
+          filters: projection.filters,
+          sort: projection.sort,
+          sortAsc: projection.sortAscending,
           cache: _kwCache,
           cachedOnly: _kwCachedOnly,
-          directCounts: _kwDirectCounts,
-          torrentCounts: _kwTorrentCounts,
-          selectedDirect: _kwSelectedDirect,
-          selectedTorrent: _kwSelectedTorrent,
-          sourceTab: _kwSourceTab,
+          directCounts: projection.providers.directCounts,
+          torrentCounts: projection.providers.torrentCounts,
+          selectedDirect: projection.providers.selectedDirect,
+          selectedTorrent: projection.providers.selectedTorrent,
+          sourceTab: projection.sourceTab,
           scrollOffset: _kwLastScroll,
         ),
       );
@@ -2630,6 +2636,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     ProfileRuntime.scope.removeListener(_onSearchProfileChanged);
     _listsSubscription.close();
     _catalogSubscription.close();
+    _keywordResultsSubscription.close();
     _keywordSearchSubscription.close();
     _keywordCacheSubscription.close();
     _titleSearch.removeListener(_publishTitleSuggestions);
@@ -12055,13 +12062,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   void _clearKeywordSearch() {
     _keywordSearchController.clear();
     _disposeKwNodes();
-    setState(() {
-      _kwAll = [];
-      _kwResults = [];
-      _kwPending = null;
-      _kwSelectionMode = false;
-      _kwSelected.clear();
-    });
+    _keywordResultsController.clear();
   }
 
   void _completeSearchSubmitFocus(FocusNode target) {
@@ -12243,18 +12244,18 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
           _kwFilters.dynamicRanges.isNotEmpty) {
         return;
       }
-      setState(() {
-        _kwFilters = TorrentFilterState(
+      _keywordResultsController.setFilters(
+        TorrentFilterState(
           qualities: qualitySet,
           ripSources: sourceSet,
           languages: languageSet,
           sizes: sizeSet,
           dynamicRanges: rangeSet,
-        );
-      });
+        ),
+      );
       // If results are already on screen (defaults resolved after a fast
       // search), re-apply so the seeded filters take effect immediately.
-      if (_kwAll.isNotEmpty) _recomputeKeyword();
+      if (_kwAll.isNotEmpty) _syncKeywordResults();
     } catch (_) {
       // Non-fatal: fall back to no default filters.
     }
@@ -12269,19 +12270,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   Future<void> _runKeyword(String query, {bool refocusToolbar = false}) async {
     // Reject outgoing-view actions before changing its UI or resolving services.
     if (query.isEmpty || !_keywordSearchController.isCurrent) return;
-    _kwStreamFrozen = false;
-    _kwPending = null;
-    _kwProviderSeen.clear();
+    _keywordResultsController.begin();
     _kwRefocusToolbar = refocusToolbar;
-    setState(() {
-      _kwDirectCounts = {};
-      _kwTorrentCounts = {};
-      _kwSelectedDirect = {};
-      _kwSelectedTorrent = {};
-      _kwSelectionMode = false;
-      _kwSelected.clear();
-      _kwSourceTab = null;
-    });
     await _keywordSearchController.search(query);
   }
 
@@ -12297,15 +12287,14 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     if (_kwStreamFrozen) {
       // The user has taken over focus — drop the pending toolbar refocus.
       _kwRefocusToolbar = false;
-      _kwPending = raw;
+      _keywordResultsController.present(raw);
       _syncKwTabNodes(); // live tabs: nodes track the parked set's sources
       setState(() {}); // pill count + tab strip update
       _reanchorKwTab(tabAnchor);
       return;
     }
-    _kwAll = raw;
-    _computeKwProviders(raw);
-    _recomputeKeyword();
+    _keywordResultsController.present(raw);
+    _syncKeywordResults();
     _reanchorKwTab(tabAnchor);
     if (_kwToolbarVisible) {
       _completeSearchSubmitFocus(_kwToolbarNodes.first);
@@ -12329,13 +12318,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     // early batch that merely hasn't delivered a source yet must not clear
     // the user's tab mid-stream, so this check only runs here.
     final full = _kwPending ?? _kwAll;
-    if (_kwSourceTab != null &&
-        !full.any((t) => keywordSourceOf(t) == _kwSourceTab)) {
-      _kwSourceTab = null;
-      // Recompute over the DISPLAYED set even when arrivals are parked, so
-      // the strip ("All" active) and the visible list can't disagree.
-      _recomputeKeyword();
-    }
+    if (_keywordResultsController.finish()) _syncKeywordResults();
     setState(() {}); // searching strip off
     // Completion: await in-flight batch checks, sweep stragglers, then settle
     // cached-only mode over the authoritative full set.
@@ -12345,7 +12328,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   /// First real user interaction → stop live-reshuffling; buffer new arrivals
   /// behind the pill instead.
   void _kwFreeze() {
-    _kwStreamFrozen = true;
+    _keywordResultsController.freeze();
     _searchSubmitFocus.cancel();
   }
 
@@ -12361,7 +12344,6 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   void _kwAdoptPending() {
     final p = _kwPending;
     if (p == null) return;
-    _kwPending = null;
     // Identity-preserving refocus (Sources-list parity): folding arrivals in
     // can insert rows above the DPAD focus — keep the remote on the SAME
     // torrent, not the same index. This also keeps a long-pressed row under
@@ -12373,14 +12355,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         break;
       }
     }
-    _kwAll = p;
-    // A tab whose source lost every row to dedupe in the adopted set would
-    // otherwise stay "active" over an empty list with no highlighted pill.
-    if (_kwSourceTab != null && !p.any((t) => keywordSourceOf(t) == _kwSourceTab)) {
-      _kwSourceTab = null;
-    }
-    _computeKwProviders(p);
-    _recomputeKeyword();
+    if (!_keywordResultsController.adopt()) return;
+    _syncKeywordResults();
     if (focusedTorrent != null) {
       final key = _kwRowKey(focusedTorrent);
       final idx = _kwResults.indexWhere((t) => _kwRowKey(t) == key);
@@ -12469,10 +12445,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     // now-gone "Select" pill (index 3), pull it back to the new first pill so
     // the remote doesn't lose focus.
     final refocusToolbar = _kwToolbarNodes.any((n) => n.hasFocus);
-    setState(() {
-      _kwSelectionMode = true;
-      _kwSelected.clear();
-    });
+    _keywordResultsController.setSelectionMode(true);
     if (refocusToolbar) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _kwToolbarNodes.first.requestFocus();
@@ -12481,34 +12454,16 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   }
 
   void _exitKwSelection() {
-    setState(() {
-      _kwSelectionMode = false;
-      _kwSelected.clear();
-    });
+    _keywordResultsController.setSelectionMode(false);
   }
 
-  void _toggleKwSelection(Torrent t) {
-    setState(() {
-      if (_kwSelected.contains(t.infohash)) {
-        _kwSelected.remove(t.infohash);
-      } else {
-        _kwSelected.add(t.infohash);
-      }
-    });
-  }
+  void _toggleKwSelection(Torrent t) =>
+      _keywordResultsController.toggleSelection(t.infohash);
 
-  void _selectAllKw() {
-    setState(() {
-      _kwSelected
-        ..clear()
-        ..addAll(_kwSelectableResults.map((t) => t.infohash));
-    });
-  }
+  void _selectAllKw() => _keywordResultsController.selectAll();
 
   /// Clear the selection but stay in selection mode (matches Home's "None").
-  void _deselectAllKw() {
-    setState(() => _kwSelected.clear());
-  }
+  void _deselectAllKw() => _keywordResultsController.deselectAll();
 
   bool _kwBulkBusy = false;
 
@@ -12606,49 +12561,16 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     if (mounted) _snack('Link copied to clipboard');
   }
 
-  /// Apply a pure provider reconciliation while keeping existing dialog-owned
-  /// selection references valid until keyword state migrates in phase 4B.
-  void _computeKwProviders(List<Torrent> torrents) {
-    final providers = reconcileKeywordProviders(
-      torrents,
-      selectedDirect: _kwSelectedDirect,
-      selectedTorrent: _kwSelectedTorrent,
-      seen: _kwProviderSeen,
-    );
-    _kwDirectCounts = providers.directCounts;
-    _kwTorrentCounts = providers.torrentCounts;
-    _kwSelectedDirect
-      ..clear()
-      ..addAll(providers.selectedDirect);
-    _kwSelectedTorrent
-      ..clear()
-      ..addAll(providers.selectedTorrent);
-    _kwProviderSeen
-      ..clear()
-      ..addAll(providers.seen);
+  /// Completion-only cache changes explicitly recompute the displayed rows.
+  void _recomputeKeyword() {
+    _keywordResultsController.recompute();
+    _syncKeywordResults();
   }
 
-  /// Re-apply keyword policies, then sync presentation-owned focus nodes.
-  void _recomputeKeyword() {
-    final filtered = filterKeywordResults(
-      _kwAll,
-      cachedOnly: _kwCachedOnly,
-      cache: _kwCache,
-      directCounts: _kwDirectCounts,
-      torrentCounts: _kwTorrentCounts,
-      selectedDirect: _kwSelectedDirect,
-      selectedTorrent: _kwSelectedTorrent,
-      sourceTab: _kwSourceTab,
-      filters: _kwFilters,
-    );
-    final sorted = sortKeywordResults(
-      filtered,
-      field: _kwSort,
-      ascending: _kwSortAsc,
-    );
-    _syncKwNodes(sorted.length);
+  void _syncKeywordResults() {
+    _syncKwNodes(_kwResults.length);
     _syncKwTabNodes();
-    setState(() => _kwResults = sorted);
+    setState(() {});
   }
 
   /// Grows/shrinks [_kwNodes] to the target length without ever disposing the
@@ -12718,8 +12640,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       ),
     );
     if (result == null || !mounted) return;
-    _kwFilters = result;
-    _recomputeKeyword();
+    _keywordResultsController.setFilters(result);
+    _syncKeywordResults();
   }
 
   /// Info banner shown above the results when the list is narrowed to
@@ -12785,114 +12707,15 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   /// Direct and Torrent providers. Ported from the old screen's stream-type
   /// dropdowns, adapted to the new toolbar/dialog idiom.
   Future<void> _openKeywordProviders() async {
-    // Freeze + adopt so the provider counts reflect everything found so far.
     _kwFreezeAndAdopt();
     await showDialog<void>(
       context: context,
-      builder: (dialogCtx) {
-        final scheme = Theme.of(dialogCtx).colorScheme;
-        return StatefulBuilder(
-          builder: (ctx, setLocal) {
-            void apply(VoidCallback mutate) {
-              setLocal(mutate);
-              _recomputeKeyword();
-            }
-
-            Widget group(
-              String title,
-              Map<String, int> counts,
-              Set<String> selected,
-            ) {
-              if (counts.isEmpty) return const SizedBox.shrink();
-              final entries = counts.entries.toList()
-                ..sort((a, b) => b.value.compareTo(a.value));
-              final allOn = selected.length == counts.length;
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(4, 8, 4, 2),
-                    child: Row(
-                      children: [
-                        Text(
-                          title,
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w700,
-                            color: scheme.onSurface,
-                          ),
-                        ),
-                        const Spacer(),
-                        TextButton(
-                          onPressed: () => apply(() {
-                            if (allOn) {
-                              selected.clear();
-                            } else {
-                              selected
-                                ..clear()
-                                ..addAll(counts.keys);
-                            }
-                          }),
-                          child: Text(allOn ? 'None' : 'All'),
-                        ),
-                      ],
-                    ),
-                  ),
-                  ...entries.map(
-                    (e) => CheckboxListTile(
-                      dense: true,
-                      contentPadding: EdgeInsets.zero,
-                      controlAffinity: ListTileControlAffinity.leading,
-                      value: selected.contains(e.key),
-                      title: Text(
-                        _kwSourceLabel(e.key),
-                        style: TextStyle(fontSize: 13, color: scheme.onSurface),
-                      ),
-                      secondary: Text(
-                        '${e.value}',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: scheme.onSurfaceVariant,
-                        ),
-                      ),
-                      onChanged: (_) => apply(() {
-                        if (selected.contains(e.key)) {
-                          selected.remove(e.key);
-                        } else {
-                          selected.add(e.key);
-                        }
-                      }),
-                    ),
-                  ),
-                ],
-              );
-            }
-
-            return AlertDialog(
-              title: const Text('Filter by source'),
-              content: SizedBox(
-                width: double.maxFinite,
-                child: SingleChildScrollView(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      group('Direct', _kwDirectCounts, _kwSelectedDirect),
-                      group('Torrent', _kwTorrentCounts, _kwSelectedTorrent),
-                    ],
-                  ),
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(dialogCtx).pop(),
-                  child: const Text('Done'),
-                ),
-              ],
-            );
-          },
-        );
-      },
+      builder: (_) => KeywordProvidersDialog(
+        session: _searchSession,
+        onChanged: () {
+          if (mounted) _syncKeywordResults();
+        },
+      ),
     );
   }
 
@@ -12910,15 +12733,14 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
             // the toggle below can then flip it. Changes apply live.
             void applyField(String value) {
               setLocal(() {
-                _kwSort = value;
-                _kwSortAsc = keywordSortAscendingByDefault(value);
+                _keywordResultsController.setSort(value);
               });
-              _recomputeKeyword();
+              _syncKeywordResults();
             }
 
             void applyDir(bool asc) {
-              setLocal(() => _kwSortAsc = asc);
-              _recomputeKeyword();
+              setLocal(() => _keywordResultsController.setSortAscending(asc));
+              _syncKeywordResults();
             }
 
             Widget tile(String value, String label) => ListTile(
@@ -13020,8 +12842,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     setState(() {
       _mode = mode;
       // Leaving the keyword list drops any in-progress multi-selection.
-      _kwSelectionMode = false;
-      _kwSelected.clear();
+      _keywordResultsController.setSelectionMode(false);
     });
     // Carry the typed query across: if there's text in the box, run the target
     // mode's search immediately instead of showing the empty state.
@@ -17042,19 +16863,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   }
 
   /// Display name for a source tab ('stremio:foo' → 'Foo').
-  static String _kwPrettySource(String s) {
-    final v = s.startsWith('stremio:') ? s.substring(8) : s;
-    return v.isEmpty ? s : v[0].toUpperCase() + v.substring(1);
-  }
-
-  String _kwSourceLabel(String source) {
-    for (final torrent in _kwFullSet) {
-      if (keywordSourceOf(torrent) != source) continue;
-      final label = torrent.addonDisplayName?.trim();
-      if (label != null && label.isNotEmpty) return label;
-    }
-    return _kwPrettySource(source);
-  }
+  String _kwSourceLabel(String source) => keywordSourceLabel(_kwFullSet, source);
 
   /// Horizontal source tabs (All / per-source with counts) above the toolbar —
   /// the fast single-select layer on top of the Providers multi-select. Only
@@ -17190,15 +16999,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     // A deliberate reshuffle: fold parked arrivals in so the tab filters the
     // complete set (also freezes further live updates).
     _kwFreezeAndAdopt();
-    // The tapped source can vanish in the adopt (dedupe reattribution) — an
-    // active tab no longer in the strip would strand an empty list.
-    if (source != null && !_kwAll.any((t) => keywordSourceOf(t) == source)) {
-      source = null;
-    }
-    if (_kwSourceTab != source) {
-      _kwSourceTab = source;
-      _recomputeKeyword();
-    }
+    if (_keywordResultsController.setSourceTab(source)) _syncKeywordResults();
+    source = _kwSourceTab;
     // Tab nodes are positional and the adopt can re-sort _kwSourceList —
     // re-anchor DPAD focus onto the tab that was actually chosen.
     if (tabHadFocus) {

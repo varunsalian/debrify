@@ -1,3 +1,4 @@
+import 'keyword_results_state.dart';
 import '../../../services/profiles/profile_session_memory.dart';
 import 'keyword_cache_state.dart';
 
@@ -11,12 +12,14 @@ class SearchSession {
   // live state owner and never changes the identity of an existing workflow.
   final KeywordCacheState initialKeywordCache;
   final String initialKeywordQuery;
+  final KeywordResultsState? initialKeywordResults;
 
   const SearchSession({
     required this.owner,
     required this.viewIdentity,
     this.initialKeywordCache = const KeywordCacheState.empty(),
     this.initialKeywordQuery = '',
+    this.initialKeywordResults,
   });
 
   @override

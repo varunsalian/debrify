@@ -515,3 +515,78 @@ actual observed-baseline identity comparison passes. Receipts are
 and diff checks pass. This request slice's automated review is complete; phase 4B
 and the overall migration remain in progress. Device/visual/performance checks
 remain pending.
+
+### Phase 4B displayed results (implemented and reviewed)
+
+`KeywordResultsController` (232 lines) now owns the displayed/pending raw results,
+freeze/adopt decisions, filtered/sorted results, provider reconciliation and choices,
+source-tab selection and bulk-selection state. `KeywordResultsState` publishes
+immutable containers and reuses unchanged lists on freeze/selection updates. The
+existing filtering, sorting and provider policies are reused. `KeywordProviders`
+is now a model, re-exported by its former policy file for existing callers.
+The screen's mutable projection fields and `_computeKwProviders` are removed;
+its small action wrappers keep row/tab focus, scroll and legacy dialog/navigation
+handoff. Cache badge notifications do not cause recomputation: the accepted cache
+completion still explicitly recomputes the displayed projection.
+
+The result controller is separate from the engine-request controller because the
+user can deliberately keep viewing older rows while authoritative results arrive.
+Each state has one owner. An explicit new search resets per-search choices while
+retaining the hidden prior rows and filter/sort preferences until the first paint.
+An explicit adopt updates provider choices and clears a vanished tab; completion
+validates the tab against the full pending set but filters the displayed set.
+Bulk selection keeps exact infohash identity, excludes direct/external rows from
+All, and retains the prior None/Cancel behavior. Outgoing-session actions are
+rejected by the injected search repository's owner check.
+
+`keywordResultsSnapshot` is a pure application function that folds pending raw
+rows and provider choices without changing the live state. It intentionally
+retains the legacy snapshot's previously displayed filtered rows. The first
+integration draft called a controller getter during widget disposal and the eight
+existing screen tests caught Riverpod's unsafe `WidgetRef` read. The correction
+uses the retained subscription's state and the pure function; no provider is
+resolved or mutated during disposal. Restoration seeds the result provider from
+immutable `SearchSession` bootstrap data before the first widget build, with no IO
+or recomputation. The static full snapshot store is still borrowed; moving its
+storage/consume boundary and default-filter reads remains phase 4B work.
+
+`KeywordProvidersDialog` (118 lines) replaces the legacy local-repaint dialog with
+a Consumer widget that owns its subscription for the dialog lifetime. Checkbox
+and All/None actions dispatch to current immutable state rather than mutate a
+captured Set. This also makes profile invalidation clear an open dialog's outgoing
+choices; a retained outgoing checkbox callback cannot restore them. The screen's
+focus callback is mounted-guarded. `keywordSourceLabel` preserves the same display
+name lookup and fallback for the dialog and source rail. Layout, wording and
+control styling are retained.
+
+Focused checks pass: **12 new controller tests**, **two new actual-screen tests**,
+and the **eight existing streaming/cache/focus/remount screen cases** (22 total).
+They cover stable freeze/adopt, provider unticks and reappearance, independent
+Direct/Torrent groups, invalid source tabs, filter/sort interaction, explicit cache
+recomputation, eligible bulk selection, begin/clear, retired actions, immutable
+bootstrap and pure snapshot folding. The new screen cases exercise the actual
+provider dialog, Name sort, bulk All/None/Cancel and an open-dialog profile handoff
+including a retained callback. The dialog test uses bounded frame advances while
+the searching indicator animates, and scrolls the toolbar to reach Select rather
+than suppressing missed-hit warnings. Draft fixture enum names were corrected to
+`StreamType.directUrl`/`externalUrl`; no production enum changed.
+
+The architecture guard covers **50 migrated files**, all below 300 lines, and the
+main screen is **20,281 lines**. Formatting and diff checks pass. Raw receipts are
+`.git/refactor-evidence/phase4b/results-*.txt`.
+
+The intermediate full suite (before extracting the dialog subscription and adding
+its profile-handoff test) matched the observed baseline with 7,576 passing
+identities. The repeated final suite completed in 172,038 ms: **7,577 passing
+identities, the same 51 baseline failures (22 failures and 29 errors), and 20
+skipped**, with no new failures, missing identities or newly skipped previously
+passing tests. Final analyzer identities/multiplicities remain the same **865**.
+The historical helper still exits 1 because its nine-failure allowance is stale;
+the actual observed-baseline comparison passes. Final receipts are
+`.git/refactor-evidence/phase4b/full-results-dialog.jsonl`,
+`full-results-dialog-comparison.txt` and `analyze-results-dialog.txt`.
+
+This slice's automated review is complete. Phase 4B still needs the default-filter
+read boundary and full snapshot storage/consume ownership; legacy presentation
+and navigation/playback bridges remain scheduled in their later phases. Native,
+visual and performance checks remain pending. The full migration is not complete.

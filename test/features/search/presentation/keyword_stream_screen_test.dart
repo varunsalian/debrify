@@ -100,6 +100,121 @@ void main() {
       tester.widget<CinemaSourcesLayout>(find.byType(CinemaSourcesLayout));
 
   testWidgets(
+    'open provider dialog clears outgoing choices and rejects retained callbacks',
+    (tester) async {
+      await mount(tester);
+      final request = repository.requests.single;
+      await drive(
+        tester,
+        () => request.onBatch('first', [
+          keywordTorrent('Private A', source: 'one'),
+          keywordTorrent('Private B', source: 'two'),
+        ]),
+      );
+      await tester.tap(find.text('Providers'));
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.byType(CheckboxListTile), findsNWidgets(2));
+      final staleChoice = tester.widget<CheckboxListTile>(
+        find.byType(CheckboxListTile).first,
+      );
+      await drive(tester, () {
+        repository.isCurrent = false;
+        ProfileRuntime.initializeCommitted(
+          ProfileScope(
+            profileId: 'incoming',
+            dataGeneration: 1,
+            sessionEpoch: 2,
+          ),
+        );
+      });
+      expect(find.byType(CheckboxListTile), findsNothing);
+      staleChoice.onChanged!(false);
+      await tester.pump();
+      expect(find.byType(CheckboxListTile), findsNothing);
+      expect(repository.requests, hasLength(1));
+      expect(tester.takeException(), isNull);
+      await drive(tester, () => tester.pumpWidget(const SizedBox()));
+      await tester.pump(const Duration(seconds: 7));
+    },
+  );
+
+  testWidgets(
+    'provider dialog, sort and bulk actions use current immutable choices',
+    (tester) async {
+      await mount(tester);
+      final request = repository.requests.single;
+      final first = keywordTorrent('Zebra', source: 'one');
+      final second = keywordTorrent('Zulu', source: 'two');
+      final added = keywordTorrent('Alpha', source: 'three');
+      await drive(tester, () => request.onBatch('first', [first, second]));
+      await tester.tap(find.text('Providers'));
+      await tester.pump(const Duration(milliseconds: 300));
+      var choices = tester
+          .widgetList<CheckboxListTile>(find.byType(CheckboxListTile))
+          .toList();
+      expect(choices.map((choice) => choice.value), [true, true]);
+      choices.first.onChanged!(false);
+      await tester.pump();
+      expect(layout(tester).resultCount, 1);
+      choices = tester
+          .widgetList<CheckboxListTile>(find.byType(CheckboxListTile))
+          .toList();
+      expect(choices.map((choice) => choice.value), [false, true]);
+      await tester.tap(find.text('All'));
+      await tester.pump();
+      expect(layout(tester).resultCount, 2);
+      await tester.tap(find.text('None'));
+      await tester.pump();
+      expect(layout(tester).resultCount, 0);
+      choices = tester
+          .widgetList<CheckboxListTile>(find.byType(CheckboxListTile))
+          .toList();
+      choices.last.onChanged!(true);
+      await tester.pump();
+      await drive(tester, () => request.complete([first, second, added]));
+      expect(
+        layout(tester).resultCount,
+        1,
+      ); // dialog keeps the displayed set frozen
+      await tester.tap(find.text('Done'));
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.tap(find.textContaining('Sort ·'));
+      await tester.pump(
+        const Duration(milliseconds: 300),
+      ); // sort opens over adopted pending arrivals
+      await tester.tap(find.text('Name'));
+      await tester.pump();
+      await tester.tap(find.text('Done'));
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(
+        layout(tester).resultCount,
+        2,
+      ); // new provider selected; untick retained
+      expect(find.text('Zebra'), findsNothing);
+      expect(
+        tester.getTopLeft(find.text('Alpha')).dy,
+        lessThan(tester.getTopLeft(find.text('Zulu')).dy),
+      );
+      await tester.ensureVisible(find.text('Select'));
+      await tester.pump();
+      await tester.tap(find.text('Select'));
+      await tester.pump();
+      await tester.tap(find.text('All'));
+      await tester.pump();
+      expect(find.text('Add · 2'), findsOneWidget);
+      await tester.tap(find.text('None'));
+      await tester.pump();
+      expect(find.text('Add'), findsOneWidget);
+      await tester.tap(find.text('Cancel'));
+      await tester.pump();
+      expect(find.text('Select'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await drive(tester, () => tester.pumpWidget(const SizedBox()));
+      await tester.pump(const Duration(seconds: 7));
+    },
+  );
+
+  testWidgets(
     'first batch paints; frozen arrivals adopt without losing row identity',
     (tester) async {
       await mount(tester);

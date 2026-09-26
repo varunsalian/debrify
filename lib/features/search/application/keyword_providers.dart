@@ -1,4 +1,7 @@
 import '../../../models/torrent.dart';
+import '../models/keyword_providers.dart';
+
+export '../models/keyword_providers.dart';
 
 /// Source tabs and provider groups must agree on the empty-source bucket.
 String keywordSourceOf(Torrent torrent) =>
@@ -6,27 +9,6 @@ String keywordSourceOf(Torrent torrent) =>
 
 bool isDirectKeywordResult(Torrent torrent) =>
     torrent.isDirectStream || torrent.isExternalStream;
-
-/// An immutable reconciliation result. The caller owns subsequent user edits.
-class KeywordProviders {
-  final Map<String, int> directCounts;
-  final Map<String, int> torrentCounts;
-  final Set<String> selectedDirect;
-  final Set<String> selectedTorrent;
-  final Set<String> seen;
-
-  KeywordProviders({
-    required Map<String, int> directCounts,
-    required Map<String, int> torrentCounts,
-    required Set<String> selectedDirect,
-    required Set<String> selectedTorrent,
-    required Set<String> seen,
-  }) : directCounts = Map.unmodifiable(directCounts),
-       torrentCounts = Map.unmodifiable(torrentCounts),
-       selectedDirect = Set.unmodifiable(selectedDirect),
-       selectedTorrent = Set.unmodifiable(selectedTorrent),
-       seen = Set.unmodifiable(seen);
-}
 
 /// New providers start selected, while providers unticked by the user stay
 /// unticked across streaming batches. A vanished provider is forgotten so it

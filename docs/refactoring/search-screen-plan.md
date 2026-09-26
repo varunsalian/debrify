@@ -447,7 +447,7 @@ exceptions at each phase; retire resolved ones.
 | 2: Leaf presentation | Complete; reviewed | Category/See All (`146466b5`) and mode controls extracted; eight new widget tests; final affected run 29 pass / same three baseline failures, analyzer unchanged; complex cards/layouts remain phases 6–7 |
 | 3: Lists/suggestions | Implemented and reviewed | Riverpod 3.4.3 and Lists controller wired; 23 new tests pass; full suite 7,450 pass / same 51 baseline failures / 20 skipped, no missing tests, analyzer unchanged; device checks pending |
 | 4A: Catalog search | Implemented and reviewed | Riverpod state, streaming/TV batching, source settings and dialog wired; 35 new tests pass; affected suite retains the same three baseline failures, analyzer unchanged; device checks pending |
-| 4B: Keyword search | In progress | Engine settings/dialog, cache state and request orchestration extracted and reviewed; full suite 7,563 pass / same 51 failures / 20 skips, analyzer unchanged. Frozen result projection, filters/defaults, full snapshot ownership and bulk selection remain; main screen 20,479 lines |
+| 4B: Keyword search | In progress | Engine settings, cache/request/result state, filters/sort/provider choices, bulk selection and provider dialog extracted and reviewed; full suite 7,577 pass / same 51 failures / 20 skips, analyzer unchanged. Default-filter reads and full snapshot storage ownership remain; main screen 20,281 lines |
 | 4C: Source selection | Not started | State, season/retry, pinning, cache and focus contracts |
 | 5: Home data | Not started | Preserve paging, snapshots, profiles, tracker semantics |
 | 6: Discover/layouts | Not started | Inventory and retain current variants |
