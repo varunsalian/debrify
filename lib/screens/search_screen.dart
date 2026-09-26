@@ -1,3 +1,6 @@
+import '../features/sources/application/source_search_dependencies.dart';
+import '../features/sources/data/service_source_search_repository.dart';
+import '../features/sources/models/source_search_request.dart';
 import '../features/sources/application/source_cache_controller.dart';
 import '../features/sources/models/source_cache_state.dart';
 import '../features/sources/application/saved_sources_controller.dart';

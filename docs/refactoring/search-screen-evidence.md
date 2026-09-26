@@ -924,3 +924,79 @@ Phase 4C remains in progress. Results/search state, individual retries and pin/l
 source actions still need extraction; focus, rendering and scrolling stay in the
 view. Later Home/Discover/lifecycle phases and native/visual/performance checks
 remain outstanding.
+
+
+### Phase 4C initial source request boundary (implemented and reviewed)
+
+`ServiceSourceSearchRepository` (166 lines) now owns the initial request's custom
+video-ID resolution, engine/addon search and concurrent IPTV lookup. The production
+screen dispatches a typed `SourceSearchRequest`, receives immutable batch/result
+lists and retains presentation, source-status ordering, freeze/pending behavior,
+cache dispatch and focus. Legacy service maps stay within the data adapter and its
+small RPC typedef file; no new transport, timeout or retry implementation was added.
+The repository borrows the existing services and starts no IO when constructed.
+
+Routing and request fields retain their behavior: exact keyword queries use engines
+only, including an empty keyword; IMDb/content-type requests preserve source order,
+movie/series and episode coordinates, known seasons and originating addon/video ID.
+Custom episode metadata resolves before search; an unresolved custom video suppresses
+search instead of guessing an IMDb episode. IPTV is skipped for keyword, custom
+identity and the existing test override. Otherwise it starts beside the main request,
+publishes status before its batch, and final results await it and append IPTV rows
+after the main rows. Snapshots preserve Torrent identities, including IPTV's existing
+per-Torrent authorization. No extra await is introduced when IPTV is absent.
+
+Live owner/request checks stop later RPC dispatch and callbacks after retirement.
+Completion closes the request's callback gate, so timed-out provider work cannot
+publish afterward. A late IPTV error is observed even if the main request has already
+failed; when the main request succeeds, an IPTV failure still propagates. Current
+errors remain errors and no automatic retry was introduced. The request snapshots
+known seasons at dispatch; only episode selections can await video resolution, and
+those do not load a season-chip inventory, so that snapshot retains the prior input.
+
+The existing `sourcesScreenForTesting` signature remains compatible. It now composes
+a nested ProviderScope overriding the repository's legacy engine callback, rather
+than adding a test-only callback field to the production widget. Raw-map conversion
+stays in the adapter. Production screens use the normal feature provider factory.
+The helper remains in the registered legacy file until the presentation/facade move;
+its adapter construction is test composition, not production widget data access.
+
+The 13 existing screen/startup/cache tests passed before extraction. The first run
+caught a cached-fallback completion timing regression caused by awaiting an empty
+IPTV future. Restoring the original nullable/no-await path fixed it; every original
+assertion remains unchanged. The final affected run has **181 passes**, covering
+Sources state/data/widget tests and existing direct-episode, IPTV, source-priority
+and streaming-search behavior. Thirteen new repository tests cover RPC flags and
+order, exact custom IDs, unresolved IDs, input/output snapshots, concurrent IPTV,
+status-before-batch callbacks, final concatenation, late callback rejection, request/
+profile retirement and both error paths. The final analyzer has **864 diagnostics**,
+with no additions and the previously removed Sources lint. Architecture checks cover
+**85 migrated files**; format/diff checks pass. Only the touched screen/helper blocks
+were formatted. Sources is **2,958 lines**, its parent **20,148**.
+
+Receipts are `.git/refactor-evidence/phase4c/request-before.txt`,
+`request-screen.txt`, `request-screen-fixed.txt`, `request-data-tests.txt`,
+`request-complete-focused.txt`, `analyze-request-complete.txt` and
+`request-final-analyzer-comparison.txt`. The first full run (`phase4c/full-request`, 173,449 ms) had 7,700 successes and
+one additional failure: `self_profile_settings_page_test.dart::identity save
+persists without changing access` read the old name after its fixed wait. The
+unchanged profile-settings file then passed all five tests in isolation
+(`request-profile-isolated.txt`). No failure allowance or profile test was changed.
+The confirmation full run on the same application code completed in **173,934 ms**
+with **7,701 successes**, the same **51 baseline failures** (22 failure/29 error
+outcomes), and **20 skips**. The profile-name test passed. All identities from the
+preceding full-cache checkpoint retain their outcomes, with no missing tests and
+13 new passing identities. Comparison against the original observed baseline also
+finds no new failures or newly skipped tests. The historical helper allowance is
+unchanged and still exits 1. This supports treating the initial profile-save result
+as a transient test outcome; the two runs and isolated result remain recorded,
+rather than adding it to the baseline allowance. Final receipts are
+`phase4c/full-request-confirmation.jsonl`,
+`phase4c/full-request-confirmation-comparison.txt` and
+`phase4c/request-confirmation-previous-checkpoint.txt` under
+`.git/refactor-evidence/`.
+
+Phase 4C remains in progress. The view still owns search/result state, provisional
+batch accumulation and presentation coordination; initial request IO is now outside
+it. Individual retry orchestration and pin/local-source actions remain too. Later
+Home/Discover/lifecycle phases and native/visual/performance checks are outstanding.

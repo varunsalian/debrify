@@ -7,11 +7,16 @@ Widget sourcesScreenForTesting({
   required PlaybackMeta meta,
   required Future<Map<String, dynamic>> Function(SearchBatchCallback onBatch)
   search,
-}) => _SourcesScreen(
-  selection: selection,
-  meta: meta,
-  isTelevision: true,
-  searchOverride: search,
+}) => ProviderScope(
+  overrides: [
+    sourceSearchRepositoryProvider.overrideWith(
+      (ref, session) => ServiceSourceSearchRepository(
+        owner: session.owner,
+        searchOverride: search,
+      ),
+    ),
+  ],
+  child: _SourcesScreen(selection: selection, meta: meta, isTelevision: true),
 );
 
 class _SourcesScreen extends ConsumerStatefulWidget {
@@ -38,9 +43,6 @@ class _SourcesScreen extends ConsumerStatefulWidget {
   /// episode long-press, where no play intent was expressed.
   final bool forcePlayOnTap;
 
-  final Future<Map<String, dynamic>> Function(SearchBatchCallback onBatch)?
-  searchOverride;
-
   const _SourcesScreen({
     required this.selection,
     required this.meta,
@@ -48,7 +50,6 @@ class _SourcesScreen extends ConsumerStatefulWidget {
     this.bindMode = false,
     this.keywordSeed,
     this.forcePlayOnTap = false,
-    this.searchOverride,
   });
 
   @override
@@ -570,89 +571,32 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
         _maybeCheckCache(batch);
       }
 
-      // Match Home's Sources list: the Stremio-aware search returns BOTH torrents
-      // AND addon direct-link streams for movies/series, and resolves IPTV/non-IMDb
-      // items straight from the addon (it skips the on-device torrent engines for
-      // non-standard content types by contentType). Previously this path was
-      // torrent-only, so addon direct links never appeared in the Search tab's
-      // Sources list even though Home showed them.
-      var originVideoId = sel.stremioVideoId?.trim();
-      if (sel.hasStremioEpisodeIdentity &&
-          originVideoId?.isNotEmpty != true &&
-          sel.season != null &&
-          sel.episode != null) {
-        originVideoId = await StremioService.instance
-            .resolveSeriesEpisodeVideoId(
-              addonKey: sel.stremioAddonKey!,
-              addonId: sel.stremioAddonId,
-              catalogId: sel.stremioCatalogId!,
-              season: sel.season!,
-              episode: sel.episode!,
-            );
-        if (!mounted || token != _searchToken) return;
-      }
-      final iptvSearch =
-          !_keywordMode &&
-              widget.searchOverride == null &&
-              !sel.hasStremioEpisodeIdentity
-          ? IptvSourceSearch.search(
-              sel,
-              deferXtreamSeriesEpisodes: true,
-              shouldContinue: () =>
-                  mounted && token == _searchToken && _searching,
-              onResult: (result) {
-                if (!mounted || token != _searchToken || !_searching) return;
-                setState(() {
-                  _iptvSources = [..._iptvSources, result];
-                  _loading = false;
-                });
-                onBatch(result.key, result.torrents);
-              },
-            )
-          : null;
-      final customEpisodeUnavailable =
-          sel.hasStremioEpisodeIdentity && originVideoId?.isNotEmpty != true;
-      final res = customEpisodeUnavailable
-          ? <String, dynamic>{
-              'torrents': <Torrent>[],
-              'addonStatuses': <AddonSearchStatus>[],
-            }
-          : widget.searchOverride != null
-          ? await widget.searchOverride!(onBatch)
-          : _keywordMode
-          ? await TorrentService.searchAllEngines(
-              _query,
-              onBatch: onBatch,
-              preserveSourceOrder: true,
-            )
-          : await TorrentService.searchByImdbWithStremio(
-              sel.imdbId,
-              isMovie: !sel.isSeries,
-              season: sel.season,
-              episode: sel.episode,
-              contentType: sel.contentType,
-              // Known seasons (from the Season chip's meta fetch) scope the
-              // smart-fallback probing to seasons that actually exist.
-              availableSeasons: _availableSeasons.isNotEmpty
-                  ? _availableSeasons
-                  : null,
-              onBatch: onBatch,
-              preserveSourceOrder: true,
-              originAddonKey: sel.stremioAddonKey,
-              originVideoId: originVideoId,
-            );
-      final iptv = iptvSearch == null ? <IptvSourceResult>[] : await iptvSearch;
-      if (!mounted || token != _searchToken) return;
-      _iptvSources = iptv;
-      final combinedTorrents = <Torrent>[
-        ...(res['torrents'] as List).cast<Torrent>(),
-        for (final source in iptv) ...source.torrents,
-      ];
+      final res = await ref
+          .read(sourceSearchRepositoryProvider(_sourcesSession))
+          .search(
+            SourceSearchRequest(
+              selection: sel,
+              keyword: _keywordMode ? _query : null,
+              availableSeasons: _availableSeasons,
+            ),
+            shouldContinue: () =>
+                mounted && token == _searchToken && _searching,
+            onBatch: onBatch,
+            onIptvResult: (result) {
+              if (!mounted || token != _searchToken || !_searching) return;
+              setState(() {
+                _iptvSources = [..._iptvSources, result];
+                _loading = false;
+              });
+            },
+          );
+      if (res == null || !mounted || token != _searchToken) return;
+      _iptvSources = res.iptv;
       _searching = false;
       // Keyword search runs engines only — no addon statuses to show.
       // The strip follows the user's Addon Priority order when one is set.
       _addonStatuses = SourcePriority.orderBy(
-        (res['addonStatuses'] as List<AddonSearchStatus>? ?? const [])
+        res.addonStatuses
             .where(
               (status) =>
                   !SourcePriority.isRecommendationOnlyAddon(status.addonId),
@@ -662,7 +606,7 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
         _sourcePriority,
         aliases: _sourceAliases,
       );
-      _presentStreaming(combinedTorrents, token);
+      _presentStreaming(res.torrents, token);
       _finishSearch(token);
     } catch (e) {
       if (!mounted || token != _searchToken) return;
