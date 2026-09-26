@@ -11,7 +11,10 @@ final sourceRetryProvider = NotifierProvider.autoDispose
     .family<SourceRetryController, Set<String>, SourcesSession>(
       SourceRetryController.new,
       retry: (count, error) => null,
-      dependencies: [sourceSearchRepositoryProvider],
+      dependencies: [
+        sourceSearchRepositoryProvider,
+        sourcesSessionActiveProvider,
+      ],
     );
 
 class SourceRetryController extends Notifier<Set<String>> {

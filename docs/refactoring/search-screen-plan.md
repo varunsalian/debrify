@@ -520,6 +520,20 @@ view/session keys; no additional scope or state owner was introduced. The broade
 phase 4C/8 scope audit must apply and verify explicit ownership for other families;
 settings tests do not establish feature-wide isolation.
 
+The retry controller now also declares its existing session-active dependency.
+Two additional tests verify explicit controller-and-repository overrides for
+both family and session-instance scopes, with an initialized parent and two
+siblings. Same-key retries remain independent; disposing one child rejects its
+late result without clearing the parent's or sibling's pending retry. The first
+experiment overriding only the controller reproduced a surviving child retry
+for an instance override; it is retained in local evidence and is not a supported
+scoping recipe. Final verification: all 559 Sources tests pass, analyzer remains
+at 863 existing diagnostics with no added identities, and 169 migrated files pass
+architecture checks. Evidence: `.git/refactor-evidence/phase4c/retry-scope-*` and
+`analyze-retry-scope-*`. This bounded dependency/test change did not rerun the
+full suite; the latest full-suite checkpoint remains the provider-picker run.
+The other families and native phase gates still require their own audit.
+
 Source batch preparation now reads live search/saved state and the scoped IPTV
 classifier in `application/source_batch_preparation.dart` (47 lines). This
 stateless operation retains no rows and rejects retired profiles/scopes. The

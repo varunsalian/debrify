@@ -105,6 +105,77 @@ void main() {
     expect(calls, hasLength(1));
   });
 
+  for (final wholeFamily in [false, true]) {
+    test(
+      'explicit retry scopes isolate pending work: family=$wholeFamily',
+      () async {
+        ProviderContainer scoped() => ProviderContainer.test(
+          parent: container,
+          overrides: [
+            sourceSearchRepositoryProvider.overrideWith(
+              (ref, key) => container.read(sourceSearchRepositoryProvider(key)),
+            ),
+            if (wholeFamily)
+              sourceRetryProvider.overrideWith2(SourceRetryController.new)
+            else
+              sourceRetryProvider(
+                session,
+              ).overrideWith(() => SourceRetryController(session)),
+          ],
+        );
+        final first = scoped();
+        final firstState = first.listen(
+          sourceRetryProvider(session),
+          (_, _) {},
+        );
+        final firstController = first.read(
+          sourceRetryProvider(session).notifier,
+        );
+        final second = scoped();
+        final secondState = second.listen(
+          sourceRetryProvider(session),
+          (_, _) {},
+        );
+        final secondController = second.read(
+          sourceRetryProvider(session).notifier,
+        );
+        expect(firstController, isNot(same(controller)));
+        expect(secondController, isNot(same(firstController)));
+        expect(
+          container.read(sourceRetryProvider(session).notifier),
+          same(controller),
+        );
+        expect(
+          first.read(sourceRetryProvider(session).notifier),
+          same(firstController),
+        );
+
+        final parentRetry = controller.retry(selection, status('same-key'));
+        final firstRetry = firstController.retry(selection, status('same-key'));
+        final secondRetry = secondController.retry(
+          selection,
+          status('same-key'),
+        );
+        expect(calls, hasLength(3));
+        expect(subscription.read(), {'same-key'});
+        expect(firstState.read(), {'same-key'});
+        expect(secondState.read(), {'same-key'});
+        first.dispose();
+        calls[1].$2.complete([]);
+        expect(await firstRetry, isNull);
+        expect(subscription.read(), {'same-key'});
+        expect(secondState.read(), {'same-key'});
+        calls[2].$2.complete([]);
+        expect(await secondRetry, isEmpty);
+        expect(secondState.read(), isEmpty);
+        expect(subscription.read(), {'same-key'});
+        calls[0].$2.complete([]);
+        expect(await parentRetry, isEmpty);
+        expect(subscription.read(), isEmpty);
+      },
+    );
+  }
+
   for (final retire in ['profile', 'dispose', 'dependency']) {
     for (final failure in [false, true]) {
       test('$retire rejects a late ${failure ? 'error' : 'result'}', () async {
