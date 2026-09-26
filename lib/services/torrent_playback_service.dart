@@ -5453,15 +5453,18 @@ class TorrentPlaybackService {
     required String imdbId,
     required bool isMovie,
     Future<bool> Function(SeriesSource)? saveBinding,
+    bool Function()? canContinue,
     String? addonCatalogId,
     String? addonCatalogKey,
   }) async {
+    bool active() => canContinue?.call() ?? true;
+    if (canContinue != null && (!context.mounted || !active())) return false;
     if (imdbId.isEmpty) {
       _snack(context, 'No IMDb match — can\'t pin a source.');
       return false;
     }
-    final provider = await _pickProvider(context);
-    if (!context.mounted || provider == _cancelled) return false;
+    final provider = await _pickProvider(context, canContinue: canContinue);
+    if (!context.mounted || !active() || provider == _cancelled) return false;
     if (provider == null) {
       _snack(context, 'No debrid provider configured. Add one in Settings.');
       return false;
@@ -5475,7 +5478,7 @@ class TorrentPlaybackService {
     String? failMessage;
     try {
       final magnet = await _magnetFor(torrent);
-      if (magnet != null) {
+      if (magnet != null && (canContinue?.call() ?? true)) {
         final r = await _add(provider, magnet, torrent);
         if (r.playUrl != null && r.playUrl!.isNotEmpty) res = r;
       }
@@ -5497,7 +5500,7 @@ class TorrentPlaybackService {
     // Pop the loader FIRST (using the captured navigator, no context), then
     // guard context use.
     if (rootNav.canPop()) rootNav.pop();
-    if (!context.mounted) return false;
+    if (!context.mounted || !active()) return false;
     if (res == null) {
       _snack(
         context,
@@ -5523,7 +5526,9 @@ class TorrentPlaybackService {
     )) {
       return false;
     }
-    if (context.mounted) _snack(context, 'Source pinned for instant playback.');
+    if (context.mounted && active()) {
+      _snack(context, 'Source pinned for instant playback.');
+    }
     return true;
   }
 
@@ -5536,18 +5541,21 @@ class TorrentPlaybackService {
     required String imdbId,
     required bool isMovie,
     Future<bool> Function(SeriesSource)? saveBinding,
+    bool Function()? canContinue,
     String? addonCatalogId,
     String? addonCatalogKey,
   }) async {
+    bool active() => canContinue?.call() ?? true;
+    if (canContinue != null && (!context.mounted || !active())) return false;
     try {
       await DirectSourceAuthorization.authorize(torrent);
     } catch (_) {
-      if (context.mounted) {
+      if (context.mounted && active()) {
         _snack(context, 'Connection changed. Search sources again.');
       }
       return false;
     }
-    if (!context.mounted) return false;
+    if (!context.mounted || !active()) return false;
     if (imdbId.isEmpty) {
       _snack(context, 'No IMDb match — can\'t pin a source.');
       return false;
@@ -5570,7 +5578,7 @@ class TorrentPlaybackService {
     )) {
       return false;
     }
-    if (context.mounted) {
+    if (context.mounted && active()) {
       _snack(context, 'Direct source pinned for fresh-link playback.');
     }
     return true;
@@ -5584,7 +5592,10 @@ class TorrentPlaybackService {
     required String imdbId,
     required bool isMovie,
     Future<bool> Function(SeriesSource)? saveBinding,
+    bool Function()? canContinue,
   }) async {
+    bool active() => canContinue?.call() ?? true;
+    if (canContinue != null && (!context.mounted || !active())) return false;
     logIptvSourceEvent(
       'manual_pin_started',
       source: torrent,
@@ -5608,16 +5619,16 @@ class TorrentPlaybackService {
         outcome: 'authorization_rejected',
         error: error,
       );
-      if (context.mounted) {
+      if (context.mounted && active()) {
         _snack(context, 'IPTV connection changed. Search sources again.');
       }
       return false;
     }
-    if (!context.mounted) {
+    if (!context.mounted || !active()) {
       logIptvSourceEvent(
         'manual_pin_completed',
         source: torrent,
-        outcome: 'view_closed',
+        outcome: context.mounted ? 'session_retired' : 'view_closed',
       );
       return false;
     }
@@ -5662,7 +5673,7 @@ class TorrentPlaybackService {
       source: torrent,
       outcome: 'saved',
     );
-    if (context.mounted) {
+    if (context.mounted && active()) {
       _snack(
         context,
         isMovie
@@ -5682,9 +5693,12 @@ class TorrentPlaybackService {
     required String imdbId,
     required bool isMovie,
     Future<bool> Function(SeriesSource)? saveBinding,
+    bool Function()? canContinue,
     required String title,
     String? year,
   }) async {
+    bool active() => canContinue?.call() ?? true;
+    if (canContinue != null && (!context.mounted || !active())) return false;
     if (imdbId.isEmpty) {
       _snack(context, 'No IMDb match — can\'t pin a source.');
       return false;
@@ -5702,7 +5716,7 @@ class TorrentPlaybackService {
         title: title,
       );
     }
-    if (source == null || !context.mounted) return false;
+    if (source == null || !context.mounted || !active()) return false;
     if (!await _persistManualBinding(
       source,
       imdbId: imdbId,
@@ -5711,7 +5725,7 @@ class TorrentPlaybackService {
     )) {
       return false;
     }
-    if (context.mounted) _snack(context, 'Local source pinned.');
+    if (context.mounted && active()) _snack(context, 'Local source pinned.');
     return true;
   }
 
@@ -7983,8 +7997,14 @@ class TorrentPlaybackService {
 
   /// Resolves which provider to use. Honours the default; when none is set and
   /// more than one is configured, asks the user (mirrors Home's behaviour).
-  static Future<String?> _pickProvider(BuildContext context) async {
+  static Future<String?> _pickProvider(
+    BuildContext context, {
+    bool Function()? canContinue,
+  }) async {
     final (configured, def) = await _configuredProviders();
+    if (canContinue != null && (!context.mounted || !canContinue())) {
+      return _cancelled;
+    }
     if (configured.isEmpty) return null;
     if (def != null) return def;
     if (configured.length == 1) return configured.first;
@@ -7998,6 +8018,9 @@ class TorrentPlaybackService {
           icon: _providerIcon(p),
         ),
     ]);
+    if (canContinue != null && (!context.mounted || !canContinue())) {
+      return _cancelled;
+    }
     if (result == null) return _cancelled; // dismissed
     // "Remember my choice" persists the default so we never ask again.
     if (result.remember) {

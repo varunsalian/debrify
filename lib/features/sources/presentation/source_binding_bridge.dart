@@ -24,6 +24,7 @@ class SourceBindingBridge {
     required String imdbId,
     required bool isMovie,
     required SourceBindingWriter saveBinding,
+    required bool Function() canContinue,
     String? addonCatalogId,
     String? addonCatalogKey,
   }) => IptvSourceSearch.owns(torrent)
@@ -33,6 +34,7 @@ class SourceBindingBridge {
           imdbId: imdbId,
           isMovie: isMovie,
           saveBinding: saveBinding,
+          canContinue: canContinue,
         )
       : torrent.isDirectStream
       ? TorrentPlaybackService.bindDirectSource(
@@ -41,6 +43,7 @@ class SourceBindingBridge {
           imdbId: imdbId,
           isMovie: isMovie,
           saveBinding: saveBinding,
+          canContinue: canContinue,
           addonCatalogId: addonCatalogId,
           addonCatalogKey: addonCatalogKey,
         )
@@ -50,6 +53,7 @@ class SourceBindingBridge {
           imdbId: imdbId,
           isMovie: isMovie,
           saveBinding: saveBinding,
+          canContinue: canContinue,
           addonCatalogId: addonCatalogId,
           addonCatalogKey: addonCatalogKey,
         );
@@ -59,6 +63,7 @@ class SourceBindingBridge {
     required String imdbId,
     required bool isMovie,
     required SourceBindingWriter saveBinding,
+    required bool Function() canContinue,
     required String title,
     String? year,
   }) => TorrentPlaybackService.bindLocalSource(
@@ -66,6 +71,7 @@ class SourceBindingBridge {
     imdbId: imdbId,
     isMovie: isMovie,
     saveBinding: saveBinding,
+    canContinue: canContinue,
     title: title,
     year: year,
   );

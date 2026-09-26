@@ -60,6 +60,7 @@ class LocalPickerBridge extends SourceBindingBridge {
     required String imdbId,
     required bool isMovie,
     required SourceBindingWriter saveBinding,
+    required bool Function() canContinue,
     required String title,
     String? year,
   }) {

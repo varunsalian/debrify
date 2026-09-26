@@ -60,7 +60,7 @@ void main() {
     controller = container.read(sourceBindingProvider(session).notifier);
   });
   Future<bool> bind(Future<bool> Function() operation) =>
-      controller.bind((_) => operation(), viewIsActive: () => true);
+      controller.bind((_, _) => operation(), viewIsActive: () => true);
 
   test(
     'one action gate stays busy through binding and the subsequent reload',
@@ -125,7 +125,7 @@ void main() {
   test('closing the view during reload rejects UI completion', () async {
     var mounted = true;
     final pending = controller.bind(
-      (_) async => true,
+      (_, _) async => true,
       viewIsActive: () => mounted,
     );
     await Future<void>.delayed(Duration.zero);
@@ -140,7 +140,7 @@ void main() {
       var mounted = true;
       final operation = Completer<bool>();
       final pending = controller.bind(
-        (_) => operation.future,
+        (_, _) => operation.future,
         viewIsActive: () => mounted,
       );
       if (retirement == 'view') {
@@ -183,11 +183,55 @@ void main() {
     boundAt: 1,
   );
 
+  for (final retirement in [
+    'view',
+    'profile',
+    'dispose',
+    'completion',
+    'error',
+  ]) {
+    test(
+      '$retirement closes the preparation guard and retained writer',
+      () async {
+        var mounted = true;
+        late bool Function() canContinue;
+        late SourceBindingWriter writer;
+        final operation = Completer<bool>();
+        final pending = controller.bind((save, current) {
+          writer = save;
+          canContinue = current;
+          return operation.future;
+        }, viewIsActive: () => mounted);
+        expect(canContinue(), isTrue);
+        if (retirement == 'view') {
+          mounted = false;
+        } else if (retirement == 'profile') {
+          ProfileSessionMemory.clearAll();
+        } else if (retirement == 'dispose') {
+          container.dispose();
+        }
+        if (retirement == 'error') {
+          final check = expectLater(pending, throwsStateError);
+          operation.completeError(StateError('preparation failed'));
+          await check;
+        } else {
+          if (retirement != 'completion') expect(canContinue(), isFalse);
+          operation.complete(false);
+          expect(await pending, isFalse);
+        }
+        expect(canContinue(), isFalse);
+        expect(await writer(pin), isFalse);
+        expect(repository.saves, isEmpty);
+        expect(repository.reads, isEmpty);
+      },
+    );
+  }
+
   test(
     'binding writer saves through the repository and closes before UI completion',
     () async {
       late SourceBindingWriter writer;
-      final pending = controller.bind((save) {
+      final pending = controller.bind((save, _) {
         writer = save;
         return save(pin);
       }, viewIsActive: () => true);
@@ -207,7 +251,7 @@ void main() {
       var mounted = true;
       late SourceBindingWriter writer;
       final operation = Completer<bool>();
-      final pending = controller.bind((save) {
+      final pending = controller.bind((save, _) {
         writer = save;
         return operation.future;
       }, viewIsActive: () => mounted);

@@ -816,7 +816,7 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
       return;
     }
     await _bindSource(
-      (saveBinding) => ref
+      (saveBinding, canContinue) => ref
           .read(sourceBindingBridgeProvider)
           .pin(
             context,
@@ -824,6 +824,7 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
             imdbId: _imdbId,
             isMovie: _isMovie,
             saveBinding: saveBinding,
+            canContinue: canContinue,
             addonCatalogId: widget.selection.stremioCatalogId,
             addonCatalogKey: widget.selection.stremioAddonKey,
           ),
@@ -838,13 +839,14 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
   }
 
   Future<void> _pinLocal() => _bindSource(
-    (saveBinding) => ref
+    (saveBinding, canContinue) => ref
         .read(sourceBindingBridgeProvider)
         .pinLocal(
           context,
           imdbId: _imdbId,
           isMovie: _isMovie,
           saveBinding: saveBinding,
+          canContinue: canContinue,
           title: widget.selection.title,
           year: widget.selection.year,
         ),

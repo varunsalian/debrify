@@ -9,7 +9,10 @@ import 'source_seasons_dependencies.dart';
 
 typedef SourceBindingWriter = Future<bool> Function(SeriesSource source);
 typedef SourceBindingOperation =
-    Future<bool> Function(SourceBindingWriter save);
+    Future<bool> Function(
+      SourceBindingWriter save,
+      bool Function() canContinue,
+    );
 
 final sourceBindingProvider = NotifierProvider.autoDispose
     .family<SourceBindingController, bool, SourcesSession>(
@@ -55,7 +58,7 @@ class SourceBindingController extends Notifier<bool> {
       final bound = await operation((source) async {
         if (!acceptingWrites || !active()) return false;
         return repository.save(source);
-      });
+      }, () => acceptingWrites && active());
       acceptingWrites = false;
       if (!bound || !active()) return false;
       final reloaded = await _savedSources.reload();

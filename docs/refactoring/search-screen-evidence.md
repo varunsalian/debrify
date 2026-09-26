@@ -2154,3 +2154,66 @@ and `binding-bridge-failure-comparison.txt`. The historical baseline helper stil
 exits 1 because of the unchanged pre-existing failures. Native dialog/profile
 preparation, remaining Sources ownership, phases 5–8 and final performance/CI
 verification remain open.
+
+
+### Phase 4C — binding action liveness at preparation boundaries
+
+This is a targeted stale-action behavior correction, separate from the preceding
+structural bridge extraction. `SourceBindingController` now supplies both the
+existing guarded writer and a live preparation check. The check closes when the
+operation completes/errors, the controller generation changes, the view closes,
+or the originating profile session retires. The bridge requires and forwards it
+to all four manual entry points. Their optional callback preserves compatibility
+for other legacy callers; no automatic playback path receives the new callback.
+Sources is 1,810 lines; controller 72, bridge 78, legacy playback service 8,891.
+The service remains the previously registered interim exception.
+
+The manual entry points reject retired starts and outer async completions,
+suppress stale messages, and check before torrent acquisition after magnet
+resolution. Provider selection checks again after configuration reads and after
+the dialog returns, before remembering a choice. Loader cleanup retains its
+captured navigator and ordering. Direct/IPTV authorization and local picker return
+checks retain explicit `context.mounted` checks alongside action liveness; an
+initial helper-only check was rejected by analyzer and corrected without ignores.
+IPTV distinguishes a retired session from an unmounted view in its completion
+log. Save/reload ordering and existing controller retry/duplicate rules are intact.
+
+Affected baseline: **288 passes**; final reviewed group: **296 passes**. Five new
+controller cases cover preparation and retained-writer retirement on view/profile/
+disposal/completion/error. Three bridge widget cases verify stale direct
+authorization cannot save/show success, a stale provider dialog cannot remember
+its choice, and an active dialog still remembers its choice even if pinning fails.
+The provider fixture uses dummy local credentials, a source without a magnet to
+avoid network acquisition, and a bounded alternation of real async IO and Flutter
+frames until the actual picker appears. Initial attempts used only fake frames or
+blocked on a real-zone observer while frame work was pending; those fixture runs
+failed or were deliberately stopped for correction. Completion and preference
+reads stay in the real async zone, followed by a frame for snack presentation.
+No production behavior was loosened to accommodate those fixtures.
+
+Receipts in `.git/refactor-evidence/phase4c/`: `binding-liveness-before.txt`,
+`binding-liveness-isolated.txt`, `binding-liveness-bridge*.txt` (fixture iterations),
+`binding-liveness-focused-reviewed.txt`, `analyze-binding-liveness-reviewed.txt`.
+The earlier interrupted focused run is retained as `binding-liveness-focused.txt`.
+
+This does not yet prove complete ownership of provider preparation. Configuration
+and credential reads inside `_configuredProviders`/`_add` still resolve legacy
+state across their own awaits. A queued remember-choice write also requires
+review at its actual preference commit edge. Local picker internal scans/dialogs
+still have their own lifecycle checks to review. Those are explicit remaining
+phase-4C requirements; the outer action callback is not a replacement for them.
+Native dialogs/devices and the later migration/performance/CI gates remain pending.
+
+
+Final review: all 111 migrated files pass the size/import guard; changed legacy
+methods and the five feature/test files match Dart formatting; diff checks pass.
+Analyzer retains **863 diagnostics**, with no added identities. Full suite:
+**7,864 successes**, the same **51 baseline failures** (22 failure/29 error), and
+**20 skips**. No original-baseline test is newly failing, missing or skipped.
+All previous binding-bridge checkpoint outcomes are unchanged; all eight new
+regression cases pass. Receipts:
+`.git/refactor-evidence/phase4c/full-binding-liveness.jsonl`,
+`full-binding-liveness-comparison.txt`, `binding-liveness-previous-checkpoint.txt`,
+and `binding-liveness-analyzer-comparison.txt`. The historical helper's nonzero
+exit remains attributable to its unchanged baseline failures. Phase 4C and the
+whole migration remain incomplete for the responsibilities listed above.
