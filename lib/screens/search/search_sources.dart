@@ -492,6 +492,10 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
         setState(() {});
       },
     );
+    _bindingSubscription = ref.listenManual(
+      sourceBindingProvider(_sourcesSession),
+      (previous, next) {},
+    );
     // Rebuild the toolbar when the funnel gains/loses focus so its D-pad
     // highlight tracks — Focus alone doesn't guarantee a parent rebuild.
     _filterFocus.addListener(_onFilterFocusChanged);
@@ -532,6 +536,7 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
 
   @override
   void dispose() {
+    _bindingSubscription.close();
     _disposedProviderFilter = _sourceFilter != null;
     _disposedFrozen = _streamFrozen;
     _disposedResultCount = _torrents.length;
@@ -812,7 +817,7 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
     _runSearch();
   }
 
-  bool _pinning = false;
+  late final ProviderSubscription<bool> _bindingSubscription;
 
   void _play(Torrent t, int i) {
     // Swallow a SELECT that leaks through as the row menu / provider picker
@@ -893,18 +898,16 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
       _snack("External links can't be pinned as a playback source.");
       return;
     }
-    if (_pinning) return; // guard concurrent binds (double-tap on TV)
-    _pinning = true;
-    try {
-      final ok = IptvSourceSearch.owns(t)
-          ? await TorrentPlaybackService.bindIptvSource(
+    await _bindSource(
+      () => IptvSourceSearch.owns(t)
+          ? TorrentPlaybackService.bindIptvSource(
               context,
               t,
               imdbId: _imdbId,
               isMovie: _isMovie,
             )
           : t.isDirectStream
-          ? await TorrentPlaybackService.bindDirectSource(
+          ? TorrentPlaybackService.bindDirectSource(
               context,
               t,
               imdbId: _imdbId,
@@ -912,48 +915,40 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
               addonCatalogId: widget.selection.stremioCatalogId,
               addonCatalogKey: widget.selection.stremioAddonKey,
             )
-          : await TorrentPlaybackService.bindSource(
+          : TorrentPlaybackService.bindSource(
               context,
               t,
               imdbId: _imdbId,
               isMovie: _isMovie,
               addonCatalogId: widget.selection.stremioCatalogId,
               addonCatalogKey: widget.selection.stremioAddonKey,
-            );
-      if (!mounted) return;
-      if (ok) {
-        await _reloadBound();
-        if (widget.bindMode && mounted) Navigator.of(context).pop();
-      }
-    } finally {
-      _pinning = false;
-    }
+            ),
+    );
   }
 
   Future<void> _unpin(SeriesSource source) async {
     if (!mounted) return;
-    await ref.read(savedSourcesProvider(_sourcesSession).notifier).remove(source);
+    await ref
+        .read(savedSourcesProvider(_sourcesSession).notifier)
+        .remove(source);
   }
 
-  Future<void> _pinLocal() async {
-    if (_pinning) return;
-    _pinning = true;
-    try {
-      final ok = await TorrentPlaybackService.bindLocalSource(
-        context,
-        imdbId: _imdbId,
-        isMovie: _isMovie,
-        title: widget.selection.title,
-        year: widget.selection.year,
-      );
-      if (!mounted) return;
-      if (ok) {
-        await _reloadBound();
-        if (widget.bindMode && mounted) Navigator.of(context).pop();
-      }
-    } finally {
-      _pinning = false;
-    }
+  Future<void> _pinLocal() => _bindSource(
+    () => TorrentPlaybackService.bindLocalSource(
+      context,
+      imdbId: _imdbId,
+      isMovie: _isMovie,
+      title: widget.selection.title,
+      year: widget.selection.year,
+    ),
+  );
+
+  Future<void> _bindSource(Future<bool> Function() operation) async {
+    if (!mounted) return;
+    final ready = await ref
+        .read(sourceBindingProvider(_sourcesSession).notifier)
+        .bind(operation, viewIsActive: () => mounted);
+    if (ready && widget.bindMode && mounted) Navigator.of(context).pop();
   }
 
   void _showRowMenu(Torrent t, int i) {

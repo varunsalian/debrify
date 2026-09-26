@@ -1393,3 +1393,60 @@ helper still exits 1 for pre-existing failures. Full receipts:
 `.git/refactor-evidence/phase4c/full-binding-model.jsonl`,
 `full-binding-model-comparison.txt`, and `binding-model-previous-checkpoint.txt`.
 Phase 4C and later migration/device/performance gates remain incomplete.
+
+
+### Phase 4C — Shared pin/local binding action orchestration
+
+Added the 53-line `SourceBindingController` and wired both production pin and local
+binding paths into it. A single Riverpod busy flag replaces `_pinning`, prevents
+concurrent operation callbacks, and stays busy through the saved-source reload.
+Construction is inert and automatic retries are disabled. The controller watches
+the borrowed saved-sources notifier to keep reload alive, and guards its own
+completion using profile/view lifetime and generation. Cancelled operations do
+not reload; operation/reload errors propagate while the live action releases its
+gate. A retired completion cannot clear a replacement action's busy flag.
+
+Dialogs/pickers, transport dispatch, external-link messaging and final route pop
+remain in presentation. The actual legacy binding functions and their arguments
+are unchanged. This does NOT establish that all writes or RPCs inside those
+functions are profile-safe: their internal async persistence/native boundaries
+and the final presentation bridge still need review before phase completion.
+The new controller guards dispatch/reload/completion, not unseen work inside the
+callback. No BuildContext or navigator is imported into application code.
+
+Baseline Sources/cinema suites passed **175 tests**. Broader existing Sources,
+cinema, addon-direct and IPTV integration tests passed **222 tests** after wiring.
+Final affected run passed **232 tests**, including nine new controller cases for
+busy/reload ordering, duplicate rejection, cancellation, current errors, view/
+profile/disposal retirement and replacement-action ownership. A new actual
+Sources menu test pins a direct row, verifies its refresh descriptor omits the
+temporary URL, verifies reload changes the menu to Unpin, and removes the binding
+through that menu. Its first fixture used a dynamic empty addon-status list,
+violating the legacy callback's typed list contract; an attempted startup wait
+was not the fix. Tracing identified the cast error. Omitting that optional field
+uses the existing empty default and preserves all persistence/menu assertions.
+All temporary tracing was removed. No existing tests or failure allowance changed.
+
+Final analysis remains **864 diagnostics**, with no new identities. Architecture
+passes for **95 migrated files**; new files and touched screen methods are
+formatted, and diff checks pass. Sources is **2,766 lines**, parent **20,156**.
+Receipts: `.git/refactor-evidence/phase4c/binding-action-before.txt`,
+`binding-action-integration.txt`, `binding-action-controller.txt`,
+`binding-action-screen-trace3.txt` (fixture diagnosis),
+`binding-action-screen-typed.txt` (passing menu test),
+`binding-action-focused-final.txt`, `analyze-binding-action-final.txt`, and
+`binding-action-analyzer-comparison.txt`.
+Remaining Phase 4C binding UI/data separation and native checks, Sources UI/focus
+extraction, later phases and the final architecture/performance/CI audit remain
+unfinished.
+
+
+The exact full helper completed in **176,033 ms** with **7,777 successes**, the
+same **51 observed baseline failures** (22 failure/29 error) and **20 skips**.
+No baseline test is newly failing, missing or skipped. Every binding-model
+checkpoint identity retains its outcome, with **10 new passing tests**. The
+historical allowance is unchanged and the helper still exits 1 for pre-existing
+failures. Full receipts:
+`.git/refactor-evidence/phase4c/full-binding-action.jsonl`,
+`full-binding-action-comparison.txt`, and `binding-action-previous-checkpoint.txt`.
+Phase 4C and later migration/device/performance gates remain unfinished.
