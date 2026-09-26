@@ -2,6 +2,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../models/stremio_addon.dart';
 import '../models/home_catalog_plan.dart';
+import '../data/home_catalog_repository.dart';
+import 'home_catalog_dependencies.dart';
 import '../models/home_catalog_state.dart';
 import '../models/home_catalog_session.dart';
 
@@ -9,7 +11,7 @@ final homeCatalogProvider = NotifierProvider.autoDispose
     .family<HomeCatalogController, HomeCatalogState, HomeCatalogSession>(
       HomeCatalogController.new,
       retry: (count, error) => null,
-      dependencies: const [],
+      dependencies: [homeCatalogRepositoryProvider],
     );
 
 /// Owns one view's catalog inventory, reservation and accepted snapshot.
@@ -17,9 +19,11 @@ final homeCatalogProvider = NotifierProvider.autoDispose
 class HomeCatalogController extends Notifier<HomeCatalogState> {
   HomeCatalogController(this.session);
   final HomeCatalogSession session;
+  late HomeCatalogRepository _repository;
 
   @override
   HomeCatalogState build() {
+    _repository = ref.watch(homeCatalogRepositoryProvider);
     final initial = session.initialBoard;
     return initial == null
         ? const HomeCatalogState.empty()
@@ -46,6 +50,62 @@ class HomeCatalogController extends Notifier<HomeCatalogState> {
     final batch = state.references.sublist(state.cursor, end);
     state = state.copyWith(cursor: end);
     return batch;
+  }
+
+  Future<List<StremioAddon>> readAddons() => _repository.readAddons();
+
+  /// Retain synchronous reservation and the repository's completion boundary.
+  /// Generation ownership is checked before reserving; publication additionally
+  /// requires the caller's mounted/profile acceptance check.
+  Future<List<CatalogSection>> fetchBatch(
+    int count, {
+    required bool Function() canReserve,
+    required bool Function() isCurrent,
+    Map<String, CatalogSection> previousRows = const {},
+    void Function(CatalogSection)? onSection,
+  }) => Future<List<CatalogSection>>.sync(() {
+    if (!ref.mounted || !canReserve()) return const <CatalogSection>[];
+    final batch = reserve(count);
+    return _repository.fetchBatch(
+      batch,
+      previousRows: previousRows,
+      isCurrent: () => ref.mounted && isCurrent(),
+      onSection: onSection,
+    );
+  });
+
+  /// Empty or already-present rows do not end vertical paging. A covered route
+  /// may pause only after an accepted empty batch, retaining its reserved cursor.
+  Future<List<CatalogSection>> fetchUntilNonEmpty(
+    int batchSize, {
+    required bool Function() isCurrent,
+    required bool Function() canContinue,
+    Map<String, CatalogSection> previousRows = const {},
+    Set<String> excludeRows = const {},
+    void Function(CatalogSection)? onSection,
+    void Function()? onBatchComplete,
+  }) async {
+    while (ref.mounted && isCurrent() && state.hasMore) {
+      final batch = await fetchBatch(
+        batchSize,
+        canReserve: isCurrent,
+        isCurrent: isCurrent,
+        previousRows: previousRows,
+        onSection: onSection,
+      );
+      if (!ref.mounted || !isCurrent()) return const [];
+      onBatchComplete?.call();
+      final additions = batch
+          .where(
+            (row) => !excludeRows.contains(
+              homeCatalogRowId((row.addon, row.catalog)),
+            ),
+          )
+          .toList();
+      if (additions.isNotEmpty) return additions;
+      if (!canContinue()) return const [];
+    }
+    return const [];
   }
 
   void commit(Map<String, StremioAddon> addons) {

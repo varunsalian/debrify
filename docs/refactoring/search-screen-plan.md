@@ -469,6 +469,38 @@ and six new successes. Evidence also includes `full-catalog-state*`.
 Evidence: `.git/refactor-evidence/phase5/catalog-state-*` and
 `analyze-catalog-state-*`. No full-phase or device/performance completion is claimed.
 
+Catalog batch orchestration now lives in `HomeCatalogController` (128 lines).
+Its declared Riverpod dependency supplies the existing plain repository; the screen
+no longer imports or stores that repository. Addon discovery, synchronous batch
+reservation/fetching and the empty/excluded-batch continuation loop use the controller.
+The two small view adapters only capture generation/profile/mounted acceptance and
+route-continuation policy. The old loop and repository wiring are removed from the
+screen, now 20,112 lines under its existing phase exception. Generations, loading
+flags, full-load/tracker orchestration and accepted row publication still await their
+subsequent bounded migrations.
+
+Review preserved one `Future.sync` around reservation and the original single async
+continuation loop, without adding adoption steps in the view adapters. Batch commits
+still happen after acceptance and before exclusion filtering; a non-empty accepted
+batch returns before checking whether a covered route may continue. Empty covered
+batches retain their cursor for the later resume. Catalog row IDs use the same
+addon/type/catalog identity; the repository produces catalog rows, while list and
+collection identities remain with their separate view paths. The controller rejects
+work after disposal, and production callbacks retain the original profile/generation
+checks. Provider construction starts no requests and automatic retries remain off.
+
+Six new workflow tests cover empty/excluded batches and commit order, pause/resume,
+retirement with a replacement inventory, disposal, rejected reservation, and explicit
+parent/two-child scope overrides with independent repositories/cursors. The preceding
+controller tests and real SearchScreen override/disposal test also pass. Targeted
+Home results: 266 passes versus 260 before, identical 12 failure identities and one
+skip. Analyzer diagnostic identities remain unchanged at 863; architecture checks
+pass for 189 migrated files. Full suite: 8,351 successes, unchanged 51
+failures/20 skips; every preceding outcome is preserved and six new tests pass.
+Evidence: `.git/refactor-evidence/phase5/catalog-workflow-*`,
+`analyze-catalog-workflow-*` and `full-catalog-workflow*`.
+The complete phase-5 and overall native/performance/CI gates remain open.
+
 ### 6. Discover and remaining layouts
 
 - Separate Discover selection/hydration from its grid/stage presentation. Preserve

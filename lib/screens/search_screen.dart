@@ -1,8 +1,6 @@
 import '../features/home/models/home_catalog_session.dart';
 import '../features/home/application/home_catalog_controller.dart';
 import '../features/home/models/home_catalog_state.dart';
-import '../features/home/application/home_catalog_dependencies.dart';
-import '../features/home/data/home_catalog_repository.dart';
 import '../features/home/application/home_catalog_plan.dart';
 import '../features/home/models/home_catalog_plan.dart';
 import '../features/home/application/home_catalog_preferences_dependencies.dart';
@@ -512,9 +510,6 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   int get _tabIndex => widget.searchMode ? 17 : (widget.discoverMode ? 18 : 15);
 
   final StremioService _stremio = StremioService.instance;
-  // Borrow the stateless dependency while Ref is live; pending batches may
-  // finish after this view is removed and still need their original guards.
-  late final HomeCatalogRepository _homeCatalogRepository;
 
   final TextEditingController _searchController = TextEditingController();
   late final _titleSearch = widget.titleSearch ?? TmdbTitleSearch();
@@ -1772,7 +1767,6 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     unawaited(_refreshMetadataFeaturePolicy());
     WidgetsBinding.instance.addObserver(this);
     _profileSessionOwner = ProfileSessionMemory.captureOwner();
-    _homeCatalogRepository = ref.read(homeCatalogRepositoryProvider);
     _keywordSnapshots = ref.read(
       keywordSnapshotRepositoryProvider(_profileSessionOwner),
     );
@@ -3060,7 +3054,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
             );
             if (!current()) return;
           }
-          final addons = await _homeCatalogRepository.readAddons();
+          final addons = await _homeCatalogController.readAddons();
           if (!current()) return;
           final plan = planHomeCatalogs(
             addons,
@@ -3204,51 +3198,47 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   /// runs of empty catalogs, and return the non-empty sections (advancing the
   /// cursor as it goes). Empty result ⇒ the board is exhausted — or [gen] went
   /// stale (a newer [_load] owns the cursor now; stop without touching it).
-  Future<List<CatalogSection>> _fetchBoardBatchUntilNonEmpty(int gen, {
+  Future<List<CatalogSection>> _fetchBoardBatchUntilNonEmpty(
+    int gen, {
     Map<String, CatalogSection> previousRows = const {},
     void Function(CatalogSection)? onSection,
     VoidCallback? onBatchComplete,
     Set<String> excludeRows = const {},
     bool pauseWhenCovered = false,
-  }) async {
+  }) {
     final scope = ProfileRuntime.scope.value;
-    while (mounted && gen == _boardLoadGen &&
-        scope == ProfileRuntime.scope.value && _boardCursor < _boardRefs.length) {
-      final batch = await _fetchBoardBatch(_kBoardBatchSize, gen,
-        previousRows: previousRows, onSection: onSection);
-      if (!mounted || gen != _boardLoadGen || scope != ProfileRuntime.scope.value) {
-        return const [];
-      }
-      onBatchComplete?.call();
-      final additions = batch.where((row) => !excludeRows.contains(_sectionRowId(row))).toList();
-      if (additions.isNotEmpty) return additions;
-      if (pauseWhenCovered && !_canPageHome) return const [];
-    }
-    return const [];
+    return _homeCatalogController.fetchUntilNonEmpty(
+      _kBoardBatchSize,
+      isCurrent: () =>
+          mounted &&
+          gen == _boardLoadGen &&
+          scope == ProfileRuntime.scope.value,
+      canContinue: () => !pauseWhenCovered || _canPageHome,
+      previousRows: previousRows,
+      excludeRows: excludeRows,
+      onSection: onSection,
+      onBatchComplete: onBatchComplete,
+    );
   }
 
-  /// Fetch exactly one batch of up to [n] catalog rows in parallel, advancing
-  /// [_boardCursor], and return the non-empty ones (order preserved). No-ops
-  /// when [gen] is stale so a superseded load can't advance the fresh load's
-  /// cursor.
   Future<List<CatalogSection>> _fetchBoardBatch(
     int n,
     int gen, {
     Map<String, CatalogSection> previousRows = const {},
     void Function(CatalogSection)? onSection,
-  }) => Future<List<CatalogSection>>.sync(() {
-    if (gen != _boardLoadGen) return const <CatalogSection>[];
+  }) {
     final scope = ProfileRuntime.scope.value;
-    bool current() =>
-        mounted && gen == _boardLoadGen && scope == ProfileRuntime.scope.value;
-    final slice = _homeCatalogController.reserve(n);
-    return _homeCatalogRepository.fetchBatch(
-      slice,
+    return _homeCatalogController.fetchBatch(
+      n,
+      canReserve: () => gen == _boardLoadGen,
+      isCurrent: () =>
+          mounted &&
+          gen == _boardLoadGen &&
+          scope == ProfileRuntime.scope.value,
       previousRows: previousRows,
-      isCurrent: current,
       onSection: onSection,
     );
-  });
+  }
 
   /// After a batch lands, if the board still doesn't fill the viewport (so the
   /// user can't scroll to trigger more) keep pulling batches until it does or
