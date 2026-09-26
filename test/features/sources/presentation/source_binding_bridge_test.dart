@@ -84,6 +84,7 @@ void main() {
       var saves = 0;
       await tester.runAsync(() async {
         SharedPreferences.setMockInitialValues({
+          'real_debrid_api_key': 'fixture-rd',
           'torbox_api_key': 'fixture-tb',
         });
         unawaited(
@@ -117,7 +118,8 @@ void main() {
       final prefs = await tester.runAsync(SharedPreferences.getInstance);
       // Reading a legacy plaintext credential migrates it to a sealed value.
       // The second provider must never be read after the first await retires.
-      expect(prefs!.getString('torbox_api_key'), 'fixture-tb');
+      expect(prefs!.getString('real_debrid_api_key'), 'fixture-rd');
+      expect(prefs.getString('torbox_api_key'), 'fixture-tb');
       expect(saves, 0);
       expect(find.text('Remember my choice'), findsNothing);
       expect(find.byType(SnackBar), findsNothing);

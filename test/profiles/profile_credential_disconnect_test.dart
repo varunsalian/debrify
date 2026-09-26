@@ -1,3 +1,4 @@
+import 'package:debrify/services/profiles/profile_session_memory.dart';
 import 'dart:async';
 import 'dart:io';
 
@@ -91,6 +92,33 @@ void main() {
   }
 
   test(
+    'guarded provider reads use the live owner outside a foreign captured zone',
+    () async {
+      await StorageService.saveApiKey('origin-fixture');
+      final owner = ProfileSessionMemory.captureOwner();
+      final foreign = ProfileScope(
+        profileId: memberId,
+        dataGeneration: 1,
+        sessionEpoch: 2,
+      );
+      final value = await ProfileRuntime.withCapturedScope(
+        foreign,
+        () => StorageService.getApiKey(
+          canContinue: () => owner == ProfileSessionMemory.captureOwner(),
+        ),
+      );
+      expect(value, 'origin-fixture');
+      expect(
+        await ProfileRuntime.withCapturedScope(
+          foreign,
+          () => StorageService.getApiKey(),
+        ),
+        isNull,
+      );
+    },
+  );
+
+  test(
     'borrower logout detaches locally and never requests remote revoke',
     () async {
       final resource = await createTrakt();
@@ -113,6 +141,44 @@ void main() {
       expect(await StorageService.clearTraktAuth(), isFalse);
       expect(await registry.getGrant(memberId, resource.id), isNull);
       expect(await registry.getResource(resource.id), isNotNull);
+    },
+  );
+
+  test(
+    'guarded provider read retains remote-transfer permission checks',
+    () async {
+      await StorageService.saveApiKey('shared-fixture');
+      final id = (await registry.getBoundResourceId(
+        adminId,
+        'provider.realDebrid',
+      ))!;
+      await resources.grant(
+        actor: await ProfileAuthorizationContext.capture(registry),
+        targetProfileId: memberId,
+        resourceId: id,
+        permissions: const {ResourcePermission.use},
+      );
+      await registry.bindResource(
+        profileId: memberId,
+        slot: 'provider.realDebrid',
+        resourceId: id,
+      );
+      await registry.setActiveProfile(memberId);
+      ProfileRuntime.publish(
+        ProfileScope(profileId: memberId, dataGeneration: 1, sessionEpoch: 2),
+      );
+      expect(
+        await StorageService.getApiKey(canContinue: () => true),
+        'shared-fixture',
+      );
+      expect(
+        await StorageService.getApiKey(
+          forRemoteTransfer: true,
+          canContinue: () => true,
+        ),
+        isNull,
+      );
+      expect(await StorageService.getApiKey(forRemoteTransfer: true), isNull);
     },
   );
 

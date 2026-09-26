@@ -2324,3 +2324,63 @@ unchanged, and all **eleven new cases** pass. Receipts:
 `full-provider-config-comparison.txt`, `provider-config-previous-checkpoint.txt`.
 The historical helper's nonzero exit is still its unchanged baseline failures.
 Phase 4C and the whole migration remain open for the responsibilities above.
+
+
+### Phase 4C — guarded configuration credential reads
+
+The manual availability path now forwards its action check into the four provider
+API-key readers and PikPak enablement/email. These optional guarded branches use a
+single private storage helper outside foreign captured-profile zones. They check
+before opening preferences, after each async lookup, and around remote-transfer
+routing. Existing unguarded calls retain their original paths. The guarded scalar
+SecretVault read checks retirement around resource routing and decryption/sealing;
+its lazy migration waits on the existing mutation barrier and rechecks both action
+ownership and the stored value immediately before writing. A retired read returns
+null. Current reads retain their value/format and real errors are not hidden.
+No encryption algorithm, credential schema, remote permission, retry policy or
+provider order changed. The review found committed resource reads already capture
+`ProfileAuthorizationContext` before registry awaits and validate when resolving
+secrets; existing in-flight revocation/decryption cases were rerun.
+
+The Sources configuration adapter is the production caller for these guards.
+`_add`, other playback operations and the PikPak acquisition session do not yet pass
+them and remain under the explicit acquisition review. Existing legacy dependencies
+now measure StorageService 10,821 lines, playback service 8,909, SecretVault 415.
+These are the bounded callback changes recorded in the plan, not wholesale service
+migrations. Sources view and feature/controller sizes are unchanged.
+
+Before changes, Sources/crypto/choice-write tests had **288 passes**, and the
+credential/resource authorization group had **27 passes**. Final combined group:
+**328 passes**. Thirteen new cases cover the five guarded getters, PikPak enablement,
+pending migration on view/profile/lifecycle retirement, replacement while waiting,
+normal migration completion, a committed-profile read from a foreign captured zone,
+and preservation of use-only remote-transfer denial. The real bridge test was also
+strengthened to check that retirement avoids migrating the first credential,
+besides avoiding the next read. Deliberately bypassing reader-guard forwarding
+makes that test fail because the first dummy credential is rewritten; restoring
+forwarding passes the full affected group. This controlled experiment was restored
+before further validation. All fixture credentials are local dummy values.
+
+Receipts under `.git/refactor-evidence/phase4c/`: `provider-credential-before.txt`,
+`provider-credential-auth-before.txt`, `provider-credential-isolated.txt`,
+`provider-credential-wiring-red.txt`, `provider-credential-focused-final.txt`,
+`analyze-provider-credential-reviewed.txt`. Initial analyzer runs caught one
+multiline-if formatting lint in a new test; it was fixed with braces, not ignored.
+The size/import guard passes for **112 migrated files**. Changed methods and test
+files are formatted, and diff checks pass. Provider acquisition, local picker
+internals, remaining Sources ownership and later/native/performance/CI gates remain
+open; the credential review here is specific to manual configuration loading.
+
+
+Final analyzer review retains **863 diagnostics**, with no added identities.
+Full suite: **7,897 successes**, unchanged **51 baseline failures** (22 failure /
+29 error), and **20 skips**. No original-baseline test is newly failing, missing
+or skipped; every previous provider-configuration checkpoint outcome is unchanged.
+All **thirteen new cases** pass, as does the strengthened existing bridge case.
+Receipts: `.git/refactor-evidence/phase4c/full-provider-credential.jsonl`,
+`full-provider-credential-comparison.txt`,
+`provider-credential-previous-checkpoint.txt`,
+`provider-credential-analyzer-comparison.txt`. The historical helper still exits 1
+for its unchanged pre-existing failures. Phase 4C remains open for acquisition,
+local picker internals and remaining Sources responsibilities; later migration,
+native/device, performance and CI gates also remain incomplete.

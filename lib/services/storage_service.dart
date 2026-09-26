@@ -632,7 +632,17 @@ class StorageService {
   static const int _debrifyTvRandomStartPercentMin = 10;
   static const int _debrifyTvRandomStartPercentMax = 90;
 
-  static Future<String?> getApiKey({bool forRemoteTransfer = false}) async {
+  static Future<String?> getApiKey({
+    bool forRemoteTransfer = false,
+    bool Function()? canContinue,
+  }) async {
+    if (canContinue != null) {
+      return _readCurrentProviderCredential(
+        _apiKeyKey,
+        canContinue,
+        forRemoteTransfer: forRemoteTransfer,
+      );
+    }
     if (forRemoteTransfer) {
       final credential = await ProfileCredentialFacade.readForRemoteTransfer(
         _apiKeyKey,
@@ -679,7 +689,15 @@ class StorageService {
   // Torbox API key helpers
   static Future<String?> getTorboxApiKey({
     bool forRemoteTransfer = false,
+    bool Function()? canContinue,
   }) async {
+    if (canContinue != null) {
+      return _readCurrentProviderCredential(
+        _torboxApiKey,
+        canContinue,
+        forRemoteTransfer: forRemoteTransfer,
+      );
+    }
     if (forRemoteTransfer) {
       final credential = await ProfileCredentialFacade.readForRemoteTransfer(
         _torboxApiKey,
@@ -2188,7 +2206,15 @@ class StorageService {
   // Premiumize API key helpers
   static Future<String?> getPremiumizeApiKey({
     bool forRemoteTransfer = false,
+    bool Function()? canContinue,
   }) async {
+    if (canContinue != null) {
+      return _readCurrentProviderCredential(
+        _premiumizeApiKey,
+        canContinue,
+        forRemoteTransfer: forRemoteTransfer,
+      );
+    }
     if (forRemoteTransfer) {
       final credential = await ProfileCredentialFacade.readForRemoteTransfer(
         _premiumizeApiKey,
@@ -2242,7 +2268,15 @@ class StorageService {
   // AllDebrid API key helpers
   static Future<String?> getAllDebridApiKey({
     bool forRemoteTransfer = false,
+    bool Function()? canContinue,
   }) async {
+    if (canContinue != null) {
+      return _readCurrentProviderCredential(
+        _allDebridApiKey,
+        canContinue,
+        forRemoteTransfer: forRemoteTransfer,
+      );
+    }
     if (forRemoteTransfer) {
       final credential = await ProfileCredentialFacade.readForRemoteTransfer(
         _allDebridApiKey,
@@ -2284,6 +2318,26 @@ class StorageService {
 
   static Future<bool> hasMdblistCredential() =>
       _credentialConfigured(_mdblistApiKeyKey, () => getMdblistApiKey());
+
+  /// Manual binding reads retain the initiating action across preferences,
+  /// resource routing and lazy legacy credential migration.
+  static Future<String?> _readCurrentProviderCredential(
+    String key,
+    bool Function() canContinue, {
+    required bool forRemoteTransfer,
+  }) => ProfileRuntime.withoutCapturedScope(() async {
+    if (!canContinue()) return null;
+    if (forRemoteTransfer) {
+      final credential = await ProfileCredentialFacade.readForRemoteTransfer(
+        key,
+      );
+      if (!canContinue()) return null;
+      if (credential.handled) return credential.value;
+    }
+    final prefs = await ProfilePreferences.instance();
+    if (!canContinue()) return null;
+    return SecretVault.getString(prefs, key, canContinue: canContinue);
+  });
 
   static Future<bool> _credentialConfigured(
     String key,
@@ -7558,7 +7612,21 @@ class StorageService {
   }
 
   // PikPak API Settings
-  static Future<bool> getPikPakEnabled() async {
+  static Future<bool> getPikPakEnabled({bool Function()? canContinue}) async {
+    if (canContinue != null) {
+      return ProfileRuntime.withoutCapturedScope(() async {
+        if (!canContinue()) return false;
+        final prefs = await ProfilePreferences.instance();
+        if (!canContinue() || !(prefs.getBool(_pikpakEnabledKey) ?? false)) {
+          return false;
+        }
+        final configured = await _credentialConfigured(
+          _pikpakEmailKey,
+          () => getPikPakEmail(canContinue: canContinue),
+        );
+        return canContinue() && configured;
+      });
+    }
     final prefs = await ProfilePreferences.instance();
     if (!(prefs.getBool(_pikpakEnabledKey) ?? false)) return false;
     return _credentialConfigured(_pikpakEmailKey, () => getPikPakEmail());
@@ -7574,7 +7642,15 @@ class StorageService {
 
   static Future<String?> getPikPakEmail({
     bool forRemoteTransfer = false,
+    bool Function()? canContinue,
   }) async {
+    if (canContinue != null) {
+      return _readCurrentProviderCredential(
+        _pikpakEmailKey,
+        canContinue,
+        forRemoteTransfer: forRemoteTransfer,
+      );
+    }
     if (forRemoteTransfer) {
       final credential = await ProfileCredentialFacade.readForRemoteTransfer(
         _pikpakEmailKey,

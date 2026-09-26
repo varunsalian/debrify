@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../utils/platform_util.dart';
 import 'profiles/profile_credential_facade.dart';
+import 'profiles/profile_preferences.dart';
 
 /// AES-GCM-256 encryption-at-rest for credential strings in SharedPreferences.
 ///
@@ -111,21 +112,37 @@ class SecretVault {
 
   /// `prefs.getString` + [open]; a legacy plaintext value is lazily rewritten
   /// sealed before being returned, so reads migrate the store over time.
-  static Future<String?> getString(SharedPreferences prefs, String key) async {
+  static Future<String?> getString(
+    SharedPreferences prefs,
+    String key, {
+    bool Function()? canContinue,
+  }) async {
+    bool active() => canContinue?.call() ?? true;
+    if (!active()) return null;
     final routed = await ProfileCredentialFacade.read(key);
+    if (!active()) return null;
     if (routed.handled) return routed.value;
     final stored = prefs.getString(key);
     if (stored == null) return null;
     final value = await open(stored);
+    if (!active()) return null;
     if (!isSealed(stored) && value != null) {
       final sealed = await seal(value);
-      // Re-check before writing: a login/refresh/logout that raced the async
-      // seal must win — the migration only upgrades the value it read.
-      if (prefs.getString(key) == stored) {
-        await prefs.setString(key, sealed);
+      if (!active()) return null;
+      if (canContinue == null) {
+        // Preserve the legacy migration contract for unguarded callers.
+        if (prefs.getString(key) == stored) await prefs.setString(key, sealed);
+      } else {
+        await ProfilePreferences.synchronizeExternalMutation(() async {
+          // Recheck both action ownership and credential replacement after
+          // waiting for the mutation barrier, immediately before the setter.
+          if (active() && prefs.getString(key) == stored) {
+            await prefs.setString(key, sealed);
+          }
+        }, marksMutation: false);
       }
     }
-    return value;
+    return active() ? value : null;
   }
 
   static Future<String?> getStringStrict(SharedPreferences prefs, String key) =>

@@ -6280,7 +6280,8 @@ class TorrentPlaybackService {
   static Future<(List<String>, String?)?> _configuredProviders({
     bool Function()? canContinue,
   }) => loadSourceProviderConfiguration(
-    isConfigured: _isConfigured,
+    isConfigured: (provider) =>
+        _isConfigured(provider, canContinue: canContinue),
     readDefault: StorageService.getDefaultTorrentProvider,
     canContinue: canContinue,
   );
@@ -8032,19 +8033,33 @@ class TorrentPlaybackService {
     return result.provider;
   }
 
-  static Future<bool> _isConfigured(String provider) async {
+  static Future<bool> _isConfigured(
+    String provider, {
+    bool Function()? canContinue,
+  }) async {
     switch (provider) {
       case 'debrid':
-        return (await StorageService.getApiKey())?.isNotEmpty ?? false;
+        return (await StorageService.getApiKey(
+              canContinue: canContinue,
+            ))?.isNotEmpty ??
+            false;
       case 'torbox':
-        return (await StorageService.getTorboxApiKey())?.isNotEmpty ?? false;
+        return (await StorageService.getTorboxApiKey(
+              canContinue: canContinue,
+            ))?.isNotEmpty ??
+            false;
       case 'premiumize':
-        return (await StorageService.getPremiumizeApiKey())?.isNotEmpty ??
+        return (await StorageService.getPremiumizeApiKey(
+              canContinue: canContinue,
+            ))?.isNotEmpty ??
             false;
       case 'alldebrid':
-        return (await StorageService.getAllDebridApiKey())?.isNotEmpty ?? false;
+        return (await StorageService.getAllDebridApiKey(
+              canContinue: canContinue,
+            ))?.isNotEmpty ??
+            false;
       case 'pikpak':
-        return StorageService.getPikPakEnabled();
+        return StorageService.getPikPakEnabled(canContinue: canContinue);
       default:
         return false;
     }
