@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import '../../../theme/app_theme.dart';
 import '../../../utils/dialog_tap_guard.dart';
 
-enum SourceRowActionKind { torrent, addon, iptv, mediaServer, external }
+import '../models/source_row_actions.dart';
+
+export '../models/source_row_actions.dart' show SourceRowActionKind;
 
 /// Row actions only: eligibility and playback/persistence stay with callers.
 /// Capture the opening view's theme across the modal route, as before.

@@ -745,39 +745,33 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
     final binding = _bindingFor(t);
     final playback = ref.read(sourcePlaybackBridgeProvider);
     final copier = ref.read(sourceLinkCopierProvider);
-    final stream = t.isDirectStream || t.isExternalStream;
+    final policy = ref.read(sourceRowActionPolicyProvider);
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: app.home.sheetBg,
-      builder: (_) => SourceRowActionsSheet(
-        app: app,
-        kind: !stream
-            ? SourceRowActionKind.torrent
-            : t.isExternalStream
-            ? SourceRowActionKind.external
-            : MediaServerService.owns(t)
-            ? SourceRowActionKind.mediaServer
-            : IptvSourceSearch.owns(t)
-            ? SourceRowActionKind.iptv
-            : SourceRowActionKind.addon,
-        bound: binding != null,
-        onPlay: () => _playNow(t, i),
-        onTogglePin: t.isExternalStream
-            ? null
-            : () => unawaited(binding != null ? _unpin(binding) : _pin(t)),
-        onCopy: stream || copier.canCopy(t)
-            ? () => unawaited(_copySourceLink(t))
-            : null,
-        onDownload:
-            stream &&
-                ProfilePolicyGuard.allowsSync(ProfileFeature.downloads) &&
-                playback.supportsDownload(t)
-            ? () {
-                if (!_sourceActionActive) return;
-                unawaited(playback.download(context, t));
-              }
-            : null,
-      ),
+      builder: (_) {
+        final actions = policy.project(
+          t,
+          canCopy: copier.canCopy,
+          supportsDownload: playback.supportsDownload,
+        );
+        return SourceRowActionsSheet(
+          app: app,
+          kind: actions.kind,
+          bound: binding != null,
+          onPlay: () => _playNow(t, i),
+          onTogglePin: actions.canPin
+              ? () => unawaited(binding != null ? _unpin(binding) : _pin(t))
+              : null,
+          onCopy: actions.canCopy ? () => unawaited(_copySourceLink(t)) : null,
+          onDownload: actions.canDownload
+              ? () {
+                  if (!_sourceActionActive) return;
+                  unawaited(playback.download(context, t));
+                }
+              : null,
+        );
+      },
     );
   }
 

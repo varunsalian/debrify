@@ -3649,3 +3649,52 @@ The final analyzer retains **863 diagnostics**, with no added identities. Receip
 Changed files/methods are formatted; architecture and diff checks pass. No failure
 allowances changed. Phase 4C remains in progress; this is startup readiness only,
 not completion of the remaining view/search orchestration or later phases.
+
+### Phase 4C — injected row-action eligibility
+
+Extracted row-menu classification, pin/copy visibility and download permission
+into the plain `data/source_row_action_policy.dart` (37 lines). Its immutable
+result/kind live in `models/source_row_actions.dart` (15 lines); the existing
+sheet exports the enum for caller compatibility. A 17-line application factory
+injects the existing media-server/IPTV classifiers and live synchronous profile
+permission. Copy/download capability functions remain captured from the existing
+injected copier and presentation bridge, so the policy imports no UI/Riverpod and
+performs no playback or persistence work.
+
+The real row menu captures the policy before opening, then projects inside its
+builder as before. Review preserves classifier precedence (torrent, external,
+media server, IPTV, addon), short-circuit callback order, live permission reads,
+external pin exclusion, and all existing action/mounted/profile guards. No
+WidgetRef access was introduced into the delayed builder. The immutable torrent
+stream type can be read there without changing the opening classification.
+The three direct service calls were removed from the Sources view; the parent
+search library's now-unused MediaServerService import was removed. Existing
+IPTV/profile imports remain for other library responsibilities. Sources part
+**1,532 → 1,526 lines**; no widget/action implementation was duplicated.
+
+Baseline: **472 Sources tests pass**. After integration: **480 pass**, including
+eight new plain policy tests covering all source kinds, classifier precedence,
+copy eligibility, live permission changes, denied/unsupported downloads and
+skipped capability calls. Existing real-screen modal/retirement and sheet tests
+pass unchanged. Initial analyzer found the now-unused legacy media-server import;
+it was removed before final verification. Architecture checks cover **143 migrated
+files**. No dependency upgrade or failure allowance change was made.
+
+Receipts under `.git/refactor-evidence/phase4c/`: `row-action-policy-before.txt`,
+`row-action-policy-after.txt`, `row-action-policy-format.dart`,
+`analyze-row-action-policy.txt` and `row-action-policy-analyzer-comparison.txt`
+(the retained initial unused-import finding). Phase 4C and remaining migration,
+native/performance and CI completion gates remain open.
+
+Final verification: **8,120 successes / the same 51 failures / 20 skips**.
+Every previous checkpoint outcome is preserved; all eight new policy tests pass.
+Original-baseline comparison finds no new failures, missing tests or new skips.
+Analyzer retains **863 diagnostics** with no added identities after removing the
+unused import. Receipts: `full-row-action-policy.jsonl`,
+`full-row-action-policy-comparison.txt`,
+`full-row-action-policy-previous-checkpoint.txt`,
+`analyze-row-action-policy-final.txt` and
+`row-action-policy-final-analyzer-comparison.txt`. Changed code and the modified
+legacy method are formatted; diff and architecture checks pass. The helper remains
+nonzero for existing failures; no allowance changes. Phase 4C and later gates
+remain in progress.
