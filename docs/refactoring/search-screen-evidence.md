@@ -4188,3 +4188,44 @@ Receipts: `full-row-navigation.jsonl`, `full-row-navigation-comparison.txt` and
 `full-row-navigation-previous-checkpoint.txt`. Changed legacy view methods pass a
 formatter stub check (`row-navigation-format.dart`); no whole-file formatting or
 failure-allowance changes. Phase 4C and later gates remain in progress.
+
+
+### Phase 4C — toolbar presentation and filter interaction
+
+Extracted toolbar composition, provider/sort/season dispatch and filter-dialog
+presentation into SourceToolbarPresentation. The view's production body calls its
+builder; replaced methods and toolbar-only getters are removed. This presentation
+helper reads the existing scoped Riverpod controllers; it creates no subscriptions,
+application state or resources. The view retains search/retry execution, projection
+rebuilding, focus nodes, lifetime and subscription ownership. Its constructor is
+side-effect free, and widget eligibility/series/active guards remain live callbacks.
+
+Review retains provider projection order, lazy warning construction, captured
+retry targets, current season inventory, select-before-search/rebuild ordering and
+filter-dialog opening values. After the dialog, active/profile checks precede
+provider access, and returned filters are compared with current filters before
+applying/rebuilding. Existing modal retirement/retheme and actual screen tests
+exercise these effects. No new DI registrations or persistence paths were added.
+
+Baseline and affected run: **499 Sources tests pass**. The initial analyzer found
+five unused parent imports and a multiline early-return brace diagnostic; all were
+fixed. Final analyzer: **863 diagnostics**, no added identities. **159 migrated
+files** pass size/import checks. Changed view methods were checked through a
+formatter stub; its only difference was the stub's trailing blank line. Existing
+large source files were not mass-formatted.
+
+Receipts under `.git/refactor-evidence/phase4c/`:
+`toolbar-presentation-before.txt`, `toolbar-presentation-after.txt`,
+`analyze-toolbar-presentation.txt`, `analyze-toolbar-presentation-final.txt`,
+`toolbar-presentation-analyzer-comparison.txt` and
+`toolbar-presentation-format{,-before}.dart`. Full-suite results follow below.
+Phase 4C and the remaining full-library/native/performance/CI gates stay open.
+
+Full suite: **8,146 successes / the same 51 failures / 20 skips**. Every prior
+checkpoint identity/outcome is preserved; original-baseline comparison finds no
+new failures, missing tests or new skips. Receipts:
+`full-toolbar-presentation.jsonl`, `full-toolbar-presentation-comparison.txt` and
+`full-toolbar-presentation-previous-checkpoint.txt`. No allowances changed.
+The helper is **141 formatted lines**; the Sources part shrinks **1,343 → 1,268**.
+The derived-season fallback comment moves with the menu responsibility. Remaining
+view extraction, Discover components and later/native gates are still pending.

@@ -163,11 +163,7 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
       );
 
   // --- redesign toolbar state (unused when _redesign is false) ---
-  SourceToolbarState get _toolbar => _resultsSubscription.read().toolbar;
-  TorrentFilterState get _filters => _toolbar.filters;
-  String get _sortBy => _toolbar.sortBy;
-  bool get _sortAsc => _toolbar.sortAsc;
-  String? get _sourceFilter => _toolbar.sourceFilter;
+  String? get _sourceFilter => _resultsSubscription.read().toolbar.sourceFilter;
   bool _disposedProviderFilter = false;
 
   late final ProviderSubscription<SourcePresentationSettings>
@@ -242,14 +238,8 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
   int? get _selectedSeason => _seasonsSubscription.read().selected;
 
   /// Seasons from the meta addon (authoritative). Empty until fetched; the
-  /// chip menu falls back to [_derivedSeasons].
+  /// chip menu falls back to the stored derived season inventory.
   List<int> get _availableSeasons => _seasonsSubscription.read().available;
-
-  /// Seasons derived from the last UNSCOPED (All Seasons) result set's
-  /// coverage info — the chip-menu fallback when the meta fetch fails. Only
-  /// snapshotted on unscoped searches: a season-scoped result set is already
-  /// filtered and would collapse the menu to the selected season.
-  List<int> get _derivedSeasons => _seasonsSubscription.read().derived;
 
   /// Whether the "Season" scope chip applies: only for a series pack search
   /// (no specific episode), never in keyword mode.
@@ -363,12 +353,6 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
     }
     await _runSearch();
   }
-
-  List<int> _seasonMenuNumbers() => sourceSeasonMenu(
-    available: _availableSeasons,
-    derived: _derivedSeasons,
-    selected: _selectedSeason,
-  );
 
   /// The search scope: the incoming selection with the Season chip's override
   /// applied (season-only, episode stays null → season-pack search).
@@ -705,7 +689,7 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
                 _seasonChipVisible ||
                 _iptvSources.isNotEmpty ||
                 _hasRetryableAddon)
-        ? () => _redesignToolbar(scheme, showProviders: !cinema)
+        ? () => _toolbarPresentation.build(scheme, showProviders: !cinema)
         : null,
     showProgress: _searching && !cinema,
     visibleCount: _visible.length,
@@ -812,66 +796,19 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
     if (mounted) setState(() {});
   }
 
-  /// The redesigned toolbar: source-group pills + sort + filter funnel, then the
-  /// active-filter pills row when filters are applied.
-  Widget _redesignToolbar(ColorScheme scheme, {bool showProviders = true}) {
-    final providers = projectSourceProviders(
-      torrents: _torrents,
-      statuses: _addonStatuses,
-      iptv: _iptvSources,
-      priority: _sourcePriority,
-      aliases: _sourceAliases,
-      retrying: _retryingAddons,
-    );
-
-    return buildSourceToolbar(
-      context,
-      scheme: scheme,
-      showProviders: showProviders,
-      providersVisible: providers.visible,
-      options: providers.options,
-      showAll: providers.showAll,
-      selectedKey: _sourceFilter,
-      onSelectProvider: (key) {
-        _resultsController.selectProvider(key);
-        _rebuildVisible();
-      },
-      onRetryProvider: (key) => unawaited(_retryAddon(providers.retries[key]!)),
-      messages: () => sourceToolbarMessages(
-        statuses: _addonStatuses,
-        iptv: _iptvSources,
-        selectedKey: _sourceFilter,
-      ),
-      controls: SourceToolbarControls(
-        showSeason: _seasonChipVisible,
-        selectedSeason: _selectedSeason,
-        seasonMenuNumbers: _seasonMenuNumbers,
-        sortBy: _sortBy,
-        sortAsc: _sortAsc,
-        filtersActive: !_filters.isEmpty,
-        filterFocus: _filterFocus,
-        onSelectSeason: (next) {
-          if (!_seasonsController.select(next)) return;
-          unawaited(_runSearch());
-        },
-        onSelectSort: (value) {
-          _resultsController.selectSort(value);
-          _rebuildVisible();
-        },
-        onToggleDirection: () {
-          _resultsController.toggleSortDirection();
-          _rebuildVisible();
-        },
-        onOpenFilters: () => unawaited(_openFilters()),
-        onFilterDown: _resultsFocus.filterDown,
-      ),
-      filters: _filters,
-      onClearFilters: () {
-        _resultsController.setFilters(const TorrentFilterState.empty());
-        _rebuildVisible();
-      },
-    );
-  }
+  late final _toolbarPresentation = SourceToolbarPresentation(
+    context: context,
+    ref: ref,
+    session: _sourcesSession,
+    hasSeasonScope: () => _seasonChipVisible,
+    isSeries: () => widget.selection.isSeries,
+    isActive: () => _sourceActionActive,
+    rebuildVisible: _rebuildVisible,
+    runSearch: _runSearch,
+    retryAddon: _retryAddon,
+    filterFocus: _filterFocus,
+    onFilterDown: _resultsFocus.filterDown,
+  );
 
   void _onFilterFocusChanged() {
     if (mounted) setState(() {});
@@ -888,18 +825,6 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
 
   String? _cacheLabel(Torrent torrent) =>
       _cacheSubscription.read().label(torrent);
-
-  Future<void> _openFilters() async {
-    if (!_sourceActionActive) return;
-    final result = await showSourceFiltersDialog(
-      context,
-      initialState: _filters,
-      isSeries: widget.selection.isSeries,
-    );
-    if (!_sourceActionActive || result == null || result == _filters) return;
-    _resultsController.setFilters(result);
-    _rebuildVisible();
-  }
 
   /// Redesigned result row (flag-gated) — a [SourceRow] with format-logo badges
   /// for detail-screen Sources, or a compact quality-tag row for keyword search
