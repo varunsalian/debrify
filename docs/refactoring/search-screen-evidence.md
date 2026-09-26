@@ -2497,3 +2497,62 @@ skips. Receipts: `.git/refactor-evidence/phase4c/full-pikpak.jsonl`,
 The historical helper still returns nonzero for unchanged existing failures, and
 its allowance was not modified. This verifies this extraction's automated gates;
 the migration and native/performance/CI completion audit remains open.
+
+
+### Phase 4C — manual binding loader route ownership
+
+A reproduced lifecycle defect: manual binding captured the root navigator but
+later called `pop()` on whatever route was current. A new route arriving during
+acquisition could be closed instead of the loader, and removing the original
+loader before completion could cause the same mistake. The four production
+bridge/navigation tests produce **one pass / three failures** before the fix.
+The failures cover a route above the loader, an already-removed loader and removal
+of the launching page. Navigator disposal was already harmless in that fixture.
+
+The shared `DebridLoadingOverlay.show` and provider helpers now return a small
+`DebridLoadingHandle` owning the exact navigator/route. Route construction uses
+the same `RawDialogRoute` and defaults as the installed SDK's `showGeneralDialog`;
+provider styles, content, 300ms transition, barrier and Back behavior are retained.
+The handle dismisses once, pops normally when current (preserving the exit fade),
+removes only its own route when covered and does nothing after prior removal or
+navigator disposal. The manual binding caller holds and dismisses this handle
+before checking the source view/session again. Existing callers may ignore the
+return value; automatic playback dismissal paths and the separate PikPak progress
+overlay are unchanged. The shared widget is **739 lines**; playback service is
+**8,864 lines** under its recorded exception. No new state/DI system was introduced.
+
+Afterward all **four bridge/navigation tests pass**, with no stale saves or new
+route pops. **Four overlay tests** cover visible/suppressed route and Back behavior,
+barrier/timing, normal animated/idempotent dismissal and root ownership from a
+nested navigator. Active acquisition success/error tests from previous slices
+remain in the affected suite. This is a separate demonstrated lifecycle correction,
+not a claim that every legacy loader or local picker has been migrated.
+
+Affected baseline: **333 passes / four failures**; final: **341 passes / the same
+four existing manual-source contract failures**. Analyzer retains **863 diagnostic
+identities/counts**, with no additions; two new test brace diagnostics were fixed.
+The migrated-source architecture check still passes **114 files**; this existing
+shared widget is covered by its scoped ownership review, not claimed as a fully
+migrated feature widget. Changed methods/tests are formatted and diff checks pass.
+Receipts under `.git/refactor-evidence/phase4c/`: `loader-before.txt`,
+`loader-red.txt`, `loader-green.txt`, `loader-overlay-tests.txt`,
+`loader-focused.txt`, `loader-failure-comparison.txt`, `analyze-loader.txt` and
+`loader-analyzer-comparison.txt`. Local-picker continuation ownership, remaining
+Sources presentation and later phase/native/performance/CI gates remain open.
+
+Follow-up review also identifies the Sources view's bind-mode completion pop
+(`_bindSource` in `lib/screens/search/search_sources.dart`) as a separate route
+ownership boundary: it currently checks mounted/session ownership but uses the
+current navigator route. This loader fix does not close that view-level review.
+`lib/services/local_bound_source_service.dart` remains 1,033 lines with modal,
+native picker, folder scanning and file-metadata continuations; record its bounded
+exception before editing it in the subsequent picker slice.
+
+Full-suite review: **7,941 successes / the same 51 failures / 20 skips**. Every
+previous checkpoint outcome is unchanged, and all **eight new loader cases** pass.
+The original-baseline comparison finds no added failures, missing tests or new
+skips. Receipts: `.git/refactor-evidence/phase4c/full-loader.jsonl`,
+`full-loader-comparison.txt` and `loader-previous-checkpoint.txt` in that directory.
+The historical helper remains nonzero for existing failures; no allowances were
+changed. Phase 4C remains in progress, with the view-level completion pop, local
+picker continuations and remaining Sources responsibilities still open.

@@ -6,7 +6,8 @@ import 'package:flutter/material.dart';
 class DebridLoadingOverlay {
   DebridLoadingOverlay._();
 
-  /// Show the loading overlay.
+  /// Show the loading overlay and return ownership of its exact route.
+  /// Existing callers may ignore the handle and retain their dismissal pairing.
   ///
   /// When [suppressVisual] is true the route is still pushed and dismissed
   /// exactly as normal (so every existing dismiss/pop call site keeps
@@ -14,7 +15,7 @@ class DebridLoadingOverlay {
   /// Used during movie Quick Play, where the caller already shows its own
   /// continuous loading mask underneath and a second visible overlay would
   /// be jarring.
-  static void show(
+  static DebridLoadingHandle show(
     BuildContext context, {
     required String provider,
     required String torrentName,
@@ -22,8 +23,8 @@ class DebridLoadingOverlay {
     IconData icon = Icons.cloud_download_rounded,
     bool suppressVisual = false,
   }) {
-    showGeneralDialog(
-      context: context,
+    final navigator = Navigator.of(context, rootNavigator: true);
+    final route = RawDialogRoute<void>(
       barrierDismissible: false,
       barrierColor: suppressVisual
           ? Colors.transparent
@@ -48,12 +49,11 @@ class DebridLoadingOverlay {
           parent: animation,
           curve: Curves.easeOutCubic,
         );
-        return FadeTransition(
-          opacity: curved,
-          child: child,
-        );
+        return FadeTransition(opacity: curved, child: child);
       },
     );
+    navigator.push(route);
+    return DebridLoadingHandle._(navigator, route);
   }
 
   /// Dismiss the overlay.
@@ -103,12 +103,12 @@ class DebridLoadingOverlay {
   }
 
   /// Provider-specific helpers
-  static void showRealDebrid(
+  static DebridLoadingHandle showRealDebrid(
     BuildContext context,
     String torrentName, {
     bool suppressVisual = false,
   }) {
-    show(
+    return show(
       context,
       provider: 'Real-Debrid',
       torrentName: torrentName,
@@ -118,12 +118,12 @@ class DebridLoadingOverlay {
     );
   }
 
-  static void showTorbox(
+  static DebridLoadingHandle showTorbox(
     BuildContext context,
     String torrentName, {
     bool suppressVisual = false,
   }) {
-    show(
+    return show(
       context,
       provider: 'Torbox',
       torrentName: torrentName,
@@ -133,12 +133,12 @@ class DebridLoadingOverlay {
     );
   }
 
-  static void showPremiumize(
+  static DebridLoadingHandle showPremiumize(
     BuildContext context,
     String torrentName, {
     bool suppressVisual = false,
   }) {
-    show(
+    return show(
       context,
       provider: 'Premiumize',
       torrentName: torrentName,
@@ -148,12 +148,12 @@ class DebridLoadingOverlay {
     );
   }
 
-  static void showAllDebrid(
+  static DebridLoadingHandle showAllDebrid(
     BuildContext context,
     String torrentName, {
     bool suppressVisual = false,
   }) {
-    show(
+    return show(
       context,
       provider: 'AllDebrid',
       torrentName: torrentName,
@@ -161,6 +161,27 @@ class DebridLoadingOverlay {
       icon: Icons.all_inclusive_rounded,
       suppressVisual: suppressVisual,
     );
+  }
+}
+
+/// Owns one loader route, even if the launching view or top route changes.
+class DebridLoadingHandle {
+  final NavigatorState _navigator;
+  final RawDialogRoute<void> _route;
+  bool _dismissed = false;
+
+  DebridLoadingHandle._(this._navigator, this._route);
+
+  void dismiss() {
+    if (_dismissed) return;
+    _dismissed = true;
+    if (!_navigator.mounted) return;
+    if (_route.isCurrent) {
+      // Keep the existing exit animation when the loader is still topmost.
+      _navigator.pop();
+    } else if (_route.isActive) {
+      _navigator.removeRoute(_route);
+    }
   }
 }
 

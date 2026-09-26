@@ -5472,11 +5472,9 @@ class TorrentPlaybackService {
       _snack(context, 'No debrid provider configured. Add one in Settings.');
       return false;
     }
-    // Capture the root navigator BEFORE showing the loader so we can always
-    // dismiss it — even if the screen tears down during the await (otherwise the
-    // barrier-less full-screen loader can get stuck covering the whole app).
-    final rootNav = Navigator.of(context, rootNavigator: true);
-    _showLoading(context, provider, torrent.name);
+    // Own this exact loader: completion must not pop a newer route after a
+    // navigation/profile handoff, even if the launching view has disappeared.
+    final loading = _showLoading(context, provider, torrent.name);
     _Resolved? res;
     String? failMessage;
     try {
@@ -5505,9 +5503,8 @@ class TorrentPlaybackService {
     } on _PikPakFailed {
       failMessage = 'Download failed on PikPak.';
     } catch (_) {}
-    // Pop the loader FIRST (using the captured navigator, no context), then
-    // guard context use.
-    if (rootNav.canPop()) rootNav.pop();
+    // Release the owned route before accessing the possibly retired view.
+    loading.dismiss();
     if (!context.mounted || !active()) return false;
     if (res == null) {
       _snack(
@@ -8720,31 +8717,30 @@ class TorrentPlaybackService {
   // ── Minimal UI feedback ────────────────────────────────────────────────────
 
   /// The app's shared cinematic add-loading overlay (not a plain spinner box).
-  static void _showLoading(BuildContext context, String provider, String name) {
+  static DebridLoadingHandle _showLoading(
+    BuildContext context,
+    String provider,
+    String name,
+  ) {
     switch (provider) {
       case 'debrid':
-        DebridLoadingOverlay.showRealDebrid(context, name);
-        break;
+        return DebridLoadingOverlay.showRealDebrid(context, name);
       case 'torbox':
-        DebridLoadingOverlay.showTorbox(context, name);
-        break;
+        return DebridLoadingOverlay.showTorbox(context, name);
       case 'premiumize':
-        DebridLoadingOverlay.showPremiumize(context, name);
-        break;
+        return DebridLoadingOverlay.showPremiumize(context, name);
       case 'alldebrid':
-        DebridLoadingOverlay.showAllDebrid(context, name);
-        break;
+        return DebridLoadingOverlay.showAllDebrid(context, name);
       case 'pikpak':
-        DebridLoadingOverlay.show(
+        return DebridLoadingOverlay.show(
           context,
           provider: 'PikPak',
           torrentName: name,
           accentColor: const Color(0xFF6366F1),
           icon: Icons.cloud_circle_rounded,
         );
-        break;
       default:
-        DebridLoadingOverlay.show(
+        return DebridLoadingOverlay.show(
           context,
           provider: _label(provider),
           torrentName: name,
