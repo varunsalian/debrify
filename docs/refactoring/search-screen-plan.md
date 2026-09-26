@@ -1,7 +1,7 @@
 # Search screen incremental refactoring plan
 
 Status: implementation started on `refactor/search-screen`; the automated baseline
-and phases 1–3 are reviewed. Phase 4A catalog extraction is reviewed; 4B keyword migration is next. Device checks remain pending.
+and phases 1–3 are reviewed. Phase 4A catalog extraction is reviewed; 4B keyword migration is in progress. Device checks remain pending.
 Device verification remains pending.
 Reviews and actual results are recorded in the
 [implementation evidence](search-screen-evidence.md).
@@ -448,7 +448,7 @@ exceptions at each phase; retire resolved ones.
 | 2: Leaf presentation | Complete; reviewed | Category/See All (`146466b5`) and mode controls extracted; eight new widget tests; final affected run 29 pass / same three baseline failures, analyzer unchanged; complex cards/layouts remain phases 6–7 |
 | 3: Lists/suggestions | Implemented and reviewed | Riverpod 3.4.3 and Lists controller wired; 23 new tests pass; full suite 7,450 pass / same 51 baseline failures / 20 skipped, no missing tests, analyzer unchanged; device checks pending |
 | 4A: Catalog search | Implemented and reviewed | Riverpod state, streaming/TV batching, source settings and dialog wired; 35 new tests pass; affected suite retains the same three baseline failures, analyzer unchanged; device checks pending |
-| 4B: Keyword search | Not started | State, streaming, engine settings, snapshots, bulk actions |
+| 4B: Keyword search | In progress | Engine source settings/dialog extracted and reviewed; nine new tests pass. Streaming, cache state, defaults, snapshots and bulk ownership remain in the legacy screen |
 | 4C: Source selection | Not started | State, season/retry, pinning, cache and focus contracts |
 | 5: Home data | Not started | Preserve paging, snapshots, profiles, tracker semantics |
 | 6: Discover/layouts | Not started | Inventory and retain current variants |

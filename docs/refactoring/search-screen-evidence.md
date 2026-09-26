@@ -350,3 +350,38 @@ Verification and review:
 - Receipts: `.git/refactor-evidence/phase4a/`. Device/visual/performance checks remain
   pending and are not inferred from widgets. Legacy sizes: screen **20,689** lines;
   Sources part **3,347**; other remaining parts unchanged. Phase 4B/C and 5–8 remain.
+
+## Phase 4B: Keyword source settings slice (phase still in progress)
+
+`KeywordSourcesDialog` now consumes its own Riverpod controller and immutable
+`KeywordSource` choices. The real screen opens it with the captured `SearchSession`
+and retains its existing post-dialog search/first-paint toolbar focus handling.
+The shared dialog controls from 4A keep the original appearance and keyboard paths.
+`EngineKeywordSourcesRepository` receives the existing combined engine loader and
+borrowed `SettingsManager`; it preserves registry order, per-engine defaults,
+explicit saved overrides, key normalization and one immediate write per bulk item.
+Like catalog settings, preference writes retain live profile checks at the async
+mutation barrier. Profile handoff clears the dialog without replaying a load.
+
+Slice review and checks:
+
+- Four adapter tests cover all three default cases (missing/false/true), saved
+  overrides, settings-key compatibility, late enumeration and actual preference
+  barriers. The combined-loader case imports a real temporary registry YAML file
+  and a disabled Prowlarr configuration, proving both appear in order and the
+  user-configured indexer's saved override takes precedence. An initial fixture
+  used the internal model's JSON shape instead of the flat imported-YAML format;
+  correcting the fixture exercised the real registry parser successfully.
+- Five dialog tests cover defaults, Select/tap, immediate bulk writes, reopen and
+  disposal, saves failing after dismissal, stale loads on profile replacement,
+  empty state and no automatic retry. All nine new tests pass.
+- Related integration/source/engine tests: **49 pass, the same two baseline title
+  suggestion failures**, no missing or newly skipped identities. Analyzer remains
+  at the same 865 identities/multiplicities. Architecture checks cover **33 files**,
+  all below 300 lines; diff checks pass. Receipts are under
+  `.git/refactor-evidence/phase4b/`.
+- This completes only the source-settings slice. Keyword streaming/freeze/adopt,
+  per-batch cache checks/final cache-only mode, default filters, borrowed snapshots,
+  and bulk-selection ownership are still in the screen and remain required work.
+  Source part is now 3,257 lines and the main screen 20,686 lines. No new permanent
+  size exception or device/performance parity claim is introduced.

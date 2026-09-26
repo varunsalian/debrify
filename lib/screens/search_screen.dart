@@ -1,6 +1,5 @@
+import '../features/search/presentation/keyword_sources_dialog.dart';
 import '../features/search/presentation/catalog_sources_dialog.dart';
-import '../features/search/presentation/source_toggle_row.dart';
-import '../features/search/presentation/source_dialog_shell.dart';
 import '../features/search/application/catalog_search_controller.dart';
 import '../features/search/models/catalog_search_state.dart';
 import '../features/search/presentation/catalog_search_projection.dart';
@@ -80,8 +79,6 @@ import '../models/torrent_filter_state.dart';
 import '../services/analytics_service.dart';
 import '../services/debrify_tv_repository.dart';
 import '../services/discover_prefs.dart';
-import '../services/engine/dynamic_engine.dart';
-import '../services/engine/settings_manager.dart';
 import '../services/episode_artwork_service.dart';
 import '../services/home_collection_rows.dart';
 import '../services/home_collections_store.dart';
@@ -13204,7 +13201,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     final fromToolbar = _kwToolbarNodes.any((n) => n.hasFocus);
     await showDialog<void>(
       context: context,
-      builder: (_) => const _KeywordSourcesDialog(),
+      builder: (_) => KeywordSourcesDialog(session: _searchSession),
     );
     if (!mounted || _kwQuery.isEmpty) return;
     // Re-search with the new enabled set.
