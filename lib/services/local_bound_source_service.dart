@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import '../features/sources/data/local_source_file_rules.dart';
 import '../features/sources/data/local_source_files.dart';
 import '../features/sources/models/local_source_file.dart';
+import '../features/sources/presentation/android_local_source_dialogs.dart';
 import '../features/sources/presentation/local_movie_pick_mode_sheet.dart';
 import '../features/sources/presentation/local_source_choice_dialogs.dart';
 import '../features/sources/presentation/local_series_folder_help.dart';
@@ -273,31 +274,7 @@ class LocalBoundSourceService {
         return null;
       }
       videos.sort((a, b) => a.relativePath.compareTo(b.relativePath));
-      final selected = await showDialog<LocalSourceDocument>(
-        context: context,
-        builder: (dialogContext) => AlertDialog(
-          title: const Text('Choose movie file'),
-          content: SizedBox(
-            width: 560,
-            height: MediaQuery.sizeOf(dialogContext).height * 0.5,
-            child: ListView.builder(
-              itemCount: videos.length,
-              itemBuilder: (_, index) => ListTile(
-                autofocus: index == 0,
-                title: Text(videos[index].name),
-                subtitle: Text(videos[index].relativePath),
-                onTap: () => Navigator.of(dialogContext).pop(videos[index]),
-              ),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(),
-              child: const Text('Cancel'),
-            ),
-          ],
-        ),
-      );
+      final selected = await showAndroidLocalMovieChoice(context, videos);
       if (!active()) return null;
       return selected?.toSource();
     } on PlatformException catch (error) {
@@ -342,26 +319,11 @@ class LocalBoundSourceService {
         );
         return null;
       }
-      final confirmed = await showDialog<bool>(
-        context: context,
-        builder: (dialogContext) => AlertDialog(
-          scrollable: true,
-          title: Text('Use folder for $title?'),
-          content: Text(
-            '${folder.name}\n${episodes.length} episodes found.\n\nChoose a folder containing only this series.',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(false),
-              child: const Text('Cancel'),
-            ),
-            TextButton(
-              autofocus: true,
-              onPressed: () => Navigator.of(dialogContext).pop(true),
-              child: const Text('Use folder'),
-            ),
-          ],
-        ),
+      final confirmed = await showAndroidLocalSeriesConfirmation(
+        context,
+        title: title,
+        folderName: folder.name,
+        episodeCount: episodes.length,
       );
       if (!active()) return null;
       return confirmed == true ? folder.toSource() : null;
