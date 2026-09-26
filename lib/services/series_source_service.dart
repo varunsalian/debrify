@@ -211,34 +211,61 @@ class SeriesSourceService {
   static const String _prefix = 'series_source_';
 
   /// Get all bound sources for a series, ordered by priority (first = highest).
-  static Future<List<SeriesSource>> getSources(String imdbId) async {
+  static Future<List<SeriesSource>> getSources(
+    String imdbId, {
+    bool Function()? canContinue,
+  }) async {
+    _ensureCurrent(canContinue);
     final prefs = await ProfilePreferences.instance();
+    _ensureCurrent(canContinue);
     final raw = prefs.getString('$_prefix$imdbId');
     if (raw == null) {
       final custom = CustomSeriesIdentity.parse(imdbId);
       if (custom == null) return [];
-      final addon = await StremioService.instance.addonForCustomProgress(imdbId);
+      final addon = await StremioService.instance.addonForCustomProgress(
+        imdbId,
+      );
+      _ensureCurrent(canContinue);
       final bindingKey = addon?.sourceBindingKey ?? custom.addonKey;
       // Old releases stored custom pins in the IMDb bucket, but already saved
       // their exact catalog/configuration scope. Move only proven matches.
       final migrated = <SeriesSource>[];
-      for (final key in prefs.getKeys().where((k) => k.startsWith(_prefix)).toList()) {
+      for (final key
+          in prefs.getKeys().where((k) => k.startsWith(_prefix)).toList()) {
         final oldId = key.substring(_prefix.length);
         if (CustomSeriesIdentity.isCustom(oldId)) continue;
-        final matches = (await getSources(oldId)).where((s) =>
-          s.matchesCatalogScope(catalogId: custom.catalogId, catalogKey: bindingKey)).toList();
+        final matches = (await getSources(oldId, canContinue: canContinue))
+            .where(
+              (s) => s.matchesCatalogScope(
+                catalogId: custom.catalogId,
+                catalogKey: bindingKey,
+              ),
+            )
+            .toList();
         for (final source in matches) {
-          if (!migrated.any((s) => s.bindingKey == source.bindingKey)) migrated.add(source);
+          if (!migrated.any((s) => s.bindingKey == source.bindingKey)) {
+            migrated.add(source);
+          }
         }
       }
       if (migrated.isEmpty) return [];
-      await _saveSources(prefs, imdbId, migrated);
-      for (final key in prefs.getKeys().where((k) => k.startsWith(_prefix)).toList()) {
+      await _saveSources(prefs, imdbId, migrated, canContinue: canContinue);
+      _ensureCurrent(canContinue);
+      for (final key
+          in prefs.getKeys().where((k) => k.startsWith(_prefix)).toList()) {
         final oldId = key.substring(_prefix.length);
         if (CustomSeriesIdentity.isCustom(oldId)) continue;
-        for (final source in (await getSources(oldId)).where((s) =>
-          s.matchesCatalogScope(catalogId: custom.catalogId, catalogKey: bindingKey)).toList()) {
-          await removeSourceEntry(oldId, source);
+        for (final source
+            in (await getSources(oldId, canContinue: canContinue))
+                .where(
+                  (s) => s.matchesCatalogScope(
+                    catalogId: custom.catalogId,
+                    catalogKey: bindingKey,
+                  ),
+                )
+                .toList()) {
+          await removeSourceEntry(oldId, source, canContinue: canContinue);
+          _ensureCurrent(canContinue);
         }
       }
       return migrated;
@@ -256,7 +283,8 @@ class SeriesSourceService {
       if (decoded is Map<String, dynamic>) {
         final source = SeriesSource.fromJson(decoded);
         // Auto-migrate to list format
-        await _saveSources(prefs, imdbId, [source]);
+        await _saveSources(prefs, imdbId, [source], canContinue: canContinue);
+        _ensureCurrent(canContinue);
         return [source];
       }
       return [];
@@ -317,10 +345,14 @@ class SeriesSourceService {
   /// Remove one exact source, including a provider-native source with no hash.
   static Future<void> removeSourceEntry(
     String imdbId,
-    SeriesSource source,
-  ) async {
+    SeriesSource source, {
+    bool Function()? canContinue,
+  }) async {
+    _ensureCurrent(canContinue);
     final prefs = await ProfilePreferences.instance();
-    final sources = await getSources(imdbId);
+    _ensureCurrent(canContinue);
+    final sources = await getSources(imdbId, canContinue: canContinue);
+    _ensureCurrent(canContinue);
     final removed = sources.where(
       (candidate) => candidate.bindingKey == source.bindingKey,
     );
@@ -332,11 +364,12 @@ class SeriesSourceService {
                 WebDavSyncRecordKey.source(imdbId, candidate.bindingKey),
           ),
     );
+    _ensureCurrent(canContinue);
     sources.removeWhere((s) => s.bindingKey == source.bindingKey);
     if (sources.isEmpty) {
-      await prefs.remove('$_prefix$imdbId');
+      await _guardedWrite(canContinue, () => prefs.remove('$_prefix$imdbId'));
     } else {
-      await _saveSources(prefs, imdbId, sources);
+      await _saveSources(prefs, imdbId, sources, canContinue: canContinue);
     }
   }
 
@@ -396,9 +429,35 @@ class SeriesSourceService {
   static Future<void> _saveSources(
     SharedPreferences prefs,
     String imdbId,
-    List<SeriesSource> sources,
-  ) async {
+    List<SeriesSource> sources, {
+    bool Function()? canContinue,
+  }) async {
     final jsonList = sources.map((s) => s.toJson()).toList();
-    await prefs.setString('$_prefix$imdbId', jsonEncode(jsonList));
+    await _guardedWrite(
+      canContinue,
+      () => prefs.setString('$_prefix$imdbId', jsonEncode(jsonList)),
+    );
+  }
+
+  static void _ensureCurrent(bool Function()? canContinue) {
+    if (canContinue != null && !canContinue()) {
+      throw StateError('Saved-source operation belongs to a retired session');
+    }
+  }
+
+  static Future<void> _guardedWrite(
+    bool Function()? canContinue,
+    Future<bool> Function() write,
+  ) async {
+    if (canContinue == null) {
+      await write();
+      return;
+    }
+    await ProfilePreferences.synchronizeExternalMutation(() async {
+      // Recheck after waiting for a snapshot; the nested preference setter
+      // retains its own current-profile checks and mutation accounting.
+      _ensureCurrent(canContinue);
+      await write();
+    }, marksMutation: false);
   }
 }

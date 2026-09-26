@@ -9,6 +9,7 @@ class SourcesSession {
   final StremioMeta? catalogItem;
   final String? metadataAddonId;
   final bool keywordMode;
+  final String? contentType;
 
   const SourcesSession({
     required this.owner,
@@ -17,6 +18,7 @@ class SourcesSession {
     this.catalogItem,
     this.metadataAddonId,
     this.keywordMode = false,
+    this.contentType,
   });
 
   bool get hasSeasonScope =>

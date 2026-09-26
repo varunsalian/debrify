@@ -797,3 +797,70 @@ cleanup/tombstone writes. Its extraction must cover those actual commit paths an
 profile retirement, not assume the lookup is read-only. That work, Sources
 results/retries/cache/pin actions, later phases and native/performance checks remain
 outstanding. Phase 4C is still in progress.
+
+
+### Phase 4C saved-source loading (implemented and reviewed)
+
+`SavedSourcesController` (44 lines) owns the saved-pin/cached-episode snapshot.
+`StoredSavedSourcesRepository` (81 lines) loads the existing pin list, filters its
+catalog/configuration scope and checks the first direct pin against installed,
+enabled streaming addons before consulting the resolved-link cache. The cache
+key still uses the title, content type, season, episode and exact pin identity.
+The actual screen consumes the snapshot through Riverpod and keeps selected-row
+matching, focus, scrolling and diagnostics in the view. Cached-row and streaming
+focus behavior remains covered by the original screen tests. Initialization does
+not read data; explicit reloads reject older requests and retired sessions.
+Current read failures retain the previous snapshot and propagate without retries.
+
+The existing `SeriesSourceService` migration remains the implementation for
+single-object and custom-catalog legacy pins. Its optional continuation predicate
+checks interactive ownership around delayed reads and before preference writes,
+including writes queued behind the preference snapshot barrier. Existing callers
+without the predicate preserve their behavior. The adapter clears inherited
+captured-scope zones for these interactive migrations so the preferences facade's
+own live-profile checks remain effective. Existing tombstone recording retains its
+original profile identity/order; cleanup checks retirement before removing pins.
+The service is 463 lines, one existing persistence responsibility, and no format or
+schema migration was introduced. Only touched service methods were formatted.
+
+Before this slice, the affected legacy migration/provider and screen tests passed.
+The combined affected suite now has **100 passes**. Seven new repository cases
+use real preferences and a real in-memory profile registry: original single-pin
+migration, custom scope/order/cleanup/tombstone identity, both migrations queued
+behind an exclusive snapshot during profile switch or lifecycle clear, and a
+profile switch during cleanup. The tests remove the outgoing preference key before
+releasing queued writes and prove neither profile's deleted key is recreated.
+Controller cases cover explicit loading, overlapping reloads, current failure,
+profile/disposal/dependency retirement and late errors. Existing cached current-
+episode cases exercise the real repository and original encrypted-link cache.
+
+The initial screen run found a regression: an unmounted focus callback logged the
+pin count by reading a closed Riverpod subscription. The view now captures only
+that diagnostic count at disposal; it does not retain a second pin snapshot or
+access disposed provider state. The same original cached-row tests pass afterward.
+The first committed-profile fixture needed the real registry and a test device
+cipher to reach the production migration; the corrected tests run that path.
+Receipts are `.git/refactor-evidence/phase4c/bound-migrations-before.txt`,
+`saved-screen.txt`, `saved-screen-fixed.txt`, `saved-migrations-final.txt` and
+`saved-complete-focused.txt`.
+
+The exact full helper completed in **173,947 ms** with **7,658 successes**, the
+same **51 baseline failures** (22 failure/29 error outcomes), and **20 skips**.
+Identity comparison finds no new failures, missing baseline tests or newly skipped
+cases. The unchanged historical helper allowance still yields exit 1. Final
+analyzer comparison has no additions and the previously removed Sources curly-brace
+lint, leaving **864 diagnostics**. The architecture guard passes **74 migrated
+files**, formatting and diff checks pass, and Sources is **3,105 lines** (parent
+20,145). The full run started before a final `mounted` guard was added to the view's
+reload wrapper; its 19 affected screen/controller cases passed afterward. That
+guard prevents pin/unpin completion from reading WidgetRef after route disposal.
+A brace-only formatting fix also removed a newly exposed service lint before the
+final analyzer run. Receipts are `phase4c/full-saved.jsonl`,
+`full-saved-comparison.txt`, `saved-disposal-final.txt`,
+`analyze-saved-disposal.txt` and `saved-disposal-analyzer-comparison.txt` under
+`.git/refactor-evidence/`.
+
+Phase 4C remains in progress:
+search/results, retry orchestration, availability-cache checks and pin/local actions
+still need extraction, followed by remaining Home/Discover/lifecycle work and native,
+visual/performance checks. Saved-source focus/reveal remains view-owned.

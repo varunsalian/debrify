@@ -70,9 +70,13 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
   final ScrollController _resultsScroll = ScrollController(
     keepScrollOffset: false,
   );
-  List<SeriesSource> _bound = [];
+  late final ProviderSubscription<SavedSourcesState> _savedSourcesSubscription;
+  List<SeriesSource> get _bound => _savedSourcesSubscription.read().sources;
+  // Delayed focus diagnostics may run after subscriptions are disposed.
+  int _disposedBoundCount = 0;
   Torrent? _selectedDirect;
-  Torrent? _cachedEpisodeSource;
+  Torrent? get _cachedEpisodeSource =>
+      _savedSourcesSubscription.read().cachedEpisode;
   bool _showCachedEpisodeSource = false;
   int _selectionFocusRun = 0;
   final int _pickerTraceId = DateTime.now().microsecondsSinceEpoch;
@@ -87,7 +91,7 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
       'search': _searchToken,
       'season': widget.selection.season,
       'episode': widget.selection.episode,
-      'bound_count': _bound.length,
+      'bound_count': mounted ? _bound.length : _disposedBoundCount,
       'results': _torrents.length,
       'visible': _visible.length,
       'match_index': selected == null ? -1 : _torrents.indexOf(selected),
@@ -426,6 +430,7 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
       catalogItem: widget.meta.catalogItem,
       metadataAddonId: widget.meta.addonId,
       keywordMode: _keywordMode,
+      contentType: widget.meta.contentType,
     );
     _seasonsSubscription = ref.listenManual(
       sourceSeasonsProvider(_sourcesSession),
@@ -437,6 +442,17 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
       sourceSettingsProvider(_sourcesSession),
       (previous, next) {
         if (mounted) setState(() {});
+      },
+    );
+    _savedSourcesSubscription = ref.listenManual(
+      savedSourcesProvider(_sourcesSession),
+      (previous, next) {
+        if (!mounted) return;
+        setState(() {
+          if (next.cacheUnavailable) _logPickerSelection('cache_unavailable');
+          _updateSelectedDirect();
+          _logPickerSelection('saved_sources_loaded');
+        });
       },
     );
     // Rebuild the toolbar when the funnel gains/loses focus so its D-pad
@@ -479,6 +495,8 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
 
   @override
   void dispose() {
+    _disposedBoundCount = _bound.length;
+    _savedSourcesSubscription.close();
     _settingsSubscription.close();
     _seasonsSubscription.close();
     _kwCtrl.dispose();
@@ -493,53 +511,9 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
   }
 
   Future<void> _reloadBound() async {
-    final allBound = _imdbId.isEmpty
-        ? <SeriesSource>[]
-        : await SeriesSourceService.getSources(_imdbId);
-    final catalogId = widget.selection.hasStremioEpisodeIdentity
-        ? widget.selection.stremioCatalogId
-        : null;
-    final bound = allBound
-        .where((source) => source.matchesCatalogScope(
-            catalogId: catalogId,
-            catalogKey: widget.selection.hasStremioEpisodeIdentity
-              ? widget.selection.stremioAddonKey : null,
-        ))
-        .toList();
-    Torrent? cached;
-    if (widget.selection.isSeries &&
-        widget.selection.season != null &&
-        widget.selection.episode != null &&
-        bound.isNotEmpty &&
-        bound.first.isAddonDirect) {
-      final pin = bound.first;
-      try {
-        final addons = await StremioService.instance.getAddons();
-        if (addons.any(
-          (addon) =>
-              addon.enabled &&
-              addon.supportsStreams &&
-              addon.sourceBindingKey == pin.addonKey,
-        )) {
-          cached = await ResolvedPlaybackLinkCache.get(
-            id: _imdbId,
-            type: widget.meta.contentType ?? 'series',
-            season: widget.selection.season,
-            episode: widget.selection.episode,
-            pin: pin,
-          );
-        }
-      } catch (_) {
-        _logPickerSelection('cache_unavailable');
-      }
-    }
+    // Pin/unpin can finish after this route has left the Navigator.
     if (!mounted) return;
-    setState(() {
-      _bound = bound;
-      _cachedEpisodeSource = cached;
-      _updateSelectedDirect();
-      _logPickerSelection('saved_sources_loaded');
-    });
+    await ref.read(savedSourcesProvider(_sourcesSession).notifier).reload();
   }
 
   /// Run the source search (free-text keyword pack search in keyword-bind mode,
