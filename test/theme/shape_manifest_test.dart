@@ -36,6 +36,7 @@ import 'package:flutter_test/flutter_test.dart';
 /// further. Update the entry when you do. RAISING one needs a reason.
 const Map<String, int> kShapeResidue = {
   'lib/features/home/presentation/category_tag.dart': 0,
+  'lib/features/search/presentation/search_mode_toggle.dart': 0,
   'lib/ui/core/see_all_link.dart': 0,
   'lib/screens/addons/addon_hub_screen.dart': 7,
   'lib/screens/alldebrid/alldebrid_files_screen.dart': 1,

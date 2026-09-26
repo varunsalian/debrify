@@ -175,3 +175,29 @@ widget classes were deleted and production calls use the new widgets.
 - The existing English labels retain legacy localization debt as allowed by
   `AGENTS.md`; no alternative localization mechanism or new wording is introduced.
   No data/service call moved into these views. Next bounded slice: mode controls.
+
+## Phase 2, slice 2 and phase review: mode controls
+
+`features/search/presentation/search_mode_toggle.dart` (259 lines) owns the existing
+selector. `features/search/models/search_mode.dart` names the same three modes in
+the same order. All production references use that enum and the old private
+selector/enum are removed. Keyword permission is now an explicit input from the
+caller; the screen's action-time permission guard is retained. The view no longer
+queries global profile policy.
+
+- Five new widget tests cover unavailable modes, pointer selection, both D-pad
+  traversal variants, field/content exits, one action per Select, borrowed focus
+  node lifetime and the narrow dropdown fallback/selection. Together with the
+  three See All tests, Search UI/metrics/focus and shape checks: **29 pass**, the
+  **same three baseline failures**, no missing/newly skipped tests.
+- Full analyzer matches all 865 baseline identities/multiplicities. Seven migrated
+  files pass architecture checks; no migrated file exceeds 300 lines. Shape
+  manifest follows the moved selector without changing existing allowances.
+- Implementation comparison confirms only public names/keys and the explicit
+  availability input differ; visual properties and keyboard dispatch are retained.
+  Existing dropdown/focus utilities are reused, and the parent owns focus nodes.
+- Phase 2 exit is satisfied for the selected leaves/controls. Stateful cards,
+  sources controls and hero/layout widgets deliberately remain in their planned
+  later phases. Remaining legacy counts: screen 20,796; cards part 926; hero part
+  2,249; sources part 3,846; stage part 1,706. The original exceptions remain
+  temporary; none is presented as the destination. Device checks remain pending.

@@ -1,3 +1,5 @@
+import '../features/search/models/search_mode.dart';
+import '../features/search/presentation/search_mode_toggle.dart';
 import '../features/home/presentation/category_tag.dart';
 import '../ui/core/see_all_link.dart';
 import '../features/search/application/keyword_filter.dart';
@@ -256,8 +258,6 @@ class SearchScreen extends StatefulWidget {
   @override
   State<SearchScreen> createState() => _SearchScreenState();
 }
-
-enum _Mode { catalog, keyword, lists }
 
 /// Completed Home data; interactive resources belong to each screen instance.
 typedef _HomePreservedState = ({
@@ -569,7 +569,7 @@ class _SearchScreenState extends State<SearchScreen>
   // stack two pushed item screens (TV) / double-fire the handoff.
   DateTime? _lastListOpenAt;
 
-  _Mode _mode = _Mode.catalog;
+  SearchMode _mode = SearchMode.catalog;
 
   /// Committed catalog query (drives per-addon catalog search). Empty = board.
   String _catalogQuery = '';
@@ -2158,7 +2158,7 @@ class _SearchScreenState extends State<SearchScreen>
     // Back also drops out of Keyword/Lists mode, so the tab returns to its
     // default Catalog prompt (matches the old overlay-close behaviour).
     // _clearQuery rebuilds, so setting the field first is enough.
-    _mode = _Mode.catalog;
+    _mode = SearchMode.catalog;
     _clearQuery();
     if (widget.isTelevision) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -2239,7 +2239,7 @@ class _SearchScreenState extends State<SearchScreen>
     _kwSearchToken++;
     _kwSearching = false;
     _kwLoading = false;
-    _mode = _Mode.catalog;
+    _mode = SearchMode.catalog;
     _clearQuery(); // clears the field, kw/lists state, and the catalog query
     _searchFocusNode.unfocus();
     setState(() => _searchSheetOpen = false);
@@ -2292,7 +2292,7 @@ class _SearchScreenState extends State<SearchScreen>
   Future<void> _refreshMdblistAuthState() async {
     final auth = await MdblistService.instance.isAuthenticated();
     if (!mounted || auth == _isMdblistAuthenticated) return;
-    final leaveLists = !auth && _mode == _Mode.lists;
+    final leaveLists = !auth && _mode == SearchMode.lists;
     if (leaveLists) {
       _listsToken++;
       _disposeListsNodes();
@@ -2300,7 +2300,7 @@ class _SearchScreenState extends State<SearchScreen>
     setState(() {
       _isMdblistAuthenticated = auth;
       if (leaveLists) {
-        _mode = _Mode.catalog;
+        _mode = SearchMode.catalog;
         _listsQuery = '';
         _listsResults = const [];
         _listsSearching = false;
@@ -2339,7 +2339,7 @@ class _SearchScreenState extends State<SearchScreen>
     if (!ProfilePolicyGuard.allowsSync(ProfileFeature.keywordSearch)) {
       return false;
     }
-    _mode = _Mode.keyword;
+    _mode = SearchMode.keyword;
     _kwQuery = snap.query;
     _kwAll = snap.all;
     _kwResults = snap.results;
@@ -2473,7 +2473,7 @@ class _SearchScreenState extends State<SearchScreen>
     // instance, so the snapshot would freeze a partial set that restores
     // looking complete (no strip, no cache badges) — matching pre-streaming
     // behavior, where a mid-flight switch preserved nothing.
-    if (_mode == _Mode.keyword &&
+    if (_mode == SearchMode.keyword &&
         _kwQuery.isNotEmpty &&
         _kwResults.isNotEmpty &&
         !_kwSearching) {
@@ -2931,7 +2931,7 @@ class _SearchScreenState extends State<SearchScreen>
     // Android TV has dedicated Home and Search tabs. Its Home is always the
     // catalog board, regardless of a preference saved on another platform.
     if (widget.isTelevision) {
-      if (_mode != _Mode.catalog) _switchMode(_Mode.catalog);
+      if (_mode != SearchMode.catalog) _switchMode(SearchMode.catalog);
       return;
     }
     final saved = await StorageService.getHomeDefaultSourceType();
@@ -2939,8 +2939,8 @@ class _SearchScreenState extends State<SearchScreen>
     final mode =
         saved == 'keyword' &&
             ProfilePolicyGuard.allowsSync(ProfileFeature.keywordSearch)
-        ? _Mode.keyword
-        : _Mode.catalog;
+        ? SearchMode.keyword
+        : SearchMode.catalog;
     if (_mode != mode) _switchMode(mode);
   }
 
@@ -6645,7 +6645,7 @@ class _SearchScreenState extends State<SearchScreen>
     // rows when a query is actually showing them — otherwise their nodes aren't
     // mounted and focus would be stranded.
     if (widget.searchMode) {
-      if (_mode == _Mode.keyword) {
+      if (_mode == SearchMode.keyword) {
         if (_kwToolbarVisible) {
           _kwToolbarNodes.first.requestFocus();
         } else {
@@ -6653,7 +6653,7 @@ class _SearchScreenState extends State<SearchScreen>
         }
         return;
       }
-      if (_mode == _Mode.lists) {
+      if (_mode == SearchMode.lists) {
         if (_listsResults.isNotEmpty && _listsNodes.isNotEmpty) {
           _listsNodes.first.requestFocus();
         } else {
@@ -6677,7 +6677,7 @@ class _SearchScreenState extends State<SearchScreen>
       }
       return;
     }
-    if (_mode == _Mode.keyword) {
+    if (_mode == SearchMode.keyword) {
       // Toolbar + result rows render together, so entering the content lands on
       // the toolbar first (Down then reaches the rows). When it isn't visible
       // (loading / error / pre-search) nothing below is focusable, so keep the
@@ -6689,7 +6689,7 @@ class _SearchScreenState extends State<SearchScreen>
       }
       return;
     }
-    if (_mode == _Mode.lists) {
+    if (_mode == SearchMode.lists) {
       if (_listsResults.isNotEmpty && _listsNodes.isNotEmpty) {
         _listsNodes.first.requestFocus();
       } else {
@@ -6726,9 +6726,9 @@ class _SearchScreenState extends State<SearchScreen>
       return;
     }
     (switch (_mode) {
-      _Mode.catalog => _modeCatalogNode,
-      _Mode.keyword => _modeKeywordNode,
-      _Mode.lists => _modeListsNode,
+      SearchMode.catalog => _modeCatalogNode,
+      SearchMode.keyword => _modeKeywordNode,
+      SearchMode.lists => _modeListsNode,
     }).requestFocus();
   }
 
@@ -6755,7 +6755,7 @@ class _SearchScreenState extends State<SearchScreen>
   /// Whether the keyword results toolbar (Sort/Filters/Sources/…) is on-screen,
   /// so focus can route into it between the search field and the result rows.
   bool get _kwToolbarVisible =>
-      _mode == _Mode.keyword &&
+      _mode == SearchMode.keyword &&
       !_kwLoading &&
       _kwError == null &&
       _kwQuery.isNotEmpty;
@@ -6764,7 +6764,7 @@ class _SearchScreenState extends State<SearchScreen>
   /// state, before a query. It's the only focusable content then, so DPAD-down
   /// from the search field must land on it (see the field's key handler).
   bool get _kwSourcesButtonVisible =>
-      _mode == _Mode.keyword &&
+      _mode == SearchMode.keyword &&
       !_kwLoading &&
       _kwError == null &&
       _kwQuery.isEmpty;
@@ -6772,7 +6772,7 @@ class _SearchScreenState extends State<SearchScreen>
   /// Catalog-mode twin of [_kwSourcesButtonVisible]: the Sources button shown
   /// on the empty catalog prompt (Search tab, no query yet, not mid-search).
   bool get _catalogSourcesButtonVisible =>
-      _mode == _Mode.catalog &&
+      _mode == SearchMode.catalog &&
       widget.searchMode &&
       _catalogQuery.isEmpty &&
       !_catalogSearching;
@@ -6937,7 +6937,7 @@ class _SearchScreenState extends State<SearchScreen>
   /// restore, preserved keyword results, a committed catalog search, or the
   /// dedicated Lists surface.
   bool get _sheetForced =>
-      _mode != _Mode.catalog ||
+      _mode != SearchMode.catalog ||
       _catalogQuery.isNotEmpty ||
       _catalogSearching ||
       // Belt to the focus latch's braces: interactive typing always comes
@@ -11998,7 +11998,7 @@ class _SearchScreenState extends State<SearchScreen>
       language: preferences?.language ?? 'en-US',
       // Title lookup belongs only to Catalog. Keyword, Lists and pasted
       // links retain their own search semantics.
-      enabled: widget.searchMode && _mode == _Mode.catalog &&
+      enabled: widget.searchMode && _mode == SearchMode.catalog &&
           MainPageBridge.activeTab.value == 'search' &&
           _titleSearchPolicyReady &&
           !_openingSuggestedTitle &&
@@ -12043,7 +12043,7 @@ class _SearchScreenState extends State<SearchScreen>
   }
 
   Future<void> _openSuggestedTitle(StremioMeta item) async {
-    if (_openingSuggestedTitle || !mounted || _mode != _Mode.catalog ||
+    if (_openingSuggestedTitle || !mounted || _mode != SearchMode.catalog ||
         MainPageBridge.activeTab.value != 'search' ||
         _titleSearchScope != ProfileRuntime.scope.value) {
       return;
@@ -12070,7 +12070,7 @@ class _SearchScreenState extends State<SearchScreen>
       }, resolve: widget.suggestedTitleResolver ?? MetadataTitleService.instance.resolve,
         onUnresolved: (unresolved) => _onQuerySubmitted(unresolved.name),
         isCurrent: () => mounted && generation == _suggestedTitleOpenGeneration &&
-            _mode == _Mode.catalog && MainPageBridge.activeTab.value == 'search');
+            _mode == SearchMode.catalog && MainPageBridge.activeTab.value == 'search');
     } finally {
       // A cancelled lookup can finish while a newer selection is loading.
       if (generation == _suggestedTitleOpenGeneration) {
@@ -12100,17 +12100,17 @@ class _SearchScreenState extends State<SearchScreen>
       _searchSubmitFocus.arm(enabled: widget.isTelevision);
     }
     switch (_mode) {
-      case _Mode.keyword:
+      case SearchMode.keyword:
         _runKeyword(q);
         return;
-      case _Mode.catalog:
+      case SearchMode.catalog:
         if (q.isEmpty) {
           _restoreHome();
         } else {
           _runCatalogSearch(q);
         }
         return;
-      case _Mode.lists:
+      case SearchMode.lists:
         if (q.isEmpty) {
           _clearListsSearch();
         } else {
@@ -13325,10 +13325,10 @@ class _SearchScreenState extends State<SearchScreen>
     _kwNodes.clear();
   }
 
-  void _switchMode(_Mode mode) {
+  void _switchMode(SearchMode mode) {
     // Belt for every entry point at once: the keyword surface is gated per
     // profile (catalog search never is).
-    if (mode == _Mode.keyword &&
+    if (mode == SearchMode.keyword &&
         !ProfilePolicyGuard.allowsSync(ProfileFeature.keywordSearch)) {
       return;
     }
@@ -13345,13 +13345,13 @@ class _SearchScreenState extends State<SearchScreen>
     final query = _searchController.text.trim();
     if (query.isEmpty) return;
     switch (mode) {
-      case _Mode.keyword:
+      case SearchMode.keyword:
         if (query != _kwQuery) _runKeyword(query);
         return;
-      case _Mode.catalog:
+      case SearchMode.catalog:
         if (query != _catalogQuery) _runCatalogSearch(query);
         return;
-      case _Mode.lists:
+      case SearchMode.lists:
         if (query != _listsQuery) _runListsSearch(query);
         return;
     }
@@ -16305,7 +16305,7 @@ class _SearchScreenState extends State<SearchScreen>
     if (widget.isTelevision || widget.searchMode) {
       return const SizedBox.shrink();
     }
-    final show = _catalogSourcesBarShown && _mode == _Mode.catalog;
+    final show = _catalogSourcesBarShown && _mode == SearchMode.catalog;
     return AnimatedSize(
       duration: const Duration(milliseconds: 160),
       curve: Curves.easeOut,
@@ -16331,7 +16331,7 @@ class _SearchScreenState extends State<SearchScreen>
     final tv = widget.isTelevision;
     // On narrow phones the search box + mode selector crowd each other in one
     // row, so stack the selector underneath. When even the stacked three labels
-    // cannot fit, [_ModeToggle] becomes a single dropdown.
+    // cannot fit, [SearchModeToggle] becomes a single dropdown.
     final hasLists = kMdblistEnabled && _isMdblistAuthenticated;
     // Reserve the three-mode layout whenever the integration is compiled in,
     // even before the async auth check lands. This avoids a one-frame inline →
@@ -16341,10 +16341,13 @@ class _SearchScreenState extends State<SearchScreen>
     final compactModeMenu = _useCompactModeMenu;
 
     final field = _buildSearchField(tv);
-    final toggle = _ModeToggle(
+    final toggle = SearchModeToggle(
       mode: _mode,
       isTelevision: tv,
       listsAvailable: hasLists,
+      keywordAvailable: ProfilePolicyGuard.allowsSync(
+        ProfileFeature.keywordSearch,
+      ),
       fullWidth: narrow,
       compact: compactModeMenu,
       onChanged: _switchMode,
@@ -16459,7 +16462,7 @@ class _SearchScreenState extends State<SearchScreen>
           // it renders the same plain TextField as before.
           final field = TvTextField(
             controller: _searchController,
-            suggestions: widget.searchMode && _mode == _Mode.catalog
+            suggestions: widget.searchMode && _mode == SearchMode.catalog
                 ? _titleSuggestions : null,
             suggestionsLabel: 'Titles from TMDB',
             focusNode: _searchFocusNode,
@@ -16498,9 +16501,9 @@ class _SearchScreenState extends State<SearchScreen>
                 : null,
             decoration: InputDecoration(
               hintText: switch (_mode) {
-                _Mode.catalog => 'Search or paste link',
-                _Mode.keyword => 'Search torrents by keyword',
-                _Mode.lists => 'Search MDBList lists',
+                SearchMode.catalog => 'Search or paste link',
+                SearchMode.keyword => 'Search torrents by keyword',
+                SearchMode.lists => 'Search MDBList lists',
               },
               hintStyle: TextStyle(color: app.fade(app.core.tx, 0.32)),
               suffixIcon: hasText
@@ -16565,8 +16568,8 @@ class _SearchScreenState extends State<SearchScreen>
   }
 
   Widget _buildBody() {
-    if (_mode == _Mode.keyword) return _buildKeyword();
-    if (_mode == _Mode.lists) return _buildListsSearch();
+    if (_mode == SearchMode.keyword) return _buildKeyword();
+    if (_mode == SearchMode.lists) return _buildListsSearch();
     // Full-screen spinner only until the FIRST result row streams in — after
     // that the board renders and late rows append beneath it (a slim progress
     // strip in _buildBoard signals the search is still running).

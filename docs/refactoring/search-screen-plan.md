@@ -1,7 +1,7 @@
 # Search screen incremental refactoring plan
 
 Status: implementation started on `refactor/search-screen`; the automated baseline
-and phase 1 are reviewed. Phase 2 is in progress. Device verification remains pending.
+and phases 1–2 are reviewed. Phase 3 is next. Device verification remains pending.
 Reviews and actual results are recorded in the
 [implementation evidence](search-screen-evidence.md).
 
@@ -444,7 +444,7 @@ exceptions at each phase; retire resolved ones.
 | --- | --- | --- |
 | 0: Baseline | Automated baseline reviewed; device checks pending | `aa3d5643`: 7,387 pass / 51 fail / 20 skipped; 865 analyzer diagnostics; ownership/behavior inventory recorded in implementation evidence |
 | 1: Keyword policies | Complete; reviewed | Sorting (`bd0c214e`), filtering and provider reconciliation wired; 32 new policy tests; final affected run 129 pass and the same two baseline suggestion failures; no new analyzer identities |
-| 2: Leaf presentation | In progress | Category tag and shared See All link extracted/reviewed; 26 affected passes, same three baseline failures; next mode controls |
+| 2: Leaf presentation | Complete; reviewed | Category/See All (`146466b5`) and mode controls extracted; eight new widget tests; final affected run 29 pass / same three baseline failures, analyzer unchanged; complex cards/layouts remain phases 6–7 |
 | 3: Lists/suggestions | Not started | Install/wire Riverpod with first consumer; preserve title-search service |
 | 4A: Catalog search | Not started | Fan-out/publication, source settings, clear/restore, See All handoff |
 | 4B: Keyword search | Not started | State, streaming, engine settings, snapshots, bulk actions |
