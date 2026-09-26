@@ -1,3 +1,4 @@
+import '../features/sources/data/source_provider_configuration.dart';
 import 'dart:async';
 import 'direct_source_authorization.dart';
 import 'media_server_service.dart';
@@ -6276,18 +6277,13 @@ class TorrentPlaybackService {
   /// order) plus the user's saved default when it's still configured — the
   /// single source of truth shared by [_pickProvider] and
   /// [_defaultConfiguredProvider], so adding a provider is a one-list edit.
-  static Future<(List<String>, String?)> _configuredProviders() async {
-    final configured = <String>[];
-    for (final p in ['debrid', 'torbox', 'premiumize', 'alldebrid', 'pikpak']) {
-      if (await _isConfigured(p)) configured.add(p);
-    }
-    if (configured.isEmpty) return (configured, null);
-    final def = await StorageService.getDefaultTorrentProvider();
-    final defaultProvider = (def != 'none' && configured.contains(def))
-        ? def
-        : null;
-    return (configured, defaultProvider);
-  }
+  static Future<(List<String>, String?)?> _configuredProviders({
+    bool Function()? canContinue,
+  }) => loadSourceProviderConfiguration(
+    isConfigured: _isConfigured,
+    readDefault: StorageService.getDefaultTorrentProvider,
+    canContinue: canContinue,
+  );
 
   /// The provider a silent (no-dialog) resolution should use: the configured
   /// default, else the first configured one, else null. Uses this service's
@@ -6295,7 +6291,9 @@ class TorrentPlaybackService {
   /// Home's resolver order, which prefers PikPak; a silent PikPak fallback
   /// would queue real downloads on the account.
   static Future<String?> _defaultConfiguredProvider() async {
-    final (configured, def) = await _configuredProviders();
+    final configuration = await _configuredProviders();
+    if (configuration == null) return null;
+    final (configured, def) = configuration;
     if (configured.isEmpty) return null;
     return def ?? configured.first;
   }
@@ -8001,7 +7999,9 @@ class TorrentPlaybackService {
     BuildContext context, {
     bool Function()? canContinue,
   }) async {
-    final (configured, def) = await _configuredProviders();
+    final configuration = await _configuredProviders(canContinue: canContinue);
+    if (configuration == null) return _cancelled;
+    final (configured, def) = configuration;
     if (canContinue != null && (!context.mounted || !canContinue())) {
       return _cancelled;
     }

@@ -64,6 +64,67 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets(
+    'retirement during configuration prevents the next credential read',
+    (tester) async {
+      late BuildContext context;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (value) {
+              context = value;
+              return const Scaffold();
+            },
+          ),
+        ),
+      );
+      var active = true;
+      var finished = false;
+      bool? result;
+      var saves = 0;
+      await tester.runAsync(() async {
+        SharedPreferences.setMockInitialValues({
+          'torbox_api_key': 'fixture-tb',
+        });
+        unawaited(
+          const SourceBindingBridge()
+              .pin(
+                context,
+                source(hasMagnet: false),
+                imdbId: 'tt1',
+                isMovie: true,
+                canContinue: () => active,
+                saveBinding: (_) async {
+                  saves++;
+                  return true;
+                },
+              )
+              .then((value) {
+                result = value;
+                finished = true;
+              }),
+        );
+        active = false;
+      });
+      for (var i = 0; i < 100 && !finished; i++) {
+        await tester.pump(const Duration(milliseconds: 20));
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 10)),
+        );
+      }
+      expect(finished, isTrue);
+      expect(result, isFalse);
+      final prefs = await tester.runAsync(SharedPreferences.getInstance);
+      // Reading a legacy plaintext credential migrates it to a sealed value.
+      // The second provider must never be read after the first await retires.
+      expect(prefs!.getString('torbox_api_key'), 'fixture-tb');
+      expect(saves, 0);
+      expect(find.text('Remember my choice'), findsNothing);
+      expect(find.byType(SnackBar), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   for (final retirement in ['before_choice', 'queued_write', 'none']) {
     final remainsActive = retirement == 'none';
     testWidgets(

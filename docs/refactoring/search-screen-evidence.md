@@ -2273,3 +2273,54 @@ is preserved, with **nine new passing identities**. Receipts:
 `provider-choice-write-previous-checkpoint.txt`. The historical helper still exits
 1 for the unchanged baseline failures. Provider acquisition, local picker internals,
 remaining Sources ownership and all later/native/performance/CI gates remain open.
+
+
+### Phase 4C — sequential provider configuration loading
+
+Extracted the shared configured-provider/default loop into
+`lib/features/sources/data/source_provider_configuration.dart` (35 lines).
+The production playback service supplies plain availability/default readers;
+manual picker actions also pass their live cancellation check. Silent provider
+selection uses the same helper without that optional check. Provider precedence
+remains Real-Debrid, TorBox, Premiumize, AllDebrid, PikPak; reads stay sequential,
+the saved default is read only when providers are configured, and unconfigured/
+case-mismatched/default-`none` values remain unset. Published lists are immutable;
+the two original callers only inspect/iterate the list. A null result represents
+retirement, separately from a valid empty configuration. Current read errors
+propagate without retry; errors from an already-retired read are discarded.
+This is extraction plus the explicit cancellation correction, not an optimization
+or a change to normal provider precedence. No new interface hierarchy or state
+owner was needed. The service remains 8,894 lines; Sources view sizes are unchanged.
+
+Ten data tests exercise ordering/sequential execution, immutable results, defaults,
+empty configuration, retirement before/between reads or during the default read,
+and current versus retired read errors. A real binding bridge test retires during
+the first provider read and verifies the next provider's mock plaintext credential
+has not undergone its observable read-time migration; no picker, save or message
+is produced. The existing active/retired/queued dialog tests remain passing.
+The combined boundary group has **15 passes**.
+
+Affected baseline: **320 passes / four failures**; final: **331 passes / the same
+four failures** in the pre-existing manual-source validation contracts. Failure
+identities are unchanged. Analyzer retains **863 diagnostics**, with no added
+identities. Size/import checks pass for **112 migrated files**, and changed methods
+and new/changed test files match Dart formatting; diff checks pass. Receipts under
+`.git/refactor-evidence/phase4c/`: `provider-config-before.txt`,
+`provider-config-isolated.txt`, `provider-config-integration.txt`,
+`provider-config-focused.txt`, `provider-config-failure-comparison.txt`,
+`analyze-provider-config.txt`, `provider-config-analyzer-comparison.txt`.
+
+The helper stops subsequent reads after retirement; it does not retroactively
+cancel an already-started reader or establish ownership within its credential
+lookup/migration. Those internals, torrent acquisition, local picker scans/dialogs,
+remaining Sources ownership and the later/native/performance/CI gates remain open.
+
+
+Full review: **7,884 successes**, unchanged **51 baseline failures** (22 failure /
+29 error), and **20 skips**. No original-baseline identity is newly failing,
+missing or skipped. Every previous provider-choice checkpoint outcome remains
+unchanged, and all **eleven new cases** pass. Receipts:
+`.git/refactor-evidence/phase4c/full-provider-config.jsonl`,
+`full-provider-config-comparison.txt`, `provider-config-previous-checkpoint.txt`.
+The historical helper's nonzero exit is still its unchanged baseline failures.
+Phase 4C and the whole migration remain open for the responsibilities above.
