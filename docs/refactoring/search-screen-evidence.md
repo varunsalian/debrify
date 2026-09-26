@@ -2059,3 +2059,39 @@ Receipts: `.git/refactor-evidence/phase4c/full-selected-source-confirmation.json
 The historical helper still exits 1 for its unchanged pre-existing failures.
 Sources focus/reveal/lifecycle ownership and binding preparation, later phases
 and native/performance/CI verification remain unfinished.
+
+
+### Phase 4C — selected-row reveal presentation
+
+Extracted `revealSourceRow` into
+`lib/features/sources/presentation/source_row_reveal.dart` (52 lines), with the
+production Sources view delegating its viewport walking and 0.3 alignment. The
+view still owns the scroll controller, focus nodes, query/result generations,
+focus eligibility and cancellation diagnostics. The helper checks the live
+cancellation callback after each frame before accessing nodes, requests focus
+through the view callback, and retains the original boundary/unattached exits.
+No new state owner, dependency or generic scheduling framework was introduced.
+Reviewed against the deleted loop: guard ordering, preserve-focus behavior,
+viewport step/clamping and event timing remain the same. Sources is now 1,822
+lines; parent 20,168. Other focus/lifecycle and binding boundaries remain pending.
+
+Affected baseline: **265 passes**; final: **269 passes**. Four new widget tests
+cover cancellation before node access, forward/backward lazy mounting with the
+same focus node, and an unattached controller. Initial test failures were fixture
+issues: assertions in an asynchronous callback conflicted with Flutter's pump
+guard, and variable-extent list layout probed row zero before the initial scroll
+position. Assertions now inspect recorded callback values after pumping; the
+bidirectional walking fixture uses explicit item extents. This does not change
+the production algorithm's existing treatment of detached node contexts or claim
+new coverage for every variable-height backwards-scroll history. Existing cinema
+focus, lifecycle and scroll-anchor cases pass. No production behavior was changed
+to accommodate the tests.
+
+Architecture check passes for **110 migrated files**. New files are formatted;
+diff checks pass. Analyzer retains **863 diagnostics**, with no added identities.
+Receipts under `.git/refactor-evidence/phase4c/`: `row-reveal-before.txt`,
+`row-reveal-focused.txt` (initial fixture failures), `row-reveal-isolated.txt`,
+`row-reveal-focused-final.txt`, `analyze-row-reveal-final.txt`, and
+`row-reveal-analyzer-comparison.txt`. The last full-suite checkpoint remains the
+selected-source confirmation above; this bounded presentation slice reran the
+affected group. Phase 4C and the whole migration remain in progress.

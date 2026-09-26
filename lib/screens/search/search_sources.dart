@@ -155,22 +155,26 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
       return;
     }
     _logPickerSelection('reveal_start');
-    while (mounted &&
-        run == _selectionFocusRun &&
-        token == _searchToken &&
-        (preserveFocus || !_streamFrozen)) {
-      await WidgetsBinding.instance.endOfFrame;
-      if (!mounted ||
-          run != _selectionFocusRun ||
-          token != _searchToken ||
-          (!preserveFocus && _streamFrozen) ||
-          _filterFocus.hasFocus ||
-          _pillFocus.hasFocus ||
-          (!preserveFocus &&
-              (_cinemaKey.currentState?.hasRailFocus ?? false)) ||
-          index >= _nodes.length) {
-        _logPickerSelection('reveal_skipped', {
-          'reason': !mounted
+    await revealSourceRow(
+      index: index,
+      controller: _resultsScroll,
+      readNodes: () => _nodes,
+      canContinue: () =>
+          mounted &&
+          run == _selectionFocusRun &&
+          token == _searchToken &&
+          (preserveFocus || !_streamFrozen),
+      cancellationReason: () {
+        if (!mounted ||
+            run != _selectionFocusRun ||
+            token != _searchToken ||
+            (!preserveFocus && _streamFrozen) ||
+            _filterFocus.hasFocus ||
+            _pillFocus.hasFocus ||
+            (!preserveFocus &&
+                (_cinemaKey.currentState?.hasRailFocus ?? false)) ||
+            index >= _nodes.length) {
+          return !mounted
               ? 'unmounted'
               : run != _selectionFocusRun
               ? 'newer_result_batch'
@@ -184,44 +188,17 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
               ? 'new_results_focused'
               : (_cinemaKey.currentState?.hasRailFocus ?? false)
               ? 'sidebar_focused'
-              : 'missing_focus_node',
-        });
-        return;
-      }
-      final rowContext = _nodes[index].context;
-      if (rowContext != null && rowContext.mounted) {
+              : 'missing_focus_node';
+        }
+        return null;
+      },
+      onRowMounted: (node) {
         if (preserveFocus) _lastCinemaSource = index;
-        if (widget.isTelevision && !preserveFocus) _nodes[index].requestFocus();
-        await Scrollable.ensureVisible(rowContext, alignment: 0.3);
-        _logPickerSelection('reveal_complete', {
-          'focus_requested': widget.isTelevision && !preserveFocus,
-        });
-        return;
-      }
-      if (!_resultsScroll.hasClients) {
-        _logPickerSelection('reveal_skipped', {
-          'reason': 'scroll_not_attached',
-        });
-        return;
-      }
-      final position = _resultsScroll.position;
-      final attached = <int>[
-        for (var i = 0; i < _nodes.length; i++)
-          if (_nodes[i].context != null) i,
-      ];
-      final backwards = attached.isNotEmpty && index < attached.first;
-      final next =
-          (position.pixels + (backwards ? -1 : 1) * position.viewportDimension)
-              .clamp(position.minScrollExtent, position.maxScrollExtent);
-      if (next == position.pixels) {
-        _logPickerSelection('reveal_skipped', {
-          'reason': 'scroll_boundary_before_row_mounted',
-        });
-        return;
-      }
-      position.jumpTo(next);
-      WidgetsBinding.instance.ensureVisualUpdate();
-    }
+        if (widget.isTelevision && !preserveFocus) node.requestFocus();
+      },
+      focusRequested: () => widget.isTelevision && !preserveFocus,
+      onEvent: _logPickerSelection,
+    );
   }
 
   // --- redesign toolbar state (unused when _redesign is false) ---
