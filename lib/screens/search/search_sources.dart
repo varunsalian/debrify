@@ -944,9 +944,6 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
     retrying: _retryingAddons,
   );
 
-  Map<String, String> get _mediaServerMessages =>
-      sourceMediaServerMessages(_addonStatuses);
-
   void _selectCinemaProvider(String? key) {
     _resultsController.selectProvider(key);
     _lastCinemaSource = 0;
@@ -1117,10 +1114,6 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
   /// The redesigned toolbar: source-group pills + sort + filter funnel, then the
   /// active-filter pills row when filters are applied.
   Widget _redesignToolbar(ColorScheme scheme, {bool showProviders = true}) {
-    final app = AppThemeScope.of(context);
-    final accent = app.home.chromeAccent;
-    final dim = app.fade(app.core.tx, 0.55);
-
     final providers = projectSourceProviders(
       torrents: _torrents,
       statuses: _addonStatuses,
@@ -1130,77 +1123,58 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
       retrying: _retryingAddons,
     );
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        if (showProviders && providers.visible)
-          SourceProviderStrip(
-            options: providers.options,
-            showAll: providers.showAll,
-            selectedKey: _sourceFilter,
-            onSelect: (key) {
-              _resultsController.selectProvider(key);
-              _rebuildVisible();
-            },
-            onRetry: (key) => unawaited(_retryAddon(providers.retries[key]!)),
-          ),
-        if (showProviders)
-          for (final entry in _mediaServerMessages.entries)
-            if (_sourceFilter == null || _sourceFilter == entry.key)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(12, 2, 12, 8),
-                child: Text(entry.value,
-                    style: TextStyle(color: scheme.error, fontSize: 12)),
-              ),
-        if (showProviders)
-          for (final source in _iptvSources)
-            if (source.retryableFailure &&
-                (_sourceFilter == null || _sourceFilter == source.key))
-              Padding(
-                padding: const EdgeInsets.fromLTRB(12, 2, 12, 8),
-                child: Text('IPTV · ${source.name}: ${source.message}',
-                  style: TextStyle(color: scheme.error, fontSize: 12)),
-              ),
-        SourceToolbarControls(
-          showSeason: _seasonChipVisible,
-          selectedSeason: _selectedSeason,
-          seasonMenuNumbers: _seasonMenuNumbers,
-          sortBy: _sortBy,
-          sortAsc: _sortAsc,
-          filtersActive: !_filters.isEmpty,
-          filterFocus: _filterFocus,
-          onSelectSeason: (next) {
-            if (!_seasonsController.select(next)) return;
-            unawaited(_runSearch());
-          },
-          onSelectSort: (value) {
-            _resultsController.selectSort(value);
-            _rebuildVisible();
-          },
-          onToggleDirection: () {
-            _resultsController.toggleSortDirection();
-            _rebuildVisible();
-          },
-          onOpenFilters: () => unawaited(_openFilters()),
-          onFilterDown: () {
-            if (_pendingNewCount > 0) {
-              _pillFocus.requestFocus();
-            } else if (_nodes.isNotEmpty) {
-              _nodes.first.requestFocus();
-            }
-          },
-        ),
-        if (!_filters.isEmpty)
-          SourceActiveFilters(
-            filters: _filters,
-            accent: accent,
-            dim: dim,
-            onClear: () {
-              _resultsController.setFilters(const TorrentFilterState.empty());
-              _rebuildVisible();
-            },
-          ),
-      ],
+    return buildSourceToolbar(
+      context,
+      scheme: scheme,
+      showProviders: showProviders,
+      providersVisible: providers.visible,
+      options: providers.options,
+      showAll: providers.showAll,
+      selectedKey: _sourceFilter,
+      onSelectProvider: (key) {
+        _resultsController.selectProvider(key);
+        _rebuildVisible();
+      },
+      onRetryProvider: (key) => unawaited(_retryAddon(providers.retries[key]!)),
+      messages: () => sourceToolbarMessages(
+        statuses: _addonStatuses,
+        iptv: _iptvSources,
+        selectedKey: _sourceFilter,
+      ),
+      controls: SourceToolbarControls(
+        showSeason: _seasonChipVisible,
+        selectedSeason: _selectedSeason,
+        seasonMenuNumbers: _seasonMenuNumbers,
+        sortBy: _sortBy,
+        sortAsc: _sortAsc,
+        filtersActive: !_filters.isEmpty,
+        filterFocus: _filterFocus,
+        onSelectSeason: (next) {
+          if (!_seasonsController.select(next)) return;
+          unawaited(_runSearch());
+        },
+        onSelectSort: (value) {
+          _resultsController.selectSort(value);
+          _rebuildVisible();
+        },
+        onToggleDirection: () {
+          _resultsController.toggleSortDirection();
+          _rebuildVisible();
+        },
+        onOpenFilters: () => unawaited(_openFilters()),
+        onFilterDown: () {
+          if (_pendingNewCount > 0) {
+            _pillFocus.requestFocus();
+          } else if (_nodes.isNotEmpty) {
+            _nodes.first.requestFocus();
+          }
+        },
+      ),
+      filters: _filters,
+      onClearFilters: () {
+        _resultsController.setFilters(const TorrentFilterState.empty());
+        _rebuildVisible();
+      },
     );
   }
 

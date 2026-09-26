@@ -48,6 +48,38 @@ SourceProviderProjection project({
 );
 
 void main() {
+  test('toolbar warnings preserve order and exact selected provider scope', () {
+    final statuses = [
+      status('mediaserver:one', error: 'First error'),
+      status('stremio:other', error: 'Addon error'),
+      status('mediaserver:two', error: 'Second server'),
+      status('mediaserver:one', error: 'Latest first error'),
+    ];
+    const iptv = [
+      IptvSourceResult('iptv:ready', 'Ready', 'Not an error', []),
+      IptvSourceResult(
+        'iptv:failed',
+        'Catalog',
+        'Unavailable',
+        [],
+        retryableFailure: true,
+      ),
+    ];
+    List<String> messages(String? key) =>
+        sourceToolbarMessages(statuses: statuses, iptv: iptv, selectedKey: key);
+    final all = messages(null);
+    expect(all, [
+      'Latest first error',
+      'Second server',
+      'IPTV · Catalog: Unavailable',
+    ]);
+    expect(messages('mediaserver:two'), ['Second server']);
+    expect(messages('iptv:failed'), ['IPTV · Catalog: Unavailable']);
+    expect(messages('iptv:ready'), isEmpty);
+    expect(messages('unknown'), isEmpty);
+    expect(() => all.clear(), throwsUnsupportedError);
+  });
+
   test('one ready source hides strip while preserving All eligibility', () {
     final result = project(rows: [row('stremio:one')]);
     expect(result.visible, isFalse);

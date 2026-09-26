@@ -3237,3 +3237,46 @@ Receipts: `full-body.jsonl`, `full-body-comparison.txt` and
 `full-body-previous-checkpoint.txt` in the same evidence directory. The baseline
 helper remains nonzero for original failures, with no allowance changes. Final
 format, diff and architecture checks pass; Phase 4C remains in progress.
+
+### Phase 4C — Sources toolbar composition
+
+Extracted toolbar grouping into `presentation/source_toolbar.dart` (**58 lines**):
+provider strip, warnings, supplied season/sort/filter controls and active-filter
+summary. It returns the original Column hierarchy and applies the same theme
+colors, warning padding/text style and visibility rules. The production view
+supplies provider options, selection/retry callbacks, borrowed controls and Clear
+handling; it retains every state mutation, search dispatch and focus action.
+The former grouping implementation, message getter and obsolete imports were
+removed. Sources part **1,687 → 1,661 lines**.
+
+Ordered warning projection now joins the existing pure provider projection
+(**191 lines**). It preserves media-server map insertion order/latest duplicate
+value, server-before-IPTV order, exact selected-key filtering and retryable IPTV
+qualification/text. It returns an immutable string list without data access or
+state retention. The callback is evaluated only when provider messages are shown,
+so cinema still skips these compact-toolbar warnings. Existing legacy service
+model imports in the projection retain their recorded transitive-audit obligation.
+
+Affected baseline **444 passes**; after extraction **445 passes**. The added case
+covers mixed server/addon/IPTV status, duplicate server errors, selected server,
+selected failed/ready IPTV, unknown selection and immutable output. Existing
+real-screen provider/retry/filter/focus and modal tests all pass. Review confirms
+unchanged SourceToolbarControls construction and provider-select/retry/Clear
+callback bodies apart from formatting, plus original render order and styles.
+Analyzer retains **863 diagnostics**, no new identities; architecture checks pass
+**132 migrated files**. Formatting and diff checks pass, with no whole-file legacy
+formatting or failure-allowance changes.
+
+Receipts under `.git/refactor-evidence/phase4c/`: `toolbar-before.txt`,
+`toolbar-after.txt`, `toolbar-original.txt`, `toolbar-extraction-review.txt`,
+`analyze-toolbar.txt` and `toolbar-analyzer-comparison.txt`. Remaining Sources
+view/focus work, later phases and native/performance/CI gates remain open.
+
+Full-suite review: **8,070 successes / the same 51 failures / 20 skips**.
+Every prior checkpoint outcome is preserved and the new warning-projection case
+passes. Original-baseline and preceding-checkpoint comparisons find no new
+failures, missing tests or new skips. Receipts: `full-toolbar.jsonl`,
+`full-toolbar-comparison.txt` and `full-toolbar-previous-checkpoint.txt` in the
+same evidence directory. The baseline helper remains nonzero for original
+failures, with no allowance changes. Final diff/format/architecture review passes.
+Phase 4C and the overall migration remain in progress.

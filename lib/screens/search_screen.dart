@@ -1,3 +1,4 @@
+import '../features/sources/presentation/source_toolbar.dart';
 import '../features/sources/presentation/source_results_body.dart';
 import '../features/sources/presentation/source_screen_frame.dart';
 import '../features/sources/presentation/source_result_row.dart';
@@ -11,9 +12,7 @@ import '../features/sources/presentation/source_row_reveal.dart';
 import '../features/sources/application/source_selection_match.dart';
 import '../ui/core/source_metadata_labels.dart';
 import '../features/sources/application/source_provider_projection.dart';
-import '../features/sources/presentation/source_provider_strip.dart';
 import '../features/sources/presentation/source_toolbar_controls.dart';
-import '../features/sources/presentation/source_active_filters.dart';
 import '../features/sources/presentation/source_title_header.dart';
 import '../features/sources/presentation/source_keyword_field.dart';
 import '../features/sources/presentation/source_pending_results_pill.dart';

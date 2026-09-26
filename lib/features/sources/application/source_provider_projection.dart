@@ -23,6 +23,20 @@ class SourceProviderProjection {
 bool sourceStatusActionable(AddonSearchStatus status) =>
     status.failed || status.count == 0;
 
+/// Compact-toolbar warnings, in their original server-then-IPTV display order.
+List<String> sourceToolbarMessages({
+  required List<AddonSearchStatus> statuses,
+  required List<IptvSourceResult> iptv,
+  required String? selectedKey,
+}) => List.unmodifiable([
+  for (final entry in sourceMediaServerMessages(statuses).entries)
+    if (selectedKey == null || selectedKey == entry.key) entry.value,
+  for (final source in iptv)
+    if (source.retryableFailure &&
+        (selectedKey == null || selectedKey == source.key))
+      'IPTV · ${source.name}: ${source.message}',
+]);
+
 String sourceProviderLabel(
   String source, {
   required List<IptvSourceResult> iptv,
