@@ -4549,3 +4549,45 @@ skips. Receipts: `full-iptv-binding-ui.jsonl`,
 `full-iptv-binding-ui-previous-checkpoint.txt`. Final formatting/diff/architecture
 checks pass; no allowances changed. The retained playback service is now
 **8,624 lines** (from 8,696). Remaining migration gates stay open.
+
+
+### Phase 4C — local-source binding presentation
+
+Moved local pin view guards, missing-identity feedback, picker completion/save
+sequencing and success feedback into `presentation/local_source_binding.dart`
+(**33 lines**). It receives only picker/save callbacks and the existing optional
+action guard. Native acquisition and filesystem ownership remain unchanged.
+The public compatibility wrapper returns the presentation Future directly and
+retains movie-versus-series selection, context/title/year/guard forwarding and
+guarded-or-legacy persistence. Existing Sources bridge callers use this function.
+
+Review retains empty-identity rejection before picking, null/cancelled results,
+post-picker mounted/session checks, original descriptor identity, rejected saves,
+uncaught picker/storage errors, and three-second success feedback. Saves finishing
+after retirement keep their original true result without feedback; the application
+controller still guards completion. All legacy code outside the method/import is
+byte-for-byte unchanged. The playback service shrinks **8,624 → 8,614 lines**.
+This extraction does not substitute widget tests for required native picker checks.
+
+Baseline **520 Sources tests pass**; affected run **530 pass**, with ten new cases
+for retired entry, missing identity, cancelled/retired/closed picker results,
+accepted/rejected saves, retirement during save, and picker/storage error identity.
+Existing real-picker integration and retirement cases also pass. Analyzer **863
+diagnostics**, no added identities; **167 migrated files** pass size/import checks.
+New files and the changed legacy wrapper are normally formatted without formatting
+the entire service. No additional DI registration or state owner was introduced.
+
+Receipts under `.git/refactor-evidence/phase4c/`: `local-binding-ui-before.txt`,
+`local-binding-ui-after.txt`, `analyze-local-binding-ui.txt`,
+`local-binding-ui-analyzer-comparison.txt`, `local-binding-ui-original.dart`,
+`local-binding-ui-wrapper-format.dart` and `local-binding-ui-review.txt`.
+Full-suite results follow below. Debrid/manual preparation boundaries and remaining
+migration/native/performance/CI gates are still open.
+
+Full suite: **8,185 successes / the same 51 failures / 20 skips**. Every previous
+checkpoint outcome is preserved, with exactly the ten added local-binding cases
+passing. Original-baseline comparison finds no new failures, missing tests or new
+skips. Receipts: `full-local-binding-ui.jsonl`,
+`full-local-binding-ui-comparison.txt` and
+`full-local-binding-ui-previous-checkpoint.txt`. Final formatting/diff/architecture
+checks pass; no allowances changed. Remaining migration gates stay open.

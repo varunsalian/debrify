@@ -1,3 +1,4 @@
+import '../features/sources/presentation/local_source_binding.dart';
 import '../features/sources/presentation/iptv_source_binding.dart';
 import '../features/sources/presentation/direct_source_binding.dart';
 import 'durable_source_binding.dart';
@@ -5518,40 +5519,29 @@ class TorrentPlaybackService {
     bool Function()? canContinue,
     required String title,
     String? year,
-  }) async {
-    bool active() => canContinue?.call() ?? true;
-    if (canContinue != null && (!context.mounted || !active())) return false;
-    if (imdbId.isEmpty) {
-      _snack(context, 'No IMDb match — can\'t pin a source.');
-      return false;
-    }
-    final SeriesSource? source;
-    if (isMovie) {
-      source = await LocalBoundSourceService.pickMovieSource(
-        context,
-        title: title,
-        canContinue: canContinue,
-        year: year,
-      );
-    } else {
-      source = await LocalBoundSourceService.pickSeriesSource(
-        context,
-        title: title,
-        canContinue: canContinue,
-      );
-    }
-    if (source == null || !context.mounted || !active()) return false;
-    if (!await _persistManualBinding(
+  }) => presentLocalSourceBinding(
+    context,
+    imdbId: imdbId,
+    canContinue: canContinue,
+    pick: () => isMovie
+        ? LocalBoundSourceService.pickMovieSource(
+            context,
+            title: title,
+            canContinue: canContinue,
+            year: year,
+          )
+        : LocalBoundSourceService.pickSeriesSource(
+            context,
+            title: title,
+            canContinue: canContinue,
+          ),
+    save: (source) => _persistManualBinding(
       source,
       imdbId: imdbId,
       isMovie: isMovie,
       saveBinding: saveBinding,
-    )) {
-      return false;
-    }
-    if (context.mounted && active()) _snack(context, 'Local source pinned.');
-    return true;
-  }
+    ),
+  );
 
   /// Compatibility writer for callers that have not migrated their binding
   /// persistence. Sources supplies its profile-owned repository callback.
