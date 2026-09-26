@@ -42,3 +42,8 @@ class LocalSourceDocument {
     localModifiedAt: modifiedAt,
   );
 }
+
+class LocalSourceUnavailable implements Exception {
+  const LocalSourceUnavailable(this.message);
+  final String message;
+}

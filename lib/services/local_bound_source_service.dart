@@ -2,13 +2,11 @@ import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import '../features/sources/data/local_source_file_rules.dart';
 import '../features/sources/data/local_source_files.dart';
 import '../features/sources/models/local_source_file.dart';
-import '../features/sources/presentation/android_local_source_dialogs.dart';
-import '../features/sources/presentation/local_folder_scan_progress.dart';
+import '../features/sources/presentation/android_local_source_picker.dart';
 import '../features/sources/presentation/local_movie_pick_mode_sheet.dart';
 import '../features/sources/presentation/local_source_choice_dialogs.dart';
 import '../features/sources/presentation/local_series_folder_help.dart';
@@ -20,6 +18,14 @@ export '../features/sources/models/local_source_file.dart'
     show LocalSeriesEpisodeFile;
 
 class LocalBoundSourceService {
+  static final _androidPicker = AndroidLocalSourcePicker(
+    pick: AndroidLocalSourceService.pick,
+    scan: AndroidLocalSourceService.videos,
+    isVideoFile: FileUtils.isVideoFile,
+    episodeCount: (documents) =>
+        AndroidLocalSourceService.episodes(documents).length,
+  );
+
   static const String mobileDisabledReason =
       'Local source binding is not supported on iOS yet.';
 
@@ -82,7 +88,11 @@ class LocalBoundSourceService {
     }
 
     if (Platform.isAndroid) {
-      return _pickAndroidSeries(context, title, canContinue: canContinue);
+      return _androidPicker.pickSeries(
+        context,
+        title,
+        canContinue: canContinue,
+      );
     }
 
     final path = await FilePicker.platform.getDirectoryPath();
@@ -145,7 +155,7 @@ class LocalBoundSourceService {
     bool active() => canContinue?.call() ?? true;
     if (canContinue != null && (!context.mounted || !active())) return null;
     if (Platform.isAndroid) {
-      return _pickAndroidMovie(
+      return _androidPicker.pickMovie(
         context,
         folder: false,
         canContinue: canContinue,
@@ -172,7 +182,11 @@ class LocalBoundSourceService {
     bool active() => canContinue?.call() ?? true;
     if (canContinue != null && (!context.mounted || !active())) return null;
     if (Platform.isAndroid) {
-      return _pickAndroidMovie(context, folder: true, canContinue: canContinue);
+      return _androidPicker.pickMovie(
+        context,
+        folder: true,
+        canContinue: canContinue,
+      );
     }
     final path = await FilePicker.platform.getDirectoryPath();
     if (!active()) return null;
@@ -205,117 +219,6 @@ class LocalBoundSourceService {
     return selected == null
         ? null
         : localSourceFromFile(selected.file, canContinue: canContinue);
-  }
-
-  static Future<List<LocalSourceDocument>> _scanAndroidFolder(
-    BuildContext context,
-    String uri, {
-    bool Function()? canContinue,
-  }) => readLocalFolderWithProgress(
-    context,
-    scan: () => AndroidLocalSourceService.videos(uri),
-    canContinue: canContinue,
-  );
-
-  static Future<SeriesSource?> _pickAndroidMovie(
-    BuildContext context, {
-    required bool folder,
-    bool Function()? canContinue,
-  }) async {
-    bool active() => canContinue?.call() ?? true;
-    if (canContinue != null && (!context.mounted || !active())) return null;
-    try {
-      final picked = await AndroidLocalSourceService.pick(directory: folder);
-      if (picked == null || !context.mounted || !active()) return null;
-      if (!folder) {
-        if (picked.isDirectory || !FileUtils.isVideoFile(picked.name)) {
-          _showSnack(context, 'Please select a video file.', isError: true);
-          return null;
-        }
-        return picked.toSource();
-      }
-      final videos = await _scanAndroidFolder(
-        context,
-        picked.uri,
-        canContinue: canContinue,
-      );
-      if (!context.mounted || !active()) return null;
-      if (videos.isEmpty) {
-        _showSnack(
-          context,
-          'No video files found in that folder.',
-          isError: true,
-        );
-        return null;
-      }
-      videos.sort((a, b) => a.relativePath.compareTo(b.relativePath));
-      final selected = await showAndroidLocalMovieChoice(context, videos);
-      if (!active()) return null;
-      return selected?.toSource();
-    } on PlatformException catch (error) {
-      if (context.mounted && active()) {
-        _showSnack(
-          context,
-          error.message ?? 'Local source could not be opened.',
-          isError: true,
-        );
-      }
-    } on LocalSourceUnavailable catch (error) {
-      if (context.mounted && active()) {
-        _showSnack(context, error.message, isError: true);
-      }
-    }
-    return null;
-  }
-
-  static Future<SeriesSource?> _pickAndroidSeries(
-    BuildContext context,
-    String title, {
-    bool Function()? canContinue,
-  }) async {
-    bool active() => canContinue?.call() ?? true;
-    if (canContinue != null && (!context.mounted || !active())) return null;
-    try {
-      final folder = await AndroidLocalSourceService.pick(directory: true);
-      if (folder == null || !context.mounted || !active()) return null;
-      final videos = await _scanAndroidFolder(
-        context,
-        folder.uri,
-        canContinue: canContinue,
-      );
-      if (!active()) return null;
-      final episodes = AndroidLocalSourceService.episodes(videos);
-      if (!context.mounted || !active()) return null;
-      if (episodes.isEmpty) {
-        _showSnack(
-          context,
-          'No episodes found. Select this show’s folder with episode filenames such as S01E01.',
-          isError: true,
-        );
-        return null;
-      }
-      final confirmed = await showAndroidLocalSeriesConfirmation(
-        context,
-        title: title,
-        folderName: folder.name,
-        episodeCount: episodes.length,
-      );
-      if (!active()) return null;
-      return confirmed == true ? folder.toSource() : null;
-    } on PlatformException catch (error) {
-      if (context.mounted && active()) {
-        _showSnack(
-          context,
-          error.message ?? 'Local folder could not be opened.',
-          isError: true,
-        );
-      }
-    } on LocalSourceUnavailable catch (error) {
-      if (context.mounted && active()) {
-        _showSnack(context, error.message, isError: true);
-      }
-    }
-    return null;
   }
 
   static Future<Directory?> _resolveSeriesFolder(

@@ -6,7 +6,8 @@ import '../utils/file_utils.dart';
 import '../utils/series_parser.dart';
 import 'series_source_service.dart';
 
-export '../models/local_source_document.dart' show LocalSourceDocument;
+export '../models/local_source_document.dart'
+    show LocalSourceDocument, LocalSourceUnavailable;
 
 class AndroidLocalEpisode {
   const AndroidLocalEpisode(this.document, this.season, this.episode);
@@ -19,11 +20,6 @@ class AndroidLocalResolution {
   const AndroidLocalResolution(this.playlist, this.startIndex);
   final List<PlaylistEntry> playlist;
   final int startIndex;
-}
-
-class LocalSourceUnavailable implements Exception {
-  const LocalSourceUnavailable(this.message);
-  final String message;
 }
 
 abstract final class AndroidLocalSourceService {
