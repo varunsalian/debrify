@@ -1,5 +1,7 @@
 import 'dart:io';
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../../../services/android_local_source_service.dart';
 import '../../../utils/file_utils.dart';
 import '../data/local_source_file_picker.dart';
@@ -15,6 +17,11 @@ const localBindingMobileDisabledReason =
 
 /// App-lifetime stateless wiring; no request, profile or widget state is retained.
 final localSourcePicker = _createLocalSourcePicker();
+
+final localSourcePickerProvider = Provider<LocalSourcePicker>(
+  (ref) => localSourcePicker,
+  dependencies: const [],
+);
 
 LocalSourcePicker _createLocalSourcePicker() {
   final android = Platform.isAndroid;
