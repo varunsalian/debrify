@@ -84,8 +84,6 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
   );
   late final ProviderSubscription<SavedSourcesState> _savedSourcesSubscription;
   List<SeriesSource> get _bound => _savedSourcesSubscription.read().sources;
-  // Delayed focus diagnostics may run after subscriptions are disposed.
-  int _disposedBoundCount = 0;
   Torrent? _selectedDirect;
   Torrent? get _cachedEpisodeSource =>
       _savedSourcesSubscription.read().cachedEpisode;
@@ -107,38 +105,24 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
     onEvent: _logPickerSelection,
   );
   final int _pickerTraceId = DateTime.now().microsecondsSinceEpoch;
-  late final SourcePickerDiagnostics _pickerDiagnostics;
+  late final SourcePickerTrace _pickerTrace;
 
   void _logPickerSelection(
     String event, [
     Map<String, Object?> detail = const {},
-  ]) {
-    final selected = _selectedDirect;
-    final fields = <String, Object?>{
-      'picker': _pickerTraceId,
-      'search': _searchToken,
-      'season': widget.selection.season,
-      'episode': widget.selection.episode,
-      'bound_count': mounted ? _bound.length : _disposedBoundCount,
-      'results': mounted ? _torrents.length : _disposedResultCount,
-      'visible': _visible.length,
-      'match_index': mounted
-          ? selected == null
-                ? -1
-                : _torrents.indexOf(selected)
-          : _disposedMatchIndex,
-      'visible_index': selected == null ? -1 : _visible.indexOf(selected),
-      'searching': mounted ? _searching : _disposedSearching,
-      'frozen': mounted ? _streamFrozen : _disposedFrozen,
-      'rail_focus': _cinemaKey.currentState?.hasRailFocus ?? false,
-      'filter_focus': _filterFocus.hasFocus,
-      'pill_focus': _pillFocus.hasFocus,
-      'tv': widget.isTelevision,
-      'provider_filter': mounted ? _sourceFilter != null : _disposedProviderFilter,
-      ...detail,
-    };
-    _pickerDiagnostics(event, fields);
-  }
+  ]) => _pickerTrace.log(
+    event,
+    search: _searchToken,
+    season: widget.selection.season,
+    episode: widget.selection.episode,
+    visible: _visible,
+    selected: _selectedDirect,
+    railFocus: _cinemaKey.currentState?.hasRailFocus ?? false,
+    filterFocus: _filterFocus.hasFocus,
+    pillFocus: _pillFocus.hasFocus,
+    television: widget.isTelevision,
+    detail: detail,
+  );
 
   void _updateSelectedDirect() {
     final matcher = ref.read(sourceBindingMatcherProvider);
@@ -164,7 +148,6 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
 
   // --- redesign toolbar state (unused when _redesign is false) ---
   String? get _sourceFilter => _resultsSubscription.read().toolbar.sourceFilter;
-  bool _disposedProviderFilter = false;
 
   late final ProviderSubscription<SourcePresentationSettings>
       _settingsSubscription;
@@ -202,7 +185,6 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
   SourceSearchController get _searchController =>
       ref.read(sourceSearchProvider(_sourcesSession).notifier);
   bool get _searching => _searchSubscription.read().searching;
-  bool _disposedSearching = false;
 
   /// Set on the first real interaction (drag scroll, row D-pad move, row menu,
   /// toolbar use). Frozen ⇒ later arrivals buffer into [_pendingTorrents]
@@ -212,9 +194,6 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
   SourceResultsController get _resultsController =>
       ref.read(sourceResultsProvider(_sourcesSession).notifier);
   bool get _streamFrozen => _resultsSubscription.read().frozen;
-  bool _disposedFrozen = false;
-  int _disposedResultCount = 0;
-  int _disposedMatchIndex = -1;
 
   /// Post-processed FULL result set waiting behind the pill while frozen.
   List<Torrent>? get _pendingTorrents => _resultsSubscription.read().pending;
@@ -263,7 +242,14 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
   void initState() {
     super.initState();
     // Deferred reveal diagnostics can run after Ref/subscriptions are disposed.
-    _pickerDiagnostics = ref.read(sourcePickerDiagnosticsProvider);
+    _pickerTrace = SourcePickerTrace(
+      pickerId: _pickerTraceId,
+      emit: ref.read(sourcePickerDiagnosticsProvider),
+      isMounted: () => mounted,
+      readResults: () => _resultsSubscription.read(),
+      readSearching: () => _searching,
+      readBoundCount: () => _bound.length,
+    );
     _query = widget.keywordSeed ?? '';
     _kwCtrl = TextEditingController(text: _query);
     _sourcesSession = SourcesSession(
@@ -365,18 +351,13 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
   @override
   void dispose() {
     _bindingSubscription.close();
-    _disposedProviderFilter = _sourceFilter != null;
-    _disposedFrozen = _streamFrozen;
-    _disposedResultCount = _torrents.length;
-    _disposedMatchIndex = _selectedDirect == null
-        ? -1
-        : _torrents.indexOf(_selectedDirect!);
+    _pickerTrace.retireResults(_selectedDirect);
     _resultsSubscription.close();
-    _disposedSearching = _searching;
+    _pickerTrace.retireSearch();
     _searchSubscription.close();
     _retrySubscription.close();
     _cacheSubscription.close();
-    _disposedBoundCount = _bound.length;
+    _pickerTrace.retireBound();
     _savedSourcesSubscription.close();
     _settingsSubscription.close();
     _seasonsSubscription.close();

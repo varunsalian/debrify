@@ -4229,3 +4229,38 @@ new failures, missing tests or new skips. Receipts:
 The helper is **141 formatted lines**; the Sources part shrinks **1,343 → 1,268**.
 The derived-season fallback comment moves with the menu responsibility. Remaining
 view extraction, Discover components and later/native gates are still pending.
+
+
+### Phase 4C — picker diagnostic retirement snapshots
+
+Moved diagnostic map construction and the six post-disposal fallback fields into
+SourcePickerTrace (**85 lines**). The view captures its existing sink during
+initState and passes ordinary callbacks, not Ref or subscriptions. Construction
+reads no state. The view still owns subscription/resource disposal and captures
+results, search and bound-count snapshots immediately before each original close
+point. The original picker ID timing, map keys, selected/visible index semantics,
+focus fields and detail override order remain unchanged. Result fields are read
+from one current immutable state snapshot per event.
+
+Two added tests verify that readers throwing after their individual close points
+are never accessed by a delayed unmounted log, that each close point preserves its
+own latest values, and that active logs reflect current row identity/state while
+retaining detail overrides. Existing real-screen disposal/reveal cases also pass.
+Baseline **499 Sources tests**; affected suite **501 pass**. Analyzer **863
+diagnostics**, no added identities; **160 migrated files** pass size/import checks.
+Changed view methods pass a formatter stub without whole-file formatting. The
+Sources part shrinks **1,268 → 1,249 lines**; this is a diagnostics ownership move,
+not completion of the remaining view/library retirement.
+
+Receipts under `.git/refactor-evidence/phase4c/`: `picker-trace-before.txt`,
+`picker-trace-after.txt`, `analyze-picker-trace.txt`,
+`picker-trace-analyzer-comparison.txt` and `picker-trace-format.dart`.
+Full-suite results follow below. Phase 4C and later/native/performance/CI gates
+remain open.
+
+Full suite: **8,148 successes / the same 51 failures / 20 skips**. All prior
+checkpoint outcomes are preserved, with exactly the two added trace tests passing.
+Original-baseline comparison finds no new failures, missing tests or new skips.
+Receipts: `full-picker-trace.jsonl`, `full-picker-trace-comparison.txt` and
+`full-picker-trace-previous-checkpoint.txt`. No allowances changed. Final diff,
+formatting and architecture checks pass; remaining migration gates are open.
