@@ -965,100 +965,83 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
     }
   }
 
-  Widget _sourcesBody(ColorScheme scheme, {bool cinema = false}) => Column(
-    children: [
-      if (_keywordMode)
-        SourceKeywordField(
-          scheme: scheme,
-          controller: _kwCtrl,
-          onSubmitted: _submitKeyword,
-        ),
-      Expanded(
-        child: _loading
-            ? const Center(child: CircularProgressIndicator())
-            : _error != null
-            ? SourceStatusMessage(
-                color: scheme.onSurfaceVariant,
-                text: 'Search failed.\n$_error',
-              )
-            : Column(
-                children: [
-                  if (_redesign && !_keywordMode && !cinema)
-                    SourceTitleHeader(
-                      title: widget.selection.title,
-                      subtitle: widget.selection.formattedLabel,
-                      poster: widget.meta.posterUrl,
-                    ),
-                  // Keep the toolbar when a season scope is available even
-                  // with zero results — otherwise a no-result season would
-                  // strand the user with no way to switch back.
-                  if (_redesign &&
-                      (_torrents.isNotEmpty ||
-                          _seasonChipVisible ||
-                          _iptvSources.isNotEmpty ||
-                          _hasRetryableAddon))
-                    _redesignToolbar(scheme, showProviders: !cinema),
-                  if (_searching && !cinema) const SourceSearchProgress(),
-                  Expanded(
-                    child: SourceResultsPane(
-                      count: _visible.length,
-                      controller: _resultsScroll,
-                      isTelevision: widget.isTelevision,
-                      redesign: _redesign,
-                      onUserScroll: _freezeStreaming,
-                      emptyBuilder: (_) => SourceStatusMessage(
-                        color: scheme.onSurfaceVariant,
-                        text: _torrents.isEmpty
-                            ? 'No sources found.'
-                            : 'No matches for your filters.',
-                      ),
-                      pendingResults: _pendingNewCount > 0
-                          ? _newSourcesPill()
-                          : null,
-                      itemBuilder: (context, i) {
-                        final t = _visible[i];
-                        if (_redesign) {
-                          return _redesignRow(t, i, cinema: cinema);
-                        }
-                        return TorrentResultRow(
-                          torrent: t,
-                          index: i,
-                          focusNode: _nodes[i],
-                          isTelevision: widget.isTelevision,
-                          qualityTier: t.qualityTier,
-                          onTap: () {
-                            if (widget.bindMode) {
-                              unawaited(_pin(t));
-                            } else {
-                              _play(t, i);
-                            }
-                          },
-                          onLongPress: () => _showRowMenu(t, i),
-                          onCopyMagnet: !_canCopySource(t)
-                              ? null
-                              : () => unawaited(_copySourceLink(t)),
-                          onNavigateUp: () {
-                            _freezeStreaming();
-                            if (i > 0) {
-                              _nodes[i - 1].requestFocus();
-                            } else if (_pendingNewCount > 0) {
-                              _pillFocus.requestFocus();
-                            }
-                          },
-                          onNavigateDown: () {
-                            _freezeStreaming();
-                            if (i < _nodes.length - 1) {
-                              _nodes[i + 1].requestFocus();
-                            }
-                          },
-                        );
-                      },
-                    ),
-                  ),
-                ],
-              ),
-      ),
-    ],
+  Widget _sourcesBody(
+    ColorScheme scheme, {
+    bool cinema = false,
+  }) => buildSourceResultsBody(
+    scheme: scheme,
+    keywordField: _keywordMode
+        ? SourceKeywordField(
+            scheme: scheme,
+            controller: _kwCtrl,
+            onSubmitted: _submitKeyword,
+          )
+        : null,
+    loading: _loading,
+    error: _error,
+    titleBuilder: _redesign && !_keywordMode && !cinema
+        ? () => SourceTitleHeader(
+            title: widget.selection.title,
+            subtitle: widget.selection.formattedLabel,
+            poster: widget.meta.posterUrl,
+          )
+        : null,
+    // Keep season controls with zero rows so an empty season cannot strand
+    // the user. Retryable providers likewise retain their recovery controls.
+    toolbarBuilder:
+        _redesign &&
+            (_torrents.isNotEmpty ||
+                _seasonChipVisible ||
+                _iptvSources.isNotEmpty ||
+                _hasRetryableAddon)
+        ? () => _redesignToolbar(scheme, showProviders: !cinema)
+        : null,
+    showProgress: _searching && !cinema,
+    visibleCount: _visible.length,
+    scrollController: _resultsScroll,
+    isTelevision: widget.isTelevision,
+    redesign: _redesign,
+    onUserScroll: _freezeStreaming,
+    hasResults: () => _torrents.isNotEmpty,
+    pendingResultsBuilder: _pendingNewCount > 0 ? _newSourcesPill : null,
+    itemBuilder: (context, i) {
+      final t = _visible[i];
+      if (_redesign) {
+        return _redesignRow(t, i, cinema: cinema);
+      }
+      return TorrentResultRow(
+        torrent: t,
+        index: i,
+        focusNode: _nodes[i],
+        isTelevision: widget.isTelevision,
+        qualityTier: t.qualityTier,
+        onTap: () {
+          if (widget.bindMode) {
+            unawaited(_pin(t));
+          } else {
+            _play(t, i);
+          }
+        },
+        onLongPress: () => _showRowMenu(t, i),
+        onCopyMagnet: !_canCopySource(t)
+            ? null
+            : () => unawaited(_copySourceLink(t)),
+        onNavigateUp: () {
+          _freezeStreaming();
+          if (i > 0) {
+            _nodes[i - 1].requestFocus();
+          } else if (_pendingNewCount > 0) {
+            _pillFocus.requestFocus();
+          }
+        },
+        onNavigateDown: () {
+          _freezeStreaming();
+          if (i < _nodes.length - 1) {
+            _nodes[i + 1].requestFocus();
+          }
+        },
+      );
+    },
   );
 
   /// Whether a chip is worth pressing: a failed addon retries, and a

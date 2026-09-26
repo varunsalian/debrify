@@ -3197,3 +3197,43 @@ missing tests or new skips. Receipts: `full-layout.jsonl`,
 evidence directory. The baseline helper remains nonzero for original failures;
 its allowances were not changed. Final diff/format/architecture checks pass.
 Phase 4C and the overall migration remain in progress.
+
+### Phase 4C — Sources results-body composition
+
+Extracted loading/error/results composition into
+`presentation/source_results_body.dart` (**61 lines**). It returns the original
+Column/Expanded hierarchy with the existing status/progress widgets and
+SourceResultsPane. Keyword input remains visible above every status branch;
+loading takes precedence over error. Title, toolbar and pending-result content
+are lazy callbacks, constructed only in the results branch. The empty-pane
+builder still reads current result availability when invoked, retaining the
+no-sources versus filtered-empty distinction.
+
+The view supplies visibility decisions, borrowed scroll controller, row builder,
+drag-freeze callback and optional content; it still owns mode/season/retry rules,
+search state, subscriptions, focus and row actions. Empty season searches retain
+their toolbar; IPTV and retry recovery controls retain their existing visibility.
+Cinema still suppresses the extra search-progress strip. No collection/state
+copy, resource owner or provider was introduced. The original body composition
+and obsolete parent imports were removed. Sources part **1,704 → 1,687 lines**.
+
+The existing affected suite passes **444 cases before and after**; no tests or
+allowances were changed. Row-builder/action callback comparison confirms the
+classic path remains unchanged apart from formatting. Review also checked branch
+precedence, optional-content construction, empty-message timing and unchanged
+SourceResultsPane list/overlay/drag behavior. Analyzer remains **863 diagnostics**
+with no new identities; **131 migrated files** pass architecture checks. New code
+and the changed legacy method are formatted without whole-file formatting.
+
+Receipts under `.git/refactor-evidence/phase4c/`: `body-before.txt`,
+`body-after.txt`, `body-original.txt`, `body-extraction-review.txt`,
+`analyze-body.txt` and `body-analyzer-comparison.txt`. Remaining Sources view/focus
+coordination, later phases and native/performance/CI completion gates stay open.
+
+Full-suite review: **8,069 successes / the same 51 failures / 20 skips**.
+Every test outcome is identical to the preceding frame checkpoint; the original
+baseline comparison likewise finds no added failures, missing tests or new skips.
+Receipts: `full-body.jsonl`, `full-body-comparison.txt` and
+`full-body-previous-checkpoint.txt` in the same evidence directory. The baseline
+helper remains nonzero for original failures, with no allowance changes. Final
+format, diff and architecture checks pass; Phase 4C remains in progress.

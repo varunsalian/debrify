@@ -1,3 +1,4 @@
+import '../features/sources/presentation/source_results_body.dart';
 import '../features/sources/presentation/source_screen_frame.dart';
 import '../features/sources/presentation/source_result_row.dart';
 import '../features/sources/presentation/source_row_focus_nodes.dart';
@@ -8,8 +9,6 @@ import '../features/sources/data/source_link_copier.dart';
 import '../features/sources/presentation/source_binding_bridge.dart';
 import '../features/sources/presentation/source_row_reveal.dart';
 import '../features/sources/application/source_selection_match.dart';
-import '../features/sources/presentation/source_status_widgets.dart';
-import '../features/sources/presentation/source_results_pane.dart';
 import '../ui/core/source_metadata_labels.dart';
 import '../features/sources/application/source_provider_projection.dart';
 import '../features/sources/presentation/source_provider_strip.dart';
