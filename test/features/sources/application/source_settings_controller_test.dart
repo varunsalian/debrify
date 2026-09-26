@@ -166,6 +166,67 @@ void main() {
   });
   for (final wholeFamily in [false, true]) {
     test(
+      'disposed settings scope rejects further reads: family=$wholeFamily',
+      () async {
+        ProviderContainer scoped(Settings repository) => ProviderContainer.test(
+          parent: container,
+          overrides: [
+            sourceSettingsRepositoryProvider.overrideWith(
+              (ref, key) => repository,
+            ),
+            if (wholeFamily)
+              sourceSettingsProvider.overrideWith2(SourceSettingsController.new)
+            else
+              sourceSettingsProvider(
+                session,
+              ).overrideWith(() => SourceSettingsController(session)),
+          ],
+        );
+        final firstRepository = Settings();
+        final secondRepository = Settings();
+        final first = scoped(firstRepository);
+        first.listen(sourceSettingsProvider(session), (_, _) {});
+        final firstController = first.read(
+          sourceSettingsProvider(session).notifier,
+        );
+        final second = scoped(secondRepository);
+        final secondState = second.listen(
+          sourceSettingsProvider(session),
+          (_, _) {},
+        );
+        final secondController = second.read(
+          sourceSettingsProvider(session).notifier,
+        );
+        final parentLoad = controller.load();
+        final firstLoad = firstController.load();
+        final secondLoad = secondController.load();
+        first.dispose();
+        // An obsolete view callback must not start more IO after its scope closes.
+        final retiredLoad = firstController.load();
+        expect(firstRepository.priority, hasLength(1));
+        expect(firstRepository.appearance, hasLength(1));
+        await retiredLoad;
+        firstRepository.priority.single.complete(chosen);
+        firstRepository.appearance.single.complete((text: true, logos: false));
+        await firstLoad;
+        expect(subscription.read().priority.providers, isEmpty);
+        expect(secondState.read().priority.providers, isEmpty);
+        secondRepository.priority.single.complete(chosen);
+        secondRepository.appearance.single.complete((text: true, logos: true));
+        await secondLoad;
+        expect(secondState.read().priority, same(chosen));
+        expect(subscription.read().priority.providers, isEmpty);
+        settings.priority.single.complete(
+          SourcePrioritySettings(providers: ['parent']),
+        );
+        settings.appearance.single.complete((text: false, logos: true));
+        await parentLoad;
+        expect(subscription.read().priority.providers, ['parent']);
+        expect(secondState.read().priority, same(chosen));
+      },
+    );
+
+    test(
       'explicit settings scope isolates parent and siblings: family=$wholeFamily',
       () async {
         ProviderContainer scoped(Settings repository) => ProviderContainer.test(
