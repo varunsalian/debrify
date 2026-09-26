@@ -11,6 +11,7 @@ class FocusFixture {
   final events = <String>[];
   bool mounted = true;
   bool frozen = false;
+  bool pending = false;
   bool selectedVisible = false;
   bool recoverEmpty = false;
   bool empty = false;
@@ -27,6 +28,7 @@ class FocusFixture {
     isMounted: () => mounted,
     searchToken: () => token,
     isFrozen: () => frozen,
+    hasPendingResults: () => pending,
     hasSelectedVisible: () => selectedVisible,
     hasRailFocus: () => rail.hasFocus,
     canRecoverEmpty: () => recoverEmpty,
@@ -63,6 +65,72 @@ class FocusFixture {
 }
 
 void main() {
+  for (final mode in [
+    (redesign: false, television: true),
+    (redesign: true, television: false),
+    (redesign: true, television: true),
+  ]) {
+    testWidgets('row navigation preserves first-row behavior for $mode', (
+      tester,
+    ) async {
+      final fixture = FocusFixture()..television = mode.television;
+      await fixture.mount(tester);
+      fixture.rows[1].requestFocus();
+      await tester.pump();
+      fixture.focus.rowUp(1, redesign: mode.redesign);
+      expect(fixture.frozen, isTrue);
+      await tester.pump();
+      expect(fixture.rows.first.hasFocus, isTrue);
+      fixture.focus.rowUp(0, redesign: mode.redesign);
+      await tester.pump();
+      expect(fixture.filter.hasFocus, mode.redesign && mode.television);
+      expect(fixture.rows.first.hasFocus, !(mode.redesign && mode.television));
+      fixture.focus.rowDown(0);
+      await tester.pump();
+      expect(fixture.rows[1].hasFocus, isTrue);
+      fixture.focus.rowDown(1);
+      await tester.pump();
+      fixture.focus.rowDown(2);
+      await tester.pump();
+      expect(fixture.rows.last.hasFocus, isTrue);
+    });
+  }
+
+  testWidgets(
+    'pending results take precedence and navigation reads live state',
+    (tester) async {
+      final fixture = FocusFixture();
+      await fixture.mount(tester);
+      fixture.rows.first.requestFocus();
+      await tester.pump();
+      fixture.pending = true;
+      fixture.focus.rowUp(0, redesign: false);
+      await tester.pump();
+      expect(fixture.pill.hasFocus, isTrue);
+      expect(fixture.focus.pillUp(), isTrue);
+      await tester.pump();
+      expect(fixture.filter.hasFocus, isTrue);
+      fixture.focus.filterDown();
+      await tester.pump();
+      expect(fixture.pill.hasFocus, isTrue);
+      fixture.focus.pillDown();
+      await tester.pump();
+      expect(fixture.rows.first.hasFocus, isTrue);
+      fixture.pending = false;
+      fixture.filter.requestFocus();
+      await tester.pump();
+      fixture.focus.filterDown();
+      await tester.pump();
+      expect(fixture.rows.first.hasFocus, isTrue);
+      fixture.empty = true;
+      fixture.filter.requestFocus();
+      await tester.pump();
+      fixture.focus.filterDown();
+      await tester.pump();
+      expect(fixture.filter.hasFocus, isTrue);
+    },
+  );
+
   testWidgets('reveal reads TV mode when the row mounts', (tester) async {
     final fixture = FocusFixture();
     await fixture.mount(tester);

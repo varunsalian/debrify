@@ -4154,3 +4154,37 @@ tests or new skips against the original baseline. Receipts:
 The Sources part shrinks **1,530 → 1,382 lines**. Only changed methods were checked
 through a formatter stub; the final row-callback wrap is whitespace-only. The
 unrelated existing provider getter formatting was left untouched.
+
+
+### Phase 4C — row and toolbar focus navigation
+
+Moved directional row/pill/filter decisions into the existing SourceResultsFocus
+coordinator (**201 lines**). The view continues to own every node and scroll
+controller; there is no additional state owner or resource lifecycle. Production
+classic and redesigned row callbacks, the pending-results pill and toolbar funnel
+now dispatch to that coordinator. Live pending-result and TV-mode getters retain
+callback-time behavior. Row movement still freezes streaming first, the pending
+pill still precedes the funnel, classic rows do not acquire redesigned funnel
+behavior, and an unattached funnel still allows the pill's Up key to bubble.
+
+Baseline: **495 Sources tests pass**. Final affected suite: **499 pass**, including
+four new widget cases for first-row classic/TV/touch behavior, row boundaries,
+pending priority, live pending changes and empty targets. Existing real-screen
+focus/resize/retirement tests also pass. Analyzer **863 diagnostics**, no added
+identities; **158 migrated files** pass size/import checks. The Sources part
+shrinks **1,382 → 1,343 lines**. Diff review confirms the callbacks are delegated
+without changing widget structure, action ordering, node ownership or disposal.
+
+Receipts under `.git/refactor-evidence/phase4c/`: `row-navigation-before.txt`,
+`row-navigation-after.txt`, `analyze-row-navigation.txt` and
+`row-navigation-analyzer-comparison.txt`. Full-suite results follow below.
+Phase 4C, standalone view retirement, broader migration and required native/
+performance/CI gates remain open.
+
+Full suite: **8,146 successes / the same 51 failures / 20 skips**. Every prior
+checkpoint outcome is preserved, with exactly the four new passing focus cases.
+Original-baseline comparison finds no new failures, missing tests or new skips.
+Receipts: `full-row-navigation.jsonl`, `full-row-navigation-comparison.txt` and
+`full-row-navigation-previous-checkpoint.txt`. Changed legacy view methods pass a
+formatter stub check (`row-navigation-format.dart`); no whole-file formatting or
+failure-allowance changes. Phase 4C and later gates remain in progress.

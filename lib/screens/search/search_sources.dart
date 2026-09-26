@@ -98,6 +98,7 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
     isMounted: () => mounted,
     searchToken: () => _searchToken,
     isFrozen: () => _streamFrozen,
+    hasPendingResults: () => _pendingNewCount > 0,
     hasSelectedVisible: () => _visible.contains(_selectedDirect),
     hasRailFocus: () => _cinemaKey.currentState?.hasRailFocus ?? false,
     canRecoverEmpty: () => _seasonChipVisible || _hasRetryableAddon,
@@ -736,20 +737,8 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
         onCopyMagnet: !_actions.canCopy(t)
             ? null
             : () => unawaited(_actions.copyLink(t)),
-        onNavigateUp: () {
-          _freezeStreaming();
-          if (i > 0) {
-            _nodes[i - 1].requestFocus();
-          } else if (_pendingNewCount > 0) {
-            _pillFocus.requestFocus();
-          }
-        },
-        onNavigateDown: () {
-          _freezeStreaming();
-          if (i < _nodes.length - 1) {
-            _nodes[i + 1].requestFocus();
-          }
-        },
+        onNavigateUp: () => _resultsFocus.rowUp(i, redesign: false),
+        onNavigateDown: () => _resultsFocus.rowDown(i),
       );
     },
   );
@@ -787,15 +776,8 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
     count: _pendingNewCount,
     focusNode: _pillFocus,
     onAdopt: _adoptPending,
-    onNavigateDown: () {
-      if (_nodes.isNotEmpty) _nodes.first.requestFocus();
-    },
-    onNavigateUp: () {
-      // Classic has no attached toolbar funnel: preserve normal key bubbling.
-      if (_filterFocus.context == null) return false;
-      _filterFocus.requestFocus();
-      return true;
-    },
+    onNavigateDown: _resultsFocus.pillDown,
+    onNavigateUp: _resultsFocus.pillUp,
   );
 
   /// Derives the rendered list from [_torrents]: source-group filter →
@@ -881,13 +863,7 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
           _rebuildVisible();
         },
         onOpenFilters: () => unawaited(_openFilters()),
-        onFilterDown: () {
-          if (_pendingNewCount > 0) {
-            _pillFocus.requestFocus();
-          } else if (_nodes.isNotEmpty) {
-            _nodes.first.requestFocus();
-          }
-        },
+        onFilterDown: _resultsFocus.filterDown,
       ),
       filters: _filters,
       onClearFilters: () {
@@ -954,23 +930,8 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
         }
       },
       onLongPress: () => _actions.showMenu(t, i),
-      onNavigateUp: () {
-        _freezeStreaming();
-        if (i > 0) {
-          _nodes[i - 1].requestFocus();
-        } else if (_pendingNewCount > 0) {
-          // From the first row, UP reaches the "+N new sources" pill first.
-          _pillFocus.requestFocus();
-        } else if (widget.isTelevision) {
-          // From the first row, UP reaches the toolbar (otherwise unreachable
-          // by remote — the list consumes UP).
-          _filterFocus.requestFocus();
-        }
-      },
-      onNavigateDown: () {
-        _freezeStreaming();
-        if (i < _nodes.length - 1) _nodes[i + 1].requestFocus();
-      },
+      onNavigateUp: () => _resultsFocus.rowUp(i, redesign: true),
+      onNavigateDown: () => _resultsFocus.rowDown(i),
     );
   }
 }

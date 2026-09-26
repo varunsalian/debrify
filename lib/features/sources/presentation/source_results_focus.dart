@@ -13,6 +13,7 @@ class SourceResultsFocus {
     required this.isMounted,
     required this.searchToken,
     required this.isFrozen,
+    required this.hasPendingResults,
     required this.hasSelectedVisible,
     required this.hasRailFocus,
     required this.canRecoverEmpty,
@@ -28,6 +29,7 @@ class SourceResultsFocus {
   final ValueGetter<bool> isMounted;
   final ValueGetter<int> searchToken;
   final ValueGetter<bool> isFrozen;
+  final ValueGetter<bool> hasPendingResults;
   final ValueGetter<bool> hasSelectedVisible;
   final ValueGetter<bool> hasRailFocus;
   final ValueGetter<bool> canRecoverEmpty;
@@ -57,6 +59,45 @@ class SourceResultsFocus {
       freeze();
     }
     return index >= 0;
+  }
+
+  /// Row navigation freezes streaming before selecting a live focus target.
+  void rowUp(int index, {required bool redesign}) {
+    freeze();
+    if (index > 0) {
+      readNodes()[index - 1].requestFocus();
+    } else if (hasPendingResults()) {
+      pillFocus.requestFocus();
+    } else if (redesign && isTelevision()) {
+      // Classic has no toolbar; only redesigned TV rows reach the funnel.
+      filterFocus.requestFocus();
+    }
+  }
+
+  void rowDown(int index) {
+    freeze();
+    final nodes = readNodes();
+    if (index < nodes.length - 1) nodes[index + 1].requestFocus();
+  }
+
+  void pillDown() {
+    final nodes = readNodes();
+    if (nodes.isNotEmpty) nodes.first.requestFocus();
+  }
+
+  bool pillUp() {
+    // Classic has no attached toolbar funnel: preserve normal key bubbling.
+    if (filterFocus.context == null) return false;
+    filterFocus.requestFocus();
+    return true;
+  }
+
+  void filterDown() {
+    if (hasPendingResults()) {
+      pillFocus.requestFocus();
+    } else {
+      pillDown();
+    }
   }
 
   /// The caller resolves row identity before choosing its new position.
