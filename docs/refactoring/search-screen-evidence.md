@@ -4067,3 +4067,48 @@ passes in this full run. Receipts: `full-source-ordering-verified.jsonl`,
 `full-source-ordering-verified-previous-checkpoint.txt`. Both full runs remain
 recorded. Final formatting/diff/architecture checks pass; no allowances changed.
 Phase 4C and remaining migration/native/performance/CI gates are still open.
+
+### Phase 4C — playback metadata boundary for the remaining view extraction
+
+Moved PlaybackMeta to `lib/models/playback_meta.dart` (**101 lines**) and
+PlaybackResumePolicy to `lib/models/playback_resume_policy.dart` (**6 lines**).
+The original services import/re-export the same declarations for compatibility.
+The Sources playback bridge now imports metadata directly and limits its service
+import to TorrentPlaybackService. Both model files are in the measured source set;
+no parallel metadata representation, conversion or new playback effect was added.
+
+Review proves PlaybackMeta equals the normally formatted original and the enum
+matches byte-for-byte. All implementation code in the playback service and local
+resume resolver is unchanged. The retained files shrink **8,866 → 8,773** and
+**126 → 122 lines**, respectively. Constructor defaults, canonical/source-specific
+resume selection, progress identity and tracker flags remain unchanged. Catalog
+and artwork objects keep their existing borrowed identities; this is not a new
+deep-immutability contract. The recursive metadata graph reaches only model/URI
+helpers, dart:convert and crypto, without project UI/service dependencies.
+
+Baseline and affected run: **515 Sources/resume/direct-stream tests pass**.
+Existing bridge wiring, direct stream reuse and resume precedence cases cover the
+compatibility path. No trivial duplicate model tests were added. The first
+analyzer run identified two now-unused service imports and a redundant bridge
+import; removing the former and restricting the bridge service import resolved
+all three. Final analyzer: **863 diagnostics**, no added identities.
+**157 migrated files** pass architecture checks. New models and the bridge are
+formatted; neither large legacy service was mass-formatted. Native handoff and
+lifecycle verification remain phase-7 gates; this move does not claim them done.
+
+Receipts under `.git/refactor-evidence/phase4c/`: `playback-meta-model-before.txt`,
+`playback-meta-model-after.txt`, `analyze-playback-meta-model.txt`,
+`playback-meta-model-analyzer-comparison.txt` (initial import findings retained),
+`analyze-playback-meta-model-final.txt`,
+`playback-meta-model-final-analyzer-comparison.txt`,
+`playback-meta-model-original.dart` and `playback-meta-model-review.txt`.
+Phase 4C and later/native/performance/CI completion gates remain in progress.
+
+Full-suite review: **8,142 successes / the same 51 failures / 20 skips**.
+All test identities/outcomes match the preceding completed checkpoint.
+Original-baseline comparison finds no new failures, missing tests or new skips.
+Receipts: `full-playback-meta-model.jsonl`,
+`full-playback-meta-model-comparison.txt` and
+`full-playback-meta-model-previous-checkpoint.txt`. The baseline helper remains
+nonzero for existing failures; no allowance changes. Final formatting/diff/
+architecture checks pass. Phase 4C and later/native/performance/CI gates stay open.

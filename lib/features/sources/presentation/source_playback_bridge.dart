@@ -2,7 +2,9 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../models/torrent.dart';
-import '../../../services/torrent_playback_service.dart';
+import '../../../models/playback_meta.dart';
+import '../../../services/torrent_playback_service.dart'
+    show TorrentPlaybackService;
 
 /// Context-dependent legacy playback remains behind this presentation boundary.
 /// The caller supplies the rendered list and its matching selected-row index.

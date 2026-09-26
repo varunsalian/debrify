@@ -1,3 +1,4 @@
+import '../models/playback_meta.dart';
 import '../features/sources/data/pikpak_source_preparation.dart';
 import '../features/sources/models/pikpak_prepared_source.dart';
 import '../features/sources/data/source_provider_configuration.dart';
@@ -6,7 +7,6 @@ import 'direct_source_authorization.dart';
 import 'media_server_service.dart';
 import 'iptv_source_search.dart';
 import '../models/advanced_search_selection.dart';
-import '../models/custom_series_identity.dart';
 import '../models/media_identity.dart';
 import 'source_selection_diagnostics.dart';
 import 'dart:convert';
@@ -23,7 +23,6 @@ import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
 
 import '../models/alldebrid_file.dart';
-import '../models/play_loader_art.dart';
 import '../models/playlist_view_mode.dart';
 import '../models/premiumize_file.dart';
 import '../models/profiles/profile_policy.dart';
@@ -77,99 +76,7 @@ import 'torrent_file_service.dart';
 import 'torrent_service.dart';
 import 'video_player_launcher.dart';
 
-/// Content identity for a playback, so the player can record Continue Watching,
-/// fetch subtitles, and drive the Episodes button (matching Home).
-class PlaybackMeta {
-  final bool initialContinuousShuffle;
-  final String? imdbId;
-  final String? contentType; // 'movie' | 'series'
-  final int? season;
-  final int? episode;
-  final String? title; // clean display title
-  final String? posterUrl;
-  final String? year;
-  final String? addonId; // originating Stremio addon (resume / next-episode)
-  final StremioMeta? catalogItem; // Exact catalog ID and addon configuration for navigation.
-  final String? stremioAddonId;
-  final String? stremioAddonKey;
-  final String? stremioCatalogId;
-  final String? stremioVideoId;
-  final double? traktProgressPercent; // Trakt watch position, if known
-  // Play came from a Trakt row → scrobble to Trakt instead of saving a local
-  // Continue Watching entry (mirrors Home passing selection.traktSource).
-  final bool traktScrobble;
-  // Simkl parallel pair (see the Simkl integration plan).
-  final double? simklProgressPercent;
-  final bool simklScrobble;
-  final double? mdblistProgressPercent;
-  final bool mdblistScrobble;
-
-  /// Catalog launches have authoritative content identity, so their local
-  /// resume position follows IMDb (plus S/E for episodes) across sources.
-  /// Generic keyword/debrid playback leaves this source-specific.
-  final PlaybackResumePolicy resumePolicy;
-
-  /// Presentation-only artwork + meta line for the play loader (Marquee).
-  /// Null on every path that doesn't have it — the loader falls back to the
-  /// poster, exactly as it did before this existed.
-  final PlayLoaderArt? art;
-  const PlaybackMeta({
-    this.initialContinuousShuffle = false,
-    this.imdbId,
-    this.contentType,
-    this.season,
-    this.episode,
-    this.title,
-    this.posterUrl,
-    this.year,
-    this.addonId,
-    this.catalogItem,
-    this.stremioAddonId,
-    this.stremioAddonKey,
-    this.stremioCatalogId,
-    this.stremioVideoId,
-    this.traktProgressPercent,
-    this.traktScrobble = false,
-    this.simklProgressPercent,
-    this.simklScrobble = false,
-    this.mdblistProgressPercent,
-    this.mdblistScrobble = false,
-    this.resumePolicy = PlaybackResumePolicy.sourceSpecific,
-    this.art,
-  });
-
-  const PlaybackMeta.catalog({
-    this.initialContinuousShuffle = false,
-    this.imdbId,
-    this.contentType,
-    this.season,
-    this.episode,
-    this.title,
-    this.posterUrl,
-    this.year,
-    this.addonId,
-    this.catalogItem,
-    this.stremioAddonId,
-    this.stremioAddonKey,
-    this.stremioCatalogId,
-    this.stremioVideoId,
-    this.traktProgressPercent,
-    this.traktScrobble = false,
-    this.simklProgressPercent,
-    this.simklScrobble = false,
-    this.mdblistProgressPercent,
-    this.mdblistScrobble = false,
-    this.art,
-  }) : resumePolicy = PlaybackResumePolicy.catalogCanonical;
-
-  bool get hasStremioEpisodeIdentity =>
-      stremioAddonKey?.trim().isNotEmpty == true &&
-      stremioCatalogId?.trim().isNotEmpty == true;
-
-  String? get progressIdentity => CustomSeriesIdentity.isCustom(imdbId) ? imdbId : hasStremioEpisodeIdentity
-      ? CustomSeriesIdentity(stremioAddonKey!, stremioCatalogId!).id
-      : imdbId;
-}
+export '../models/playback_meta.dart';
 
 /// Isolated "add a chosen torrent to debrid → do the configured post-torrent
 /// action" flow, composed ONLY from service-layer primitives.
