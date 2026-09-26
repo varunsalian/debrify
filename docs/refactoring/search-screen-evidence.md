@@ -4455,3 +4455,54 @@ or new skips. Receipts: `full-durable-binding.jsonl`,
 `full-durable-binding-comparison.txt` and
 `full-durable-binding-previous-checkpoint.txt`. Final formatting/diff/architecture
 checks pass; no allowances changed. Phase 4C and later gates remain open.
+
+
+### Phase 4C — direct-source binding presentation
+
+Moved direct-pin view guards, feedback and interaction sequencing into
+`presentation/direct_source_binding.dart` (**50 lines**). It receives ordinary
+authorize/describe/save callbacks, imports only Flutter and typed models, and
+creates no state owner or DI registration. The public legacy service method is a
+compatibility wrapper returning this function's Future directly; it supplies the
+same authorization, durable descriptor and guarded-or-legacy persistence calls.
+The existing injected Sources bridge and other callers therefore use the new
+production function without API changes.
+
+Review preserves the initial optional-guard contract, authorization before IMDb
+validation, post-authorization retirement checks, accepted descriptor types,
+false/error save behavior, three-second feedback and successful-save return value
+when a view retires during saving. The application binding controller still
+rejects retired completion. Catalog arguments, movie/series persistence behavior
+and saved descriptor identity are forwarded unchanged. All implementation outside
+the replaced method/import is byte-for-byte unchanged; the retained playback
+service shrinks **8,715 → 8,696 lines**. Other manual UI/preparation boundaries
+remain open; this function does not close the whole binding migration.
+
+Baseline **517 Sources/addon tests pass**. Final affected run **523 pass**, with
+six added widget cases for retired entry, active/retired authorization failure,
+retirement during rejected/successful save and legacy missing-identity ordering.
+Two initial fixture cases lacked mandatory addon provenance; after correcting
+that, callback-local assertions exposed Flutter guarded-test conflicts. Capturing
+the saved value and asserting after the pump fixes the harness. Initial failed
+receipts are retained; existing behavior tests stayed passing. Analyzer initially
+has **863 diagnostics**, no added identities; final comparison follows below.
+**165 migrated files** pass size/import checks. Both extracted code and the legacy
+wrapper pass normal formatting checks without mass-formatting the service.
+
+Receipts under `.git/refactor-evidence/phase4c/`: `direct-binding-ui-before.txt`,
+`direct-binding-ui-after.txt`, `direct-binding-ui-fixed.txt`,
+`direct-binding-ui-verified.txt`, `analyze-direct-binding-ui.txt`,
+`direct-binding-ui-analyzer-comparison.txt`, `direct-binding-ui-original.dart`,
+`direct-binding-ui-wrapper-format.dart` and `direct-binding-ui-review.txt`.
+Full-suite results follow below. Phase 4C and remaining native/performance/CI and
+full-library gates remain open.
+
+Full suite: **8,163 successes / the same 51 failures / 20 skips**. Every prior
+checkpoint identity/outcome is preserved, with exactly the six added UI cases
+passing. Original-baseline comparison finds no new failures, missing tests or new
+skips. Receipts: `full-direct-binding-ui.jsonl`,
+`full-direct-binding-ui-comparison.txt` and
+`full-direct-binding-ui-previous-checkpoint.txt`. Final analyzer remains **863**
+with no added identities (`analyze-direct-binding-ui-final.txt` and
+`direct-binding-ui-final-analyzer-comparison.txt`). Final diff/format/architecture
+checks pass; no allowances changed. Remaining migration gates stay open.

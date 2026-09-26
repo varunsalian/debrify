@@ -1,3 +1,4 @@
+import '../features/sources/presentation/direct_source_binding.dart';
 import 'durable_source_binding.dart';
 import '../models/playback_meta.dart';
 import '../features/sources/data/pikpak_source_preparation.dart';
@@ -5457,45 +5458,25 @@ class TorrentPlaybackService {
     bool Function()? canContinue,
     String? addonCatalogId,
     String? addonCatalogKey,
-  }) async {
-    bool active() => canContinue?.call() ?? true;
-    if (canContinue != null && (!context.mounted || !active())) return false;
-    try {
-      await DirectSourceAuthorization.authorize(torrent);
-    } catch (_) {
-      if (context.mounted && active()) {
-        _snack(context, 'Connection changed. Search sources again.');
-      }
-      return false;
-    }
-    if (!context.mounted || !active()) return false;
-    if (imdbId.isEmpty) {
-      _snack(context, 'No IMDb match — can\'t pin a source.');
-      return false;
-    }
-    final source = _durableBindingForSource(
-      torrent,
+  }) => presentDirectSourceBinding(
+    context,
+    torrent,
+    imdbId: imdbId,
+    canContinue: canContinue,
+    authorize: DirectSourceAuthorization.authorize,
+    describe: (source) => _durableBindingForSource(
+      source,
       SeriesSource.addonDirectService,
       addonCatalogId: addonCatalogId,
       addonCatalogKey: addonCatalogKey,
-    );
-    if (source == null || (!source.isAddonDirect && !source.isMediaServer)) {
-      _snack(context, 'This direct stream cannot be refreshed by its addon.');
-      return false;
-    }
-    if (!await _persistManualBinding(
+    ),
+    save: (source) => _persistManualBinding(
       source,
       imdbId: imdbId,
       isMovie: isMovie,
       saveBinding: saveBinding,
-    )) {
-      return false;
-    }
-    if (context.mounted && active()) {
-      _snack(context, 'Direct source pinned for fresh-link playback.');
-    }
-    return true;
-  }
+    ),
+  );
 
   /// Pin an IPTV movie or whole series by its secret-free catalog identity.
   /// Playback always resolves the current URL from the saved connection.
