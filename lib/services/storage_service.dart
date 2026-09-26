@@ -1,3 +1,4 @@
+import '../models/home_preferences.dart';
 import '../models/media_identity.dart';
 import '../models/subtitle_source_priority.dart';
 import '../models/custom_series_identity.dart';
@@ -42,6 +43,8 @@ import 'playback_recovery_intent.dart';
 import 'webdav_sync/webdav_sync_hot_merge.dart';
 import 'webdav_sync/webdav_sync_library_models.dart';
 import 'webdav_sync/webdav_sync_tombstones.dart';
+
+export '../models/home_preferences.dart';
 
 /// Which ambient-trailer surface a sound/volume preference belongs to.
 ///
@@ -10790,17 +10793,6 @@ class StorageService {
     _startupIptvChannelCached = null;
   }
 }
-
-/// See [StorageService.getHomeHeroSource].
-enum HomeHeroSourceMode { auto, random, custom }
-
-/// The Spotlight hero source pref — see [StorageService.getHomeHeroSource].
-/// [ids] are kept even in `auto`/`random` mode so a user flipping modes in
-/// Settings doesn't lose their custom picks.
-typedef HomeHeroSource = ({HomeHeroSourceMode mode, List<String> ids});
-
-/// One opted-in extra Home row — see [StorageService.getHomeExtraRows].
-typedef HomeExtraRow = ({String id, String title});
 
 class ApiKeyValidator {
   static bool isValidFormat(String apiKey) {

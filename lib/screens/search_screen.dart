@@ -1,3 +1,4 @@
+import '../features/home/application/home_catalog_preferences_dependencies.dart';
 import '../features/sources/presentation/sources_screen.dart';
 import '../ui/core/source_metadata_labels.dart';
 import '../features/search/application/keyword_snapshot_dependencies.dart';
@@ -2772,10 +2773,13 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     unawaited(_reloadHeroTrailerPrefs());
     await _loadHomeDefaultView();
     if (!mounted) return;
-    final disabled = await StorageService.getHomeDisabledSections();
-    final extras = await StorageService.getHomeExtraRows();
-    final rowOrder = await StorageService.getHomeRowOrder();
-    final heroSource = await StorageService.getHomeHeroSource();
+    final preferences = await ref
+        .read(homeCatalogPreferencesRepositoryProvider)
+        .read();
+    final disabled = preferences.disabled;
+    final extras = preferences.extras;
+    final rowOrder = preferences.rowOrder;
+    final heroSource = preferences.heroSource;
     final collections = await _readHomeCollections();
     if (!mounted) return;
     final hideWatched = HideWatchedPrefs.enabled;
@@ -2968,10 +2972,13 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
           }
         },
         load: () async {
-          final disabled = await StorageService.getHomeDisabledSections();
-          final extras = await StorageService.getHomeExtraRows();
-          final rowOrder = await StorageService.getHomeRowOrder();
-          final heroSource = await StorageService.getHomeHeroSource();
+          final preferences = await ref
+              .read(homeCatalogPreferencesRepositoryProvider)
+              .read();
+          final disabled = preferences.disabled;
+          final extras = preferences.extras;
+          final rowOrder = preferences.rowOrder;
+          final heroSource = preferences.heroSource;
           final collections = await _readHomeCollections();
           final collectionsSig = await HomeCollectionsStore.signatureOfAsync(
             collections,
