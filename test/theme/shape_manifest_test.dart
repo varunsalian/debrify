@@ -35,6 +35,7 @@ import 'package:flutter_test/flutter_test.dart';
 /// The residue shrinks as `const` sites are opened up or `app` is threaded
 /// further. Update the entry when you do. RAISING one needs a reason.
 const Map<String, int> kShapeResidue = {
+  'lib/features/sources/presentation/source_provider_strip.dart': 0,
   'lib/features/sources/presentation/source_toolbar_controls.dart': 0,
   'lib/features/sources/presentation/source_active_filters.dart': 0,
   'lib/features/sources/presentation/source_pending_results_pill.dart': 0,
@@ -61,7 +62,6 @@ const Map<String, int> kShapeResidue = {
   'lib/screens/premiumize/premiumize_files_screen.dart': 6,
   'lib/screens/search/search_card_widgets.dart': 0,
   'lib/screens/search/search_hero_widgets.dart': 2,
-  'lib/screens/search/search_sources.dart': 2,
   'lib/screens/search/search_stage_widgets.dart': 0,
   'lib/screens/search_screen.dart': 1,
   'lib/screens/see_all/catalog_see_all_screen.dart': 0,
@@ -121,10 +121,11 @@ const Map<String, int> kShapeResidue = {
   'lib/widgets/youtube/youtube_video_card.dart': 0,
 };
 
-// Extracted legacy pieces with bare radii but no shape-token sites of their own.
-// Keep their residue guarded without claiming they are already swept. Moving
-// the keyword field transfers one permitted site from search_sources.dart.
+// Migration files with no remaining shape-token sites of their own. Keep their
+// residue guarded without counting them as swept. The keyword field retains its
+// old literal; all Sources shape-token calls now live in registered widgets.
 const Map<String, int> kExtractedShapeResidue = {
+  'lib/screens/search/search_sources.dart': 0,
   'lib/features/sources/presentation/source_keyword_field.dart': 1,
 };
 

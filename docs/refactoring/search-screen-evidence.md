@@ -1753,3 +1753,48 @@ for pre-existing failures. Final receipts:
 `toolbar-controls-previous-checkpoint.txt`.
 Phase 4C provider rail, remaining Sources UI/focus and manual binding preparation
 boundaries, later phases, native/performance checks and final CI remain open.
+
+
+### Phase 4C — Provider-strip presentation
+
+Extracted the 128-line `SourceProviderStrip` with a 16-line immutable
+`SourceProviderOption` boundary. The production toolbar prepares its ordered
+options and sends separate selection/retry callbacks; the widget snapshots the
+list and only renders/dispatches. Source aliases, provider ordering, label
+precedence, actionable-status selection, request-key lookup and failure messages
+remain upstream for the next projection slice. The original local pill builder
+and strip rendering are removed. Sources is **2,159 lines**; parent **20,164**.
+
+Review preserves strip visibility and All eligibility at the call site; existing
+ValueKeys, horizontal scroll geometry, pill padding, selected ink/fill, failed
+colors, retry text constraints and spinner/refresh behavior remain. Busy retries
+remain clickable as before, with duplicate prevention still owned by the retry
+controller. Retry callbacks resolve the same captured status by source key,
+retaining the exact configuration request key at the service boundary. Media
+server/IPTV messages and selection filtering are unchanged.
+
+The shape guard initially exposed that Sources now contains no shape-token calls
+after this move. The old file is retained under the existing no-token residue
+map with its actual **zero** bare radii (tightened from allowance 2). The strip's
+two moved token calls are registered with zero bare radii. Both token guards pass
+and the total remains **490**; thresholds and failure allowances are unchanged.
+
+Affected baseline: **230 passes**, the one original-baseline bare-radius failure.
+Final affected Sources/cinema/shape group: **233 passes**, the same failure. Two
+new widget cases exercise ordered All/provider/retry choices through touch and
+keyboard, including a busy failed retry. A new real-screen test at 500×800
+exercises the non-cinema production strip: select one provider, restore All,
+then retry using the exact addon configuration. The existing cinema retry test
+also passes. Analyzer identities remain **864**, with no additions; architecture
+checks pass for **103 migrated files**. New/changed test files and new widgets/
+model are formatted; diff checks pass. Receipts under
+`.git/refactor-evidence/phase4c/`: `provider-strip-before.txt`,
+`provider-strip-focused.txt` (intermediate manifest mismatch),
+`provider-strip-focused-final.txt`, `provider-strip-wired-screen.txt`,
+`provider-strip-complete.txt`, `analyze-provider-strip-final.txt`,
+`provider-strip-final-analyzer-comparison.txt`.
+
+The previous full-suite checkpoint remains `full-toolbar-controls.jsonl`
+(7,820 successes, same 51 failures/20 skips); this leaf uses affected checks.
+Remaining provider projection, Sources UI/focus, manual binding preparation,
+later phases and native/performance/CI gates are still open.

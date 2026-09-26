@@ -1467,118 +1467,35 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
       aliases: _sourceAliases,
     );
 
-    Widget pill({
-      required String key,
-      required Widget child,
-      required bool on,
-      required VoidCallback? onTap,
-    }) => Padding(
-      key: ValueKey(key),
-      padding: const EdgeInsets.only(right: 6),
-      child: Material(
-        color: on ? accent : app.fade(app.core.tx, 0.05),
-        borderRadius: app.shape.brPill,
-        child: InkWell(
-          borderRadius: app.shape.brPill,
-          onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 7),
-            child: child,
-          ),
-        ),
-      ),
-    );
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         if (showProviders && (sortedKeys.length > 1 || retryByKey.isNotEmpty ||
             _iptvSources.any((s) => s.retryableFailure)))
-          SizedBox(
-            height: 44,
-            child: ListView(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.fromLTRB(12, 4, 12, 4),
-              children: [
-                if (sourceByKey.isNotEmpty)
-                  pill(
-                    key: 'source-pill-all',
-                    on: _sourceFilter == null,
-                    onTap: () {
-                      _resultsController.selectProvider(null);
-                      _rebuildVisible();
-                    },
-                    child: Text(
-                      'All',
-                      style: TextStyle(
-                        color: _sourceFilter == null ? app.inkOn(accent) : dim,
-                        fontSize: 12.5,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
+          SourceProviderStrip(
+            options: [
+              for (final key in sortedKeys)
+                if (retryByKey[key] case final status?)
+                  SourceProviderOption(
+                    key: key,
+                    label: status.name,
+                    retryable: true,
+                    failed: status.failed,
+                    retrying: _retryingAddons.contains(status.requestKey),
+                  )
+                else if (sourceByKey[key] case final source?)
+                  SourceProviderOption(
+                    key: key,
+                    label: labelsByKey[key] ?? _providerLabel(source),
                   ),
-                for (final key in sortedKeys)
-                  if (retryByKey[key] case final status?)
-                    pill(
-                      key: 'source-pill-$key',
-                      on: false,
-                      onTap: () => unawaited(_retryAddon(status)),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          ConstrainedBox(
-                            constraints: const BoxConstraints(maxWidth: 110),
-                            child: Text(
-                              status.name,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                color: status.failed
-                                    ? Theme.of(context).colorScheme.error
-                                    : dim,
-                                fontSize: 12.5,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 5),
-                          if (_retryingAddons.contains(status.requestKey))
-                            const SizedBox.square(
-                              dimension: 11,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 1.5,
-                              ),
-                            )
-                          else
-                            Icon(
-                              Icons.refresh_rounded,
-                              size: 14,
-                              color: status.failed
-                                  ? Theme.of(context).colorScheme.error
-                                  : dim,
-                            ),
-                        ],
-                      ),
-                    )
-                  else if (sourceByKey[key] case final source?)
-                    pill(
-                      key: 'source-pill-$key',
-                      on: _sourceFilter == key,
-                      onTap: () {
-                        _resultsController.selectProvider(key);
-                        _rebuildVisible();
-                      },
-                      child: Text(
-                        labelsByKey[key] ?? _providerLabel(source),
-                        style: TextStyle(
-                          color: _sourceFilter == key ? app.inkOn(accent) : dim,
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-              ],
-            ),
+            ],
+            showAll: sourceByKey.isNotEmpty,
+            selectedKey: _sourceFilter,
+            onSelect: (key) {
+              _resultsController.selectProvider(key);
+              _rebuildVisible();
+            },
+            onRetry: (key) => unawaited(_retryAddon(retryByKey[key]!)),
           ),
         if (showProviders)
           for (final entry in _mediaServerMessages.entries)

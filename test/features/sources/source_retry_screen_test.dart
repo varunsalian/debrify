@@ -158,4 +158,87 @@ void main() {
       await tester.pumpWidget(const SizedBox());
     },
   );
+  testWidgets(
+    'narrow Sources strip selects providers and retries exact configuration',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      tester.view.physicalSize = const Size(500, 800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      var retries = 0;
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            sourceSettingsRepositoryProvider.overrideWith(
+              (ref, key) => Settings(),
+            ),
+          ],
+          child: MaterialApp(
+            home: AppThemeScope(
+              theme: AppThemes.legacy,
+              child: sourcesScreenForTesting(
+                selection: const AdvancedSearchSelection(
+                  imdbId: 'tt-fixture',
+                  title: 'Fixture',
+                  isSeries: false,
+                ),
+                meta: const PlaybackMeta(),
+                search: (onBatch) async => {
+                  'torrents': [
+                    row('First', 'stremio:first'),
+                    row('Second', 'stremio:second'),
+                  ],
+                  'addonStatuses': [
+                    const AddonSearchStatus(
+                      addonId: 'broken',
+                      addonKey: 'exact-config',
+                      name: 'Broken',
+                      sourceKey: 'stremio:broken',
+                      count: 0,
+                      error: 'timeout',
+                    ),
+                  ],
+                },
+                retry:
+                    ({
+                      required addonId,
+                      required type,
+                      required imdbId,
+                      season,
+                      episode,
+                      required timeout,
+                      required preserveOrder,
+                      originVideoId,
+                    }) async {
+                      expect(addonId, 'exact-config');
+                      retries++;
+                      return [];
+                    },
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byType(CinemaSourcesLayout), findsNothing);
+      expect(find.byType(SourceRow), findsNWidgets(2));
+      await tester.tap(find.byKey(const ValueKey('source-pill-stremio:first')));
+      await tester.pumpAndSettle();
+      expect(tester.widget<SourceRow>(find.byType(SourceRow)).title, 'First');
+      await tester.tap(find.byKey(const ValueKey('source-pill-all')));
+      await tester.pumpAndSettle();
+      expect(find.byType(SourceRow), findsNWidgets(2));
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('source-pill-stremio:broken')),
+      );
+      await tester.tap(
+        find.byKey(const ValueKey('source-pill-stremio:broken')),
+      );
+      await tester.pumpAndSettle();
+      expect(retries, 1);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
 }
