@@ -139,8 +139,7 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
     final match = matchSelectedSource(
       saved: _bound,
       torrents: _torrents,
-      mediaServerKeyFor: (torrent) =>
-          MediaServerService.bindingFor(torrent)?.bindingKey,
+      mediaServerKeyFor: ref.read(sourceBindingMatcherProvider).mediaServerKeyFor,
     );
     _selectedDirect = match.source;
     if (match.diagnostics case final diagnostics?) {
@@ -318,32 +317,8 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
 
   String get _imdbId => widget.selection.imdbId;
   bool get _isMovie => !widget.selection.isSeries;
-  SeriesSource? _bindingFor(Torrent torrent) {
-    for (final source in _bound) {
-      if (source.isMediaServer && MediaServerService.bindingFor(torrent)?.bindingKey == source.bindingKey) return source;
-      if (IptvSourceSearch.owns(torrent) &&
-          source.isIptvDirect &&
-          source.iptvPlaylistId == torrent.iptvPlaylistId &&
-          source.iptvCatalogType == torrent.iptvCatalogType &&
-          source.iptvEntryKey == torrent.iptvEntryKey) {
-        return source;
-      }
-      if (torrent.isDirectStream &&
-          source.matchesAddonDirect(
-            candidateAddonKey: torrent.stremioAddonKey,
-            candidateStreamKey: torrent.stremioStreamKey,
-            candidateBingeGroup: torrent.stremioBingeGroup,
-          )) {
-        return source;
-      }
-      if (torrent.streamType == StreamType.torrent &&
-          source.torrentHash.isNotEmpty &&
-          source.torrentHash == torrent.infohash) {
-        return source;
-      }
-    }
-    return null;
-  }
+  SeriesSource? _bindingFor(Torrent torrent) =>
+      ref.read(sourceBindingMatcherProvider).match(_bound, torrent);
 
   @override
   void initState() {

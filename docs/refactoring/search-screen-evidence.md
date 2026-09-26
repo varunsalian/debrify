@@ -3280,3 +3280,52 @@ failures, missing tests or new skips. Receipts: `full-toolbar.jsonl`,
 same evidence directory. The baseline helper remains nonzero for original
 failures, with no allowance changes. Final diff/format/architecture review passes.
 Phase 4C and the overall migration remain in progress.
+
+### Phase 4C — saved-binding matching boundary
+
+Moved `_bindingFor` iteration/branch rules into plain
+`data/source_binding_matcher.dart` (**43 lines**) with injected media-server key
+and IPTV ownership callbacks. `application/source_binding_match_dependencies.dart`
+(**14 lines**) provides the stateless adapter through Riverpod at app scope.
+Identity is resolved on each call without retaining rows, pins, profile data or
+keys. The production row menu delegates to the matcher; primary-source selection
+also receives its existing media-server callback through this adapter. Primary
+selection policy/diagnostics remain distinct, as before. The old matching body is
+removed; Sources part **1,661 → 1,636 lines**.
+
+The matcher preserves saved order/first match, conditional per-pin media lookup,
+IPTV ownership and complete catalog identity, direct add-on configuration and
+binge-group/profile compatibility, and exact nonempty torrent-hash fallback.
+Returned objects retain their original identities. It does not read storage or
+receive Ref/BuildContext. Review compares the moved algorithm with the original
+after explicit dependency substitution, formatting and braces around one return.
+The legacy media-server implementation behind the adapter remains in the final
+transitive audit; this step does not claim it has been migrated.
+
+**Seven new plain tests** cover no lookups for empty pins, saved-order identity,
+stream/hash eligibility, add-on group/profile fallback and configuration isolation,
+IPTV catalog identity/ownership, lazy media lookup stopping at the first match,
+and changing identity resolution across calls. The initial add-on test fixture
+omitted its required addonId, so six new cases passed and that fixture failed;
+adding the missing fixture field made all seven pass without changing behavior.
+That failed receipt is retained, not classified as an app regression.
+
+Affected baseline **445 passes**, after integration **452 passes**. Existing
+real-screen binding, modal, primary-selection/focus and playback tests still pass.
+Analyzer retains **863 diagnostics**, with no added identities. Architecture
+checks pass **134 migrated files**; formatting/diff checks pass and no failure
+allowances changed. Receipts under `.git/refactor-evidence/phase4c/`:
+`binding-match-before.txt`, `binding-match-invalid-fixture.txt`,
+`binding-match-after.txt`, `binding-match-original.txt`,
+`binding-match-extraction-review.txt`, `analyze-binding-match.txt` and
+`binding-match-analyzer-comparison.txt`. Remaining Sources focus/service boundaries
+and later phases/native/performance/CI gates remain open.
+
+Full-suite review: **8,077 successes / the same 51 failures / 20 skips**.
+Every previous checkpoint outcome is preserved and all seven new matcher cases
+pass. Original-baseline and preceding-checkpoint comparisons find no new failures,
+missing tests or new skips. Receipts: `full-binding-match.jsonl`,
+`full-binding-match-comparison.txt` and `full-binding-match-previous-checkpoint.txt`
+in the same evidence directory. The baseline helper remains nonzero for original
+failures, with no allowance changes. Final diff/format/architecture review passes.
+Phase 4C and the overall migration remain in progress.
