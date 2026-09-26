@@ -43,6 +43,10 @@ EXTRACTED_ELSEWHERE: tuple[str, ...] = (
 # Context-dependent legacy actions are allowed only through these named bridges.
 # Phase 4C owns binding preparation; phase 7 retains playback lifecycle review.
 PRESENTATION_BRIDGE_IMPORTS = {
+    # Identifiable factory wiring platform operations into stateless presentation.
+    "lib/features/sources/presentation/local_source_picker_composition.dart": {
+        "lib/services/android_local_source_service.dart",
+    },
     "lib/features/sources/presentation/source_playback_bridge.dart": {
         "lib/services/torrent_playback_service.dart",
     },
