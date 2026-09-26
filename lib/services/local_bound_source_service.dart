@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
@@ -9,6 +8,7 @@ import '../features/sources/data/local_source_file_rules.dart';
 import '../features/sources/data/local_source_files.dart';
 import '../features/sources/models/local_source_file.dart';
 import '../features/sources/presentation/android_local_source_dialogs.dart';
+import '../features/sources/presentation/local_folder_scan_progress.dart';
 import '../features/sources/presentation/local_movie_pick_mode_sheet.dart';
 import '../features/sources/presentation/local_source_choice_dialogs.dart';
 import '../features/sources/presentation/local_series_folder_help.dart';
@@ -211,36 +211,11 @@ class LocalBoundSourceService {
     BuildContext context,
     String uri, {
     bool Function()? canContinue,
-  }) async {
-    bool active() => canContinue?.call() ?? true;
-    if (canContinue != null && (!context.mounted || !active())) return const [];
-    final navigator = Navigator.of(context);
-    final progress = DialogRoute<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => const PopScope(
-        canPop: false,
-        child: AlertDialog(
-          content: Row(
-            children: [
-              CircularProgressIndicator(),
-              SizedBox(width: 20),
-              Expanded(child: Text('Reading local folder…')),
-            ],
-          ),
-        ),
-      ),
-    );
-    unawaited(navigator.push(progress));
-    try {
-      final videos = await AndroidLocalSourceService.videos(uri);
-      return active() ? videos : const [];
-    } finally {
-      if (navigator.mounted && progress.isActive) {
-        navigator.removeRoute(progress);
-      }
-    }
-  }
+  }) => readLocalFolderWithProgress(
+    context,
+    scan: () => AndroidLocalSourceService.videos(uri),
+    canContinue: canContinue,
+  );
 
   static Future<SeriesSource?> _pickAndroidMovie(
     BuildContext context, {
