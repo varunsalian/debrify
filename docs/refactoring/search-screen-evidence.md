@@ -1667,3 +1667,38 @@ diff checks pass. Receipts under `.git/refactor-evidence/phase4c/`:
 The full suite was not rerun after this leaf extraction. Native/visual checks,
 remaining Sources UI/focus and binding boundaries, later phases and final
 performance/CI gates remain incomplete.
+
+
+### Phase 4C — Active-filter summary presentation
+
+Extracted `SourceActiveFilters` (106 lines), including its five private label
+formatters. The actual toolbar passes immutable `TorrentFilterState`, its existing
+accent/dim colors and a Clear callback. The callback still sets empty filters on
+`SourceResultsController` then calls `_rebuildVisible`; all focus and result
+projection stay with their existing owners. The replaced method/label helpers
+are removed from Sources, now **2,401 lines**; parent **20,161**.
+
+Review preserves group order (quality, rip source, language, size, range), set
+insertion order within each group, exact legacy labels, wrap/padding dimensions,
+colors and the existing InkWell. Visibility still depends on nonempty filters.
+The moved `app.shape.brPill` site is registered with zero bare-radius allowance,
+keeping the existing 490-call shape guard intact. No new application text,
+service dependency or second copy of filter state was introduced.
+
+Baseline affected Sources/cinema/shape tests: **221 passes**, one original
+baseline shape-radius failure. Post-extraction: **223 passes**, that same failure.
+Two new widget cases cover pointer and keyboard Clear, single dispatch, retained
+input state and observable label ordering. Both other shape guards pass. Final
+analyzer identities remain **864**, with no additions. Architecture checks pass
+for **100 migrated files**; new files are formatted and diff checks pass. The
+inserted toolbar call follows normal formatting; existing unrelated formatting
+in the surrounding legacy toolbar is retained. Receipts under
+`.git/refactor-evidence/phase4c/`: `filter-summary-before.txt`,
+`filter-summary-focused.txt`, `analyze-filter-summary.txt`,
+`filter-summary-analyzer-comparison.txt`.
+
+The most recent full-suite checkpoint remains `full-pending-pill.jsonl`
+(7,809 successes, same 51 failures/20 skips), preceding the header and this
+filter-summary leaf extraction. No full-suite/native parity claim is made for
+these leaves. Remaining Sources toolbar/results/focus and manual binding
+boundaries, later phases and native/performance/CI checks remain open.
