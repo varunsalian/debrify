@@ -138,6 +138,30 @@ Future<List<LocalSeriesFolderCandidate>> matchingLocalSeriesFolders(
   return List.unmodifiable(candidates);
 }
 
+Future<LocalSeriesFolderLookup?> lookupLocalSeriesFolders(
+  String pickedPath, {
+  required String title,
+  bool Function()? canContinue,
+}) async {
+  bool active() => canContinue?.call() ?? true;
+  final pickedFolder = Directory(pickedPath);
+  if (!await pickedFolder.exists()) return null;
+  if (!active()) return null;
+  if (localSeriesFolderMatchScore(localPathName(pickedPath), title) > 0) {
+    return (
+      direct: pickedFolder,
+      candidates: const <LocalSeriesFolderCandidate>[],
+    );
+  }
+  final matches = await matchingLocalSeriesFolders(
+    pickedPath,
+    title: title,
+    canContinue: canContinue,
+  );
+  if (!active()) return null;
+  return (direct: null, candidates: matches);
+}
+
 Future<SeriesSource?> localSourceFromFile(
   File file, {
   bool Function()? canContinue,

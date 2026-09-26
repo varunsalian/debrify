@@ -9,7 +9,7 @@ import '../features/sources/models/local_source_file.dart';
 import '../features/sources/presentation/android_local_source_picker.dart';
 import '../features/sources/presentation/local_movie_pick_mode_sheet.dart';
 import '../features/sources/presentation/local_source_choice_dialogs.dart';
-import '../features/sources/presentation/local_series_folder_help.dart';
+import '../features/sources/presentation/local_series_folder_resolution.dart';
 import '../models/series_source.dart';
 import '../utils/file_utils.dart';
 import 'android_local_source_service.dart';
@@ -84,10 +84,15 @@ class LocalBoundSourceService {
     if (path == null || path.trim().isEmpty) return null;
     if (!context.mounted || !active()) return null;
 
-    final seriesFolder = await _resolveSeriesFolder(
+    final seriesFolder = await resolveLocalSeriesFolder(
       context,
-      path,
       title: title,
+      pickedFolderName: localPathName(path),
+      lookup: () => lookupLocalSeriesFolders(
+        path,
+        title: title,
+        canContinue: canContinue,
+      ),
       canContinue: canContinue,
     );
     if (seriesFolder == null || !active()) return null;
@@ -184,53 +189,6 @@ class LocalBoundSourceService {
     return selected == null
         ? null
         : localSourceFromFile(selected.file, canContinue: canContinue);
-  }
-
-  static Future<Directory?> _resolveSeriesFolder(
-    BuildContext context,
-    String pickedPath, {
-    required String title,
-    bool Function()? canContinue,
-  }) async {
-    bool active() => canContinue?.call() ?? true;
-    if (canContinue != null && (!context.mounted || !active())) return null;
-    final pickedFolder = Directory(pickedPath);
-    if (!await pickedFolder.exists()) return null;
-    if (!active()) return null;
-
-    if (localSeriesFolderMatchScore(localPathName(pickedPath), title) > 0) {
-      return pickedFolder;
-    }
-
-    final matches = await matchingLocalSeriesFolders(
-      pickedPath,
-      title: title,
-      canContinue: canContinue,
-    );
-    if (!active()) return null;
-    if (matches.isEmpty) {
-      if (context.mounted) {
-        await showLocalSeriesFolderHelp(
-          context,
-          title: title,
-          pickedFolderName: localPathName(pickedPath),
-        );
-      }
-      return null;
-    }
-
-    if (matches.length == 1) {
-      return matches.single.directory;
-    }
-
-    if (!context.mounted) return null;
-    final selected = await showLocalSeriesFolderChoice(
-      context,
-      title: title,
-      candidates: matches,
-    );
-    if (!active()) return null;
-    return selected?.directory;
   }
 
   static void _showSnack(

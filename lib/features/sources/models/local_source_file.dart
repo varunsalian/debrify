@@ -1,5 +1,10 @@
 import 'dart:io';
 
+typedef LocalSeriesFolderLookup = ({
+  Directory? direct,
+  List<LocalSeriesFolderCandidate> candidates,
+});
+
 class LocalSeriesFolderCandidate {
   final Directory directory;
   final String folderName;
