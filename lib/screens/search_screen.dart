@@ -1,3 +1,5 @@
+import '../features/home/application/home_catalog_plan.dart';
+import '../features/home/models/home_catalog_plan.dart';
 import '../features/home/application/home_catalog_preferences_dependencies.dart';
 import '../features/sources/presentation/sources_screen.dart';
 import '../ui/core/source_metadata_labels.dart';
@@ -3038,42 +3040,26 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
           }
           final addons = await _stremio.getCatalogAddons();
           if (!current()) return;
-          // Enumerate every BROWSABLE catalog across all addons — no global row cap.
-          // This is cheap (manifest data); items are pulled lazily in batches on
-          // scroll. Catalogs that require a `search` extra are search-only: browsing
-          // them without a query just returns empty after a wasted round trip, so
-          // skip them here (they still power the Keyword/catalog search path).
-          // Catalogs the user hid in the Home Rows manager are skipped too.
-          // Catalogs claimed by an enabled collection folder live inside that
-          // folder (as in Nuvio) and never double up as plain board rows.
-          final claimed = HomeCollectionsStore.claimedCatalogKeys(
-            _homeCollections,
+          final plan = planHomeCatalogs(
             addons,
-            disabledRows: _homeDisabled,
-            showsCollectionRows: !widget.searchMode && !widget.discoverMode,
+            disabled: _homeDisabled,
+            claimed: HomeCollectionsStore.claimedCatalogKeys(
+              _homeCollections,
+              addons,
+              disabledRows: _homeDisabled,
+              showsCollectionRows: !widget.searchMode && !widget.discoverMode,
+            ),
+            rowOrder: _homeRowOrderActive ? _homeRowOrder : null,
           );
-          final boardRefs = [
-            for (final a in addons)
-              for (final c in a.catalogs)
-                if (c.isBrowsable &&
-                    !_homeDisabled.contains('${a.id}:${c.type}:${c.id}') &&
-                    !claimed.contains('${a.id}:${c.type}:${c.id}'))
-                  (a, c),
-          ];
           _boardRefs
             ..clear()
-            ..addAll(
-              _homeRowOrderActive
-                  ? HomeRowOrder.apply(boardRefs, _homeRowOrder, _catalogRefRowId)
-                  : boardRefs,
-            );
+            ..addAll(plan.references);
           _boardCursor = 0;
-          _addonsById.clear();
-          for (final a in addons) {
-            _addonsById.putIfAbsent(a.id, () => a);
-          }
+          _addonsById
+            ..clear()
+            ..addAll(plan.addonsById);
           if (progress != null) {
-            progress.catalogOrder(_boardRefs.map(_catalogRefRowId).toList());
+            progress.catalogOrder(_boardRefs.map(homeCatalogRowId).toList());
             // This cursor is safe to resume even if only some of the first
             // batch publishes. Never commit a reserved/in-flight cursor.
             _commitBoardSnapshot();
@@ -3244,7 +3230,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
           final row = await loadHomeCatalogSection(
             addon: addon,
             catalog: catalog,
-            previous: previousRows[_catalogRefRowId(ref)],
+            previous: previousRows[homeCatalogRowId(ref)],
             isCurrent: current,
             hides: WatchedFilter.predicate,
             fetch: (skip, onRawCount) => _stremio.fetchCatalog(
@@ -3322,7 +3308,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       if (more.isNotEmpty) {
         final merged = mergeHomeCatalogRows(previous: _homeSections,
           additions: more,
-          catalogOrder: _boardRefs.map(_catalogRefRowId).toList(),
+          catalogOrder: _boardRefs.map(homeCatalogRowId).toList(),
           rowId: _sectionRowId);
         final appendOnly = merged.length == _homeSections.length + more.length &&
             Iterable<int>.generate(_homeSections.length)
@@ -3930,9 +3916,6 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       : section is HomeCollectionSection
       ? section.rowId
       : '${section.addon.id}:${section.catalog.type}:${section.catalog.id}';
-
-  String _catalogRefRowId((StremioAddon, StremioAddonCatalog) ref) =>
-      '${ref.$1.id}:${ref.$2.type}:${ref.$2.id}';
 
   /// The focus-node list backing a favourites row of the given [ref].
   List<FocusNode> _favNodesFor(_FavRowRef ref) {
