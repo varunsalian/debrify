@@ -1,3 +1,4 @@
+import '../features/sources/presentation/source_provider_picker.dart';
 import '../features/sources/presentation/torrent_source_binding.dart';
 import '../features/sources/presentation/local_source_binding.dart';
 import '../features/sources/presentation/iptv_source_binding.dart';
@@ -7785,39 +7786,22 @@ class TorrentPlaybackService {
   static Future<String?> _pickProvider(
     BuildContext context, {
     bool Function()? canContinue,
-  }) async {
-    final configuration = await _configuredProviders(canContinue: canContinue);
-    if (configuration == null) return _cancelled;
-    final (configured, def) = configuration;
-    if (canContinue != null && (!context.mounted || !canContinue())) {
-      return _cancelled;
-    }
-    if (configured.isEmpty) return null;
-    if (def != null) return def;
-    if (configured.length == 1) return configured.first;
-    if (!context.mounted) return _cancelled;
-    final result = await showProviderPickerDialog(context, [
-      for (final p in configured)
-        ProviderPickerOption(
-          id: p,
-          label: _label(p),
-          gradient: _providerGradient(p),
-          icon: _providerIcon(p),
-        ),
-    ]);
-    if (canContinue != null && (!context.mounted || !canContinue())) {
-      return _cancelled;
-    }
-    if (result == null) return _cancelled; // dismissed
-    // "Remember my choice" persists the default so we never ask again.
-    if (result.remember) {
-      await StorageService.setDefaultTorrentProvider(
-        result.provider,
-        canContinue: canContinue,
-      );
-    }
-    return result.provider;
-  }
+  }) => pickSourceProvider(
+    context,
+    cancelledProvider: _cancelled,
+    canContinue: canContinue,
+    loadConfiguration: () => _configuredProviders(canContinue: canContinue),
+    optionFor: (provider) => ProviderPickerOption(
+      id: provider,
+      label: _label(provider),
+      gradient: _providerGradient(provider),
+      icon: _providerIcon(provider),
+    ),
+    remember: (provider) => StorageService.setDefaultTorrentProvider(
+      provider,
+      canContinue: canContinue,
+    ),
+  );
 
   static Future<bool> _isConfigured(
     String provider, {

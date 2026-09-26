@@ -4641,3 +4641,45 @@ tests or new skips. Receipts: `full-torrent-binding-ui.jsonl`,
 with no added identities (`torrent-binding-ui-analyzer-comparison.txt`). Final
 diff/format/architecture checks pass; no allowances changed. Remaining migration
 gates stay open.
+
+
+### Phase 4C — shared provider-picker presentation
+
+Moved provider-selection orchestration into the 37-line
+`presentation/source_provider_picker.dart`. The legacy wrapper supplies existing
+configuration loading, provider display options, remembered-default persistence
+and the cancellation sentinel; both manual binding and existing playback callers
+use it. No new configuration/state owner or retry loop was introduced. The dialog
+widget itself, provider option order/styles and storage operations are unchanged.
+
+Review retains null configuration versus empty provider semantics, default and
+single-provider fast paths, guarded and unguarded caller differences, view/session
+checks around dialog display, dismissal behavior, awaited remembered writes and
+the returned provider. In particular, legacy unguarded defaults may return after
+their view closes, and a remembered write returns its selection after awaiting;
+caller/storage ownership checks remain responsible for rejecting retired work.
+No new blanket guard silently changes those existing contracts.
+
+Baseline **545 Sources tests pass**; affected run **557 pass**, with twelve new
+cases covering fast paths, configuration retirement, guarded/unguarded closed
+views, real-dialog order/selection/remember/dismissal, rejected retired choices
+and awaiting persistence. Existing real binding/provider/credential ownership
+tests continue to pass. Analyzer **863 diagnostics**, no added identities;
+**169 migrated files** pass size/import checks. The extracted function and wrapper
+are normally formatted. All legacy implementation outside the method/import is
+byte-for-byte unchanged; playback service **8,607 → 8,591 lines**.
+
+Receipts under `.git/refactor-evidence/phase4c/`: `provider-picker-ui-before.txt`,
+`provider-picker-ui-after.txt`, `analyze-provider-picker-ui.txt`,
+`provider-picker-ui-analyzer-comparison.txt`, `provider-picker-ui-original.dart`,
+`provider-picker-ui-wrapper-format.dart` and `provider-picker-ui-review.txt`.
+Full-suite results follow below. Remaining native/integration ownership audits and
+full-library/performance/CI gates are still open.
+
+Full suite: **8,212 successes / the same 51 failures / 20 skips**. Every previous
+checkpoint identity/outcome is preserved, with exactly twelve new passing picker
+cases. Original-baseline comparison finds no new failures, missing tests or new
+skips. Receipts: `full-provider-picker-ui.jsonl`,
+`full-provider-picker-ui-comparison.txt` and
+`full-provider-picker-ui-previous-checkpoint.txt`. Final diff/format/architecture
+checks pass; no allowances changed. Remaining migration gates stay open.
