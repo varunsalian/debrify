@@ -712,3 +712,45 @@ reveal, pin/local mutations and cache orchestration remain. The last full-suite
 checkpoint is still the preceding phase-4B run; this pure policy slice used the
 affected suite plus analyzer comparison. Native/visual/performance checks and all
 later migration phases remain pending.
+
+
+### Phase 4C season state and guide boundary (implemented and reviewed)
+
+The production Sources screen now consumes `SourceSeasonsController` through
+Riverpod. A view-specific `SourcesSession` carries the captured profile owner and
+metadata identity. Selected, authoritative and derived seasons have one immutable
+state owner; the screen retains focus, menu rendering and search dispatch.
+Initialization explicitly requests metadata, while provider creation performs no
+IO. Request generations reject replaced results, and retirement/disposal rejects
+late guides before inventory dispatch. Metadata failure retains fallback behavior.
+
+`StremioSourceSeasonsRepository` preserves origin-catalog versus fallback-IMDb
+lookup and built-in metadata routing. It keeps raw metadata private and records
+inventory through the existing borrowed completion service under the captured
+scope. Inventory remains non-blocking. An optional commit predicate on the
+existing inventory methods rejects retired interactive writes after waiting for
+the preference mutation barrier; callers without the predicate retain their
+existing behavior and schema. The guarded writer uses the existing barrier and
+lets the preference setter own mutation revision tracking.
+
+The affected suite has **65 passes**: real Sources focus/streaming, pure season
+policies, controller timing/retirement, repository origin/fallback routing and
+actual persisted inventory, completion and custom-series progress. New coverage
+verifies a real inventory write queued behind a held preference snapshot cannot
+write or notify after session retirement. Analyzer identities/multiplicities
+remain the same **865**. The architecture check passes for **64 migrated files**;
+the new controller is 88 lines and concrete adapter 75. Sources is 3,149 lines;
+the parent screen is 20,142. Formatting and diff checks pass. Receipts:
+`.git/refactor-evidence/phase4c/guide-final-focused.txt`,
+`analyze-guide-final.txt` and `guide-analyzer-comparison.txt`.
+
+The exact full-suite helper completed in 171,282 ms with **7,628 successes**, the
+same **51 observed baseline failures** (22 failure and 29 error outcomes), and
+**20 skips**. Identity comparison finds no new failures, missing tests or newly
+skipped baseline cases. The historical helper still exits 1 because its allowance
+covers only nine of the 51 observed failures; the allowance was not changed.
+Receipts are `.git/refactor-evidence/phase4c/full-guide.jsonl`,
+`full-guide.helper.txt` and `full-guide-comparison.txt`. Phase 4C remains in
+progress: Sources results/search, retries, cache and pin/local-source actions
+still require extraction. Later phases and native/visual/performance checks
+remain outstanding.

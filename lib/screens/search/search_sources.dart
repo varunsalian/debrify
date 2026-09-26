@@ -14,7 +14,7 @@ Widget sourcesScreenForTesting({
   searchOverride: search,
 );
 
-class _SourcesScreen extends StatefulWidget {
+class _SourcesScreen extends ConsumerStatefulWidget {
   final AdvancedSearchSelection selection;
   final PlaybackMeta meta;
   final bool isTelevision;
@@ -52,10 +52,10 @@ class _SourcesScreen extends StatefulWidget {
   });
 
   @override
-  State<_SourcesScreen> createState() => _SourcesScreenState();
+  ConsumerState<_SourcesScreen> createState() => _SourcesScreenState();
 }
 
-class _SourcesScreenState extends State<_SourcesScreen> {
+class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
   bool _loading = true;
   String? _error;
   List<Torrent> _torrents = [];
@@ -352,17 +352,21 @@ class _SourcesScreenState extends State<_SourcesScreen> {
   // --- season scoping (pack-search mode: series, no specific episode) ---
   /// Currently selected season override; null = All Seasons (the selection's
   /// original whole-series/season scope).
-  int? _selectedSeason;
+  late final SourcesSession _sourcesSession;
+  late final ProviderSubscription<SourceSeasonsState> _seasonsSubscription;
+  SourceSeasonsController get _seasonsController =>
+      ref.read(sourceSeasonsProvider(_sourcesSession).notifier);
+  int? get _selectedSeason => _seasonsSubscription.read().selected;
 
   /// Seasons from the meta addon (authoritative). Empty until fetched; the
   /// chip menu falls back to [_derivedSeasons].
-  List<int> _availableSeasons = [];
+  List<int> get _availableSeasons => _seasonsSubscription.read().available;
 
   /// Seasons derived from the last UNSCOPED (All Seasons) result set's
   /// coverage info — the chip-menu fallback when the meta fetch fails. Only
   /// snapshotted on unscoped searches: a season-scoped result set is already
   /// filtered and would collapse the menu to the selected season.
-  List<int> _derivedSeasons = [];
+  List<int> get _derivedSeasons => _seasonsSubscription.read().derived;
 
   /// Whether the "Season" scope chip applies: only for a series pack search
   /// (no specific episode), never in keyword mode.
@@ -412,13 +416,26 @@ class _SourcesScreenState extends State<_SourcesScreen> {
     super.initState();
     _query = widget.keywordSeed ?? '';
     _kwCtrl = TextEditingController(text: _query);
-    _selectedSeason = widget.selection.season;
+    _sourcesSession = SourcesSession(
+      owner: ProfileSessionMemory.captureOwner(),
+      viewIdentity: Object(),
+      selection: widget.selection,
+      catalogItem: widget.meta.catalogItem,
+      metadataAddonId: widget.meta.addonId,
+      keywordMode: _keywordMode,
+    );
+    _seasonsSubscription = ref.listenManual(
+      sourceSeasonsProvider(_sourcesSession),
+      (previous, next) {
+        if (mounted) setState(() {});
+      },
+    );
     // Rebuild the toolbar when the funnel gains/loses focus so its D-pad
     // highlight tracks — Focus alone doesn't guarantee a parent rebuild.
     _filterFocus.addListener(_onFilterFocusChanged);
     _loadCacheConfig();
     unawaited(_initializeSources());
-    if (_seasonChipVisible) unawaited(_loadSeasons());
+    if (_seasonChipVisible) unawaited(_seasonsController.load());
   }
 
   Future<void> _initializeSources() async {
@@ -465,41 +482,6 @@ class _SourcesScreenState extends State<_SourcesScreen> {
     } catch (_) {}
   }
 
-  /// Preserve built-in metadata for tracker titles in the Season chip menu.
-  /// Other titles retain the addon lookup. On failure, derive seasons from
-  /// the current results' coverage info.
-  Future<void> _loadSeasons() async {
-    if (_imdbId.isEmpty) return;
-    try {
-      final stremio = StremioService.instance;
-      final builtIn = !widget.selection.hasStremioEpisodeIdentity &&
-          (MediaIdentity.isNative(_imdbId) ||
-              widget.meta.addonId == NativeSeriesMetadataService.addon.id);
-      final videos = await stremio.fetchSourcesSeriesGuide(
-        imdbId: _imdbId,
-        catalogItem: widget.meta.catalogItem,
-        builtIn: builtIn,
-      );
-      if (videos == null || !mounted) return;
-      unawaited(
-        LocalSeriesCompletionService.instance.recordRawEpisodeInventory(
-          imdbId: _imdbId,
-          seriesTitle: widget.selection.title,
-          videos: videos,
-        ),
-      );
-      final seasons = <int>{};
-      for (final v in videos) {
-        final s = (v['season'] as num?)?.toInt();
-        if (s != null && s > 0) seasons.add(s);
-      }
-      if (seasons.isEmpty) return;
-      setState(() => _availableSeasons = seasons.toList()..sort());
-    } catch (_) {
-      // Chip falls back to result-derived seasons.
-    }
-  }
-
   List<int> _seasonMenuNumbers() => sourceSeasonMenu(
     available: _availableSeasons,
     derived: _derivedSeasons,
@@ -516,6 +498,7 @@ class _SourcesScreenState extends State<_SourcesScreen> {
 
   @override
   void dispose() {
+    _seasonsSubscription.close();
     _kwCtrl.dispose();
     _resultsScroll.dispose();
     _filterFocus.removeListener(_onFilterFocusChanged);
@@ -928,7 +911,7 @@ class _SourcesScreenState extends State<_SourcesScreen> {
     // Use the FULL set even when part of it is parked behind the pill.
     final fullSet = _pendingTorrents ?? _torrents;
     if (_seasonChipVisible && sel.season == null) {
-      _derivedSeasons = deriveSourceSeasons(fullSet);
+      _seasonsController.acceptResults(fullSet, unscoped: true);
     }
     // A source-group pill selected for a previous search may not exist in the
     // new result set — checked ONLY here, against the authoritative full set:
@@ -2106,8 +2089,7 @@ class _SourcesScreenState extends State<_SourcesScreen> {
                   color: const Color(0xFF1E1B2C),
                   onSelected: (v) {
                     final next = v == 0 ? null : v;
-                    if (next == _selectedSeason) return;
-                    setState(() => _selectedSeason = next);
+                    if (!_seasonsController.select(next)) return;
                     unawaited(_runSearch());
                   },
                   itemBuilder: (_) => [

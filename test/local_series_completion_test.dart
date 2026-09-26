@@ -1,4 +1,7 @@
+import 'dart:async';
 import 'dart:convert';
+import 'package:debrify/services/profiles/profile_preferences.dart';
+import 'package:debrify/services/profiles/profile_session_memory.dart';
 import 'package:debrify/services/local_series_completion_service.dart';
 import 'package:debrify/services/storage_service.dart';
 import 'package:debrify/services/tracking_source_policy.dart';
@@ -13,6 +16,50 @@ void main() {
   setUp(() {
     SharedPreferences.setMockInitialValues({});
   });
+
+  test(
+    'retired season inventory queued behind preference snapshot cannot commit',
+    () async {
+      final owner = ProfileSessionMemory.captureOwner();
+      final entered = Completer<void>();
+      final release = Completer<void>();
+      final snapshot = ProfilePreferences.captureMutationSnapshot((
+        token,
+      ) async {
+        entered.complete();
+        await release.future;
+      });
+      await entered.future;
+      final revision = StorageService.localCompletionRevision.value;
+      var guardCalls = 0;
+      final write = LocalSeriesCompletionService.instance
+          .recordRawEpisodeInventory(
+            imdbId: 'tt-retired-guide',
+            seriesTitle: 'Fixture',
+            videos: [
+              {'season': 1, 'episode': 1, 'released': '2025-01-01T00:00:00Z'},
+            ],
+            canCommit: () {
+              guardCalls++;
+              return owner == ProfileSessionMemory.captureOwner();
+            },
+          );
+      // Let the real service read/recalculate and reach the held write barrier.
+      await Future<void>.delayed(Duration.zero);
+      expect(guardCalls, greaterThanOrEqualTo(2));
+      ProfileSessionMemory.clearAll();
+      release.complete();
+      await snapshot;
+      await write;
+      final prefs = await SharedPreferences.getInstance();
+      expect(
+        prefs.getString(StorageService.localSeriesCompletionStateKey),
+        isNull,
+      );
+      expect(StorageService.localCompletionRevision.value, revision);
+      expect(guardCalls, greaterThanOrEqualTo(3));
+    },
+  );
 
   TraktSeason season(List<TraktEpisode> episodes) =>
       TraktSeason(number: 1, episodeCount: episodes.length, episodes: episodes);

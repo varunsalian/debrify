@@ -81,7 +81,9 @@ class LocalSeriesCompletionService {
     required String imdbId,
     required String seriesTitle,
     required List<TraktSeason> seasons,
+    bool Function()? canCommit,
   }) {
+    if (canCommit != null && !canCommit()) return Future.value();
     final recordScope =
         ProfileRuntime.isInitialized && ProfileRuntime.isProfileCommitted
         ? ProfileRuntime.capture()
@@ -136,7 +138,8 @@ class LocalSeriesCompletionService {
         if (_isCurrentScope(recordScope)) _scheduleNextRelease(state);
         return;
       }
-      await _writeState(state);
+      await _writeState(state, canCommit: canCommit);
+      if (canCommit != null && !canCommit()) return;
       if (_isCurrentScope(recordScope)) {
         _scheduleNextRelease(state);
         StorageService.localCompletionRevision.value++;
@@ -151,7 +154,9 @@ class LocalSeriesCompletionService {
     required String imdbId,
     required String seriesTitle,
     required List<Map<String, dynamic>> videos,
+    bool Function()? canCommit,
   }) {
+    if (canCommit != null && !canCommit()) return Future.value();
     final bySeason = <int, List<TraktEpisode>>{};
     for (final video in videos) {
       final season = (video['season'] as num?)?.toInt();
@@ -175,6 +180,7 @@ class LocalSeriesCompletionService {
     return recordEpisodeInventory(
       imdbId: imdbId,
       seriesTitle: seriesTitle,
+      canCommit: canCommit,
       seasons: [
         for (final entry in bySeason.entries)
           TraktSeason(
@@ -514,11 +520,28 @@ class LocalSeriesCompletionService {
     }
   }
 
-  Future<void> _writeState(Map<String, Map<String, dynamic>> state) async {
+  Future<void> _writeState(
+    Map<String, Map<String, dynamic>> state, {
+    bool Function()? canCommit,
+  }) async {
     final prefs = await ProfilePreferences.instance();
-    await prefs.setString(
-      StorageService.localSeriesCompletionStateKey,
-      jsonEncode(state),
-    );
+    Future<void> write() async {
+      if (canCommit != null && !canCommit()) return;
+      await prefs.setString(
+        StorageService.localSeriesCompletionStateKey,
+        jsonEncode(state),
+      );
+    }
+    if (canCommit == null) {
+      await write();
+    } else {
+      // Check interactive ownership after waiting for the preference barrier.
+      // The outer writer prevents an exclusive snapshot from entering between
+      // this check and the nested preference commit; the setter marks mutation.
+      await ProfilePreferences.synchronizeExternalMutation(
+        write,
+        marksMutation: false,
+      );
+    }
   }
 }
