@@ -714,6 +714,25 @@ the five preceding single-file tests. Evidence:
 `full-series-folder-lookup*`. Local picker composition/presentation consolidation,
 native checks and the remaining phase gates are still pending.
 
+Native checkpoint (2026-09-27): the full production Android debug APK builds
+successfully with the pinned SDK. A separate blank Android TV/API 34 arm64 AVD
+(`codex_sources_refactor_tv`, 1920×1080) exercised the production local picker
+entry points through a temporary harness and real MainActivity/native channel.
+The local service from `4ea552dc`, before the recent picker extractions, ran in
+the same harness/environment for a controlled comparison. Eleven captured native
+hierarchy/focus states match, including movie-mode D-pad selection, Back, native
+file/folder cancellation and movie/series origin-focus restoration. Both variants
+issued one file and two folder native intents and returned the same four
+no-selection results. This image resolves document selection to Android TV's
+`DocumentsStub`; successful document selection, scanning and persistence remain
+unverified on a real document-provider target. Screenshot capture failed, so this
+does not establish rendered visual parity, full Sources/player lifecycle parity
+or performance. Existing AVDs/user profiles were untouched; the isolated emulator
+is stopped and standard build APK outputs restored. Evidence, harnesses, hashes,
+logs, XML comparison and exact limitations are in
+`.git/refactor-evidence/phase4c/native/` and `native-android-debug-build.txt`.
+This narrows the native gap but does not close phase 4C or the later native gates.
+
 Source batch preparation now reads live search/saved state and the scoped IPTV
 classifier in `application/source_batch_preparation.dart` (47 lines). This
 stateless operation retains no rows and rejects retired profiles/scopes. The
