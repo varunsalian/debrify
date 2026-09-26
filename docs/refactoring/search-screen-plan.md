@@ -797,6 +797,36 @@ Phase 4C and the full migration remain open; native successful document selectio
 remaining binding/preparation boundaries and later feature/lifecycle gates are not
 satisfied by this checkpoint.
 
+Successful Android document-selection checkpoint (2026-09-27, production
+`acd10111`): a separate blank Pixel 6/API 34 arm64 AVD uses real DocumentsUI and
+the external-storage document provider. Current and pre-extraction (`4ea552dc`
+local service) harnesses were built with the same pinned SDK/native code. Five
+synthetic videos exercise direct movie selection, a two-episode series folder,
+and an alphabetically ordered movie-folder choice. Both variants select the same
+sources and resolve episode 2 at index 1. After two force-stop/relaunch cycles
+(three app processes per variant), direct movie, series and folder-movie access
+still resolve correctly. Android reports three corresponding persisted read-only
+URI grants in each variant.
+
+All nine result events match, comparing every source/metadata field, file timestamp,
+URI, size, ordered playlist entry and start index; only `boundAt`, the action-time
+timestamp, is excluded. All 13 captured app hierarchy/focus/geometry states match,
+with identical one-file/two-folder native picker intent counts. The harness saves
+source JSON in its own fixture preferences, so this establishes persisted native
+URI access, not full Sources repository/profile-write integration. Screenshot
+capture returned an empty image; no pixel parity is claimed. Actual player rendering,
+full-screen lifecycle, desktop native pickers and profile/release performance remain
+pending. The TV image's DocumentsStub restriction is unchanged, but successful
+selection is now verified on a real phone document-provider target.
+
+Evidence, harnesses, fixture videos, build hashes, process logs, permission records,
+XML comparison and review are in `.git/refactor-evidence/phase4c/native/phone/`.
+Only the newly created test app/AVD was reset; existing AVDs/profiles were untouched.
+The emulator is stopped and standard build outputs byte-match the preserved full
+production APK. No application/native/dependency source changed; the prior 8,306-pass
+full-suite/analyzer checkpoint remains the automated baseline. Phase 4C and later
+feature/lifecycle/completion gates remain open.
+
 Source batch preparation now reads live search/saved state and the scoped IPTV
 classifier in `application/source_batch_preparation.dart` (47 lines). This
 stateless operation retains no rows and rejects retired profiles/scopes. The
