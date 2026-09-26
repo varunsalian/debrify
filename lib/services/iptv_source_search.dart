@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart' show visibleForTesting;
 
 import '../models/advanced_search_selection.dart';
 import '../models/iptv_playlist.dart';
+import '../models/iptv_source_result.dart';
 import '../models/profiles/profile_policy.dart';
 import '../models/torrent.dart';
 import '../utils/iptv_title.dart';
@@ -19,29 +20,7 @@ import 'source_selection_diagnostics.dart';
 import 'storage_service.dart';
 import 'xtream_codes_service.dart';
 
-class IptvSourceResult {
-  const IptvSourceResult(
-    this.key,
-    this.name,
-    this.message,
-    this.torrents, {
-    this.retryableFailure = false,
-  });
-  final String key;
-  final String name;
-  final String message;
-  final List<Torrent> torrents;
-  final bool retryableFailure;
-}
-
-enum IptvEpisodeResolutionStatus { resolved, missing, unavailable }
-
-class IptvEpisodeResolution {
-  const IptvEpisodeResolution(this.status, [this.source]);
-
-  final IptvEpisodeResolutionStatus status;
-  final Torrent? source;
-}
+export '../models/iptv_source_result.dart';
 
 /// Searches cached catalogs; the shared queue prepares missing/stale catalogs.
 class IptvSourceSearch {

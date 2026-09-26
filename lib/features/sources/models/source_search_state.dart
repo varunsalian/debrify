@@ -1,4 +1,4 @@
-import '../../../services/iptv_source_search.dart';
+import '../../../models/iptv_source_result.dart';
 import '../../../models/addon_search_status.dart';
 
 /// Request state for one Sources view. Rendered/frozen rows have a separate

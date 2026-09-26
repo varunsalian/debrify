@@ -3875,3 +3875,40 @@ Receipts: `full-addon-status.jsonl`, `full-addon-status-comparison.txt` and
 `full-addon-status-previous-checkpoint.txt`. The baseline helper remains nonzero
 for existing failures; no allowances changed. Final format/diff/architecture
 checks pass. Phase 4C and the remaining migration gates stay open.
+
+### Phase 4C — shared IPTV result model boundary
+
+Moved `IptvSourceResult`, `IptvEpisodeResolutionStatus` and
+`IptvEpisodeResolution` byte-for-byte into `lib/models/iptv_source_result.dart`
+(**25 lines**, imports only Torrent). Sources link copying, search repository/API
+contracts, provider projection and search state/result models now import the
+model directly. IptvSourceSearch imports and re-exports the same declarations,
+preserving existing imports and type identity without introducing DTO conversion.
+
+The retained IPTV service shrinks **1,190 → 1,169 lines**; its entire search,
+refresh, resolution and authorization implementation is unchanged. Constructors
+and the legacy result-list contract are preserved, including const callers. The
+production Sources repository still publishes `List.unmodifiable(result.torrents)`
+through its existing snapshot function; that repository was not edited. This is
+model/service separation, not a claim that the legacy result constructor itself
+creates an immutable row list or that other service-backed classifiers are migrated.
+
+Baseline and after: **494 Sources tests pass**. Existing resolution/copy,
+repository snapshot, retry/projection and real-screen tests cover these contracts
+and service compatibility exports. No trivial field/structure tests were added
+for unchanged declarations. Analyzer retains **863 diagnostics**, no added
+identities; **146 migrated files** pass architecture checks. The legacy service
+was not mass-formatted. Receipts under `.git/refactor-evidence/phase4c/`:
+`iptv-result-model-before.txt`, `iptv-result-model-after.txt`,
+`analyze-iptv-result-model.txt`, `iptv-result-model-analyzer-comparison.txt`
+and `iptv-result-model-review.txt`. Phase 4C and later/native/performance/CI gates
+remain in progress.
+
+Full-suite review: **8,141 successes / the same 51 failures / 20 skips**.
+All test identities and outcomes exactly match the preceding checkpoint.
+Original-baseline comparison finds no new failures, missing tests or new skips.
+Receipts: `full-iptv-result-model.jsonl`,
+`full-iptv-result-model-comparison.txt` and
+`full-iptv-result-model-previous-checkpoint.txt`. The helper remains nonzero for
+existing failures; no allowances changed. Final formatting/diff/architecture
+checks pass. Phase 4C and later migration/native/performance/CI gates remain open.

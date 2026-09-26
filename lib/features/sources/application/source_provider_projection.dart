@@ -1,6 +1,6 @@
 import '../../../models/cinema_source_provider.dart';
 import '../../../models/torrent.dart';
-import '../../../services/iptv_source_search.dart';
+import '../../../models/iptv_source_result.dart';
 import '../../../services/source_priority.dart';
 import '../../../models/addon_search_status.dart';
 import '../models/source_provider_option.dart';

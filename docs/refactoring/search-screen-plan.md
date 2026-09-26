@@ -440,6 +440,15 @@ adapters may preserve their current APIs; list any new transitional adapter's pa
 reason, remaining coupling, and removal milestone when introducing it. Revisit
 exceptions at each phase; retire resolved ones.
 
+IPTV search/episode-resolution results now live in the shared 25-line
+`lib/models/iptv_source_result.dart`, importing only Torrent. Six Sources
+application/data/model consumers use that declaration directly; the IPTV service
+re-exports it for compatibility. `lib/services/iptv_source_search.dart` shrank
+from 1,190 to 1,169 lines and retains cached-catalog search, refresh coordination,
+episode resolution and authorization. The existing const/list API is preserved;
+the repository still wraps result rows in an immutable snapshot before publication.
+Phase 8 must review remaining injected/classification service dependencies.
+
 `AddonSearchStatus` now lives in the shared 36-line
 `lib/models/addon_search_status.dart`, with no imports. Five Sources application/model
 files use it directly; StremioService re-exports it for compatibility. The retained
@@ -740,7 +749,7 @@ for compatibility. The retained `lib/services/torrent_service.dart` (1,053 lines
 still owns pre-existing engine configuration/network orchestration outside this
 policy extraction; its injected repository boundary remains subject to phase-8
 review. This change does not close other transitive service dependencies, including
-IPTV result types through IptvSourceSearch or the selectors listed above.
+the service-backed classifiers and selectors listed above.
 
 | Phase | Status | Revision, checks, and remaining work |
 | --- | --- | --- |
