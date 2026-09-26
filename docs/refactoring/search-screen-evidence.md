@@ -2601,3 +2601,73 @@ new skips. Receipts: `.git/refactor-evidence/phase4c/full-bind-route.jsonl`,
 same directory. The helper remains nonzero for unchanged historical failures;
 its allowances were not changed. Phase 4C and subsequent migration/native gates
 remain active.
+
+
+### Phase 4C — local file inventory and matching data boundary
+
+Extracted filesystem inventory/source metadata into `local_source_files.dart`
+(**139 lines**), pure movie/folder matching and path rules into
+`local_source_file_rules.dart` (**107 lines**), and final file/folder/episode
+metadata descriptors into `local_source_file.dart` (**47 lines**). These files
+contain no UI, navigation, Riverpod or mutable application state. The existing
+picker supplies paths and consumes the results directly; its native/modal flow
+and Android service are unchanged. No new interface, scheduler or DI container
+was needed for stateless filesystem operations. The legacy picker now imports
+the shared source model directly instead of its persistence service.
+
+The old implementations and model declarations were removed, reducing
+`lib/services/local_bound_source_service.dart` from **1,033 to 750 lines**. The
+public `scanSeriesFolder` facade delegates to the new operation and returns a
+caller-owned list as before; `LocalSeriesEpisodeFile` remains available through
+a compatibility export. New feature inventories are unmodifiable snapshots.
+Movie/folder chooser candidates retain their original object identity and order;
+matching still sorts copies instead of mutating input lists.
+
+Review retained recursive video scans without following links, descending size
+order, sample filtering, largest-duplicate episode selection, season/episode order,
+direct-child series-folder matching, score/name ordering and filename/year rules.
+The movie substring rule and path normalization quirks were intentionally preserved.
+Source hashes, URIs, local kinds, size/modification metadata and bound timestamps
+are unchanged. Stream/stat error branches still retain their prior behavior,
+including partial unsorted results on interrupted enumeration; no retry or scan
+limits were added. Native permission/error scenarios still need device validation.
+
+Before extraction, **three filesystem behavior tests passed** through the original
+public episode API. They verify nested ordering/duplicates, relative names/metadata,
+empty/missing folders, mutable legacy results and exclusion of file/directory
+symlinks. They still pass after extraction. **Fourteen matching/path tests** and
+**five data-operation tests** cover matching scores, year preference, input identity,
+path separators, immutable inventories, direct-child ordering and saved metadata.
+**Two real picker tests** substitute only the native directory-selection plugin,
+use real temporary files and verify movie year selection and series-child-folder
+resolution. They pass both against the original service restored temporarily for
+comparison and against the extracted implementation. The Windows symlink fixture
+is explicitly skipped where creating links requires host privileges; all current
+host cases ran.
+
+Affected baseline: **315 passes**; final: **339 passes**, with no failures.
+Analyzer retains **863 diagnostics**, with no added identities. Architecture checks
+pass **117 migrated files**; new files and changed legacy methods are formatted,
+and diff checks pass. Receipts under `.git/refactor-evidence/phase4c/`:
+`local-files-before.txt`, `local-inventory-baseline.txt`, `local-files-data-tests.txt`,
+`local-files-picker-baseline.txt`, `local-files-picker-tests.txt`,
+`local-files-focused.txt`, `analyze-local-files.txt` and
+`local-files-analyzer-comparison.txt`. The remaining local picker continuation
+checks, presentation separation and later Sources/native/performance/CI gates
+remain open; a smaller service alone is not completion.
+
+Extraction review also compared all **11 moved function bodies** against the
+unchanged service, normalizing only symbol names, formatting and the documented
+immutable result wrapping. All match. Receipt:
+`.git/refactor-evidence/phase4c/local-files-extraction-review.txt`. This confirms
+that the existing matching formulas and partial/error branches moved intact;
+it supplements the behavior tests rather than replacing them.
+
+Full-suite review: **7,971 successes / the same 51 failures / 20 skips**. All
+previous checkpoint outcomes are unchanged and all **24 new cases** pass. The
+original-baseline comparison reports no new failures, missing tests or new skips.
+Receipts: `.git/refactor-evidence/phase4c/full-local-files.jsonl`,
+`full-local-files-comparison.txt` and `local-files-previous-checkpoint.txt` in that
+directory. The historical helper's nonzero result is unchanged; no failure
+allowances were modified. Phase 4C remains open for local-picker continuation/UI
+ownership and the remaining Sources work, followed by the original later phases.

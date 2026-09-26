@@ -5,10 +5,15 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../features/sources/data/local_source_file_rules.dart';
+import '../features/sources/data/local_source_files.dart';
+import '../features/sources/models/local_source_file.dart';
+import '../models/series_source.dart';
 import '../utils/file_utils.dart';
-import '../utils/series_parser.dart';
-import 'series_source_service.dart';
 import 'android_local_source_service.dart';
+
+export '../features/sources/models/local_source_file.dart'
+    show LocalSeriesEpisodeFile;
 
 class LocalBoundSourceService {
   static const String mobileDisabledReason =
@@ -154,8 +159,8 @@ class LocalBoundSourceService {
     }
 
     final stat = await seriesFolder.stat();
-    final folderName = _folderName(resolvedPath).isNotEmpty
-        ? _folderName(resolvedPath)
+    final folderName = localPathName(resolvedPath).isNotEmpty
+        ? localPathName(resolvedPath)
         : title;
     return SeriesSource(
       torrentHash: SeriesSource.localSourceHash(resolvedPath),
@@ -173,51 +178,7 @@ class LocalBoundSourceService {
 
   static Future<List<LocalSeriesEpisodeFile>> scanSeriesFolder(
     String path,
-  ) async {
-    final candidates = await _scanFolder(path);
-    if (candidates.isEmpty) return [];
-
-    final relativeNames = candidates
-        .map((candidate) => _relativePath(path, candidate.file.path))
-        .toList();
-    final sizes = candidates.map((candidate) => candidate.sizeBytes).toList();
-    final parsed = SeriesParser.parsePlaylist(relativeNames, fileSizes: sizes);
-    final bestByEpisode = <String, LocalSeriesEpisodeFile>{};
-
-    for (int i = 0; i < candidates.length; i++) {
-      final info = parsed[i];
-      final season = info.season;
-      final episode = info.episode;
-      if (!info.isSeries || season == null || episode == null) continue;
-      if (SeriesParser.isSampleFile(relativeNames[i])) continue;
-
-      final candidate = candidates[i];
-      final entry = LocalSeriesEpisodeFile(
-        file: candidate.file,
-        relativePath: relativeNames[i],
-        fileName: candidate.fileName,
-        season: season,
-        episode: episode,
-        sizeBytes: candidate.sizeBytes,
-        modifiedAt: candidate.modifiedAt,
-      );
-      final key = '$season-$episode';
-      final existing = bestByEpisode[key];
-      if (existing == null || entry.sizeBytes > existing.sizeBytes) {
-        bestByEpisode[key] = entry;
-      }
-    }
-
-    final episodes = bestByEpisode.values.toList();
-    episodes.sort((a, b) {
-      final seasonCompare = a.season.compareTo(b.season);
-      if (seasonCompare != 0) return seasonCompare;
-      final episodeCompare = a.episode.compareTo(b.episode);
-      if (episodeCompare != 0) return episodeCompare;
-      return a.relativePath.compareTo(b.relativePath);
-    });
-    return episodes;
-  }
+  ) async => (await scanLocalSeriesFolder(path)).toList();
 
   static bool get isLocalBindingDisabled => Platform.isIOS;
 
@@ -234,7 +195,7 @@ class LocalBoundSourceService {
     );
     final path = result?.files.single.path;
     if (path == null || path.trim().isEmpty) return null;
-    return _sourceFromFile(File(path));
+    return localSourceFromFile(File(path));
   }
 
   static Future<SeriesSource?> _pickFromFolder(
@@ -246,7 +207,7 @@ class LocalBoundSourceService {
     final path = await FilePicker.platform.getDirectoryPath();
     if (path == null || path.trim().isEmpty) return null;
 
-    final candidates = await _scanFolder(path);
+    final candidates = await scanLocalVideoFolder(path);
     if (candidates.isEmpty) {
       if (context.mounted) {
         _showSnack(
@@ -258,14 +219,14 @@ class LocalBoundSourceService {
       return null;
     }
 
-    final matched = _matchMovieFiles(candidates, title: title, year: year);
+    final matched = matchLocalMovieFiles(candidates, title: title, year: year);
     if (matched != null) {
-      return _sourceFromFile(matched.file);
+      return localSourceFromFile(matched.file);
     }
 
     if (!context.mounted) return null;
     final selected = await _showManualFileChooser(context, candidates);
-    return selected == null ? null : _sourceFromFile(selected.file);
+    return selected == null ? null : localSourceFromFile(selected.file);
   }
 
   static Future<List<LocalSourceDocument>> _scanAndroidFolder(
@@ -418,41 +379,6 @@ class LocalBoundSourceService {
     return null;
   }
 
-  static Future<List<_LocalVideoCandidate>> _scanFolder(String path) async {
-    final root = Directory(path);
-    if (!await root.exists()) return [];
-
-    final candidates = <_LocalVideoCandidate>[];
-    try {
-      await for (final entity in root.list(
-        recursive: true,
-        followLinks: false,
-      )) {
-        if (entity is! File) continue;
-        final name = _pathName(entity.path);
-        if (!FileUtils.isVideoFile(name)) continue;
-        try {
-          final stat = await entity.stat();
-          candidates.add(
-            _LocalVideoCandidate(
-              file: entity,
-              fileName: name,
-              sizeBytes: stat.size,
-              modifiedAt: stat.modified.millisecondsSinceEpoch,
-            ),
-          );
-        } catch (_) {
-          // Skip files that cannot be statted.
-        }
-      }
-    } catch (_) {
-      return candidates;
-    }
-
-    candidates.sort((a, b) => b.sizeBytes.compareTo(a.sizeBytes));
-    return candidates;
-  }
-
   static Future<Directory?> _resolveSeriesFolder(
     BuildContext context,
     String pickedPath, {
@@ -461,17 +387,17 @@ class LocalBoundSourceService {
     final pickedFolder = Directory(pickedPath);
     if (!await pickedFolder.exists()) return null;
 
-    if (_seriesFolderMatchScore(_folderName(pickedPath), title) > 0) {
+    if (localSeriesFolderMatchScore(localPathName(pickedPath), title) > 0) {
       return pickedFolder;
     }
 
-    final matches = await _matchingSeriesChildFolders(pickedPath, title: title);
+    final matches = await matchingLocalSeriesFolders(pickedPath, title: title);
     if (matches.isEmpty) {
       if (context.mounted) {
         await _showSeriesFolderExpectationDialog(
           context,
           title: title,
-          pickedFolderName: _folderName(pickedPath),
+          pickedFolderName: localPathName(pickedPath),
         );
       }
       return null;
@@ -488,40 +414,6 @@ class LocalBoundSourceService {
       candidates: matches,
     );
     return selected?.directory;
-  }
-
-  static Future<List<_SeriesFolderCandidate>> _matchingSeriesChildFolders(
-    String pickedPath, {
-    required String title,
-  }) async {
-    final root = Directory(pickedPath);
-    final candidates = <_SeriesFolderCandidate>[];
-    try {
-      await for (final entity in root.list(
-        recursive: false,
-        followLinks: false,
-      )) {
-        if (entity is! Directory) continue;
-        final folderName = _folderName(entity.path);
-        final score = _seriesFolderMatchScore(folderName, title);
-        if (score <= 0) continue;
-        candidates.add(
-          _SeriesFolderCandidate(
-            directory: entity,
-            folderName: folderName,
-            score: score,
-          ),
-        );
-      }
-    } catch (_) {
-      return candidates;
-    }
-    candidates.sort((a, b) {
-      final scoreCompare = b.score.compareTo(a.score);
-      if (scoreCompare != 0) return scoreCompare;
-      return a.folderName.compareTo(b.folderName);
-    });
-    return candidates;
   }
 
   static Future<void> _showSeriesFolderExpectationDialog(
@@ -584,46 +476,13 @@ class LocalBoundSourceService {
     );
   }
 
-  static _LocalVideoCandidate? _matchMovieFiles(
-    List<_LocalVideoCandidate> candidates, {
-    required String title,
-    String? year,
-  }) {
-    final titleTokens = _importantTokens(title);
-    if (titleTokens.isEmpty) return null;
-
-    final titleMatches = candidates.where((candidate) {
-      final normalizedName = _normalize(candidate.fileName);
-      return titleTokens.every(normalizedName.contains);
-    }).toList();
-
-    if (titleMatches.isEmpty) return null;
-
-    final normalizedYear = year?.trim();
-    if (normalizedYear != null && RegExp(r'^\d{4}$').hasMatch(normalizedYear)) {
-      final yearMatches = titleMatches
-          .where(
-            (candidate) =>
-                _normalize(candidate.fileName).contains(normalizedYear),
-          )
-          .toList();
-      if (yearMatches.isNotEmpty) {
-        yearMatches.sort((a, b) => b.sizeBytes.compareTo(a.sizeBytes));
-        return yearMatches.first;
-      }
-    }
-
-    titleMatches.sort((a, b) => b.sizeBytes.compareTo(a.sizeBytes));
-    return titleMatches.first;
-  }
-
-  static Future<_SeriesFolderCandidate?> _showSeriesFolderChooser(
+  static Future<LocalSeriesFolderCandidate?> _showSeriesFolderChooser(
     BuildContext context, {
     required String title,
-    required List<_SeriesFolderCandidate> candidates,
+    required List<LocalSeriesFolderCandidate> candidates,
   }) {
     final visibleCandidates = candidates.take(40).toList();
-    return showDialog<_SeriesFolderCandidate>(
+    return showDialog<LocalSeriesFolderCandidate>(
       context: context,
       builder: (dialogContext) {
         return Dialog(
@@ -703,12 +562,12 @@ class LocalBoundSourceService {
     );
   }
 
-  static Future<_LocalVideoCandidate?> _showManualFileChooser(
+  static Future<LocalVideoCandidate?> _showManualFileChooser(
     BuildContext context,
-    List<_LocalVideoCandidate> candidates,
+    List<LocalVideoCandidate> candidates,
   ) {
     final visibleCandidates = candidates.take(80).toList();
-    return showDialog<_LocalVideoCandidate>(
+    return showDialog<LocalVideoCandidate>(
       context: context,
       builder: (dialogContext) {
         return Dialog(
@@ -786,80 +645,6 @@ class LocalBoundSourceService {
     );
   }
 
-  static Future<SeriesSource?> _sourceFromFile(File file) async {
-    if (!await file.exists()) return null;
-    final name = _pathName(file.path);
-    if (!FileUtils.isVideoFile(name)) return null;
-
-    final stat = await file.stat();
-    return SeriesSource(
-      torrentHash: SeriesSource.localSourceHash(file.path),
-      torrentName: name,
-      debridService: SeriesSource.localService,
-      debridTorrentId: file.path,
-      boundAt: DateTime.now().millisecondsSinceEpoch,
-      localPath: file.path,
-      localUri: Uri.file(file.path).toString(),
-      localKind: SeriesSource.localKindMovieFile,
-      localSizeBytes: stat.size,
-      localModifiedAt: stat.modified.millisecondsSinceEpoch,
-    );
-  }
-
-  static List<String> _importantTokens(String value) {
-    const stopWords = {'a', 'an', 'and', 'of', 'the'};
-    return _normalize(value)
-        .split(' ')
-        .where((token) => token.length > 1 && !stopWords.contains(token))
-        .toSet()
-        .toList();
-  }
-
-  static String _normalize(String value) {
-    return value
-        .toLowerCase()
-        .replaceAll(RegExp(r'\.[a-z0-9]{2,5}$'), ' ')
-        .replaceAll(RegExp(r'[^a-z0-9]+'), ' ')
-        .trim()
-        .replaceAll(RegExp(r'\s+'), ' ');
-  }
-
-  static int _seriesFolderMatchScore(String folderName, String title) {
-    final titleTokens = _importantTokens(title);
-    if (titleTokens.isEmpty) return 0;
-
-    final normalizedFolder = _normalize(folderName);
-    if (normalizedFolder.isEmpty) return 0;
-    final normalizedTitle = _normalize(title);
-    final titleWithoutArticle = _withoutLeadingArticle(normalizedTitle);
-    var score = titleTokens.length * 10;
-
-    if (normalizedFolder == normalizedTitle) return score + 120;
-    if (titleWithoutArticle != normalizedTitle &&
-        normalizedFolder == titleWithoutArticle) {
-      return score + 110;
-    }
-    if (normalizedTitle.length > 3 &&
-        normalizedFolder.startsWith('$normalizedTitle ')) {
-      return score + 80;
-    }
-    if (titleWithoutArticle.length > 3 &&
-        titleWithoutArticle != normalizedTitle &&
-        normalizedFolder.startsWith('$titleWithoutArticle ')) {
-      return score + 70;
-    }
-
-    if (titleTokens.length < 2) return 0;
-    final folderTokens = normalizedFolder.split(' ').toSet();
-    if (!titleTokens.every(folderTokens.contains)) return 0;
-    score -= (folderTokens.length - titleTokens.length).clamp(0, 20);
-    return score;
-  }
-
-  static String _withoutLeadingArticle(String normalizedTitle) {
-    return normalizedTitle.replaceFirst(RegExp(r'^(the|a|an) '), '');
-  }
-
   static void _showSnack(
     BuildContext context,
     String message, {
@@ -888,28 +673,6 @@ class LocalBoundSourceService {
     return '${size.toStringAsFixed(decimals)} ${units[unit]}';
   }
 
-  static String _folderName(String path) {
-    return _pathName(path);
-  }
-
-  static String _pathName(String path) {
-    final normalized = path.trim().replaceAll('\\', '/');
-    final trimmed = normalized.endsWith('/')
-        ? normalized.substring(0, normalized.length - 1)
-        : normalized;
-    final index = trimmed.lastIndexOf('/');
-    return index == -1 ? trimmed : trimmed.substring(index + 1);
-  }
-
-  static String _relativePath(String rootPath, String filePath) {
-    final root = rootPath.replaceAll('\\', '/').replaceFirst(RegExp(r'/$'), '');
-    final file = filePath.replaceAll('\\', '/');
-    if (file == root) return _folderName(file);
-    if (file.startsWith('$root/')) {
-      return file.substring(root.length + 1);
-    }
-    return _pathName(filePath);
-  }
 }
 
 enum _LocalPickMode { file, folder }
@@ -952,52 +715,6 @@ class _ExpectationRow extends StatelessWidget {
       ],
     );
   }
-}
-
-class _SeriesFolderCandidate {
-  final Directory directory;
-  final String folderName;
-  final int score;
-
-  const _SeriesFolderCandidate({
-    required this.directory,
-    required this.folderName,
-    required this.score,
-  });
-}
-
-class _LocalVideoCandidate {
-  final File file;
-  final String fileName;
-  final int sizeBytes;
-  final int modifiedAt;
-
-  const _LocalVideoCandidate({
-    required this.file,
-    required this.fileName,
-    required this.sizeBytes,
-    required this.modifiedAt,
-  });
-}
-
-class LocalSeriesEpisodeFile {
-  final File file;
-  final String relativePath;
-  final String fileName;
-  final int season;
-  final int episode;
-  final int sizeBytes;
-  final int modifiedAt;
-
-  const LocalSeriesEpisodeFile({
-    required this.file,
-    required this.relativePath,
-    required this.fileName,
-    required this.season,
-    required this.episode,
-    required this.sizeBytes,
-    required this.modifiedAt,
-  });
 }
 
 class _LocalPickTile extends StatelessWidget {
