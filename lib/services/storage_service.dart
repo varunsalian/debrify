@@ -8626,9 +8626,26 @@ class StorageService {
     return prefs.getString(_defaultTorrentProviderKey) ?? 'none';
   }
 
-  static Future<void> setDefaultTorrentProvider(String provider) async {
-    final prefs = await ProfilePreferences.instance();
-    await prefs.setString(_defaultTorrentProviderKey, provider);
+  static Future<void> setDefaultTorrentProvider(
+    String provider, {
+    bool Function()? canContinue,
+  }) async {
+    if (canContinue == null) {
+      final prefs = await ProfilePreferences.instance();
+      await prefs.setString(_defaultTorrentProviderKey, provider);
+      return;
+    }
+    await ProfileRuntime.withoutCapturedScope(() async {
+      if (!canContinue()) return;
+      final prefs = await ProfilePreferences.instance();
+      if (!canContinue()) return;
+      await ProfilePreferences.synchronizeExternalMutation(() async {
+        // Waiting for a profile snapshot may retire the picker. Check here,
+        // with no intervening await before the nested preference setter.
+        if (!canContinue()) return;
+        await prefs.setString(_defaultTorrentProviderKey, provider);
+      }, marksMutation: false);
+    });
   }
 
   static Future<void> clearDefaultTorrentProvider() async {

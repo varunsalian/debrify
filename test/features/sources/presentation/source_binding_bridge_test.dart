@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'package:debrify/services/profiles/profile_preferences.dart';
 import 'package:debrify/features/sources/presentation/source_binding_bridge.dart';
 import 'package:debrify/models/torrent.dart';
 import 'package:debrify/widgets/provider_picker_dialog.dart';
@@ -62,10 +64,13 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  for (final remainsActive in [false, true]) {
+  for (final retirement in ['before_choice', 'queued_write', 'none']) {
+    final remainsActive = retirement == 'none';
     testWidgets(
       remainsActive
           ? 'active provider dialog retains its remembered choice on pin failure'
+          : retirement == 'queued_write'
+          ? 'provider choice queued before retirement cannot persist afterward'
           : 'retired provider dialog cannot remember a choice or begin pinning',
       (tester) async {
         late BuildContext context;
@@ -111,9 +116,34 @@ void main() {
         }
         await tester.pumpAndSettle();
         expect(find.text('Remember my choice'), findsOneWidget);
-        active = remainsActive;
+        late Completer<void> release;
+        late Future<void> snapshot;
+        if (retirement == 'queued_write') {
+          await tester.runAsync(() async {
+            final entered = Completer<void>();
+            release = Completer<void>();
+            snapshot = ProfilePreferences.captureMutationSnapshot((_) async {
+              entered.complete();
+              await release.future;
+            });
+            await entered.future;
+          });
+          addTearDown(() {
+            if (!release.isCompleted) release.complete();
+          });
+        }
+        active = retirement != 'before_choice';
         Navigator.of(context).pop(const ProviderPickResult('torbox', true));
         await tester.pumpAndSettle();
+        if (retirement == 'queued_write') {
+          await tester.runAsync(() async {
+            // Drain dialog completion and preference opening up to the barrier.
+            await Future<void>.delayed(Duration.zero);
+            active = false;
+            release.complete();
+            await snapshot;
+          });
+        }
         expect(await tester.runAsync(() => pending), isFalse);
         await tester.pump();
         final prefs = await tester.runAsync(SharedPreferences.getInstance);

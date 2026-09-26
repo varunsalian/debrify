@@ -8024,7 +8024,10 @@ class TorrentPlaybackService {
     if (result == null) return _cancelled; // dismissed
     // "Remember my choice" persists the default so we never ask again.
     if (result.remember) {
-      await StorageService.setDefaultTorrentProvider(result.provider);
+      await StorageService.setDefaultTorrentProvider(
+        result.provider,
+        canContinue: canContinue,
+      );
     }
     return result.provider;
   }

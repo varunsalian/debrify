@@ -2217,3 +2217,59 @@ regression cases pass. Receipts:
 and `binding-liveness-analyzer-comparison.txt`. The historical helper's nonzero
 exit remains attributable to its unchanged baseline failures. Phase 4C and the
 whole migration remain incomplete for the responsibilities listed above.
+
+
+### Phase 4C — queued provider-choice persistence
+
+Closed the specific queued preference-write gap identified in the prior binding
+review. The manual picker forwards its live action check into
+`StorageService.setDefaultTorrentProvider`. Its optional guarded path opens
+preferences outside inherited captured-profile zones, checks again after opening,
+then enters the existing preference mutation barrier and rechecks immediately
+before calling the nested setter. There is no await between that final check and
+the setter. The preferences facade retains its own scope validation, write budget
+and change notifications. The outer barrier does not double-count a mutation.
+A retired action completes without writing; genuine errors still propagate.
+The existing unguarded path and scalar key/schema are unchanged.
+
+No new DI framework or synchronization abstraction was added. This is a bounded
+change to a pre-existing legacy primitive, recorded before implementation in the
+plan's exception list. StorageService is now 10,745 lines; playback service 8,894.
+They retain unrelated app-wide responsibilities. Sources entry/view size remains
+unchanged. Provider acquisition and native-picker internals still require their
+separate phase-4C ownership review; this closes only the remembered-choice write.
+
+Regression evidence first ran the old setter body with the new optional argument:
+**two passes / five failures**. Failures reproduced retired writes, a foreign
+captured-scope write, and view/profile/lifecycle retirement while queued. With the
+guard, all **eight storage tests pass**, including current/unguarded behavior,
+queued live completion and propagation/recovery after a forbidden nested preference
+mutation. One additional real bridge/dialog test holds the actual mutation
+barrier after the picker appears, returns a remembered choice, then retires the
+action before releasing the barrier; it verifies no preference is persisted.
+The existing positive picker path remains passing. Combined boundary group:
+**12 passes**. Dummy credentials are mock preferences, with no provider acquisition.
+
+Affected suite baseline: **394 passes / two failures**; final: **403 passes / the
+same two failures** (`profile_restore_coordinator_test.dart` explicit appearance
+restore and `webdav_sync_hot_merge_test.dart` appearance portability). Analyzer
+retains **863 diagnostics**, with no added identities. The size/import guard passes
+for **111 migrated files**; changed methods/test files match Dart formatting and
+diff checks pass. Receipts under `.git/refactor-evidence/phase4c/`:
+`provider-choice-write-before.txt`, `provider-choice-write-red.txt`,
+`provider-choice-write-green.txt`, `provider-choice-write-integration.txt`,
+`provider-choice-write-focused.txt`, `provider-choice-write-failure-comparison.txt`,
+`analyze-provider-choice-write.txt`, `provider-choice-write-analyzer-comparison.txt`.
+The retired-action test title was clarified after the red run to state only the
+observable no-write assertion; its assertion and failure coverage were retained.
+
+
+Full integration review: **7,873 successes**, unchanged **51 baseline failures**
+(22 failure/29 error), and **20 skips**. No original-baseline identity is newly
+failing, missing or skipped. Every previous binding-liveness checkpoint outcome
+is preserved, with **nine new passing identities**. Receipts:
+`.git/refactor-evidence/phase4c/full-provider-choice-write.jsonl`,
+`full-provider-choice-write-comparison.txt`,
+`provider-choice-write-previous-checkpoint.txt`. The historical helper still exits
+1 for the unchanged baseline failures. Provider acquisition, local picker internals,
+remaining Sources ownership and all later/native/performance/CI gates remain open.
