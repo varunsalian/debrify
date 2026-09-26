@@ -1,3 +1,5 @@
+import '../features/search/application/keyword_cache_controller.dart';
+import '../features/search/models/keyword_cache_state.dart';
 import '../features/search/presentation/keyword_sources_dialog.dart';
 import '../features/search/presentation/catalog_sources_dialog.dart';
 import '../features/search/application/catalog_search_controller.dart';
@@ -616,7 +618,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   // Sort direction for _kwSort (ignored for 'relevance', which is engine order).
   // Defaults follow each field's natural direction; the sort dialog can flip it.
   bool _kwSortAsc = false;
-  Map<String, List<String>> _kwCache = {}; // infohash(lower) → ['TB','PM']
+  late final ProviderSubscription<KeywordCacheState> _keywordCacheSubscription;
+  KeywordCacheController get _keywordCacheController =>
+      ref.read(keywordCacheProvider(_searchSession).notifier);
+  Map<String, List<String>> get _kwCache => _keywordCacheSubscription.read().badges;
 
   // Provider (stream-type) multi-select filter, ported from the old search
   // screen: results are grouped into "Direct" (direct/external URL streams) and
@@ -630,7 +635,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   /// True when the results list is being narrowed to TorBox-cached torrents
   /// only (TorBox is the sole usable debrid provider and its cache-check is on)
   /// — mirrors the old screen's `_showingTorboxCachedOnly`. Drives the banner.
-  bool _kwCachedOnly = false;
+  bool get _kwCachedOnly => _keywordCacheSubscription.read().cachedOnly;
 
   // Bulk-selection state for keyword results (mirrors Home's multi-select).
   bool _kwSelectionMode = false;
@@ -638,60 +643,6 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
 
   /// Monotonic token so a slow earlier keyword search can't clobber a newer one.
   int _kwSearchToken = 0;
-
-  /// Infohashes already dispatched to a provider cache-check for the current
-  /// keyword search. Lets each streaming batch check only its fresh hashes.
-  final Set<String> _kwCacheChecked = {};
-
-  /// Whether a TorBox cache-check has successfully run this keyword search —
-  /// the precondition for cached-only mode (never hide rows on a thrown check).
-  bool _kwTbRan = false;
-
-  /// In-flight per-batch cache-check futures for the current search. The
-  /// completion sweep awaits these so cached-only mode is decided only once
-  /// every batch's badges have landed.
-  final List<Future<void>> _kwPendingChecks = [];
-
-  // Cache-check config, resolved ONCE per keyword search (freshly re-read each
-  // search, then reused across its streaming batches — no per-batch storage
-  // reads). Same gating as Home: pref on AND integration on AND key present.
-  bool _kwTbOn = false;
-  bool _kwPmOn = false;
-  String? _kwTbKey;
-  String? _kwPmKey;
-  bool _kwOtherProviderActive = false;
-
-  /// Reads the cache-check gating and whether any usable non-TorBox provider
-  /// is active. Awaited at the top of each search so streaming batch checks
-  /// see up-to-date settings.
-  Future<void> _loadKwCacheConfig() async {
-    final r = await Future.wait([
-      StorageService.getTorboxCacheCheckEnabled(),
-      StorageService.getTorboxIntegrationEnabled(),
-      StorageService.getTorboxApiKey(),
-      StorageService.getPremiumizeCacheCheckEnabled(),
-      StorageService.getPremiumizeIntegrationEnabled(),
-      StorageService.getPremiumizeApiKey(),
-      StorageService.getApiKey(),
-      StorageService.getRealDebridIntegrationEnabled(),
-      StorageService.getAllDebridApiKey(),
-      StorageService.getAllDebridIntegrationEnabled(),
-      StorageService.getPikPakEnabled(),
-    ]);
-    final tbKey = r[2] as String?;
-    final pmKey = r[5] as String?;
-    final rdKey = r[6] as String?;
-    final adKey = r[8] as String?;
-    _kwTbOn = (r[0] as bool) && (r[1] as bool) && (tbKey?.isNotEmpty ?? false);
-    _kwPmOn = (r[3] as bool) && (r[4] as bool) && (pmKey?.isNotEmpty ?? false);
-    _kwTbKey = tbKey;
-    _kwPmKey = pmKey;
-    final rdActive = (r[7] as bool) && (rdKey?.isNotEmpty ?? false);
-    final pmActive = (r[4] as bool) && (pmKey?.isNotEmpty ?? false);
-    final adActive = (r[9] as bool) && (adKey?.isNotEmpty ?? false);
-    final pikpakActive = r[10] as bool;
-    _kwOtherProviderActive = rdActive || pmActive || adActive || pikpakActive;
-  }
 
   // ── Streaming keyword search (per-engine batches, Sources-list parity) ──
   /// Raw per-engine batches accumulated this search; merged provisionally so
@@ -1863,9 +1814,16 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     unawaited(_refreshMetadataFeaturePolicy());
     WidgetsBinding.instance.addObserver(this);
     _profileSessionOwner = ProfileSessionMemory.captureOwner();
+    final keywordSnapshot = _takeKeywordSnapshot();
     _searchSession = SearchSession(
       owner: _profileSessionOwner,
       viewIdentity: Object(),
+      initialKeywordCache: keywordSnapshot == null
+          ? const KeywordCacheState.empty()
+          : KeywordCacheState(
+              badges: keywordSnapshot.cache,
+              cachedOnly: keywordSnapshot.cachedOnly,
+            ),
     );
     // Retain state for this screen's mounted lifetime, including covered routes.
     // Returning from a pushed list must not discard results or replay a request.
@@ -1893,6 +1851,14 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         } else {
           setState(() {});
         }
+      },
+    );
+    _keywordCacheSubscription = ref.listenManual(
+      keywordCacheProvider(_searchSession),
+      (previous, next) {
+        // Badges repaint without rebuilding focus nodes. Only the accepted
+        // completion wrapper below asks for a cached-only row recomputation.
+        if (mounted) setState(() {});
       },
     );
     if (!widget.searchMode && !widget.discoverMode) _watchHomeReturnChanges();
@@ -2047,10 +2013,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     // would flip the mode back and could fire a catalog search with the
     // restored keyword text. A successful restore therefore also suppresses
     // the default-view load outright.
-    final restoredKeyword =
-        widget.isTelevision && !widget.searchMode && !widget.discoverMode
-        ? false
-        : _restoreKeywordState();
+    final restoredKeyword = _restoreKeywordState(keywordSnapshot);
     // Home board only: live-refresh when the Home Rows manager changes which
     // rows are hidden. The bridge also invalidates a saved return snapshot.
     if (!widget.searchMode && !widget.discoverMode) {
@@ -2362,22 +2325,24 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     }
   }
 
-  /// Restore a preserved keyword search into this instance if one exists for
-  /// this variant. Returns true when a restore happened. Called from initState
-  /// (pre-first-build) so direct field assignment — not setState — is correct.
-  bool _restoreKeywordState() {
-    final snap = _kwPreserved.take(
+  /// Consume the borrowed snapshot once, before constructing providers. Seed
+  /// their initial state instead of mutating them during widget initialization.
+  _KwPreservedState? _takeKeywordSnapshot() {
+    if (widget.isTelevision && !widget.searchMode && !widget.discoverMode) {
+      return null;
+    }
+    final snapshot = _kwPreserved.take(
       _profileSessionOwner,
       where: (value) => value.variant == _variantKey && value.query.isNotEmpty,
     );
-    if (snap == null) {
-      return false;
-    }
-    // The keyword surface is per-profile; a snapshot saved under a profile
-    // that had it must not restore into one that doesn't.
-    if (!ProfilePolicyGuard.allowsSync(ProfileFeature.keywordSearch)) {
-      return false;
-    }
+    return ProfilePolicyGuard.allowsSync(ProfileFeature.keywordSearch)
+        ? snapshot : null;
+  }
+
+  /// Restore presentation fields before the first build, retaining default-view
+  /// suppression and scroll timing. Cache state is already seeded in its owner.
+  bool _restoreKeywordState(_KwPreservedState? snap) {
+    if (snap == null) return false;
     _mode = SearchMode.keyword;
     _kwQuery = snap.query;
     _kwAll = snap.all;
@@ -2385,8 +2350,6 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     _kwFilters = snap.filters;
     _kwSort = snap.sort;
     _kwSortAsc = snap.sortAsc;
-    _kwCache = snap.cache;
-    _kwCachedOnly = snap.cachedOnly;
     _kwDirectCounts = snap.directCounts;
     _kwTorrentCounts = snap.torrentCounts;
     _kwSelectedDirect = snap.selectedDirect;
@@ -2658,6 +2621,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     ProfileRuntime.scope.removeListener(_onSearchProfileChanged);
     _listsSubscription.close();
     _catalogSubscription.close();
+    _keywordCacheSubscription.close();
     _titleSearch.removeListener(_publishTitleSuggestions);
     _titleSearch.dispose();
     _titleSuggestions.dispose();
@@ -12072,23 +12036,27 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     _searchSubmitFocus.cancel();
     _searchController.clear();
     _cancelTitleSuggestions();
-    _kwSearchToken++;
-    _disposeKwNodes();
+    _clearKeywordSearch();
     _disposeListsNodes();
     _listsController.clear();
+    _restoreHome();
+  }
+
+  void _clearKeywordSearch() {
+    _kwSearchToken++;
+    _keywordCacheController.clear(_kwSearchToken);
+    _disposeKwNodes();
     setState(() {
       _kwSearching = false;
       _kwLoading = false;
       _kwQuery = '';
       _kwAll = [];
       _kwResults = [];
-      _kwCache = {};
       _kwError = null;
       _kwPending = null;
       _kwSelectionMode = false;
       _kwSelected.clear();
     });
-    _restoreHome();
   }
 
   void _completeSearchSubmitFocus(FocusNode target) {
@@ -12110,6 +12078,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   void _onSearchProfileChanged() {
     _cancelTitleSuggestions();
     if (_profileSessionOwner != ProfileSessionMemory.captureOwner()) {
+      _searchController.clear();
+      _clearKeywordSearch();
       _clearListsSearch();
       final hadCatalogSearch = _catalogQuery.isNotEmpty || _catalogSearching;
       _catalogController.clear();
@@ -12299,16 +12269,11 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     _kwStreamFrozen = false;
     _kwPending = null;
     _kwProviderSeen.clear();
-    _kwCacheChecked.clear();
-    _kwPendingChecks.clear();
-    _kwTbRan = false;
     _kwRefocusToolbar = refocusToolbar;
     setState(() {
       _kwLoading = true;
       _kwError = null;
       _kwQuery = query;
-      _kwCache = {};
-      _kwCachedOnly = false;
       _kwDirectCounts = {};
       _kwTorrentCounts = {};
       _kwSelectedDirect = {};
@@ -12336,13 +12301,13 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         // Stamp TB/PM badges on this engine's rows as they land, and record the
         // future so the completion sweep can await it before deciding cached-
         // only mode (settling it mid-stream would flicker rows in/out).
-        _kwPendingChecks.add(_checkKeywordCache(batch, token));
+        _keywordCacheController.checkBatch(batch, token);
       }
 
       // Resolve cache-check gating BEFORE the search starts so streaming
       // batches badge against fresh settings (a superseded search's config
       // load is harmless — its batches fail the token guard anyway).
-      await _loadKwCacheConfig();
+      if (!await _keywordCacheController.begin(token)) return;
       if (!mounted || token != _kwSearchToken) return;
       final result = await TorrentService.searchAllEngines(
         query,
@@ -12503,7 +12468,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         });
       }
     }
-    unawaited(_checkKeywordCache(_kwAll, _kwSearchToken));
+    unawaited(_keywordCacheController.check(_kwAll, _kwSearchToken));
   }
 
   /// Identity key for pending-row diffing (infohash when real, else the
@@ -12825,92 +12790,12 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     }
   }
 
-  /// Additive cache-check against TorBox/Premiumize (the only providers that
-  /// support it), stamping TB/PM badges onto [torrents]' rows. Called per
-  /// streaming batch and once as a completion sweep (via [_finalizeKeywordCache]).
-  ///
-  /// Results MERGE into [_kwCache] so earlier batches' badges survive. A hash is
-  /// added to [_kwCacheChecked] ONLY after every enabled provider resolved for
-  /// it — a thrown check leaves it un-memoized so a later batch or the finalize
-  /// sweep re-queries it (a transient failure must not permanently drop rows).
-  /// Cached-only mode is NOT decided here — see [_finalizeKeywordCache].
-  Future<void> _checkKeywordCache(List<Torrent> torrents, int token) async {
-    final hashes = <String>[];
-    for (final t in torrents) {
-      final h = t.infohash.toLowerCase();
-      // contains (not add): dispatch every not-yet-confirmed hash; memoization
-      // happens post-success below, so a failed hash stays retryable.
-      if (h.isEmpty || _kwCacheChecked.contains(h)) continue;
-      hashes.add(h);
-    }
-    if (hashes.isEmpty) return;
-    final add = <String, List<String>>{};
-    // A provider is "done" for these hashes when it's not enabled (nothing to
-    // do) OR its check succeeded. Only when BOTH are done do we memoize.
-    bool tbDone = !(_kwTbOn && _kwTbKey != null);
-    bool pmDone = !(_kwPmOn && _kwPmKey != null);
-    bool tbOk = false;
-    if (_kwTbOn && _kwTbKey != null) {
-      try {
-        final cached = await TorboxService.checkCachedTorrents(
-          apiKey: _kwTbKey!,
-          infoHashes: hashes,
-        );
-        tbDone = true;
-        tbOk = true;
-        for (final h in cached) {
-          (add[h] ??= <String>[]).add('TB');
-        }
-      } catch (_) {}
-    }
-    if (_kwPmOn && _kwPmKey != null) {
-      try {
-        final res = await PremiumizeService.checkCache(_kwPmKey!, hashes);
-        pmDone = true;
-        for (var i = 0; i < hashes.length && i < res.length; i++) {
-          if (res[i]) (add[hashes[i]] ??= <String>[]).add('PM');
-        }
-      } catch (_) {}
-    }
-    // Guard BEFORE mutating any shared state so a superseded search's late
-    // batch can't stamp badges, flip _kwTbRan, or memoize hashes for the new one.
-    if (!mounted || token != _kwSearchToken) return;
-    // A successful TorBox check is the precondition for cached-only mode (a
-    // thrown check must NOT hide every result).
-    if (tbOk) _kwTbRan = true;
-    _kwCache.addAll(add);
-    if (tbDone && pmDone) _kwCacheChecked.addAll(hashes);
-    setState(() {});
-  }
-
-  /// Completion: wait for every in-flight batch check so [_kwCache] and
-  /// [_kwTbRan] reflect the whole result set, sweep any hash a batch missed or
-  /// whose check failed, THEN settle cached-only mode. Deferring the decision
-  /// until the checks resolve is what prevents cached rows from being hidden by
-  /// a not-yet-returned batch — the failure mode of settling it mid-flight.
+  /// Badge updates never reconcile row nodes. Cached-only mode changes do,
+  /// and only the completion accepted by this still-mounted search may do so.
   Future<void> _finalizeKeywordCache(List<Torrent> full, int token) async {
-    try {
-      await Future.wait(List<Future<void>>.from(_kwPendingChecks));
-    } catch (_) {}
+    final changed = await _keywordCacheController.finish(full, token);
     if (!mounted || token != _kwSearchToken) return;
-    // Retry any hash still un-memoized (never dispatched, or a failed check).
-    await _checkKeywordCache(full, token);
-    if (!mounted || token != _kwSearchToken) return;
-    // Narrow to TorBox-cached torrents only when TorBox is the sole usable
-    // provider. Any other active provider may be able to handle a result that
-    // TorBox does not cache, so its rows must remain visible.
-    final cachedOnly = _kwTbRan && !_kwOtherProviderActive;
-    if (cachedOnly != _kwCachedOnly) {
-      // Cached-only mode toggles the visible set → full recompute.
-      _kwCachedOnly = cachedOnly;
-      _recomputeKeyword();
-    } else {
-      // Badges-only update: the result list is unchanged, so just repaint the
-      // cache labels. Rebuilding _kwNodes here (as a full recompute would) drops
-      // TV DPAD focus off whatever row the user navigated to while the async
-      // cache check was still in flight.
-      setState(() {});
-    }
+    if (changed) _recomputeKeyword();
   }
 
   Future<void> _openKeywordFilters() async {

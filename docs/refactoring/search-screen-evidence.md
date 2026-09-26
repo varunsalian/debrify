@@ -385,3 +385,58 @@ Slice review and checks:
   and bulk-selection ownership are still in the screen and remain required work.
   Source part is now 3,257 lines and the main screen 20,686 lines. No new permanent
   size exception or device/performance parity claim is introduced.
+
+### Phase 4B cache slice (implemented and reviewed)
+
+`KeywordCacheController` owns the immutable badge map, checked hashes, outstanding
+batch checks, successful-TorBox flag and cached-only decision. Credentials and
+provider calls live in a search-owned session behind `KeywordCacheRepository`;
+`DebridKeywordCacheRepository` borrows the original storage and provider services.
+The screen's mutable cache/config fields and cache-check implementations are gone.
+
+The boundary preserves lowercasing without trimming, duplicate dispatch, TB-before-PM
+request order, partial badges, memoization only after all enabled checks succeed,
+retry eligibility for failed hashes, the completion sweep and other-provider gating.
+Repeated-key badge replacement retains the original `addAll` behavior. The existing
+provider services still own network retries/timeouts; Riverpod retries are disabled.
+Private generations and the workflow token reject stale configuration and results.
+The screen's subscription repaints badges; only an accepted cached-only change
+reconciles visible rows/focus. Profile handoff now also clears outgoing keyword
+rows and invalidates their workflow token before a late completion can publish.
+
+Review found a real restoration regression before this slice was committed: the
+first version called a notifier restore action inside `initState`, which Riverpod
+correctly rejects during widget construction. A new actual-screen remount test
+exposed it despite the earlier full-suite pass. The fix consumes the existing
+borrowed snapshot once before constructing the immutable `SearchSession`, seeds
+its cache provider on initial build, and restores other presentation fields at
+their original point before default-view loading. It does not defer the first
+render or requery. Dependency/profile rebuilds do not reapply that initial seed.
+The existing static `ProfileSessionMemory` remains the snapshot owner; no new store
+or listener is allocated per provider. Full snapshot extraction remains later 4B.
+
+Focused evidence: **15 controller tests**, **14 real-adapter tests**, and **four
+production-screen tests** now pass. They cover completion ordering, retry/memoization,
+empty success versus failure, disabled/other providers, request replacement,
+configuration races, clear/profile/disposal, immutable seeding, real credential
+settings/delegation, focus-preserving filtering, profile handoff and a fresh-screen
+restore without additional engine/credential/cache calls. The adapter's draft
+record-of-list equality assertion was corrected to compare keys and hash lists
+separately; the actual captured values were already correct.
+
+The full suite before adding the remount case matched the observed baseline
+(7,526 passing identities, 51 existing failures, 20 skipped). After the restoration
+fix and added case, the repeated full suite has **7,527 passing identities, the
+same 51 baseline failures, and 20 skipped**, with no missing or newly skipped
+identities. Analyzer still matches all **865 diagnostic identities/multiplicities**.
+The historical helper's exit 1 remains attributable to its outdated nine-failure
+allowance; comparison with the actual observed baseline passes. The architecture
+check covers **38 migrated files**, all below 300 lines. Formatting and diff checks
+pass. Raw receipts remain in `.git/refactor-evidence/phase4b/`.
+
+The cache slice's automated review is complete; phase 4B as a whole remains in
+progress. The main screen is 20,571 lines. Remaining keyword work includes the
+workflow/action generation and initial-action profile guard, streaming/freeze/adopt,
+filtered/sorted results and selections, default-filter reads, and full snapshot
+ownership. Focus/scroll and legacy navigation effects will remain in presentation.
+Device/visual/performance checks are still pending, not inferred from these tests.
