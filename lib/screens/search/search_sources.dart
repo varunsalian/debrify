@@ -77,7 +77,8 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
   /// Equals [_torrents] when the redesign is off (no toolbar). [_nodes] is kept
   /// in lock-step with THIS list, never [_torrents].
   List<Torrent> _visible = [];
-  final List<FocusNode> _nodes = [];
+  final _rowFocus = SourceRowFocusNodes();
+  List<FocusNode> get _nodes => _rowFocus.nodes;
   final ScrollController _resultsScroll = ScrollController(
     keepScrollOffset: false,
   );
@@ -482,9 +483,7 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
     _filterFocus.removeListener(_onFilterFocusChanged);
     _filterFocus.dispose();
     _pillFocus.dispose();
-    for (final n in _nodes) {
-      n.dispose();
-    }
+    _rowFocus.dispose();
     super.dispose();
   }
 
@@ -506,10 +505,7 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
     _retryController.beginSearch();
     _resultsController.beginSearch();
     if (mounted) setState(() => _loading = true);
-    for (final n in _nodes) {
-      n.dispose();
-    }
-    _nodes.clear();
+    _rowFocus.resetForSearch();
     // An IPTV status can expose the body before the first non-empty batch.
     // Never retain rows whose focus nodes were just disposed.
     _visible = [];
@@ -645,24 +641,7 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
   /// row widgets are still mounted this frame, and unmounting a Focus widget
   /// whose node is already disposed asserts (same rule _rebuildVisible
   /// documents).
-  void _syncStreamNodes() {
-    while (_nodes.length < _visible.length) {
-      _nodes.add(FocusNode(debugLabel: 'src_${_nodes.length}'));
-    }
-    if (_nodes.length > _visible.length) {
-      final removed = <FocusNode>[];
-      while (_nodes.length > _visible.length) {
-        final node = _nodes.removeLast();
-        if (node.hasFocus && _nodes.isNotEmpty) _nodes.last.requestFocus();
-        removed.add(node);
-      }
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        for (final node in removed) {
-          node.dispose();
-        }
-      });
-    }
-  }
+  void _syncStreamNodes() => _rowFocus.resize(_visible.length);
 
   /// Completion-only steps: season snapshot, cache badges, TV focus anchor.
   void _finishSearch(int token) {
@@ -1214,19 +1193,10 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
       _resultsController.display(_pendingTorrents!);
       _maybeCheckCache();
     }
-    final old = List<FocusNode>.from(_nodes);
-    _nodes.clear();
     _visible = _applyToolbar(_torrents);
     _updateSelectedDirect();
-    for (var i = 0; i < _visible.length; i++) {
-      _nodes.add(FocusNode(debugLabel: 'src_$i'));
-    }
+    _rowFocus.replaceAll(_visible.length);
     if (mounted) setState(() {});
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      for (final n in old) {
-        n.dispose();
-      }
-    });
   }
 
   /// The redesigned toolbar: source-group pills + sort + filter funnel, then the

@@ -3052,3 +3052,61 @@ missing tests or new skips. Receipts: `full-filter-header.jsonl`,
 in the same evidence directory. The baseline helper still exits nonzero for the
 original failures; its allowances were not changed. Phase 4C and the full
 migration remain in progress.
+
+### Phase 4C — row focus-node ownership
+
+Moved row FocusNode construction, resize, toolbar replacement, search reset and
+disposal into `presentation/source_row_focus_nodes.dart` (**69 lines**), owned by
+one Sources view. Rows borrow nodes through a read-only live list. No application
+state, filtering, selected-source matching, scroll controller or toolbar/pill
+focus ownership moved into this helper. The production view calls it in each
+former allocation/retirement path, and the replaced node-mutation bodies were
+removed. The Sources part shrank from **1,820 to 1,790 lines**.
+
+Search reset still disposes its previous nodes immediately when entering loading.
+Streaming retains surviving node identities and `src_N` labels. Toolbar changes
+create replacement nodes without moving focus to the list; retired nodes are
+disposed after the rebuild frame, while ordinary view teardown disposes current
+nodes. Pending retirement callbacks retain only their own retired nodes and finish
+cleanup even when the view is removed. Disposal prevents subsequent helper calls
+from resurrecting resources. The view still owns all row identity restoration,
+selected-source reveal, freeze and remote-anchor decisions.
+
+The initial moved resize algorithm matched the original `_syncStreamNodes`
+after inlining helper calls and replacing the count expression. A real Focus
+widget host exposed a pre-existing flaw at this resource boundary: when several
+focused-tail rows were removed, an intermediate focus request could target a node
+removed later in the same loop. Six lifecycle cases passed and this multi-row
+case failed. The deliberate correction records whether a removed node held focus
+and requests the final surviving node once, retaining reverse retirement order
+and post-frame disposal. The higher-level view policies remain unchanged; this
+is not a claim that a new native-device symptom was reproduced.
+
+**Seven lifecycle tests pass**, covering growth without stealing toolbar focus,
+retained identities/live read-only access, single/multiple/all-row shrink,
+post-frame retirement while widgets are still mounted, toolbar replacement,
+immediate search reset and disposal with queued cleanup. They verify disposal on
+the real FocusNodes and exercise actual Focus widget rebuild/detach behavior.
+Existing production-screen streaming/selected-source/cinema/held-key tests also
+pass, covering the integrated callers rather than only the new helper.
+
+Affected baseline **435 passes**; after integration **442 passes**, no failures.
+Analyzer retains **863 diagnostics**, with no new identities. Architecture checks
+pass **128 migrated files**. New code is formatted and diff checks pass; no
+whole-file legacy formatting was performed. Receipts under
+`.git/refactor-evidence/phase4c/`: `row-focus-before.txt`,
+`row-focus-initial.txt`, `row-focus-initial-implementation.dart`,
+`row-focus-extraction-review.txt`, `row-focus-affected.txt`,
+`analyze-row-focus.txt` and `row-focus-analyzer-comparison.txt`.
+
+Remaining Sources presentation/focus decisions and all later migration phases,
+native/device checks, performance comparisons and CI completion gates remain open.
+
+Full-suite review: **8,067 successes / the same 51 failures / 20 skips**.
+Every previous checkpoint outcome is preserved and all **seven new lifecycle
+cases** pass. Original-baseline and preceding-checkpoint comparisons find no new
+failures, missing tests or new skips. Receipts: `full-row-focus.jsonl`,
+`full-row-focus-comparison.txt` and `full-row-focus-previous-checkpoint.txt` in
+the same evidence directory. The baseline helper still exits nonzero for the
+original failures; its allowances were not changed. Final diff/architecture
+review passes. Phase 4C and the full migration remain in progress.
