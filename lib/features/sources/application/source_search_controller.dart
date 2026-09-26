@@ -9,12 +9,21 @@ import '../models/source_search_state.dart';
 import '../models/sources_session.dart';
 import 'source_search_dependencies.dart';
 import 'source_seasons_dependencies.dart';
+import 'source_cache_controller.dart';
+import 'source_results_controller.dart';
+import 'source_retry_controller.dart';
 
 final sourceSearchProvider = NotifierProvider.autoDispose
     .family<SourceSearchController, SourceSearchState, SourcesSession>(
       SourceSearchController.new,
       retry: (count, error) => null,
-      dependencies: [sourceSearchRepositoryProvider],
+      dependencies: [
+        sourceSearchRepositoryProvider,
+        sourcesSessionActiveProvider,
+        sourceCacheProvider,
+        sourceRetryProvider,
+        sourceResultsProvider,
+      ],
     );
 
 class SourceSearchController extends Notifier<SourceSearchState> {
@@ -43,6 +52,16 @@ class SourceSearchController extends Notifier<SourceSearchState> {
   List<Torrent> _merge() => List.unmodifiable(
     TorrentService.mergeSearchResults(_batches, preserveSourceOrder: true),
   );
+
+  /// Reset query-owned results and background work before the view replaces
+  /// focus resources. Search dispatch follows that synchronous view reset.
+  bool prepareSearch() {
+    if (!ref.mounted || !_repository.isCurrent) return false;
+    ref.read(sourceCacheProvider(session).notifier).beginSearch();
+    ref.read(sourceRetryProvider(session).notifier).beginSearch();
+    ref.read(sourceResultsProvider(session).notifier).beginSearch();
+    return true;
+  }
 
   /// Explicit search action. Callbacks hand accepted rows to presentation and
   /// cache checks in their original order; no context, focus or navigation is

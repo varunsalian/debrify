@@ -419,9 +419,7 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
     final token = ++_searchToken;
     // Search and cache/retry generations retire together; widgets retain the
     // token only for focus and row-adoption callbacks.
-    _cacheController.beginSearch();
-    _retryController.beginSearch();
-    _resultsController.beginSearch();
+    if (!_searchController.prepareSearch()) return;
     if (mounted) setState(() => _loading = true);
     _rowFocus.resetForSearch();
     // An IPTV status can expose the body before the first non-empty batch.

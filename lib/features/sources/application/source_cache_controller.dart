@@ -10,6 +10,10 @@ final sourceCacheProvider = NotifierProvider.autoDispose
     .family<SourceCacheController, SourceCacheState, SourcesSession>(
       SourceCacheController.new,
       retry: (count, error) => null,
+      dependencies: [
+        sourceCacheRepositoryProvider,
+        sourcesSessionActiveProvider,
+      ],
     );
 
 class SourceCacheController extends Notifier<SourceCacheState> {

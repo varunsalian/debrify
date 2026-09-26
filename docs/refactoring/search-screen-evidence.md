@@ -3698,3 +3698,46 @@ unused import. Receipts: `full-row-action-policy.jsonl`,
 legacy method are formatted; diff and architecture checks pass. The helper remains
 nonzero for existing failures; no allowance changes. Phase 4C and later gates
 remain in progress.
+
+### Phase 4C — coordinated search preparation
+
+Moved the cache/retry/results reset sequence into the existing application search
+controller's explicit `prepareSearch` action. The controller is now **147 lines**;
+no additional state owner, orchestration class or UI callback was added. The
+actual view invokes this action, then resets loading/focus resources and dispatches
+search exactly where it did before. Retired search owners reject preparation
+before looking up dependent providers. Sources part **1,526 → 1,524 lines**.
+
+Cache and search providers declare their existing/new dependencies for explicit
+nested ownership. Cache/retry/results state and reset algorithms are unchanged;
+search batches, request generation, callbacks and completion remain unchanged.
+Review confirms no dependency cycle: retry/cache/results do not depend on the
+search controller. The view still owns the query token used for focus/adoption.
+The synchronous split is intentional: query-owned work resets before view focus
+resources, and request dispatch follows those view changes.
+
+Baseline: **480 Sources tests pass**. After integration: **484 pass**. Four new
+cases use real state owners and controlled repositories to verify ordered
+cache/retry/results publication, cleared displayed/pending/frozen state while
+retaining toolbar selection and cache configuration, retirement of outstanding
+cache/retry work, preservation of a newer same-key retry, rechecking previously
+cached hashes, profile/disposal rejection before dependency access, and explicit
+child preparation without changing parent results. Existing production-screen
+streaming/focus/retry behavior tests pass.
+
+Analyzer retains **863 diagnostics** with no added identities. All **143 migrated
+files** pass architecture checks. Receipts under `.git/refactor-evidence/phase4c/`:
+`search-reset-owner-before.txt`, `search-reset-owner-after.txt`,
+`analyze-search-reset-owner.txt` and
+`search-reset-owner-analyzer-comparison.txt`. Phase 4C and the broader migration,
+native/performance and CI completion gates remain open.
+
+Full-suite review: **8,124 successes / the same 51 failures / 20 skips**.
+Every previous checkpoint outcome is preserved and all four preparation tests
+pass. Original-baseline comparison finds no new failures, missing tests or new
+skips. Receipts: `full-search-reset-owner.jsonl`,
+`full-search-reset-owner-comparison.txt`,
+`full-search-reset-owner-previous-checkpoint.txt` and
+`search-reset-owner-review.txt`. The baseline helper remains nonzero for existing
+failures; no allowances changed. Changed code/method formatting, architecture and
+diff checks pass. Phase 4C and the remaining migration gates are still open.

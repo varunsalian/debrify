@@ -1,4 +1,9 @@
 import 'dart:async';
+import 'package:debrify/features/sources/application/source_cache_controller.dart';
+import 'package:debrify/features/sources/application/source_cache_dependencies.dart';
+import 'package:debrify/features/sources/application/source_results_controller.dart';
+import 'package:debrify/features/sources/application/source_retry_controller.dart';
+import 'package:debrify/features/sources/data/source_cache_repository.dart';
 import 'package:debrify/features/sources/application/source_search_controller.dart';
 import 'package:debrify/features/sources/application/source_search_dependencies.dart';
 import 'package:debrify/features/sources/data/source_search_repository.dart';
@@ -52,6 +57,7 @@ class SearchRepository implements SourceSearchRepository {
   SearchRepository(this.session);
   final SourcesSession session;
   final List<PendingSearch> calls = [];
+  final retries = <Completer<List<Torrent>?>>[];
   @override
   bool get isCurrent => session.owner == ProfileSessionMemory.captureOwner();
   @override
@@ -71,13 +77,40 @@ class SearchRepository implements SourceSearchRepository {
     AdvancedSearchSelection selection,
     String requestKey, {
     required bool Function() shouldContinue,
-  }) => throw UnimplementedError();
+  }) {
+    final pending = Completer<List<Torrent>?>();
+    retries.add(pending);
+    return pending.future;
+  }
+}
+
+class CacheRepository implements SourceCacheRepository, SourceCacheSession {
+  final checks = <Completer<Set<String>>>[];
+  @override
+  bool get isCurrent => true;
+  @override
+  bool get torboxEnabled => true;
+  @override
+  bool get premiumizeEnabled => false;
+  @override
+  Future<SourceCacheSession> open() async => this;
+  @override
+  Future<Set<String>> torbox(List<String> hashes) {
+    final pending = Completer<Set<String>>();
+    checks.add(pending);
+    return pending.future;
+  }
+
+  @override
+  Future<List<bool>> premiumize(List<String> hashes) =>
+      throw StateError('Disabled');
 }
 
 void main() {
   late ProviderContainer container;
   late SourcesSession session;
   late SearchRepository repository;
+  late CacheRepository cacheRepository;
   late SourceSearchController controller;
   late ProviderSubscription<SourceSearchState> subscription;
   late List<(List<Torrent>, bool)> rows;
@@ -89,8 +122,12 @@ void main() {
       selection: selection,
     );
     repository = SearchRepository(session);
+    cacheRepository = CacheRepository();
     container = ProviderContainer.test(
       overrides: [
+        sourceCacheRepositoryProvider.overrideWith(
+          (ref, key) => cacheRepository,
+        ),
         sourceSearchRepositoryProvider.overrideWith(
           (ref, session) => repository,
         ),
@@ -285,6 +322,7 @@ void main() {
         container.dispose();
       } else if (retirement == 'dependency') {
         repository = SearchRepository(session);
+        cacheRepository = CacheRepository();
         container.invalidate(sourceSearchRepositoryProvider(session));
         subscription.read();
       } else {
@@ -304,4 +342,131 @@ void main() {
       }
     });
   }
+  test(
+    'preparation resets cache/retry/results in order and retires old work',
+    () async {
+      final cacheState = container.listen(
+        sourceCacheProvider(session),
+        (_, _) {},
+      );
+      final retryState = container.listen(
+        sourceRetryProvider(session),
+        (_, _) {},
+      );
+      final resultState = container.listen(
+        sourceResultsProvider(session),
+        (_, _) {},
+      );
+      final cache = container.read(sourceCacheProvider(session).notifier);
+      final retry = container.read(sourceRetryProvider(session).notifier);
+      final results = container.read(sourceResultsProvider(session).notifier);
+      await cache.configure();
+      final previous = row('previous');
+      final initialCheck = cache.check([previous]);
+      cacheRepository.checks.last.complete({'previous'});
+      await initialCheck;
+      expect(cacheState.read().label(previous), 'TB');
+      final lateCache = cache.check([row('late')]);
+      final oldRetry = retry.retry(selection, status('addon'));
+      results.display([previous]);
+      results.selectProvider('engine:keep');
+      results.freeze();
+      results.bufferIfFrozen([row('pending')]);
+      final order = <String>[];
+      container.listen(
+        sourceCacheProvider(session),
+        (_, _) => order.add('cache'),
+      );
+      container.listen(
+        sourceRetryProvider(session),
+        (_, _) => order.add('retry'),
+      );
+      container.listen(
+        sourceResultsProvider(session),
+        (_, _) => order.add('results'),
+      );
+
+      expect(controller.prepareSearch(), isTrue);
+      expect(order, ['cache', 'retry', 'results']);
+      expect(repository.calls, isEmpty);
+      expect(cacheState.read().label(previous), isNull);
+      expect(cacheState.read().torboxEnabled, isTrue);
+      expect(retryState.read(), isEmpty);
+      expect(resultState.read().displayed, isEmpty);
+      expect(resultState.read().pending, isNull);
+      expect(resultState.read().frozen, isFalse);
+      expect(resultState.read().toolbar.sourceFilter, 'engine:keep');
+
+      final newRetry = retry.retry(selection, status('addon'));
+      repository.retries.first.complete([row('stale')]);
+      cacheRepository.checks.last.complete({'late'});
+      expect(await oldRetry, isNull);
+      await lateCache;
+      expect(retryState.read(), {'addon'});
+      expect(cacheState.read().torbox, isEmpty);
+      final currentRows = [row('current')];
+      repository.retries.last.complete(currentRows);
+      expect(await newRetry, same(currentRows));
+      expect(retryState.read(), isEmpty);
+      final repeat = cache.check([previous]);
+      expect(cacheRepository.checks, hasLength(3));
+      cacheRepository.checks.last.complete({'previous'});
+      await repeat;
+      expect(cacheState.read().label(previous), 'TB');
+    },
+  );
+
+  for (final retirement in ['profile', 'dispose']) {
+    test('$retirement rejects preparation before provider access', () {
+      if (retirement == 'profile') {
+        ProfileSessionMemory.clearAll();
+        addTearDown(ProfileSessionMemory.debugReset);
+      } else {
+        container.dispose();
+      }
+      expect(controller.prepareSearch(), isFalse);
+      expect(cacheRepository.checks, isEmpty);
+      expect(repository.calls, isEmpty);
+      expect(repository.retries, isEmpty);
+    });
+  }
+
+  test('explicit child preparation retains parent result state', () {
+    container.listen(sourceResultsProvider(session), (_, _) {});
+    final parentResults = container.read(
+      sourceResultsProvider(session).notifier,
+    );
+    final original = row('parent');
+    parentResults.display([original]);
+    parentResults.freeze();
+    final child = ProviderContainer.test(
+      parent: container,
+      overrides: [
+        sourceSearchProvider(
+          session,
+        ).overrideWith(() => SourceSearchController(session)),
+        sourceCacheProvider(
+          session,
+        ).overrideWith(() => SourceCacheController(session)),
+        sourceRetryProvider(
+          session,
+        ).overrideWith(() => SourceRetryController(session)),
+        sourceResultsProvider(
+          session,
+        ).overrideWith(() => SourceResultsController(session)),
+      ],
+    );
+    child.listen(sourceSearchProvider(session), (_, _) {});
+    child.listen(sourceResultsProvider(session), (_, _) {});
+    child.read(sourceResultsProvider(session).notifier).display([row('child')]);
+    expect(
+      child.read(sourceSearchProvider(session).notifier).prepareSearch(),
+      isTrue,
+    );
+    expect(child.read(sourceResultsProvider(session)).displayed, isEmpty);
+    expect(container.read(sourceResultsProvider(session)).displayed, [
+      same(original),
+    ]);
+    expect(container.read(sourceResultsProvider(session)).frozen, isTrue);
+  });
 }
