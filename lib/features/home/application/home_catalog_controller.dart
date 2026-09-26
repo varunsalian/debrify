@@ -14,30 +14,75 @@ final homeCatalogProvider = NotifierProvider.autoDispose
       dependencies: [homeCatalogRepositoryProvider],
     );
 
-/// Owns one view's catalog inventory, reservation and accepted snapshot.
-/// Loading generations/profile acceptance remain with the calling workflow.
+/// Owns one view's catalog requests, paging flags and accepted snapshot.
+/// The caller supplies profile/mounted acceptance and route continuation policy.
 class HomeCatalogController extends Notifier<HomeCatalogState> {
   HomeCatalogController(this.session);
   final HomeCatalogSession session;
   late HomeCatalogRepository _repository;
+  int _generation = 0;
+  int get generation => _generation;
+
+  bool owns(int generation) => ref.mounted && generation == _generation;
 
   @override
   HomeCatalogState build() {
     _repository = ref.watch(homeCatalogRepositoryProvider);
+    ref.onDispose(() => _generation++);
     final initial = session.initialBoard;
-    return initial == null
-        ? const HomeCatalogState.empty()
-        : const HomeCatalogState.empty().copyWith(
-            references: initial.references,
-            cursor: initial.cursor,
-            committed: initial,
-          );
+    return const HomeCatalogState.empty().copyWith(
+      references: initial?.references,
+      cursor: initial?.cursor,
+      committed: initial,
+      refreshing: session.initiallyRefreshing,
+    );
   }
 
   // Pending legacy refresh loops can finish after their view is removed. They
   // see an exhausted inventory, without reading disposed provider state.
   HomeCatalogState get current =>
       ref.mounted ? state : const HomeCatalogState.empty();
+
+  int beginLoad() {
+    if (!ref.mounted) return _generation;
+    final generation = ++_generation;
+    // Fresh Home seeds this state during construction, before its first frame.
+    // Starting that request must not notify providers from widget initState.
+    if (!state.refreshing || state.loadingMore) {
+      state = state.copyWith(refreshing: true, loadingMore: false);
+    }
+    return generation;
+  }
+
+  /// A timeout retires pending batches but leaves refresh ownership active
+  /// until the caller has restored its accepted snapshot and finished the load.
+  int? retireLoad(int generation) {
+    if (!owns(generation)) return null;
+    return ++_generation;
+  }
+
+  void finishLoad(int generation) {
+    if (owns(generation) && state.refreshing) {
+      state = state.copyWith(refreshing: false);
+    }
+  }
+
+  bool beginPage(int generation) {
+    if (!owns(generation) ||
+        state.refreshing ||
+        state.loadingMore ||
+        !state.hasMore) {
+      return false;
+    }
+    state = state.copyWith(loadingMore: true);
+    return true;
+  }
+
+  void finishPage(int generation) {
+    if (owns(generation) && state.loadingMore) {
+      state = state.copyWith(loadingMore: false);
+    }
+  }
 
   void install(List<HomeCatalogReference> references) {
     if (!ref.mounted) return;
@@ -59,17 +104,17 @@ class HomeCatalogController extends Notifier<HomeCatalogState> {
   /// requires the caller's mounted/profile acceptance check.
   Future<List<CatalogSection>> fetchBatch(
     int count, {
-    required bool Function() canReserve,
+    required int generation,
     required bool Function() isCurrent,
     Map<String, CatalogSection> previousRows = const {},
     void Function(CatalogSection)? onSection,
   }) => Future<List<CatalogSection>>.sync(() {
-    if (!ref.mounted || !canReserve()) return const <CatalogSection>[];
+    if (!owns(generation)) return const <CatalogSection>[];
     final batch = reserve(count);
     return _repository.fetchBatch(
       batch,
       previousRows: previousRows,
-      isCurrent: () => ref.mounted && isCurrent(),
+      isCurrent: () => owns(generation) && isCurrent(),
       onSection: onSection,
     );
   });
@@ -78,6 +123,7 @@ class HomeCatalogController extends Notifier<HomeCatalogState> {
   /// may pause only after an accepted empty batch, retaining its reserved cursor.
   Future<List<CatalogSection>> fetchUntilNonEmpty(
     int batchSize, {
+    required int generation,
     required bool Function() isCurrent,
     required bool Function() canContinue,
     Map<String, CatalogSection> previousRows = const {},
@@ -85,15 +131,15 @@ class HomeCatalogController extends Notifier<HomeCatalogState> {
     void Function(CatalogSection)? onSection,
     void Function()? onBatchComplete,
   }) async {
-    while (ref.mounted && isCurrent() && state.hasMore) {
+    while (owns(generation) && isCurrent() && state.hasMore) {
       final batch = await fetchBatch(
         batchSize,
-        canReserve: isCurrent,
+        generation: generation,
         isCurrent: isCurrent,
         previousRows: previousRows,
         onSection: onSection,
       );
-      if (!ref.mounted || !isCurrent()) return const [];
+      if (!owns(generation) || !isCurrent()) return const [];
       onBatchComplete?.call();
       final additions = batch
           .where(

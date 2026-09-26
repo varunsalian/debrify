@@ -8,11 +8,13 @@ class HomeCatalogSession {
     required this.owner,
     required this.viewIdentity,
     this.initialBoard,
+    this.initiallyRefreshing = false,
   });
 
   final ProfileSessionOwner owner;
   final Object viewIdentity;
   final HomeCatalogSnapshot? initialBoard;
+  final bool initiallyRefreshing;
 
   @override
   bool operator ==(Object other) =>

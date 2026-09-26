@@ -11,13 +11,23 @@ class HomeCatalogState {
   const HomeCatalogState.empty()
     : references = const [],
       cursor = 0,
-      committed = null;
+      committed = null,
+      refreshing = false,
+      loadingMore = false;
 
-  const HomeCatalogState._(this.references, this.cursor, this.committed);
+  const HomeCatalogState._(
+    this.references,
+    this.cursor,
+    this.committed,
+    this.refreshing,
+    this.loadingMore,
+  );
 
   final List<HomeCatalogReference> references;
   final int cursor;
   final HomeCatalogSnapshot? committed;
+  final bool refreshing;
+  final bool loadingMore;
 
   bool get hasMore => cursor < references.length;
 
@@ -25,9 +35,13 @@ class HomeCatalogState {
     List<HomeCatalogReference>? references,
     int? cursor,
     HomeCatalogSnapshot? committed,
+    bool? refreshing,
+    bool? loadingMore,
   }) => HomeCatalogState._(
     references == null ? this.references : List.unmodifiable(references),
     cursor ?? this.cursor,
     committed ?? this.committed,
+    refreshing ?? this.refreshing,
+    loadingMore ?? this.loadingMore,
   );
 }

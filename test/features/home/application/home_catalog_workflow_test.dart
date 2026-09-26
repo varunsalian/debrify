@@ -71,6 +71,7 @@ void main() {
       final published = <String>[];
       final pending = controller.fetchUntilNonEmpty(
         1,
+        generation: controller.generation,
         isCurrent: () => true,
         canContinue: () => true,
         excludeRows: {'fixture:movie:existing'},
@@ -108,6 +109,7 @@ void main() {
       var checks = 0;
       final empty = await controller.fetchUntilNonEmpty(
         1,
+        generation: controller.generation,
         isCurrent: () => true,
         canContinue: () {
           checks++;
@@ -119,6 +121,7 @@ void main() {
       expect(controller.current.cursor, 1);
       final result = await controller.fetchUntilNonEmpty(
         1,
+        generation: controller.generation,
         isCurrent: () => true,
         canContinue: () {
           checks++;
@@ -154,6 +157,7 @@ void main() {
       final published = <CatalogSection>[];
       final pending = controller.fetchUntilNonEmpty(
         1,
+        generation: controller.generation,
         isCurrent: () => current,
         canContinue: () => true,
         onSection: published.add,
@@ -192,6 +196,7 @@ void main() {
       final published = <CatalogSection>[];
       final pending = controller.fetchUntilNonEmpty(
         1,
+        generation: controller.generation,
         isCurrent: () => true,
         canContinue: () => true,
         onSection: published.add,
@@ -225,7 +230,7 @@ void main() {
       expect(
         await controller.fetchBatch(
           1,
-          canReserve: () => false,
+          generation: controller.generation - 1,
           isCurrent: () => true,
         ),
         isEmpty,
@@ -234,7 +239,7 @@ void main() {
       expect(requests, isEmpty);
       final rows = await controller.fetchBatch(
         1,
-        canReserve: () => true,
+        generation: controller.generation,
         isCurrent: () => true,
       );
       expect(rows.single.catalog.id, 'first');
@@ -271,7 +276,7 @@ void main() {
         controller.install([row('child')]);
         final rows = await controller.fetchBatch(
           1,
-          canReserve: () => true,
+          generation: controller.generation,
           isCurrent: () => true,
         );
         expect(rows.single.items.single.id, label);
@@ -279,7 +284,7 @@ void main() {
       }
       final rows = await original.fetchBatch(
         1,
-        canReserve: () => true,
+        generation: original.generation,
         isCurrent: () => true,
       );
       expect(rows.single.items.single.id, 'parent');

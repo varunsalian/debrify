@@ -782,8 +782,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   /// ([_boardRefs]/[_boardCursor]/[_homeSections]); every await inside the
   /// load pipeline re-checks this so a superseded load can neither apply its
   /// stale sections nor advance the new load's cursor.
-  int _boardLoadGen = 0;
-  bool _boardRefreshing = false;
+  int get _boardLoadGen => _homeCatalogController.generation;
+  bool get _boardRefreshing => _homeCatalogController.current.refreshing;
   bool _progressiveHomeLoadPending = false;
   bool _homePaginationDeferred = false;
   double _classicAnchorTailPadding = 0;
@@ -859,7 +859,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   int get _boardCursor => _homeCatalogController.current.cursor;
   HomeCatalogSnapshot? get _committedBoard =>
       _homeCatalogController.current.committed;
-  bool _boardLoadingMore = false;
+  bool get _boardLoadingMore => _homeCatalogController.current.loadingMore;
   late final ScrollController _boardScroll;
 
   /// Whether more board rows remain to lazily load (board mode only — never
@@ -1850,6 +1850,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       viewIdentity: Object(),
       initialBoard: restoredHome && keywordSnapshot == null
           ? homeSnapshot.board : null,
+      initiallyRefreshing: !widget.searchMode && !widget.discoverMode &&
+          !(restoredHome && keywordSnapshot == null),
     );
     _homeCatalogSubscription = ref.listenManual(
       homeCatalogProvider(homeSession),
@@ -2928,7 +2930,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         for (final row in _homeSections)
           if (row is! HomeListSection) _sectionRowId(row): row,
     };
-    final gen = ++_boardLoadGen;
+    // A superseded pagination request may never return. Its finally block is
+    // generation-guarded, so it cannot clear a newer request's loading flag.
+    final gen = _homeCatalogController.beginLoad();
     _deferredHomeProgress = null;
     final scope = ProfileRuntime.scope.value;
     bool current() => mounted && gen == _boardLoadGen &&
@@ -2949,12 +2953,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     if (progressive) developer.Timeline.instantSync('Home.loadStarted');
     var completionGen = gen;
     var expired = false;
-    // A superseded pagination request may never return. Its finally block is
-    // generation-guarded, so it cannot clear a newer request's loading flag.
-    _boardLoadingMore = false;
     _homePaginationDeferred = false;
     _progressiveHomeLoadPending = progressive;
-    _boardRefreshing = true;
     setState(() {
       if (!keepRows) {
         _loading = true;
@@ -2969,7 +2969,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
           if (!current()) return;
           expired = true;
           _progressiveHomeLoadPending = false;
-          completionGen = ++_boardLoadGen;
+          completionGen = _homeCatalogController.retireLoad(gen) ?? gen;
           final pending = _deferredHomeProgress;
           if (pending != null && pending.generation == gen) {
             // Already accepted data remains valid after retiring requests,
@@ -3180,7 +3180,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       progress?.dispose();
       boardFinished = true;
       if (completionGen == _boardLoadGen && scope == ProfileRuntime.scope.value) {
-        _boardRefreshing = false;
+        _homeCatalogController.finishLoad(completionGen);
         _progressiveHomeLoadPending = false;
         // Empty/failed catalogs can end without another content publication.
         // Rebuild the initial Spotlight gate so its cards fallback is shown.
@@ -3209,6 +3209,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     final scope = ProfileRuntime.scope.value;
     return _homeCatalogController.fetchUntilNonEmpty(
       _kBoardBatchSize,
+      generation: gen,
       isCurrent: () =>
           mounted &&
           gen == _boardLoadGen &&
@@ -3230,7 +3231,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     final scope = ProfileRuntime.scope.value;
     return _homeCatalogController.fetchBatch(
       n,
-      canReserve: () => gen == _boardLoadGen,
+      generation: gen,
       isCurrent: () =>
           mounted &&
           gen == _boardLoadGen &&
@@ -3287,7 +3288,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     final gen = _boardLoadGen;
     final scope = ProfileRuntime.scope.value;
     var appended = false;
-    setState(() => _boardLoadingMore = true);
+    if (!_homeCatalogController.beginPage(gen)) return false;
+    setState(() {});
     try {
       final existingRows = {
         for (final row in _homeSections) _sectionRowId(row): row,
@@ -3327,7 +3329,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       }
     } finally {
       if (mounted && gen == _boardLoadGen && scope == ProfileRuntime.scope.value) {
-        setState(() => _boardLoadingMore = false);
+        setState(() => _homeCatalogController.finishPage(gen));
         _maybeAutoFillBoard();
       }
     }

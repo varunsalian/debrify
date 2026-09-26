@@ -501,6 +501,38 @@ Evidence: `.git/refactor-evidence/phase5/catalog-workflow-*`,
 `analyze-catalog-workflow-*` and `full-catalog-workflow*`.
 The complete phase-5 and overall native/performance/CI gates remain open.
 
+Catalog request ownership now moves into `HomeCatalogController` (174 lines).
+The screen's generation, refresh and vertical-page fields are replaced by read-only
+controller accessors. The controller starts/finishes refreshes and pages, retires a
+timeout generation, and rejects stale batches internally. A stale retirement returns
+no completion token, so it cannot authorize cleanup of a newer refresh. Disposal and
+provider recomputation retire pending work. Profile/mounted acceptance remains an
+explicit caller predicate; generation identity alone is not treated as profile safety.
+
+`HomeCatalogState` (47 lines) publishes immutable refresh/page flags alongside its
+inventory/cursor/snapshot. Fresh Home's initial refreshing flag is seeded through
+`HomeCatalogSession` (27 lines); beginning that first request changes only its private
+request generation and emits no provider update during initState. Cached returns and
+Search/Discover variants start idle. Refresh start clears a superseded page's loading
+flag; stale finalizers cannot clear flags owned by a newer operation. Existing view
+setState, profile guards, progressive/deferred publication, timeout recovery and
+focus decisions keep their current timing and locations. SearchScreen remains
+20,114 lines under the phase exception; the full-load pipeline and independent Home
+responsibilities still need extraction before this phase can be complete.
+
+Six new ownership tests cover initial notification timing, overlapping load/page
+finalizers, timeout retirement, superseded batches even with an externally true
+predicate, cached recovery and provider recomputation. Earlier workflow tests now
+pass the real generation token and retain their assertions. The actual SearchScreen
+provider-override/disposal test and targeted Home regressions pass: 272 successes
+versus 266 before, identical 12 failure identities and one skip. A missing brace pair
+and unused test import from this slice were fixed; analyzer diagnostic identities
+are unchanged at 863. Size/import checks pass for 189 migrated files. Full suite:
+8,357 successes, unchanged 51 failures/20 skips; every preceding outcome is preserved
+and six new tests pass. Evidence: `.git/refactor-evidence/phase5/catalog-ownership-*`,
+`analyze-catalog-ownership-*` and `full-catalog-ownership*`. Device/performance and overall completion gates
+remain open.
+
 ### 6. Discover and remaining layouts
 
 - Separate Discover selection/hydration from its grid/stage presentation. Preserve
