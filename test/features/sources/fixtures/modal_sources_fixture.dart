@@ -92,9 +92,14 @@ class ModalSourcesFixture {
   final navigator = GlobalKey<NavigatorState>();
   final dark = ValueNotifier(false);
   final calls = <String>[];
+  int searchRequests = 0;
   late MaterialPageRoute<void> origin;
 
-  Future<void> pump(WidgetTester tester, {bool direct = true}) async {
+  Future<void> pump(
+    WidgetTester tester, {
+    bool direct = true,
+    bool bindMode = false,
+  }) async {
     SharedPreferences.setMockInitialValues({});
     await tester.binding.setSurfaceSize(const Size(500, 900));
     addTearDown(() async {
@@ -155,8 +160,12 @@ class ModalSourcesFixture {
             isSeries: false,
           ),
           meta: const PlaybackMeta(),
-          search: (_) async => {
-            'torrents': [torrent],
+          bindMode: bindMode,
+          search: (_) async {
+            searchRequests++;
+            return {
+              'torrents': [torrent],
+            };
           },
         ),
       ),

@@ -898,108 +898,42 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
   }
 
   @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final cinema = useCinemaSourcesLayout(
-          constraints,
-          isTelevision: widget.isTelevision,
-        );
-        return Scaffold(
-          backgroundColor: scheme.surface,
-          appBar: cinema
-              ? null
-              : AppBar(
-                  title: Text(
-                    _keywordMode
-                        ? 'Find a source for ${widget.selection.title}'
-                        : widget.bindMode
-                        ? 'Pick a source for ${widget.selection.title}'
-                        : widget.selection.formattedLabel,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  actions: [
-                    // Pin an on-device file/folder as the source. Desktop only — hidden on
-                    // Android/iOS (incl. Android TV) where local binding is unavailable, so
-                    // it's never a dead-end D-pad stop.
-                    if (_imdbId.isNotEmpty &&
-                        ref.read(sourceBindingBridgeProvider).localBindingAvailable)
-                      IconButton(
-                        tooltip: 'Pin an on-device file or folder',
-                        icon: const Icon(Icons.folder_open_rounded),
-                        onPressed: () => unawaited(_pinLocal()),
-                      ),
-                  ],
-                ),
-          body: cinema
-              ? SafeArea(
-                  child: CinemaSourcesLayout(
-                    key: _cinemaKey,
-                    contextTitle: _keywordMode
-                        ? _query
-                        : widget.selection.title,
-                    contextLabel: !_keywordMode && widget.selection.isSeries
-                        ? widget.selection.formattedLabel
-                        : null,
-                    art: _keywordMode
-                        ? null
-                        : widget.meta.art ??
-                              PlayLoaderArt(
-                                posterUrl: widget.meta.posterUrl,
-                                yearLabel: widget.selection.year,
-                              ),
-                    title: _keywordMode
-                        ? 'Search results'
-                        : widget.bindMode
-                        ? 'Pick a source'
-                        : 'Choose a source',
-                    subtitle: _keywordMode
-                        ? 'Find a source for ${widget.selection.title}'
-                        : widget.selection.formattedLabel,
-                    onBack: () => Navigator.of(context).maybePop(),
-                    backLabel: _keywordMode ? 'Back' : 'Details',
-                    headerAction:
-                        _imdbId.isNotEmpty &&
-                            ref.read(sourceBindingBridgeProvider).localBindingAvailable
-                        ? IconButton(
-                            tooltip: 'Pin an on-device file or folder',
-                            icon: const Icon(Icons.folder_open_rounded),
-                            onPressed: () => unawaited(_pinLocal()),
-                          )
-                        : null,
-                    providers: _cinemaProviders,
-                    selectedProvider: _sourceFilter,
-                    onProviderSelected: _selectCinemaProvider,
-                    onFocusResults: () {
-                      if (_nodes.isNotEmpty) {
-                        _nodes[_lastCinemaSource.clamp(0, _nodes.length - 1)]
-                            .requestFocus();
-                      } else if (_filterFocus.context != null) {
-                        _filterFocus.requestFocus();
-                      }
-                    },
-                    isSourceFocused: () {
-                      final index = _nodes.indexWhere((node) => node.hasFocus);
-                      if (index >= 0) {
-                        _lastCinemaSource = index;
-                        _freezeStreaming();
-                      }
-                      return index >= 0;
-                    },
-                    resultCount: _visible.length,
-                    searching: _loading || _searching,
-                    failed: _error != null,
-                    isTelevision: widget.isTelevision,
-                    child: _sourcesBody(scheme, cinema: true),
-                  ),
-                )
-              : _sourcesBody(scheme),
-        );
-      },
-    );
-  }
+  Widget build(BuildContext context) => buildSourceScreenFrame(
+    context,
+    selection: widget.selection,
+    keywordQuery: _keywordMode ? _query : null,
+    bindMode: widget.bindMode,
+    isTelevision: widget.isTelevision,
+    art: widget.meta.art,
+    posterUrl: widget.meta.posterUrl,
+    cinemaKey: _cinemaKey,
+    canPinLocal: () =>
+        _imdbId.isNotEmpty &&
+        ref.read(sourceBindingBridgeProvider).localBindingAvailable,
+    onPinLocal: () => unawaited(_pinLocal()),
+    providers: () => _cinemaProviders,
+    selectedProvider: _sourceFilter,
+    onProviderSelected: _selectCinemaProvider,
+    onFocusResults: () {
+      if (_nodes.isNotEmpty) {
+        _nodes[_lastCinemaSource.clamp(0, _nodes.length - 1)].requestFocus();
+      } else if (_filterFocus.context != null) {
+        _filterFocus.requestFocus();
+      }
+    },
+    isSourceFocused: () {
+      final index = _nodes.indexWhere((node) => node.hasFocus);
+      if (index >= 0) {
+        _lastCinemaSource = index;
+        _freezeStreaming();
+      }
+      return index >= 0;
+    },
+    resultCount: _visible.length,
+    searching: _loading || _searching,
+    failed: _error != null,
+    bodyBuilder: (scheme, cinema) => _sourcesBody(scheme, cinema: cinema),
+  );
 
   List<CinemaSourceProvider> get _cinemaProviders => projectCinemaSourceProviders(
     torrents: _torrents,

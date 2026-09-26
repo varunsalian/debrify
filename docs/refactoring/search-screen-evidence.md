@@ -3152,3 +3152,48 @@ Receipts: `full-row-view.jsonl`, `full-row-view-comparison.txt`,
 `full-row-view-previous-checkpoint.txt` and `row-view-analyzer-comparison.txt`.
 The baseline helper remains nonzero for original failures; no allowances changed.
 Formatting, diff and architecture checks pass. Phase 4C remains in progress.
+
+### Phase 4C — responsive Sources frame
+
+Extracted compact app-bar and cinema frame presentation into
+`presentation/source_screen_frame.dart` (**112 lines**). The function consumes
+immutable selection/art and scalar display inputs with explicit callbacks, and
+returns the same LayoutBuilder/Scaffold/SafeArea/CinemaSourcesLayout tree. It
+borrows the existing cinema key and does not introduce a resource/state owner.
+The existing threshold policy, titles/subtitles, keyword art suppression,
+poster/year fallback, back navigation and local-file affordance are preserved.
+Local capability checks and cinema provider projection stay lazy inside the
+selected layout branch. The original view keeps search/subscriptions, body
+composition, provider selection, streaming freeze and focus restoration callbacks.
+The former frame implementation is removed; Sources part **1,770 → 1,704 lines**.
+
+Before extraction, **442 existing affected tests passed**, and two added real-screen
+resize scenarios passed on the original implementation. Both normal and bind mode
+resize compact → cinema → compact, retaining the row FocusNode and title, correct
+play affordance and contextual cinema title/count, exactly one search request,
+and a working copy action after returning. The fixture adds an observable request
+counter and optional bind mode; existing modal test behavior remains unchanged.
+After extraction **444 affected tests pass**. Existing cinema/held-key, playback,
+binding, selected-source and modal cases exercise the integrated callbacks.
+
+Review confirms identical frame widget expressions/tree after explicit argument
+substitution and unchanged focus callback bodies apart from formatting. No new
+analyzer diagnostic identities (**863 existing diagnostics**); architecture checks
+pass **130 migrated files**. New/touched test code and the changed legacy build
+method are formatted without mass-formatting the legacy part. No failure
+allowances changed. These host resize tests do not replace native/device checks.
+
+Receipts under `.git/refactor-evidence/phase4c/`: `layout-before.txt`,
+`layout-resize-before.txt`, `layout-after.txt`, `layout-original.txt`,
+`layout-extraction-review.txt`, `analyze-layout.txt` and
+`layout-analyzer-comparison.txt`. Remaining Sources body/focus coordination,
+later phases, native/performance validation and final CI gates remain pending.
+
+Full-suite review: **8,069 successes / the same 51 failures / 20 skips**.
+Every previous checkpoint outcome is preserved and both new resize cases pass.
+Original-baseline and preceding-checkpoint comparisons find no new failures,
+missing tests or new skips. Receipts: `full-layout.jsonl`,
+`full-layout-comparison.txt` and `full-layout-previous-checkpoint.txt` in the same
+evidence directory. The baseline helper remains nonzero for original failures;
+its allowances were not changed. Final diff/format/architecture checks pass.
+Phase 4C and the overall migration remain in progress.
