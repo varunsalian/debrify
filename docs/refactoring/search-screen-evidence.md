@@ -3607,3 +3607,45 @@ failures, missing tests or new skips. Receipts: `full-settings-explicit-scope.js
 attributable to existing failures; no allowances were changed. Changed code is
 formatted and diff/architecture checks pass. This resolves explicit settings
 scope ownership, not automatic repository-only scoping or the broader migration.
+
+### Phase 4C — application-owned startup readiness
+
+Moved the initial settings/saved-source readiness barrier from the view into
+`application/source_startup.dart` (31 lines). The stateless Riverpod operation
+loads the two existing controllers concurrently in the original dispatch order,
+then returns readiness only for an active originating profile/scope. It creates
+no state, search, navigation or persistence effect on provider construction.
+Production `_initializeSources` awaits it and still owns `_runSearch` dispatch.
+The old inline load orchestration was removed; Sources part **1,538 → 1,532 lines**.
+
+Review retains the view's mounted and profile checks after its await: checking
+only inside the operation would leave an asynchronous gap before search dispatch.
+The settings and saved-source controller implementations and their error policies
+are unchanged. Settings priority is still ready before the first batch, avoiding
+the old interaction-path streaming freeze. `_reloadBound` remains for subsequent
+pin/playback actions; only initial readiness moved. Season loading and cache
+initialization retain their existing independent timing.
+
+Baseline: **463 Sources tests pass**. After extraction: **472 pass**, including
+nine new tests covering either completion order, appearance/saved-read failure
+propagation, profile/scope retirement before and during startup, and explicit
+nested controller/repository overrides without loading or changing parent state.
+The scoped test uses the verified explicit-ownership strategy from the previous
+checkpoint; it does not assume repository-only transitive family scoping.
+
+Receipts under `.git/refactor-evidence/phase4c/`: `startup-owner-before.txt`,
+`startup-owner-after.txt` (471 passes before the scoped case),
+`startup-owner-verified.txt` (472 passes), `analyze-startup-owner.txt` and
+`startup-owner-analyzer-comparison.txt`. Architecture checks cover **140 migrated
+files**. Phase 4C and subsequent phases/native/performance/CI gates remain open.
+
+Final verification: **8,112 full-suite successes / the same 51 failures / 20 skips**.
+Every prior checkpoint outcome is preserved and all nine new startup tests pass.
+Original-baseline comparison finds no new failures, missing tests or new skips.
+The final analyzer retains **863 diagnostics**, with no added identities. Receipts:
+`full-startup-owner.jsonl`, `full-startup-owner-comparison.txt`,
+`full-startup-owner-previous-checkpoint.txt`, `analyze-startup-owner-final.txt`,
+`startup-owner-final-analyzer-comparison.txt` and `startup-owner-review.txt`.
+Changed files/methods are formatted; architecture and diff checks pass. No failure
+allowances changed. Phase 4C remains in progress; this is startup readiness only,
+not completion of the remaining view/search orchestration or later phases.

@@ -355,15 +355,9 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
   }
 
   Future<void> _initializeSources() async {
-    // Priority must be known before the first engine batch lands. Loading it
-    // beside the search and rebuilding afterwards used the toolbar's
-    // user-interaction path, which froze streaming and parked every later
-    // batch behind the "+N new sources" pill.
-    await Future.wait([
-      ref.read(sourceSettingsProvider(_sourcesSession).notifier).load(),
-      _reloadBound(),
-    ]);
+    final ready = await ref.read(sourceStartupProvider).load(_sourcesSession);
     if (!mounted ||
+        !ready ||
         _sourcesSession.owner != ProfileSessionMemory.captureOwner()) {
       return;
     }
