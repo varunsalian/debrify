@@ -1253,3 +1253,53 @@ pre-existing failures. Full receipts:
 `.git/refactor-evidence/phase4c/full-result-state.jsonl`,
 `full-result-state-comparison.txt`, and `result-state-previous-checkpoint.txt`.
 Phase 4C and later migration/device/performance gates remain open.
+
+
+### Phase 4C — Sources toolbar state and provider reconciliation
+
+Extended the existing `SourceResultsController` (now 131 lines) with toolbar
+selection actions and projection through the already-tested Sources policy.
+The 33-line immutable `SourceToolbarState` belongs to `SourceResultsState`
+(now 34 lines), avoiding a separate controller for four related settings. The
+production view no longer owns mutable provider/filter/sort fields. All existing
+cinema rail, source pill, sort direction, filter dialog and clear-filter actions
+use this state. A disposed provider-filter boolean preserves diagnostic access
+without reading a closed subscription.
+
+New searches preserve toolbar choices while clearing adopted/pending/frozen rows.
+Freeze, buffering and adoption retain the same toolbar snapshot. Provider
+reconciliation still runs only at completion, against the full authoritative
+set including pending rows, using the same aliases; a quality filter hiding a
+provider does not clear its selection. The screen retains the exact explicit
+adoption/focus/scroll actions after toolbar changes and derives its rendered list
+through the controller's pure projection call. No persistence or request behavior
+was added.
+
+Baseline and post-wiring Sources feature/cinema suites passed **164 tests**.
+Final affected Sources/cinema/priority/season run passed **191 tests**, including
+five new toolbar cases covering reset preservation, pending-row lifetime,
+alias-aware final reconciliation, current-state projection/filter clearing and
+retired-profile rejection. Existing focus and pending-row assertions are unchanged.
+Analysis caught a missing-braces lint in the extracted reconciliation condition;
+adding braces preserved its control flow. Final analysis returns to **864
+diagnostics**, with no additions against baseline. Architecture checks pass for
+**93 migrated files**, formatting and diff checks pass. Sources is **2,771 lines**;
+parent stays **20,155**.
+
+Receipts: `.git/refactor-evidence/phase4c/toolbar-state-before.txt`,
+`toolbar-state-integration.txt`, `toolbar-state-focused-final.txt`,
+`analyze-toolbar-state.txt` (intermediate lint), `analyze-toolbar-state-final.txt`,
+and `toolbar-state-final-analyzer-comparison.txt`.
+Pin/local actions, Sources UI/focus extraction, later phases, native/performance
+checks and final transitive-boundary/CI verification remain open.
+
+
+The exact full-suite helper completed in **175,996 ms** with **7,761 successes**,
+the same **51 observed baseline failures** (22 failure/29 error) and **20 skips**.
+No original baseline identity is newly failing, missing or skipped. Every result-
+state checkpoint identity retains its outcome, with **five new passing tests**.
+The historical allowance remains unchanged and the helper still exits 1 for
+pre-existing failures. Full receipts:
+`.git/refactor-evidence/phase4c/full-toolbar-state.jsonl`,
+`full-toolbar-state-comparison.txt`, and `toolbar-state-previous-checkpoint.txt`.
+Phase 4C and later migration/device/performance gates remain unfinished.

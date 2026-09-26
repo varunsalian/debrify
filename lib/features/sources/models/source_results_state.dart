@@ -1,4 +1,5 @@
 import '../../../models/torrent.dart';
+import 'source_toolbar_state.dart';
 
 /// Full adopted and pending rows, before toolbar projection. Both snapshots
 /// retain Torrent identity for saved-source matching and focus restoration.
@@ -6,11 +7,13 @@ class SourceResultsState {
   final List<Torrent> displayed;
   final List<Torrent>? pending;
   final bool frozen;
+  final SourceToolbarState toolbar;
 
   SourceResultsState({
     List<Torrent> displayed = const [],
     List<Torrent>? pending,
     this.frozen = false,
+    this.toolbar = const SourceToolbarState(),
   }) : displayed = List.unmodifiable(displayed),
        pending = pending == null ? null : List.unmodifiable(pending);
 

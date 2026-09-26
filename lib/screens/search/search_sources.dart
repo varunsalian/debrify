@@ -109,7 +109,7 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
       'filter_focus': _filterFocus.hasFocus,
       'pill_focus': _pillFocus.hasFocus,
       'tv': widget.isTelevision,
-      'provider_filter': _sourceFilter != null,
+      'provider_filter': mounted ? _sourceFilter != null : _disposedProviderFilter,
       ...detail,
     };
     DiagnosticLog.instance.recordEvent(
@@ -285,10 +285,12 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
   }
 
   // --- redesign toolbar state (unused when _redesign is false) ---
-  TorrentFilterState _filters = const TorrentFilterState.empty();
-  String _sortBy = 'source'; // source | name | size | seeders | date
-  bool _sortAsc = false;
-  String? _sourceFilter; // null = all sources; else a normalized provider key
+  SourceToolbarState get _toolbar => _resultsSubscription.read().toolbar;
+  TorrentFilterState get _filters => _toolbar.filters;
+  String get _sortBy => _toolbar.sortBy;
+  bool get _sortAsc => _toolbar.sortAsc;
+  String? get _sourceFilter => _toolbar.sourceFilter;
+  bool _disposedProviderFilter = false;
 
   late final ProviderSubscription<SourcePresentationSettings>
       _settingsSubscription;
@@ -530,6 +532,7 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
 
   @override
   void dispose() {
+    _disposedProviderFilter = _sourceFilter != null;
     _disposedFrozen = _streamFrozen;
     _disposedResultCount = _torrents.length;
     _disposedMatchIndex = _selectedDirect == null
@@ -746,13 +749,7 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
     // new result set — checked ONLY here, against the authoritative full set:
     // an early batch that merely hasn't delivered that source yet must not
     // silently clear the user's filter mid-stream.
-    if (_sourceFilter != null &&
-        !fullSet.any(
-          (t) =>
-              SourcePriority.keyForSource(t.source, aliases: _sourceAliases) ==
-              _sourceFilter,
-        )) {
-      _sourceFilter = null;
+    if (_resultsController.reconcileProvider(fullSet, _sourceAliases)) {
       if (_pendingTorrents == null) {
         _visible = _redesign ? _applyToolbar(_torrents) : _torrents;
         _syncStreamNodes();
@@ -1282,7 +1279,7 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
   };
 
   void _selectCinemaProvider(String? key) {
-    _sourceFilter = key;
+    _resultsController.selectProvider(key);
     _lastCinemaSource = 0;
     // The rail returns to row zero after changing providers. Mount that row
     // before Right can request its focus; a lazy list left at the previous
@@ -1566,16 +1563,8 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
   /// Derives the rendered list from [_torrents]: source-group filter →
   /// quality/rip/language filter → provider priority + stable dedupe →
   /// optional explicit field sort. "Addon order" is the default.
-  List<Torrent> _applyToolbar(List<Torrent> src) => projectSourceResults(
-    src,
-    sourceFilter: _sourceFilter,
-    sourceAliases: _sourceAliases,
-    isSeries: widget.selection.isSeries,
-    filters: _filters,
-    sourcePriority: _sourcePriority,
-    sortBy: _sortBy,
-    sortAsc: _sortAsc,
-  );
+  List<Torrent> _applyToolbar(List<Torrent> src) =>
+      _resultsController.project(src, _settings.priority);
 
   /// Recompute [_visible] and rebuild [_nodes] in lock-step after a toolbar
   /// change (source pill, sort, or filter). The ListView stays mounted (no
@@ -1701,7 +1690,7 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
                     key: 'source-pill-all',
                     on: _sourceFilter == null,
                     onTap: () {
-                      _sourceFilter = null;
+                      _resultsController.selectProvider(null);
                       _rebuildVisible();
                     },
                     child: Text(
@@ -1761,7 +1750,7 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
                       key: 'source-pill-$key',
                       on: _sourceFilter == key,
                       onTap: () {
-                        _sourceFilter = key;
+                        _resultsController.selectProvider(key);
                         _rebuildVisible();
                       },
                       child: Text(
@@ -1845,7 +1834,7 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
                 tooltip: 'Sort',
                 color: const Color(0xFF1E1B2C),
                 onSelected: (v) {
-                  _sortBy = v;
+                  _resultsController.selectSort(v);
                   _rebuildVisible();
                 },
                 itemBuilder: (_) => const [
@@ -1883,7 +1872,7 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
                 InkWell(
                   borderRadius: app.shape.br(9),
                   onTap: () {
-                    _sortAsc = !_sortAsc;
+                    _resultsController.toggleSortDirection();
                     _rebuildVisible();
                   },
                   child: _tbChip(
@@ -2012,7 +2001,7 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
             ),
           InkWell(
             onTap: () {
-              _filters = const TorrentFilterState.empty();
+              _resultsController.setFilters(const TorrentFilterState.empty());
               _rebuildVisible();
             },
             child: Text(
@@ -2059,7 +2048,7 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
       ),
     );
     if (!mounted || result == null || result == _filters) return;
-    _filters = result;
+    _resultsController.setFilters(result);
     _rebuildVisible();
   }
 
