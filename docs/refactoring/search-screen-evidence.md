@@ -1303,3 +1303,45 @@ pre-existing failures. Full receipts:
 `.git/refactor-evidence/phase4c/full-toolbar-state.jsonl`,
 `full-toolbar-state-comparison.txt`, and `toolbar-state-previous-checkpoint.txt`.
 Phase 4C and later migration/device/performance gates remain unfinished.
+
+
+### Phase 4C — Saved-source removal boundary
+
+Wired production `_unpin` through `SavedSourcesController.remove` and
+`StoredSavedSourcesRepository.remove`. The view no longer invokes the persistence
+service directly. The existing controller/repository remain cohesive at **61/99
+lines**. The adapter calls the existing binding-specific removal with the captured
+owner's `canContinue` predicate, outside captured profile zones, preserving the
+preferences facade's live-profile checks and existing guarded-write barrier.
+Current errors propagate; retired operations return false and do not reload.
+The underlying service, storage schema, binding-key matching and tombstone
+implementation are unchanged.
+
+An explicit removal remains repository-owned if the view closes; the controller
+checks liveness, repository identity and owner before reloading. Independent
+removals do not invalidate each other's writes through the read-generation guard.
+The existing reload generation still handles competing reads. Pin/local binding
+calls require a separate presentation bridge because they involve dialogs and
+platform picking; they remain outstanding rather than being hidden in a data
+adapter taking BuildContext.
+
+The existing saved-source repository/controller and cinema focus baseline passed
+**26 tests**. After extraction all Sources feature/cinema tests passed **175
+tests**. Six new cases exercise remove-before-reload ordering, completion after
+view disposal, stale/current error handling, exact binding removal/last-key
+cleanup/origin tombstone recording, and actual queued writes during profile
+switching or lifecycle retirement. Queued tests delete outgoing data while the
+write barrier is held and verify it is not recreated and incoming profile data
+is untouched. No failure allowance or existing assertion was changed.
+
+A missing-braces lint introduced in the new controller guard was corrected; final
+analysis remains **864 diagnostics** with no new identities. All five changed
+feature/test files pass formatting, architecture checks pass for **93 migrated
+files**, and diff checks pass. Sources remains **2,771 lines**, parent **20,155**.
+Receipts: `.git/refactor-evidence/phase4c/unpin-before.txt`, `unpin-focused.txt`,
+`analyze-unpin.txt` (intermediate lint), `analyze-unpin-final.txt`, and
+`unpin-final-analyzer-comparison.txt`.
+The full suite was not repeated for this bounded adapter/action change; its latest
+checkpoint remains the toolbar-state run above. Phase 4C pin/local binding and UI,
+later phases, native/performance checks and the final architecture audit remain
+unfinished.

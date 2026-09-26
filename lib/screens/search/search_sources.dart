@@ -931,8 +931,8 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
   }
 
   Future<void> _unpin(SeriesSource source) async {
-    await SeriesSourceService.removeSourceEntry(_imdbId, source);
-    await _reloadBound();
+    if (!mounted) return;
+    await ref.read(savedSourcesProvider(_sourcesSession).notifier).remove(source);
   }
 
   Future<void> _pinLocal() async {

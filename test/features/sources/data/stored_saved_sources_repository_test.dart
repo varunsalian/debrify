@@ -249,4 +249,86 @@ void main() {
       );
     },
   );
+  test(
+    'explicit unpin removes only the selected binding and records origin tombstone',
+    () async {
+      final prefs = await SharedPreferences.getInstance();
+      final original = jsonEncode([canonicalPin.toJson(), pin.toJson()]);
+      await prefs.setString(
+        first.preferenceKey('series_source_$canonical'),
+        original,
+      );
+      await prefs.setString(
+        second.preferenceKey('series_source_$canonical'),
+        original,
+      );
+      final recorded = <String>[];
+      WebDavSyncTombstoneRecorder.debugInstall(
+        sink: (profile, keys) => recorded.add(profile),
+      );
+      final repo = repository();
+      expect(await repo.remove(canonicalPin), isTrue);
+      final remaining =
+          jsonDecode(
+                prefs.getString(
+                  first.preferenceKey('series_source_$canonical'),
+                )!,
+              )
+              as List;
+      expect(remaining.single['torrentHash'], pin.torrentHash);
+      expect(recorded, [first.profileId]);
+      expect(
+        prefs.getString(second.preferenceKey('series_source_$canonical')),
+        original,
+      );
+      expect(await repo.remove(pin), isTrue);
+      expect(
+        prefs.getString(first.preferenceKey('series_source_$canonical')),
+        isNull,
+      );
+    },
+  );
+
+  for (final retirement in ['switch', 'clear']) {
+    test(
+      'queued unpin cannot recreate deleted data after $retirement',
+      () async {
+        final prefs = await SharedPreferences.getInstance();
+        final original = jsonEncode([canonicalPin.toJson(), pin.toJson()]);
+        final key = first.preferenceKey('series_source_$canonical');
+        final incomingKey = second.preferenceKey('series_source_$canonical');
+        await prefs.setString(key, original);
+        await prefs.setString(incomingKey, original);
+        final repo = repository();
+        final entered = Completer<void>();
+        final release = Completer<void>();
+        addTearDown(() {
+          if (!release.isCompleted) release.complete();
+        });
+        final snapshot = ProfilePreferences.captureMutationSnapshot((_) async {
+          entered.complete();
+          await release.future;
+        });
+        await entered.future;
+        var finished = false;
+        final removal = repo
+            .remove(canonicalPin)
+            .whenComplete(() => finished = true);
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+        expect(finished, isFalse);
+        if (retirement == 'switch') {
+          ProfileRuntime.publish(second);
+        } else {
+          ProfileSessionMemory.clearAll();
+        }
+        await prefs.remove(key);
+        release.complete();
+        await snapshot;
+        expect(await removal, isFalse);
+        expect(prefs.getString(key), isNull);
+        expect(prefs.getString(incomingKey), original);
+        expect(await repo.remove(pin), isFalse);
+      },
+    );
+  }
 }

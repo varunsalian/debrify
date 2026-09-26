@@ -15,6 +15,24 @@ class StoredSavedSourcesRepository implements SavedSourcesRepository {
   bool get isCurrent => session.owner == ProfileSessionMemory.captureOwner();
 
   @override
+  Future<bool> remove(SeriesSource source) async {
+    if (!isCurrent) return false;
+    try {
+      await ProfileRuntime.withoutCapturedScope(
+        () => SeriesSourceService.removeSourceEntry(
+          session.selection.imdbId,
+          source,
+          canContinue: () => isCurrent,
+        ),
+      );
+      return isCurrent;
+    } catch (_) {
+      if (!isCurrent) return false;
+      rethrow;
+    }
+  }
+
+  @override
   Future<SavedSourcesState> load() async {
     if (!isCurrent) return SavedSourcesState();
     // Interactive migration must retain the preferences facade's live-profile

@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../services/series_source_service.dart';
 import '../data/saved_sources_repository.dart';
 import '../models/saved_sources_state.dart';
 import '../models/sources_session.dart';
@@ -40,5 +41,21 @@ class SavedSourcesController extends Notifier<SavedSourcesState> {
       if (!_accept(generation)) return false;
       rethrow;
     }
+  }
+
+  /// Complete an explicit removal for its originating profile, even if the
+  /// view closes. Only a live owner may reload/publish afterward. Independent
+  /// removals do not cancel one another through the read generation.
+  Future<bool> remove(SeriesSource source) async {
+    if (!ref.mounted || !_repository.isCurrent) return false;
+    final repository = _repository;
+    final removed = await repository.remove(source);
+    if (!removed ||
+        !ref.mounted ||
+        !repository.isCurrent ||
+        !identical(repository, _repository)) {
+      return false;
+    }
+    return reload();
   }
 }

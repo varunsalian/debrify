@@ -15,6 +15,14 @@ class Repository implements SavedSourcesRepository {
   @override
   bool isCurrent = true;
   final reads = <Completer<SavedSourcesState>>[];
+  final removals = <(SeriesSource, Completer<bool>)>[];
+  @override
+  Future<bool> remove(SeriesSource source) {
+    final result = Completer<bool>();
+    removals.add((source, result));
+    return result.future;
+  }
+
   @override
   Future<SavedSourcesState> load() {
     final next = Completer<SavedSourcesState>();
@@ -59,6 +67,40 @@ void main() {
     );
     subscription = container.listen(savedSourcesProvider(session), (_, _) {});
     controller = container.read(savedSourcesProvider(session).notifier);
+  });
+
+  test('remove waits for persistence before reloading saved rows', () async {
+    final pending = controller.remove(loaded.sources.single);
+    expect(repository.removals.single.$1, same(loaded.sources.single));
+    expect(repository.reads, isEmpty);
+    repository.removals.single.$2.complete(true);
+    await Future<void>.delayed(Duration.zero);
+    expect(repository.reads, hasLength(1));
+    repository.reads.single.complete(SavedSourcesState());
+    expect(await pending, isTrue);
+    expect(subscription.read().sources, isEmpty);
+  });
+
+  test(
+    'closing the view leaves removal completion owned by the repository',
+    () async {
+      final pending = controller.remove(loaded.sources.single);
+      container.dispose();
+      repository.removals.single.$2.complete(true);
+      expect(await pending, isFalse);
+      expect(repository.reads, isEmpty);
+    },
+  );
+
+  test('retired removal skips reload; current failures propagate', () async {
+    final retired = controller.remove(loaded.sources.single);
+    repository.removals.single.$2.complete(false);
+    expect(await retired, isFalse);
+    expect(repository.reads, isEmpty);
+    final failing = controller.remove(loaded.sources.single);
+    repository.removals.last.$2.completeError(StateError('fixture'));
+    await expectLater(failing, throwsStateError);
+    expect(repository.reads, isEmpty);
   });
 
   test(
