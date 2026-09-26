@@ -21,9 +21,12 @@ EXTRACTED_ELSEWHERE: tuple[str, ...] = (
     "lib/models/series_source.dart",
     "lib/models/cinema_source_provider.dart",
 )
-# Context-dependent legacy pickers are allowed only through this named bridge.
-# Phase 4C still owns the async preparation review; no persistence lives here.
+# Context-dependent legacy actions are allowed only through these named bridges.
+# Phase 4C owns binding preparation; phase 7 retains playback lifecycle review.
 PRESENTATION_BRIDGE_IMPORTS = {
+    "lib/features/sources/presentation/source_playback_bridge.dart": {
+        "lib/services/torrent_playback_service.dart",
+    },
     "lib/features/sources/presentation/source_binding_bridge.dart": {
         "lib/services/iptv_source_search.dart",
         "lib/services/torrent_playback_service.dart",

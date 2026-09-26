@@ -2860,3 +2860,74 @@ retirement test) retains **863 diagnostics** and no new identities. Receipts:
 The baseline helper's nonzero exit remains due to the original failures; its
 allowances are unchanged. Phase 4C remains open for the remaining presentation,
 focus and legacy action boundaries, with the original later phases still required.
+
+### Phase 4C — playback and download presentation bridge
+
+Sources row activation and direct-stream downloads now call the injected
+`presentation/source_playback_bridge.dart` (**39 lines**). It is an immutable,
+stateless adapter for the existing context-dependent legacy APIs, with no
+persistence, native resource ownership or parallel application state. Its precise
+legacy import is registered alongside the binding bridge; no general service
+imports were allowed for presentation files.
+
+The screen retains interaction ownership: freeze before activation, suppress
+dialog-generated duplicate taps, compute stream/download policy eligibility and
+reload saved bindings after playback completion only while mounted. The bridge
+forwards the same context, selected torrent, force-play flag, metadata, rendered
+source list, selected index and search title, without copying/reordering the list
+or introducing an asynchronous boundary. The download menu captures its bridge
+when opened, so download capability checks and dispatch do not need a live Ref
+during later modal rebuilds. Other modal callbacks, including torrent copy
+eligibility, still need the separate view-retirement review.
+
+Review compared both `_playNow` and `_showRowMenu` with the preceding checkpoint:
+after substituting bridge calls/captured dependency and normalizing formatting,
+their bodies match. Native activation, download resolution and their existing
+error/lifecycle behavior are untouched; this is not native parity evidence or
+completion of their phase-7 review. The Sources part remains an interim exception
+at **1,816 lines**; the test-only entry point gained an optional force-play flag
+so tests can exercise the production widget's existing intent parameter.
+
+**Seven real-screen wiring tests pass**: ordinary row activation, explicit
+force-play, menu activation, provider-filtered list/index handoff, completion after
+view disposal, eligible download dispatch and unsupported download visibility.
+They verify selected torrent/metadata identity, visible playlist order, exact
+index and query title, duplicate-tap suppression, and saved-binding reload only
+after successful completion. The filtered fixture uses the narrow provider strip
+and its actual `engine:beta` key; the other cases use the wide cinema layout.
+Tests substitute only the presentation bridge and existing repository boundaries;
+actual player startup, transfers and native teardown remain separate device gates.
+
+Affected baseline **386 passes**; after integration **393 passes**, no failures.
+After the modal dependency-capture review, the focused **seven cases** pass again.
+Final analyzer retains **863 diagnostics**, with no new identities. Architecture
+checks pass **124 migrated files**; touched legacy methods/new files are formatted
+and diff checks pass. Receipts under `.git/refactor-evidence/phase4c/`:
+`playback-bridge-before.txt`, `playback-bridge-affected.txt`,
+`playback-bridge-final-focused.txt`, `playback-bridge-extraction-review.txt`,
+`analyze-playback-bridge-final.txt` and
+`playback-bridge-final-analyzer-comparison.txt`.
+Remaining Sources presentation/focus work and all later phases remain open.
+
+The first full run reported **8,032 successes / 52 failures / 20 skips**.
+All seven new wiring tests passed, but the previously documented
+`remote_reliable_transfer_test.dart::large binary file arrives intact with bounded progress blocks`
+cleanup race recurred: its content/progress checks passed and its immediate
+directory assertion still saw the temporary `.part` file. Reinspection confirms
+the unchanged receiver publishes receipt phase `complete` before awaiting
+journal IO and temporary-file deletion. The Sources bridge changes neither this
+service nor the transfer test. All **18 transfer tests** pass in isolation.
+The first run and comparison remain recorded in `full-playback-bridge.jsonl`,
+`full-playback-bridge-comparison.txt`, and
+`playback-bridge-transfer-investigation.txt`; no failure allowance was changed.
+
+The unchanged repeat full run has **8,033 successes / the original 51 failures /
+20 skips**. The transfer cleanup test passes; all preceding checkpoint outcomes
+are preserved and all **seven new tests** pass. Both original-baseline and prior
+checkpoint comparisons report no new failures, missing tests or new skips.
+Receipts: `full-playback-bridge-verified.jsonl`,
+`full-playback-bridge-verified-comparison.txt` and
+`playback-bridge-verified-previous-checkpoint.txt` in the same directory.
+The historical helper still exits nonzero for the original failures. Phase 4C,
+the modal ownership/focus review, and the later native/performance/CI gates remain
+open.

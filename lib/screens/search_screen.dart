@@ -1,3 +1,4 @@
+import '../features/sources/presentation/source_playback_bridge.dart';
 import '../features/sources/application/source_link_dependencies.dart';
 import '../features/sources/data/source_link_copier.dart';
 import '../features/sources/presentation/source_binding_bridge.dart';

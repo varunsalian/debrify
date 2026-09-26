@@ -9,6 +9,7 @@ Widget sourcesScreenForTesting({
   search,
   SourceAddonRetry? retry,
   bool bindMode = false,
+  bool forcePlayOnTap = false,
 }) => ProviderScope(
   overrides: [
     sourceSearchRepositoryProvider.overrideWith(
@@ -24,6 +25,7 @@ Widget sourcesScreenForTesting({
     meta: meta,
     isTelevision: true,
     bindMode: bindMode,
+    forcePlayOnTap: forcePlayOnTap,
   ),
 );
 
@@ -752,18 +754,21 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
   void _playNow(Torrent t, int i) {
     _freezeStreaming();
     unawaited(
-      TorrentPlaybackService.activateTorrent(
-        context,
-        t,
-        forcePlay: widget.forcePlayOnTap,
-        meta: widget.meta,
-        // The rendered list — [_visible] equals [_torrents] with the redesign
-        // off, but is the source-filtered/sorted list when on, so the index and
-        // the in-player Sources switcher stay in sync with what the user sees.
-        sources: _visible,
-        sourceIndex: i,
-        searchKeyword: widget.selection.title,
-      ).then((_) => _reloadBound()),
+      ref
+          .read(sourcePlaybackBridgeProvider)
+          .play(
+            context,
+            t,
+            forcePlay: widget.forcePlayOnTap,
+            meta: widget.meta,
+            // The rendered list — [_visible] equals [_torrents] with the redesign
+            // off, but is the source-filtered/sorted list when on, so the index and
+            // the in-player Sources switcher stay in sync with what the user sees.
+            sources: _visible,
+            sourceIndex: i,
+            searchKeyword: widget.selection.title,
+          )
+          .then((_) => _reloadBound()),
     );
   }
 
@@ -871,6 +876,7 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
     _freezeStreaming();
     final app = AppThemeScope.of(context);
     final binding = _bindingFor(t);
+    final playback = ref.read(sourcePlaybackBridgeProvider);
     final stream = t.isDirectStream || t.isExternalStream;
     showModalBottomSheet<void>(
       context: context,
@@ -897,10 +903,8 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
         onDownload:
             stream &&
                 ProfilePolicyGuard.allowsSync(ProfileFeature.downloads) &&
-                TorrentPlaybackService.supportsDirectStreamDownload(t)
-            ? () => unawaited(
-                TorrentPlaybackService.downloadDirectStream(context, t),
-              )
+                playback.supportsDownload(t)
+            ? () => unawaited(playback.download(context, t))
             : null,
       ),
     );
