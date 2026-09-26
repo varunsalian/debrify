@@ -2996,3 +2996,59 @@ missing tests or new skips. Receipts: `full-modal-owner.jsonl`,
 `full-modal-owner-comparison.txt` and `modal-owner-previous-checkpoint.txt` in
 the same evidence directory. The historical helper's nonzero result remains due
 to the original failures; no allowances were changed. Phase 4C remains in progress.
+
+### Phase 4C — shared filter header and narrow layout
+
+Extracted the filter editor's header to `lib/ui/core/filter_sheet_header.dart`
+(**77 lines**), used by the existing shared editor reached from Sources and
+Keyword search. The editor still owns both FocusNodes, selection sets, Clear
+mutation and dialog result/navigation. The header borrows the nodes and callbacks;
+its Clear predicate is read at build and interaction time, preserving the former
+live eligibility check. No Riverpod state or service/data access was added.
+
+The intentional layout correction gives the title the remaining row width,
+bounded to two lines with ellipsis. Its original text, font and weight remain.
+Clear/Close retain their original order, widgets, focus nodes, Select/Space
+handling, callback eligibility, colors and semantics. Review compared both
+control subtrees against the previous implementation after input substitutions;
+both match. The extracted legacy header body was removed.
+
+The shared editor shrank from **746 to 700 physical lines** (a formatted temporary
+copy is **673 lines**, also below the ceiling). Its remaining responsibility is
+one local facet-selection editor: constructing/disposal of chip focus nodes,
+local selection updates and Clear/Apply, keyboard scrolling, facet rendering and
+static option labels. It contains no network, persistence or feature application
+orchestration. This is the required 501–800-line cohesion review, not an exception
+to the final ceiling. The untouched legacy portions were not mass-formatted.
+Both editor and header are registered in the measured source set, and registered
+`lib/widgets/` files now receive the same presentation import checks as shared UI.
+
+**Eight real-dialog tests pass**. Six cover 390/500-pixel portrait widths,
+landscape and TV-sized windows, with normal, 1.6x and 2x text as specified by the
+cases. They assert no layout exception, visible control bounds and successful
+Clear/Apply. Two cover Select and Space activation of Clear, disabled Clear and
+Close/cancel. Against the unchanged editor, four narrow/scaled cases fail with
+header overflow while the other four pass; all eight pass after the change.
+
+The earlier modal ownership fixture is restored from 560 to its original **500
+pixels**. All **19 cases pass** at that width, closing the specific host-layout
+finding without bypassing it. Combined affected Sources/Search tests: **630
+passes**. Analyzer retains **863 diagnostics**, no new identities. Architecture
+checks pass **127 measured files**; new code/delegation formatting and diff checks
+pass. Native/device/font verification remains part of the later platform gates;
+these are host widget layout results.
+
+Receipts under `.git/refactor-evidence/phase4c/`: `filter-header-red.txt`,
+`filter-header-green.txt`, `filter-header-affected.txt`,
+`filter-header-original-width.txt`, `filter-header-extraction-review.txt`,
+`analyze-filter-header.txt` and `filter-header-analyzer-comparison.txt`.
+Sources focus/presentation and all later migration work remain open.
+
+Full-suite review: **8,060 successes / the same 51 failures / 20 skips**.
+Every previous checkpoint outcome is preserved and all **eight new cases** pass.
+Original-baseline and preceding-checkpoint comparisons find no new failures,
+missing tests or new skips. Receipts: `full-filter-header.jsonl`,
+`full-filter-header-comparison.txt` and `filter-header-previous-checkpoint.txt`
+in the same evidence directory. The baseline helper still exits nonzero for the
+original failures; its allowances were not changed. Phase 4C and the full
+migration remain in progress.

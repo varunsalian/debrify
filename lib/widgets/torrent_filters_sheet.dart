@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../models/torrent_filter_state.dart';
+import '../ui/core/filter_sheet_header.dart';
 import '../utils/tv_keys.dart';
 
 class TorrentFiltersSheet extends StatefulWidget {
@@ -239,59 +240,12 @@ class _TorrentFiltersSheetState extends State<TorrentFiltersSheet> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text(
-                    'Filter Results',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Focus(
-                        focusNode: _clearButtonFocusNode,
-                        onKeyEvent: (node, event) {
-                          if (event is KeyDownEvent &&
-                              (isActivateKey(event.logicalKey) ||
-                                  event.logicalKey == LogicalKeyboardKey.space)) {
-                            if (_hasSelection) {
-                              _clearAll();
-                              return KeyEventResult.handled;
-                            }
-                          }
-                          return KeyEventResult.ignored;
-                        },
-                        child: TextButton(
-                          onPressed: _hasSelection ? _clearAll : null,
-                          child: const Text('Clear'),
-                        ),
-                      ),
-                      Focus(
-                        focusNode: _closeButtonFocusNode,
-                        onKeyEvent: (node, event) {
-                          if (event is KeyDownEvent &&
-                              (isActivateKey(event.logicalKey) ||
-                                  event.logicalKey == LogicalKeyboardKey.space)) {
-                            Navigator.of(context).pop();
-                            return KeyEventResult.handled;
-                          }
-                          return KeyEventResult.ignored;
-                        },
-                        child: IconButton(
-                          onPressed: () => Navigator.of(context).pop(),
-                          icon: const Icon(
-                            Icons.close_rounded,
-                            color: Colors.white70,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
+              FilterSheetHeader(
+                clearFocus: _clearButtonFocusNode,
+                closeFocus: _closeButtonFocusNode,
+                canClear: () => _hasSelection,
+                onClear: _clearAll,
+                onClose: () => Navigator.of(context).pop(),
               ),
               const SizedBox(height: 8),
               Expanded(

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Small size/import guard for the search-screen migration, not legacy code.
+"""Small size/import guard for the measured search-screen migration source set.
 
 Run from any directory: python3 dev/tool/check_search_architecture.py
 Review still establishes semantic ownership and appropriate dependency contracts.
@@ -11,12 +11,14 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[2]
 FEATURES = ("search", "home", "discover", "sources")
-# Register extracted application files placed outside the feature directories.
+# Register extracted/adopted application files outside the feature directories.
 # The original screen/parts are tracked temporary exceptions in the phase plan;
 # add a retained facade here once its migration is complete.
 EXTRACTED_ELSEWHERE: tuple[str, ...] = (
     "lib/core/platform/system_clipboard.dart",
     "lib/ui/core/see_all_link.dart",
+    "lib/ui/core/filter_sheet_header.dart",
+    "lib/widgets/torrent_filters_sheet.dart",
     "lib/ui/core/source_metadata_labels.dart",
     "lib/models/series_source.dart",
     "lib/models/cinema_source_provider.dart",
@@ -52,7 +54,7 @@ def violations(path: Path) -> list[str]:
 
     layer = next((x for x in ("application", "data", "models", "presentation")
                   if x in path.parts), None)
-    if relative.startswith("lib/ui/"):
+    if relative.startswith(("lib/ui/", "lib/widgets/")):
         layer = "presentation"
     for declaration in DIRECTIVES.findall(source):
         for uri in URIS.findall(declaration):

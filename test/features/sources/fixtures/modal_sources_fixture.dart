@@ -96,7 +96,7 @@ class ModalSourcesFixture {
 
   Future<void> pump(WidgetTester tester, {bool direct = true}) async {
     SharedPreferences.setMockInitialValues({});
-    await tester.binding.setSurfaceSize(const Size(560, 900));
+    await tester.binding.setSurfaceSize(const Size(500, 900));
     addTearDown(() async {
       await tester.pumpWidget(const SizedBox());
       dark.dispose();
