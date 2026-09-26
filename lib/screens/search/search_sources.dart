@@ -962,162 +962,39 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
 
   void _showRowMenu(Torrent t, int i) {
     _freezeStreaming();
-    // Direct / external addon streams have no infohash to pin — offer the
-    // stream-appropriate actions (play/open + copy link), mirroring Home's
-    // direct-stream action sheet.
-    if (t.isDirectStream || t.isExternalStream) {
-      _showStreamRowMenu(t, i);
-      return;
-    }
     final app = AppThemeScope.of(context);
     final binding = _bindingFor(t);
-    final bound = binding != null;
+    final stream = t.isDirectStream || t.isExternalStream;
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: app.home.sheetBg,
-      builder: (sheetCtx) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: Icon(Icons.play_arrow_rounded, color: app.core.tx),
-              title: const Text('Play'),
-              onTap: () {
-                DialogTapGuard.markKeyAction();
-                Navigator.of(sheetCtx).pop();
-                _playNow(t, i);
-              },
-            ),
-            ListTile(
-              leading: Icon(
-                bound ? Icons.link_off_rounded : Icons.link_rounded,
-                color: const Color(0xFFF59E0B),
-              ),
-              title: Text(bound ? 'Unpin source' : 'Pin as source'),
-              subtitle: Text(
-                bound
-                    ? 'Stop reusing this source'
-                    : 'Reuse this source for instant playback',
-                style: TextStyle(color: app.fade(app.core.tx, 0.5)),
-              ),
-              onTap: () {
-                DialogTapGuard.markKeyAction();
-                Navigator.of(sheetCtx).pop();
-                if (bound) {
-                  unawaited(_unpin(binding));
-                } else {
-                  unawaited(_pin(t));
-                }
-              },
-            ),
-            if (_canCopySource(t))
-              ListTile(
-                leading: const Icon(
-                  Icons.copy_rounded,
-                  color: Color(0xFFF59E0B),
-                ),
-                title: const Text('Copy link'),
-                onTap: () {
-                  DialogTapGuard.markKeyAction();
-                  Navigator.of(sheetCtx).pop();
-                  unawaited(_copySourceLink(t));
-                },
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  /// Options sheet for a direct / external addon stream. Playable direct links
-  /// can be pinned by addon provenance; external browser links remain open-only.
-  void _showStreamRowMenu(Torrent t, int i) {
-    final app = AppThemeScope.of(context);
-    final external = t.isExternalStream;
-    final binding = _bindingFor(t);
-    showModalBottomSheet<void>(
-      context: context,
-      backgroundColor: app.home.sheetBg,
-      builder: (sheetCtx) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: Icon(
-                external ? Icons.open_in_new_rounded : Icons.play_arrow_rounded,
-                color: app.core.tx,
-              ),
-              title: Text(external ? 'Open externally' : 'Play now'),
-              subtitle: Text(
-                external
-                    ? 'Open this link in your browser'
-                    : 'Stream directly — no debrid needed',
-                style: TextStyle(color: app.fade(app.core.tx, 0.5)),
-              ),
-              onTap: () {
-                DialogTapGuard.markKeyAction();
-                Navigator.of(sheetCtx).pop();
-                _playNow(t, i);
-              },
-            ),
-            if (!external)
-              ListTile(
-                leading: Icon(
-                  binding != null ? Icons.link_off_rounded : Icons.link_rounded,
-                  color: const Color(0xFFF59E0B),
-                ),
-                title: Text(binding != null ? 'Unpin source' : 'Pin as source'),
-                subtitle: Text(
-                  binding != null
-                      ? 'Stop refreshing this stream for playback'
-                      : MediaServerService.owns(t)
-                      ? 'Resolve this version from your media server when played'
-                      : IptvSourceSearch.owns(t)
-                      ? 'Resolve it from this IPTV catalog when played'
-                      : 'Re-fetch a fresh link from this addon when played',
-                  style: TextStyle(color: app.fade(app.core.tx, 0.5)),
-                ),
-                onTap: () {
-                  DialogTapGuard.markKeyAction();
-                  Navigator.of(sheetCtx).pop();
-                  if (binding != null) {
-                    unawaited(_unpin(binding));
-                  } else {
-                    unawaited(_pin(t));
-                  }
-                },
-              ),
-            ListTile(
-              leading: const Icon(Icons.copy_rounded, color: Color(0xFFF59E0B)),
-              title: const Text('Copy link'),
-              onTap: () async {
-                DialogTapGuard.markKeyAction();
-                Navigator.of(sheetCtx).pop();
-                await _copySourceLink(t);
-              },
-            ),
-            if (ProfilePolicyGuard.allowsSync(ProfileFeature.downloads) &&
-                TorrentPlaybackService.supportsDirectStreamDownload(t))
-              ListTile(
-                leading: const Icon(
-                  Icons.download_rounded,
-                  color: Color(0xFF60A5FA),
-                ),
-                title: const Text('Download to device'),
-                subtitle: Text(
-                  'Save this stream to your device',
-                  style: TextStyle(color: app.fade(app.core.tx, 0.5)),
-                ),
-                onTap: () {
-                  DialogTapGuard.markKeyAction();
-                  Navigator.of(sheetCtx).pop();
-                  unawaited(
-                    TorrentPlaybackService.downloadDirectStream(context, t),
-                  );
-                },
-              ),
-          ],
-        ),
+      builder: (_) => SourceRowActionsSheet(
+        app: app,
+        kind: !stream
+            ? SourceRowActionKind.torrent
+            : t.isExternalStream
+            ? SourceRowActionKind.external
+            : MediaServerService.owns(t)
+            ? SourceRowActionKind.mediaServer
+            : IptvSourceSearch.owns(t)
+            ? SourceRowActionKind.iptv
+            : SourceRowActionKind.addon,
+        bound: binding != null,
+        onPlay: () => _playNow(t, i),
+        onTogglePin: t.isExternalStream
+            ? null
+            : () => unawaited(binding != null ? _unpin(binding) : _pin(t)),
+        onCopy: stream || _canCopySource(t)
+            ? () => unawaited(_copySourceLink(t))
+            : null,
+        onDownload:
+            stream &&
+                ProfilePolicyGuard.allowsSync(ProfileFeature.downloads) &&
+                TorrentPlaybackService.supportsDirectStreamDownload(t)
+            ? () => unawaited(
+                TorrentPlaybackService.downloadDirectStream(context, t),
+              )
+            : null,
       ),
     );
   }

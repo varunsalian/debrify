@@ -1518,3 +1518,47 @@ failures. Full receipts:
 `analyze-binding-save-complete.txt` and
 `binding-save-complete-analyzer-comparison.txt`.
 Phase 4C and later migration/device/performance gates remain incomplete.
+
+
+### Phase 4C — Sources row-action sheet
+
+Extracted the torrent/direct/external action sheets into the 116-line
+`SourceRowActionsSheet`, wired through the actual Sources row-menu entry point.
+The widget receives a captured theme, row kind, binding state and eligible action
+callbacks. It owns only rendering and the existing input-guard → modal-pop →
+action ordering. Eligibility and playback/persistence dispatch stay at the caller
+until their remaining boundaries migrate. The replaced stream-specific sheet
+method is removed; Sources is now **2,652 lines**, parent **20,157**.
+
+Review compared all five row kinds (torrent, addon, IPTV, media server, external),
+bound/unbound labels, icon colors, subtitle styles, optional copy/download actions
+and sheet geometry against the original. Stream copy remains visible even when
+its handler must report a missing link. Download eligibility is still evaluated
+inside the modal builder. Media-server/IPTV ownership checks only inspect the
+source prefix; evaluating them for a bound row has no side effects. Unchanged
+legacy text retains the migration's localization exception.
+
+The existing real Sources binding/menu and cinema-focus baseline passed **11
+tests**, and passed again after wiring. Eleven new widget cases cover row
+variants, unpin wording and keyboard activation for play/pin/copy/download,
+including the active input guard and modal dismissal before callback dispatch.
+The complete affected Sources/cinema/addon-direct/IPTV/provider-native group
+passes **261 tests**. Analyzer identities remain at **864**, with no additions
+against the initial baseline; the previously removed Sources braces lint stays
+removed. Architecture checks pass for **96 migrated files**. Formatting and diff
+checks pass. Receipts under `.git/refactor-evidence/phase4c/`:
+`row-actions-before.txt`, `row-actions-integration.txt`, `row-actions-widget.txt`,
+`row-actions-focused-final.txt`, `analyze-row-actions.txt` and
+`row-actions-analyzer-comparison.txt`.
+
+This completes the automated row-action-sheet slice only. Remaining Sources UI,
+focus ownership, binding presentation/native/provider preparation, later phases,
+and native/performance/CI gates are still open.
+
+Full-suite verification completed in **174,385 ms**: **7,800 successes**, the same
+**51 observed baseline failures** (22 failure/29 error), and **20 skips**. No
+initial-baseline test is newly failing, missing or skipped. Every previous
+binding-persistence checkpoint outcome is preserved, with **11 new passing
+identities**. The unchanged historical helper still exits 1 for pre-existing
+failures. Receipts: `.git/refactor-evidence/phase4c/full-row-actions.jsonl`,
+`full-row-actions-comparison.txt` and `row-actions-previous-checkpoint.txt`.
