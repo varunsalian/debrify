@@ -1,3 +1,4 @@
+import '../features/sources/presentation/torrent_source_binding.dart';
 import '../features/sources/presentation/local_source_binding.dart';
 import '../features/sources/presentation/iptv_source_binding.dart';
 import '../features/sources/presentation/direct_source_binding.dart';
@@ -5370,22 +5371,45 @@ class TorrentPlaybackService {
     bool Function()? canContinue,
     String? addonCatalogId,
     String? addonCatalogKey,
+  }) => presentTorrentSourceBinding(
+    context,
+    imdbId: imdbId,
+    cancelledProvider: _cancelled,
+    canContinue: canContinue,
+    pickProvider: () => _pickProvider(context, canContinue: canContinue),
+    showLoading: (provider) =>
+        _showLoading(context, provider, torrent.name).dismiss,
+    prepare: (provider) => _prepareManualTorrentBinding(
+      provider,
+      torrent,
+      canContinue: canContinue,
+    ),
+    describe: (provider) => SeriesSource(
+      torrentHash: torrent.infohash,
+      torrentName: torrent.name,
+      debridService: storedProviderKey(provider),
+      debridTorrentId: '',
+      boundAt: DateTime.now().millisecondsSinceEpoch,
+      addonCatalogId: addonCatalogId,
+      addonCatalogKey: addonCatalogKey,
+    ),
+    save: (source) => _persistManualBinding(
+      source,
+      imdbId: imdbId,
+      isMovie: isMovie,
+      saveBinding: saveBinding,
+    ),
+    providerLabel: _label,
+  );
+
+  /// Backend-only readiness probe for a manual pin. Cleanup of acquisitions
+  /// that cannot be played stays with the provider implementation.
+  static Future<({bool ready, String? failureMessage})>
+  _prepareManualTorrentBinding(
+    String provider,
+    Torrent torrent, {
+    bool Function()? canContinue,
   }) async {
-    bool active() => canContinue?.call() ?? true;
-    if (canContinue != null && (!context.mounted || !active())) return false;
-    if (imdbId.isEmpty) {
-      _snack(context, 'No IMDb match — can\'t pin a source.');
-      return false;
-    }
-    final provider = await _pickProvider(context, canContinue: canContinue);
-    if (!context.mounted || !active() || provider == _cancelled) return false;
-    if (provider == null) {
-      _snack(context, 'No debrid provider configured. Add one in Settings.');
-      return false;
-    }
-    // Own this exact loader: completion must not pop a newer route after a
-    // navigation/profile handoff, even if the launching view has disappeared.
-    final loading = _showLoading(context, provider, torrent.name);
     _Resolved? res;
     String? failMessage;
     try {
@@ -5414,38 +5438,7 @@ class TorrentPlaybackService {
     } on _PikPakFailed {
       failMessage = 'Download failed on PikPak.';
     } catch (_) {}
-    // Release the owned route before accessing the possibly retired view.
-    loading.dismiss();
-    if (!context.mounted || !active()) return false;
-    if (res == null) {
-      _snack(
-        context,
-        failMessage ??
-            'That source isn\'t instantly playable on ${_label(provider)} — pick a cached one.',
-      );
-      return false;
-    }
-    final source = SeriesSource(
-      torrentHash: torrent.infohash,
-      torrentName: torrent.name,
-      debridService: storedProviderKey(provider),
-      debridTorrentId: '',
-      boundAt: DateTime.now().millisecondsSinceEpoch,
-      addonCatalogId: addonCatalogId,
-      addonCatalogKey: addonCatalogKey,
-    );
-    if (!await _persistManualBinding(
-      source,
-      imdbId: imdbId,
-      isMovie: isMovie,
-      saveBinding: saveBinding,
-    )) {
-      return false;
-    }
-    if (context.mounted && active()) {
-      _snack(context, 'Source pinned for instant playback.');
-    }
-    return true;
+    return (ready: res != null, failureMessage: failMessage);
   }
 
   /// Pin a playable Stremio addon stream without persisting its usually

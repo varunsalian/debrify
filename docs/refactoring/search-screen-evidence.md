@@ -4591,3 +4591,53 @@ skips. Receipts: `full-local-binding-ui.jsonl`,
 `full-local-binding-ui-comparison.txt` and
 `full-local-binding-ui-previous-checkpoint.txt`. Final formatting/diff/architecture
 checks pass; no allowances changed. Remaining migration gates stay open.
+
+
+### Phase 4C — debrid pin presentation and readiness boundary
+
+Moved manual torrent/debrid pin presentation to
+`presentation/torrent_source_binding.dart` (**65 lines**). The caller supplies
+provider selection, the exact loader dismissal callback, readiness acquisition,
+descriptor construction, persistence and provider labeling. The presentation
+function owns the interaction order and releases its loader in finally before
+checking view/session retirement or showing feedback/writing. Unexpected injected
+preparation errors also release the loader before propagating; production provider
+errors retain their existing backend handling.
+
+The compatibility wrapper retains all public arguments and returns the presentation
+Future directly. Acquisition now lives in the context-free private readiness
+method returning a typed `(ready, failureMessage)` record. Its entire prior body —
+magnet resolution, guarded add, Real-Debrid/AllDebrid cleanup, PikPak processing/
+failure messages and fallback catches — is byte-for-byte unchanged. The extracted
+readiness call introduces an awaited boundary, after which the UI rechecks ownership
+following loader dismissal. Existing actual route-ownership cases and the new
+retirement tests pass. Descriptor construction remains after successful current
+preparation, preserving raw hash/name, stored provider mapping, timestamp and addon
+catalog fields. Save-result and late-success feedback semantics are unchanged.
+
+Baseline **530 Sources tests pass**; affected run **545 pass**, with fifteen new
+cases covering early exits, provider cancellation/configuration absence, view/
+session retirement during picking and acquisition, loader-before-save ordering,
+retirement caused by dismissal, unexpected preparation failure, specific/fallback
+feedback, save rejection and late successful save. The first analyzer found one
+multiline guard needing braces; that formatting issue is corrected. **168 migrated
+files** pass architecture checks. The legacy service shrinks **8,614 → 8,607 lines**;
+all code outside the binding block/import remains byte-for-byte unchanged.
+
+Receipts under `.git/refactor-evidence/phase4c/`: `torrent-binding-ui-before.txt`,
+`torrent-binding-ui-after.txt`, `analyze-torrent-binding-ui.txt`,
+`analyze-torrent-binding-ui-final.txt`, `torrent-binding-ui-original.dart`,
+`torrent-binding-ui-wrapper-format.dart` and `torrent-binding-ui-review.txt`.
+Full-suite/final analyzer results follow below. Shared provider-picker/native and
+preparation internals still need their recorded boundary review; this extraction
+does not close phase 4C or the remaining migration/native/performance/CI gates.
+
+Full suite: **8,200 successes / the same 51 failures / 20 skips**. Every prior
+checkpoint identity/outcome is preserved, with exactly fifteen new passing
+interaction cases. Original-baseline comparison finds no new failures, missing
+tests or new skips. Receipts: `full-torrent-binding-ui.jsonl`,
+`full-torrent-binding-ui-comparison.txt` and
+`full-torrent-binding-ui-previous-checkpoint.txt`. Final analyzer remains **863**
+with no added identities (`torrent-binding-ui-analyzer-comparison.txt`). Final
+diff/format/architecture checks pass; no allowances changed. Remaining migration
+gates stay open.
