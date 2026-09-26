@@ -1600,3 +1600,29 @@ This leaf extraction uses the immediately preceding full-suite checkpoint
 for this slice. This is automated evidence only, not native input/visual parity.
 Phase 4C binding presentation/provider/native preparation, remaining UI/focus,
 later phases, device/performance checks and final CI remain open.
+
+
+### Phase 4C — Pending-pill shape-manifest follow-up
+
+The next slice's broader baseline exposed a missed source-text guard in the
+pending-pill extraction: `the sweep is still substantial` counted 489 calls in
+its registered files because the moved `app.shape.brPill` was outside that list.
+This test passed in the original baseline and preceding full-suite checkpoint,
+so it was a regression in test-location coverage, not an accepted baseline
+failure. The previous 236-test affected group did not include this guard.
+
+Added the extracted `source_pending_results_pill.dart` to `kShapeResidue` with
+zero bare radii. The guard again counts **490 calls**, its existing threshold
+is unchanged, and the extracted component is now covered by the per-file bare
+radius ratchet. An audit found no other unregistered feature files containing
+`app.shape` calls. The original-baseline `no swept file grows a new bare radius`
+failure remains; the other two manifest checks pass. Receipts:
+`.git/refactor-evidence/phase4c/headers-before.txt` and
+`pending-pill-shape-repair.txt`. No application code or failure allowance changed.
+
+The confirming full suite has **7,809 successes**, the same **51 baseline
+failures** (22 failure/29 error), and **20 skips**. All previous row-action
+checkpoint outcomes are preserved; all nine pending-pill tests pass. No initial
+baseline identity is newly failing, missing or skipped. Receipts:
+`.git/refactor-evidence/phase4c/full-pending-pill.jsonl`,
+`full-pending-pill-comparison.txt`, `pending-pill-previous-checkpoint.txt`.
