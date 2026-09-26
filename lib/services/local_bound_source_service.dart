@@ -8,6 +8,9 @@ import 'package:flutter/services.dart';
 import '../features/sources/data/local_source_file_rules.dart';
 import '../features/sources/data/local_source_files.dart';
 import '../features/sources/models/local_source_file.dart';
+import '../features/sources/presentation/local_movie_pick_mode_sheet.dart';
+import '../features/sources/presentation/local_source_choice_dialogs.dart';
+import '../features/sources/presentation/local_series_folder_help.dart';
 import '../models/series_source.dart';
 import '../utils/file_utils.dart';
 import 'android_local_source_service.dart';
@@ -44,82 +47,16 @@ class LocalBoundSourceService {
       return null;
     }
 
-    final mode = await showModalBottomSheet<_LocalPickMode>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: const Color(0xFF1E293B),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
-      ),
-      builder: (sheetContext) {
-        return SafeArea(
-          child: SingleChildScrollView(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    width: 36,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: Colors.white24,
-                      borderRadius: BorderRadius.circular(99),
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-                  const Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      'Local Movie Source',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  const Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      'Choose a video file or browse a folder.',
-                      style: TextStyle(color: Colors.white54, fontSize: 12),
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-                  _LocalPickTile(
-                    autofocus: true,
-                    icon: Icons.movie_creation_outlined,
-                    color: const Color(0xFF34D399),
-                    title: 'Pick Video File',
-                    subtitle: 'Bind one local movie file',
-                    onTap: () =>
-                        Navigator.of(sheetContext).pop(_LocalPickMode.file),
-                  ),
-                  const SizedBox(height: 8),
-                  _LocalPickTile(
-                    icon: Icons.folder_open_rounded,
-                    color: const Color(0xFF60A5FA),
-                    title: 'Pick Folder',
-                    subtitle: Platform.isAndroid
-                        ? 'Choose a movie file inside a folder'
-                        : 'Match by filename, then use the largest match',
-                    onTap: () =>
-                        Navigator.of(sheetContext).pop(_LocalPickMode.folder),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        );
-      },
+    final mode = await showLocalMoviePickMode(
+      context,
+      androidFolderSelection: Platform.isAndroid,
     );
 
     if (mode == null || !context.mounted) return null;
 
     return switch (mode) {
-      _LocalPickMode.file => _pickFile(context),
-      _LocalPickMode.folder => _pickFromFolder(
+      LocalMoviePickMode.file => _pickFile(context),
+      LocalMoviePickMode.folder => _pickFromFolder(
         context,
         title: title,
         year: year,
@@ -225,7 +162,7 @@ class LocalBoundSourceService {
     }
 
     if (!context.mounted) return null;
-    final selected = await _showManualFileChooser(context, candidates);
+    final selected = await showLocalFileChoice(context, candidates);
     return selected == null ? null : localSourceFromFile(selected.file);
   }
 
@@ -394,7 +331,7 @@ class LocalBoundSourceService {
     final matches = await matchingLocalSeriesFolders(pickedPath, title: title);
     if (matches.isEmpty) {
       if (context.mounted) {
-        await _showSeriesFolderExpectationDialog(
+        await showLocalSeriesFolderHelp(
           context,
           title: title,
           pickedFolderName: localPathName(pickedPath),
@@ -408,241 +345,12 @@ class LocalBoundSourceService {
     }
 
     if (!context.mounted) return null;
-    final selected = await _showSeriesFolderChooser(
+    final selected = await showLocalSeriesFolderChoice(
       context,
       title: title,
       candidates: matches,
     );
     return selected?.directory;
-  }
-
-  static Future<void> _showSeriesFolderExpectationDialog(
-    BuildContext context, {
-    required String title,
-    required String pickedFolderName,
-  }) {
-    return showDialog<void>(
-      context: context,
-      builder: (dialogContext) {
-        return AlertDialog(
-          backgroundColor: const Color(0xFF1E293B),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-          title: const Text(
-            'Choose the Show Folder',
-            style: TextStyle(fontWeight: FontWeight.w700),
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Select the folder named like "$title".',
-                style: const TextStyle(color: Colors.white70),
-              ),
-              const SizedBox(height: 12),
-              _ExpectationRow(
-                label: 'Good',
-                value: 'TV Shows/$title/',
-                color: Color(0xFF34D399),
-              ),
-              const SizedBox(height: 6),
-              _ExpectationRow(
-                label: 'Not',
-                value: pickedFolderName.isEmpty
-                    ? 'TV Shows/'
-                    : '$pickedFolderName/',
-                color: Color(0xFFF87171),
-              ),
-              const SizedBox(height: 12),
-              const Text(
-                'Episode files inside can still be named S01E01.mkv, S01E02.mkv, and so on.',
-                style: TextStyle(color: Colors.white54, fontSize: 12),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(),
-              child: const Text(
-                'OK',
-                style: TextStyle(color: Color(0xFF60A5FA)),
-              ),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  static Future<LocalSeriesFolderCandidate?> _showSeriesFolderChooser(
-    BuildContext context, {
-    required String title,
-    required List<LocalSeriesFolderCandidate> candidates,
-  }) {
-    final visibleCandidates = candidates.take(40).toList();
-    return showDialog<LocalSeriesFolderCandidate>(
-      context: context,
-      builder: (dialogContext) {
-        return Dialog(
-          backgroundColor: const Color(0xFF1E293B),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 520, maxHeight: 560),
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Choose Series Folder',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Multiple folders matched "$title".',
-                    style: const TextStyle(color: Colors.white54, fontSize: 12),
-                  ),
-                  const SizedBox(height: 12),
-                  Flexible(
-                    child: ListView.separated(
-                      shrinkWrap: true,
-                      itemCount: visibleCandidates.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: 6),
-                      itemBuilder: (context, index) {
-                        final candidate = visibleCandidates[index];
-                        return ListTile(
-                          dense: true,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          tileColor: Colors.white.withValues(alpha: 0.05),
-                          leading: const Icon(
-                            Icons.folder_open_rounded,
-                            color: Color(0xFF60A5FA),
-                          ),
-                          title: Text(
-                            candidate.folderName,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          subtitle: Text(
-                            candidate.directory.path,
-                            style: const TextStyle(color: Colors.white54),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          onTap: () =>
-                              Navigator.of(dialogContext).pop(candidate),
-                        );
-                      },
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: TextButton(
-                      onPressed: () => Navigator.of(dialogContext).pop(),
-                      child: const Text(
-                        'Cancel',
-                        style: TextStyle(color: Colors.white54),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  static Future<LocalVideoCandidate?> _showManualFileChooser(
-    BuildContext context,
-    List<LocalVideoCandidate> candidates,
-  ) {
-    final visibleCandidates = candidates.take(80).toList();
-    return showDialog<LocalVideoCandidate>(
-      context: context,
-      builder: (dialogContext) {
-        return Dialog(
-          backgroundColor: const Color(0xFF1E293B),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 520, maxHeight: 560),
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Choose Local File',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
-                  ),
-                  const SizedBox(height: 4),
-                  const Text(
-                    'No confident filename match was found.',
-                    style: TextStyle(color: Colors.white54, fontSize: 12),
-                  ),
-                  const SizedBox(height: 12),
-                  Flexible(
-                    child: ListView.separated(
-                      shrinkWrap: true,
-                      itemCount: visibleCandidates.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: 6),
-                      itemBuilder: (context, index) {
-                        final candidate = visibleCandidates[index];
-                        return ListTile(
-                          dense: true,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          tileColor: Colors.white.withValues(alpha: 0.05),
-                          leading: const Icon(
-                            Icons.movie_outlined,
-                            color: Color(0xFF60A5FA),
-                          ),
-                          title: Text(
-                            candidate.fileName,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          subtitle: Text(
-                            _formatSize(candidate.sizeBytes),
-                            style: const TextStyle(color: Colors.white54),
-                          ),
-                          onTap: () =>
-                              Navigator.of(dialogContext).pop(candidate),
-                        );
-                      },
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: TextButton(
-                      onPressed: () => Navigator.of(dialogContext).pop(),
-                      child: const Text(
-                        'Cancel',
-                        style: TextStyle(color: Colors.white54),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        );
-      },
-    );
   }
 
   static void _showSnack(
@@ -660,91 +368,4 @@ class LocalBoundSourceService {
     );
   }
 
-  static String _formatSize(int bytes) {
-    if (bytes <= 0) return 'Unknown size';
-    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
-    var size = bytes.toDouble();
-    var unit = 0;
-    while (size >= 1024 && unit < units.length - 1) {
-      size /= 1024;
-      unit++;
-    }
-    final decimals = unit <= 1 ? 0 : 1;
-    return '${size.toStringAsFixed(decimals)} ${units[unit]}';
-  }
-
-}
-
-enum _LocalPickMode { file, folder }
-
-class _ExpectationRow extends StatelessWidget {
-  final String label;
-  final String value;
-  final Color color;
-
-  const _ExpectationRow({
-    required this.label,
-    required this.value,
-    required this.color,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        SizedBox(
-          width: 44,
-          child: Text(
-            label,
-            style: TextStyle(
-              color: color,
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ),
-        Expanded(
-          child: Text(
-            value,
-            style: const TextStyle(color: Colors.white70, fontSize: 12),
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _LocalPickTile extends StatelessWidget {
-  final bool autofocus;
-  final IconData icon;
-  final Color color;
-  final String title;
-  final String subtitle;
-  final VoidCallback onTap;
-
-  const _LocalPickTile({
-    this.autofocus = false,
-    required this.icon,
-    required this.color,
-    required this.title,
-    required this.subtitle,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return ListTile(
-      autofocus: autofocus,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      tileColor: Colors.white.withValues(alpha: 0.05),
-      leading: Icon(icon, color: color),
-      title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
-      subtitle: Text(subtitle, style: const TextStyle(color: Colors.white54)),
-      trailing: const Icon(Icons.chevron_right_rounded, color: Colors.white38),
-      onTap: onTap,
-    );
-  }
 }

@@ -2671,3 +2671,59 @@ Receipts: `.git/refactor-evidence/phase4c/full-local-files.jsonl`,
 directory. The historical helper's nonzero result is unchanged; no failure
 allowances were modified. Phase 4C remains open for local-picker continuation/UI
 ownership and the remaining Sources work, followed by the original later phases.
+
+
+### Phase 4C — local picker presentation components
+
+Moved the local movie mode sheet to `local_movie_pick_mode_sheet.dart` (**108
+lines**), file/series-folder candidate dialogs and their size label to
+`local_source_choice_dialogs.dart` (**179 lines**), and series-folder guidance to
+`local_series_folder_help.dart` (**96 lines**). They accept typed display inputs,
+render the original widgets and return the original selection/cancellation values.
+They import no services, storage, native APIs or Riverpod. The movie sheet receives
+its Android wording flag from the existing platform decision in the caller.
+No application state or new abstraction was introduced for these modal functions.
+
+The actual picker calls these functions; its replaced builders, private widgets,
+mode enum and size formatter were removed. The legacy coordinator shrank from
+**750 to 371 lines**. Its remaining responsibilities include native/Android picking,
+Android-specific dialogs, filesystem action orchestration and snackbars; its live
+action continuation review remains open. This is not a claim that all picker UI
+or native behavior is migrated merely because the file is now smaller.
+
+Preserved original context forwarding, modal options, focus/autofocus, shapes,
+colors, padding, labels, movie file/folder outcomes, 40-folder and 80-file display
+limits, ordering and selected candidate identity. Existing unlocalized copy and
+fixed legacy styling remain under the unchanged-UI migration exception. Both
+candidate lists still copy the limited input for presentation without mutating the
+source inventory. Cancellation and Back retain their prior results.
+
+**Nine component tests pass**, covering directional movie selection and Android/
+desktop wording, file/Back results, candidate limits and identity, size labels,
+empty-list cancellation and guidance examples/dismissal. **Three new real picker
+integration cases** exercise unmatched movie choice, multiple series-folder choice
+and no-match guidance using temporary files with only the native directory plugin
+substituted. Together with the two earlier picker tests, all **five pass** against
+both the unchanged service restored temporarily for comparison and the extracted
+implementation. Existing narrow/landscape large-text picker checks also pass.
+Review compared all **seven moved UI/helper bodies** with the original after
+formatting, renamed symbols and the explicit platform argument: all match.
+
+Affected baseline **339 passes**; final **351 passes**, no failures. Analyzer
+retains **863 diagnostics**, with no new identities. Size/import checks pass
+**120 migrated files**; new files/changed legacy methods are formatted and diff
+checks pass. Receipts under `.git/refactor-evidence/phase4c/`:
+`local-dialogs-before.txt`, `local-dialogs-tests.txt`,
+`local-dialogs-integration-baseline.txt`, `local-dialogs-integration.txt`,
+`local-dialogs-focused.txt`, `local-dialogs-extraction-review.txt`,
+`analyze-local-dialogs.txt` and `local-dialogs-analyzer-comparison.txt`.
+Native/device and later migration/performance/CI gates remain open.
+
+Full-suite review: **7,983 successes / the same 51 failures / 20 skips**. Every
+previous checkpoint outcome is unchanged; all **12 new cases** pass. The original
+baseline comparison finds no new failures, missing tests or new skips. Receipts:
+`.git/refactor-evidence/phase4c/full-local-dialogs.jsonl`,
+`full-local-dialogs-comparison.txt` and `local-dialogs-previous-checkpoint.txt` in
+the same directory. The historical helper remains nonzero for the unchanged
+existing failures; its allowances were not modified. Phase 4C remains in progress
+for picker continuation/native ownership and the remaining Sources work.

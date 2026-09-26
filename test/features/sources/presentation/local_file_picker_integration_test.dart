@@ -114,4 +114,109 @@ void main() {
       await tester.pumpWidget(const SizedBox());
     });
   }
+
+  for (final scenario in ['movie_choice', 'series_choice', 'series_help']) {
+    testWidgets('local picker delegates $scenario to its presentation dialog', (
+      tester,
+    ) async {
+      final originalPicker = FilePicker.platform;
+      late Directory root;
+      await tester.runAsync(() async {
+        root = await Directory.systemTemp.createTemp('picker-dialog-fixture-');
+        if (scenario == 'movie_choice') {
+          await File('${root.path}/Unmatched.mkv').writeAsBytes([1, 2]);
+        } else if (scenario == 'series_choice') {
+          for (final name in ['Office A', 'Office B']) {
+            final folder = await Directory('${root.path}/$name').create();
+            await File(
+              '${folder.path}/The.Office.S01E01.mkv',
+            ).writeAsBytes([1, 2]);
+          }
+        } else {
+          await Directory('${root.path}/Unrelated').create();
+        }
+        FilePicker.platform = DirectoryPicker(root.path);
+      });
+      addTearDown(() async {
+        FilePicker.platform = originalPicker;
+        await root.delete(recursive: true);
+      });
+      late BuildContext page;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) {
+              page = context;
+              return const Scaffold();
+            },
+          ),
+        ),
+      );
+      SeriesSource? result;
+      Object? error;
+      var finished = false;
+      await tester.runAsync(() async {
+        final pending = scenario == 'movie_choice'
+            ? LocalBoundSourceService.pickMovieSource(page, title: 'Arrival')
+            : LocalBoundSourceService.pickSeriesSource(
+                page,
+                title: 'The Office',
+              );
+        unawaited(
+          pending.then(
+            (source) {
+              result = source;
+              finished = true;
+            },
+            onError: (Object caught) {
+              error = caught;
+              finished = true;
+            },
+          ),
+        );
+      });
+      if (scenario == 'movie_choice') {
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Pick Folder'));
+      }
+      final action = switch (scenario) {
+        'movie_choice' => 'Unmatched.mkv',
+        'series_choice' => 'Office B',
+        _ => 'OK',
+      };
+      for (
+        var attempt = 0;
+        attempt < 100 && find.text(action).evaluate().isEmpty;
+        attempt++
+      ) {
+        await tester.pump(const Duration(milliseconds: 20));
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 10)),
+        );
+      }
+      expect(find.text(action), findsOneWidget);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(action));
+      for (var attempt = 0; attempt < 100 && !finished; attempt++) {
+        await tester.pump(const Duration(milliseconds: 20));
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 10)),
+        );
+      }
+      expect(finished, isTrue);
+      expect(error, isNull);
+      if (scenario == 'series_help') {
+        expect(result, isNull);
+      } else {
+        expect(
+          result?.localPath,
+          '${root.path}/${scenario == 'movie_choice' ? 'Unmatched.mkv' : 'Office B'}',
+        );
+      }
+      await tester.pumpAndSettle();
+      expect(Navigator.of(page).canPop(), isFalse);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox());
+    });
+  }
 }
