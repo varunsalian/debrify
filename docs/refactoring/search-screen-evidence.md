@@ -100,3 +100,26 @@ but observe one; the compact-hero failure expects immediate resolution but sees 
 request. These are pre-extraction behavior mismatches, not sorting/filtering
 failures, and must be revisited when those paths migrate. Existing matcher and
 streaming tests pass. No first-policy failure prevents the bounded extraction.
+
+## Phase 1, slice 1: keyword sorting
+
+Destination: `lib/features/search/application/keyword_sort.dart`. The production
+recompute and sort dialog now call this policy; `_sortKeyword` and `_naturalAscFor`
+were removed from the screen. Sort field strings, relevance/unknown-field order,
+case-insensitive display titles, directions and comparator ties remain unchanged.
+No new controller, dependency, mutable state owner or persistence was introduced.
+
+- 17 policy tests cover directions, relevance/fallback, displayed titles, ties,
+  empty/singleton lists, defaults and non-mutation. Combined with streaming,
+  quality-tier, dynamic-range and filter-ladder tests: **93 passing**.
+- Full `flutter analyze --no-pub`: the same 865 diagnostic identities and
+  multiplicities as baseline after ignoring location shifts; none added/removed.
+- `python3 dev/tool/check_search_architecture.py`: one migrated source passes.
+  Nine temporary positive/negative fixtures verify size, UI/framework imports,
+  handwritten parts and permitted presentation keyboard imports. CI wiring remains
+  phase 8. This lexical check supplements responsibility review.
+- New sources/tests are Dart-formatted; `git diff --check` passes. Legacy screen
+  formatting is retained outside the edited fragments to avoid unrelated churn.
+- Review: the actual production call is wired, both duplicate methods are gone,
+  focus syncing remains in presentation, and sort output still copies the input.
+  No new or retired legacy structural exceptions. Next: filter/provider policies.

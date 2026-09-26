@@ -443,7 +443,7 @@ exceptions at each phase; retire resolved ones.
 | Phase | Status | Revision, checks, and remaining work |
 | --- | --- | --- |
 | 0: Baseline | Automated baseline reviewed; device checks pending | `aa3d5643`: 7,387 pass / 51 fail / 20 skipped; 865 analyzer diagnostics; ownership/behavior inventory recorded in implementation evidence |
-| 1: Keyword policies | Not started | First slice: keyword sorting |
+| 1: Keyword policies | In progress | Sorting extracted and reviewed: 93 affected tests pass, no new analyzer identities; next filtering/provider reconciliation |
 | 2: Leaf presentation | Not started | Choose one component after dependency inspection |
 | 3: Lists/suggestions | Not started | Install/wire Riverpod with first consumer; preserve title-search service |
 | 4A: Catalog search | Not started | Fan-out/publication, source settings, clear/restore, See All handoff |

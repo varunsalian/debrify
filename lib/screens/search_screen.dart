@@ -1,3 +1,4 @@
+import '../features/search/application/keyword_sort.dart';
 import '../services/native_series_metadata_service.dart';
 import '../models/media_identity.dart';
 import '../widgets/random_playback_dialog.dart';
@@ -12920,7 +12921,11 @@ class _SearchScreenState extends State<SearchScreen>
     }
     // 4) Quality / rip-source / language attribute filters.
     final filtered = TorrentFilterMatcher.apply(base.toList(), _kwFilters);
-    final sorted = _sortKeyword(filtered);
+    final sorted = sortKeywordResults(
+      filtered,
+      field: _kwSort,
+      ascending: _kwSortAsc,
+    );
     _syncKwNodes(sorted.length);
     _syncKwTabNodes();
     setState(() => _kwResults = sorted);
@@ -12972,40 +12977,6 @@ class _SearchScreenState extends State<SearchScreen>
       });
     }
   }
-
-  List<Torrent> _sortKeyword(List<Torrent> list) {
-    final l = [...list];
-    // Direction multiplier: descending by default (asc flips it). 'name' compares
-    // case-insensitively; the rest are numeric.
-    final int dir = _kwSortAsc ? 1 : -1;
-    switch (_kwSort) {
-      case 'seeders':
-        l.sort((a, b) => dir * a.seeders.compareTo(b.seeders));
-        break;
-      case 'size':
-        l.sort((a, b) => dir * a.sizeBytes.compareTo(b.sizeBytes));
-        break;
-      case 'date':
-        l.sort((a, b) => dir * a.createdUnix.compareTo(b.createdUnix));
-        break;
-      case 'name':
-        l.sort(
-          (a, b) =>
-              dir *
-              a.displayTitle.toLowerCase().compareTo(
-                b.displayTitle.toLowerCase(),
-              ),
-        );
-        break;
-      default: // 'relevance' — keep the engine (seeder-deduped) order
-        break;
-    }
-    return l;
-  }
-
-  /// Natural default direction for a sort field: names read A→Z (ascending);
-  /// seeders/size/date read most/largest/newest first (descending).
-  bool _naturalAscFor(String field) => field == 'name';
 
   /// Additive cache-check against TorBox/Premiumize (the only providers that
   /// support it), stamping TB/PM badges onto [torrents]' rows. Called per
@@ -13300,7 +13271,7 @@ class _SearchScreenState extends State<SearchScreen>
             void applyField(String value) {
               setLocal(() {
                 _kwSort = value;
-                _kwSortAsc = _naturalAscFor(value);
+                _kwSortAsc = keywordSortAscendingByDefault(value);
               });
               _recomputeKeyword();
             }
