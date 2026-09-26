@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../models/cinema_source_provider.dart';
 import '../models/play_loader_art.dart';
 import '../theme/app_theme_scope.dart';
 import '../utils/tv_keys.dart';
 import 'recoverable_network_image.dart';
+
+export '../models/cinema_source_provider.dart';
 
 /// Use the available pane size, rather than the physical display: a tablet in
 /// split view and a landscape phone still need a usable single-column list.
@@ -16,25 +19,6 @@ bool useCinemaSourcesLayout(
     size.hasBoundedHeight &&
     size.maxWidth >= (isTelevision ? 600 : 720) &&
     (isTelevision || size.maxHeight >= 420);
-
-class CinemaSourceProvider {
-  const CinemaSourceProvider({
-    required this.id,
-    required this.label,
-    required this.count,
-    this.failed = false,
-    this.loading = false,
-    this.message,
-  });
-
-  /// Null is the all-sources group. Other ids retain the search's own identity.
-  final String? id;
-  final String label;
-  final int count;
-  final bool failed;
-  final bool loading;
-  final String? message;
-}
 
 /// A presentation shell for the existing source list. Matching, filtering,
 /// playback, and badge layout remain owned by the search and its source rows.

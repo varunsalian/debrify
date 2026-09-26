@@ -1103,61 +1103,17 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
     );
   }
 
-  List<CinemaSourceProvider> get _cinemaProviders {
-    final counts = <String, int>{};
-    final names = <String, String>{};
-    for (final status in _addonStatuses) {
-      names.putIfAbsent(status.sourceKey, () => status.name);
-    }
-    for (final t in _torrents) {
-      final key = SourcePriority.keyForSource(
-        t.source,
-        aliases: _sourceAliases,
-      );
-      counts[key] = (counts[key] ?? 0) + 1;
-      names.putIfAbsent(
-        key,
-        () => t.addonDisplayName ?? _providerLabel(t.source),
-      );
-    }
-    for (final source in _iptvSources) {
-      names[source.key] = 'IPTV · ${source.name}';
-    }
-    final iptvMessages = {
-      for (final source in _iptvSources)
-        if (source.retryableFailure) source.key: source.message,
-    };
-    final keys = SourcePriority.orderBy(
-      names.keys.toList()..sort(),
-      (key) => key,
-      _sourcePriority,
-      aliases: _sourceAliases,
-    );
-    return [
-      CinemaSourceProvider(
-        id: null,
-        label: 'All sources',
-        count: _torrents.length,
-      ),
-      for (final key in keys)
-        CinemaSourceProvider(
-          id: key,
-          label: names[key]!.isEmpty ? 'Other sources' : names[key]!,
-          count: counts[key] ?? 0,
-          message: iptvMessages[key] ?? _mediaServerMessages[key],
-          failed: _addonStatuses.any((s) => s.sourceKey == key && s.failed),
-          loading: _addonStatuses.any(
-            (s) => s.sourceKey == key && _retryingAddons.contains(s.requestKey),
-          ),
-        ),
-    ];
-  }
+  List<CinemaSourceProvider> get _cinemaProviders => projectCinemaSourceProviders(
+    torrents: _torrents,
+    statuses: _addonStatuses,
+    iptv: _iptvSources,
+    priority: _sourcePriority,
+    aliases: _sourceAliases,
+    retrying: _retryingAddons,
+  );
 
-  Map<String, String> get _mediaServerMessages => {
-    for (final status in _addonStatuses)
-      if (status.sourceKey.startsWith('mediaserver:') && status.error != null)
-        status.sourceKey: status.error!,
-  };
+  Map<String, String> get _mediaServerMessages =>
+      sourceMediaServerMessages(_addonStatuses);
 
   void _selectCinemaProvider(String? key) {
     _resultsController.selectProvider(key);
@@ -1538,9 +1494,6 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
     _resultsController.setFilters(result);
     _rebuildVisible();
   }
-
-  String _providerLabel(String source) =>
-      sourceProviderLabel(source, iptv: _iptvSources);
 
   /// Redesigned result row (flag-gated) — a [SourceRow] with format-logo badges
   /// for detail-screen Sources, or a compact quality-tag row for keyword search

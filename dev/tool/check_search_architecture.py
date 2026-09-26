@@ -18,6 +18,7 @@ EXTRACTED_ELSEWHERE: tuple[str, ...] = (
     "lib/ui/core/see_all_link.dart",
     "lib/ui/core/source_metadata_labels.dart",
     "lib/models/series_source.dart",
+    "lib/models/cinema_source_provider.dart",
 )
 GENERATED_SUFFIXES = (".g.dart", ".freezed.dart")
 DIRECTIVES = re.compile(r"^\s*(?:import|export)\s+([^;]+);", re.MULTILINE)

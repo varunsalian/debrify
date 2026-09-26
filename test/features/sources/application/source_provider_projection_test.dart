@@ -131,4 +131,95 @@ void main() {
       'IPTV · First',
     );
   });
+  test(
+    'cinema keeps first labels, grouped counts, zero groups and priority order',
+    () {
+      final result = projectCinemaSourceProviders(
+        torrents: [
+          row('z', label: 'Row Z'),
+          row('a', label: 'Row A'),
+        ],
+        statuses: [
+          status('engine:group', name: ''),
+          status('engine:group', name: 'Later'),
+          status('stremio:zero', count: 2),
+        ],
+        iptv: [],
+        priority: ['stremio:zero'],
+        aliases: {'z': 'engine:group', 'a': 'engine:group'},
+        retrying: {},
+      );
+      expect(result.map((entry) => entry.id), [
+        null,
+        'stremio:zero',
+        'engine:group',
+      ]);
+      expect(result.map((entry) => entry.count), [2, 0, 2]);
+      expect(result.last.label, 'Other sources');
+      expect(result.first.label, 'All sources');
+      expect(() => result.clear(), throwsUnsupportedError);
+    },
+  );
+
+  test(
+    'cinema combines status flags and retains last nonnull server error',
+    () {
+      final statuses = [
+        status('mediaserver:one', config: 'first', error: 'First error'),
+        status('mediaserver:one', config: 'second', error: 'Last error'),
+        status('mediaserver:one', config: 'third', count: 1),
+        status('stremio:other', error: 'Not a server message'),
+      ];
+      final result = projectCinemaSourceProviders(
+        torrents: [],
+        statuses: statuses,
+        iptv: [],
+        priority: [],
+        aliases: {},
+        retrying: {'first'},
+      );
+      final server = result.singleWhere(
+        (entry) => entry.id == 'mediaserver:one',
+      );
+      expect(server.failed, isTrue);
+      expect(server.loading, isTrue);
+      expect(server.message, 'Last error');
+      expect(
+        result.singleWhere((entry) => entry.id == 'stremio:other').message,
+        isNull,
+      );
+      final messages = sourceMediaServerMessages(statuses);
+      expect(messages, {'mediaserver:one': 'Last error'});
+      expect(() => messages.clear(), throwsUnsupportedError);
+    },
+  );
+
+  test(
+    'cinema IPTV overrides labels and publishes only retryable messages',
+    () {
+      final result = projectCinemaSourceProviders(
+        torrents: [row('iptv:one', label: 'Row')],
+        statuses: [status('iptv:one', name: 'Status')],
+        iptv: [
+          const IptvSourceResult(
+            'iptv:one',
+            'Catalog',
+            'Unavailable',
+            [],
+            retryableFailure: true,
+          ),
+          const IptvSourceResult('iptv:two', 'Ready', 'No message', []),
+        ],
+        priority: [],
+        aliases: {},
+        retrying: {},
+      );
+      expect(result[1].label, 'IPTV · Catalog');
+      expect(result[1].count, 1);
+      expect(result[1].message, 'Unavailable');
+      expect(result[1].failed, isFalse);
+      expect(result[2].count, 0);
+      expect(result[2].message, isNull);
+    },
+  );
 }

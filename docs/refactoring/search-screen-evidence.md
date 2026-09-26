@@ -1884,3 +1884,48 @@ The latest full-suite checkpoint remains `full-row-labels.jsonl` (7,836 successe
 same 51 failures/20 skips); this slice uses affected checks. Cinema provider
 projection, remaining Sources UI/focus, manual binding preparation and later
 phases/native/performance/CI gates remain unfinished.
+
+
+### Phase 4C — Cinema provider summaries
+
+The actual cinema rail now consumes `projectCinemaSourceProviders`; media-server
+message collection is also a pure operation. Both live alongside the compact
+strip projection in the 177-line application file. The existing 18-line
+`CinemaSourceProvider` class moved unchanged into shared models, registered in
+the architecture check and re-exported by the old widget import path. A direct
+comparison confirms its class body is identical. The application layer imports
+the model rather than a widget; no duplicate summary DTO or new state owner was
+introduced. The existing layout is otherwise unchanged (642 lines).
+
+Review retains cinema's distinct semantics: first status label wins, all matching
+rows contribute to alias-group counts, zero-count groups remain, keys are sorted
+before priority ordering, empty labels become Other sources, and All sources
+counts every row. Loading/failure aggregate all matching configurations. IPTV
+overrides labels and supplies messages only for retryable failures; media-server
+errors retain the last nonnull value. Results and message maps are immutable.
+The screen no longer directly imports SourcePriority. Sources is **1,979 lines**;
+parent **20,164**. The existing legacy status-type/priority transitive dependency
+exception remains for the final boundary audit.
+
+Affected baseline: **236 passes**. Final Sources/cinema group: **239 passes**.
+Three new policy cases cover grouping/order/zero counts, first-label precedence,
+combined flags/exact request identity, server error precedence, IPTV overrides
+and immutable output. Existing production cinema and narrow-strip tests pass.
+Final analyzer identities remain **864**, with no additions after removing the
+now-unused priority import. Architecture checks cover **106 migrated files**.
+New/migrated model and policy/test files are formatted; diff checks pass. Receipts
+under `.git/refactor-evidence/phase4c/`: `cinema-projection-before.txt`,
+`cinema-projection-focused.txt`, `analyze-cinema-projection.txt` (intermediate
+unused import), `analyze-cinema-projection-final.txt`,
+`cinema-projection-final-analyzer-comparison.txt`.
+
+Full-suite confirmation: **7,844 successes**, the same **51 baseline failures**
+(22 failure/29 error), and **20 skips**. No original-baseline identity is newly
+failing, missing or skipped. Every previous row-label checkpoint outcome is
+preserved, with **eight new passing tests** from compact/cinema projections.
+The allowance is unchanged and the helper still exits 1 for pre-existing
+failures. Receipts: `.git/refactor-evidence/phase4c/full-cinema-projection.jsonl`,
+`full-cinema-projection-comparison.txt`,
+`cinema-projection-previous-checkpoint.txt`.
+Remaining Sources UI/focus ownership and manual binding preparation, later
+phases, native/performance verification and final CI remain incomplete.
