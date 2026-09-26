@@ -3788,3 +3788,54 @@ Receipts: `full-retry-owner.jsonl`, `full-retry-owner-comparison.txt`,
 The baseline helper remains nonzero for existing failures; no allowance changes.
 Changed code/method formatting, diff and architecture checks pass. Phase 4C and
 later/native/performance/CI gates remain in progress.
+
+### Phase 4C — shared pure result-merge policy
+
+Extracted the merge policy into `lib/services/torrent_result_merge.dart` (**60
+lines**, imports only the Torrent model). The Sources application controller now
+calls the pure function directly. The existing TorrentService API delegates and
+retains its original diagnostic for deduplicated/default mode, with no diagnostic
+for preserve-source-order mode. All original callers remain compatible; the
+service's old private merge/tie-break implementations were removed.
+
+This is a shared policy, used by Sources and the legacy service's keyword/IMDb
+search paths. Its existing services location avoids a dependency from shared
+infrastructure into a feature. It is registered in the architecture/size guard.
+The retained legacy torrent service shrinks **1,093 → 1,053 lines** and still
+owns its pre-existing engine/network orchestration; that adapter boundary remains
+part of the final review. Other Stremio/source-priority transitive dependencies
+are not claimed resolved by this direct import change.
+
+Review mechanically matches the original algorithm/comments after unindenting,
+removing `static`, renaming the entry point and retaining the diagnostic in the
+wrapper. Everything before the original merge section is unchanged apart from
+one import. Exact-hash deduplication, highest-seeder/name/source precedence,
+first-winner behavior for exact ties, provider-order concatenation, original
+Torrent identities and mutable new result lists are preserved. No normalization,
+sorting optimization or package upgrade was introduced.
+
+Baseline: **501 affected Sources/streaming-merge tests pass**. After integration:
+**508 pass**, including seven new direct-policy cases for empty input in both
+modes, duplicate/identity retention in Sources order, representative precedence,
+exact ties, raw empty/case-sensitive hash keys and immutable input preservation.
+The existing corpus-based arrival-order, associative and incremental merge cases
+still exercise the compatibility API. The first run's one new-test failure came
+from an untyped empty inner fixture list passed to `List.unmodifiable`; typing
+the outer fixture fixed it without changing production code.
+
+Analyzer remains **863 diagnostics**, no added identities; **144 migrated files**
+pass architecture checks. Receipts under `.git/refactor-evidence/phase4c/`:
+`merge-policy-before.txt`, `merge-policy-after.txt` (fixture failure retained),
+`merge-policy-verified.txt`, `merge-policy-review.txt`, `analyze-merge-policy.txt`
+and `merge-policy-analyzer-comparison.txt`. Phase 4C and later/native/performance/CI
+completion gates remain open.
+
+Full-suite review: **8,141 successes / the same 51 failures / 20 skips**.
+Every previous checkpoint outcome is preserved, and all seven new merge-policy
+cases pass. Original-baseline comparison finds no new failures, missing tests or
+new skips. Receipts: `full-merge-policy.jsonl`,
+`full-merge-policy-comparison.txt`, `full-merge-policy-previous-checkpoint.txt`
+and `merge-policy-wrapper-format.dart`. Changed files and the legacy wrapper are
+normally formatted; architecture/diff checks pass. No failure allowances changed;
+the baseline helper remains nonzero for existing failures. Phase 4C and later
+migration/native/performance/CI gates remain open.

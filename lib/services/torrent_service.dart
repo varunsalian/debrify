@@ -1,3 +1,4 @@
+import 'torrent_result_merge.dart';
 import 'package:flutter/foundation.dart';
 
 import '../models/engine_config/engine_config.dart';
@@ -1038,56 +1039,15 @@ class TorrentService {
     List<List<Torrent>> batches, {
     bool preserveSourceOrder = false,
   }) {
-    if (preserveSourceOrder) {
-      return [for (final batch in batches) ...batch];
-    }
-    return _deduplicateAndSort(batches);
-  }
-
-  /// Total order used for dedupe tie-breaks and sort tie-breaks, so the merge
-  /// is deterministic and INDEPENDENT of batch arrival order — a streaming
-  /// provisional merge and the awaited (nested) final merge can never pick
-  /// different representatives or row orders for the same inputs.
-  static int _mergeTieBreak(Torrent a, Torrent b) {
-    final n = a.name.compareTo(b.name);
-    if (n != 0) return n;
-    return a.source.compareTo(b.source);
-  }
-
-  static List<Torrent> _deduplicateAndSort(List<List<Torrent>> allResults) {
-    final Map<String, Torrent> uniqueTorrents = {};
-
-    for (final torrentList in allResults) {
-      for (final torrent in torrentList) {
-        // Keep the higher-seeded copy of a shared infohash; on equal seeders
-        // pick deterministically (NOT first-seen — that would depend on which
-        // engine happened to answer first).
-        final existing = uniqueTorrents[torrent.infohash];
-        if (existing == null ||
-            torrent.seeders > existing.seeders ||
-            (torrent.seeders == existing.seeders &&
-                _mergeTieBreak(torrent, existing) < 0)) {
-          uniqueTorrents[torrent.infohash] = torrent;
-        }
-      }
-    }
-
-    // Sort by seeders descending with a total-order tiebreak, so equal-seeder
-    // runs (e.g. addon direct streams, all seeders == 0) can't reorder
-    // arbitrarily between two merges of the same inputs.
-    final deduplicatedResults = uniqueTorrents.values.toList();
-    deduplicatedResults.sort((a, b) {
-      final s = b.seeders.compareTo(a.seeders);
-      if (s != 0) return s;
-      final h = a.infohash.compareTo(b.infohash);
-      if (h != 0) return h;
-      return _mergeTieBreak(a, b);
-    });
-
-    debugPrint(
-      'TorrentService: Deduplicated to ${deduplicatedResults.length} unique torrents',
+    final merged = mergeTorrentResults(
+      batches,
+      preserveSourceOrder: preserveSourceOrder,
     );
-
-    return deduplicatedResults;
+    if (!preserveSourceOrder) {
+      debugPrint(
+        'TorrentService: Deduplicated to ${merged.length} unique torrents',
+      );
+    }
+    return merged;
   }
 }

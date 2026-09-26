@@ -3,7 +3,7 @@ import '../../../models/advanced_search_selection.dart';
 import '../../../models/torrent.dart';
 import '../../../services/source_priority.dart';
 import '../../../services/stremio_service.dart';
-import '../../../services/torrent_service.dart';
+import '../../../services/torrent_result_merge.dart';
 import '../data/source_search_repository.dart';
 import '../models/source_search_request.dart';
 import '../models/source_search_state.dart';
@@ -53,7 +53,7 @@ class SourceSearchController extends Notifier<SourceSearchState> {
       ref.mounted && _repository.isCurrent && generation == _generation;
 
   List<Torrent> _merge() => List.unmodifiable(
-    TorrentService.mergeSearchResults(_batches, preserveSourceOrder: true),
+    mergeTorrentResults(_batches, preserveSourceOrder: true),
   );
 
   /// Reset query-owned results and background work before the view replaces
