@@ -636,63 +636,18 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
   /// "+N new sources" pill so rows never reshuffle mid-read.
   void _presentStreaming(List<Torrent> raw, int token) {
     if (!mounted || token != _searchToken) return;
-    final sel = _effectiveSelection;
-    // Ready-to-play addon URLs are the most useful first choice on the Sources
-    // page. Keep the service's shared ranking untouched (Quick Play also uses
-    // it), and invert the transport order only for this view. Explicit toolbar
-    // sorts are applied later and therefore still win.
-    final sourceOrdered = SourcePriority.directAddonLinksFirst(raw);
-    // Series pack/bind post-processing — ported from the old Home
-    // (torrent_search_screen) so this list matches. For a specific episode
-    // (episode drill-down), show EVERYTHING the episode-scoped query returned
-    // — engines + addon streams, torrents and direct links alike, in standard
-    // merge order. No curateEpisodeCandidates here: that filter serves the
-    // auto-play probe path; on this page it dropped direct links lacking an
-    // S/E token in the name and floated season packs, hiding exactly the
-    // per-episode sources the user drilled down for. Pack-NAMED rows the
-    // episode query genuinely returned stay visible by design. Otherwise
-    // (whole series/season, no episode) drop direct-link singles and apply the
-    // requested season scope while retaining provider order. The Sources
-    // browser does not apply an implicit relevance sort.
-    List<Torrent> torrents;
-    if (sel.isSeries && sel.season != null && sel.episode != null) {
-      torrents = sourceOrdered;
-    } else {
-      torrents = filterSourceSeasonPacks(
-        sourceOrdered,
-        selection: sel,
-        bindMode: widget.bindMode,
-        isIptvSource: IptvSourceSearch.owns,
-      );
-    }
-    // Include the fallback before buffering so it counts as a pending row even
-    // when the final engine response adds no other sources.
-    if (!_searching &&
-        _cachedEpisodeSource != null &&
-        _bound.isNotEmpty &&
-        _bound.first.isAddonDirect) {
-      final pin = _bound.first;
-      final candidates =
-          torrents
-              .where(
-                (t) => t.isDirectStream && t.stremioAddonKey == pin.addonKey,
-              )
-              .toList()
-            ..sort(
-              (a, b) => (a.stremioStreamIndex ?? 0).compareTo(
-                b.stremioStreamIndex ?? 0,
-              ),
-            );
-      if (StremioService.selectPinnedDirectStream(
-            candidates,
-            streamKey: pin.streamKey ?? '',
-            streamIndex: pin.streamIndex ?? 0,
-            bingeGroup: pin.bingeGroup,
-          ) ==
-          null) {
-        torrents = [_cachedEpisodeSource!, ...torrents];
-        _logPickerSelection('cached_episode_inserted');
-      }
+    final prepared = prepareSourceResults(
+      raw,
+      selection: _effectiveSelection,
+      bindMode: widget.bindMode,
+      isIptvSource: IptvSourceSearch.owns,
+      searching: _searching,
+      cachedEpisodeSource: _cachedEpisodeSource,
+      bound: _bound,
+    );
+    final torrents = prepared.torrents;
+    if (prepared.cachedEpisodeInserted) {
+      _logPickerSelection('cached_episode_inserted');
     }
     if (_streamFrozen) {
       _pendingTorrents = torrents;

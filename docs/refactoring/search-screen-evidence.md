@@ -1095,3 +1095,49 @@ changes during extraction; the plan explicitly requires separating these before
 the final boundary audit. Phase 4C remains open for search/result state, streamed
 result preparation, pin/local actions and presentation extraction. Later phases,
 native behavior and performance checks are also still pending.
+
+
+### Phase 4C — Streamed Sources result preparation
+
+Moved the production batch-preparation algorithm into the 80-line
+`application/source_result_preparation.dart`. The widget still rejects stale
+search tokens before invoking it and owns pending-result buffering, focus and
+rendering. The policy returns an immutable list with original Torrent identities
+and a flag for the existing cached-row diagnostic. Cached fallback insertion still
+happens before buffering, only on search completion, using only the first saved
+source and the existing exact configuration/binge-group/profile selector.
+Episode-scoped queries still retain all returned rows; series-pack eligibility,
+IPTV binding exceptions and same-addon direct-first order remain unchanged.
+
+The baseline cinema-focus and season-policy suites passed **24 tests**. All Sources
+feature, cinema-focus, priority and season-filter tests passed **166 tests** after
+extraction. Six new preparation cases cover row identity/order/nonmutation,
+completion-only cache fallback, exact configuration and binge-group behavior,
+first-pin eligibility and whole-series IPTV binding. Existing screen tests verify
+pending fallback counts and focus behavior. Analyzer review caught an unnecessary
+non-null assertion made redundant by the new local parameter; removed it without
+changing behavior and reran analysis.
+
+Shared legacy pure selection and model dependencies are recorded in the plan's
+transitive-boundary exception; the direct-import guard alone does not resolve it.
+Sources is **2,847 lines**, parent **20,151**. Formatting and diff checks pass;
+architecture checks cover **88 migrated files**. Receipts:
+`.git/refactor-evidence/phase4c/preparation-before.txt`, `preparation-focused.txt`,
+`analyze-preparation.txt` (intermediate diagnostic) and
+`analyze-preparation-final.txt`.
+
+
+Final analyzer comparison has no additions: **864 diagnostics**, preserving the
+prior checkpoint. The exact full-suite helper completed in **172,948 ms** with
+**7,736 successes**, the same **51 observed baseline failures** (22 failure/29
+error) and **20 skips**. No baseline test is newly failing, missing or skipped;
+every identity from the retry checkpoint retains its outcome, with **15 new
+passing identities** from toolbar projection and preparation. The historical
+allowance file is unchanged and the helper still exits 1 for those pre-existing
+failures. Full receipts: `.git/refactor-evidence/phase4c/full-preparation.jsonl`,
+`full-preparation-comparison.txt`, `preparation-previous-checkpoint.txt` and
+`preparation-analyzer-comparison.txt`.
+
+Phase 4C remains in progress for search/result state, pin/local actions and Sources
+presentation. Later Home/Discover/lifecycle work, native checks, performance
+comparisons and the final architecture/CI audit are not yet complete.
