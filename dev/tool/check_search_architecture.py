@@ -14,7 +14,7 @@ FEATURES = ("search", "home", "discover", "sources")
 # Register extracted application files placed outside the feature directories.
 # The original screen/parts are tracked temporary exceptions in the phase plan;
 # add a retained facade here once its migration is complete.
-EXTRACTED_ELSEWHERE: tuple[str, ...] = ()
+EXTRACTED_ELSEWHERE: tuple[str, ...] = ("lib/ui/core/see_all_link.dart",)
 GENERATED_SUFFIXES = (".g.dart", ".freezed.dart")
 DIRECTIVES = re.compile(r"^\s*(?:import|export)\s+([^;]+);", re.MULTILINE)
 URIS = re.compile(r"['\"]([^'\"]+)['\"]")
@@ -35,6 +35,8 @@ def violations(path: Path) -> list[str]:
 
     layer = next((x for x in ("application", "data", "models", "presentation")
                   if x in path.parts), None)
+    if relative.startswith("lib/ui/"):
+        layer = "presentation"
     for declaration in DIRECTIVES.findall(source):
         for uri in URIS.findall(declaration):
             target = uri

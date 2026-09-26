@@ -152,3 +152,26 @@ The old cache predicate, classification and duplicate filter/count loops are gon
 - Phase 1 exit is satisfied. The screen remains a registered legacy exception
   (20,791 lines); its remaining workflows follow phases 2–8. Manual device and
   native parity are still pending and are not inferred from these pure tests.
+
+## Phase 2, slice 1: leaf presentation
+
+`CategoryTag` now belongs to `features/home/presentation/category_tag.dart` (43
+lines). `SeeAllLink` is in `ui/core/see_all_link.dart` (57 lines): the existing rail
+header uses it across Home and Search catalog rows, so this is demonstrated shared
+UI. Its path is explicitly measured by the architecture checker. Original private
+widget classes were deleted and production calls use the new widgets.
+
+- Review compared the original widget implementations with the extracted files,
+  ignoring formatting, public names and optional keys: no implementation changed.
+  Theme tokens, dimensions, hover behavior, gesture callback and labels match.
+- Three new widget tests cover full/compact labels, one tap dispatch, hover
+  brightening/restoration and no accidental action on hover. Together with search
+  metrics, search/title focus and Home row-focus/shape checks: **26 pass**, the
+  **same three baseline failures** (two unresolved suggestions and shape residue).
+  No new failures, skipped formerly passing tests or removed test identities.
+- Full analyzer identities/multiplicities remain unchanged at 865. Five migrated
+  files pass size/import checks. Shape-manifest coverage follows both moves, with
+  no raised residue allowances or weakened assertions. New files are formatted.
+- The existing English labels retain legacy localization debt as allowed by
+  `AGENTS.md`; no alternative localization mechanism or new wording is introduced.
+  No data/service call moved into these views. Next bounded slice: mode controls.

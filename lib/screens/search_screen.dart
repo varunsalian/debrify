@@ -1,3 +1,5 @@
+import '../features/home/presentation/category_tag.dart';
+import '../ui/core/see_all_link.dart';
 import '../features/search/application/keyword_filter.dart';
 import '../features/search/application/keyword_providers.dart';
 import '../features/search/application/keyword_sort.dart';
@@ -20143,7 +20145,7 @@ class _SearchScreenState extends State<SearchScreen>
             ),
           ),
           if (onSeeAll != null && !tv)
-            _SeeAllLink(onTap: onSeeAll, compact: compact),
+            SeeAllLink(onTap: onSeeAll, compact: compact),
         ],
       ),
     );
@@ -20447,7 +20449,7 @@ class _SearchScreenState extends State<SearchScreen>
     return _buildFavRowShell(
       title: isMovies ? 'Watchlist Movies' : 'Watchlist Series',
       tags: [
-        _CategoryTag(
+        CategoryTag(
           isMovies ? 'Movies' : 'Series',
           icon: Icons.bookmark_rounded,
         ),
@@ -20551,10 +20553,10 @@ class _SearchScreenState extends State<SearchScreen>
     return _buildFavRowShell(
       title: 'Debrify TV',
       tags: const [
-        _CategoryTag('Channels'),
+        CategoryTag('Channels'),
         // Make it explicit this row is the user's STARRED channels, not every
         // channel — otherwise people expect all channels here.
-        _CategoryTag('Favorites', icon: Icons.star_rounded),
+        CategoryTag('Favorites', icon: Icons.star_rounded),
       ],
       itemCount: _tvFavChannels.length,
       cellBuilder: (col, posterW, cellH) {
@@ -20593,8 +20595,8 @@ class _SearchScreenState extends State<SearchScreen>
     return _buildFavRowShell(
       title: 'Stremio TV',
       tags: const [
-        _CategoryTag('Channels'),
-        _CategoryTag('Favorites', icon: Icons.star_rounded),
+        CategoryTag('Channels'),
+        CategoryTag('Favorites', icon: Icons.star_rounded),
       ],
       itemCount: _stvFavChannels.length,
       cellBuilder: (col, posterW, cellH) {
@@ -20632,8 +20634,8 @@ class _SearchScreenState extends State<SearchScreen>
     return _buildFavRowShell(
       title: 'IPTV',
       tags: const [
-        _CategoryTag('Live'),
-        _CategoryTag('Favorites', icon: Icons.star_rounded),
+        CategoryTag('Live'),
+        CategoryTag('Favorites', icon: Icons.star_rounded),
       ],
       itemCount: _iptvFavChannels.length,
       cellBuilder: (col, posterW, cellH) {
@@ -20674,8 +20676,8 @@ class _SearchScreenState extends State<SearchScreen>
     return _buildFavRowShell(
       title: row.title,
       tags: const [
-        _CategoryTag('IPTV'),
-        _CategoryTag('List', icon: Icons.playlist_play_rounded),
+        CategoryTag('IPTV'),
+        CategoryTag('List', icon: Icons.playlist_play_rounded),
       ],
       itemCount: row.channels.length,
       cellBuilder: (col, posterW, cellH) {
@@ -20713,7 +20715,7 @@ class _SearchScreenState extends State<SearchScreen>
     final tv = widget.isTelevision;
     return _buildFavRowShell(
       title: 'Playlist',
-      tags: const [_CategoryTag('Saved')],
+      tags: const [CategoryTag('Saved')],
       itemCount: _playlistItems.length,
       cellBuilder: (col, posterW, cellH) {
         final item = _playlistItems[col];
