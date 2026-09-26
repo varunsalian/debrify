@@ -899,12 +899,13 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
       return;
     }
     await _bindSource(
-      () => IptvSourceSearch.owns(t)
+      (saveBinding) => IptvSourceSearch.owns(t)
           ? TorrentPlaybackService.bindIptvSource(
               context,
               t,
               imdbId: _imdbId,
               isMovie: _isMovie,
+              saveBinding: saveBinding,
             )
           : t.isDirectStream
           ? TorrentPlaybackService.bindDirectSource(
@@ -912,6 +913,7 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
               t,
               imdbId: _imdbId,
               isMovie: _isMovie,
+              saveBinding: saveBinding,
               addonCatalogId: widget.selection.stremioCatalogId,
               addonCatalogKey: widget.selection.stremioAddonKey,
             )
@@ -920,6 +922,7 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
               t,
               imdbId: _imdbId,
               isMovie: _isMovie,
+              saveBinding: saveBinding,
               addonCatalogId: widget.selection.stremioCatalogId,
               addonCatalogKey: widget.selection.stremioAddonKey,
             ),
@@ -934,21 +937,27 @@ class _SourcesScreenState extends ConsumerState<_SourcesScreen> {
   }
 
   Future<void> _pinLocal() => _bindSource(
-    () => TorrentPlaybackService.bindLocalSource(
+    (saveBinding) => TorrentPlaybackService.bindLocalSource(
       context,
       imdbId: _imdbId,
       isMovie: _isMovie,
+      saveBinding: saveBinding,
       title: widget.selection.title,
       year: widget.selection.year,
     ),
   );
 
-  Future<void> _bindSource(Future<bool> Function() operation) async {
+  Future<void> _bindSource(SourceBindingOperation operation) async {
     if (!mounted) return;
     final ready = await ref
         .read(sourceBindingProvider(_sourcesSession).notifier)
         .bind(operation, viewIsActive: () => mounted);
-    if (ready && widget.bindMode && mounted) Navigator.of(context).pop();
+    if (ready &&
+        widget.bindMode &&
+        mounted &&
+        _sourcesSession.owner == ProfileSessionMemory.captureOwner()) {
+      Navigator.of(context).pop();
+    }
   }
 
   void _showRowMenu(Torrent t, int i) {

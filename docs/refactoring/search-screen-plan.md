@@ -440,6 +440,16 @@ adapters may preserve their current APIs; list any new transitional adapter's pa
 reason, remaining coupling, and removal milestone when introducing it. Revisit
 exceptions at each phase; retire resolved ones.
 
+The legacy `lib/services/torrent_playback_service.dart` retains manual binding
+UI, provider preparation and automatic playback/binding paths. Phase 4C may add a
+narrow persistence callback to its four manual binding entry points while the
+original dialogs/native pickers remain there. Sources must supply its captured
+repository writer. Move the manual binding UI behind the named presentation
+bridge and finish its async ownership review before phase 4C closes; automatic
+playback and engine internals stay in their existing phase-7 shared boundary.
+Do not treat the entire legacy playback service as newly extracted code or add
+unrelated behavior to it under this exception.
+
 The keyword filter and Sources toolbar projection reuse the existing pure calls in
 `lib/utils/torrent_filter_matcher.dart` and `lib/services/source_priority.dart`.
 Those legacy files retain transitive UI/service dependencies (including quality
@@ -464,7 +474,7 @@ or deduplication behavior.
 | 3: Lists/suggestions | Implemented and reviewed | Riverpod 3.4.3 and Lists controller wired; 23 new tests pass; full suite 7,450 pass / same 51 baseline failures / 20 skipped, no missing tests, analyzer unchanged; device checks pending |
 | 4A: Catalog search | Implemented and reviewed | Riverpod state, streaming/TV batching, source settings and dialog wired; 35 new tests pass; affected suite retains the same three baseline failures, analyzer unchanged; device checks pending |
 | 4B: Keyword search | Implemented and reviewed | Application/data state, settings/defaults, selection and snapshot ownership wired; full suite 7,600 pass / same 51 failures / 20 skips, analyzer unchanged. Focus/navigation wrappers remain in the registered legacy screen (20,138 lines) for later presentation/bridge phases; device checks pending |
-| 4C: Source selection | In progress | Season policies, guide state/inventory, startup settings, saved-source loading, cache checks, initial requests, individual addon retries, toolbar projection, streamed-result preparation search state/batch orchestration, and adopted/pending result ownership and toolbar state/reconciliation and guarded unpin persistence extracted; shared binding model separated from storage; shared pin/local action gate and reload orchestration extracted. Binding-action slice: 232 affected passes and no new analyzer diagnostics; full suite 7,777 successes, same 51 failures/20 skips, all prior checkpoint outcomes preserved. Legacy binding UI/data boundaries, Sources UI and focus ownership remain; Sources part 2,766 lines |
+| 4C: Source selection | In progress | Season policies, guide state/inventory, startup settings, saved-source loading, cache checks, initial requests, individual addon retries, toolbar projection, streamed-result preparation search state/batch orchestration, and adopted/pending result ownership and toolbar state/reconciliation and guarded unpin persistence extracted; shared binding model separated from storage; shared pin/local action gate and reload orchestration extracted; manual Sources bindings now use guarded repository persistence. Binding-persistence slice: 250 affected passes and no new analyzer diagnostics; full suite 7,789 successes, same 51 failures/20 skips, all prior checkpoint outcomes preserved. Legacy binding UI/data boundaries, Sources UI and focus ownership remain; Sources part 2,775 lines |
 | 5: Home data | Not started | Preserve paging, snapshots, profiles, tracker semantics |
 | 6: Discover/layouts | Not started | Inventory and retain current variants |
 | 7: Hero/handoff/lifecycle | Not started | Native/device checks required where affected |

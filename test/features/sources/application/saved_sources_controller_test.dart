@@ -23,6 +23,13 @@ class Repository implements SavedSourcesRepository {
     return result.future;
   }
 
+  final saves = <SeriesSource>[];
+  @override
+  Future<bool> save(SeriesSource source) async {
+    saves.add(source);
+    return isCurrent;
+  }
+
   @override
   Future<SavedSourcesState> load() {
     final next = Completer<SavedSourcesState>();

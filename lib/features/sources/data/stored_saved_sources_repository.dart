@@ -16,6 +16,31 @@ class StoredSavedSourcesRepository implements SavedSourcesRepository {
   bool get isCurrent => session.owner == ProfileSessionMemory.captureOwner();
 
   @override
+  Future<bool> save(SeriesSource source) async {
+    if (!isCurrent) return false;
+    try {
+      await ProfileRuntime.withoutCapturedScope(() async {
+        final id = session.selection.imdbId;
+        if (session.selection.isSeries) {
+          await SeriesSourceService.addSource(
+            id,
+            source,
+            canContinue: () => isCurrent,
+          );
+        } else {
+          await SeriesSourceService.setSources(id, [
+            source,
+          ], canContinue: () => isCurrent);
+        }
+      });
+      return isCurrent;
+    } catch (_) {
+      if (!isCurrent) return false;
+      rethrow;
+    }
+  }
+
+  @override
   Future<bool> remove(SeriesSource source) async {
     if (!isCurrent) return false;
     try {

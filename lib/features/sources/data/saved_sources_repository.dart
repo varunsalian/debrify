@@ -5,4 +5,5 @@ abstract interface class SavedSourcesRepository {
   bool get isCurrent;
   Future<SavedSourcesState> load();
   Future<bool> remove(SeriesSource source);
+  Future<bool> save(SeriesSource source);
 }

@@ -88,20 +88,22 @@ void main() {
     await registry.close();
   });
 
-  StoredSavedSourcesRepository repository({bool customSelection = false}) =>
-      StoredSavedSourcesRepository(
-        SourcesSession(
-          owner: ProfileSessionMemory.captureOwner(),
-          viewIdentity: Object(),
-          selection: AdvancedSearchSelection(
-            imdbId: customSelection ? custom : canonical,
-            title: 'Fixture',
-            isSeries: true,
-            stremioAddonKey: customSelection ? 'config-a' : null,
-            stremioCatalogId: customSelection ? 'OnePace' : null,
-          ),
-        ),
-      );
+  StoredSavedSourcesRepository repository({
+    bool customSelection = false,
+    bool series = true,
+  }) => StoredSavedSourcesRepository(
+    SourcesSession(
+      owner: ProfileSessionMemory.captureOwner(),
+      viewIdentity: Object(),
+      selection: AdvancedSearchSelection(
+        imdbId: customSelection ? custom : canonical,
+        title: 'Fixture',
+        isSeries: series,
+        stremioAddonKey: customSelection ? 'config-a' : null,
+        stremioCatalogId: customSelection ? 'OnePace' : null,
+      ),
+    ),
+  );
 
   test(
     'legacy single-object pin migrates to a list under its original profile',
@@ -331,4 +333,123 @@ void main() {
       },
     );
   }
+  for (final series in [false, true]) {
+    test(
+      'save preserves ${series ? 'series append/dedupe' : 'movie replacement'} policy',
+      () async {
+        final repo = repository(series: series);
+        expect(await repo.save(canonicalPin), isTrue);
+        expect(await repo.save(pin), isTrue);
+        expect(await repo.save(canonicalPin), isTrue);
+        final prefs = await SharedPreferences.getInstance();
+        final rows =
+            jsonDecode(
+                  prefs.getString(
+                    first.preferenceKey('series_source_$canonical'),
+                  )!,
+                )
+                as List;
+        expect(
+          rows.map((row) => row['torrentHash']),
+          series
+              ? [canonicalPin.torrentHash, pin.torrentHash]
+              : [canonicalPin.torrentHash],
+        );
+        expect(
+          prefs.getString(second.preferenceKey('series_source_$canonical')),
+          isNull,
+        );
+      },
+    );
+
+    for (final retirement in ['switch', 'clear']) {
+      test(
+        'queued ${series ? 'series' : 'movie'} save cannot recreate deleted profile data after $retirement',
+        () async {
+          final prefs = await SharedPreferences.getInstance();
+          final key = first.preferenceKey('series_source_$canonical');
+          final incomingKey = second.preferenceKey('series_source_$canonical');
+          final original = jsonEncode([canonicalPin.toJson()]);
+          await prefs.setString(key, original);
+          await prefs.setString(incomingKey, original);
+          final repo = repository(series: series);
+          final entered = Completer<void>();
+          final release = Completer<void>();
+          addTearDown(() {
+            if (!release.isCompleted) release.complete();
+          });
+          final snapshot = ProfilePreferences.captureMutationSnapshot((
+            _,
+          ) async {
+            entered.complete();
+            await release.future;
+          });
+          await entered.future;
+          var finished = false;
+          final save = repo.save(pin).whenComplete(() => finished = true);
+          await Future<void>.delayed(const Duration(milliseconds: 100));
+          expect(finished, isFalse);
+          if (retirement == 'switch') {
+            ProfileRuntime.publish(second);
+          } else {
+            ProfileSessionMemory.clearAll();
+          }
+          await prefs.remove(key);
+          release.complete();
+          await snapshot;
+          expect(await save, isFalse);
+          expect(prefs.getString(key), isNull);
+          expect(prefs.getString(incomingKey), original);
+          expect(await repo.save(pin), isFalse);
+        },
+      );
+    }
+  }
+
+  test(
+    'movie replacement rejects retirement after recording origin tombstone',
+    () async {
+      final prefs = await SharedPreferences.getInstance();
+      final original = jsonEncode([canonicalPin.toJson()]);
+      final key = first.preferenceKey('series_source_$canonical');
+      final incomingKey = second.preferenceKey('series_source_$canonical');
+      await prefs.setString(key, original);
+      await prefs.setString(incomingKey, original);
+      final repo = repository(series: false);
+      final recorded = <String>[];
+      WebDavSyncTombstoneRecorder.debugInstall(
+        sink: (profile, keys) {
+          recorded.add(profile);
+          ProfileRuntime.publish(second);
+        },
+      );
+      expect(await repo.save(pin), isFalse);
+      expect(recorded, [first.profileId]);
+      expect(prefs.getString(key), original);
+      expect(prefs.getString(incomingKey), original);
+    },
+  );
+
+  test(
+    'save ignores a foreign captured zone and retains the live originating profile',
+    () async {
+      final repo = repository();
+      expect(
+        await ProfileRuntime.withCapturedScope(
+          second,
+          () => repo.save(canonicalPin),
+        ),
+        isTrue,
+      );
+      final prefs = await SharedPreferences.getInstance();
+      expect(
+        prefs.getString(first.preferenceKey('series_source_$canonical')),
+        isNotNull,
+      );
+      expect(
+        prefs.getString(second.preferenceKey('series_source_$canonical')),
+        isNull,
+      );
+    },
+  );
 }

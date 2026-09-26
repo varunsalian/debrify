@@ -1450,3 +1450,71 @@ failures. Full receipts:
 `.git/refactor-evidence/phase4c/full-binding-action.jsonl`,
 `full-binding-action-comparison.txt`, and `binding-action-previous-checkpoint.txt`.
 Phase 4C and later migration/device/performance gates remain unfinished.
+
+
+### Phase 4C — Profile-owned binding persistence
+
+Sources now passes a generation/view-checked writer into the four existing manual
+binding entry points (torrent, addon/media-server direct, IPTV and local). The
+69-line `SourceBindingController` supplies the writer through its operation
+contract and closes it as soon as the operation returns, including failure.
+A retained callback cannot save after completion or retirement. It delegates
+accepted writes to the 125-line `StoredSavedSourcesRepository`, which owns the
+captured Sources session and preserves movie replacement versus series
+append/stable-binding deduplication. Saved-source reload remains once per successful
+live action; the final view pop also rechecks originating owner after its await.
+
+The repository runs outside foreign captured zones and passes owner checks into
+`SeriesSourceService.addSource/setSources`. Both methods now accept optional
+`canContinue` callbacks, propagate them into reads/migrations, recheck after awaited
+work (including replacement tombstones), and use the existing guarded write
+barrier. Thus a queued write cannot recreate deleted outgoing-profile data or
+target an incoming profile. An accepted persistence operation remains owned by
+its originating repository; view closure alone does not retarget it. Current
+storage errors propagate, while retired operations return false.
+
+Legacy manual bind callers may omit the writer and retain the prior persistence
+policy through `_persistManualBinding`. The existing dialogs, descriptor creation,
+loader cleanup and native picker calls remain in `TorrentPlaybackService` under
+the explicitly recorded transitional exception. This does not complete their
+provider/RPC/native ownership review or the presentation bridge extraction.
+The service is **8,868 lines** (was 8,828); only its four manual binding methods
+and a small compatibility writer changed. `SeriesSourceService` is **280 lines**.
+No schema or default auto-play binding policy was changed.
+
+Baseline and initial integration passed **238 tests**. Final affected Sources,
+cinema, addon-direct, IPTV and provider-native binding run passed **250 tests**.
+Twelve new cases cover movie/series save policy, four real queued-write/profile
+retirement combinations, retirement during movie tombstone recording, foreign
+captured-zone handling, accepted writer lifetime and three pre-write retirement
+cases. The existing real Sources pin/unpin menu test additionally spies on the
+injected repository and verifies exactly one repository save while retaining its
+secret-free descriptor and menu/persistence assertions. That strengthened screen
+test also passed independently. No existing assertions or failure allowances were
+weakened.
+
+Review fixed four missing-braces diagnostics in touched legacy blocks (including
+one exposed by normal formatting). Final analysis returns to **864 diagnostics**
+with no new identities. Architecture checks pass for **95 migrated files**;
+changed feature/test files and touched legacy methods are formatted, and diff
+checks pass. Sources is **2,775 lines**, parent **20,156**. Receipts:
+`.git/refactor-evidence/phase4c/binding-save-before.txt`,
+`binding-save-integration.txt`, `binding-save-new-tests.txt`,
+`binding-save-focused-final.txt`, `binding-save-wired-screen.txt`,
+`analyze-binding-save.txt` (intermediate lints), `analyze-binding-save-final.txt`
+and `binding-save-analyzer-comparison.txt`.
+Phase 4C UI/native/provider preparation boundaries, Sources UI/focus extraction,
+later phases and final native/performance/CI audits remain unfinished.
+
+
+The exact full-suite helper completed in **176,285 ms** with **7,789 successes**,
+the same **51 observed baseline failures** (22 failure/29 error) and **20 skips**.
+No original baseline identity is newly failing, missing or skipped. Every binding-
+action checkpoint outcome is preserved, with **12 new passing tests**. The
+historical allowance is unchanged and the helper still exits 1 for pre-existing
+failures. Full receipts:
+`.git/refactor-evidence/phase4c/full-binding-save.jsonl`,
+`full-binding-save-comparison.txt`, `binding-save-previous-checkpoint.txt`,
+`analyze-binding-save-complete.txt` and
+`binding-save-complete-analyzer-comparison.txt`.
+Phase 4C and later migration/device/performance gates remain incomplete.

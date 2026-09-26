@@ -1,4 +1,8 @@
 import 'package:debrify/features/sources/application/source_settings_dependencies.dart';
+import 'package:debrify/features/sources/application/saved_sources_dependencies.dart';
+import 'package:debrify/features/sources/data/saved_sources_repository.dart';
+import 'package:debrify/features/sources/data/stored_saved_sources_repository.dart';
+import 'package:debrify/features/sources/models/saved_sources_state.dart';
 import 'package:debrify/features/sources/data/source_settings_repository.dart';
 import 'package:debrify/features/sources/models/source_presentation_settings.dart';
 import 'package:debrify/models/advanced_search_selection.dart';
@@ -25,11 +29,29 @@ class Settings implements SourceSettingsRepository {
       (text: false, logos: false);
 }
 
+class SavingRepository implements SavedSourcesRepository {
+  SavingRepository(this.delegate, this.onSave);
+  final StoredSavedSourcesRepository delegate;
+  final void Function() onSave;
+  @override
+  bool get isCurrent => delegate.isCurrent;
+  @override
+  Future<SavedSourcesState> load() => delegate.load();
+  @override
+  Future<bool> remove(SeriesSource source) => delegate.remove(source);
+  @override
+  Future<bool> save(SeriesSource source) {
+    onSave();
+    return delegate.save(source);
+  }
+}
+
 void main() {
   testWidgets(
     'Sources direct pin reloads the row binding and unpin removes it',
     (tester) async {
       SharedPreferences.setMockInitialValues({});
+      var repositorySaves = 0;
       final torrent = Torrent(
         rowid: 0,
         infohash: 'url:1',
@@ -53,6 +75,12 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
+            savedSourcesRepositoryProvider.overrideWith(
+              (ref, session) => SavingRepository(
+                StoredSavedSourcesRepository(session),
+                () => repositorySaves++,
+              ),
+            ),
             sourceSettingsRepositoryProvider.overrideWith(
               (ref, key) => Settings(),
             ),
@@ -84,6 +112,7 @@ void main() {
       await tester.pumpAndSettle();
       final sources = await SeriesSourceService.getSources('tt-fixture');
       expect(sources, hasLength(1));
+      expect(repositorySaves, 1);
       expect(sources.single.isAddonDirect, isTrue);
       expect(sources.single.addonKey, 'configuration');
       expect(sources.single.streamIndex, 3);

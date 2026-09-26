@@ -14,6 +14,13 @@ class Repository implements SavedSourcesRepository {
   @override
   bool isCurrent = true;
   final reads = <Completer<SavedSourcesState>>[];
+  final saves = <SeriesSource>[];
+  @override
+  Future<bool> save(SeriesSource source) async {
+    saves.add(source);
+    return isCurrent;
+  }
+
   @override
   Future<SavedSourcesState> load() {
     final read = Completer<SavedSourcesState>();
@@ -53,7 +60,7 @@ void main() {
     controller = container.read(sourceBindingProvider(session).notifier);
   });
   Future<bool> bind(Future<bool> Function() operation) =>
-      controller.bind(operation, viewIsActive: () => true);
+      controller.bind((_) => operation(), viewIsActive: () => true);
 
   test(
     'one action gate stays busy through binding and the subsequent reload',
@@ -118,7 +125,7 @@ void main() {
   test('closing the view during reload rejects UI completion', () async {
     var mounted = true;
     final pending = controller.bind(
-      () async => true,
+      (_) async => true,
       viewIsActive: () => mounted,
     );
     await Future<void>.delayed(Duration.zero);
@@ -133,7 +140,7 @@ void main() {
       var mounted = true;
       final operation = Completer<bool>();
       final pending = controller.bind(
-        () => operation.future,
+        (_) => operation.future,
         viewIsActive: () => mounted,
       );
       if (retirement == 'view') {
@@ -168,4 +175,54 @@ void main() {
       expect(subscription.read(), isFalse);
     },
   );
+  const pin = SeriesSource(
+    torrentHash: 'hash',
+    torrentName: 'Fixture',
+    debridService: 'rd',
+    debridTorrentId: 'id',
+    boundAt: 1,
+  );
+
+  test(
+    'binding writer saves through the repository and closes before UI completion',
+    () async {
+      late SourceBindingWriter writer;
+      final pending = controller.bind((save) {
+        writer = save;
+        return save(pin);
+      }, viewIsActive: () => true);
+      await Future<void>.delayed(Duration.zero);
+      expect(repository.saves, [same(pin)]);
+      expect(repository.reads, hasLength(1));
+      expect(await writer(pin), isFalse);
+      expect(repository.saves, hasLength(1));
+      repository.reads.single.complete(SavedSourcesState());
+      expect(await pending, isTrue);
+      expect(await writer(pin), isFalse);
+    },
+  );
+
+  for (final retirement in ['view', 'profile', 'dispose']) {
+    test('$retirement rejects a delayed writer before persistence', () async {
+      var mounted = true;
+      late SourceBindingWriter writer;
+      final operation = Completer<bool>();
+      final pending = controller.bind((save) {
+        writer = save;
+        return operation.future;
+      }, viewIsActive: () => mounted);
+      if (retirement == 'view') {
+        mounted = false;
+      } else if (retirement == 'profile') {
+        ProfileSessionMemory.clearAll();
+      } else {
+        container.dispose();
+      }
+      expect(await writer(pin), isFalse);
+      expect(repository.saves, isEmpty);
+      operation.complete(false);
+      expect(await pending, isFalse);
+      expect(repository.reads, isEmpty);
+    });
+  }
 }

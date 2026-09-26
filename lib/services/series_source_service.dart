@@ -107,9 +107,16 @@ class SeriesSourceService {
   /// Add a source to the list (appends at end = lowest priority).
   /// Hash-backed sources dedupe exactly as before. Provider-native cloud
   /// sources dedupe by provider + kind + stable provider id.
-  static Future<void> addSource(String imdbId, SeriesSource source) async {
+  static Future<void> addSource(
+    String imdbId,
+    SeriesSource source, {
+    bool Function()? canContinue,
+  }) async {
+    _ensureCurrent(canContinue);
     final prefs = await ProfilePreferences.instance();
-    final sources = await getSources(imdbId);
+    _ensureCurrent(canContinue);
+    final sources = await getSources(imdbId, canContinue: canContinue);
+    _ensureCurrent(canContinue);
     // Replace if the same stable binding already exists.
     final existingIdx = sources.indexWhere(
       (s) => s.bindingKey == source.bindingKey,
@@ -119,7 +126,7 @@ class SeriesSourceService {
     } else {
       sources.add(source);
     }
-    await _saveSources(prefs, imdbId, sources);
+    await _saveSources(prefs, imdbId, sources, canContinue: canContinue);
   }
 
   /// Remove a specific source by torrentHash.
@@ -195,10 +202,14 @@ class SeriesSourceService {
   /// Replace the entire source list (for reordering).
   static Future<void> setSources(
     String imdbId,
-    List<SeriesSource> sources,
-  ) async {
+    List<SeriesSource> sources, {
+    bool Function()? canContinue,
+  }) async {
+    _ensureCurrent(canContinue);
     final prefs = await ProfilePreferences.instance();
-    final existing = await getSources(imdbId);
+    _ensureCurrent(canContinue);
+    final existing = await getSources(imdbId, canContinue: canContinue);
+    _ensureCurrent(canContinue);
     final retained = sources.map((source) => source.bindingKey).toSet();
     await WebDavSyncTombstoneRecorder.recordForCurrentProfile(
       existing
@@ -210,10 +221,11 @@ class SeriesSourceService {
             (source) => WebDavSyncRecordKey.source(imdbId, source.bindingKey),
           ),
     );
+    _ensureCurrent(canContinue);
     if (sources.isEmpty) {
-      await prefs.remove('$_prefix$imdbId');
+      await _guardedWrite(canContinue, () => prefs.remove('$_prefix$imdbId'));
     } else {
-      await _saveSources(prefs, imdbId, sources);
+      await _saveSources(prefs, imdbId, sources, canContinue: canContinue);
     }
   }
 

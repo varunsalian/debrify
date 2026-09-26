@@ -5452,6 +5452,7 @@ class TorrentPlaybackService {
     Torrent torrent, {
     required String imdbId,
     required bool isMovie,
+    Future<bool> Function(SeriesSource)? saveBinding,
     String? addonCatalogId,
     String? addonCatalogKey,
   }) async {
@@ -5514,10 +5515,13 @@ class TorrentPlaybackService {
       addonCatalogId: addonCatalogId,
       addonCatalogKey: addonCatalogKey,
     );
-    if (isMovie) {
-      await SeriesSourceService.setSources(imdbId, [source]);
-    } else {
-      await SeriesSourceService.addSource(imdbId, source);
+    if (!await _persistManualBinding(
+      source,
+      imdbId: imdbId,
+      isMovie: isMovie,
+      saveBinding: saveBinding,
+    )) {
+      return false;
     }
     if (context.mounted) _snack(context, 'Source pinned for instant playback.');
     return true;
@@ -5531,13 +5535,16 @@ class TorrentPlaybackService {
     Torrent torrent, {
     required String imdbId,
     required bool isMovie,
+    Future<bool> Function(SeriesSource)? saveBinding,
     String? addonCatalogId,
     String? addonCatalogKey,
   }) async {
     try {
       await DirectSourceAuthorization.authorize(torrent);
     } catch (_) {
-      if (context.mounted) _snack(context, 'Connection changed. Search sources again.');
+      if (context.mounted) {
+        _snack(context, 'Connection changed. Search sources again.');
+      }
       return false;
     }
     if (!context.mounted) return false;
@@ -5555,10 +5562,13 @@ class TorrentPlaybackService {
       _snack(context, 'This direct stream cannot be refreshed by its addon.');
       return false;
     }
-    if (isMovie) {
-      await SeriesSourceService.setSources(imdbId, [source]);
-    } else {
-      await SeriesSourceService.addSource(imdbId, source);
+    if (!await _persistManualBinding(
+      source,
+      imdbId: imdbId,
+      isMovie: isMovie,
+      saveBinding: saveBinding,
+    )) {
+      return false;
     }
     if (context.mounted) {
       _snack(context, 'Direct source pinned for fresh-link playback.');
@@ -5573,6 +5583,7 @@ class TorrentPlaybackService {
     Torrent torrent, {
     required String imdbId,
     required bool isMovie,
+    Future<bool> Function(SeriesSource)? saveBinding,
   }) async {
     logIptvSourceEvent(
       'manual_pin_started',
@@ -5624,10 +5635,18 @@ class TorrentPlaybackService {
       return false;
     }
     try {
-      if (isMovie) {
-        await SeriesSourceService.setSources(imdbId, [source]);
-      } else {
-        await SeriesSourceService.addSource(imdbId, source);
+      if (!await _persistManualBinding(
+        source,
+        imdbId: imdbId,
+        isMovie: isMovie,
+        saveBinding: saveBinding,
+      )) {
+        logIptvSourceEvent(
+          'manual_pin_completed',
+          source: torrent,
+          outcome: 'session_retired',
+        );
+        return false;
       }
     } catch (error) {
       logIptvSourceEvent(
@@ -5662,6 +5681,7 @@ class TorrentPlaybackService {
     BuildContext context, {
     required String imdbId,
     required bool isMovie,
+    Future<bool> Function(SeriesSource)? saveBinding,
     required String title,
     String? year,
   }) async {
@@ -5683,12 +5703,32 @@ class TorrentPlaybackService {
       );
     }
     if (source == null || !context.mounted) return false;
+    if (!await _persistManualBinding(
+      source,
+      imdbId: imdbId,
+      isMovie: isMovie,
+      saveBinding: saveBinding,
+    )) {
+      return false;
+    }
+    if (context.mounted) _snack(context, 'Local source pinned.');
+    return true;
+  }
+
+  /// Compatibility writer for callers that have not migrated their binding
+  /// persistence. Sources supplies its profile-owned repository callback.
+  static Future<bool> _persistManualBinding(
+    SeriesSource source, {
+    required String imdbId,
+    required bool isMovie,
+    Future<bool> Function(SeriesSource)? saveBinding,
+  }) async {
+    if (saveBinding != null) return saveBinding(source);
     if (isMovie) {
       await SeriesSourceService.setSources(imdbId, [source]);
     } else {
       await SeriesSourceService.addSource(imdbId, source);
     }
-    if (context.mounted) _snack(context, 'Local source pinned.');
     return true;
   }
 
