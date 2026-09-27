@@ -132,6 +132,7 @@ import '../features/home/data/home_collections_repository.dart';
 import '../features/home/models/home_catalog_preferences.dart';
 import '../features/home/models/home_catalog_session.dart';
 import '../features/home/application/home_catalog_controller.dart';
+import '../features/home/application/home_catalog_continuation_controller.dart';
 import '../features/home/models/home_catalog_state.dart';
 import '../features/home/models/home_catalog_plan.dart';
 import '../features/home/application/home_catalog_preferences_dependencies.dart';
@@ -610,8 +611,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   final _catalogContinueNode = FocusNode(debugLabel: 'catalog_continue');
   final _catalogMoreNode = FocusNode(debugLabel: 'catalog_more');
   FocusNode? _catalogReturnFocus;
-  bool _catalogContinuing = false;
-  int _catalogContinueCursor = 0;
+  late final HomeCatalogContinuationController _catalogContinuationController;
+  late final ProviderSubscription<bool> _catalogContinuationSubscription;
+  bool get _catalogContinuing => _catalogContinuationController.busy;
   bool _loading = true;
   String? _error;
   List<CatalogSection> get _homeSections => _homeCatalogController.rows;
@@ -1739,6 +1741,15 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       (previous, next) {},
     );
     _homeCatalogController = ref.read(homeCatalogProvider(homeSession).notifier);
+    _catalogContinuationSubscription = ref.listenManual(
+      homeCatalogContinuationProvider(homeSession),
+      (previous, next) {
+        if (mounted) setState(() {});
+      },
+    );
+    _catalogContinuationController = ref.read(
+      homeCatalogContinuationProvider(homeSession).notifier,
+    );
     _episodeArtworkSubscription = ref.listenManual(
       homeEpisodeArtworkProvider(homeSession),
       (previous, next) {},
@@ -2633,6 +2644,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     _discoverLayoutSubscription.close();
     _discoverSourceSubscription.close();
     _metadataFeatureSubscription.close();
+    _catalogContinuationSubscription.close();
     _homeCatalogSubscription.close();
     _episodeArtworkSubscription.close();
     for (final subscription in _trackerAuthSubscriptions.values) {
@@ -15246,36 +15258,34 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   }
 
   Future<void> _continueHomeCatalogs({required bool moreCatalogs}) async {
-    if (_catalogContinuing || _boardLoadingMore) return;
-    final pending = _sections
-        .where((s) => s.pagingPaused && !s.exhausted)
-        .toList();
-    if (pending.any((s) => s.loadingMore)) return;
     final gen = _boardLoadGen;
+    bool current() =>
+        mounted &&
+        gen == _boardLoadGen &&
+        _profileSessionOwner == ProfileSessionMemory.captureOwner();
     final actionNode = moreCatalogs ? _catalogMoreNode : _catalogContinueNode;
     final ownedFocus = actionNode.hasFocus;
-    setState(() => _catalogContinuing = true);
+    final operation = _catalogContinuationController.start(
+      moreCatalogs: moreCatalogs,
+      boardLoading: _boardLoadingMore,
+      rows: _sections,
+      hasMoreCatalogs: () => _boardHasMore,
+      isCurrent: current,
+      loadMoreCatalogs: () async {
+        await _loadMoreBoard();
+      },
+      resumeRow: (section) async {
+        final i = _sections.indexOf(section);
+        if (i >= 0) await _loadMoreRow(i, resume: true);
+      },
+    );
+    if (operation == null) return;
     try {
-      if (moreCatalogs) {
-        if (_boardHasMore) await _loadMoreBoard();
-      } else if (pending.isNotEmpty) {
-        final offset = _catalogContinueCursor % pending.length;
-        final batch = [
-          ...pending.skip(offset),
-          ...pending.take(offset),
-        ].take(4);
-        _catalogContinueCursor = (offset + 4) % pending.length;
-        for (final section in batch) {
-          if (!mounted || gen != _boardLoadGen) return;
-          final i = _sections.indexOf(section);
-          if (i >= 0) await _loadMoreRow(i, resume: true);
-        }
-      }
+      await operation;
     } finally {
-      if (mounted) setState(() => _catalogContinuing = false);
-      if (mounted && gen == _boardLoadGen && ownedFocus) {
+      if (current() && ownedFocus) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (!mounted || gen != _boardLoadGen) return;
+          if (!current()) return;
           // Busy buttons retain focus. Restore only when the completed action
           // disappeared, and do not override a user's move to another card.
           if (actionNode.parent != null &&
