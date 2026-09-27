@@ -1,3 +1,4 @@
+import '../features/home/application/home_local_continuation_dependencies.dart';
 import '../features/home/application/home_row_snapshot.dart';
 import '../features/home/application/home_board_load.dart';
 import '../features/home/application/home_board_dependencies.dart';
@@ -225,14 +226,6 @@ const int _kBoardBatchSize = 8;
 /// When a row's horizontal scroll gets within this many pixels of the end, the
 /// next page for that catalog is fetched (Stremio-style unlimited rows).
 const double _kRowLoadMoreThreshold = 900;
-
-/// Format a season/episode as a compact 'S2 · E5' label, or null when unknown.
-String? _seLabel(int? season, int? episode) {
-  if (season == null || episode == null || season <= 0 || episode <= 0) {
-    return null;
-  }
-  return 'S$season · E$episode';
-}
 
 /// Dedicated Search tab.
 ///
@@ -3360,12 +3353,19 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   /// (e.g. after returning from a detail/playback).
   Future<void> _loadContinueWatching() async {
     final token = ++_cwLoadToken;
+    bool current() =>
+        mounted &&
+        token == _cwLoadToken &&
+        _profileSessionOwner == ProfileSessionMemory.captureOwner();
+    if (!current()) return;
+    final repository = ref.read(homeLocalContinuationRepositoryProvider);
     // Every CW reload passes through here (init, Home-settings change,
     // integration change, post-playback), so it is the one place the card
     // lookups need their Progress source refreshed.
-    final progressSource = await StorageService.getWatchProgressSource();
-    final enabled = await StorageService.getHomeContinueWatchingEnabled();
-    if (!mounted || token != _cwLoadToken) return;
+    final progressSource = await repository.readProgressSource();
+    if (!current()) return;
+    final enabled = await repository.readEnabled();
+    if (!current()) return;
     if (progressSource != _cwProgressSource) {
       setState(() => _cwProgressSource = progressSource);
     }
@@ -3389,89 +3389,14 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       return;
     }
 
-    final raw = await StorageService.getContinueWatchingItems();
-    final configuredAddons = raw.any((m) => CustomSeriesIdentity.isCustom(m['imdbId'] as String?))
-        ? await _stremio.getEnabledAddons() : const <StremioAddon>[];
-    final items = <StremioMeta>[];
-    final progress = <String, double>{};
-    final episode = <String, String>{};
-    final remainingMinutes = <String, int>{};
-    final episodeRefs = <String, ({int season, int episode})>{};
-    final ids = <String>{};
-    final addonIds = <String, String?>{};
-    for (final m in raw) {
-      final imdbId = m['imdbId'] as String?;
-      if (imdbId == null || imdbId.isEmpty) continue;
-      final type = (m['contentType'] as String?) ?? 'movie';
-      items.add(
-        StremioMeta(
-          id: CustomSeriesIdentity.parse(imdbId)?.catalogId ?? imdbId,
-          imdbId: MediaIdentity.isNative(imdbId) ? null : imdbId,
-          type: type,
-          name: (m['title'] as String?) ?? 'Untitled',
-          poster: m['posterUrl'] as String?,
-          year: m['year'] as String?,
-          sourceAddon: configuredAddons.where((a) => a.portableConfigurationKey == CustomSeriesIdentity.parse(imdbId)?.addonKey || a.sourceBindingKey == CustomSeriesIdentity.parse(imdbId)?.addonKey).firstOrNull,
-        ),
-      );
-      ids.add(imdbId);
-      addonIds[imdbId] = CustomSeriesIdentity.parse(imdbId)?.addonKey ?? m['addonId'] as String?;
-
-      // Watched fraction — joined from the playback-state store, exactly like
-      // HomeContinueWatchingSection (finished episodes count as 100%).
-      double? pct;
-      if (type == 'series') {
-        final lastEp = await StorageService.getLastPlayedEpisodeByImdbId(
-          imdbId,
-        );
-        if (lastEp != null) {
-          final finished = lastEp['finished'] == true;
-          final posMs = lastEp['positionMs'] as int? ?? 0;
-          final durMs = lastEp['durationMs'] as int? ?? 1;
-          if (durMs > 0) {
-            pct = finished ? 100.0 : (posMs / durMs * 100).clamp(0.0, 100.0);
-          }
-          final se = _seLabel(
-            lastEp['season'] as int?,
-            lastEp['episode'] as int?,
-          );
-          if (se != null) episode[imdbId] = se;
-          final season = lastEp['season'] as int?;
-          final episodeNumber = lastEp['episode'] as int?;
-          if (season != null &&
-              episodeNumber != null &&
-              season > 0 &&
-              episodeNumber > 0) {
-            episodeRefs[imdbId] = (season: season, episode: episodeNumber);
-          }
-          final left = continueWatchingMinutesLeft(
-            positionMs: posMs,
-            durationMs: durMs,
-          );
-          if (left != null) remainingMinutes[imdbId] = left;
-        }
-      } else {
-        final state = await StorageService.getVideoPlaybackStateByImdbId(
-          imdbId,
-        );
-        if (state != null) {
-          final posMs = state['positionMs'] as int? ?? 0;
-          final durMs = state['durationMs'] as int? ?? 1;
-          if (durMs > 0) pct = (posMs / durMs * 100).clamp(0.0, 100.0);
-          final left = continueWatchingMinutesLeft(
-            positionMs: posMs,
-            durationMs: durMs,
-          );
-          if (left != null) remainingMinutes[imdbId] = left;
-        }
-      }
-      if (pct != null) progress[imdbId] = pct / 100.0;
-    }
+    final data = await repository.load(isCurrent: current);
+    if (data == null || !current()) return;
+    final items = data.items;
 
     await _ensureCwMergeFlags();
     // Bail if a newer load superseded this one while we were awaiting — never
     // dispose/replace nodes or state a later run already committed.
-    if (!mounted || token != _cwLoadToken) return;
+    if (!current()) return;
 
     // Split into two recency-ordered rows; `items` is already most-recent-first.
     final movies = items.where((m) => m.type != 'series').toList();
@@ -3494,26 +3419,26 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       _cwAll = items;
       _cwIds
         ..clear()
-        ..addAll(ids);
+        ..addAll(data.ids);
       _cwProgress
         ..clear()
-        ..addAll(progress);
+        ..addAll(data.progress);
       _cwEpisode
         ..clear()
-        ..addAll(episode);
+        ..addAll(data.episode);
       _cwRemainingMinutes
         ..clear()
-        ..addAll(remainingMinutes);
+        ..addAll(data.remainingMinutes);
       _cwEpisodeArtwork.clear();
       _cwAddonId
         ..clear()
-        ..addAll(addonIds);
+        ..addAll(data.addonIds);
     });
     unawaited(
       _enrichCwEpisodeArtwork(
-        refs: episodeRefs,
+        refs: data.episodeRefs,
         target: _cwEpisodeArtwork,
-        isCurrent: () => token == _cwLoadToken,
+        isCurrent: current,
       ),
     );
     _maybeAutoFocusBoard();
@@ -5005,7 +4930,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         byImdb[id] = it;
         final p = it.progress;
         if (p != null) progress[id] = (p / 100).clamp(0.0, 1.0);
-        final se = _seLabel(it.season, it.episode);
+        final se = continueWatchingEpisodeLabel(it.season, it.episode);
         if (se != null) episode[id] = se;
         if (it.season != null &&
             it.episode != null &&
@@ -5579,7 +5504,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         // "Up next" entries have no paused position — no progress bar for them.
         final p = it.progress;
         if (p != null) progress[id] = (p / 100).clamp(0.0, 1.0);
-        final se = _seLabel(it.season, it.episode);
+        final se = continueWatchingEpisodeLabel(it.season, it.episode);
         if (se != null) episode[id] = se;
         if (MediaIdentity.isImdb(it.id) && it.season != null &&
             it.episode != null &&
@@ -5767,7 +5692,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         byImdb[id] = item;
         final pct = item.selection.mdblistProgressPercent;
         if (pct != null) progress[id] = (pct / 100).clamp(0, 1);
-        final se = _seLabel(item.selection.season, item.selection.episode);
+        final se = continueWatchingEpisodeLabel(
+          item.selection.season,
+          item.selection.episode,
+        );
         if (se != null) episodes[id] = se;
       }
     }

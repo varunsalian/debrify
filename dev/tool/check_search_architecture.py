@@ -23,6 +23,7 @@ EXTRACTED_ELSEWHERE: tuple[str, ...] = (
     "lib/models/source_provider_ref.dart",
     "lib/services/source_ordering.dart",
     "lib/utils/torrent_quality.dart",
+    "lib/utils/continue_watching_presentation.dart",
     "lib/utils/language_mapping.dart",
     "lib/screens/video_player/utils/language_mapping.dart",
     "lib/utils/torrent_filter_matcher.dart",

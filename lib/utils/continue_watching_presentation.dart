@@ -1,6 +1,14 @@
 /// Presentation helpers shared by Continue Watching card renderers.
 library;
 
+/// Format a season/episode as a compact 'S2 · E5' label, or null when unknown.
+String? continueWatchingEpisodeLabel(int? season, int? episode) {
+  if (season == null || episode == null || season <= 0 || episode <= 0) {
+    return null;
+  }
+  return 'S$season · E$episode';
+}
+
 /// Whole minutes left from an exact saved playback position.
 ///
 /// Rounds up so a final partial minute still reads as one minute rather than
