@@ -11,6 +11,7 @@ import '../../models/profiles/profile_policy.dart';
 import '../profiles/profile_async_authorization.dart';
 import '../profiles/profile_credential_facade.dart';
 import '../profiles/profile_runtime.dart';
+import '../profiles/profile_session_memory.dart';
 import 'mdblist_discover_models.dart';
 import 'mdblist_models.dart';
 import 'mdblist_transport.dart';
@@ -957,6 +958,8 @@ class MdblistService {
     ProfileAsyncAuthorization? capability,
   }) async {
     final scope = ProfileRuntime.scope.value;
+    final owner = ProfileSessionMemory.captureOwner();
+    bool current() => owner == ProfileSessionMemory.captureOwner();
     capability ??= await _captureCapability();
     final contentId = target.ids.contentId;
     final originalTarget = target;
@@ -977,7 +980,7 @@ class MdblistService {
             )
           : MdblistScrobbleTarget.movie(mapped);
     }
-    if (scope != ProfileRuntime.scope.value) {
+    if (scope != ProfileRuntime.scope.value || !current()) {
       return const MdblistResult.failure(MdblistResultKind.denied);
     }
     final payload = target.payload(progress);
@@ -991,6 +994,9 @@ class MdblistService {
       capability: capability,
     );
     if (result.isSuccess) {
+      if (!current()) {
+        return const MdblistResult.failure(MdblistResultKind.denied);
+      }
       // A stop lands the title in watched history; drop the cached snapshot
       // BEFORE notifying, so revision listeners refetch authoritative data.
       if (action == 'stop') _invalidateSnapshotBucket('watched');
@@ -1001,8 +1007,18 @@ class MdblistService {
         );
       }
       playbackRevision.value++;
+      // Listeners run synchronously and may initiate profile retirement.
+      if (!current()) {
+        return const MdblistResult.failure(MdblistResultKind.denied);
+      }
       libraryRevision.value++;
+      if (!current()) {
+        return const MdblistResult.failure(MdblistResultKind.denied);
+      }
       if (action == 'stop') watchedRevision.value++;
+      if (!current()) {
+        return const MdblistResult.failure(MdblistResultKind.denied);
+      }
     }
     return result;
   }

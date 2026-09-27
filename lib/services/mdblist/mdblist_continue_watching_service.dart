@@ -2,6 +2,7 @@ import '../../models/advanced_search_selection.dart';
 import '../../models/mdblist_continue_watching.dart';
 import 'package:flutter/foundation.dart';
 
+import '../profiles/profile_session_memory.dart';
 import 'mdblist_models.dart';
 import 'mdblist_service.dart';
 
@@ -343,10 +344,11 @@ class MdblistContinueWatchingService {
   }
 
   Future<bool> clear(MdblistContinueWatchingItem item) async {
+    final owner = ProfileSessionMemory.captureOwner();
     final target = item.clearTarget;
     if (!item.paused || target == null) return false;
     final response = await service.scrobbleClear(target);
-    if (response.isSuccess) {
+    if (response.isSuccess && owner == ProfileSessionMemory.captureOwner()) {
       invalidate();
       return true;
     }
