@@ -1,3 +1,4 @@
+import '../features/home/application/home_pikpak_only_controller.dart';
 import '../features/home/application/home_bound_counts_controller.dart';
 import '../features/home/application/home_configuration_changes.dart';
 import '../features/home/application/home_settings_refresh.dart';
@@ -727,7 +728,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
 
   /// True when PikPak is the ONLY configured provider. PikPak can't quick-play
   /// (it queues a cloud download), so catalog "Play" is hidden — matching Home.
-  bool _pikpakOnly = false;
+  late final HomePikpakOnlyController _pikpakOnlyController;
+  late final ProviderSubscription<bool> _pikpakOnlySubscription;
+  bool get _pikpakOnly => _pikpakOnlyController.current;
 
   /// Experimental flag: route series taps to the merged detail+episodes page.
   /// Loaded once on init; movies and the flag-off path keep the existing flow.
@@ -1916,6 +1919,13 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       (previous, next) {},
     );
     _homeCatalogController = ref.read(homeCatalogProvider(homeSession).notifier);
+    _pikpakOnlySubscription = ref.listenManual(
+      homePikpakOnlyProvider(homeSession),
+      (previous, next) {},
+    );
+    _pikpakOnlyController = ref.read(
+      homePikpakOnlyProvider(homeSession).notifier,
+    );
     _boundCountsSubscription = ref.listenManual(
       homeBoundCountsProvider(homeSession),
       (previous, next) {},
@@ -2750,6 +2760,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     _searchController.dispose();
     ProfileRuntime.scope.removeListener(_onSearchProfileChanged);
     _homeCatalogSubscription.close();
+    _pikpakOnlySubscription.close();
     _boundCountsSubscription.close();
     _homeSettingsRefreshSubscription.close();
     _homeLayoutPreferenceSubscription.close();
@@ -3429,22 +3440,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   }
 
   /// PikPak is "only" when it's enabled and no add/resolve provider has a key.
-  Future<void> _refreshPikpakOnly() async {
-    final pikpak = await StorageService.getPikPakEnabled();
-    final rd = await StorageService.getApiKey();
-    final tb = await StorageService.getTorboxApiKey();
-    final pm = await StorageService.getPremiumizeApiKey();
-    final ad = await StorageService.getAllDebridApiKey();
-    final anyOther =
-        (rd != null && rd.isNotEmpty) ||
-        (tb != null && tb.isNotEmpty) ||
-        (pm != null && pm.isNotEmpty) ||
-        (ad != null && ad.isNotEmpty);
-    final onlyPikpak = pikpak && !anyOther;
-    if (mounted && onlyPikpak != _pikpakOnly) {
-      setState(() => _pikpakOnly = onlyPikpak);
-    }
-  }
+  Future<void> _refreshPikpakOnly() => _pikpakOnlyController.load(
+    isCurrent: () => mounted,
+    onChanged: () => setState(() {}),
+  );
 
   /// Load the Continue Watching row from the shared local store. Mirrors
   /// Home's join (item list + per-title playback progress) but is read-only —
