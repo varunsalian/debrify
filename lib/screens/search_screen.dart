@@ -1,3 +1,5 @@
+import '../features/home/application/home_watchlist_controller.dart';
+import '../features/home/models/home_watchlist.dart';
 import '../features/home/application/home_iptv_lists_controller.dart';
 import '../features/home/models/home_iptv_list.dart';
 import '../features/home/presentation/home_iptv_list_focus.dart';
@@ -1068,8 +1070,12 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   // Debrify's account-independent movie/series watchlist. Full metadata is
   // stored locally and presented as separate movie and series rows, so neither
   // row needs a tracker or catalog network request.
-  List<StremioMeta> _watchlistMovieItems = [];
-  List<StremioMeta> _watchlistSeriesItems = [];
+  late final HomeWatchlistController _watchlistController;
+  late final ProviderSubscription<HomeWatchlist> _watchlistSubscription;
+  List<StremioMeta> get _watchlistMovieItems =>
+      _watchlistController.current.movies;
+  List<StremioMeta> get _watchlistSeriesItems =>
+      _watchlistController.current.series;
   final List<FocusNode> _watchlistMovieNodes = [];
   final List<FocusNode> _watchlistSeriesNodes = [];
 
@@ -1923,6 +1929,17 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     _iptvListsController = ref.read(
       homeIptvListsProvider(iptvListsSession).notifier,
     );
+    final watchlistSession = (
+      owner: _profileSessionOwner,
+      viewIdentity: Object(),
+    );
+    _watchlistSubscription = ref.listenManual(
+      homeWatchlistProvider(watchlistSession),
+      (previous, next) {},
+    );
+    _watchlistController = ref.read(
+      homeWatchlistProvider(watchlistSession).notifier,
+    );
     final localContinuationSession = HomeContinuationSession(
       owner: _profileSessionOwner,
       viewIdentity: Object(),
@@ -2677,6 +2694,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     _stremioFavoritesSubscription.close();
     _iptvFavoritesSubscription.close();
     _iptvListsSubscription.close();
+    _watchlistSubscription.close();
     _continuationLayoutSubscription.close();
     _listsSubscription.close();
     _catalogSubscription.close();
@@ -3823,7 +3841,6 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   final _pendingHomeRows = <HomeRowRefresh>{};
   Timer? _homeRefreshTimer;
   bool _homeAddonsPending = false;
-  int _watchlistRevision = 0;
   int _playlistRevision = 0;
 
   void _onHomeAddonsChanged() {
@@ -4138,27 +4155,14 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     }
   }
 
-  Future<void> _loadMyWatchlist() async {
-    final revision = ++_watchlistRevision;
-    try {
-      final items = await StorageService.getMyWatchlistItems();
-      if (!mounted || revision != _watchlistRevision) return;
-      setState(() {
-        _watchlistMovieItems = [
-          for (final item in items)
-            if (item.type.toLowerCase() != 'series') item,
-        ];
-        _watchlistSeriesItems = [
-          for (final item in items)
-            if (item.type.toLowerCase() == 'series') item,
-        ];
-      });
+  Future<void> _loadMyWatchlist() => _watchlistController.load(
+    isCurrent: () => mounted,
+    onRows: () {
+      setState(() {});
       _syncMyWatchlistNodes();
       _maybeAutoFocusBoard();
-    } catch (_) {
-      // A local shelf failure is non-fatal; leave it hidden.
-    }
-  }
+    },
+  );
 
   void _syncMyWatchlistNodes() {
     _syncWatchlistNodes(
