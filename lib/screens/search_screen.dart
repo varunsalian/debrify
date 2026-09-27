@@ -168,6 +168,7 @@ import '../services/native_series_metadata_service.dart';
 import '../models/media_identity.dart';
 import '../features/home/presentation/home_random_playback_action.dart';
 import '../features/home/application/home_random_episode_dependencies.dart';
+import '../features/home/application/home_catalog_episode_identity_dependencies.dart';
 import '../widgets/clear_pinned_sources_button.dart';
 import '../services/profiles/profile_runtime.dart';
 import 'metadata_explore_page.dart';
@@ -11317,51 +11318,6 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     );
   }
 
-  Future<AdvancedSearchSelection> _withCatalogEpisodeIdentity(
-    AdvancedSearchSelection selection,
-    StremioMeta item,
-    StremioAddon addon,
-  ) async {
-    final season = selection.season;
-    final episode = selection.episode;
-    if (!selection.isSeries || season == null || episode == null) {
-      return selection;
-    }
-    final videoId = await _stremio.episodeVideoIdForLaunch(
-      addon: addon,
-      imdbId: selection.imdbId,
-      catalogId: item.id,
-      season: season,
-      episode: episode,
-    );
-    if (videoId == null || videoId.isEmpty) {
-      // An unknown catalog identity must not silently fall back to the
-      // ordinary IMDb episode when metadata is
-      // temporarily unavailable. Preserve the origin so playback can retry
-      // resolution and fail as unavailable instead of playing different media.
-      if (!StremioService.isCanonicalCatalogAlias(item.id, selection.imdbId)) {
-        return selection.withStremioEpisodeIdentity(
-          addonId: addon.id,
-          addonKey: addon.sourceBindingKey,
-          catalogId: item.id,
-          videoId: '',
-        );
-      }
-      return selection;
-    }
-    if (StremioService.isCanonicalEpisodeId(
-      selection.imdbId, videoId, season, episode,
-    )) {
-      return selection;
-    }
-    return selection.withStremioEpisodeIdentity(
-      addonId: addon.id,
-      addonKey: addon.sourceBindingKey,
-      catalogId: item.id,
-      videoId: videoId,
-    );
-  }
-
   Future<void> _playRandomEpisodeFromDetail(
     StremioMeta item,
     StremioAddon addon,
@@ -11466,11 +11422,22 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
           )
         : null;
     Future<void> launch(AdvancedSearchSelection selection) async {
-      selection = await _withCatalogEpisodeIdentity(selection, item, addon);
-      if (!mounted || cancelled) {
+      bool current() =>
+          mounted &&
+          !cancelled &&
+          _profileSessionOwner == ProfileSessionMemory.captureOwner();
+      if (!current()) {
         resolving?.dismiss();
         return;
       }
+      final resolved = await ref
+          .read(homeCatalogEpisodeIdentityProvider(_profileSessionOwner))
+          .resolve(selection, item, addon, isCurrent: current);
+      if (resolved == null || !current()) {
+        resolving?.dismiss();
+        return;
+      }
+      selection = resolved;
       debugPrint(
         '[SeriesResume] ${browseSourcesOnly ? 'sources-open' : 'play-launch'} '
         'title="${selection.title}" '
@@ -11483,11 +11450,19 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         'mdblistPct=${selection.mdblistProgressPercent}',
       );
       resolving?.dismiss();
-      if (cancelled) return;
+      if (!current()) return;
       if (browseSourcesOnly) {
-        _browseSelection(selection, metadataAddonId: addon.id, catalogItem: item.withSourceAddon(addon));
+        _browseSelection(
+          selection,
+          metadataAddonId: addon.id,
+          catalogItem: item.withSourceAddon(addon),
+        );
       } else {
-        await _playSelection(selection, metadataAddonId: addon.id, catalogItem: item.withSourceAddon(addon));
+        await _playSelection(
+          selection,
+          metadataAddonId: addon.id,
+          catalogItem: item.withSourceAddon(addon),
+        );
       }
     }
 
