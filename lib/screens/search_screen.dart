@@ -249,7 +249,8 @@ import '../services/video_player_launcher.dart';
 import '../services/tracking_source_policy.dart';
 import '../utils/continue_watching_presentation.dart';
 import '../utils/dialog_tap_guard.dart';
-import '../utils/episode_progress_merge.dart';
+import '../features/home/data/home_series_resume_resolution.dart';
+import '../features/home/models/home_series_resume_result.dart';
 import '../utils/format_tag_detector.dart';
 import '../utils/tv_keys.dart';
 import '../utils/tv_search_focus_handoff.dart';
@@ -11857,22 +11858,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   // button label (_resolveResumeInfo) and Play (_onCatalogPlay) via a short
   // cache — so a tracker call that flakes between page-open and button-press
   // can never make the pill advertise one episode and playback open another.
-  final Map<
-    String,
-    ({
-      int atMs,
-      String rev,
-      ({
-        bool started,
-        int season,
-        int episode,
-        double? simklProgress,
-        AdvancedSearchSelection? selection,
-        int? sourcePrio,
-      })
-      r,
-    })
-  >
+  final Map<String, ({int atMs, String rev, HomeSeriesResumeResult r})>
   _seriesResumeCache = {};
 
   /// Combined cache identity: per-title tracker revisions (any scrobble/
@@ -11920,17 +11906,12 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   /// source flags from it, so an ADVANCED tracker winner keeps its player
   /// scrobbling attribution. The launcher's shared normalization still applies
   /// the independent Scrobble masters before any write reaches a tracker.
-  Future<
-    ({
-      bool started,
-      int season,
-      int episode,
-      double? simklProgress,
-      AdvancedSearchSelection? selection,
-      int? sourcePrio,
-    })
-  >
-  _reconcileSeriesResume(StremioMeta item, {bool isTraktSource = false, bool preferBuiltIn = false, StremioMeta? catalogItem}) async {
+  Future<HomeSeriesResumeResult> _reconcileSeriesResume(
+    StremioMeta item, {
+    bool isTraktSource = false,
+    bool preferBuiltIn = false,
+    StremioMeta? catalogItem,
+  }) async {
     final trackingPolicy = await _loadTrackingPolicy(item);
     if (trackingPolicy == null) {
       return (
@@ -11950,7 +11931,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       isTraktSource,
       trackingPolicy.progressSource,
     );
-    final rev = '$progressRev:$preferBuiltIn:${catalogItem?.sourceAddon?.sourceBindingKey}:${catalogItem?.id}';
+    final rev =
+        '$progressRev:$preferBuiltIn:${catalogItem?.sourceAddon?.sourceBindingKey}:${catalogItem?.id}';
     final hit = _seriesResumeCache[playId];
     if (hit != null && nowMs - hit.atMs < 45000 && hit.rev == rev) {
       debugPrint(
@@ -12023,211 +12005,38 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       'simklNext=${simklNext == null ? 'none' : 'S${simklNext.season}E${simklNext.episode}'}',
     );
 
-    final candidates =
-        <
-          ({
-            int prio,
-            int? tsMs,
-            int s,
-            int e,
-            double? pct,
-            bool finished,
-            AdvancedSearchSelection? sel,
-          })
-        >[];
-    if (trakt != null &&
-        trakt.sel.season != null &&
-        trakt.sel.episode != null) {
-      candidates.add((
-        prio: 0,
-        // Trakt's own activity timestamp.
-        tsMs: trakt.tsMs,
-        s: trakt.sel.season!,
-        e: trakt.sel.episode!,
-        pct: trakt.sel.traktProgressPercent,
-        finished: false,
-        sel: trakt.sel,
-      ));
-    }
-    if (simkl != null) {
-      candidates.add((
-        prio: 1,
-        tsMs: simkl.pausedAt?.millisecondsSinceEpoch,
-        s: simkl.season,
-        e: simkl.episode,
-        pct: simkl.progress,
-        finished: false,
-        sel: null,
-      ));
-    }
-    final mdbSel = mdb?.selection;
-    if (mdb != null &&
-        mdb.paused &&
-        mdbSel!.season != null &&
-        mdbSel.episode != null) {
-      candidates.add((
-        prio: 2,
-        tsMs: mdb.updatedAt?.millisecondsSinceEpoch,
-        s: mdbSel.season!,
-        e: mdbSel.episode!,
-        pct: mdbSel.mdblistProgressPercent,
-        // The winner's ORIGINAL selection so a launch keeps its progress
-        // percent (a rebuilt coordinate would restart at the local offset).
-        finished: false,
-        sel: mdbSel,
-      ));
-    }
-    if (local != null) {
-      candidates.add((
-        prio: 3,
-        tsMs: local.tsMs,
-        s: local.season,
-        e: local.episode,
-        pct: local.pct,
-        finished: local.finished,
-        sel: null,
-      ));
-    }
-
-    ({
-      bool started,
-      int season,
-      int episode,
-      double? simklProgress,
-      AdvancedSearchSelection? selection,
-      int? sourcePrio,
-    })
-    result;
-    if (candidates.isEmpty) {
-      // Fresh device / nothing anywhere. next_to_watch matches the home card;
-      // the MDBList CW coordinate is the weaker backup (same as the old tail).
-      if (simklNext != null) {
-        result = (
-          started: true,
-          season: simklNext.season,
-          episode: simklNext.episode,
-          simklProgress: null,
-          selection: null,
-          sourcePrio: null,
+    final result = await resolveHomeSeriesResume(
+      trakt: trakt,
+      simkl: simkl,
+      mdb: mdb,
+      local: local,
+      simklNext: simklNext,
+      findNextEpisode: (season, episode) => NextEpisodeService.findNextEpisode(
+        playId,
+        season,
+        episode,
+        preferBuiltIn: preferBuiltIn,
+        catalogItem: catalogItem,
+      ),
+      onWinner: (winner, {required trackerFrontierAhead, required willAdvance}) {
+        debugPrint(
+          '[SeriesResume] reconcile-winner title="${item.name}" id=$playId '
+          'source=${_resumeSourceName(winner.sourcePriority)} base=S${winner.season}E${winner.episode} '
+          'pct=${winner.progress} timestamp=${_formatResumeTimestamp(winner.timestampMs)} '
+          'finished=${winner.finished} trackerFrontierAhead=$trackerFrontierAhead '
+          'willAdvance=$willAdvance '
+          'progressPolicy=${trackingPolicy.progressSource.name}',
         );
-      } else if (mdbSel?.season != null && mdbSel?.episode != null) {
-        result = (
-          started: true,
-          season: mdbSel!.season!,
-          episode: mdbSel.episode!,
-          simklProgress: null,
-          selection: null,
-          sourcePrio: null,
-        );
-      } else {
-        result = (
-          started: false,
-          season: 1,
-          episode: 1,
-          simklProgress: null,
-          selection: null,
-          sourcePrio: null,
-        );
-      }
-    } else {
-      candidates.sort((a, b) {
-        final at = a.tsMs;
-        final bt = b.tsMs;
-        if (at != null && bt != null) return bt.compareTo(at);
-        if (at != null) return -1;
-        if (bt != null) return 1;
-        return a.prio.compareTo(b.prio);
-      });
-      final w = candidates.first;
-      var season = w.s;
-      var episode = w.e;
-      var selection = w.sel;
-      var simklProgress = w.prio == 1 ? w.pct : null;
-      final isTracker = w.prio <= 2;
-      final sourcePrio = w.prio;
-      // Advance rules. Tracker sessions at ≥80% are the orphan pattern the
-      // trackers themselves treat as watched — advance. A LOCAL position at
-      // ≥80% only advances when the player marked it finished OR a tracker's
-      // resume/up-next frontier confirms the episode is behind it. A local-only
-      // pause in the last stretch stays resumable in place.
-      final trackerFrontiers = <EpisodeCoordinate>[
-        for (final candidate in candidates)
-          if (candidate.prio <= 2) (season: candidate.s, episode: candidate.e),
-        if (simklNext != null)
-          (season: simklNext.season, episode: simklNext.episode),
-      ];
-      final trackerFrontierAhead = trackerFrontiers.any(
-        (frontier) =>
-            frontier.season > season ||
-            (frontier.season == season && frontier.episode > episode),
-      );
-      final done = shouldAdvanceEpisodeResume(
-        candidate: (season: season, episode: episode),
-        finished: w.finished,
-        progress: w.pct,
-        isTracker: isTracker,
-        trackerFrontiers: trackerFrontiers,
-      );
-      debugPrint(
-        '[SeriesResume] reconcile-winner title="${item.name}" id=$playId '
-        'source=${_resumeSourceName(w.prio)} base=S${w.s}E${w.e} '
-        'pct=${w.pct} timestamp=${_formatResumeTimestamp(w.tsMs)} '
-        'finished=${w.finished} trackerFrontierAhead=$trackerFrontierAhead '
-        'willAdvance=$done '
-        'progressPolicy=${trackingPolicy.progressSource.name}',
-      );
-      if (done) {
-        // 4s-boxed like every other network hop here: the guide fetch's body
-        // read is otherwise unbounded, and the PLAY path has no outer box —
-        // a stalled read would hang the press. Timeout → null → the defined
-        // "keep the winner / adjacent tracker frontier" fallback.
-        final next = await NextEpisodeService.findNextEpisode(
-          playId,
-          season,
-          episode,
-          preferBuiltIn: preferBuiltIn,
-          catalogItem: catalogItem,
-        ).timeout(const Duration(seconds: 4), onTimeout: () => null);
-        // A tracker-frontier backup is safe ONLY when it is the winner's direct
-        // successor. A frontier can be seasons ahead during a rewatch; trusting
-        // that blindly when the guide flakes would teleport the rewatch.
-        EpisodeCoordinate? adjacentTrackerFrontier;
-        for (final frontier in trackerFrontiers) {
-          final isDirectSuccessor =
-              (frontier.season == season && frontier.episode == episode + 1) ||
-              (frontier.season == season + 1 && frontier.episode == 1);
-          if (isDirectSuccessor) {
-            adjacentTrackerFrontier = frontier;
-            break;
-          }
-        }
-        final target = next ?? adjacentTrackerFrontier;
+      },
+      onAdvance: (from, next, adjacentTrackerFrontier, target) {
         debugPrint(
           '[SeriesResume] reconcile-advance title="${item.name}" id=$playId '
           'guideNext=${next == null ? 'none' : 'S${next.season}E${next.episode}'} '
           'adjacentTracker=${adjacentTrackerFrontier == null ? 'none' : 'S${adjacentTrackerFrontier.season}E${adjacentTrackerFrontier.episode}'} '
-          'chosen=${target == null ? 'keep-S${w.s}E${w.e}' : 'S${target.season}E${target.episode}'}',
+          'chosen=${target == null ? 'keep-S${from.season}E${from.episode}' : 'S${target.season}E${target.episode}'}',
         );
-        if (target != null) {
-          season = target.season;
-          episode = target.episode;
-          selection = null;
-          simklProgress = null;
-        }
-        // Both unknown (finale / no guide): keep the winner — playing its tail
-        // is still truer than inventing an episode.
-      }
-      result = (
-        started: true,
-        season: season,
-        episode: episode,
-        simklProgress: simklProgress,
-        selection: selection,
-        // The BASE winner's provider survives an advance on purpose — the
-        // next episode should scrobble to the tracker that owned the resume.
-        sourcePrio: sourcePrio,
-      );
-    }
+      },
+    );
     debugPrint(
       '[SeriesResume] reconcile-result title="${item.name}" id=$playId '
       'started=${result.started} target=S${result.season}E${result.episode} '
