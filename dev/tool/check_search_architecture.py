@@ -17,6 +17,8 @@ FEATURES = ("search", "home", "discover", "sources")
 EXTRACTED_ELSEWHERE: tuple[str, ...] = (
     "lib/models/home_preferences.dart",
     "lib/services/stremio_tv_rotation.dart",
+    "lib/services/stremio_tv_service.dart",
+    "lib/models/stremio_tv/stremio_tv_channel.dart",
     "lib/models/stremio_tv/stremio_tv_now_playing.dart",
     "lib/models/debrify_tv/channel.dart",
     "lib/models/debrify_tv_channel_record.dart",

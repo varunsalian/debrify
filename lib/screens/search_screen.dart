@@ -1,3 +1,5 @@
+import '../features/home/application/home_stremio_favorites_controller.dart';
+import '../features/home/models/home_stremio_favorites.dart';
 import '../features/home/application/home_tv_favorites_controller.dart';
 import '../features/home/application/home_mdblist_continuation_controller.dart';
 import '../features/home/models/home_mdblist_continuation.dart';
@@ -108,7 +110,6 @@ import '../models/iptv_playlist.dart';
 import '../models/play_loader_art.dart';
 import '../models/playlist_view_mode.dart';
 import '../models/stremio_addon.dart';
-import '../models/stremio_tv/stremio_tv_channel.dart';
 import '../models/stremio_tv/stremio_tv_now_playing.dart';
 import '../models/torrent.dart';
 import '../models/torrent_filter_state.dart';
@@ -207,7 +208,6 @@ import 'settings/tv_home_style_page.dart'
     show effectiveOffTvHomeStyle, shouldUseOffTvSpotlightShell;
 import 'debrid_downloads_screen.dart';
 import 'episodes_screen.dart';
-import 'stremio_tv/stremio_tv_service.dart';
 import 'stremio_tv/widgets/stremio_tv_catalog_picker_dialog.dart';
 import 'torbox/torbox_downloads_screen.dart';
 import 'premiumize/premiumize_files_screen.dart';
@@ -1045,10 +1045,12 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   // "channels" (catalogs treated as TV channels). Each card shows the channel's
   // current now-playing item poster (same time-based rotation as the Home /
   // Stremio TV screens); tapping opens the channel. Loaded once on init.
-  List<StremioTvChannel> _stvFavChannels = [];
+  late final HomeStremioFavoritesController _stremioFavoritesController;
+  late final ProviderSubscription<HomeStremioFavorites>
+  _stremioFavoritesSubscription;
+  List<HomeStremioFavorite> get _stvFavChannels =>
+      _stremioFavoritesController.current.channels;
   final List<FocusNode> _stvFavNodes = [];
-  int _stvRotationMinutes = 90;
-  int _stvSeriesRotationMinutes = 45;
 
   // IPTV favourites — a leading row of the user's starred live IPTV channels.
   // Cards show the channel logo (glyph fallback); tapping plays the stream
@@ -1880,6 +1882,17 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     _tvFavoritesController = ref.read(
       homeTvFavoritesProvider(tvFavoritesSession).notifier,
     );
+    final stremioFavoritesSession = (
+      owner: _profileSessionOwner,
+      viewIdentity: Object(),
+    );
+    _stremioFavoritesSubscription = ref.listenManual(
+      homeStremioFavoritesProvider(stremioFavoritesSession),
+      (previous, next) {},
+    );
+    _stremioFavoritesController = ref.read(
+      homeStremioFavoritesProvider(stremioFavoritesSession).notifier,
+    );
     final localContinuationSession = HomeContinuationSession(
       owner: _profileSessionOwner,
       viewIdentity: Object(),
@@ -2636,6 +2649,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     _simklContinuationSubscription.close();
     _mdblistContinuationSubscription.close();
     _tvFavoritesSubscription.close();
+    _stremioFavoritesSubscription.close();
     _continuationLayoutSubscription.close();
     _listsSubscription.close();
     _catalogSubscription.close();
@@ -3780,7 +3794,6 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   final _pendingHomeRows = <HomeRowRefresh>{};
   Timer? _homeRefreshTimer;
   bool _homeAddonsPending = false;
-  int _stremioFavoritesRevision = 0;
   int _watchlistRevision = 0;
   int _playlistRevision = 0;
 
@@ -3861,41 +3874,15 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     MainPageBridge.switchTab?.call(MainTab.debrifyTv);
   }
 
-  /// Load the user's starred Stremio TV channels for the leading favourites row.
-  /// Mirrors the Home section: discover all channels, keep the favourited ones
-  /// (preserving discovery order), then fetch their items so each card can show
-  /// a now-playing poster. Silently leaves the row empty on any error.
-  Future<void> _loadStremioTvFavorites() async {
-    final revision = ++_stremioFavoritesRevision;
-    try {
-      final ids = await StorageService.getStremioTvFavoriteChannelIds();
-      if (ids.isEmpty) {
-        if (!mounted || revision != _stremioFavoritesRevision) return;
-        setState(() => _stvFavChannels = const []);
-        _syncStvFavNodes();
-        return;
-      }
-      final rotations = await Future.wait([
-        StorageService.getStremioTvRotationMinutes(),
-        StorageService.getStremioTvSeriesRotationMinutes(),
-      ]);
-      final rotation = rotations[0];
-      final seriesRotation = rotations[1];
-      final all = await StremioTvService.instance.discoverChannels();
-      final favs = all.where((c) => ids.contains(c.id)).toList();
-      await StremioTvService.instance.loadAllChannelItems(favs);
-      if (!mounted || revision != _stremioFavoritesRevision) return;
-      setState(() {
-        _stvRotationMinutes = rotation;
-        _stvSeriesRotationMinutes = seriesRotation;
-        _stvFavChannels = favs;
-      });
+  /// Reload starred Stremio TV channels without replacing newer row data.
+  Future<void> _loadStremioTvFavorites() => _stremioFavoritesController.load(
+    isCurrent: () => mounted,
+    onRows: (hasFavoriteIds) {
+      setState(() {});
       _syncStvFavNodes();
-      _maybeAutoFocusBoard();
-    } catch (_) {
-      // Favourites row just stays hidden.
-    }
-  }
+      if (hasFavoriteIds) _maybeAutoFocusBoard();
+    },
+  );
 
   void _syncStvFavNodes() {
     while (_stvFavNodes.length < _stvFavChannels.length) {
@@ -3918,18 +3905,14 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   /// The now-playing item for a Stremio TV channel, using the same time-based
   /// rotation as the Home / Stremio TV screens (series rotate on their own
   /// cadence). Null when the channel has no loaded items.
-  StremioTvNowPlaying? _stvNowPlaying(StremioTvChannel channel) {
-    return StremioTvService.instance.getNowPlaying(
-      channel,
-      rotationMinutes: channel.type == 'series'
-          ? _stvSeriesRotationMinutes
-          : _stvRotationMinutes,
-    );
+  StremioTvNowPlaying? _stvNowPlaying(HomeStremioFavorite channel) {
+    if (channel.items.isEmpty) return null;
+    return _stremioFavoritesController.playingAt(channel, DateTime.now());
   }
 
   /// Open a Stremio TV channel (same path the Home screen uses): hand off to the
   /// live player if it's mounted, else queue an auto-play and switch tabs.
-  void _playStremioTvChannel(StremioTvChannel channel) {
+  void _playStremioTvChannel(HomeStremioFavorite channel) {
     if (MainPageBridge.watchStremioTvChannel != null) {
       MainPageBridge.watchStremioTvChannel!(channel.id);
       return;
@@ -7326,7 +7309,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   /// poster — the same resolution the classic and Canvas rails use. Spotlight
   /// landscape mode instead chooses the title's best wide art. Null
   /// (placeholder) until the channel's items load.
-  String? _stvFavArt(StremioTvChannel ch, {bool landscape = false}) {
+  String? _stvFavArt(HomeStremioFavorite ch, {bool landscape = false}) {
     final item = _stvNowPlaying(ch)?.item;
     if (item == null) return null;
     if (landscape) return _wideArtUrl(item);
