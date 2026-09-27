@@ -1,139 +1,7 @@
-part of '../search_screen.dart';
-
-/// The Discover glass stage's still backdrop: the focused (rail-shown) title's
-/// backdrop drawn full-frame behind both panes, veiled by [_DiscoverStageVeils]
-/// above it. Adoption is dwell-debounced (~380ms) so rapid DPAD arrowing never
-/// decodes a full-bleed image per step — the first artwork after an empty stage
-/// paints immediately. Only real `background` art is used (never a blown-up
-/// poster); titles without it browse on the plain ink wash.
-class _DiscoverStageBackdrop extends StatefulWidget {
-  final ValueListenable<StremioMeta?> shown;
-
-  /// How long the DPAD must rest before this adopts a new backdrop. The STAGE
-  /// layout passes ZERO: its feed is already settled upstream (the identity
-  /// block's own settle), so a second dwell here would only make the art trail
-  /// the title it belongs to.
-  final Duration dwell;
-
-  /// Crossfade swaps instead of snapping them. The two-pane keeps the snap —
-  /// a full-screen crossfade is a saveLayer on weak TV GPUs, and behind a
-  /// grid it buys little. The STAGE turns it on: the art IS the layout there,
-  /// and its swaps are already rate-limited by the settle, so this matches the
-  /// Home board's own full-bleed art, which crossfades on the same cadence.
-  final bool crossfade;
-
-  const _DiscoverStageBackdrop({
-    required this.shown,
-    this.dwell = const Duration(milliseconds: 380),
-    this.crossfade = false,
-  });
-
-  @override
-  State<_DiscoverStageBackdrop> createState() => _DiscoverStageBackdropState();
-}
-
-class _DiscoverStageBackdropState extends State<_DiscoverStageBackdrop> {
-  String? _url;
-  Timer? _dwell;
-
-  static String? _bgOf(StremioMeta? m) {
-    final bg = m?.background;
-    return (bg != null && bg.isNotEmpty) ? bg : null;
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    widget.shown.addListener(_onShown);
-    _url = _bgOf(widget.shown.value);
-  }
-
-  @override
-  void dispose() {
-    _dwell?.cancel();
-    widget.shown.removeListener(_onShown);
-    super.dispose();
-  }
-
-  void _onShown() {
-    final next = _bgOf(widget.shown.value);
-    if (next == _url) return;
-    _dwell?.cancel();
-    // Cleared (source swap) or the focused title has no backdrop: drop to ink
-    // now — holding another title's art behind the wrong detail reads wrong.
-    if (next == null) {
-      setState(() => _url = null);
-      return;
-    }
-    // First art onto an empty stage: no dwell, the page should dress itself
-    // promptly. Subsequent moves debounce.
-    if (_url == null) {
-      setState(() => _url = next);
-      return;
-    }
-    if (widget.dwell == Duration.zero) {
-      setState(() => _url = next);
-      return;
-    }
-    _dwell = Timer(widget.dwell, () {
-      if (!mounted) return;
-      final cur = _bgOf(widget.shown.value);
-      if (cur != null && cur != _url) setState(() => _url = cur);
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final url = _url;
-    // Per-IMAGE fades stay off in both modes (a CachedNetworkImage crossfade
-    // runs on every arrival, including cache hits). Slight upward bias keeps
-    // faces/titles in the art's clear zone.
-    final art = url == null
-        ? const SizedBox.shrink()
-        : CachedNetworkImage(
-            key: ValueKey(url),
-            imageUrl: url,
-            fit: BoxFit.cover,
-            alignment: const Alignment(0, -0.4),
-            memCacheWidth: HomeTheme.heroBackdropCacheWidthTv,
-            fadeInDuration: Duration.zero,
-            fadeOutDuration: Duration.zero,
-            placeholder: (_, __) => const SizedBox.shrink(),
-            errorWidget: (_, __, ___) => const SizedBox.shrink(),
-          );
-    if (!widget.crossfade) return art;
-    // Android TV keeps the two-pane's SNAP even on the stage: the switcher's
-    // crossfade is a full-screen saveLayer on that GLES2 pipeline — the exact
-    // cost the two-pane documented when it declined the fade — and a rest can
-    // pay it twice (the raw list art, then the /meta-enriched background a
-    // moment later). On an Amlogic box those frames land right when the user
-    // is about to move again, which reads as navigation lag.
-    if (PlatformUtil.isAndroidTvCached) return art;
-    // Between two SETTLED titles — at most one swap per rest — so the
-    // saveLayer this costs is bounded, exactly as on the Home board's stage.
-    return AnimatedSwitcher(
-      duration: const Duration(milliseconds: 240),
-      // LOSING the art snaps instead of fading. Catalog list items usually
-      // arrive with no `background` at all — it comes with the /meta
-      // enrichment a moment later — so a symmetric crossfade would dip the
-      // whole frame to ink and back on nearly every rest. Only the arrival is
-      // worth animating.
-      reverseDuration: url == null
-          ? Duration.zero
-          : const Duration(milliseconds: 240),
-      // EXPAND, not the default centre-and-shrink-wrap: a switcher's stock
-      // layout hands its children loose constraints, which would let each
-      // backdrop paint at its own intrinsic size instead of covering the
-      // frame — outgoing and incoming art must both be the same full-bleed
-      // crop, or the swap reads as a jump in zoom.
-      layoutBuilder: (current, previous) => Stack(
-        fit: StackFit.expand,
-        children: [...previous, if (current != null) current],
-      ),
-      child: art,
-    );
-  }
-}
+import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
+import '../../../theme/app_theme_scope.dart';
+import '../../../utils/platform_util.dart';
 
 /// The Discover glass stage's tint veils — the mock's gradient recipe, painted
 /// in the page ink so the art dissolves into the canvas: loudest art behind the
@@ -150,7 +18,7 @@ class _DiscoverStageBackdropState extends State<_DiscoverStageBackdrop> {
 /// lerped colors, never an Opacity layer), so it is safe over the underlay
 /// trailer's punched hole; the gradient only re-paints during the transitions,
 /// never at idle.
-class _DiscoverStageVeils extends StatelessWidget {
+class DiscoverStageVeils extends StatelessWidget {
   final ValueListenable<bool> showing;
   final ValueListenable<bool> theater;
 
@@ -161,7 +29,8 @@ class _DiscoverStageVeils extends StatelessWidget {
   /// forces a per-frame full-screen saveLayer on weak TV GPUs).
   final bool stage;
 
-  const _DiscoverStageVeils({
+  const DiscoverStageVeils({
+    super.key,
     required this.showing,
     required this.theater,
     this.stage = false,
@@ -326,79 +195,6 @@ class _DiscoverStageVeils extends StatelessWidget {
                       ),
                     ],
                   ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// Lights-off over the grid while the trailer PLAYS (pre-theater): an animated
-/// baked-color wash covering the panel side (posters + filter line recede,
-/// Home-rows style), feathered over its first 15% so no hard seam cuts the
-/// stage at the pane divide. In THEATER the wash dissolves back to zero — there
-/// the panel content fades itself (host-side AnimatedOpacity) and ink here
-/// would just bury the now-unveiled video. Sits ABOVE the two-pane. Any DPAD
-/// move drops the signals and the lights snap back up in 250ms.
-class _DiscoverGridDim extends StatelessWidget {
-  final ValueListenable<bool> showing;
-  final ValueListenable<bool> theater;
-  final double leftInset;
-
-  const _DiscoverGridDim({
-    required this.showing,
-    required this.theater,
-    required this.leftInset,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final ink = AppThemeScope.of(context).home.bg;
-    return Positioned(
-      left: leftInset,
-      top: 0,
-      right: 0,
-      bottom: 0,
-      // RepaintBoundary inside the Positioned (which must stay a direct Stack
-      // child): the dim animates a panel-wide gradient per frame during the
-      // 250/900ms transitions — keep those frames off the stage layer.
-      child: RepaintBoundary(
-        child: IgnorePointer(
-          child: ValueListenableBuilder<bool>(
-            valueListenable: showing,
-            builder: (_, on, __) => ValueListenableBuilder<bool>(
-              valueListenable: theater,
-              builder: (_, deep, __) => TweenAnimationBuilder<double>(
-                tween: Tween(end: deep ? 2.0 : (on ? 1.0 : 0.0)),
-                duration: deep
-                    ? const Duration(milliseconds: 1200)
-                    : on
-                    ? const Duration(milliseconds: 900)
-                    : const Duration(milliseconds: 250),
-                curve: Curves.easeInOutCubic,
-                builder: (_, t, __) {
-                  // 0→1: 0 → .52 (playback); 1→2: .52 → 0 (theater unveils).
-                  final a = t <= 1.0 ? 0.52 * t : 0.52 * (2.0 - t);
-                  if (a <= 0.001) return const SizedBox.shrink();
-                  return DecoratedBox(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.centerLeft,
-                        end: Alignment.centerRight,
-                        // withValues (not fade): absolute alphas over an
-                        // always-opaque ground token — equivalent, and the
-                        // ramp's 0.0 end must stay a true clear.
-                        colors: [
-                          ink.withValues(alpha: 0.0),
-                          ink.withValues(alpha: a),
-                        ],
-                        stops: const [0.0, 0.15],
-                      ),
-                    ),
-                  );
-                },
-              ),
-            ),
           ),
         ),
       ),

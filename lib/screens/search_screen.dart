@@ -1,3 +1,6 @@
+import '../features/discover/presentation/discover_grid_layout.dart';
+import '../features/discover/presentation/discover_stage_backdrop.dart';
+import '../features/discover/presentation/discover_stage_veils.dart';
 import '../features/discover/application/discover_source_controller.dart';
 import '../features/discover/models/discover_source_state.dart';
 import '../features/discover/application/metadata_feature_controller.dart';
@@ -245,7 +248,6 @@ import 'premiumize/premiumize_files_screen.dart';
 import 'alldebrid/alldebrid_files_screen.dart';
 import 'pikpak/pikpak_files_screen.dart';
 
-part 'search/search_sources.dart';
 part 'search/search_card_widgets.dart';
 part 'search/search_hero_widgets.dart';
 part 'search/search_stage_widgets.dart';
@@ -16794,7 +16796,6 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   );
 
   Widget _buildDiscoverContent() {
-    final app = AppThemeScope.of(context);
     final panel = DiscoverCardSettingsScope(
       showTypeTags: _discShowTypeTags,
       showRatings: _discShowRatings,
@@ -16831,171 +16832,43 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
           return panel;
         }
         if (_discStage) return _buildDiscoverStage(c, panel);
-        final railW = (c.maxWidth * 0.375).clamp(320.0, 460.0);
-        final panelW = c.maxWidth - railW;
-        final mq = MediaQuery.of(context);
-        final twoPane = Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            SizedBox(
-              width: railW,
-              // Theater: the identity block ghosts to 15% so the trailer owns
-              // the art zone. AnimatedOpacity is acceptable here — the layer is
-              // rail-sized (not full-screen), pays its saveLayer only during
-              // the ~1.2s ease, and composites as a cached raster once settled.
-              // It wraps a SIBLING of the video layer, so the underlay punch is
-              // untouched. Lights-up is fast to match the veils' cadence.
-              child: ValueListenableBuilder<bool>(
-                valueListenable: _discTheater,
-                // RepaintBoundary: the rail rebuilds on every DPAD step (new
-                // title, logo, plot) — keep that raster confined to the rail
-                // column instead of dirtying the stage layer behind it.
-                child: RepaintBoundary(
-                  child: ValueListenableBuilder<StremioMeta?>(
-                    valueListenable: _discFocused,
-                    builder: (_, item, __) => DiscoverDetailRail(
-                      item: item,
-                      trailerStreams: _discTrailerStreams,
-                      trailerLoading: _discTrailerLoading,
-                      trailerVolume: _discTrailerVolume,
-                      trailerMeta: _discTrailerMeta,
-                      shownItem: _discShown,
-                    ),
-                  ),
-                ),
-                builder: (_, theater, child) => AnimatedOpacity(
-                  opacity: theater ? 0.15 : 1.0,
-                  duration: theater
-                      ? const Duration(milliseconds: 1200)
-                      : const Duration(milliseconds: 250),
-                  curve: Curves.easeInOutCubic,
-                  child: child,
-                ),
-              ),
+        return buildDiscoverGridLayout(
+          context,
+          c: c,
+          panel: panel,
+          detailRail: ValueListenableBuilder<StremioMeta?>(
+            valueListenable: _discFocused,
+            builder: (_, item, __) => DiscoverDetailRail(
+              item: item,
+              trailerStreams: _discTrailerStreams,
+              trailerLoading: _discTrailerLoading,
+              trailerVolume: _discTrailerVolume,
+              trailerMeta: _discTrailerMeta,
+              shownItem: _discShown,
             ),
-            // The grid derives its column count from MediaQuery width; report
-            // the panel's (narrower) width so it lays out for its real box
-            // instead of the full screen and overflowing.
-            SizedBox(
-              width: panelW,
-              // Theater: the grid itself ghosts to ~12% — fading the CONTENT is
-              // the only way to unveil the trailer on this side (any ink wash
-              // painted over the panel darkens the video with it, and the
-              // opaque posters block it regardless). Same layer rules as the
-              // rail's fade: sibling of the video layer (punch untouched),
-              // saveLayer only during the ~1.2s ease, cached raster after.
-              child: ValueListenableBuilder<bool>(
-                valueListenable: _discTheater,
-                // RepaintBoundary: the filter line's focus pills repaint on
-                // every DPAD move across it (the grid viewport below is its own
-                // boundary already) — keep panel chrome out of the stage layer.
-                child: RepaintBoundary(
-                  child: MediaQuery(
-                    data: mq.copyWith(size: Size(panelW, mq.size.height)),
-                    child: panel,
-                  ),
-                ),
-                builder: (_, theater, child) => AnimatedOpacity(
-                  opacity: theater ? 0.12 : 1.0,
-                  duration: theater
-                      ? const Duration(milliseconds: 1200)
-                      : const Duration(milliseconds: 250),
-                  curve: Curves.easeInOutCubic,
-                  child: child,
-                ),
-              ),
-            ),
-          ],
-        );
-        // The glass stage (bottom → top): base ink wash → the focused title's
-        // full-frame backdrop → the ambient trailer (which replaces the still,
-        // frame one, across the whole canvas) → the tint veils that keep both
-        // panes legible (direct translucent paint — never an Opacity layer, and
-        // safe over the underlay video's punched hole, exactly like the Home
-        // hero's feathers) → the panes themselves → status chips.
-        //
-        // Layer discipline (the Home hero's): each stage stratum sits in its
-        // own RepaintBoundary so a rail swap (every DPAD step) or a veil
-        // transition frame re-rasters only itself. Without the boundaries they
-        // all share one picture and every keypress re-records + re-rasters the
-        // full-screen backdrop AND both veil gradients on the weak TV GPU —
-        // the whole page reads as laggy. These are plain composited layers,
-        // not saveLayers, so the underlay video's punch is unaffected.
-        return Stack(
-          fit: StackFit.expand,
-          children: [
-            DecoratedBox(decoration: BoxDecoration(gradient: app.home.wash)),
-            RepaintBoundary(child: _DiscoverStageBackdrop(shown: _discShown)),
-            DiscoverTrailerStage(
-              trailer: _discTrailerStreams,
-              loading: _discTrailerLoading,
-              volume: _discTrailerVolume,
-              meta: _discTrailerMeta,
-              railRect: Rect.zero,
-              takeover: _discTakeover,
-              fullStage: true,
-              showing: _discTrailerShowing,
-            ),
-            RepaintBoundary(
-              child: _DiscoverStageVeils(
-                showing: _discTrailerShowing,
-                theater: _discTheater,
-              ),
-            ),
-            twoPane,
-            // Lights-off over the grid side while the trailer plays — the Home
-            // rows' recede, transplanted. Above the panes (it dims the posters
-            // and filter line), feathered on its left edge so no seam cuts the
-            // stage. Animated as a baked color (direct paint), never Opacity.
-            _DiscoverGridDim(
-              showing: _discTrailerShowing,
-              theater: _discTheater,
-              leftInset: railW,
-            ),
-            // Recede the two-pane as the trailer takes over — a baked scrim, not
-            // an Opacity layer (whose mid-values force a per-frame full-screen
-            // saveLayer on weak TV GPUs). Dormant while the takeover stays
-            // disabled, kept wired for its revival.
-            ValueListenableBuilder<double>(
-              valueListenable: _discTakeover,
-              builder: (_, t, __) => t <= 0.001
-                  ? const SizedBox.shrink()
-                  : IgnorePointer(
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          color: app.fade(app.home.bg, 0.92 * t),
-                        ),
-                      ),
-                    ),
-            ),
-            // Status corner: the Home hero's chip pair, handing over in place —
-            // equalizer TRAILER pill while resolving/buffering, AMBIENT chip
-            // once frames are up. Anchored bottom-left, in the rail column's
-            // permanently-empty zone (the plot is capped at 6 lines, so the
-            // identity block never reaches it) — the top-right corner belongs
-            // to the filter line, which can wrap two rows on 5-segment sources.
-            Positioned(
-              bottom: 22,
-              left: 24,
-              child: ValueListenableBuilder<bool>(
-                valueListenable: _discTrailerLoading,
-                builder: (_, loading, __) =>
-                    _HeroTrailerLoadingPill(visible: loading),
-              ),
-            ),
-            Positioned(
-              bottom: 22,
-              left: 24,
-              child: ValueListenableBuilder<bool>(
-                valueListenable: _discTrailerShowing,
-                builder: (_, showing, __) => ValueListenableBuilder<bool>(
-                  valueListenable: _discTrailerLoading,
-                  builder: (_, loading, __) =>
-                      _HeroAmbientChip(visible: showing && !loading),
-                ),
-              ),
-            ),
-          ],
+          ),
+          backdrop: DiscoverStageBackdrop(shown: _discShown),
+          trailer: DiscoverTrailerStage(
+            trailer: _discTrailerStreams,
+            loading: _discTrailerLoading,
+            volume: _discTrailerVolume,
+            meta: _discTrailerMeta,
+            railRect: Rect.zero,
+            takeover: _discTakeover,
+            fullStage: true,
+            showing: _discTrailerShowing,
+          ),
+          veils: DiscoverStageVeils(
+            showing: _discTrailerShowing,
+            theater: _discTheater,
+          ),
+          theater: _discTheater,
+          showing: _discTrailerShowing,
+          loading: _discTrailerLoading,
+          takeover: _discTakeover,
+          loadingIndicator: (visible) =>
+              _HeroTrailerLoadingPill(visible: visible),
+          ambientIndicator: (visible) => _HeroAmbientChip(visible: visible),
         );
       },
     );
@@ -17035,7 +16908,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       children: [
         DecoratedBox(decoration: BoxDecoration(gradient: app.home.wash)),
         RepaintBoundary(
-          child: _DiscoverStageBackdrop(
+          child: DiscoverStageBackdrop(
             shown: _discShown,
             // The identity block settles this feed upstream, so no second
             // dwell here — art and title land together, and they crossfade
@@ -17055,7 +16928,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
           showing: _discTrailerShowing,
         ),
         RepaintBoundary(
-          child: _DiscoverStageVeils(
+          child: DiscoverStageVeils(
             showing: _discTrailerShowing,
             theater: _discTheater,
             stage: true,
