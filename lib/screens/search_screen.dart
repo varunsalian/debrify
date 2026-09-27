@@ -1,3 +1,4 @@
+import '../features/home/application/home_iptv_favorites_controller.dart';
 import '../features/home/application/home_stremio_favorites_controller.dart';
 import '../features/home/models/home_stremio_favorites.dart';
 import '../features/home/application/home_tv_favorites_controller.dart';
@@ -1056,7 +1057,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   // Cards show the channel logo (glyph fallback); tapping plays the stream
   // directly via VideoPlayerLauncher (no tab switch). Reloaded whenever list
   // membership or manual order changes.
-  List<IptvChannel> _iptvFavChannels = [];
+  late final HomeIptvFavoritesController _iptvFavoritesController;
+  late final ProviderSubscription<List<IptvChannel>> _iptvFavoritesSubscription;
+  List<IptvChannel> get _iptvFavChannels => _iptvFavoritesController.current;
   final List<FocusNode> _iptvFavNodes = [];
 
   // Debrify's account-independent movie/series watchlist. Full metadata is
@@ -1893,6 +1896,17 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     _stremioFavoritesController = ref.read(
       homeStremioFavoritesProvider(stremioFavoritesSession).notifier,
     );
+    final iptvFavoritesSession = (
+      owner: _profileSessionOwner,
+      viewIdentity: Object(),
+    );
+    _iptvFavoritesSubscription = ref.listenManual(
+      homeIptvFavoritesProvider(iptvFavoritesSession),
+      (previous, next) {},
+    );
+    _iptvFavoritesController = ref.read(
+      homeIptvFavoritesProvider(iptvFavoritesSession).notifier,
+    );
     final localContinuationSession = HomeContinuationSession(
       owner: _profileSessionOwner,
       viewIdentity: Object(),
@@ -2650,6 +2664,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     _mdblistContinuationSubscription.close();
     _tvFavoritesSubscription.close();
     _stremioFavoritesSubscription.close();
+    _iptvFavoritesSubscription.close();
     _continuationLayoutSubscription.close();
     _listsSubscription.close();
     _catalogSubscription.close();
@@ -3921,38 +3936,15 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     MainPageBridge.switchTab?.call(MainTab.stremioTv);
   }
 
-  /// Load the user's starred IPTV channels for the leading favourites row.
-  /// Favourites are stored as a url → {name, logoUrl, group} map, so rebuild
-  /// [IptvChannel] objects from it in the store's user-defined order.
-  Future<void> _loadIptvFavorites() async {
-    try {
-      final map = await StorageService.getIptvFavoriteChannels();
-      if (map.isEmpty) {
-        if (!mounted) return;
-        setState(() => _iptvFavChannels = const []);
-        _syncIptvFavNodes();
-        return;
-      }
-      final favs = map.entries.map((e) {
-        final meta = e.value;
-        return IptvChannel(
-          name: meta['name'] as String? ?? 'Unknown Channel',
-          url: e.key,
-          logoUrl: meta['logoUrl'] as String?,
-          group: meta['group'] as String?,
-          duration: -1, // live stream
-          attributes: const {},
-          httpHeaders: StorageService.iptvFavoriteHeaders(meta),
-        );
-      }).toList();
-      if (!mounted) return;
-      setState(() => _iptvFavChannels = favs);
+  /// Reload the live-only favourites projection; custom lists retain their own mapping.
+  Future<void> _loadIptvFavorites() => _iptvFavoritesController.load(
+    isCurrent: () => mounted,
+    onRows: (hasFavorites) {
+      setState(() {});
       _syncIptvFavNodes();
-      _maybeAutoFocusBoard();
-    } catch (_) {
-      // Favourites row just stays hidden.
-    }
-  }
+      if (hasFavorites) _maybeAutoFocusBoard();
+    },
+  );
 
   void _syncIptvFavNodes() {
     while (_iptvFavNodes.length < _iptvFavChannels.length) {

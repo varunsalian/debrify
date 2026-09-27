@@ -16,6 +16,7 @@ FEATURES = ("search", "home", "discover", "sources")
 # add a retained facade here once its migration is complete.
 EXTRACTED_ELSEWHERE: tuple[str, ...] = (
     "lib/models/home_preferences.dart",
+    "lib/models/iptv_playlist.dart",
     "lib/services/stremio_tv_rotation.dart",
     "lib/services/stremio_tv_service.dart",
     "lib/models/stremio_tv/stremio_tv_channel.dart",
