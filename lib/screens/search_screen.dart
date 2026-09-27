@@ -175,6 +175,7 @@ import '../features/home/application/home_tracking_policy_dependencies.dart';
 import '../features/home/application/home_tracker_resume_dependencies.dart';
 import '../features/home/data/home_tracker_resume_repository.dart';
 import '../features/home/data/home_catalog_playback_payload.dart';
+import '../features/home/presentation/home_catalog_playback_bridge.dart';
 import '../features/home/models/home_catalog_origin.dart';
 import '../widgets/clear_pinned_sources_button.dart';
 import '../services/profiles/profile_runtime.dart';
@@ -12756,58 +12757,37 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   /// Catalog auto-best play — the service picks the provider, shows the real
   /// cinematic overlay, searches, and plays (with source list + content
   /// metadata so the in-player Sources switcher + Continue Watching work).
-  Future<void> _playSelection(AdvancedSearchSelection sel, {String? metadataAddonId, StremioMeta? catalogItem}) async {
-    // The originating detail can remain underneath a recommendation detail.
-    // Capture its provider for delayed Sources handoffs as well as this launch.
+  Future<void> _playSelection(
+    AdvancedSearchSelection sel, {
+    String? metadataAddonId,
+    StremioMeta? catalogItem,
+  }) async {
+    bool current() =>
+        mounted && _profileSessionOwner == ProfileSessionMemory.captureOwner();
+    if (!current()) return;
+    // Capture the originating detail's provider for delayed Sources handoffs.
     final addonId = metadataAddonId ?? _activeAddonId;
-    // Playback is about to change every resume signal — never let a
-    // pre-playback reconciled answer survive into the post-playback reads.
+    // No pre-playback reconciled answer may survive into post-playback reads.
     _seriesResumeCache.clear();
-    // Row quick-play skips the detail page, so there's no detail route whose
-    // pop can drive the post-playback refresh — this method has to do it. WHEN
-    // it can depends on the player: the in-app route only completes the await
-    // below once it pops (playback over, progress final), while an external
-    // activity returns control immediately, still mid-launch. Latch which one
-    // took the stream so a native/external launch doesn't fire a pointless
-    // tracker refetch while the player is still opening — its real refresh
-    // arrives via _onPlaybackReturned.
-    var external = false;
-    void onExternal() => external = true;
-    MainPageBridge.addExternalPlayerLaunchListener(onExternal);
-    try {
-      await TorrentPlaybackService.playFromSelection(
-        context,
-        imdbId: sel.imdbId,
-        isMovie: !sel.isSeries,
-        season: sel.season,
-        episode: sel.episode,
-        meta: _metaFor(sel, addonId: addonId, catalogItem: catalogItem),
-        // This is the user's own Play press, so it honors "Play button opens".
-        // The selection already carries the exact season/episode the button was
-        // going to play, so the manual list opens on that episode — no next-up
-        // resolution here, and no way for the list to disagree with the button.
-        openSourcePicker: () => _browseSelection(
-          sel, forcePlayOnTap: true, metadataAddonId: addonId, catalogItem: catalogItem,
-        ),
-      );
-    } finally {
-      MainPageBridge.removeExternalPlayerLaunchListener(onExternal);
-    }
-    if (!mounted) return;
-    // The full refresh only when the in-app player has genuinely finished AND
-    // the board is what's on screen. An external launch is still opening, and a
-    // detail page / See-All on top owns the refresh through its own route
-    // callback — the latch keeps that deferred pass aware playback happened, so
-    // skipping here loses nothing and avoids refreshing an invisible board.
-    final boardOnTop = ModalRoute.of(context)?.isCurrent ?? false;
-    if (external || !boardOnTop) {
-      // Old-screen parity: a movie auto-binds its source on play, so refresh
-      // the board's bound badges (harmless no-op for series and non-IMDb
-      // titles, which don't auto-bind).
-      await _refreshBoundSources();
-      return;
-    }
-    await _refreshAfterPlayback();
+    await ref
+        .read(homeCatalogPlaybackBridgeProvider)
+        .play(
+          context,
+          selection: sel,
+          buildMeta: () =>
+              _metaFor(sel, addonId: addonId, catalogItem: catalogItem),
+          // Honor "Play button opens" for this exact episode. A manual source tap
+          // must play directly rather than asking the user's intent a second time.
+          openSourcePicker: () => _browseSelection(
+            sel,
+            forcePlayOnTap: true,
+            metadataAddonId: addonId,
+            catalogItem: catalogItem,
+          ),
+          isCurrent: current,
+          refreshBoundSources: _refreshBoundSources,
+          refreshAfterPlayback: _refreshAfterPlayback,
+        );
   }
 
   /// Manual sources list in-tab — the screen searches itself (own loading) and

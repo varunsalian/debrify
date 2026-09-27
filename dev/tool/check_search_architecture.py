@@ -67,6 +67,10 @@ EXTRACTED_ELSEWHERE: tuple[str, ...] = (
 # Context-dependent legacy actions are allowed only through these named bridges.
 # Phase 4C owns binding preparation; phase 7 retains playback lifecycle review.
 PRESENTATION_BRIDGE_IMPORTS = {
+    "lib/features/home/presentation/home_catalog_playback_bridge.dart": {
+        "lib/services/main_page_bridge.dart",
+        "lib/services/torrent_playback_service.dart",
+    },
     # TV Home's UI-only registration/cleanup boundary; no data or player APIs.
     "lib/features/home/presentation/home_hero_shell_bridge.dart": {
         "lib/services/main_page_bridge.dart",
