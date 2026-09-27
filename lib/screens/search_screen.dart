@@ -9,6 +9,7 @@ import '../features/home/presentation/home_tonight_layout.dart';
 import '../features/home/presentation/home_tonight_header.dart';
 import '../features/home/presentation/home_tonight_queue_list.dart';
 import '../features/home/presentation/home_stage_hold_latch.dart';
+import '../features/home/presentation/home_stage_focus_requests.dart';
 import '../features/home/presentation/home_canvas_tabs.dart';
 import '../features/home/presentation/home_canvas_shelf.dart';
 import '../features/home/presentation/home_canvas_layout.dart';
@@ -5320,7 +5321,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       // preserve the active rail even when its numeric section index changes.
       _pendingStageAdvanceKey = null;
       _pendingStageAdvanceAt = null;
-      _stageGeneration++;
+      _stageFocusRequests.invalidate();
     }
     if (preserveFocus) {
       List<List<String>> identities(List<CatalogSection> rows) => [
@@ -6056,10 +6057,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     _ => false,
   };
 
-  /// Bumped by every layout transition and every board reseed. Post-frame
-  /// focus callbacks capture it (with the style) and bail if either moved —
-  /// a callback posted by Canvas must never land focus inside Mosaic.
-  int _stageGeneration = 0;
+  late final HomeStageFocusRequests _stageFocusRequests = HomeStageFocusRequests(
+    isMounted: () => mounted,
+    readStyle: () => _homeStyleEffective,
+  );
 
   /// Deferred stage move: DOWN past the last rail asked for a batch that had
   /// not arrived. Keyed by the rail the user pressed DOWN on, so a batch that
@@ -6126,7 +6127,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     _pendingStageRightOrigin = null;
     if (_canvasRailKey != key) return;
     if (!_stageDeferralStillValid(at, origin)) return;
-    _stagePostFrameFocus(() {
+    _stageFocusRequests.schedule(() {
       // Re-check INSIDE the frame: focus can move during the post-frame gap.
       if (!identical(FocusManager.instance.primaryFocus, origin)) return null;
       final rails = _stageRails;
@@ -6164,7 +6165,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     _pendingStageRightCol = -1;
     _pendingStageRightOrigin = null;
     _stageHold.reset();
-    _stageGeneration++;
+    _stageFocusRequests.invalidate();
   }
 
   /// THE single layout-transition path. Both entry points route here — the
@@ -7489,7 +7490,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         _atriumFocusedRailKey.value = nextKey;
       }
     });
-    _stagePostFrameFocus(_stageFocusTarget);
+    _stageFocusRequests.schedule(_stageFocusTarget);
   }
 
   /// The CANVAS home: full-bleed stage (idle art → ambient trailer via the
@@ -7633,20 +7634,6 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       },
     );
   }
-  /// A post-frame focus request that is only honoured if BOTH the layout and
-  /// the stage generation are unchanged when the frame lands. Without this a
-  /// callback posted by one layout can grab focus inside the next one (style
-  /// switches and board reseeds both bump the generation).
-  void _stagePostFrameFocus(FocusNode? Function() resolve) {
-    final style = _homeStyleEffective;
-    final gen = _stageGeneration;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      if (_homeStyleEffective != style || _stageGeneration != gen) return;
-      resolve()?.requestFocus();
-    });
-  }
-
   /// A DOWN that ran off the end of the rail list asked for another batch.
   /// Called when one lands: completes the move only if the user is STILL on
   /// the rail they pressed DOWN from, and the request hasn't gone stale — a
@@ -7680,7 +7667,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     if (fillLower) {
       // Atrium had only a top row: the window stays put and focus drops into
       // the row that just landed beneath it.
-      _stagePostFrameFocus(() {
+      _stageFocusRequests.schedule(() {
         if (!identical(FocusManager.instance.primaryFocus, origin)) return null;
         final now = _stageRails;
         final at = now.indexWhere((r) => _canvasRailKeyOf(r) == key);
@@ -7701,7 +7688,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       return;
     }
     setState(() => _canvasRailKey = _canvasRailKeyOf(rails[i + 1]));
-    _stagePostFrameFocus(() {
+    _stageFocusRequests.schedule(() {
       if (!(ModalRoute.of(context)?.isCurrent ?? true)) return null;
       final primary = FocusManager.instance.primaryFocus;
       // Deck/Mosaic replace the entire rail. That intentional replacement
@@ -7775,7 +7762,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   void _seedStageFocusOnce() {
     if (_canvasFocusSeeded) return;
     _canvasFocusSeeded = true;
-    _stagePostFrameFocus(() {
+    _stageFocusRequests.schedule(() {
       // Don't yank if focus already landed somewhere real (sidebar, etc).
       final primary = FocusManager.instance.primaryFocus;
       if (primary != null && primary is! FocusScopeNode) return null;
@@ -8008,7 +7995,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       return;
     }
     setState(() => _canvasRailKey = _canvasRailKeyOf(rails[cur + 1]));
-    _stagePostFrameFocus(() {
+    _stageFocusRequests.schedule(() {
       if (_homeStyleEffective != 'atrium') return null;
       // Deferred completions pass the node that pressed DOWN; focus can move
       // during the frame gap, and a late batch must not yank it back.
