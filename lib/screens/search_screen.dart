@@ -1,3 +1,5 @@
+import '../features/discover/application/metadata_feature_controller.dart';
+import '../features/discover/models/metadata_feature_policy.dart';
 import '../features/home/application/home_episode_artwork_controller.dart';
 import '../features/home/models/home_episode_artwork.dart';
 import '../features/home/models/home_tracker_authentication.dart';
@@ -537,7 +539,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   final _titleSearchScope = ProfileRuntime.scope.value;
   bool _openingSuggestedTitle = false;
   int _suggestedTitleOpenGeneration = 0;
-  bool _titleSearchPolicyReady = false;
+  bool get _titleSearchPolicyReady => _metadataFeatureController.current.ready;
   String _titleSearchText = '';
   bool _titleSearchComposing = false;
   final FocusNode _searchFocusNode = FocusNode(debugLabel: 'search_field');
@@ -1801,6 +1803,17 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     _searchController.addListener(_onTitleSearchEditingChanged);
     ProfileRuntime.scope.addListener(_onSearchProfileChanged);
     MetadataPreferencesService.revision.addListener(_metadataSettingsChanged);
+    final metadataSession = (
+      owner: ProfileSessionMemory.captureOwner(),
+      viewIdentity: Object(),
+    );
+    _metadataFeatureSubscription = ref.listenManual(
+      metadataFeaturePolicyProvider(metadataSession),
+      (previous, next) {},
+    );
+    _metadataFeatureController = ref.read(
+      metadataFeaturePolicyProvider(metadataSession).notifier,
+    );
     unawaited(_refreshMetadataFeaturePolicy());
     WidgetsBinding.instance.addObserver(this);
     _profileSessionOwner = ProfileSessionMemory.captureOwner();
@@ -2790,6 +2803,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     _heroTint.dispose();
     _searchController.dispose();
     ProfileRuntime.scope.removeListener(_onSearchProfileChanged);
+    _metadataFeatureSubscription.close();
     _homeCatalogSubscription.close();
     _episodeArtworkSubscription.close();
     for (final subscription in _trackerAuthSubscriptions.values) {
@@ -10531,28 +10545,29 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   /// nothing but a timer reset, never a resolve or a decoder spin-up. Both
   /// lookups (Cinemeta /meta for the YouTube id, then the stream resolve) are
   /// cached in their services, so re-resting on a recent card starts fast.
-  MetadataPreferences? _metadataFeaturePolicy;
-  int _metadataFeatureGeneration = 0;
-  Future<void> _refreshMetadataFeaturePolicy() async {
-    final generation = ++_metadataFeatureGeneration;
-    final scope = ProfileRuntime.scope.value;
-    try {
-      final prefs = await MetadataPreferencesService.load();
-      if (!mounted || generation != _metadataFeatureGeneration || scope != ProfileRuntime.scope.value) return;
-      setState(() => _metadataFeaturePolicy = prefs);
-      _titleSearchPolicyReady = true;
-      _scheduleTitleSuggestions();
-      if (widget.discoverMode &&
-          _discSource == _discTmdb &&
-          !prefs.features.contains(MetadataFeature.discovery)) {
-        _selectDiscoverSource(_discCw);
-      }
-    } catch (_) {}
-  }
+  late final ProviderSubscription<MetadataFeaturePolicy>
+  _metadataFeatureSubscription;
+  late final MetadataFeatureController _metadataFeatureController;
+  MetadataPreferences? get _metadataFeaturePolicy =>
+      _metadataFeatureController.current.preferences;
+
+  Future<void> _refreshMetadataFeaturePolicy() =>
+      _metadataFeatureController.load(
+        isCurrent: () => mounted,
+        onAccepted: (prefs) {
+          setState(() {});
+          _scheduleTitleSuggestions();
+          if (widget.discoverMode &&
+              _discSource == _discTmdb &&
+              !prefs.features.contains(MetadataFeature.discovery)) {
+            _selectDiscoverSource(_discCw);
+          }
+        },
+      );
 
   void _metadataSettingsChanged() {
     if (!mounted) return;
-    _titleSearchPolicyReady = false;
+    _metadataFeatureController.invalidate();
     _cancelTitleSuggestions();
     unawaited(_refreshMetadataFeaturePolicy());
     _episodeArtworkController.refresh(

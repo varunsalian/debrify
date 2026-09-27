@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'package:debrify/features/discover/application/metadata_feature_dependencies.dart';
+import 'package:debrify/features/discover/models/metadata_feature_policy.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:debrify/models/metadata_preferences.dart';
 import 'package:debrify/screens/metadata_explore_page.dart';
@@ -15,7 +18,9 @@ import 'package:http/testing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
+  MetadataFeatureReader? policyReader;
   setUp(() {
+    policyReader = null;
     SharedPreferences.setMockInitialValues({});
     ProfileRuntime.debugReset();
     ProfileRuntime.initializeLegacy();
@@ -49,10 +54,18 @@ void main() {
   ) => drive(
     tester,
     () => tester.pumpWidget(
-      ProviderScope(child: MaterialApp(
-        navigatorKey: navigator,
-        home: const SearchScreen(discoverMode: true),
-      )),
+      ProviderScope(
+        overrides: [
+          if (policyReader != null)
+            metadataFeatureReaderProvider.overrideWith(
+              (ref, session) => policyReader!,
+            ),
+        ],
+        child: MaterialApp(
+          navigatorKey: navigator,
+          home: const SearchScreen(discoverMode: true),
+        ),
+      ),
     ),
   );
 
@@ -131,6 +144,47 @@ void main() {
       await mount(tester, navigator);
       expect(source(tester).value, 'cw');
       expect(find.byType(MetadataBrowsePage), findsNothing);
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump(const Duration(seconds: 5));
+      expect(tester.takeException(), isNull);
+    },
+  );
+  testWidgets(
+    'older enabled policy cannot restore TMDB after a newer disable',
+    (tester) async {
+      final older = Completer<MetadataPreferences>();
+      var reads = 0;
+      policyReader = () {
+        reads++;
+        return reads == 1
+            ? Future.value(MetadataPreferences())
+            : reads == 2
+            ? older.future
+            : Future.value(MetadataPreferences(features: {}));
+      };
+      final navigator = GlobalKey<NavigatorState>();
+      await mount(tester, navigator);
+      await drive(tester, () async => source(tester).onSelected('tmdb'));
+      expect(source(tester).value, 'tmdb');
+      await drive(
+        tester,
+        () async => MetadataPreferencesService.revision.value++,
+      );
+      expect(reads, 2);
+      await drive(
+        tester,
+        () async => MetadataPreferencesService.revision.value++,
+      );
+      expect(reads, 3);
+      expect(source(tester).value, 'cw');
+      await drive(tester, () async => older.complete(MetadataPreferences()));
+      expect(source(tester).value, 'cw');
+      expect(
+        source(tester).options.map((o) => o.value),
+        isNot(contains('tmdb')),
+      );
+      expect(find.byType(MetadataBrowsePage), findsNothing);
+      expect(navigator.currentState!.canPop(), isFalse);
       await tester.pumpWidget(const SizedBox());
       await tester.pump(const Duration(seconds: 5));
       expect(tester.takeException(), isNull);
