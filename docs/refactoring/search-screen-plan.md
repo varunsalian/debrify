@@ -128,7 +128,7 @@ until the batch ends. This replaces per-helper checkpoints, not incremental safe
 
 | Batch | Current status |
 | --- | --- |
-| A | In progress; resume resolver ownership/capacity implemented and reviewed (111 affected tests pass); remaining Home actions and deletion/persistence pending |
+| A | In progress; resume resolver ownership/capacity and Continue Watching hold/menu workflow implemented and reviewed (111 and 27 affected tests pass); remaining Home actions and deletion/persistence pending |
 | B | Pending remaining boundaries; substantial Sources extraction already complete |
 | C | Pending remaining boundaries; substantial layout/search extraction already complete |
 | D | Pending remaining boundaries and facade reduction |

@@ -260,7 +260,8 @@ import '../utils/tv_search_focus_handoff.dart';
 import '../services/youtube_service.dart';
 import '../widgets/add_source_picker_dialog.dart';
 import '../widgets/debrid_action_sheet.dart';
-import '../widgets/home/cw_card_menu.dart';
+import '../features/home/presentation/home_continue_watching_actions.dart';
+import '../features/home/application/home_cw_hold_preference.dart';
 import '../widgets/home/card_focus_rise.dart';
 import '../widgets/home/home_theme.dart';
 import '../widgets/home/spotlight_board.dart';
@@ -4832,131 +4833,28 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
 
   // ── Continue Watching card menu (long-press / hold-OK) ────────────────────
 
-  /// Guards against a second menu stacking on the first — on TV the hold-OK
-  /// gesture and the tap the platform synthesizes from DPAD Select can both
-  /// arrive for one press.
-  bool _cwMenuOpen = false;
+  final _continueWatchingActions = HomeContinueWatchingActions();
 
-  /// Long-press (hold-OK on TV) on a Continue Watching card: Play, or take the
-  /// title off the row. Each row supplies its own removal (see [HomeContinuationRow.onRemove])
-  /// because the four sources write to four different places.
-  /// When Home's Hold to Quick Play preference is on, the same gesture skips
-  /// this menu and invokes the row's Quick Play action directly.
-  ///
-  /// [cwIndex]/[col] are the card's board coordinates, used to put TV focus back
-  /// on a live card once the row rebuilds without the removed one.
   Future<void> _openCwCardMenu(
     HomeContinuationRow row,
     StremioMeta item,
     int cwIndex,
     int col,
   ) async {
-    if (_cwMenuOpen) return;
-    _cwMenuOpen = true;
-    final isSeries = item.type == 'series';
-    final playActionAvailable = row.kind == HomeContinuationKind.iptv || !_pikpakOnly;
-    final removeActionAvailable = row.canRemove?.call(item) ?? true;
-    if (!playActionAvailable && !removeActionAvailable) {
-      _cwMenuOpen = false;
-      return;
-    }
-    // IPTV series use their primary action to open the series page; that is
-    // still useful in the menu, but it is not the immediate playback this
-    // preference promises.
-    final quickPlayAvailable =
-        playActionAvailable && !(row.kind == HomeContinuationKind.iptv && isSeries);
-    try {
-      final holdToQuickPlay = await StorageService.getHomeCwHoldToQuickPlay();
-      if (!mounted) return;
-      if (holdToQuickPlay && quickPlayAvailable) {
-        row.onQuickPlay(item);
-        return;
-      }
-    } catch (_) {
-      // A preference read must never take the existing action menu away.
-    } finally {
-      // The dialog path takes ownership of this guard below. Direct Quick Play
-      // and failed preference reads release it here.
-      _cwMenuOpen = false;
-    }
-    if (!mounted) return;
-    _cwMenuOpen = true;
-    // An IPTV series card routes to its Xtream series page rather than playing
-    // outright (see [_openIptvCwItem]) — so name the action for what it does.
-    final playLabel = (row.kind == HomeContinuationKind.iptv && isSeries)
-        ? 'Open series'
-        : 'Play';
-    final String playDescription;
-    final String removeDescription;
-    switch (row.kind) {
-      case HomeContinuationKind.local:
-        playDescription = isSeries
-            ? 'Jump back into the episode you stopped on.'
-            : 'Resume from where you left off.';
-        removeDescription =
-            'Takes it off this row and clears the position saved on this '
-            'device.';
-      case HomeContinuationKind.trakt:
-        playDescription = isSeries
-            ? 'Jump back into the episode you stopped on.'
-            : 'Resume from where you left off.';
-        removeDescription =
-            'Deletes this title\'s playback progress (and watch history) on '
-            'Trakt, so it leaves the Trakt rows everywhere.';
-      case HomeContinuationKind.simkl:
-        playDescription = isSeries
-            ? 'Jump back into the episode you stopped on.'
-            : 'Resume from where you left off.';
-        removeDescription = isSeries
-            ? 'Moves the show to On Hold on Simkl and clears the paused '
-                  'position, so it stops resurfacing as up next.'
-            : 'Clears this movie\'s paused position on Simkl.';
-      case HomeContinuationKind.mdblist:
-        playDescription = isSeries
-            ? 'Jump into the paused or next unwatched episode from MDBList.'
-            : 'Resume from the position saved on MDBList.';
-        removeDescription =
-            'Clears this paused playback position from MDBList.';
-      case HomeContinuationKind.iptv:
-        playDescription = isSeries
-            ? 'Open the series and pick up where you left off.'
-            : 'Resume from where you left off.';
-        removeDescription = isSeries
-            ? 'Clears every watched episode of this series from your IPTV '
-                  'history.'
-            : 'Clears this item from your IPTV watch history and forgets its '
-                  'position.';
-    }
-
-    final episode = row.episodeOf(item);
-    CwCardAction? action;
-    try {
-      action = await showCwCardMenu(
-        context,
-        title: item.name,
-        isTelevision: widget.isTelevision,
-        posterUrl: item.poster,
-        subtitle: [row.title, if (episode != null) episode].join('  ·  '),
-        // Mirrors the card's own long-press-to-play gate: PikPak-only setups
-        // have no quick play, so the menu offers the removal alone.
-        showPlay: playActionAvailable,
-        showRemove: removeActionAvailable,
-        playLabel: playLabel,
-        playDescription: playDescription,
-        removeDescription: removeDescription,
-      );
-    } finally {
-      _cwMenuOpen = false;
-    }
-    if (!mounted || action == null) return;
-    switch (action) {
-      case CwCardAction.play:
-        row.onQuickPlay(item);
-      case CwCardAction.remove:
-        await row.onRemove(item);
-        if (!mounted) return;
-        _refocusAfterCwRemoval(cwIndex, col);
-    }
+    if (!_catalogNavigationCurrent()) return;
+    final readPreference = ref.read(
+      homeCwHoldPreferenceProvider(_profileSessionOwner),
+    );
+    await _continueWatchingActions.open(
+      context: context,
+      row: row,
+      item: item,
+      pikpakOnly: _pikpakOnly,
+      isTelevision: () => widget.isTelevision,
+      isCurrent: _catalogNavigationCurrent,
+      readHoldToQuickPlay: readPreference,
+      refocusAfterRemoval: () => _refocusAfterCwRemoval(cwIndex, col),
+    );
   }
 
   /// Put TV focus back on the board after a removal: the card that had it is
@@ -4965,7 +4863,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   void _refocusAfterCwRemoval(int cwIndex, int col) {
     if (!widget.isTelevision) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
+      if (!_catalogNavigationCurrent()) return;
       // Same index first: if this row survived it's still here, and if it
       // emptied out the row below has slid into its place.
       if (_focusCwRow(cwIndex, col)) return;

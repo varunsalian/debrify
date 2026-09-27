@@ -6,6 +6,33 @@ workflow checkpoints, reuse valid evidence, and run broader checks at integratio
 gates. Earlier entries retain their original slice history. No changes are pushed
 to the public repository.
 
+## Batch A checkpoint: Continue Watching hold/menu workflow — 2026-09-28
+
+`HomeContinueWatchingActions` now owns the complete per-view hold/menu interaction:
+duplicate-gesture suppression, fresh preference read, quick-play eligibility, all
+five row descriptions, modal dispatch, removal completion and return-focus handoff.
+The production Home caller supplies live TV/profile/view guards and its existing
+row actions. `homeCwHoldPreferenceProvider` supplies a fresh originating-scope
+preference reader; there is no new preference cache or application-state owner.
+
+Retirement guards now cover entry, preference return, modal result and removal
+completion. The deferred screen focus callback also rejects a retired profile.
+Existing active behavior is retained, including IPTV series opening its menu,
+PikPak-only removal, preference-read failure fallback and row-specific copy.
+The underlying removal/persistence operations have not yet migrated; this does
+not claim safe transitive deletion writes or native recovery completion.
+
+Validation: 15 existing affected tests pass before and after; 12 new tests exercise
+the actual menu for all five sources, duplicate pending gestures, quick play,
+PikPak eligibility, preference failure and retirement at asynchronous boundaries.
+Combined result: 27 passes. Analyzer identities are unchanged at 848; architecture
+checks pass for 446 migrated files. Diff whitespace checks pass. Review checked
+production wiring, live input timing, guard release and removal/focus ordering.
+Receipts: `.git/refactor-evidence/phase5/cw-action-before.txt`, `cw-action-after.txt`
+and `cw-action-analyze.txt`; all processes are terminal. Full-suite comparison
+remains scheduled at A+B integration. Next: remaining Home actions and the complete
+local deletion/persistence workflow, including recovery/sync records.
+
 ## Batch A checkpoint: series-resume resolver — 2026-09-28
 
 Production detail-label and Play callers now share a per-view/profile resolver
