@@ -1,3 +1,5 @@
+import '../features/home/application/home_trailer_preferences_controller.dart';
+import '../features/home/models/home_trailer_preferences.dart';
 import '../features/home/application/home_default_view.dart';
 import '../features/home/application/home_default_view_dependencies.dart';
 import '../features/home/application/home_display_preferences_controller.dart';
@@ -1620,13 +1622,16 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   String? _heroTrailerScheduledItemId;
   String? _heroPreviewAttemptedId;
 
-  /// Settings → Home Page toggles, read once per screen life (on TV a tab
-  /// switch rebuilds the screen, so Settings changes are picked up on return).
-  bool _heroTrailerEnabled = false;
+  /// Accepted trailer settings, refreshed on settings and sync notifications.
+  late final HomeTrailerPreferencesController _heroTrailerPreferencesController;
+  late final ProviderSubscription<HomeTrailerPreferences>
+  _heroTrailerPreferencesSubscription;
+  bool get _heroTrailerEnabled =>
+      _heroTrailerPreferencesController.current.enabled;
 
-  /// Ambient volume (0–100) for the hero trailer; 0 when the sound toggle is
-  /// off. Applied at engine open, so it's also read once per screen life.
-  double _heroTrailerVolume = 0;
+  /// Effective ambient volume (0–100); zero while the sound toggle is off.
+  double get _heroTrailerVolume =>
+      _heroTrailerPreferencesController.current.volume;
 
   /// Trailers only on the TV Home board's full spotlight — never the Search
   /// tab's compact strip (too small, and results should dominate) or off-TV
@@ -1893,6 +1898,13 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       (previous, next) {},
     );
     _homeCatalogController = ref.read(homeCatalogProvider(homeSession).notifier);
+    _heroTrailerPreferencesSubscription = ref.listenManual(
+      homeTrailerPreferencesProvider(homeSession),
+      (previous, next) {},
+    );
+    _heroTrailerPreferencesController = ref.read(
+      homeTrailerPreferencesProvider(homeSession).notifier,
+    );
     _homeDefaultViewSubscription = ref.listenManual(
       homeDefaultViewProvider(homeSession),
       (previous, next) {},
@@ -2133,27 +2145,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       // tiles, a same-title card in another row). Observe-only: the key still
       // performs its normal action (SELECT opens the showcased title).
       HardwareKeyboard.instance.addHandler(_onTakeoverKey);
-      Future.wait([
-        StorageService.getHomeHeroTrailerEnabled(),
-        StorageService.getAmbientTrailerAudioEnabled(
-          AmbientTrailerSurface.homeHero,
-        ),
-        StorageService.getAmbientTrailerVolume(AmbientTrailerSurface.homeHero),
-      ]).then((values) {
-        if (!mounted) return;
-        final enabled = values[0] as bool;
-        setState(() {
-          _heroTrailerEnabled = enabled;
-          _heroTrailerVolume = (values[1] as bool)
-              ? (values[2] as int).toDouble()
-              : 0;
-        });
-        if (!enabled) return;
-        // The board usually seeds the hero before this read lands — kick the
-        // current spotlight so the billboard still starts on cold open.
-        final current = _heroItem.value;
-        if (current != null) _scheduleHeroTrailer(current);
-      });
+      unawaited(_reloadHeroTrailerPrefs(initial: true));
     }
     // Discover on TV: relay the trailer takeover to the sidebar chrome-dim so
     // the rail hides when the trailer goes fullscreen. The showing listener
@@ -2368,25 +2360,22 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     unawaited(_reloadHeroTrailerPrefs());
   }
 
-  Future<void> _reloadHeroTrailerPrefs() async {
-    final surface = widget.isTelevision
-        ? AmbientTrailerSurface.homeHero
-        : AmbientTrailerSurface.detail;
-    final values = await Future.wait([
-      StorageService.getHomeHeroTrailerEnabled(),
-      StorageService.getAmbientTrailerAudioEnabled(surface),
-      StorageService.getAmbientTrailerVolume(surface),
-    ]);
-    if (!mounted) return;
-    final enabled = values[0] as bool;
-    setState(() {
-      _heroTrailerEnabled = enabled;
-      _heroTrailerVolume = (values[1] as bool)
-          ? (values[2] as int).toDouble()
-          : 0;
-    });
-    if (!enabled) _clearHeroTrailer();
-  }
+  Future<void> _reloadHeroTrailerPrefs({bool initial = false}) =>
+      _heroTrailerPreferencesController.load(
+        useHomeAudio: widget.isTelevision,
+        isCurrent: () => mounted,
+        onAccepted: (preferences) {
+          setState(() {});
+          if (initial) {
+            if (!preferences.enabled) return;
+            // The board usually seeds the hero before this read lands.
+            final current = _heroItem.value;
+            if (current != null) _scheduleHeroTrailer(current);
+          } else if (!preferences.enabled) {
+            _clearHeroTrailer();
+          }
+        },
+      );
 
   /// Off-TV Home's Back (via the bridge, tab key 'home'): close the Spotlight
   /// search sheet if it is up. Consuming the press here is what keeps the
@@ -2725,6 +2714,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     _searchController.dispose();
     ProfileRuntime.scope.removeListener(_onSearchProfileChanged);
     _homeCatalogSubscription.close();
+    _heroTrailerPreferencesSubscription.close();
     _homeDefaultViewSubscription.close();
     _homeDisplaySubscription.close();
     _localContinuationSubscription.close();
