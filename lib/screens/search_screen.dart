@@ -1,3 +1,4 @@
+import '../features/home/presentation/home_trailer_transitions.dart';
 import '../features/home/presentation/home_classic_rows.dart';
 import '../features/home/presentation/home_board_cell.dart';
 import '../features/home/models/home_favorite_row_ref.dart';
@@ -17403,12 +17404,14 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
             // (The old "ambient colour bleed" — a tinted wash flooding the
             // rows while the trailer played, then draining out on stop — is
             // gone by user call. Playback now reads as LIGHTS DOWN instead:
-            // neutral graded veils over the rows (_dimRowsForTrailer) and the
+            // neutral graded veils over the rows (buildHomeTrailerRowsDim) and the
             // hero canvas (spotlight's stage-dim), no hue swinging in/out.
             // The always-on mood field above is the only colour, and it
             // doesn't react to playback at all.)
-            _buildTrailerTakeoverRecede(
-              Column(
+            buildHomeTrailerBoardRecede(
+              active: _heroTrailerActive,
+              takeover: _heroTrailerTakeover,
+              board: Column(
                 children: [
                   // The hero spotlight only changes as DPAD focus moves across tiles, so
                   // it's meaningful on TV only. On phones/desktop (no DPAD) it would just
@@ -17506,8 +17509,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
                       (_catalogSearching || _catalogSearchFailures > 0))
                     _buildSearchStatusStrip(),
                   Expanded(
-                    child: _dimRowsForTrailer(
-                      Builder(
+                    child: buildHomeTrailerRowsDim(
+                      active: _heroTrailerActive,
+                      showing: _heroTrailerShowing,
+                      rows: Builder(
                         builder: (context) {
                           // Home uses one globally ordered descriptor list across
                           // every row family. Catalog search results never read
@@ -17598,91 +17603,6 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
             // name/plot remain on screen — small, top-left, fully readable.
             if (_heroTrailerActive) _buildTakeoverInfoOverlay(),
           ],
-        );
-      },
-    );
-  }
-
-  /// Settles the poster rows back while the ambient trailer plays, so the
-  /// moving picture owns the frame (Nuvio/Netflix behavior) and any DPAD move
-  /// brings them straight back. Implemented as a flat bg-tinted VEIL fading in
-  /// ABOVE the rows — NOT an Opacity around them: fading the rows subtree
-  /// meant a rows-viewport-sized saveLayer re-rastered on every frame of the
-  /// fade (the "trailer start stutters" kind of cost on a weak TV GPU), while
-  /// this is one solid fill that paints nothing at all when idle. Rows live
-  /// BELOW the hero band, so the veil can never sit over the trailer
-  /// underlay's punch-through hole.
-  Widget _dimRowsForTrailer(Widget rows) {
-    if (!_heroTrailerActive) return rows;
-    return Stack(
-      fit: StackFit.passthrough,
-      children: [
-        rows,
-        Positioned.fill(
-          child: IgnorePointer(
-            child: ValueListenableBuilder<bool>(
-              valueListenable: _heroTrailerShowing,
-              builder: (context, on, _) => AnimatedOpacity(
-                opacity: on ? 1.0 : 0.0,
-                // LIGHTS OFF, asymmetric: the theatre dims slowly when the
-                // picture starts, but any DPAD move brings the room back
-                // FAST so navigation never feels gated by an effect.
-                duration: on
-                    ? const Duration(milliseconds: 900)
-                    : const Duration(milliseconds: 250),
-                curve: Curves.easeOut,
-                // Near-black: the rows become ghosts (a whisper of structure
-                // stays so pressing DOWN isn't a leap into a void), graded a
-                // touch deeper toward the screen's foot.
-                child: const DecoratedBox(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [Color(0xE00D0B1A), Color(0xFA0D0B1A)],
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  /// Fades the board UI fully OUT as the trailer takes over — cards, rows and
-  /// hero block leave the stage entirely (the compact info overlay replaces
-  /// them). GPU-frugal by design:
-  ///  • the wrapper tree shape is FIXED (Opacity always present), so the
-  ///    board subtree — focus nodes, list scroll state — is never re-parented
-  ///    when the takeover starts/ends;
-  ///  • Opacity is layer-free at 1.0 and paints nothing at all at 0.0; the
-  ///    brief mid-fade is over static content (raster-cache friendly);
-  ///  • a TickerMode freezes the hidden board's animators (skeleton shimmers)
-  ///    so nothing re-records an invisible subtree per frame.
-  /// A short follower tween smooths the driving value, so the instant kill
-  /// (focus moved → takeover snaps to 0) eases the board back in ~240ms
-  /// instead of popping. Focus stays on the hidden card: any arrow restores
-  /// the board, and SELECT opens the very title being showcased.
-  Widget _buildTrailerTakeoverRecede(Widget board) {
-    if (!_heroTrailerActive) return board;
-    return ValueListenableBuilder<double>(
-      valueListenable: _heroTrailerTakeover,
-      child: board,
-      builder: (context, target, child) {
-        return TweenAnimationBuilder<double>(
-          tween: Tween<double>(end: target),
-          duration: const Duration(milliseconds: 240),
-          curve: Curves.easeOut,
-          child: child,
-          builder: (context, t, kid) {
-            final tt = t.clamp(0.0, 1.0);
-            return Opacity(
-              opacity: 1.0 - tt,
-              child: TickerMode(enabled: tt < 0.95, child: kid!),
-            );
-          },
         );
       },
     );
