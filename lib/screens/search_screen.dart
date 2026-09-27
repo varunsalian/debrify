@@ -1,3 +1,4 @@
+import '../features/home/presentation/home_stage_favorite_identity.dart';
 import '../widgets/skeleton_poster.dart' show BrandLoadingStage;
 import '../features/home/presentation/home_trakt_skeleton_row.dart';
 import '../features/home/presentation/home_stage_rows.dart';
@@ -7749,7 +7750,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
                       child: ValueListenableBuilder<HomeFavoriteFocus?>(
                         valueListenable: _canvasFavFocus,
                         builder: (context, fav, _) => fav != null
-                            ? _StageFavIdentity(fav: fav)
+                            ? HomeStageFavoriteIdentity(fav: fav)
                             : HomeStageIdentity(
                                 item: _heroItem,
                                 enriched: _heroEnriched,
@@ -8238,7 +8239,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
                       child: ValueListenableBuilder<HomeFavoriteFocus?>(
                         valueListenable: _canvasFavFocus,
                         builder: (context, fav, _) => fav != null
-                            ? _StageFavIdentity(fav: fav, centered: true)
+                            ? HomeStageFavoriteIdentity(fav: fav, centered: true)
                             : HomeStageIdentity(
                                 item: _heroItem,
                                 enriched: _heroEnriched,
@@ -8676,7 +8677,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
                       ValueListenableBuilder<HomeFavoriteFocus?>(
                         valueListenable: _canvasFavFocus,
                         builder: (context, fav, _) => fav != null
-                            ? _StageFavIdentity(fav: fav)
+                            ? HomeStageFavoriteIdentity(fav: fav)
                             : HomeStageIdentity(
                                 item: _heroItem,
                                 enriched: _heroEnriched,
@@ -9018,7 +9019,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
                             builder: (context, fav, _) => Align(
                               alignment: Alignment.bottomLeft,
                               child: fav != null
-                                  ? _StageFavIdentity(fav: fav)
+                                  ? HomeStageFavoriteIdentity(fav: fav)
                                   : HomeStageIdentity(
                                       item: _heroItem,
                                       enriched: _heroEnriched,
@@ -9423,7 +9424,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
                   child: ValueListenableBuilder<HomeFavoriteFocus?>(
                     valueListenable: _canvasFavFocus,
                     builder: (context, fav, _) => fav != null
-                        ? _StageFavIdentity(fav: fav)
+                        ? HomeStageFavoriteIdentity(fav: fav)
                         : HomeStageIdentity(
                             item: _heroItem,
                             enriched: _heroEnriched,

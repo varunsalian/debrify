@@ -3238,6 +3238,21 @@ retirement-wide verification follows the remaining two presentation extractions.
 The stage part is 89 lines and remains temporary; native/compositing checks remain
 open. No trivial constructor/render-copy tests were added for this body move.
 
+#### Reviewed favourite stage identity
+
+All five stage callers now use the 56-line
+`lib/features/home/presentation/home_stage_favorite_identity.dart`. Its complete
+body matches the original after the public name and optional key. Left/center
+alignment, title/subtitle text, line limits, theme colors, spacing and shadows
+are unchanged. Favourite selection and subscriptions stay with the composing
+view; this widget receives the existing typed focus descriptor only. All 58
+favourite/playlist/caption/progressive screen checks pass, and all 861 analyzer
+identities are preserved. Size/import checks pass for 346 measured files.
+Evidence: `stage-favorite-*` and `analyze-stage-favorite.txt` under
+`.git/refactor-evidence/phase5/`. The stage part is now 40 lines, with only the
+corner painter and stale historical comments left; the full retirement check
+follows that final extraction. Native layout/font checks remain open.
+
 Remaining phase-6 work:
 
 - Separate Discover selection/hydration from its grid/stage presentation. Preserve
