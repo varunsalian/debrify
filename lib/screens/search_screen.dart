@@ -1,3 +1,4 @@
+import '../features/home/presentation/home_continuation_row.dart';
 import '../features/home/presentation/home_catalog_row.dart';
 import '../features/home/presentation/home_catalog_row_header.dart';
 import '../features/home/presentation/home_favorite_row.dart';
@@ -16176,87 +16177,26 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     );
   }
 
-  /// A leading Continue Watching row (local or Trakt) — same poster cards as the
-  /// catalog rows, plus a bottom progress bar and an optional type tag. Vertical
-  /// navigation resolves [homeRowId] against the live global order.
-  Widget _buildContinueWatchingRow(HomeContinuationRow row, int cwIndex, String homeRowId) {
-    final tv = widget.isTelevision;
-    final posterW = _railTitleCardW(context);
-    final cellH = _railTitleCardH(context);
-    final rowH = cellH + 14;
-    final items = row.items;
-    final nodes = row.nodes;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _railHeader(title: row.title, tag: row.tag, onSeeAll: row.onSeeAll),
-        SizedBox(
-          height: rowH,
-          child: Builder(
-            builder: (context) {
-              // Rows start on the first poster (no leading See-All tile). DPAD-up
-              // from the first CW row leaves the board; col-0 DPAD-left drops to
-              // the sidebar (handled in HomeBoardCell when onLeft is null).
-              VoidCallback up(int col) =>
-                  () => _focusRelativeHomeRail(homeRowId, -1, col);
-              VoidCallback down(int col) =>
-                  () => _focusRelativeHomeRail(homeRowId, 1, col);
-              return ListView.builder(
-                scrollDirection: Axis.horizontal,
-                clipBehavior: Clip.hardEdge,
-                cacheExtent: 400,
-                padding: const EdgeInsets.symmetric(horizontal: 13),
-                itemCount: items.length,
-                itemBuilder: (context, index) {
-                  final col = index;
-                  final item = items[col];
-                  return Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 11),
-                    child: Center(
-                      child: SizedBox(
-                        width: posterW,
-                        height: cellH,
-                        child: HomeBoardCell(
-                          onLeftEdge: () =>
-                              MainPageBridge.focusTvSidebar?.call(),
-                          item: item,
-                          isTelevision: tv,
-                          focusNode: nodes[col],
-                          column: col,
-                          rowNodes: nodes,
-                          hasBoundSource: _isBound(item),
-                          // A Continue Watching progress bar describes the
-                          // active viewing session. A global "watched once"
-                          // check from another tracker reads as contradictory
-                          // here, especially during a rewatch.
-                          showWatchedBadge: false,
-                          aspectRatio: _titleCardAspect,
-                          artUrl: _titleArtUrl(item),
-                          showTitleOverlay: !_hideHomeCardTitlesAndRatings,
-                          progress: row.progressOf(item),
-                          episodeLabel: row.episodeOf(item),
-                          // Long-press / hold-OK opens the Play + Remove menu
-                          // rather than playing outright — a Continue Watching
-                          // card is the one place removal has to be reachable.
-                          onLongPress: () =>
-                              _openCwCardMenu(row, item, cwIndex, col),
-                          onFocused: () => _setHero(item),
-                          onUp: up(col),
-                          onDown: down(col),
-                          onOpen: () => row.onOpen(item),
-                        ),
-                      ),
-                    ),
-                  );
-                },
-              );
-            },
-          ),
-        ),
-      ],
-    );
-  }
+  Widget _buildContinueWatchingRow(
+    HomeContinuationRow row,
+    int cwIndex,
+    String homeRowId,
+  ) => buildHomeContinuationRow(
+    row: row,
+    header: _railHeader(title: row.title, tag: row.tag, onSeeAll: row.onSeeAll),
+    isTelevision: widget.isTelevision,
+    posterWidth: _railTitleCardW(context),
+    cellHeight: _railTitleCardH(context),
+    aspectRatio: () => _titleCardAspect,
+    showTitleOverlay: () => !_hideHomeCardTitlesAndRatings,
+    artOf: _titleArtUrl,
+    isBound: _isBound,
+    onLeftEdge: () => MainPageBridge.focusTvSidebar?.call(),
+    onFocused: _setHero,
+    onMenu: (item, col) => _openCwCardMenu(row, item, cwIndex, col),
+    onUp: (col) => _focusRelativeHomeRail(homeRowId, -1, col),
+    onDown: (col) => _focusRelativeHomeRail(homeRowId, 1, col),
+  );
 
   /// A skeleton Trakt Continue Watching row shown while the account's fetch is
   /// still in flight (see [_traktReserving]). Sized identically to a real CW row
