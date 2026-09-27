@@ -1,3 +1,6 @@
+import '../features/home/models/home_return_snapshot.dart';
+import '../features/home/data/home_return_repository.dart';
+import '../features/home/application/home_return_dependencies.dart';
 import '../features/home/application/home_pikpak_only_controller.dart';
 import '../features/home/application/home_bound_counts_controller.dart';
 import '../features/home/application/home_configuration_changes.dart';
@@ -98,7 +101,6 @@ import '../services/metadata_provider_service.dart';
 import '../widgets/collections/collection_focus_art.dart';
 import '../widgets/collections/collection_focus_glow.dart';
 import '../widgets/see_all/discover_browsing_input.dart';
-import '../services/home_return_cache.dart';
 import '../services/home_load_deadline.dart';
 import '../services/home_load_progress.dart';
 import '../widgets/home/home_row_focus.dart';
@@ -147,7 +149,6 @@ import '../services/home_row_order.dart';
 import '../services/filtered_catalog_pager.dart';
 import '../services/hide_watched_prefs.dart';
 import '../services/watched_filter.dart';
-import '../services/watched_status_service.dart';
 import '../services/iptv_cw_router.dart';
 import '../services/iptv_media_store.dart';
 import '../services/local_bound_source_service.dart';
@@ -309,21 +310,6 @@ class SearchScreen extends ConsumerStatefulWidget {
   @override
   ConsumerState<SearchScreen> createState() => _SearchScreenState();
 }
-
-/// Completed Home data; interactive resources belong to each screen instance.
-typedef _HomePreservedState = ({
-  List<CatalogSection> sections,
-  HomeBoardSnapshot<(StremioAddon, StremioAddonCatalog), StremioAddon> board,
-  HomeBoardConfiguration configuration,
-  CatalogSection? hero,
-  bool heroResolutionPending,
-  HomeCardOrientation cardOrientation,
-  bool hideCardTitlesAndRatings,
-  bool hideCatalogAddonNames,
-  bool hideCollectionNames,
-  DateTime loadedAt,
-  double scrollOffset,
-});
 
 /// Fixed Discover sources; installed addons are appended dynamically (key
 /// 'a:{addonId}').
@@ -697,22 +683,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   // Retain the plain snapshot adapter: disposal must not resolve WidgetRef.
   late final KeywordSnapshotRepository _keywordSnapshots;
 
-  static final _homePreserved = HomeReturnCache<_HomePreservedState>();
-  static bool _homeReturnListenersInstalled = false;
+  late final HomeReturnRepository _homeReturnRepository;
   int _homeReturnRevision = -1;
   DateTime? _homeLoadedAt;
   double _homeLastScroll = 0;
-
-  static void _watchHomeReturnChanges() {
-    if (_homeReturnListenersInstalled) return;
-    _homeReturnListenersInstalled = true;
-    MetadataPreferencesService.revision.addListener(HomeReturnCache.invalidate);
-    // With filtering enabled, watched changes also change catalog membership.
-    // These process-lifetime listeners retain no screen, player or focus node.
-    WatchedStatusService.instance.addListener(() {
-      if (HideWatchedPrefs.enabled) HomeReturnCache.invalidate();
-    });
-  }
 
   /// Captured at mount, not dispose: an outgoing screen may be torn down after
   /// the next profile is published and must still tag its snapshot as outgoing.
@@ -1815,6 +1789,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     unawaited(_refreshMetadataFeaturePolicy());
     WidgetsBinding.instance.addObserver(this);
     _profileSessionOwner = ProfileSessionMemory.captureOwner();
+    _homeReturnRepository = ref.read(
+      homeReturnRepositoryProvider(_profileSessionOwner),
+    );
     _homeCollectionsRepository = ref.read(homeCollectionsRepositoryProvider);
     _keywordSnapshots = ref.read(
       keywordSnapshotRepositoryProvider(_profileSessionOwner),
@@ -1894,9 +1871,11 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         setState(() {});
       },
     );
-    if (!widget.searchMode && !widget.discoverMode) _watchHomeReturnChanges();
+    if (!widget.searchMode && !widget.discoverMode) {
+      _homeReturnRepository.observeInvalidation();
+    }
     final homeSnapshot = !widget.searchMode && !widget.discoverMode
-        ? _homePreserved.take(_profileSessionOwner)
+        ? _homeReturnRepository.take()
         : null;
     final restoredHome = homeSnapshot != null &&
         homeSnapshot.configuration.hideWatched == HideWatchedPrefs.enabled;
@@ -2562,8 +2541,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     return true;
   }
 
-  Future<void> _restoreHomeSnapshot(_HomePreservedState snapshot) async {
-    _homeReturnRevision = HomeReturnCache.revision;
+  Future<void> _restoreHomeSnapshot(HomeReturnSnapshot snapshot) async {
+    _homeReturnRevision = _homeReturnRepository.revision;
     _homeLoadedAt = snapshot.loadedAt;
     _spotlightHeroOverride = snapshot.hero;
     _addonsById
@@ -2605,16 +2584,24 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   void _preserveHomeSnapshot() {
     final board = _committedBoard;
     final loadedAt = _homeLoadedAt;
-    if (widget.searchMode || widget.discoverMode || board == null ||
-        loadedAt == null || _loading || _error != null || _boardRefreshing ||
-        _boardLoadingMore || _pendingBoardReload) {
+    if (widget.searchMode ||
+        widget.discoverMode ||
+        board == null ||
+        loadedAt == null ||
+        _loading ||
+        _error != null ||
+        _boardRefreshing ||
+        _boardLoadingMore ||
+        _pendingBoardReload) {
       return;
     }
-    _homePreserved.store(_profileSessionOwner, (
+    _homeReturnRepository.store((
       sections: _homeCatalogController.rowsForReturn(),
       board: board,
       configuration: _homeConfiguration,
-      hero: _spotlightHeroOverride == null ? null : copyHomeRowForReturn(_spotlightHeroOverride!),
+      hero: _spotlightHeroOverride == null
+          ? null
+          : copyHomeRowForReturn(_spotlightHeroOverride!),
       heroResolutionPending: _heroSourceResolutionPending,
       cardOrientation: _homeCardOrientation,
       hideCardTitlesAndRatings: _hideHomeCardTitlesAndRatings,
@@ -2622,7 +2609,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       hideCollectionNames: _hideHomeCollectionNames,
       loadedAt: loadedAt,
       scrollOffset: _homeLastScroll,
-    ), revision: _homeReturnRevision, loadedAt: loadedAt);
+    ), revision: _homeReturnRevision);
   }
 
   @override
@@ -3013,7 +3000,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   }
 
   Future<void> _load({bool preserveVisibleRows = false}) async {
-    _homeReturnRevision = HomeReturnCache.revision;
+    _homeReturnRevision = _homeReturnRepository.revision;
     _homeLoadedAt = null;
     final previousLists = _homeSections.whereType<HomeListSection>().toList();
     HomeBoardLoad? operation;

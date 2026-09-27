@@ -109,6 +109,9 @@ class ProfileSessionMemory<T> implements _ProfileSessionClearable {
   }
 
   @visibleForTesting
+  static int get debugRegisteredStoreCount => _stores.length;
+
+  @visibleForTesting
   static void debugReset() {
     for (final store in _stores) {
       store.clear();
