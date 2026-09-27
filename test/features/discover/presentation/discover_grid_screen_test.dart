@@ -1,3 +1,4 @@
+import 'package:debrify/widgets/see_all/discover_browsing_input.dart';
 import 'dart:async';
 import 'package:debrify/features/discover/application/discover_source_dependencies.dart';
 import 'package:debrify/features/discover/data/discover_source_repository.dart';
@@ -97,6 +98,18 @@ void main() {
           find.byType(DiscoverStageVeils),
         );
         stage.showing!.value = true;
+        await tester.pump(const Duration(milliseconds: 4999));
+        expect(veils.theater.value, isFalse);
+        await tester.pump(const Duration(milliseconds: 1));
+        expect(veils.theater.value, isTrue);
+        tester
+            .widget<DiscoverBrowsingInput>(find.byType(DiscoverBrowsingInput))
+            .onActivity();
+        expect(veils.theater.value, isFalse);
+        await tester.pump(const Duration(milliseconds: 4999));
+        expect(veils.theater.value, isFalse);
+        await tester.pump(const Duration(milliseconds: 1));
+        expect(veils.theater.value, isTrue);
         stage.takeover!.value = .5;
         (veils.theater as ValueNotifier<bool>).value = true;
         await tester.pump();

@@ -1,3 +1,4 @@
+import '../features/discover/presentation/discover_preview.dart';
 import '../features/discover/presentation/discover_source_picker.dart';
 import '../features/home/presentation/home_stage_theater.dart';
 import '../features/home/presentation/home_hero_shell_bridge.dart';
@@ -1562,48 +1563,15 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   final ValueNotifier<StremioMeta?> _discFocused = ValueNotifier(null);
   void _onDiscFocused(StremioMeta item) => _discFocused.value = item;
 
-  // Discover ambient trailer, shared between the rail (which resolves + owns the
-  // single-decoder discipline, writing here) and the full-screen
-  // DiscoverTrailerStage (which renders the window and can promote it to a
-  // fullscreen takeover). See discover_trailer_stage.dart.
-  final ValueNotifier<YoutubeResolvedStreams?> _discTrailerStreams =
-      ValueNotifier(null);
-  final ValueNotifier<bool> _discTrailerLoading = ValueNotifier(false);
-  final ValueNotifier<double> _discTrailerVolume = ValueNotifier(0);
-  final ValueNotifier<double> _discTakeover = ValueNotifier(0);
-  // The playing trailer's (enriched) title — drives the fullscreen takeover's
-  // name/meta overlay. Written by the rail alongside its streams.
-  final ValueNotifier<StremioMeta?> _discTrailerMeta = ValueNotifier(null);
-  // What the rail is actually rendering (focused item merged with enrichment) —
-  // published by the rail, read by the full-frame glass stage that draws the
-  // title's backdrop behind both panes.
-  final ValueNotifier<StremioMeta?> _discShown = ValueNotifier(null);
-  // True while trailer frames are on the stage (set by DiscoverTrailerStage) —
-  // drives the AMBIENT chip in the page's status corner.
-  final ValueNotifier<bool> _discTrailerShowing = ValueNotifier(false);
-  // Theater: after a few seconds of uninterrupted playback the page commits to
-  // the trailer — veils thin to near-clear, rail and grid recede to ~15%. Armed
-  // by playback and browsing activity; controls return immediately on input
-  // and dim again after the idle dwell if trailer playback continues.
-  final ValueNotifier<bool> _discTheater = ValueNotifier(false);
-  Timer? _discTheaterTimer;
-  static const Duration _discTheaterDelay = Duration(seconds: 5);
-
-  void _onDiscShowingChanged() {
-    _discTheaterTimer?.cancel();
-    if (_discTrailerShowing.value) {
-      _discTheaterTimer = Timer(_discTheaterDelay, () {
-        if (mounted && _discTrailerShowing.value) _discTheater.value = true;
-      });
-    } else {
-      _discTheater.value = false;
-    }
-  }
+  // Local preview signals are borrowed by the resolving rail and player stage.
+  late final DiscoverPreview _discPreview = DiscoverPreview(
+    isCurrent: () => mounted,
+  );
 
   /// Relay the Discover takeover to the app shell so the TV sidebar hides in
   /// lock-step (a cinema has no menu) — the same signal the Home board uses.
   void _relayDiscoverChromeDim() =>
-      MainPageBridge.tvChromeDim.value = _discTakeover.value;
+      MainPageBridge.tvChromeDim.value = _discPreview.takeover.value;
 
   // ── Discover layout (grid / stage) ───────────────────────────────────────
 
@@ -1643,13 +1611,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   /// Home board's rule for the same swap), then re-read the pref and rebuild.
   void _onDiscoverLayoutChanged() {
     if (!mounted) return;
-    _discTrailerStreams.value = null;
-    _discTrailerMeta.value = null;
-    _discTrailerLoading.value = false;
-    _discTrailerShowing.value = false;
-    _discTheater.value = false;
-    _discTheaterTimer?.cancel();
-    _discTakeover.value = 0;
+    _discPreview.resetPlayback();
     unawaited(_loadDiscoverLayout());
   }
 
@@ -2124,8 +2086,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
           _onDiscoverCardSettingsChanged;
     }
     if (widget.discoverMode && widget.isTelevision) {
-      _discTakeover.addListener(_relayDiscoverChromeDim);
-      _discTrailerShowing.addListener(_onDiscShowingChanged);
+      _discPreview.takeover.addListener(_relayDiscoverChromeDim);
+      _discPreview.observePlayback();
       // Layout pref (grid/stage): read once here, then live-reloaded whenever
       // the Settings picker fires the bridge. DISCOVER instance only — Home
       // and Search never render this layout and must not take the slot.
@@ -2719,9 +2681,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       MainPageBridge.discoverCardSettingsChanged = null;
     }
     if (widget.discoverMode && widget.isTelevision) {
-      _discTakeover.removeListener(_relayDiscoverChromeDim);
-      _discTrailerShowing.removeListener(_onDiscShowingChanged);
-      _discTheaterTimer?.cancel();
+      _discPreview.takeover.removeListener(_relayDiscoverChromeDim);
+      _discPreview.stopObservingPlayback();
       // Only clear the bridge slot if it's still OURS — a newly-mounted
       // Discover instance may have claimed it before this one tears down.
       if (MainPageBridge.discoverLayoutChanged == _onDiscoverLayoutChanged) {
@@ -2738,14 +2699,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         });
       }
     }
-    _discTrailerStreams.dispose();
-    _discTrailerLoading.dispose();
-    _discTrailerVolume.dispose();
-    _discTakeover.dispose();
-    _discTrailerMeta.dispose();
-    _discShown.dispose();
-    _discTrailerShowing.dispose();
-    _discTheater.dispose();
+    _discPreview.dispose();
     _boardScroll.dispose();
     _kwScroll.dispose();
     _kwPillFocus.dispose();
@@ -15096,12 +15050,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   /// filter so DPAD walks Source → the panel's own filters → grid. All item
   /// open/play/bound wiring is this screen's existing board handlers.
   Widget _buildDiscover() => DiscoverBrowsingInput(
-    onActivity: () {
-      if (_discTheater.value) _discTheater.value = false;
-      // Input can leave the same trailer playing (hover or a grid boundary).
-      // Restart its idle dwell even when the playback notifier does not change.
-      _onDiscShowingChanged();
-    },
+    onActivity: _discPreview.onActivity,
     child: _buildDiscoverContent(),
   );
 
@@ -15126,17 +15075,13 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         // beside the rail; too short and the rail's fixed identity block can't
         // fit. Either way, fall back to the full-width panel.
         if (c.maxWidth < 720 || c.maxHeight < 420) {
-          // The trailer stage (which drives _discTakeover → sidebar chrome-dim,
-          // and _discTrailerShowing → the AMBIENT chip) is unmounted in this
+          // The trailer stage (which drives _discPreview.takeover → sidebar chrome-dim,
+          // and _discPreview.showing → the AMBIENT chip) is unmounted in this
           // branch. Clear both post-frame so nothing sticks across the drop.
-          if (_discTakeover.value != 0 ||
-              _discTrailerShowing.value ||
-              _discTheater.value) {
+          if (_discPreview.needsCompactReset) {
             WidgetsBinding.instance.addPostFrameCallback((_) {
               if (!mounted) return;
-              _discTakeover.value = 0;
-              _discTrailerShowing.value = false;
-              _discTheater.value = false;
+              _discPreview.clearCompactEffects();
             });
           }
           return panel;
@@ -15150,32 +15095,32 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
             valueListenable: _discFocused,
             builder: (_, item, __) => DiscoverDetailRail(
               item: item,
-              trailerStreams: _discTrailerStreams,
-              trailerLoading: _discTrailerLoading,
-              trailerVolume: _discTrailerVolume,
-              trailerMeta: _discTrailerMeta,
-              shownItem: _discShown,
+              trailerStreams: _discPreview.streams,
+              trailerLoading: _discPreview.loading,
+              trailerVolume: _discPreview.volume,
+              trailerMeta: _discPreview.meta,
+              shownItem: _discPreview.shown,
             ),
           ),
-          backdrop: DiscoverStageBackdrop(shown: _discShown),
+          backdrop: DiscoverStageBackdrop(shown: _discPreview.shown),
           trailer: DiscoverTrailerStage(
-            trailer: _discTrailerStreams,
-            loading: _discTrailerLoading,
-            volume: _discTrailerVolume,
-            meta: _discTrailerMeta,
+            trailer: _discPreview.streams,
+            loading: _discPreview.loading,
+            volume: _discPreview.volume,
+            meta: _discPreview.meta,
             railRect: Rect.zero,
-            takeover: _discTakeover,
+            takeover: _discPreview.takeover,
             fullStage: true,
-            showing: _discTrailerShowing,
+            showing: _discPreview.showing,
           ),
           veils: DiscoverStageVeils(
-            showing: _discTrailerShowing,
-            theater: _discTheater,
+            showing: _discPreview.showing,
+            theater: _discPreview.theater,
           ),
-          theater: _discTheater,
-          showing: _discTrailerShowing,
-          loading: _discTrailerLoading,
-          takeover: _discTakeover,
+          theater: _discPreview.theater,
+          showing: _discPreview.showing,
+          loading: _discPreview.loading,
+          takeover: _discPreview.takeover,
           loadingIndicator: (visible) =>
               HomeHeroTrailerLoadingPill(visible: visible),
           ambientIndicator: (visible) => HomeHeroAmbientChip(visible: visible),
@@ -15208,44 +15153,44 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       builder: (_, item, __) => DiscoverDetailRail(
         item: item,
         layout: DiscoverDetailLayout.stage,
-        trailerShowing: _discTrailerShowing,
+        trailerShowing: _discPreview.showing,
         stageMaxWidth: maxWidth,
         stageBudget: budget,
         // Holding a direction across the shelf settles identity updates;
         // the trailer still releases on the first keypress.
         settleDelay: const Duration(milliseconds: 260),
-        trailerStreams: _discTrailerStreams,
-        trailerLoading: _discTrailerLoading,
-        trailerVolume: _discTrailerVolume,
-        trailerMeta: _discTrailerMeta,
-        shownItem: _discShown,
+        trailerStreams: _discPreview.streams,
+        trailerLoading: _discPreview.loading,
+        trailerVolume: _discPreview.volume,
+        trailerMeta: _discPreview.meta,
+        shownItem: _discPreview.shown,
       ),
     ),
     backdrop: DiscoverStageBackdrop(
-      shown: _discShown,
+      shown: _discPreview.shown,
       // Identity already settles the feed: art and title land together.
       dwell: Duration.zero,
       crossfade: true,
     ),
     trailer: DiscoverTrailerStage(
-      trailer: _discTrailerStreams,
-      loading: _discTrailerLoading,
-      volume: _discTrailerVolume,
-      meta: _discTrailerMeta,
+      trailer: _discPreview.streams,
+      loading: _discPreview.loading,
+      volume: _discPreview.volume,
+      meta: _discPreview.meta,
       railRect: Rect.zero,
-      takeover: _discTakeover,
+      takeover: _discPreview.takeover,
       fullStage: true,
-      showing: _discTrailerShowing,
+      showing: _discPreview.showing,
     ),
     veils: DiscoverStageVeils(
-      showing: _discTrailerShowing,
-      theater: _discTheater,
+      showing: _discPreview.showing,
+      theater: _discPreview.theater,
       stage: true,
     ),
-    theater: _discTheater,
-    showing: _discTrailerShowing,
-    loading: _discTrailerLoading,
-    takeover: _discTakeover,
+    theater: _discPreview.theater,
+    showing: _discPreview.showing,
+    loading: _discPreview.loading,
+    takeover: _discPreview.takeover,
     loadingIndicator: (visible) => HomeHeroTrailerLoadingPill(visible: visible),
     ambientIndicator: (visible) => HomeHeroAmbientChip(visible: visible),
   );
@@ -15261,15 +15206,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       isCurrent: () => mounted,
       beforeChange: () {
         _discFocused.value = null;
-        _discShown.value = null;
+        _discPreview.shown.value = null;
         if (source == _discJellyfin || source == _discEmby) {
-          _discTrailerStreams.value = null;
-          _discTrailerMeta.value = null;
-          _discTrailerLoading.value = false;
-          _discTrailerShowing.value = false;
-          _discTheater.value = false;
-          _discTheaterTimer?.cancel();
-          _discTakeover.value = 0;
+          _discPreview.resetPlayback();
         }
       },
       onChanged: () => setState(() {}),
