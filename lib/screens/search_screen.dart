@@ -176,7 +176,7 @@ import '../services/home_load_deadline.dart';
 import '../services/home_load_progress.dart';
 import '../widgets/home/home_row_focus.dart';
 import '../widgets/home/home_continuation_focus.dart';
-import '../widgets/home/catalog_continuation_button.dart';
+import '../features/home/presentation/home_catalog_continuation_footer.dart';
 import '../services/home_row_refresh.dart';
 import '../services/profiles/connection_resource_service.dart';
 import 'dart:async';
@@ -15325,43 +15325,16 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
               : _buildBoardContent(),
         ),
         if (!_loading && showContinuation)
-          SafeArea(
-            top: false,
-            child: Focus(
-              onKeyEvent: (_, event) {
-                if (event is KeyDownEvent &&
-                    event.logicalKey == LogicalKeyboardKey.arrowUp) {
-                  _restoreCatalogContinuationFocus();
-                  return KeyEventResult.handled;
-                }
-                return KeyEventResult.ignored;
-              },
-              child: Wrap(
-                alignment: WrapAlignment.center,
-                children: [
-                  if (pending.isNotEmpty)
-                    CatalogContinuationButton(
-                      focusNode: _catalogContinueNode,
-                      autofocus: _sections.every((s) => s.items.isEmpty),
-                      busy: busy,
-                      label: 'Continue paused rows',
-                      onPressed: () =>
-                          _continueHomeCatalogs(moreCatalogs: false),
-                    ),
-                  if (hasMoreCatalogs)
-                    CatalogContinuationButton(
-                      focusNode: _catalogMoreNode,
-                      autofocus:
-                          pending.isEmpty &&
-                          _sections.every((s) => s.items.isEmpty),
-                      busy: busy,
-                      label: 'Load more catalogs',
-                      onPressed: () =>
-                          _continueHomeCatalogs(moreCatalogs: true),
-                    ),
-                ],
-              ),
-            ),
+          buildHomeCatalogContinuationFooter(
+            hasPausedRows: pending.isNotEmpty,
+            hasMoreCatalogs: hasMoreCatalogs,
+            catalogsEmpty: _sections.every((s) => s.items.isEmpty),
+            busy: busy,
+            continueNode: _catalogContinueNode,
+            moreNode: _catalogMoreNode,
+            onRestoreFocus: _restoreCatalogContinuationFocus,
+            onContinueRows: () => _continueHomeCatalogs(moreCatalogs: false),
+            onMoreCatalogs: () => _continueHomeCatalogs(moreCatalogs: true),
           ),
       ],
     );
