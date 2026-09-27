@@ -1,3 +1,4 @@
+import '../features/home/presentation/home_catalog_row_header.dart';
 import '../features/home/presentation/home_favorite_row.dart';
 import '../features/home/application/home_post_playback_refresh_controller.dart';
 import '../features/discover/presentation/discover_source_panel.dart';
@@ -158,7 +159,6 @@ import '../features/search/models/lists_search_state.dart';
 import '../features/search/models/search_mode.dart';
 import '../features/search/presentation/search_mode_toggle.dart';
 import '../features/home/presentation/category_tag.dart';
-import '../ui/core/see_all_link.dart';
 import '../features/search/application/keyword_providers.dart';
 import '../services/native_series_metadata_service.dart';
 import '../models/media_identity.dart';
@@ -187,7 +187,6 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import '../models/custom_series_identity.dart';
 import 'package:flutter/services.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 import '../models/advanced_search_selection.dart';
 import '../theme/app_theme_scope.dart';
@@ -16003,36 +16002,36 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         .then((_) => _refreshAfterPlayback(trackers: true));
   }
 
-  /// Shared header for a board rail: a "Popular Movies"-style title (the
-  /// content type lives in the words — [CatalogSection.rowTitle]) with the
-  /// source riding beside it as a small [RowTagPill]. The "See All" link is a
-  /// mouse/tap affordance shown on desktop only — TV keeps the rail
-  /// chrome-free and paginates as the user scrolls.
-  TextStyle _railTitleStyle({required double fontSize}) => GoogleFonts.poppins(
-    fontSize: fontSize, fontWeight: FontWeight.w600, letterSpacing: 0,
-    color: AppThemeScope.of(context).fade(AppThemeScope.of(context).core.tx, 0.92),
-  );
-
   double _classicCatalogRowExtent(
     BuildContext context, {
     CatalogSection? section,
   }) {
     double lineHeight(TextStyle style) {
       final painter = TextPainter(
-        text: TextSpan(text: 'Ag', style: DefaultTextStyle.of(context).style.merge(style)),
+        text: TextSpan(
+          text: 'Ag',
+          style: DefaultTextStyle.of(context).style.merge(style),
+        ),
         textDirection: Directionality.of(context),
-        textScaler: MediaQuery.textScalerOf(context), maxLines: 1,
+        textScaler: MediaQuery.textScalerOf(context),
+        maxLines: 1,
       )..layout();
       final height = painter.height;
       painter.dispose();
       return height;
     }
+
     if (_hideHomeCollectionNames && section is HomeCollectionSection) {
       return 8 + _railTitleCardH(context) + 14;
     }
-    var header = lineHeight(_railTitleStyle(fontSize: 15));
+    var header = lineHeight(
+      homeCatalogRowTitleStyle(this.context, fontSize: 15),
+    );
     if (!_hideHomeCatalogAddonNames) {
-      header = max(header, lineHeight(RowTagPill.textStyle(9.5)) + 9.5 * .56 + 2);
+      header = max(
+        header,
+        lineHeight(RowTagPill.textStyle(9.5)) + 9.5 * .56 + 2,
+      );
     }
     return 14 + header + 10 + _railTitleCardH(context) + 14;
   }
@@ -16041,61 +16040,13 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     required String title,
     String? tag,
     VoidCallback? onSeeAll,
-  }) {
-    final tv = widget.isTelevision;
-    final compact = !tv && MediaQuery.sizeOf(context).width < 480;
-    return Padding(
-      // Tighter vertically on TV so the current row's header + a peek of the
-      // next row fit under the hero on short-canvas panels.
-      padding: EdgeInsets.fromLTRB(
-        compact ? 16 : 24,
-        tv ? 14 : 22,
-        compact ? 16 : 24,
-        tv ? 10 : 12,
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          Expanded(
-            // One shape for every tier now: title + provenance pill. The tag
-            // used to render as a second line (compact) / a dot-suffix (wide)
-            // back when it was the content type; as the ADDON it reads as
-            // provenance, and the pill keeps it a footnote on all three tiers
-            // (the same chip the Spotlight board's headings wear).
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                Flexible(
-                  child: Text(
-                    title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    // Poppins for the rail titles too, so headings share one
-                    // display face. TV runs them quieter (15px) — the hero
-                    // carries the weight, the row title just labels the shelf
-                    // (Nuvio's row grammar).
-                    style: _railTitleStyle(fontSize: tv || compact ? 15 : 17),
-                  ),
-                ),
-                if (tag != null) ...[
-                  const SizedBox(width: 8),
-                  // Intrinsic width under a hard cap — a second Flexible here
-                  // would halve the title's max width and wrap it (the
-                  // Spotlight heading hit exactly that).
-                  ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 150),
-                    child: RowTagPill(tag, fontSize: 9.5),
-                  ),
-                ],
-              ],
-            ),
-          ),
-          if (onSeeAll != null && !tv)
-            SeeAllLink(onTap: onSeeAll, compact: compact),
-        ],
-      ),
-    );
-  }
+  }) => buildHomeCatalogRowHeader(
+    context,
+    isTelevision: widget.isTelevision,
+    title: title,
+    tag: tag,
+    onSeeAll: onSeeAll,
+  );
 
   Widget _buildRow(int rowIndex, {String? homeRowId}) {
     final section = _sections[rowIndex];
