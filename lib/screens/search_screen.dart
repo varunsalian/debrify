@@ -1,3 +1,4 @@
+import '../features/home/application/home_tv_favorites_controller.dart';
 import '../features/home/application/home_mdblist_continuation_controller.dart';
 import '../features/home/models/home_mdblist_continuation.dart';
 import '../features/home/application/home_simkl_continuation_controller.dart';
@@ -112,7 +113,6 @@ import '../models/stremio_tv/stremio_tv_now_playing.dart';
 import '../models/torrent.dart';
 import '../models/torrent_filter_state.dart';
 import '../services/analytics_service.dart';
-import '../services/debrify_tv_repository.dart';
 import '../services/discover_prefs.dart';
 import '../services/episode_artwork_service.dart';
 import '../services/home_collection_rows.dart';
@@ -1035,7 +1035,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   // keyword channels, shown between Continue Watching and the catalog rows.
   // Channels have no artwork, so they render as Stremio-shaped cards with a
   // gradient + glyph placeholder (see [_ArtPoster]).
-  List<DebrifyTvChannel> _tvFavChannels = [];
+  late final HomeTvFavoritesController _tvFavoritesController;
+  late final ProviderSubscription<List<DebrifyTvChannel>>
+  _tvFavoritesSubscription;
+  List<DebrifyTvChannel> get _tvFavChannels => _tvFavoritesController.current;
   final List<FocusNode> _tvFavNodes = [];
 
   // Stremio TV favourites — a leading row of the user's starred Stremio
@@ -1866,6 +1869,17 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       (previous, next) {},
     );
     _homeCatalogController = ref.read(homeCatalogProvider(homeSession).notifier);
+    final tvFavoritesSession = (
+      owner: _profileSessionOwner,
+      viewIdentity: Object(),
+    );
+    _tvFavoritesSubscription = ref.listenManual(
+      homeTvFavoritesProvider(tvFavoritesSession),
+      (previous, next) {},
+    );
+    _tvFavoritesController = ref.read(
+      homeTvFavoritesProvider(tvFavoritesSession).notifier,
+    );
     final localContinuationSession = HomeContinuationSession(
       owner: _profileSessionOwner,
       viewIdentity: Object(),
@@ -2621,6 +2635,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     _traktContinuationSubscription.close();
     _simklContinuationSubscription.close();
     _mdblistContinuationSubscription.close();
+    _tvFavoritesSubscription.close();
     _continuationLayoutSubscription.close();
     _listsSubscription.close();
     _catalogSubscription.close();
@@ -3765,7 +3780,6 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   final _pendingHomeRows = <HomeRowRefresh>{};
   Timer? _homeRefreshTimer;
   bool _homeAddonsPending = false;
-  int _tvFavoritesRevision = 0;
   int _stremioFavoritesRevision = 0;
   int _watchlistRevision = 0;
   int _playlistRevision = 0;
@@ -3815,32 +3829,14 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   }
 
   /// Reload starred channels without replacing newer row data.
-  Future<void> _loadTvFavorites() async {
-    final revision = ++_tvFavoritesRevision;
-    try {
-      final ids = await StorageService.getDebrifyTvFavoriteChannelIds();
-      if (ids.isEmpty) {
-        if (!mounted || revision != _tvFavoritesRevision) return;
-        setState(() => _tvFavChannels = const []);
-        _syncTvFavNodes();
-        return;
-      }
-      final records = await DebrifyTvRepository.instance.fetchAllChannels();
-      // fetchAllChannels() is already ordered by channel number; preserve that
-      // order (matching the Home row) rather than a redundant, non-stable
-      // re-sort that could shuffle channels sharing channelNumber 0.
-      final favs = records
-          .map(DebrifyTvChannel.fromRecord)
-          .where((c) => ids.contains(c.id))
-          .toList();
-      if (!mounted || revision != _tvFavoritesRevision) return;
-      setState(() => _tvFavChannels = favs);
+  Future<void> _loadTvFavorites() => _tvFavoritesController.load(
+    isCurrent: () => mounted,
+    onRows: (hasFavoriteIds) {
+      setState(() {});
       _syncTvFavNodes();
-      _maybeAutoFocusBoard();
-    } catch (_) {
-      // Favourites row just stays hidden.
-    }
-  }
+      if (hasFavoriteIds) _maybeAutoFocusBoard();
+    },
+  );
 
   /// Grow/shrink the favourites row's focus nodes to match the channel count.
   void _syncTvFavNodes() {
