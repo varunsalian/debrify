@@ -6,6 +6,15 @@ import '../../../utils/continue_watching_presentation.dart';
 /// Detached, read-only Simkl shelf containers. Legacy metadata and descriptors
 /// retain their identities for the existing playback handoff.
 class HomeSimklContinuation {
+  const HomeSimklContinuation.empty()
+    : movies = const [],
+      series = const [],
+      all = const [],
+      progress = const {},
+      episode = const {},
+      episodeRefs = const {},
+      byImdb = const {};
+
   HomeSimklContinuation._({
     required List<StremioMeta> movies,
     required List<StremioMeta> series,

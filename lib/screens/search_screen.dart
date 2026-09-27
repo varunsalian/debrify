@@ -1,3 +1,4 @@
+import '../features/home/application/home_simkl_continuation_controller.dart';
 import '../features/home/models/home_simkl_continuation.dart';
 import '../features/home/presentation/home_progress_view.dart';
 import '../features/home/application/home_trakt_continuation_controller.dart';
@@ -999,16 +1000,22 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   // strip below the Trakt rows, built from the account's paused playback
   // sessions (same `/sync/playback` lists the scrobble resume already fetches).
   // Independent of the Trakt block above so neither can regress the other.
-  List<StremioMeta> _simklMovies = [];
-  List<StremioMeta> _simklSeries = [];
-  List<StremioMeta> _simklAll = []; // paused_at order, for the See-All grid
-  final Map<String, double> _simklProgress = {}; // imdbId → 0..1
-  final Map<String, String> _simklEpisode = {}; // imdbId → 'S2 · E5' (series)
+  late final HomeSimklContinuationController _simklContinuationController;
+  late final ProviderSubscription<HomeSimklContinuation>
+  _simklContinuationSubscription;
+  HomeSimklContinuation get _simklContinuation =>
+      _simklContinuationController.current;
+  List<StremioMeta> get _simklMovies => _simklContinuation.movies;
+  List<StremioMeta> get _simklSeries => _simklContinuation.series;
+  List<StremioMeta> get _simklAll => _simklContinuation.all;
+  late final Map<String, double> _simklProgress;
+  Map<String, String> get _simklEpisode => _simklContinuation.episode;
+  Map<String, SimklContinueWatchingItem> get _simklByImdb =>
+      _simklContinuation.byImdb;
   final Map<String, String> _simklEpisodeArtwork = {};
-  final Map<String, SimklContinueWatchingItem> _simklByImdb = {};
+
   final List<FocusNode> _simklMovieNodes = [];
   final List<FocusNode> _simklSeriesNodes = [];
-  int _simklCwToken = 0;
   List<StremioMeta> _mdblistMovies = [];
   List<StremioMeta> _mdblistSeries = [];
   List<StremioMeta> _mdblistAll = [];
@@ -1905,6 +1912,16 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     _traktProgress = HomeProgressView(
       () => _traktContinuationController.current.data.progress,
     );
+    _simklContinuationSubscription = ref.listenManual(
+      homeSimklContinuationProvider(localContinuationSession),
+      (previous, next) {},
+    );
+    _simklContinuationController = ref.read(
+      homeSimklContinuationProvider(localContinuationSession).notifier,
+    );
+    _simklProgress = HomeProgressView(
+      () => _simklContinuationController.current.progress,
+    );
     _iptvContinuationSubscription = ref.listenManual(
       homeIptvContinuationProvider(localContinuationSession),
       (previous, next) {},
@@ -2603,6 +2620,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     _localContinuationSubscription.close();
     _iptvContinuationSubscription.close();
     _traktContinuationSubscription.close();
+    _simklContinuationSubscription.close();
     _continuationLayoutSubscription.close();
     _listsSubscription.close();
     _catalogSubscription.close();
@@ -5308,59 +5326,36 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   /// once on init / integration change and caches in memory. Token-guarded
   /// against overlap; hides the rows when Simkl isn't connected. [refreshBound]
   /// runs a bound-source refresh at the end (skip when the caller already does).
-  Future<void> _loadSimklContinueWatching({bool refreshBound = true}) async {
-    final token = ++_simklCwToken;
-    final result = await SimklContinueWatchingService.instance.fetchItems();
-    await _ensureCwMergeFlags();
-    if (!mounted || token != _simklCwToken) return;
-    // Null = a transient fetch failure — leave any existing rows in place (a
-    // real disconnect returns empty lists, which fall through and clear them).
-    if (result == null) return;
-
-    final snapshot = HomeSimklContinuation.fromRows(
-      movies: result.movies,
-      shows: result.shows,
-    );
-    // Whether the board already showed Simkl rows before this load — only a
-    // fresh appearance announces itself below; a refresh of rows the user can
-    // already see stays quiet.
-    final hadSimklRows = _simklMovies.isNotEmpty || _simklSeries.isNotEmpty;
-    _syncCwNodes(
-      _simklMovieNodes,
-      _cwMergeSimkl ? snapshot.all.length : snapshot.movies.length,
-      'smovie',
-    );
-    _syncCwNodes(
-      _simklSeriesNodes,
-      _cwMergeSimkl ? 0 : snapshot.series.length,
-      'sseries',
-    );
-    setState(() {
-      _simklMovies = snapshot.movies;
-      _simklSeries = snapshot.series;
-      _simklAll = snapshot.all;
-      _simklProgress
-        ..clear()
-        ..addAll(snapshot.progress);
-      _simklEpisode
-        ..clear()
-        ..addAll(snapshot.episode);
-      _simklEpisodeArtwork.clear();
-      _simklByImdb
-        ..clear()
-        ..addAll(snapshot.byImdb);
-    });
-    unawaited(
-      _enrichCwEpisodeArtwork(
-        refs: snapshot.episodeRefs,
-        target: _simklEpisodeArtwork,
-        isCurrent: () => token == _simklCwToken,
-      ),
-    );
-    _maybeAutoFocusBoard();
-    if (!hadSimklRows) _maybeAnnounceSimklRows();
-    if (refreshBound) unawaited(_refreshBoundSources());
-  }
+  Future<void> _loadSimklContinueWatching({bool refreshBound = true}) =>
+      _simklContinuationController.load(
+        isCurrent: () => mounted,
+        ensureLayout: _ensureCwMergeFlags,
+        beforeRows: (next) {
+          _syncCwNodes(
+            _simklMovieNodes,
+            _cwMergeSimkl ? next.all.length : next.movies.length,
+            'smovie',
+          );
+          _syncCwNodes(
+            _simklSeriesNodes,
+            _cwMergeSimkl ? 0 : next.series.length,
+            'sseries',
+          );
+        },
+        onRows: (next, hadRows, current) {
+          setState(_simklEpisodeArtwork.clear);
+          unawaited(
+            _enrichCwEpisodeArtwork(
+              refs: next.episodeRefs,
+              target: _simklEpisodeArtwork,
+              isCurrent: current,
+            ),
+          );
+          _maybeAutoFocusBoard();
+          if (!hadRows) _maybeAnnounceSimklRows();
+          if (refreshBound) unawaited(_refreshBoundSources());
+        },
+      );
 
   /// Open a Simkl Continue Watching title as a detail page. For a series, scroll
   /// the episodes panel to the paused episode (the same path the Calendar uses);
