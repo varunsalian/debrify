@@ -1,3 +1,4 @@
+import '../features/home/presentation/home_promenade_layout.dart';
 import '../features/home/presentation/home_canvas_tabs.dart';
 import '../features/home/presentation/home_canvas_shelf.dart';
 import '../features/home/presentation/home_canvas_layout.dart';
@@ -418,15 +419,6 @@ double _atriumLabelHeight(BuildContext context) =>
 // single-source-of-truth contract as the Canvas block above: the widgets and
 // the identity block that must stay clear of them read the same numbers.
 const double _kPromLabelFontSize = 12.0;
-
-/// Gap between the centred rail label and the strip below it.
-const double _kPromLabelGap = 14;
-
-/// Trailing spacer under the strip.
-const double _kPromStripTail = 24;
-
-/// Air between the identity block and the label row under it.
-const double _kPromIdentityGap = 26;
 
 /// Dim painted over every strip cell that isn't focused, so the centre-locked
 /// cell reads as the lit one. A flat fill inside the card's own clip (see
@@ -7942,183 +7934,66 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         final double cellW = favRail
             ? _stageFavW(context, stripBoxH)
             : stripBoxH * _stageCardAspect(rail, fallback: 16 / 9);
-        // Measured bottom-up, exactly like Canvas's shelfColumnH, so the
-        // identity's clearance is DERIVED and can never drift into the strip.
-        final columnH =
-            _kPromStripTail +
-            stripBoxH +
-            _kPromLabelGap +
-            _promenadeLabelHeight(context);
-        // Half-viewport pads: without them the list clamps at its ends and
-        // the first/last cell can never reach the centre lock.
-        final double sidePad = ((boardW - cellW) / 2).clamp(0.0, boardW / 2);
         final itemCount = favRail
             ? _canvasFavItemCount(rail.favKind!)
             : items.length;
-
-        return Stack(
-          fit: StackFit.expand,
-          children: [
-            // Stage floor + full-bleed key art, BELOW the punch hole so the
-            // video replaces it in place when the trailer starts.
-            HomeStageArt(
-              item: _heroItem,
-              enriched: _heroEnriched,
-              fav: _canvasFavFocus,
-              cacheWidth: _tvHeroArtworkCacheWidth,
-              cacheHeight: _tvHeroArtworkCacheHeight,
-            ),
-            if (_heroTrailerActive)
-              _HeroTrailerLayer(
-                trailer: _heroTrailer,
-                isTelevision: widget.isTelevision,
-                heroHeight: boardH,
-                fullBleed: true,
-                volume: _heroTrailerVolume,
-                loading: _heroTrailerLoading,
-                onPlayingChanged: _onHeroTrailerPlaying,
-                takeover: _heroTrailerTakeover,
-              ),
-            if (_heroTrailerActive)
-              _HeroLiveLayer(
-                channel: _heroLiveChannel,
-                streamUrl: _heroLiveUrl,
-                heroHeight: boardH,
-                fullBleed: true,
-                volume: _heroTrailerVolume,
-                onPlayingChanged: _onHeroTrailerPlaying,
-                onPlaybackFailed: _onHeroLivePlaybackFailed,
-              ),
-            IgnorePointer(
-              child: HomeStageScrims(
-                theater: _canvasTheater,
-                variant: HomeStageScrimVariant.centered,
-              ),
-            ),
-            // Centred identity — which glides to the TOP-LEFT in theater, the
-            // Netflix billboard move Canvas already makes. A logo parked in
-            // the middle of a clean full-screen trailer reads as something
-            // left behind; in the corner it reads as a signature. Meta and
-            // synopsis have already faded by then (they go with
-            // trailerShowing, before the dwell), so what travels is the logo.
-            Positioned.fill(
-              child: IgnorePointer(
-                child: AnimatedPadding(
-                  padding: EdgeInsets.only(
-                    left: 48,
-                    right: 48,
-                    top: _canvasTheater ? 36 : 0,
-                    bottom: _canvasTheater ? 0 : columnH + _kPromIdentityGap,
+        return buildHomePromenadeLayout(
+          boardWidth: boardW,
+          stripHeight: stripBoxH,
+          cellWidth: cellW,
+          labelHeight: _promenadeLabelHeight(context),
+          theater: _canvasTheater,
+          railKey: railKey,
+          itemCount: itemCount,
+          artwork: HomeStageArt(
+            item: _heroItem,
+            enriched: _heroEnriched,
+            fav: _canvasFavFocus,
+            cacheWidth: _tvHeroArtworkCacheWidth,
+            cacheHeight: _tvHeroArtworkCacheHeight,
+          ),
+          trailer: _heroTrailerActive
+              ? _HeroTrailerLayer(
+                  trailer: _heroTrailer,
+                  isTelevision: widget.isTelevision,
+                  heroHeight: boardH,
+                  fullBleed: true,
+                  volume: _heroTrailerVolume,
+                  loading: _heroTrailerLoading,
+                  onPlayingChanged: _onHeroTrailerPlaying,
+                  takeover: _heroTrailerTakeover,
+                )
+              : null,
+          live: _heroTrailerActive
+              ? _HeroLiveLayer(
+                  channel: _heroLiveChannel,
+                  streamUrl: _heroLiveUrl,
+                  heroHeight: boardH,
+                  fullBleed: true,
+                  volume: _heroTrailerVolume,
+                  onPlayingChanged: _onHeroTrailerPlaying,
+                  onPlaybackFailed: _onHeroLivePlaybackFailed,
+                )
+              : null,
+          identity: ValueListenableBuilder<HomeFavoriteFocus?>(
+            valueListenable: _canvasFavFocus,
+            builder: (context, fav, _) => fav != null
+                ? HomeStageFavoriteIdentity(fav: fav, centered: true)
+                : HomeStageIdentity(
+                    item: _heroItem,
+                    enriched: _heroEnriched,
+                    trailerShowing: _heroTrailerShowing,
+                    variant: HomeStageIdentityVariant.centered,
+                    maxWidth: boardW - 96,
                   ),
-                  duration: _canvasTheater
-                      ? const Duration(milliseconds: 900)
-                      : const Duration(milliseconds: 250),
-                  curve: Curves.easeInOutCubic,
-                  child: AnimatedAlign(
-                    alignment: _canvasTheater
-                        ? Alignment.topLeft
-                        : Alignment.bottomCenter,
-                    duration: _canvasTheater
-                        ? const Duration(milliseconds: 900)
-                        : const Duration(milliseconds: 250),
-                    curve: Curves.easeInOutCubic,
-                    child: AnimatedScale(
-                      scale: _canvasTheater ? 0.7 : 1.0,
-                      alignment: Alignment.topLeft,
-                      duration: _canvasTheater
-                          ? const Duration(milliseconds: 900)
-                          : const Duration(milliseconds: 250),
-                      curve: Curves.easeInOutCubic,
-                      child: ValueListenableBuilder<HomeFavoriteFocus?>(
-                        valueListenable: _canvasFavFocus,
-                        builder: (context, fav, _) => fav != null
-                            ? HomeStageFavoriteIdentity(fav: fav, centered: true)
-                            : HomeStageIdentity(
-                                item: _heroItem,
-                                enriched: _heroEnriched,
-                                trailerShowing: _heroTrailerShowing,
-                                variant: HomeStageIdentityVariant.centered,
-                                maxWidth: boardW - 96,
-                              ),
-                      ),
-                    ),
-                  ),
+          ),
+          label: _promenadeLabel(view),
+          itemBuilder: (context, col) => favRail
+              ? _canvasFavCell(rail.favKind!, railKey, col)
+              : SizedBox(
+                  height: stripBoxH,
+                  child: _promenadeCell(rail, railKey, items, nodes, col),
                 ),
-              ),
-            ),
-            // Rail label + the strip. Theater recede: slide + fade, cells stay
-            // MOUNTED so focus survives and the wake keypress still moves.
-            Positioned(
-              left: 0,
-              right: 0,
-              bottom: 0,
-              child: AnimatedSlide(
-                offset: _canvasTheater ? const Offset(0, 0.12) : Offset.zero,
-                duration: _canvasTheater
-                    ? const Duration(milliseconds: 900)
-                    : const Duration(milliseconds: 250),
-                curve: Curves.easeOut,
-                child: AnimatedOpacity(
-                  opacity: _canvasTheater ? 0.0 : 1.0,
-                  duration: _canvasTheater
-                      ? const Duration(milliseconds: 900)
-                      : const Duration(milliseconds: 250),
-                  curve: Curves.easeOut,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.only(
-                          left: 48,
-                          right: 48,
-                          bottom: _kPromLabelGap,
-                        ),
-                        child: _promenadeLabel(view),
-                      ),
-                      SizedBox(
-                        height: stripBoxH,
-                        child: ListView.builder(
-                          // Keyed by rail IDENTITY: insertions above the
-                          // active rail must never read as a content swap.
-                          key: ValueKey('prom-rail-$railKey'),
-                          scrollDirection: Axis.horizontal,
-                          clipBehavior: Clip.hardEdge,
-                          cacheExtent: 400,
-                          padding: EdgeInsets.symmetric(horizontal: sidePad),
-                          itemCount: itemCount,
-                          itemBuilder: (context, col) => Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 7),
-                            child: Center(
-                              child: SizedBox(
-                                width: cellW,
-                                child: favRail
-                                    ? _canvasFavCell(
-                                        rail.favKind!,
-                                        railKey,
-                                        col,
-                                      )
-                                    : SizedBox(
-                                        height: stripBoxH,
-                                        child: _promenadeCell(
-                                          rail,
-                                          railKey,
-                                          items,
-                                          nodes,
-                                          col,
-                                        ),
-                                      ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: _kPromStripTail),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ],
         );
       },
     );
