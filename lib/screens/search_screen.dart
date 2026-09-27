@@ -1,3 +1,5 @@
+import '../features/home/application/home_default_view.dart';
+import '../features/home/application/home_default_view_dependencies.dart';
 import '../features/home/application/home_display_preferences_controller.dart';
 import '../features/home/models/home_display_preferences.dart';
 import '../features/home/presentation/home_progress_publication.dart';
@@ -879,6 +881,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
 
   // Riverpod owns inventory, reservation and the last accepted snapshot for
   // this view. Search detours retain the subscription and its cursor.
+  late final ProviderSubscription<HomeDefaultView> _homeDefaultViewSubscription;
+  HomeDefaultView get _homeDefaultView => _homeDefaultViewSubscription.read();
   late final HomeCatalogController _homeCatalogController;
   late final ProviderSubscription<HomeCatalogState> _homeCatalogSubscription;
   List<HomeCatalogReference> get _boardRefs =>
@@ -1889,6 +1893,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       (previous, next) {},
     );
     _homeCatalogController = ref.read(homeCatalogProvider(homeSession).notifier);
+    _homeDefaultViewSubscription = ref.listenManual(
+      homeDefaultViewProvider(homeSession),
+      (previous, next) {},
+    );
     final displaySession = (
       owner: _profileSessionOwner,
       viewIdentity: Object(),
@@ -2717,6 +2725,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     _searchController.dispose();
     ProfileRuntime.scope.removeListener(_onSearchProfileChanged);
     _homeCatalogSubscription.close();
+    _homeDefaultViewSubscription.close();
     _homeDisplaySubscription.close();
     _localContinuationSubscription.close();
     _iptvContinuationSubscription.close();
@@ -2910,7 +2919,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     }
     // Sync can update volume on a surviving Home on every platform.
     unawaited(_reloadHeroTrailerPrefs());
-    await _loadHomeDefaultView();
+    await _loadHomeDefaultView(isCurrent: current);
     if (!mounted) return;
     final changes =
         await HomeConfigurationRefresh(
@@ -2951,22 +2960,15 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     _load();
   }
 
-  Future<void> _loadHomeDefaultView() async {
-    // Android TV has dedicated Home and Search tabs. Its Home is always the
-    // catalog board, regardless of a preference saved on another platform.
-    if (widget.isTelevision) {
-      if (_mode != SearchMode.catalog) _switchMode(SearchMode.catalog);
-      return;
-    }
-    final saved = await StorageService.getHomeDefaultSourceType();
-    if (!mounted || widget.searchMode || widget.discoverMode) return;
-    final mode =
-        saved == 'keyword' &&
-            ProfilePolicyGuard.allowsSync(ProfileFeature.keywordSearch)
-        ? SearchMode.keyword
-        : SearchMode.catalog;
-    if (_mode != mode) _switchMode(mode);
-  }
+  Future<void> _loadHomeDefaultView({bool Function()? isCurrent}) =>
+      _homeDefaultView.load(
+        isTelevision: widget.isTelevision,
+        isHome: !widget.searchMode && !widget.discoverMode,
+        isCurrent: () => mounted && (isCurrent?.call() ?? true),
+        select: (mode) {
+          if (_mode != mode) _switchMode(mode);
+        },
+      );
 
   void _commitBoardSnapshot() {
     _homeCatalogController.commit(_addonsById);

@@ -1,3 +1,4 @@
+import 'package:debrify/features/home/application/home_default_view_dependencies.dart';
 import 'package:debrify/features/search/application/keyword_defaults_dependencies.dart';
 import 'package:debrify/models/torrent_filter_state.dart';
 import '../fakes/fake_keyword_defaults_repository.dart';
@@ -30,8 +31,10 @@ void main() {
   late FakeKeywordCacheRepository cache;
   late FakeKeywordDefaultsRepository defaults;
   late MockClient client;
+  var homeDefaultReads = 0;
 
   setUp(() {
+    homeDefaultReads = 0;
     disableRuntimeFonts();
     ProfileRuntime.debugReset();
     ProfileRuntime.initializeLegacy();
@@ -75,8 +78,12 @@ void main() {
     field.onSubmitted!(query);
   });
 
-  Widget application() => ProviderScope(
+  Widget application({bool home = false}) => ProviderScope(
     overrides: [
+      homeDefaultViewReaderProvider.overrideWithValue(() async {
+        homeDefaultReads++;
+        return 'keyword';
+      }),
       keywordDefaultsRepositoryProvider.overrideWith(
         (ref, session) => defaults,
       ),
@@ -85,14 +92,14 @@ void main() {
       ),
       keywordCacheRepositoryProvider.overrideWith((ref, session) => cache),
     ],
-    child: const MaterialApp(home: SearchScreen(searchMode: true)),
+    child: MaterialApp(home: SearchScreen(searchMode: !home)),
   );
 
-  Future<void> mount(WidgetTester tester) async {
+  Future<void> mount(WidgetTester tester, {bool home = false}) async {
     tester.view.physicalSize = const Size(1200, 900);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
-    await drive(tester, () => tester.pumpWidget(application()));
+    await drive(tester, () => tester.pumpWidget(application(home: home)));
     await tester.tap(find.text('Keyword'));
     await tester.pump();
     await submit(tester, 'query');
@@ -173,6 +180,27 @@ void main() {
       await tester.pump(const Duration(seconds: 7));
     },
   );
+
+  testWidgets('Home keyword return skips the saved-default read', (
+    tester,
+  ) async {
+    await mount(tester, home: true);
+    expect(homeDefaultReads, 1);
+    final request = repository.requests.single;
+    await drive(
+      tester,
+      () => request.complete([keywordTorrent('Saved.1080p')]),
+    );
+    expect(layout(tester).resultCount, 1);
+    await drive(tester, () => tester.pumpWidget(const SizedBox()));
+    await drive(tester, () => tester.pumpWidget(application(home: true)));
+    expect(layout(tester).resultCount, 1);
+    expect(repository.requests, hasLength(1));
+    expect(homeDefaultReads, 1);
+    expect(tester.takeException(), isNull);
+    await drive(tester, () => tester.pumpWidget(const SizedBox()));
+    await tester.pump(const Duration(seconds: 7));
+  });
 
   testWidgets(
     'open provider dialog clears outgoing choices and rejects retained callbacks',
