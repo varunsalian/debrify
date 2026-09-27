@@ -1,3 +1,4 @@
+import '../features/home/presentation/home_classic_rows.dart';
 import '../features/home/presentation/home_board_cell.dart';
 import '../features/home/models/home_favorite_row_ref.dart';
 import '../features/home/presentation/home_favorite_cell.dart';
@@ -17515,86 +17516,41 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
                           final homeRails = orderedHome
                               ? _classicHomeRails
                               : const <_CanvasRail>[];
-                          final revealPrefix = 'board-reveal-$_boardGen-';
-                          final homeRailIndex = <String, int>{
-                            for (var i = 0; i < homeRails.length; i++)
-                              _canvasRailRowId(homeRails[i]): i,
-                          };
-                          int? findHomeRailIndex(Key key) {
-                            if (!orderedHome || key is! ValueKey<String>) {
-                              return null;
-                            }
-                            final value = key.value;
-                            if (!value.startsWith(revealPrefix)) return null;
-                            return homeRailIndex[value.substring(
-                              revealPrefix.length,
-                            )];
-                          }
-
-                          final showFooter = _boardLoadingMore;
-                          return ListView.builder(
-                            controller: _boardScroll,
-                            // A lazy sliver cannot relocate a keyed child by
-                            // itself. Tracker/CW rows can arrive above the
-                            // focused row, so provide the new index to preserve
-                            // its entrance state and Focus attachment.
-                            findChildIndexCallback: orderedHome
-                                ? findHomeRailIndex
+                          return HomeClassicRows(
+                            scrollController: _boardScroll,
+                            generation: _boardGen,
+                            catalogRowCount: _sections.length,
+                            orderedRowIds: orderedHome
+                                ? homeRails.map(_canvasRailRowId).toList()
                                 : null,
-                            padding: EdgeInsets.only(top: 6,
-                              bottom: 32 + _classicAnchorTailPadding),
-                            // ~1.5 rows of pre-build. Smaller extent means
-                            // smaller, more frequent builds on weak TV chips.
-                            cacheExtent: 300,
-                            itemCount:
-                                (orderedHome
-                                    ? homeRails.length
-                                    : _sections.length) +
-                                (showFooter ? 1 : 0),
-                            itemBuilder: (context, i) {
-                              Widget row;
-                              var revealIdentity = 'index:$i';
-                              if (orderedHome && i < homeRails.length) {
-                                final rail = homeRails[i];
-                                final rowId = _canvasRailRowId(rail);
-                                revealIdentity = rowId;
-                                if (rail.traktSkeletonIndex >= 0) {
-                                  row = _buildTraktSkeletonRow(
-                                    rail.traktSkeletonIndex,
-                                  );
-                                } else if (rail.cw != null) {
-                                  row = _buildContinueWatchingRow(
-                                    rail.cw!,
-                                    rail.cwIndex,
-                                    rowId,
-                                  );
-                                } else if (rail.favKind != null) {
-                                  row = _buildFavRow(rail.favKind!, rowId);
-                                } else {
-                                  row = _buildRow(
-                                    rail.sectionIndex!,
-                                    homeRowId: rowId,
-                                  );
-                                }
-                              } else if (orderedHome) {
-                                return _buildBoardFooter();
-                              } else {
-                                final s = i;
-                                if (s >= _sections.length) {
-                                  return _buildBoardFooter();
-                                }
-                                row = _buildRow(s);
+                            showFooter: _boardLoadingMore,
+                            tailPadding: _classicAnchorTailPadding,
+                            footerBuilder: (_) => _buildBoardFooter(),
+                            isFresh: () =>
+                                DateTime.now().difference(_boardAppliedAt) <
+                                const Duration(milliseconds: 1800),
+                            rowBuilder: (context, i) {
+                              if (!orderedHome) return _buildRow(i);
+                              final rail = homeRails[i];
+                              final rowId = _canvasRailRowId(rail);
+                              if (rail.traktSkeletonIndex >= 0) {
+                                return _buildTraktSkeletonRow(
+                                  rail.traktSkeletonIndex,
+                                );
                               }
-                              // Staggered entrance for the first screenful of
-                              // rows when a fresh board lands.
-                              final fresh =
-                                  DateTime.now().difference(_boardAppliedAt) <
-                                  const Duration(milliseconds: 1800);
-                              return _EntranceReveal(
-                                key: ValueKey('$revealPrefix$revealIdentity'),
-                                play: fresh && i < 6,
-                                delayMs: 60 * i,
-                                child: row,
+                              if (rail.cw != null) {
+                                return _buildContinueWatchingRow(
+                                  rail.cw!,
+                                  rail.cwIndex,
+                                  rowId,
+                                );
+                              }
+                              if (rail.favKind != null) {
+                                return _buildFavRow(rail.favKind!, rowId);
+                              }
+                              return _buildRow(
+                                rail.sectionIndex!,
+                                homeRowId: rowId,
                               );
                             },
                           );
