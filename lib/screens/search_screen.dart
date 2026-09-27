@@ -1,3 +1,4 @@
+import '../features/home/presentation/home_stage_rail_label.dart';
 import '../features/home/presentation/home_promenade_layout.dart';
 import '../features/home/presentation/home_canvas_tabs.dart';
 import '../features/home/presentation/home_canvas_shelf.dart';
@@ -415,22 +416,10 @@ const double _kAtriumWallBudget = 0.64;
 double _atriumLabelHeight(BuildContext context) =>
     MediaQuery.textScalerOf(context).scale(_kAtriumLabelFontSize) * 1.35;
 
-// Metrics for the PROMENADE bottom column (centred rail label + strip). Same
-// single-source-of-truth contract as the Canvas block above: the widgets and
-// the identity block that must stay clear of them read the same numbers.
-const double _kPromLabelFontSize = 12.0;
-
 /// Dim painted over every strip cell that isn't focused, so the centre-locked
 /// cell reads as the lit one. A flat fill inside the card's own clip (see
 /// [CardFocusRise.restVeil]) — no Opacity, no saveLayer.
 const Color _kPromRestVeil = Color(0x8C0D0B1A);
-
-/// Height of Promenade's centred label row at the current text scale (the
-/// chevron column is the floor, exactly as in [homeCanvasTabsHeight]).
-double _promenadeLabelHeight(BuildContext context) => max(
-  homeCanvasChevronColumnHeight,
-  MediaQuery.textScalerOf(context).scale(_kPromLabelFontSize) * 1.35,
-);
 
 /// Intent for a left-arrow on the search field, remapped (via a [Shortcuts]
 /// override closer than the default text-editing shortcuts) so an empty field
@@ -7941,7 +7930,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
           boardWidth: boardW,
           stripHeight: stripBoxH,
           cellWidth: cellW,
-          labelHeight: _promenadeLabelHeight(context),
+          labelHeight: homeStageRailLabelHeight(context),
           theater: _canvasTheater,
           railKey: railKey,
           itemCount: itemCount,
@@ -7987,7 +7976,12 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
                     maxWidth: boardW - 96,
                   ),
           ),
-          label: _promenadeLabel(view),
+          label: buildHomeStageRailLabel(
+            context: this.context,
+            title: _canvasTabTitle(view.rails, view.index),
+            railIndex: view.index,
+            railCount: view.rails.length,
+          ),
           itemBuilder: (context, col) => favRail
               ? _canvasFavCell(rail.favKind!, railKey, col)
               : SizedBox(
@@ -8050,74 +8044,6 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       onNearEnd: rail.sectionIndex == null
           ? null
           : () => _loadMoreRow(rail.sectionIndex!),
-    );
-  }
-
-  /// Promenade's centred rail label. The stacked chevron pair is the same
-  /// affordance Canvas's tabs carry, and for the same reason: UP/DOWN is what
-  /// changes rails, and nothing else on this screen says so.
-  Widget _promenadeLabel(
-    HomeStageRailView view, {
-    MainAxisAlignment align = MainAxisAlignment.center,
-  }) {
-    final app = AppThemeScope.of(context);
-    final title = _canvasTabTitle(view.rails, view.index);
-    return Row(
-      mainAxisAlignment: align,
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.keyboard_arrow_up_rounded,
-              size: 13,
-              color: app.fade(app.core.tx, 0.45),
-            ),
-            Transform.translate(
-              offset: const Offset(0, -5),
-              child: Icon(
-                Icons.keyboard_arrow_down_rounded,
-                size: 13,
-                color: app.fade(app.core.tx, 0.45),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(width: 12),
-        Flexible(
-          child: Text(
-            title.toUpperCase(),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontSize: _kPromLabelFontSize,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 2.4,
-              color: app.fade(app.core.tx, 0.82),
-            ),
-          ),
-        ),
-        if (view.rails.length > 1) ...[
-          const SizedBox(width: 14),
-          // Flexible as well as the title: on a narrow header (Mosaic shares
-          // its row with the identity) a rigid counter is what tips the Row
-          // into an overflow.
-          Flexible(
-            child: Text(
-              '${view.index + 1}/${view.rails.length}',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontSize: _kPromLabelFontSize,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 0.6,
-                color: app.fade(app.core.tx, 0.32),
-              ),
-            ),
-          ),
-        ],
-      ],
     );
   }
 
@@ -8714,8 +8640,11 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
                               crossAxisAlignment: CrossAxisAlignment.end,
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                _promenadeLabel(
-                                  view,
+                                buildHomeStageRailLabel(
+                                  context: this.context,
+                                  title: _canvasTabTitle(view.rails, view.index),
+                                  railIndex: view.index,
+                                  railCount: view.rails.length,
                                   align: MainAxisAlignment.end,
                                 ),
                                 if (view.rails.length > 1) ...[
