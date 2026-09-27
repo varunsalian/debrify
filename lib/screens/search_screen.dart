@@ -1,3 +1,4 @@
+import '../features/home/presentation/home_favorite_cell.dart';
 import '../features/home/presentation/home_art_poster.dart';
 import '../features/home/presentation/home_card_style.dart';
 import '../features/discover/presentation/discover_stage_layout.dart';
@@ -6365,7 +6366,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     _canvasFavFocus.value = focus;
   }
 
-  /// One favourites cell on the Canvas shelf — the SAME [_FavArtCell] +
+  /// One favourites cell on the Canvas shelf — the SAME [HomeFavoriteCell] +
   /// [HomeArtPoster] stack the classic rows use (identical art, badges, hold
   /// behaviour and open actions), with UP/DOWN rewired to rail switching and
   /// focus driving the Canvas stage override (and the full-bleed live
@@ -6393,7 +6394,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       final row = _iptvListRows[ref.list];
       final channel = row.channels[col];
       final live = channel.isLive;
-      return _FavArtCell(
+      return HomeFavoriteCell(
+        onLeftEdge: () => MainPageBridge.focusTvSidebar?.call(),
         isTelevision: true,
         column: col,
         rowNodes: nodes,
@@ -6433,7 +6435,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
             ? _watchlistMovieItems
             : _watchlistSeriesItems;
         final item = items[col];
-        return _FavArtCell(
+        return HomeFavoriteCell(
+          onLeftEdge: () => MainPageBridge.focusTvSidebar?.call(),
           isTelevision: true,
           column: col,
           rowNodes: nodes,
@@ -6464,7 +6467,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         );
       case _FavKind.iptv:
         final channel = _iptvFavChannels[col];
-        return _FavArtCell(
+        return HomeFavoriteCell(
+          onLeftEdge: () => MainPageBridge.focusTvSidebar?.call(),
           isTelevision: true,
           column: col,
           rowNodes: nodes,
@@ -6503,7 +6507,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         final number = channel.channelNumber > 0
             ? channel.channelNumber
             : col + 1;
-        return _FavArtCell(
+        return HomeFavoriteCell(
+          onLeftEdge: () => MainPageBridge.focusTvSidebar?.call(),
           isTelevision: true,
           column: col,
           rowNodes: nodes,
@@ -6536,7 +6541,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       case _FavKind.stremio:
         final channel = _stvFavChannels[col];
         final item = _stvNowPlaying(channel)?.item;
-        return _FavArtCell(
+        return HomeFavoriteCell(
+          onLeftEdge: () => MainPageBridge.focusTvSidebar?.call(),
           isTelevision: true,
           column: col,
           rowNodes: nodes,
@@ -6573,7 +6579,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         final item = _playlistItems[col];
         final posterUrl = item.posterUrl;
         final title = item.title;
-        return _FavArtCell(
+        return HomeFavoriteCell(
+          onLeftEdge: () => MainPageBridge.focusTvSidebar?.call(),
           isTelevision: true,
           column: col,
           rowNodes: nodes,
@@ -18715,7 +18722,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       itemCount: items.length,
       cellBuilder: (col, posterW, cellH) {
         final item = items[col];
-        return _FavArtCell(
+        return HomeFavoriteCell(
+          onLeftEdge: () => MainPageBridge.focusTvSidebar?.call(),
           isTelevision: tv,
           column: col,
           rowNodes: nodes,
@@ -18822,7 +18830,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         final number = channel.channelNumber > 0
             ? channel.channelNumber
             : col + 1;
-        return _FavArtCell(
+        return HomeFavoriteCell(
+          onLeftEdge: () => MainPageBridge.focusTvSidebar?.call(),
           isTelevision: tv,
           column: col,
           rowNodes: _tvFavNodes,
@@ -18864,7 +18873,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         // (landscape) background so channels whose now-playing meta lacks a
         // poster still show art instead of a blank glyph.
         final art = _firstNonEmpty(item?.poster, item?.background);
-        return _FavArtCell(
+        return HomeFavoriteCell(
+          onLeftEdge: () => MainPageBridge.focusTvSidebar?.call(),
           isTelevision: tv,
           column: col,
           rowNodes: _stvFavNodes,
@@ -18898,7 +18908,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       itemCount: _iptvFavChannels.length,
       cellBuilder: (col, posterW, cellH) {
         final channel = _iptvFavChannels[col];
-        return _FavArtCell(
+        return HomeFavoriteCell(
+          onLeftEdge: () => MainPageBridge.focusTvSidebar?.call(),
           isTelevision: tv,
           column: col,
           rowNodes: _iptvFavNodes,
@@ -18942,7 +18953,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       cellBuilder: (col, posterW, cellH) {
         final channel = row.channels[col];
         final live = channel.isLive;
-        return _FavArtCell(
+        return HomeFavoriteCell(
+          onLeftEdge: () => MainPageBridge.focusTvSidebar?.call(),
           isTelevision: tv,
           column: col,
           rowNodes: nodes,
@@ -18980,7 +18992,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         final item = _playlistItems[col];
         final posterUrl = item.posterUrl;
         final title = item.title;
-        return _FavArtCell(
+        return HomeFavoriteCell(
+          onLeftEdge: () => MainPageBridge.focusTvSidebar?.call(),
           isTelevision: tv,
           column: col,
           rowNodes: _playlistFavNodes,

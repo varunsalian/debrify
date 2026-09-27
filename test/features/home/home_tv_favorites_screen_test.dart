@@ -3,6 +3,7 @@ import 'package:debrify/features/home/application/home_tv_favorites_dependencies
 import 'package:debrify/features/home/data/home_tv_favorites_repository.dart';
 import 'package:debrify/screens/search_screen.dart';
 import 'package:debrify/services/home_row_refresh.dart';
+import 'package:debrify/services/main_page_bridge.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/profiles/profile_scope.dart';
 import 'package:debrify/services/stremio_service.dart';
@@ -27,7 +28,14 @@ void main() {
       await loader.load();
     }
   });
-  for (final mode in ['home', 'profile', 'dispose', 'search', 'discover']) {
+  for (final mode in [
+    'home',
+    'sidebar',
+    'profile',
+    'dispose',
+    'search',
+    'discover',
+  ]) {
     testWidgets('TV favourites injected reads preserve $mode behavior', (
       tester,
     ) async {
@@ -111,11 +119,25 @@ void main() {
           .evaluate()
           .map((e) => Focus.maybeOf(e))
           .whereType<FocusNode>();
-      if (mode == 'home') {
+      if (mode == 'home' || mode == 'sidebar') {
         expect(channelReads, 1);
         final node = nodes().single;
         node.requestFocus();
         await tester.pump();
+        if (mode == 'sidebar') {
+          final previous = MainPageBridge.focusTvSidebar;
+          addTearDown(() => MainPageBridge.focusTvSidebar = previous);
+          var originalCalls = 0;
+          var replacementCalls = 0;
+          MainPageBridge.focusTvSidebar = () => originalCalls++;
+          await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+          expect(originalCalls, 1);
+          MainPageBridge.focusTvSidebar = () => replacementCalls++;
+          // No rebuild: the route's current sidebar callback must be read live.
+          await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+          expect(originalCalls, 1);
+          expect(replacementCalls, 1);
+        }
         failed = true;
         await drive(() => HomeRowRefreshSignal.dispatch({'tv/ch'}));
         await tester.pump(const Duration(milliseconds: 100));

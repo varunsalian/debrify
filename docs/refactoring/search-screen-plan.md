@@ -2591,6 +2591,47 @@ prior outcome and adds exactly six successful tests. This completes the card
 extraction, not the surrounding Home layouts, native playback/preview
 ownership, device/performance checks or final facade/size gates.
 
+#### Reviewed favourites directional-navigation extraction
+
+`lib/features/home/presentation/home_favorite_cell.dart` (97 lines) replaces
+`_FavArtCell` at all twelve Classic/stage caller sites. The widget keeps the
+borrowed row nodes, column index, child and directional callbacks; it owns no focus
+node and remains excluded from focus traversal. Its required `onLeftEdge` callback
+replaces the direct `MainPageBridge` dependency. The view passes a closure that
+reads the current bridge callback when invoked, preserving route callback changes
+without requiring a rebuild. Normal arrows, held-arrow overrides, neighbour focus,
+first/last-column handling and key-up/non-TV bubbling are unchanged. No provider
+or application controller is warranted for these view-owned focus operations.
+The old wrapper class is removed from the card part.
+
+A real-screen sidebar scenario was added and passed against the original widget
+before extraction: replace the bridge callback after rendering, navigate left twice
+with different callbacks, then retain focus through failed refresh and clear the
+row. Six direct widget tests cover horizontal repeat traversal and both row edges,
+vertical repeat fallback/overrides, horizontal override precedence, off-TV event
+bubbling and passing activation/back keys to the parent. The affected baseline
+(with the new sidebar test) has 29 passes; the expanded target has 35 passes.
+Normalized wrapper bodies match after renaming, adding the optional key/required
+callback and replacing the bridge invocation. Analyzer identities remain exactly
+863; the 316-file architecture guard passes. The wrapper has zero shape residue
+and no shape-token calls, so it belongs in the residue-only manifest; the existing
+490-call swept-file floor is unchanged.
+
+SearchScreen is 19,065 lines (the explicit dependency adds a line at each caller),
+and the card part is now 543 lines. Evidence: `fav-navigation-*`,
+`analyze-fav-navigation-*` and `full-fav-navigation*` under
+`.git/refactor-evidence/phase5/`. The completed full suite reports 8,960 successes,
+the same 22 failures / 29 errors and 20 skips. Exact comparison against
+`full-art-poster-final.jsonl` preserves every prior outcome and adds exactly seven
+successful tests. The remaining card part contains catalog-card rendering and
+favourites row identifiers. Catalog
+cards still use `MetadataPresentationMixin`, which reads metadata services, owns
+retry/preload timers and a shared cache, and listens to policy/profile changes.
+Its data/lifecycle boundary must be resolved before calling that card a completed
+UI/logic separation; moving the same mixin dependency into a feature file alone
+would not satisfy the destination. Native remote behaviour and the surrounding
+Home layouts remain within the later device/lifecycle gates.
+
 Remaining phase-6 work:
 
 - Separate Discover selection/hydration from its grid/stage presentation. Preserve
