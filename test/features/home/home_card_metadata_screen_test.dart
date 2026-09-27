@@ -49,7 +49,7 @@ void main() {
       final card = find
           .byWidgetPredicate(
             (widget) =>
-                widget.runtimeType.toString() == '_StremioCard' &&
+                widget.runtimeType.toString() == 'HomeCatalogCard' &&
                 (widget as dynamic).item.name == 'Fast 0',
           )
           .first;

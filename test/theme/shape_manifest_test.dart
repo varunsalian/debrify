@@ -61,7 +61,7 @@ const Map<String, int> kShapeResidue = {
   'lib/screens/playlist_content_view_screen.dart': 0,
   'lib/screens/playlist_screen.dart': 0,
   'lib/screens/premiumize/premiumize_files_screen.dart': 6,
-  'lib/screens/search/search_card_widgets.dart': 0,
+  'lib/features/home/presentation/home_catalog_card.dart': 0,
   'lib/screens/search/search_hero_widgets.dart': 2,
   'lib/screens/search/search_stage_widgets.dart': 0,
   'lib/screens/search_screen.dart': 1,

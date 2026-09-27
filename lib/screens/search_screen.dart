@@ -1,5 +1,5 @@
-import '../features/home/presentation/home_card_metadata_view.dart';
-import '../features/home/models/home_card_metadata.dart';
+import '../features/home/presentation/home_catalog_card.dart';
+import '../features/home/models/home_favorite_row_ref.dart';
 import '../features/home/presentation/home_favorite_cell.dart';
 import '../features/home/presentation/home_art_poster.dart';
 import '../features/home/presentation/home_card_style.dart';
@@ -106,8 +106,6 @@ import '../models/media_identity.dart';
 import '../widgets/random_playback_dialog.dart';
 import '../utils/show_shuffle.dart';
 import '../widgets/clear_pinned_sources_button.dart';
-import '../widgets/recoverable_network_image.dart';
-import '../models/metadata_card_artwork.dart';
 import '../models/hero_metadata_presentation.dart';
 import '../services/profiles/profile_runtime.dart';
 import 'metadata_explore_page.dart';
@@ -115,8 +113,6 @@ import '../widgets/metadata_presentation_mixin.dart';
 import '../models/metadata_preferences.dart';
 import '../services/metadata_preferences_service.dart';
 import '../services/metadata_provider_service.dart';
-import '../widgets/collections/collection_focus_art.dart';
-import '../widgets/collections/collection_focus_glow.dart';
 import '../widgets/see_all/discover_browsing_input.dart';
 import '../services/home_load_deadline.dart';
 import '../services/home_load_progress.dart';
@@ -208,7 +204,6 @@ import '../widgets/home/home_theme.dart';
 import '../widgets/home/row_tag_pill.dart';
 import '../widgets/home/spotlight_board.dart';
 import '../widgets/home/spotlight_catalog_card_cache.dart';
-import '../widgets/movie_watched_badge.dart';
 import '../widgets/search_loading_animation.dart';
 import '../widgets/skeleton_poster.dart';
 import '../widgets/source_row.dart';
@@ -253,7 +248,6 @@ import 'premiumize/premiumize_files_screen.dart';
 import 'alldebrid/alldebrid_files_screen.dart';
 import 'pikpak/pikpak_files_screen.dart';
 
-part 'search/search_card_widgets.dart';
 part 'search/search_hero_widgets.dart';
 part 'search/search_stage_widgets.dart';
 
@@ -3671,39 +3665,39 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   /// lists.
   // Reach-sweep rule: a feature that's off drops its Home rows too, not
   // just its tab — the profile should never see a shelf it can't open.
-  List<_FavRowRef> get _favRowKinds => [
-    if (_watchlistMoviesVisible) const _FavRowRef(_FavKind.watchlistMovies),
-    if (_watchlistSeriesVisible) const _FavRowRef(_FavKind.watchlistSeries),
-    if (_playlistFavVisible) const _FavRowRef(_FavKind.playlist),
+  List<HomeFavoriteRowRef> get _favRowKinds => [
+    if (_watchlistMoviesVisible) const HomeFavoriteRowRef(HomeFavoriteKind.watchlistMovies),
+    if (_watchlistSeriesVisible) const HomeFavoriteRowRef(HomeFavoriteKind.watchlistSeries),
+    if (_playlistFavVisible) const HomeFavoriteRowRef(HomeFavoriteKind.playlist),
     if (_tvFavVisible &&
         ProfilePolicyGuard.allowsSync(ProfileFeature.debrifyTv))
-      const _FavRowRef(_FavKind.debrify),
+      const HomeFavoriteRowRef(HomeFavoriteKind.debrify),
     if (_stvFavVisible &&
         ProfilePolicyGuard.allowsSync(ProfileFeature.stremioTv))
-      const _FavRowRef(_FavKind.stremio),
+      const HomeFavoriteRowRef(HomeFavoriteKind.stremio),
     if (_iptvFavVisible && ProfilePolicyGuard.allowsSync(ProfileFeature.iptv))
-      const _FavRowRef(_FavKind.iptv),
+      const HomeFavoriteRowRef(HomeFavoriteKind.iptv),
     if (_catalogQuery.isEmpty &&
         !_catalogSearching &&
         ProfilePolicyGuard.allowsSync(ProfileFeature.iptv))
       for (var i = 0; i < _iptvListRows.length; i++)
-        if (_iptvListRows[i].channels.isNotEmpty) _FavRowRef(_FavKind.iptv, i),
+        if (_iptvListRows[i].channels.isNotEmpty) HomeFavoriteRowRef(HomeFavoriteKind.iptv, i),
   ];
 
   int get _favRowCount => _favRowKinds.length;
   bool get _anyFavVisible => _favRowKinds.isNotEmpty;
 
-  String _favRowId(_FavRowRef ref) {
+  String _favRowId(HomeFavoriteRowRef ref) {
     if (ref.isIptvList) {
       return HomeExtraRowIds.iptvList(_iptvListRows[ref.list].listId);
     }
     return switch (ref.kind) {
-      _FavKind.watchlistMovies => 'watchlist:movies',
-      _FavKind.watchlistSeries => 'watchlist:series',
-      _FavKind.playlist => 'fav:playlist',
-      _FavKind.debrify => 'fav:debrify',
-      _FavKind.stremio => 'fav:stremio',
-      _FavKind.iptv => 'fav:iptv',
+      HomeFavoriteKind.watchlistMovies => 'watchlist:movies',
+      HomeFavoriteKind.watchlistSeries => 'watchlist:series',
+      HomeFavoriteKind.playlist => 'fav:playlist',
+      HomeFavoriteKind.debrify => 'fav:debrify',
+      HomeFavoriteKind.stremio => 'fav:stremio',
+      HomeFavoriteKind.iptv => 'fav:iptv',
     };
   }
 
@@ -3714,22 +3708,22 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       : '${section.addon.id}:${section.catalog.type}:${section.catalog.id}';
 
   /// The focus-node list backing a favourites row of the given [ref].
-  List<FocusNode> _favNodesFor(_FavRowRef ref) {
+  List<FocusNode> _favNodesFor(HomeFavoriteRowRef ref) {
     if (ref.isIptvList) {
       return _iptvListFocus.nodesFor(_iptvListRows[ref.list].listId);
     }
     switch (ref.kind) {
-      case _FavKind.watchlistMovies:
+      case HomeFavoriteKind.watchlistMovies:
         return _watchlistMovieNodes;
-      case _FavKind.watchlistSeries:
+      case HomeFavoriteKind.watchlistSeries:
         return _watchlistSeriesNodes;
-      case _FavKind.iptv:
+      case HomeFavoriteKind.iptv:
         return _iptvFavNodes;
-      case _FavKind.debrify:
+      case HomeFavoriteKind.debrify:
         return _tvFavNodes;
-      case _FavKind.stremio:
+      case HomeFavoriteKind.stremio:
         return _stvFavNodes;
-      case _FavKind.playlist:
+      case HomeFavoriteKind.playlist:
         return _playlistFavNodes;
     }
   }
@@ -6374,7 +6368,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   /// focus driving the Canvas stage override (and the full-bleed live
   /// preview, for IPTV).
   Widget _canvasFavCell(
-    _FavRowRef ref,
+    HomeFavoriteRowRef ref,
     String railKey,
     int col, {
     VoidCallback? onUp,
@@ -6431,9 +6425,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       );
     }
     switch (ref.kind) {
-      case _FavKind.watchlistMovies:
-      case _FavKind.watchlistSeries:
-        final items = ref.kind == _FavKind.watchlistMovies
+      case HomeFavoriteKind.watchlistMovies:
+      case HomeFavoriteKind.watchlistSeries:
+        final items = ref.kind == HomeFavoriteKind.watchlistMovies
             ? _watchlistMovieItems
             : _watchlistSeriesItems;
         final item = items[col];
@@ -6467,7 +6461,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
             ),
           ),
         );
-      case _FavKind.iptv:
+      case HomeFavoriteKind.iptv:
         final channel = _iptvFavChannels[col];
         return HomeFavoriteCell(
           onLeftEdge: () => MainPageBridge.focusTvSidebar?.call(),
@@ -6504,7 +6498,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
             ),
           ),
         );
-      case _FavKind.debrify:
+      case HomeFavoriteKind.debrify:
         final channel = _tvFavChannels[col];
         final number = channel.channelNumber > 0
             ? channel.channelNumber
@@ -6540,7 +6534,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
             ),
           ),
         );
-      case _FavKind.stremio:
+      case HomeFavoriteKind.stremio:
         final channel = _stvFavChannels[col];
         final item = _stvNowPlaying(channel)?.item;
         return HomeFavoriteCell(
@@ -6577,7 +6571,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
             ),
           ),
         );
-      case _FavKind.playlist:
+      case HomeFavoriteKind.playlist:
         final item = _playlistItems[col];
         final posterUrl = item.posterUrl;
         final title = item.title;
@@ -7007,7 +7001,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   /// says how many items it holds. The three channel kinds carry LOGOS — wide,
   /// frequently transparent marks — which a 2:3 crop cuts in half, so they get
   /// a square tile that contains the art on a plate instead of filling with it.
-  SpotlightShelf _spotlightFavShelf(_FavRowRef ref, {String? id}) {
+  SpotlightShelf _spotlightFavShelf(HomeFavoriteRowRef ref, {String? id}) {
     final nodes = _favNodesFor(ref);
     if (ref.isIptvList) {
       final row = _iptvListRows[ref.list];
@@ -7036,9 +7030,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       );
     }
     switch (ref.kind) {
-      case _FavKind.watchlistMovies:
-      case _FavKind.watchlistSeries:
-        final isMovies = ref.kind == _FavKind.watchlistMovies;
+      case HomeFavoriteKind.watchlistMovies:
+      case HomeFavoriteKind.watchlistSeries:
+        final isMovies = ref.kind == HomeFavoriteKind.watchlistMovies;
         final items = isMovies ? _watchlistMovieItems : _watchlistSeriesItems;
         return SpotlightShelf(
           id: id,
@@ -7067,7 +7061,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
               ),
           ],
         );
-      case _FavKind.playlist:
+      case HomeFavoriteKind.playlist:
         return SpotlightShelf(
           id: id,
           title: 'Playlists',
@@ -7082,7 +7076,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
               ),
           ],
         );
-      case _FavKind.iptv:
+      case HomeFavoriteKind.iptv:
         return SpotlightShelf(
           id: id,
           title: 'IPTV Favourites',
@@ -7106,7 +7100,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
               ),
           ],
         );
-      case _FavKind.debrify:
+      case HomeFavoriteKind.debrify:
         return SpotlightShelf(
           id: id,
           title: 'Debrify TV',
@@ -7123,7 +7117,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
               ),
           ],
         );
-      case _FavKind.stremio:
+      case HomeFavoriteKind.stremio:
         return SpotlightShelf(
           id: id,
           title: 'Stremio TV',
@@ -7520,38 +7514,38 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         ]
       : _canvasRails;
 
-  int _canvasFavItemCount(_FavRowRef ref) {
+  int _canvasFavItemCount(HomeFavoriteRowRef ref) {
     if (ref.isIptvList) return _iptvListRows[ref.list].channels.length;
     switch (ref.kind) {
-      case _FavKind.watchlistMovies:
+      case HomeFavoriteKind.watchlistMovies:
         return _watchlistMovieItems.length;
-      case _FavKind.watchlistSeries:
+      case HomeFavoriteKind.watchlistSeries:
         return _watchlistSeriesItems.length;
-      case _FavKind.iptv:
+      case HomeFavoriteKind.iptv:
         return _iptvFavChannels.length;
-      case _FavKind.debrify:
+      case HomeFavoriteKind.debrify:
         return _tvFavChannels.length;
-      case _FavKind.stremio:
+      case HomeFavoriteKind.stremio:
         return _stvFavChannels.length;
-      case _FavKind.playlist:
+      case HomeFavoriteKind.playlist:
         return _playlistItems.length;
     }
   }
 
-  String _canvasFavTitle(_FavRowRef ref) {
+  String _canvasFavTitle(HomeFavoriteRowRef ref) {
     if (ref.isIptvList) return _iptvListRows[ref.list].title;
     switch (ref.kind) {
-      case _FavKind.watchlistMovies:
+      case HomeFavoriteKind.watchlistMovies:
         return 'Watchlist Movies';
-      case _FavKind.watchlistSeries:
+      case HomeFavoriteKind.watchlistSeries:
         return 'Watchlist Series';
-      case _FavKind.iptv:
+      case HomeFavoriteKind.iptv:
         return 'IPTV Favorites';
-      case _FavKind.debrify:
+      case HomeFavoriteKind.debrify:
         return 'Debrify TV';
-      case _FavKind.stremio:
+      case HomeFavoriteKind.stremio:
         return 'Stremio TV';
-      case _FavKind.playlist:
+      case HomeFavoriteKind.playlist:
         return 'Playlist';
     }
   }
@@ -18689,28 +18683,28 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   }
 
   /// Dispatch to the right favourites-row builder for [ref].
-  Widget _buildFavRow(_FavRowRef ref, String homeRowId) {
+  Widget _buildFavRow(HomeFavoriteRowRef ref, String homeRowId) {
     if (ref.isIptvList) {
       return _buildIptvListRow(ref, homeRowId);
     }
     switch (ref.kind) {
-      case _FavKind.watchlistMovies:
-      case _FavKind.watchlistSeries:
+      case HomeFavoriteKind.watchlistMovies:
+      case HomeFavoriteKind.watchlistSeries:
         return _buildWatchlistRow(ref, homeRowId);
-      case _FavKind.iptv:
+      case HomeFavoriteKind.iptv:
         return _buildIptvFavRow(homeRowId);
-      case _FavKind.debrify:
+      case HomeFavoriteKind.debrify:
         return _buildTvFavRow(homeRowId);
-      case _FavKind.stremio:
+      case HomeFavoriteKind.stremio:
         return _buildStremioTvFavRow(homeRowId);
-      case _FavKind.playlist:
+      case HomeFavoriteKind.playlist:
         return _buildPlaylistFavRow(homeRowId);
     }
   }
 
-  Widget _buildWatchlistRow(_FavRowRef ref, String homeRowId) {
+  Widget _buildWatchlistRow(HomeFavoriteRowRef ref, String homeRowId) {
     final tv = widget.isTelevision;
-    final isMovies = ref.kind == _FavKind.watchlistMovies;
+    final isMovies = ref.kind == HomeFavoriteKind.watchlistMovies;
     final items = isMovies ? _watchlistMovieItems : _watchlistSeriesItems;
     final nodes = isMovies ? _watchlistMovieNodes : _watchlistSeriesNodes;
     return _buildFavRowShell(
@@ -18941,7 +18935,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   /// favourites row, but content-aware: play routes by the stored content
   /// type (lists can hold VOD/series alongside live), and only a live entry
   /// retunes the hero's live preview on focus.
-  Widget _buildIptvListRow(_FavRowRef ref, String homeRowId) {
+  Widget _buildIptvListRow(HomeFavoriteRowRef ref, String homeRowId) {
     final tv = widget.isTelevision;
     final row = _iptvListRows[ref.list];
     final nodes = _iptvListFocus.nodesFor(row.listId);

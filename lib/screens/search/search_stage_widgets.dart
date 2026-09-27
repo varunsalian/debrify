@@ -113,7 +113,7 @@ class _SkeletonPoster extends StatelessWidget {
   }
 }
 
-/// [_StremioCard] plus DPAD arrow navigation. The card owns SELECT, its
+/// [HomeCatalogCard] plus DPAD arrow navigation. The card owns SELECT, its
 /// focus visuals and ensureVisible; this ancestor [Focus] catches the arrows
 /// the card ignores (left/right within the row, up/down to adjacent rows or
 /// the search field) and reports focus to drive the hero.
@@ -151,10 +151,10 @@ class _BoardCell extends StatelessWidget {
   /// don't paginate (e.g. Continue Watching).
   final VoidCallback? onNearEnd;
 
-  /// Shared-element tag forwarded to the card (see [_StremioCard.heroTag]).
+  /// Shared-element tag forwarded to the card (see [HomeCatalogCard.heroTag]).
   final String? heroTag;
 
-  /// Forwarded to [_StremioCard.ringColor] (Canvas cells use white).
+  /// Forwarded to [HomeCatalogCard.ringColor] (Canvas cells use white).
   final Color? ringColor;
 
   /// Cell shape + the art that fills it. Defaults are the 2:3 poster every
@@ -275,7 +275,7 @@ class _BoardCell extends StatelessWidget {
         if (has) onFocused();
       },
       onKeyEvent: _handleArrows,
-      child: _StremioCard(
+      child: HomeCatalogCard(
         item: item,
         isTelevision: isTelevision,
         focusNode: focusNode,
@@ -298,27 +298,6 @@ class _BoardCell extends StatelessWidget {
       ),
     );
   }
-}
-
-/// Hero flight for poster→detail-backdrop: always show the POSTER side of the
-/// pair (the `from` hero on push, the `to` hero on pop), so the artwork the
-/// user tapped is what grows into / shrinks out of the detail page — never a
-/// half-loaded backdrop.
-Widget _posterFlightShuttle(
-  BuildContext flightContext,
-  Animation<double> animation,
-  HeroFlightDirection direction,
-  BuildContext fromHeroContext,
-  BuildContext toHeroContext,
-) {
-  final Hero posterHero =
-      (direction == HeroFlightDirection.push
-              ? fromHeroContext.widget
-              : toHeroContext.widget)
-          as Hero;
-  // The shuttle renders in the root overlay, outside any Material — wrap so a
-  // text placeholder (missing poster art) can't render unstyled mid-flight.
-  return Material(type: MaterialType.transparency, child: posterHero.child);
 }
 
 /// Metahub title-logo URL derived synchronously from an IMDb id (same trick
@@ -373,7 +352,7 @@ String? _firstNonEmpty(String? a, String? b) =>
 class _CanvasRail {
   final _CwRow? cw;
   final int cwIndex;
-  final _FavRowRef? favKind;
+  final HomeFavoriteRowRef? favKind;
   final int? sectionIndex;
   final int traktSkeletonIndex;
   const _CanvasRail({

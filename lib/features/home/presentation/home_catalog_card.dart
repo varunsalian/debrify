@@ -1,6 +1,23 @@
-part of '../search_screen.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import '../../../models/home_collection_rows.dart';
+import '../../../models/metadata_card_artwork.dart';
+import '../../../models/metadata_preferences.dart';
+import '../../../models/stremio_addon.dart';
+import '../../../theme/app_theme_scope.dart';
+import '../../../utils/dialog_tap_guard.dart';
+import '../../../utils/tv_keys.dart';
+import '../../../widgets/collections/collection_focus_art.dart';
+import '../../../widgets/collections/collection_focus_glow.dart';
+import '../../../widgets/home/card_focus_rise.dart';
+import '../../../widgets/home/home_theme.dart';
+import '../../../widgets/movie_watched_badge.dart';
+import '../../../widgets/recoverable_network_image.dart';
+import '../models/home_card_metadata.dart';
+import 'home_card_metadata_view.dart';
+import 'home_card_style.dart';
 
-class _StremioCard extends StatefulWidget {
+class HomeCatalogCard extends StatefulWidget {
   final StremioMeta item;
   final bool isTelevision;
   final FocusNode focusNode;
@@ -53,7 +70,8 @@ class _StremioCard extends StatefulWidget {
   /// Dim while unfocused — see [CardFocusRise.restVeil].
   final Color? restVeil;
 
-  const _StremioCard({
+  const HomeCatalogCard({
+    super.key,
     required this.item,
     required this.isTelevision,
     required this.focusNode,
@@ -76,10 +94,10 @@ class _StremioCard extends StatefulWidget {
   });
 
   @override
-  State<_StremioCard> createState() => _StremioCardState();
+  State<HomeCatalogCard> createState() => _HomeCatalogCardState();
 }
 
-class _StremioCardState extends State<_StremioCard>
+class _HomeCatalogCardState extends State<HomeCatalogCard>
     with SingleTickerProviderStateMixin {
   bool _focused = false;
   bool _hovered = false;
@@ -87,7 +105,7 @@ class _StremioCardState extends State<_StremioCard>
   bool get _active => _focused || _hovered;
 
   /// Hold-OK on TV (same 500ms as the IPTV channel row's hold-to-favourite) —
-  /// only armed on cards that have an [_StremioCard.onLongPress] menu. A short
+  /// only armed on cards that have an [HomeCatalogCard.onLongPress] menu. A short
   /// press still opens the title. Driven by a controller so the focused card
   /// can show the hold filling, making an otherwise-invisible gesture
   /// discoverable.
@@ -176,7 +194,8 @@ class _StremioCardState extends State<_StremioCard>
           // cover-crop the poster into the wide cell before giving up on art.
           errorWidget: (_, __, ___) =>
               poster != fallbackPoster &&
-                  fallbackPoster != null && fallbackPoster.isNotEmpty
+                  fallbackPoster != null &&
+                  fallbackPoster.isNotEmpty
               ? RecoverableNetworkImage(
                   imageUrl: fallbackPoster,
                   fit: BoxFit.cover,
@@ -463,7 +482,7 @@ class _StremioCardState extends State<_StremioCard>
                   value: _holdController.value,
                   strokeWidth: 3,
                   backgroundColor: Colors.white.withValues(alpha: 0.22),
-                  valueColor: const AlwaysStoppedAnimation(kStremioFocusRing),
+                  valueColor: const AlwaysStoppedAnimation(kCardFocusRing),
                 ),
               ),
             ),
@@ -517,34 +536,23 @@ class _StremioCardState extends State<_StremioCard>
   }
 }
 
-/// The kinds of leading saved-content rows. Render order (Watchlist Movies,
-/// Watchlist Series, Playlist, Debrify TV, Stremio TV, IPTV) is defined by
-/// [_SearchScreenState._favRowKinds], the single source of truth for rendering
-/// and the index-based DPAD focus wiring.
-enum _FavKind {
-  watchlistMovies,
-  watchlistSeries,
-  iptv,
-  debrify,
-  stremio,
-  playlist,
-}
-
-/// One visible favourites-family row: a singleton [kind] row ([list] == -1),
-/// or — for `kind == _FavKind.iptv` with [list] >= 0 — the IPTV custom-list
-/// row at that index of [_SearchScreenState._iptvListRows]. Value-equal so
-/// rebuilt ref lists compare cleanly.
-class _FavRowRef {
-  final _FavKind kind;
-  final int list;
-  const _FavRowRef(this.kind, [this.list = -1]);
-
-  bool get isIptvList => list >= 0;
-
-  @override
-  bool operator ==(Object other) =>
-      other is _FavRowRef && other.kind == kind && other.list == list;
-
-  @override
-  int get hashCode => Object.hash(kind, list);
+/// Hero flight for poster→detail-backdrop: always show the POSTER side of the
+/// pair (the `from` hero on push, the `to` hero on pop), so the artwork the
+/// user tapped is what grows into / shrinks out of the detail page — never a
+/// half-loaded backdrop.
+Widget _posterFlightShuttle(
+  BuildContext flightContext,
+  Animation<double> animation,
+  HeroFlightDirection direction,
+  BuildContext fromHeroContext,
+  BuildContext toHeroContext,
+) {
+  final Hero posterHero =
+      (direction == HeroFlightDirection.push
+              ? fromHeroContext.widget
+              : toHeroContext.widget)
+          as Hero;
+  // The shuttle renders in the root overlay, outside any Material — wrap so a
+  // text placeholder (missing poster art) can't render unstyled mid-flight.
+  return Material(type: MaterialType.transparency, child: posterHero.child);
 }
