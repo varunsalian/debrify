@@ -1,3 +1,4 @@
+import '../features/home/presentation/home_classic_layout.dart';
 import '../features/home/presentation/home_takeover_info.dart';
 import '../features/home/presentation/home_trailer_transitions.dart';
 import '../features/home/presentation/home_classic_rows.dart';
@@ -17367,251 +17368,182 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     }
 
     final tv = widget.isTelevision;
-    final width = MediaQuery.of(context).size.width;
-
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        // Size the hero from the board's own height (below the search header) so a
-        // full poster row plus the current + next row headers always stay on
-        // screen. On a short-canvas TV (~540 logical) the hero shrinks; tall
-        // canvases keep it large and reveal more rows.
-        //
-        // On the dedicated Search tab it's a compact strip, not a full spotlight:
-        // the search field above it already eats vertical space, and results —
-        // not a cinematic hero — should dominate, so cap it well below the board's
-        // so the first result row isn't squeezed.
-        // Fixed hero height, sized to leave a full card row visible below. It is
-        // deliberately NOT resized when the trailer plays: animating this band
-        // would relayout the rows ListView and re-fit the playing video texture
-        // every frame (weak-TV stutter), and would bounce the rows on every
-        // focus-rest/move as trailers start and stop. The full-bleed cover-crop
-        // of a 16:9 trailer into this wide-short band is accepted as inherent.
-        final heroH = tv
-            ? _tvHeroBudget(constraints.maxHeight)
-            : (width >= 900 ? 300.0 : 196.0);
-
-        // The ambient trailer is hosted BEHIND the spotlight, in the hero band
-        // only — a full-bleed frame that covers the band; the spotlight fades its
-        // still + text out on play. No fullscreen takeover; the video never
-        // moves, resizes or re-fits, so playback simply continues.
-        return Stack(
-          fit: StackFit.expand,
-          children: [
-            // The GLASS STAGE (focused title's blurred art) lives in the
-            // APP SHELL now (TvAmbientArtStage in main.dart) so it also
-            // fills the strip behind the sidebar rail; this board's
-            // scaffold is transparent over it and publishes the art/tint
-            // via MainPageBridge (see _publishAmbientArt).
-            // (The old "ambient colour bleed" — a tinted wash flooding the
-            // rows while the trailer played, then draining out on stop — is
-            // gone by user call. Playback now reads as LIGHTS DOWN instead:
-            // neutral graded veils over the rows (buildHomeTrailerRowsDim) and the
-            // hero canvas (spotlight's stage-dim), no hue swinging in/out.
-            // The always-on mood field above is the only colour, and it
-            // doesn't react to playback at all.)
-            buildHomeTrailerBoardRecede(
+    return buildHomeClassicLayout(
+      isTelevision: tv,
+      viewportWidth: MediaQuery.of(context).size.width,
+      tvHeroBudget: _tvHeroBudget,
+      trailerActive: _heroTrailerActive,
+      takeover: _heroTrailerTakeover,
+      boardBuilder: (heroH) => Column(
+        children: [
+          // The hero spotlight only changes as DPAD focus moves across tiles, so
+          // it's meaningful on TV only. On phones/desktop (no DPAD) it would just
+          // sit frozen on the first item and waste vertical space — hide it.
+          // On the dedicated Search tab it shows once there are results (to help
+          // disambiguate similarly-named titles) but stays hidden on the blank
+          // prompt. See [_heroActive].
+          if (_heroActive)
+            ValueListenableBuilder<StremioMeta?>(
+              valueListenable: _heroItem,
+              builder: (context, item, _) {
+                if (item == null) return const SizedBox.shrink();
+                return ValueListenableBuilder<StremioMeta?>(
+                  valueListenable: _heroEnriched,
+                  builder: (context, enriched, __) {
+                    return _HeroSpotlight(
+                      item: item,
+                      background: item.background?.isNotEmpty == true
+                          ? item.background
+                          : enriched?.background,
+                      description: item.description?.isNotEmpty == true
+                          ? item.description
+                          : enriched?.description,
+                      // Catalog list items usually omit the rating; fall back
+                      // to the enriched /meta details.
+                      rating: item.imdbRating ?? enriched?.imdbRating,
+                      runtime: item.runtimeDisplay ?? enriched?.runtimeDisplay,
+                      // Catalog rows rarely carry the title-treatment
+                      // art; the enriched /meta details usually do —
+                      // but that roundtrip lands AFTER first paint, so
+                      // derive the metahub URL from the IMDb id and
+                      // start loading it immediately (for tt items the
+                      // enriched logo IS this URL, so nothing swaps
+                      // when the details arrive).
+                      logo: item.logo?.isNotEmpty == true
+                          ? item.logo
+                          : (enriched?.logo?.isNotEmpty == true
+                                ? enriched!.logo
+                                : _derivedHeroLogo(item)),
+                      compact: widget.searchMode,
+                      isTelevision: tv,
+                      height: heroH,
+                      artworkCacheWidth: tv
+                          ? (_homeBoardMode
+                                ? _tvHeroArtworkCacheWidth
+                                : HomeTheme.heroBackdropCacheWidthTv)
+                          : HomeTheme.heroBackdropCacheWidth,
+                      artworkCacheHeight: tv
+                          ? (_homeBoardMode
+                                ? _tvHeroArtworkCacheHeight
+                                : HomeTheme.heroBackdropCacheHeightTv)
+                          : null,
+                      tint: _heroTint,
+                      // The Concept-5 stage (region key art + colour
+                      // field, text capped at the region's left edge)
+                      // is the TV Home LAYOUT, full stop — driven by
+                      // the synchronous getter only, never by the
+                      // async Settings read (_heroTrailerEnabled).
+                      // That read used to pick the layout and could
+                      // land AFTER first paint (or never trigger a
+                      // rebuild), flipping the hero mid-session; now
+                      // it only gates whether a video actually plays
+                      // in the region (see _scheduleHeroTrailer).
+                      // Trailers-off users keep the same stage — the
+                      // region simply always shows the key art.
+                      boxedTrailer: _heroTrailerActive,
+                      // Pill lives in the trailer region now.
+                      trailerLoading: null,
+                      // Still passed so the backdrop's Ken Burns drift
+                      // freezes while the trailer plays (boxedTrailer
+                      // suppresses the image FADE, not this freeze).
+                      trailerShowing: _heroTrailerActive
+                          ? _heroTrailerShowing
+                          : null,
+                      // An IPTV favourite took the boxed region — this
+                      // item's colour field/identity text describe
+                      // something that isn't playing anymore, so hide
+                      // them (see [_HeroSpotlight.liveTakeover]).
+                      liveTakeover: _heroTrailerActive
+                          ? _heroLiveTakeover
+                          : null,
+                    );
+                  },
+                );
+              },
+            ),
+          // Slim, non-focusable status strip for a streaming catalog search:
+          // a hairline progress bar while rows are still arriving, then a
+          // quiet "N sources didn't respond" note if any catalog errored.
+          // Lives above the rows so it never takes DPAD focus and appends
+          // below never move it.
+          if (_catalogQuery.isNotEmpty &&
+              (_catalogSearching || _catalogSearchFailures > 0))
+            _buildSearchStatusStrip(),
+          Expanded(
+            child: buildHomeTrailerRowsDim(
               active: _heroTrailerActive,
-              takeover: _heroTrailerTakeover,
-              board: Column(
-                children: [
-                  // The hero spotlight only changes as DPAD focus moves across tiles, so
-                  // it's meaningful on TV only. On phones/desktop (no DPAD) it would just
-                  // sit frozen on the first item and waste vertical space — hide it.
-                  // On the dedicated Search tab it shows once there are results (to help
-                  // disambiguate similarly-named titles) but stays hidden on the blank
-                  // prompt. See [_heroActive].
-                  if (_heroActive)
-                    ValueListenableBuilder<StremioMeta?>(
-                      valueListenable: _heroItem,
-                      builder: (context, item, _) {
-                        if (item == null) return const SizedBox.shrink();
-                        return ValueListenableBuilder<StremioMeta?>(
-                          valueListenable: _heroEnriched,
-                          builder: (context, enriched, __) {
-                            return _HeroSpotlight(
-                              item: item,
-                              background: item.background?.isNotEmpty == true
-                                  ? item.background
-                                  : enriched?.background,
-                              description: item.description?.isNotEmpty == true
-                                  ? item.description
-                                  : enriched?.description,
-                              // Catalog list items usually omit the rating; fall back
-                              // to the enriched /meta details.
-                              rating: item.imdbRating ?? enriched?.imdbRating,
-                              runtime:
-                                  item.runtimeDisplay ??
-                                  enriched?.runtimeDisplay,
-                              // Catalog rows rarely carry the title-treatment
-                              // art; the enriched /meta details usually do —
-                              // but that roundtrip lands AFTER first paint, so
-                              // derive the metahub URL from the IMDb id and
-                              // start loading it immediately (for tt items the
-                              // enriched logo IS this URL, so nothing swaps
-                              // when the details arrive).
-                              logo: item.logo?.isNotEmpty == true
-                                  ? item.logo
-                                  : (enriched?.logo?.isNotEmpty == true
-                                        ? enriched!.logo
-                                        : _derivedHeroLogo(item)),
-                              compact: widget.searchMode,
-                              isTelevision: tv,
-                              height: heroH,
-                              artworkCacheWidth: tv
-                                  ? (_homeBoardMode
-                                        ? _tvHeroArtworkCacheWidth
-                                        : HomeTheme.heroBackdropCacheWidthTv)
-                                  : HomeTheme.heroBackdropCacheWidth,
-                              artworkCacheHeight: tv
-                                  ? (_homeBoardMode
-                                        ? _tvHeroArtworkCacheHeight
-                                        : HomeTheme.heroBackdropCacheHeightTv)
-                                  : null,
-                              tint: _heroTint,
-                              // The Concept-5 stage (region key art + colour
-                              // field, text capped at the region's left edge)
-                              // is the TV Home LAYOUT, full stop — driven by
-                              // the synchronous getter only, never by the
-                              // async Settings read (_heroTrailerEnabled).
-                              // That read used to pick the layout and could
-                              // land AFTER first paint (or never trigger a
-                              // rebuild), flipping the hero mid-session; now
-                              // it only gates whether a video actually plays
-                              // in the region (see _scheduleHeroTrailer).
-                              // Trailers-off users keep the same stage — the
-                              // region simply always shows the key art.
-                              boxedTrailer: _heroTrailerActive,
-                              // Pill lives in the trailer region now.
-                              trailerLoading: null,
-                              // Still passed so the backdrop's Ken Burns drift
-                              // freezes while the trailer plays (boxedTrailer
-                              // suppresses the image FADE, not this freeze).
-                              trailerShowing: _heroTrailerActive
-                                  ? _heroTrailerShowing
-                                  : null,
-                              // An IPTV favourite took the boxed region — this
-                              // item's colour field/identity text describe
-                              // something that isn't playing anymore, so hide
-                              // them (see [_HeroSpotlight.liveTakeover]).
-                              liveTakeover: _heroTrailerActive
-                                  ? _heroLiveTakeover
-                                  : null,
-                            );
-                          },
+              showing: _heroTrailerShowing,
+              rows: Builder(
+                builder: (context) {
+                  // Home uses one globally ordered descriptor list across
+                  // every row family. Catalog search results never read
+                  // that Home order.
+                  final orderedHome = _homeRowOrderActive;
+                  final homeRails = orderedHome
+                      ? _classicHomeRails
+                      : const <_CanvasRail>[];
+                  return HomeClassicRows(
+                    scrollController: _boardScroll,
+                    generation: _boardGen,
+                    catalogRowCount: _sections.length,
+                    orderedRowIds: orderedHome
+                        ? homeRails.map(_canvasRailRowId).toList()
+                        : null,
+                    showFooter: _boardLoadingMore,
+                    tailPadding: _classicAnchorTailPadding,
+                    footerBuilder: (_) => _buildBoardFooter(),
+                    isFresh: () =>
+                        DateTime.now().difference(_boardAppliedAt) <
+                        const Duration(milliseconds: 1800),
+                    rowBuilder: (context, i) {
+                      if (!orderedHome) return _buildRow(i);
+                      final rail = homeRails[i];
+                      final rowId = _canvasRailRowId(rail);
+                      if (rail.traktSkeletonIndex >= 0) {
+                        return _buildTraktSkeletonRow(rail.traktSkeletonIndex);
+                      }
+                      if (rail.cw != null) {
+                        return _buildContinueWatchingRow(
+                          rail.cw!,
+                          rail.cwIndex,
+                          rowId,
                         );
-                      },
-                    ),
-                  // Slim, non-focusable status strip for a streaming catalog search:
-                  // a hairline progress bar while rows are still arriving, then a
-                  // quiet "N sources didn't respond" note if any catalog errored.
-                  // Lives above the rows so it never takes DPAD focus and appends
-                  // below never move it.
-                  if (_catalogQuery.isNotEmpty &&
-                      (_catalogSearching || _catalogSearchFailures > 0))
-                    _buildSearchStatusStrip(),
-                  Expanded(
-                    child: buildHomeTrailerRowsDim(
-                      active: _heroTrailerActive,
-                      showing: _heroTrailerShowing,
-                      rows: Builder(
-                        builder: (context) {
-                          // Home uses one globally ordered descriptor list across
-                          // every row family. Catalog search results never read
-                          // that Home order.
-                          final orderedHome = _homeRowOrderActive;
-                          final homeRails = orderedHome
-                              ? _classicHomeRails
-                              : const <_CanvasRail>[];
-                          return HomeClassicRows(
-                            scrollController: _boardScroll,
-                            generation: _boardGen,
-                            catalogRowCount: _sections.length,
-                            orderedRowIds: orderedHome
-                                ? homeRails.map(_canvasRailRowId).toList()
-                                : null,
-                            showFooter: _boardLoadingMore,
-                            tailPadding: _classicAnchorTailPadding,
-                            footerBuilder: (_) => _buildBoardFooter(),
-                            isFresh: () =>
-                                DateTime.now().difference(_boardAppliedAt) <
-                                const Duration(milliseconds: 1800),
-                            rowBuilder: (context, i) {
-                              if (!orderedHome) return _buildRow(i);
-                              final rail = homeRails[i];
-                              final rowId = _canvasRailRowId(rail);
-                              if (rail.traktSkeletonIndex >= 0) {
-                                return _buildTraktSkeletonRow(
-                                  rail.traktSkeletonIndex,
-                                );
-                              }
-                              if (rail.cw != null) {
-                                return _buildContinueWatchingRow(
-                                  rail.cw!,
-                                  rail.cwIndex,
-                                  rowId,
-                                );
-                              }
-                              if (rail.favKind != null) {
-                                return _buildFavRow(rail.favKind!, rowId);
-                              }
-                              return _buildRow(
-                                rail.sectionIndex!,
-                                homeRowId: rowId,
-                              );
-                            },
-                          );
-                        },
-                      ),
-                    ),
-                  ),
-                ],
+                      }
+                      if (rail.favKind != null) {
+                        return _buildFavRow(rail.favKind!, rowId);
+                      }
+                      return _buildRow(rail.sectionIndex!, homeRowId: rowId);
+                    },
+                  );
+                },
               ),
             ),
-            // The ambient trailer, painted into a right-anchored region of the
-            // hero whose edges dissolve into the backdrop (premium-OTT blend).
-            // Sits ABOVE the board as an IgnorePointer overlay so the video
-            // paints over the hero backdrop while the title/rows keep DPAD focus;
-            // the spotlight reserves the right zone (boxedTrailer) so the crisp
-            // trailer never overlaps the title text.
-            if (_heroTrailerActive)
-              Positioned.fill(
-                child: _HeroTrailerLayer(
-                  trailer: _heroTrailer,
-                  isTelevision: widget.isTelevision,
-                  heroHeight: heroH,
-                  volume: _heroTrailerVolume,
-                  loading: _heroTrailerLoading,
-                  onPlayingChanged: _onHeroTrailerPlaying,
-                  takeover: _heroTrailerTakeover,
-                ),
-              ),
-            // A focused IPTV favourite's live feed, painted into the SAME
-            // region — above the catalog trailer layer so it simply wins
-            // whenever a channel has focus (shrinks to nothing otherwise,
-            // letting the catalog trailer show through).
-            if (_heroTrailerActive)
-              Positioned.fill(
-                child: _HeroLiveLayer(
-                  channel: _heroLiveChannel,
-                  streamUrl: _heroLiveUrl,
-                  heroHeight: heroH,
-                  volume: _heroTrailerVolume,
-                  onPlayingChanged: _onHeroTrailerPlaying,
-                  onPlaybackFailed: _onHeroLivePlaybackFailed,
-                ),
-              ),
-            // While the film owns the board, only the showcased title's
-            // name/plot remain on screen — small, top-left, fully readable.
-            if (_heroTrailerActive)
-              buildHomeTakeoverInfo(
-                this.context,
-                heroItem: _heroItem,
-                heroEnriched: _heroEnriched,
-                heroTakeover: _heroTrailerTakeover,
-              ),
-          ],
-        );
-      },
+          ),
+        ],
+      ),
+      trailerBuilder: (heroH) => _HeroTrailerLayer(
+        trailer: _heroTrailer,
+        isTelevision: widget.isTelevision,
+        heroHeight: heroH,
+        volume: _heroTrailerVolume,
+        loading: _heroTrailerLoading,
+        onPlayingChanged: _onHeroTrailerPlaying,
+        takeover: _heroTrailerTakeover,
+      ),
+      liveBuilder: (heroH) => _HeroLiveLayer(
+        channel: _heroLiveChannel,
+        streamUrl: _heroLiveUrl,
+        heroHeight: heroH,
+        volume: _heroTrailerVolume,
+        onPlayingChanged: _onHeroTrailerPlaying,
+        onPlaybackFailed: _onHeroLivePlaybackFailed,
+      ),
+      infoBuilder: () => buildHomeTakeoverInfo(
+        context,
+        heroItem: _heroItem,
+        heroEnriched: _heroEnriched,
+        heroTakeover: _heroTrailerTakeover,
+      ),
     );
   }
 
