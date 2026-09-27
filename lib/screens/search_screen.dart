@@ -1,4 +1,4 @@
-import '../features/home/presentation/home_catalog_card.dart';
+import '../features/home/presentation/home_board_cell.dart';
 import '../features/home/models/home_favorite_row_ref.dart';
 import '../features/home/presentation/home_favorite_cell.dart';
 import '../features/home/presentation/home_art_poster.dart';
@@ -6348,7 +6348,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     _canvasCols[railKey] = col;
     _stageCol.value = col;
     // Atrium's two-row window needs to know which row owns focus (favourites
-    // cells don't go through a _BoardCell onFocused), and favourites only
+    // cells don't go through a HomeBoardCell onFocused), and favourites only
     // ever live in Tonight's RAIL zone, never its Continue queue.
     _atriumFocusedRailKey.value = railKey;
     _tonightZoneIsQueue = false;
@@ -7846,7 +7846,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
                                         child: SizedBox(
                                           width: cardW,
                                           height: cardH,
-                                          child: _BoardCell(
+                                          child: HomeBoardCell(
+                                            onLeftEdge: () =>
+                                                MainPageBridge.focusTvSidebar?.call(),
                                             item: item,
                                             isTelevision: true,
                                             focusNode: nodes[col],
@@ -8317,7 +8319,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     );
   }
 
-  /// One wide strip cell — the SAME [_BoardCell] every board uses, in a 16:9
+  /// One wide strip cell — the SAME [HomeBoardCell] every board uses, in a 16:9
   /// box with derived landscape art, so hold-OK menus, quick-play, paging and
   /// the focus grammar are identical to Canvas's shelf.
   Widget _promenadeCell(
@@ -8328,7 +8330,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     int col,
   ) {
     final item = items[col];
-    return _BoardCell(
+    return HomeBoardCell(
+      onLeftEdge: () => MainPageBridge.focusTvSidebar?.call(),
       item: item,
       isTelevision: true,
       focusNode: nodes[col],
@@ -8815,7 +8818,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
                         )
                       : SizedBox(
                           height: rowBoxH,
-                          child: _BoardCell(
+                          child: HomeBoardCell(
+                            onLeftEdge: () =>
+                                MainPageBridge.focusTvSidebar?.call(),
                             item: items[col],
                             isTelevision: true,
                             focusNode: nodes[col],
@@ -9197,7 +9202,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     final item = items[col];
     return SizedBox(
       height: cellW / _stageCardAspect(rail),
-      child: _BoardCell(
+      child: HomeBoardCell(
+        onLeftEdge: () => MainPageBridge.focusTvSidebar?.call(),
         item: item,
         isTelevision: true,
         focusNode: nodes[col],
@@ -9623,7 +9629,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     VoidCallback? onFocusedExtra,
   }) {
     final item = items[col];
-    return _BoardCell(
+    return HomeBoardCell(
+      onLeftEdge: () => MainPageBridge.focusTvSidebar?.call(),
       item: item,
       isTelevision: true,
       focusNode: nodes[col],
@@ -18459,7 +18466,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
               builder: (context) {
                 // Rows start straight on the first poster (Stremio-style, no
                 // leading See-All tile). DPAD-up from row 0 leaves the board;
-                // col-0 DPAD-left drops to the sidebar (handled in _BoardCell
+                // col-0 DPAD-left drops to the sidebar (handled in HomeBoardCell
                 // when onLeftEdge is null).
                 VoidCallback up(int col) => homeRowId != null
                     ? () => _focusRelativeHomeRail(homeRowId, -1, col)
@@ -18520,7 +18527,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
                         child: SizedBox(
                           width: collection == null ? posterW : cellH * itemAspect,
                           height: cellH,
-                          child: _BoardCell(
+                          child: HomeBoardCell(
+                            onLeftEdge: () =>
+                                MainPageBridge.focusTvSidebar?.call(),
                             item: item,
                             isTelevision: tv,
                             focusNode: nodes[col],
@@ -18603,7 +18612,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
             builder: (context) {
               // Rows start on the first poster (no leading See-All tile). DPAD-up
               // from the first CW row leaves the board; col-0 DPAD-left drops to
-              // the sidebar (handled in _BoardCell when onLeftEdge is null).
+              // the sidebar (handled in HomeBoardCell when onLeft is null).
               VoidCallback up(int col) =>
                   () => _focusRelativeHomeRail(homeRowId, -1, col);
               VoidCallback down(int col) =>
@@ -18623,7 +18632,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
                       child: SizedBox(
                         width: posterW,
                         height: cellH,
-                        child: _BoardCell(
+                        child: HomeBoardCell(
+                          onLeftEdge: () =>
+                              MainPageBridge.focusTvSidebar?.call(),
                           item: item,
                           isTelevision: tv,
                           focusNode: nodes[col],
