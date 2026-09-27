@@ -1,3 +1,5 @@
+import '../features/home/application/home_display_preferences_controller.dart';
+import '../features/home/models/home_display_preferences.dart';
 import '../features/home/presentation/home_progress_publication.dart';
 import '../features/home/application/home_playlist_controller.dart';
 import '../features/home/models/home_playlist.dart';
@@ -1894,6 +1896,28 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       (previous, next) {},
     );
     _homeCatalogController = ref.read(homeCatalogProvider(homeSession).notifier);
+    final displaySession = (
+      owner: _profileSessionOwner,
+      viewIdentity: Object(),
+      initial: restoredHome && keywordSnapshot == null
+          ? (
+              orientation: homeSnapshot.cardOrientation,
+              hideTitlesAndRatings: homeSnapshot.hideCardTitlesAndRatings,
+              hideCatalogAddonNames: homeSnapshot.hideCatalogAddonNames,
+              hideCollectionNames: homeSnapshot.hideCollectionNames,
+              spotlightFocusDetails: false,
+              animationsEnabled: false,
+              animationStyle: 'snowy_mountain',
+            )
+          : initialHomeDisplayPreferences,
+    );
+    _homeDisplaySubscription = ref.listenManual(
+      homeDisplayPreferencesProvider(displaySession),
+      (previous, next) {},
+    );
+    _homeDisplayController = ref.read(
+      homeDisplayPreferencesProvider(displaySession).notifier,
+    );
     final tvFavoritesSession = (
       owner: _profileSessionOwner,
       viewIdentity: Object(),
@@ -2506,10 +2530,6 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     _homeReturnRevision = HomeReturnCache.revision;
     _homeLoadedAt = snapshot.loadedAt;
     _spotlightHeroOverride = snapshot.hero;
-    _homeCardOrientation = snapshot.cardOrientation;
-    _hideHomeCardTitlesAndRatings = snapshot.hideCardTitlesAndRatings;
-    _hideHomeCatalogAddonNames = snapshot.hideCatalogAddonNames;
-    _hideHomeCollectionNames = snapshot.hideCollectionNames;
     _addonsById
       ..clear()
       ..addAll(snapshot.board.addons);
@@ -2704,6 +2724,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     _searchController.dispose();
     ProfileRuntime.scope.removeListener(_onSearchProfileChanged);
     _homeCatalogSubscription.close();
+    _homeDisplaySubscription.close();
     _localContinuationSubscription.close();
     _iptvContinuationSubscription.close();
     _traktContinuationSubscription.close();
@@ -2837,37 +2858,12 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     if (!mounted) return;
     final reloadGen = ++_homeSettingsReloadGen;
     final reloadSession = HomeCollectionsStore.captureSession();
-    final spotlightFocusDetails = await StorageService.getSpotlightFocusDetails();
-    final homeAnimationsEnabled = await StorageService.getHomeAnimationsEnabled();
-    final homeAnimationStyle = await StorageService.getHomeAnimationStyle();
-    final cardSettings = await Future.wait<Object>([
-      StorageService.getHomeCardOrientation(),
-      StorageService.getHomeHideCardTitlesAndRatings(),
-      StorageService.getHomeHideCatalogAddonNames(),
-      StorageService.getHomeHideCollectionNames(),
-    ]);
-    if (!mounted) return;
-    final orientation = cardSettings[0] as HomeCardOrientation;
-    final hideTitlesAndRatings = cardSettings[1] as bool;
-    final hideCatalogAddonNames = cardSettings[2] as bool;
-    final hideCollectionNames = cardSettings[3] as bool;
-    if (orientation != _homeCardOrientation ||
-        hideTitlesAndRatings != _hideHomeCardTitlesAndRatings ||
-        hideCatalogAddonNames != _hideHomeCatalogAddonNames ||
-        hideCollectionNames != _hideHomeCollectionNames ||
-        spotlightFocusDetails != _spotlightFocusDetails ||
-        homeAnimationsEnabled != _homeAnimationsEnabled ||
-        homeAnimationStyle != _homeAnimationStyle) {
-      setState(() {
-        _homeCardOrientation = orientation;
-        _hideHomeCardTitlesAndRatings = hideTitlesAndRatings;
-        _hideHomeCatalogAddonNames = hideCatalogAddonNames;
-        _hideHomeCollectionNames = hideCollectionNames;
-        _spotlightFocusDetails = spotlightFocusDetails;
-        _homeAnimationsEnabled = homeAnimationsEnabled;
-        _homeAnimationStyle = homeAnimationStyle;
-      });
-    }
+    bool current() =>
+        mounted &&
+        reloadGen == _homeSettingsReloadGen &&
+        reloadSession == HomeCollectionsStore.captureSession();
+    await _loadHomeCardOrientation(isCurrent: current);
+    if (!current()) return;
     // Merged-CW toggles: re-read, and on a change re-sync each provider's node
     // lists against the lists already in memory (no refetch needed — the data
     // is the same, only which slot renders it changes).
@@ -5984,9 +5980,13 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
 
   // Landscape default matches the stored default, so a fresh boot doesn't
   // flash portrait rows before the async pref read lands.
-  HomeCardOrientation _homeCardOrientation = HomeCardOrientation.landscape;
-  bool _hideHomeCardTitlesAndRatings = false;
-  bool _hideHomeCatalogAddonNames = false;
+  late final HomeDisplayPreferencesController _homeDisplayController;
+  late final ProviderSubscription<HomeDisplayPreferences>
+  _homeDisplaySubscription;
+  HomeDisplayPreferences get _homeDisplay => _homeDisplayController.current;
+  HomeCardOrientation get _homeCardOrientation => _homeDisplay.orientation;
+  bool get _hideHomeCardTitlesAndRatings => _homeDisplay.hideTitlesAndRatings;
+  bool get _hideHomeCatalogAddonNames => _homeDisplay.hideCatalogAddonNames;
   bool _useAddonSourceText = false;
   bool _showAddonSourceLogos = false;
 
@@ -5996,10 +5996,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     if (mounted) setState(() { _useAddonSourceText = value; _showAddonSourceLogos = logos; });
   }
 
-  bool _hideHomeCollectionNames = false;
-  bool _spotlightFocusDetails = false;
-  bool _homeAnimationsEnabled = false;
-  String _homeAnimationStyle = 'snowy_mountain';
+  bool get _hideHomeCollectionNames => _homeDisplay.hideCollectionNames;
+  bool get _spotlightFocusDetails => _homeDisplay.spotlightFocusDetails;
+  bool get _homeAnimationsEnabled => _homeDisplay.animationsEnabled;
+  String get _homeAnimationStyle => _homeDisplay.animationStyle;
 
   bool get _homeLandscapeCards =>
       _homeCardOrientation == HomeCardOrientation.landscape;
@@ -6275,39 +6275,11 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     _applyStageTransition(style);
   }
 
-  Future<void> _loadHomeCardOrientation() async {
-    final spotlightFocusDetails = await StorageService.getSpotlightFocusDetails();
-    final homeAnimationsEnabled = await StorageService.getHomeAnimationsEnabled();
-    final homeAnimationStyle = await StorageService.getHomeAnimationStyle();
-    final values = await Future.wait<Object>([
-      StorageService.getHomeCardOrientation(),
-      StorageService.getHomeHideCardTitlesAndRatings(),
-      StorageService.getHomeHideCatalogAddonNames(),
-      StorageService.getHomeHideCollectionNames(),
-    ]);
-    if (!mounted) return;
-    final orientation = values[0] as HomeCardOrientation;
-    final hideTitlesAndRatings = values[1] as bool;
-    final hideCatalogAddonNames = values[2] as bool;
-    final hideCollectionNames = values[3] as bool;
-    if (orientation == _homeCardOrientation &&
-        hideTitlesAndRatings == _hideHomeCardTitlesAndRatings &&
-        hideCatalogAddonNames == _hideHomeCatalogAddonNames &&
-        hideCollectionNames == _hideHomeCollectionNames &&
-        spotlightFocusDetails == _spotlightFocusDetails &&
-        homeAnimationsEnabled == _homeAnimationsEnabled &&
-        homeAnimationStyle == _homeAnimationStyle) {
-      return;
-    }
-    setState(() {
-      _homeCardOrientation = orientation;
-      _hideHomeCardTitlesAndRatings = hideTitlesAndRatings;
-      _hideHomeCatalogAddonNames = hideCatalogAddonNames;
-      _hideHomeCollectionNames = hideCollectionNames;
-      _spotlightFocusDetails = spotlightFocusDetails;
-      _homeAnimationsEnabled = homeAnimationsEnabled;
-      _homeAnimationStyle = homeAnimationStyle;
-    });
+  Future<void> _loadHomeCardOrientation({bool Function()? isCurrent}) async {
+    final changed = await _homeDisplayController.load(
+      isCurrent: () => mounted && (isCurrent?.call() ?? true),
+    );
+    if (mounted && changed) setState(() {});
   }
 
   /// Settings picker fired: tear down live players BEFORE the relayout, so
