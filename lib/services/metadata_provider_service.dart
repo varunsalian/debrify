@@ -3,20 +3,12 @@ import 'dart:collection';
 import 'metadata_details_service.dart';
 import 'stremio_service.dart';
 import '../models/metadata_preferences.dart';
+import '../models/metadata_presentation.dart';
 import '../models/stremio_addon.dart';
 import 'metadata_preferences_service.dart';
 import 'tmdb_metadata_repository.dart';
 
-class MetadataPresentation {
-  const MetadataPresentation(
-    this.item, {
-    this.unavailable = const {},
-    this.retryable = false,
-  });
-  final bool retryable;
-  final StremioMeta item;
-  final Set<MetadataCategory> unavailable;
-}
+export '../models/metadata_presentation.dart';
 
 typedef MetadataAddonLoader =
     Future<StremioMeta?> Function(String provider, StremioMeta item);

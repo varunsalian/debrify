@@ -2632,6 +2632,50 @@ UI/logic separation; moving the same mixin dependency into a feature file alone
 would not satisfy the destination. Native remote behaviour and the surrounding
 Home layouts remain within the later device/lifecycle gates.
 
+#### Reviewed shared metadata-cache prerequisite
+
+Before moving the catalog card, its existing metadata dependency now delegates
+resolved-result storage to `lib/core/metadata/metadata_presentation_cache.dart`
+(59 lines). The process-wide `shared` instance replaces the mixin's static map;
+visible card resolution and hero preloading both use it. Preparing the cache still
+compares the current profile scope (including generation/epoch), revision and the
+same JSON-encoded policy. Entries retain their original catalog-object keys and
+presentation values, expire after 15 minutes, and remain bounded to 256 entries.
+Preload reads do not consume/promote entries; visible reads remove before checking
+freshness and successful results reinsert at the end. Updating an existing preload
+entry refreshes its expiry without moving its insertion position. Retryable or
+incomplete presentations are not stored. Callers still own relevance checks and
+expiry checks at the original points; the cache does not cancel provider work or
+add profile-write guarantees.
+
+`MetadataPresentation` moved unchanged into a 13-line model file. The provider
+service re-exports it for existing imports; its class body/const constructor and
+legacy metadata values are unchanged. The core cache has no widget, service-call
+or Riverpod dependency; profile identity is an explicit typed input. A constructor
+clock permits deterministic cache checks while the shared production instance
+keeps `DateTime.now`. The remaining 285-line mixin still owns resolution/retry/
+preload orchestration, listeners and view publication; this prerequisite does not
+claim that the catalog card's UI/logic separation is complete.
+
+Existing metadata tests pass (47). Two new integration cases passed against the
+original mixin before extraction and after it: cross-widget-type reuse survives
+disposal, and hero preloading feeds a different card type while policy changes
+invalidate the result. Assertions run outside the preload callback's existing
+error-catching boundary; the initial fixture failure is retained. Twelve pure
+cache tests cover equal-scope/policy retention, profile/generation/epoch/legacy
+invalidation, revision/policy changes, object identity, consume-versus-peek reads,
+partial/retry rejection, expiry records, capacity and both recency behaviours.
+The expanded target passes all 61 tests. Analyzer identities remain exactly 863.
+The architecture guard now includes both extracted files and treats core metadata
+as data code for import checks; all 318 registered files pass. Formatting and diff
+checks pass. Evidence: `metadata-cache-*`, `analyze-metadata-cache-*` and
+`full-metadata-cache*` under `.git/refactor-evidence/phase5/`. The completed full
+suite reports 8,974 successes, the same 22 failures / 29 errors and 20 skips. Exact
+comparison against `full-fav-navigation.jsonl` preserves every prior outcome and
+adds exactly fourteen successful tests. The later controller/adapter work must
+borrow this same shared cache
+rather than introduce a competing per-card cache or clear it on view disposal.
+
 Remaining phase-6 work:
 
 - Separate Discover selection/hydration from its grid/stage presentation. Preserve

@@ -1,9 +1,9 @@
+import '../core/metadata/metadata_presentation_cache.dart';
 import '../services/tmdb_metadata_repository.dart';
 import '../services/diagnostic_log.dart';
 import '../models/hero_metadata_presentation.dart';
 import '../models/metadata_preferences.dart';
 import 'dart:async';
-import 'dart:convert';
 
 import 'package:flutter/widgets.dart';
 
@@ -16,11 +16,7 @@ import '../services/profiles/profile_runtime.dart';
 /// are shared by the repository. Item/provider/profile changes invalidate any
 /// in-flight result before it can update a recycled tile.
 mixin MetadataPresentationMixin<T extends StatefulWidget> on State<T> {
-  static final _resolved =
-      <StremioMeta, ({MetadataPresentation value, DateTime expires})>{};
-  static Object? _cacheScope;
-  static int? _cacheRevision;
-  static String? _cachePolicy;
+  static final _presentationCache = MetadataPresentationCache.shared;
   Timer? _retry;
   int _attempt = 0;
   bool _resolvedOnce = false;
@@ -182,7 +178,7 @@ mixin MetadataPresentationMixin<T extends StatefulWidget> on State<T> {
           final item = queue[index];
           final timer = Stopwatch()..start();
           try {
-            final cached = _resolved[item];
+            final cached = _presentationCache.peek(item);
             var result = cached != null && cached.expires.isAfter(DateTime.now())
                 ? cached.value
                 : await _present(item, prefs, relevant, hero: true);
@@ -194,7 +190,7 @@ mixin MetadataPresentationMixin<T extends StatefulWidget> on State<T> {
               result = await _present(item, prefs, relevant, hero: true);
             }
             if (!relevant()) return;
-            _storePresentation(item, result);
+            _presentationCache.store(item, result);
             DiagnosticLog.instance.recordEvent(source: 'metadata', event: 'hero_preload',
               fields: {'slot': index, 'elapsed_ms': timer.elapsedMilliseconds,
                 'retryable': result.retryable});
@@ -210,26 +206,11 @@ mixin MetadataPresentationMixin<T extends StatefulWidget> on State<T> {
     }
   }
 
-  void _prepareCache(MetadataPreferences prefs) {
-    final scope = ProfileRuntime.scope.value;
-    final revision = MetadataPreferencesService.revision.value;
-    final policy = jsonEncode(prefs.toJson());
-    if (_cacheScope != scope || _cacheRevision != revision || _cachePolicy != policy) {
-      _resolved.clear();
-      _cacheScope = scope;
-      _cacheRevision = revision;
-      _cachePolicy = policy;
-    }
-  }
-
-  void _storePresentation(StremioMeta original, MetadataPresentation presentation) {
-    if (presentation.retryable || presentation.unavailable.isNotEmpty) return;
-    _resolved[original] = (value: presentation,
-        expires: DateTime.now().add(const Duration(minutes: 15)));
-    while (_resolved.length > 256) {
-      _resolved.remove(_resolved.keys.first);
-    }
-  }
+  void _prepareCache(MetadataPreferences prefs) => _presentationCache.prepare(
+    scope: ProfileRuntime.scope.value,
+    revision: MetadataPreferencesService.revision.value,
+    preferences: prefs,
+  );
 
   Future<void> _resolveMetadata() async {
     final timing = Stopwatch()..start();
@@ -242,7 +223,7 @@ mixin MetadataPresentationMixin<T extends StatefulWidget> on State<T> {
       if (!mounted || generation != _metadataGeneration) return;
       setState(() => _presentationPreferences = prefs);
       _prepareCache(prefs);
-      final cached = _resolved.remove(original);
+      final cached = _presentationCache.take(original);
       final presentation =
           (cached != null && cached.expires.isAfter(DateTime.now())
               ? cached.value
@@ -258,7 +239,7 @@ mixin MetadataPresentationMixin<T extends StatefulWidget> on State<T> {
         fields: {'elapsed_ms': timing.elapsedMilliseconds, 'retryable': presentation.retryable,
           'cache_hit': cached != null && cached.expires.isAfter(DateTime.now()),
           'attempt': _attempt, 'missing': presentation.unavailable.length});
-      _storePresentation(original, presentation);
+      _presentationCache.store(original, presentation);
       _resolvedOnce = true;
       if (presentation.retryable && _attempt < 2) {
         _retry?.cancel();
