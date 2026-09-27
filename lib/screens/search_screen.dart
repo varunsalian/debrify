@@ -1,3 +1,4 @@
+import '../features/home/presentation/home_stage_scrims.dart';
 import '../features/home/presentation/home_stage_art.dart';
 import '../features/home/presentation/home_tonight_queue_row.dart';
 import '../features/home/presentation/home_tonight_card_caption.dart';
@@ -7704,7 +7705,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
             // states so trailer start never swaps the lighting. Plain
             // gradient draws over the hole: the proven feather pattern. In
             // theater the BOTTOM ramp fades with the shelf it exists for.
-            IgnorePointer(child: _CanvasScrims(theater: _canvasTheater)),
+            IgnorePointer(child: HomeStageScrims(theater: _canvasTheater)),
             // Identity (logo art + meta line), settle-driven like the hero.
             // THEATER: the logo glides to the top-left and shrinks — Netflix
             // billboard style — so the clean full-bleed video still carries a
@@ -8195,9 +8196,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
                 onPlaybackFailed: _onHeroLivePlaybackFailed,
               ),
             IgnorePointer(
-              child: _CanvasScrims(
+              child: HomeStageScrims(
                 theater: _canvasTheater,
-                variant: _StageScrimVariant.centered,
+                variant: HomeStageScrimVariant.centered,
               ),
             ),
             // Centred identity — which glides to the TOP-LEFT in theater, the
@@ -8607,7 +8608,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
                       onPlaybackFailed: _onHeroLivePlaybackFailed,
                     ),
                   const IgnorePointer(
-                    child: _CanvasScrims(variant: _StageScrimVariant.seam),
+                    child: HomeStageScrims(variant: HomeStageScrimVariant.seam),
                   ),
                 ],
               ),
