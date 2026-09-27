@@ -1,3 +1,6 @@
+import 'package:debrify/features/home/application/home_continuation_layout_dependencies.dart';
+import 'package:debrify/features/home/data/home_continuation_layout_repository.dart';
+import 'package:debrify/services/main_page_bridge.dart';
 import 'dart:async';
 
 import 'package:debrify/features/home/application/home_local_continuation_dependencies.dart';
@@ -38,6 +41,7 @@ void main() {
         ProfileRuntime.debugReset();
       });
       final calls = <String>[];
+      final layoutReads = <String>[];
       final first = Completer<Map<String, dynamic>?>();
       final repository = HomeLocalContinuationRepository(
         readProgressSource: () async {
@@ -53,10 +57,14 @@ void main() {
           return [
             {'imdbId': 'tmdb:movie:1', 'title': 'Local fixture'},
             {'imdbId': 'tmdb:movie:2', 'title': 'Second local fixture'},
+            {'imdbId': 'tmdb:3', 'title': 'Series fixture', 'type': 'series'},
           ];
         },
         readAddons: () => throw StateError('Unexpected addons'),
-        readEpisode: (_) => throw StateError('Unexpected episode'),
+        readEpisode: (id) async {
+          calls.add(id);
+          return null;
+        },
         readMovie: (id) {
           calls.add(id);
           return id == 'tmdb:movie:1' ? first.future : Future.value(null);
@@ -68,6 +76,14 @@ void main() {
           await tester.pumpWidget(
             ProviderScope(
               overrides: [
+                homeContinuationLayoutRepositoryProvider.overrideWithValue(
+                  HomeContinuationLayoutRepository(
+                    readMerged: (provider) {
+                      layoutReads.add(provider);
+                      return StorageService.getHomeCwMergedRows(provider);
+                    },
+                  ),
+                ),
                 homeLocalContinuationRepositoryProvider.overrideWithValue(
                   repository,
                 ),
@@ -106,6 +122,7 @@ void main() {
           'items',
           'tmdb:movie:1',
           'tmdb:movie:2',
+          'tmdb:3',
         ]);
         expect(find.text('Local fixture'), findsWidgets);
         FocusNode cardNode() => find
@@ -126,20 +143,54 @@ void main() {
           () => tester.pump(const Duration(milliseconds: 100)),
           () => client,
         );
+        await tester.runAsync(() async {
+          await Future<void>.delayed(const Duration(milliseconds: 100));
+        });
+        await tester.pump();
         expect(calls, [
           'source',
           'enabled',
           'items',
           'tmdb:movie:1',
           'tmdb:movie:2',
+          'tmdb:3',
           'source',
           'enabled',
           'items',
           'tmdb:movie:1',
           'tmdb:movie:2',
+          'tmdb:3',
         ]);
         expect(cardNode(), same(node));
         expect(node.hasFocus, isTrue);
+        expect(layoutReads, ['local', 'trakt', 'simkl', 'mdblist']);
+        final historyReads = List<String>.of(calls);
+        for (final merged in [true, false]) {
+          await tester.runAsync(() async {
+            await StorageService.setHomeCwMergedRows('local', merged);
+            MainPageBridge.notifyHomeSettingsChanged();
+            await Future<void>.delayed(const Duration(milliseconds: 100));
+          });
+          await http.runWithClient(
+            () => tester.pump(const Duration(milliseconds: 100)),
+            () => client,
+          );
+          expect(cardNode(), same(node));
+          expect(node.hasFocus, isTrue);
+          expect(calls, historyReads);
+          if (merged) {
+            final seriesNode = find
+                .text('Series fixture')
+                .evaluate()
+                .map((element) => Focus.maybeOf(element))
+                .whereType<FocusNode>()
+                .single;
+            expect(seriesNode.debugLabel, 'search_cw_movie_2');
+          }
+        }
+        expect(layoutReads, [
+          for (var i = 0; i < 3; i++) ...['local', 'trakt', 'simkl', 'mdblist'],
+        ]);
       } else {
         expect(calls, isNot(contains('tmdb:movie:2')));
         expect(find.text('Local fixture'), findsNothing);

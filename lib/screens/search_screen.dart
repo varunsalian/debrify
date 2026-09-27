@@ -1,3 +1,5 @@
+import '../features/home/application/home_continuation_layout_controller.dart';
+import '../features/home/models/home_continuation_layout.dart';
 import '../features/home/application/home_iptv_continuation_controller.dart';
 import '../features/home/models/home_iptv_continuation_state.dart';
 import '../features/home/application/home_local_continuation_controller.dart';
@@ -924,31 +926,16 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   // Loaded once before the first node sync (each CW loader awaits
   // [_ensureCwMergeFlags]); [_reloadForHomeSettings] re-reads and re-syncs
   // node counts when a toggle changes.
-  bool _cwMergeLocal = false;
-  bool _cwMergeTrakt = false;
-  bool _cwMergeSimkl = false;
-  bool _cwMergeMdblist = false;
-  Future<void>? _cwMergeFlagsLoad;
+  late final HomeContinuationLayoutController _continuationLayoutController;
+  late final ProviderSubscription<HomeContinuationLayout>
+  _continuationLayoutSubscription;
+  bool get _cwMergeLocal => _continuationLayoutController.current.local;
+  bool get _cwMergeTrakt => _continuationLayoutController.current.trakt;
+  bool get _cwMergeSimkl => _continuationLayoutController.current.simkl;
+  bool get _cwMergeMdblist => _continuationLayoutController.current.mdblist;
 
-  Future<void> _ensureCwMergeFlags() => _cwMergeFlagsLoad ??= () async {
-    try {
-      final flags = await Future.wait([
-        StorageService.getHomeCwMergedRows('local'),
-        StorageService.getHomeCwMergedRows('trakt'),
-        StorageService.getHomeCwMergedRows('simkl'),
-        StorageService.getHomeCwMergedRows('mdblist'),
-      ]);
-      // Plain assignments: every caller is a CW loader that setStates right
-      // after its node sync, so the flags never render stale.
-      _cwMergeLocal = flags[0];
-      _cwMergeTrakt = flags[1];
-      _cwMergeSimkl = flags[2];
-      _cwMergeMdblist = flags[3];
-    } catch (_) {
-      // Keep the split-rows defaults: a failed pref read must never become a
-      // failed CW load (this memoized future is awaited by every loader).
-    }
-  }();
+  Future<void> _ensureCwMergeFlags() =>
+      _continuationLayoutController.ensureLoaded(isCurrent: () => mounted);
 
   // IPTV Continue Watching (Xtream VOD movies + series), sourced from the
   // player's own watch history via [IptvCwRouter] — kept separate from the
@@ -1880,6 +1867,13 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       owner: _profileSessionOwner,
       viewIdentity: Object(),
     );
+    _continuationLayoutSubscription = ref.listenManual(
+      homeContinuationLayoutProvider(localContinuationSession),
+      (previous, next) {},
+    );
+    _continuationLayoutController = ref.read(
+      homeContinuationLayoutProvider(localContinuationSession).notifier,
+    );
     _localContinuationSubscription = ref.listenManual(
       homeLocalContinuationProvider(localContinuationSession),
       (previous, next) {},
@@ -2584,6 +2578,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     _homeCatalogSubscription.close();
     _localContinuationSubscription.close();
     _iptvContinuationSubscription.close();
+    _continuationLayoutSubscription.close();
     _listsSubscription.close();
     _catalogSubscription.close();
     _keywordResultsSubscription.close();
@@ -2739,22 +2734,12 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     // Merged-CW toggles: re-read, and on a change re-sync each provider's node
     // lists against the lists already in memory (no refetch needed — the data
     // is the same, only which slot renders it changes).
-    final mergeFlags = await Future.wait([
-      StorageService.getHomeCwMergedRows('local'),
-      StorageService.getHomeCwMergedRows('trakt'),
-      StorageService.getHomeCwMergedRows('simkl'),
-      StorageService.getHomeCwMergedRows('mdblist'),
-    ]);
+    final mergeChanged = await _continuationLayoutController.refresh(
+      isCurrent: () => mounted && reloadGen == _homeSettingsReloadGen,
+    );
     if (!mounted) return;
-    if (mergeFlags[0] != _cwMergeLocal ||
-        mergeFlags[1] != _cwMergeTrakt ||
-        mergeFlags[2] != _cwMergeSimkl ||
-        mergeFlags[3] != _cwMergeMdblist) {
+    if (mergeChanged) {
       setState(() {
-        _cwMergeLocal = mergeFlags[0];
-        _cwMergeTrakt = mergeFlags[1];
-        _cwMergeSimkl = mergeFlags[2];
-        _cwMergeMdblist = mergeFlags[3];
         _syncCwNodes(
           _cwMovieNodes,
           _cwMergeLocal ? _cwAll.length : _cwMovies.length,
