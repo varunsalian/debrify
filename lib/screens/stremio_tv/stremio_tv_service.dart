@@ -8,6 +8,7 @@ import '../../models/stremio_tv/stremio_tv_channel.dart';
 import '../../models/stremio_tv/stremio_tv_now_playing.dart';
 import '../../services/storage_service.dart';
 import '../../services/stremio_service.dart';
+import '../../services/stremio_tv_rotation.dart';
 import '../../services/tvmaze_service.dart';
 import '../../utils/stremio_tv_episode_picker.dart';
 
@@ -285,7 +286,7 @@ class StremioTvService {
       // Pick a deterministic page based on channel ID + day, so the pool rotates daily
       final dayKey =
           DateTime.now().millisecondsSinceEpoch ~/ (24 * 60 * 60 * 1000);
-      final pageHash = _djb2('page:${channel.id}:$dayKey');
+      final pageHash = stremioTvStableHash('page:${channel.id}:$dayKey');
       final page = pageHash % _maxPages; // 0.._maxPages-1
       final skip = page * _pageSize;
 
@@ -337,28 +338,6 @@ class StremioTvService {
   // Time-Based Rotation (the "currently playing" algorithm)
   // ============================================================================
 
-  /// DJB2 hash function for deterministic rotation.
-  static int _djb2(String input) {
-    int hash = 5381;
-    for (int i = 0; i < input.length; i++) {
-      hash = ((hash << 5) + hash) + input.codeUnitAt(i); // hash * 33 + c
-      hash = hash & 0x7FFFFFFF; // Keep positive 31-bit
-    }
-    return hash;
-  }
-
-  /// Per-channel time offset so each channel has independent slot boundaries.
-  /// Applies integer mixing after DJB2 to ensure good distribution even for
-  /// IDs that differ only in their suffix (e.g., genre years like 1975, 1976).
-  static int _channelOffsetMs(String channelId, int slotDurationMs) {
-    var h = _djb2(channelId);
-    // Murmur3-style finalizer for better bit distribution
-    h = (((h >> 16) ^ h) * 0x45d9f3b) & 0x7FFFFFFF;
-    h = (((h >> 16) ^ h) * 0x45d9f3b) & 0x7FFFFFFF;
-    h = (h >> 16) ^ h;
-    return (h % slotDurationMs).abs();
-  }
-
   /// Get the "now playing" item for a channel based on current time.
   ///
   /// Uses time-based hashing so the same channel shows the same item
@@ -389,30 +368,13 @@ class StremioTvService {
     int salt = 0,
   }) {
     if (channel.items.isEmpty) return null;
-
-    final now = DateTime.now();
-    final slotDurationMs = rotationMinutes * 60 * 1000;
-    final offset = _channelOffsetMs(channel.id, slotDurationMs);
-    final adjusted = now.millisecondsSinceEpoch - offset;
-    final slotNumber = (adjusted ~/ slotDurationMs) + slotOffset;
-
-    final seed = salt == 0
-        ? '${channel.id}:$slotNumber'
-        : '${channel.id}:$slotNumber:$salt';
-    final hash = _djb2(seed);
-    final index = hash % channel.items.length;
-
-    final slotStartMs = slotNumber * slotDurationMs + offset;
-    final slotStart = DateTime.fromMillisecondsSinceEpoch(slotStartMs);
-    final slotEnd = DateTime.fromMillisecondsSinceEpoch(
-      slotStartMs + slotDurationMs,
-    );
-
-    return StremioTvNowPlaying(
-      item: channel.items[index],
-      itemIndex: index,
-      slotStart: slotStart,
-      slotEnd: slotEnd,
+    return stremioTvPlayingAt(
+      channelId: channel.id,
+      items: channel.items,
+      now: DateTime.now(),
+      slotOffset: slotOffset,
+      rotationMinutes: rotationMinutes,
+      salt: salt,
     );
   }
 
@@ -427,39 +389,14 @@ class StremioTvService {
     int salt = 0,
   }) {
     if (channel.items.isEmpty) return [];
-
-    final now = DateTime.now();
-    final slotDurationMs = rotationMinutes * 60 * 1000;
-    final offset = _channelOffsetMs(channel.id, slotDurationMs);
-    final adjusted = now.millisecondsSinceEpoch - offset;
-    final currentSlotNumber = adjusted ~/ slotDurationMs;
-
-    final schedule = <StremioTvNowPlaying>[];
-    for (int i = 0; i < count; i++) {
-      final slotNumber = currentSlotNumber + i;
-      final seed = salt == 0
-          ? '${channel.id}:$slotNumber'
-          : '${channel.id}:$slotNumber:$salt';
-      final hash = _djb2(seed);
-      final index = hash % channel.items.length;
-
-      final slotStartMs = slotNumber * slotDurationMs + offset;
-      final slotStart = DateTime.fromMillisecondsSinceEpoch(slotStartMs);
-      final slotEnd = DateTime.fromMillisecondsSinceEpoch(
-        slotStartMs + slotDurationMs,
-      );
-
-      schedule.add(
-        StremioTvNowPlaying(
-          item: channel.items[index],
-          itemIndex: index,
-          slotStart: slotStart,
-          slotEnd: slotEnd,
-        ),
-      );
-    }
-
-    return schedule;
+    return stremioTvSchedule(
+      channelId: channel.id,
+      items: channel.items,
+      now: DateTime.now(),
+      count: count,
+      rotationMinutes: rotationMinutes,
+      salt: salt,
+    );
   }
 
   /// Get the next slot's item (for "Up Next" / skip).
