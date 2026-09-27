@@ -1,3 +1,5 @@
+import '../features/home/presentation/home_hero_live_layer.dart';
+import '../features/home/presentation/home_hero_surface.dart';
 import '../features/home/presentation/home_stage_rail_label.dart';
 import '../features/home/presentation/home_promenade_layout.dart';
 import '../features/home/presentation/home_atrium_layout.dart';
@@ -7452,7 +7454,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
                 )
               : null,
           live: _heroTrailerActive
-              ? _HeroLiveLayer(
+              ? HomeHeroLiveLayer(
+                  isAddonChannel: StremioIptvService.isStremioChannelUrl,
                   channel: _heroLiveChannel,
                   streamUrl: _heroLiveUrl,
                   heroHeight: boardH,
@@ -7767,7 +7770,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
                 )
               : null,
           live: _heroTrailerActive
-              ? _HeroLiveLayer(
+              ? HomeHeroLiveLayer(
+                  isAddonChannel: StremioIptvService.isStremioChannelUrl,
                   channel: _heroLiveChannel,
                   streamUrl: _heroLiveUrl,
                   heroHeight: boardH,
@@ -7998,7 +8002,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
                 )
               : null,
           live: _heroTrailerActive
-              ? _HeroLiveLayer(
+              ? HomeHeroLiveLayer(
+                  isAddonChannel: StremioIptvService.isStremioChannelUrl,
                   channel: _heroLiveChannel,
                   streamUrl: _heroLiveUrl,
                   heroHeight: boardH,
@@ -8260,7 +8265,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
             cacheHeight: _tvHeroArtworkCacheHeight,
           ),
           liveSurface: _heroTrailerActive
-              ? _HeroLiveLayer(
+              ? HomeHeroLiveLayer(
+                  isAddonChannel: StremioIptvService.isStremioChannelUrl,
                   channel: _heroLiveChannel,
                   streamUrl: _heroLiveUrl,
                   heroHeight: boardH,
@@ -8527,7 +8533,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
                 )
               : null,
           live: _heroTrailerActive
-              ? _HeroLiveLayer(
+              ? HomeHeroLiveLayer(
+                  isAddonChannel: StremioIptvService.isStremioChannelUrl,
                   channel: _heroLiveChannel,
                   streamUrl: _heroLiveUrl,
                   heroHeight: geometry.cardH,
@@ -8772,7 +8779,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
                   )
                 : null,
             live: _heroTrailerActive
-                ? _HeroLiveLayer(
+                ? HomeHeroLiveLayer(
+                    isAddonChannel: StremioIptvService.isStremioChannelUrl,
                     channel: _heroLiveChannel,
                     streamUrl: _heroLiveUrl,
                     heroHeight: geometry.cardH,
@@ -15945,7 +15953,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         onPlayingChanged: _onHeroTrailerPlaying,
         takeover: _heroTrailerTakeover,
       ),
-      liveBuilder: (heroH) => _HeroLiveLayer(
+      liveBuilder: (heroH) => HomeHeroLiveLayer(
+        isAddonChannel: StremioIptvService.isStremioChannelUrl,
         channel: _heroLiveChannel,
         streamUrl: _heroLiveUrl,
         heroHeight: heroH,

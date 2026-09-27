@@ -435,7 +435,7 @@ class _HeroSpotlightState extends State<_HeroSpotlight>
           // geometry jump. Falls back to the classic full-bleed backdrop when
           // the band is too short for a region (and on the compact hero).
           final Rect? artRegion = widget.boxedTrailer
-              ? _heroTrailerRegionRect(cons.maxWidth, height)
+              ? homeHeroTrailerRegionRect(cons.maxWidth, height)
               : null;
           return Stack(
             // Clip so a long title/plot can never bleed out of the hero into the
@@ -709,7 +709,7 @@ class _HeroSpotlightState extends State<_HeroSpotlight>
                           final defaultMax = isTelevision ? 640.0 : 520.0;
                           double maxTextW = defaultMax;
                           if (widget.boxedTrailer) {
-                            final region = _heroTrailerRegionRect(
+                            final region = homeHeroTrailerRegionRect(
                               cons.maxWidth,
                               height,
                             );
@@ -864,19 +864,19 @@ class _HeroSpotlightState extends State<_HeroSpotlight>
           return Stack(
             fit: StackFit.expand,
             children: [
-              _heroEdgeFeather(
+              homeHeroEdgeFeather(
                 Alignment.centerLeft,
                 Alignment.centerRight,
                 melt,
-                _heroTrailerFeatherFrac,
+                homeHeroTrailerFeatherFrac,
               ),
-              _heroEdgeFeather(
+              homeHeroEdgeFeather(
                 Alignment.topCenter,
                 Alignment.bottomCenter,
                 melt,
                 0.16,
               ),
-              _heroEdgeFeather(
+              homeHeroEdgeFeather(
                 Alignment.bottomCenter,
                 Alignment.topCenter,
                 melt,
@@ -928,79 +928,9 @@ class _HeroSpotlightState extends State<_HeroSpotlight>
   );
 }
 
-/// Geometry of the Home hero's ambient-trailer REGION — a right-anchored slab
-/// that fills the hero band's height and bleeds to the right screen edge, into
-/// which the trailer is painted and lightly feathered (slim neutral melts at
-/// its left/top/bottom edges — no hard frame, but the picture stays
-/// essentially clear). Shared by [_HeroSpotlight] (which keeps its title text
-/// clear of the region) and [_HeroTrailerLayer] (which paints the video) so
-/// both agree on the rect. Origin is the hero band's own top-left.
-///
-/// Width-led: ~56% of the hero, so the title keeps the left ~44%. Returns null
-/// for a band too short to read as a trailer (falls back to full-width text).
-Rect? _heroTrailerRegionRect(double width, double heroH) {
-  if (!width.isFinite || !heroH.isFinite || width <= 0 || heroH <= 0) {
-    return null;
-  }
-  if (heroH < 170) return null; // too short — keep the full-width hero instead
-  // Below this the region can't be both wide enough to read and leave room for
-  // the title — and it also keeps the clamp() below well-formed (lower ≤ upper).
-  if (width < 480) return null;
-  final regionW = (width * 0.56).clamp(360.0, width);
-  final left = width - regionW; // flush to the right screen edge
-  return Rect.fromLTWH(left, 0, regionW, heroH);
-}
-
-/// Fraction of the region's width over which the IDLE key-art's left edge
-/// dissolves into the hero (see [_regionArtFeathers]). The title text ends at
-/// the region's left, so at rest it sits over the dark side of this feather.
-const double _heroTrailerFeatherFrac = 0.34;
-
-/// Fraction for the LIVE video's left-edge melt — deliberately about half the
-/// idle art's [_heroTrailerFeatherFrac]. The balance (user-tuned): the old
-/// full-width feathers read as bleed over the picture, but fully crisp edges
-/// read as a legacy boxed player — a slim melt keeps the picture essentially
-/// untouched while its edges still dissolve into the stage.
-const double _heroTrailerVideoFeatherFrac = 0.16;
-
-/// Slight brightness lift painted flat over the live ambient trailer —
-/// trailers are graded dark and the ambient region has no other light on it.
-/// Low-alpha white: lifts the mids/shadows a touch without visibly milking
-/// the highlights. Works in BOTH engine modes: over the underlay hole it
-/// alpha-blends onto the native video via the system compositor; over the
-/// texture path it's an ordinary fill. Tune the alpha to taste (0 = off).
-const Color _heroTrailerBrightnessLift = Color(0x14FFFFFF);
-
-/// One edge-feather for the hero's art/trailer region: a gradient from opaque
-/// [c] at [begin] dissolving to transparent by [frac]. EASED stops (not a
-/// linear two-stop ramp — that reads as a hard "veil edge" where the fade
-/// starts): dense at the covered edge, long soft tail into the picture, the
-/// Nuvio/Netflix gradient recipe. Still one baked gradient fill — no shader
-/// mask, no per-frame cost — shared by the idle key-art and the live trailer
-/// (the trailer at roughly half the art's fractions, so the picture stays
-/// essentially clear) so the two states dissolve alike at the handover.
-Widget _heroEdgeFeather(Alignment begin, Alignment end, Color c, double frac) {
-  return DecoratedBox(
-    decoration: BoxDecoration(
-      gradient: LinearGradient(
-        begin: begin,
-        end: end,
-        colors: [
-          c,
-          c.withValues(alpha: 0.86),
-          c.withValues(alpha: 0.42),
-          c.withValues(alpha: 0.13),
-          c.withValues(alpha: 0.0),
-        ],
-        stops: [0.0, frac * 0.28, frac * 0.56, frac * 0.80, frac],
-      ),
-    ),
-  );
-}
-
 /// Full-board ambient trailer layer (TV Home board only). Sits ABOVE the hero +
 /// rows as an [IgnorePointer] overlay and paints the trailer into a right-
-/// anchored REGION of the hero band (see [_heroTrailerRegionRect]) — a live,
+/// anchored REGION of the hero band (see [homeHeroTrailerRegionRect]) — a live,
 /// near-untouched picture beside the title, its edges slim-feathered into the
 /// darkened stage. The region fades in
 /// when a trailer starts resolving and out when it clears; the title/backdrop
@@ -1056,7 +986,7 @@ class _HeroTrailerLayer extends StatefulWidget {
   final ValueListenable<YoutubeResolvedStreams?> trailer;
 
   /// The hero spotlight's height — sets the region's height (see
-  /// [_heroTrailerRegionRect]).
+  /// [homeHeroTrailerRegionRect]).
   final double heroHeight;
 
   /// Ambient volume 0–100 (0 = play silently).
@@ -1186,7 +1116,7 @@ class _HeroTrailerLayerState extends State<_HeroTrailerLayer> {
           final heroH = widget.heroHeight.clamp(0.0, boardH);
           final region = widget.fullBleed
               ? (Offset.zero & Size(boardW, boardH))
-              : _heroTrailerRegionRect(boardW, heroH);
+              : homeHeroTrailerRegionRect(boardW, heroH);
           if (region == null) return const SizedBox.shrink();
 
           final hasVideo = streams != null && streams.hasPlayable;
@@ -1223,11 +1153,11 @@ class _HeroTrailerLayerState extends State<_HeroTrailerLayer> {
 
   /// The trailer region — NO frame; the video cover-fills a right-anchored
   /// slab whose edges melt into the stage via SLIM neutral feathers (see
-  /// [_heroTrailerVideoFeatherFrac] for the tuned balance: heavy feathers
+  /// [homeHeroTrailerVideoFeatherFrac] for the tuned balance: heavy feathers
   /// read as bleed, none at all read as a legacy boxed player). The right
   /// edge bleeds off screen.
   ///
-  /// Under the feathers sits [_heroTrailerBrightnessLift] — a single flat
+  /// Under the feathers sits [homeHeroTrailerBrightnessLift] — a single flat
   /// low-alpha white fill that lifts the ambient video slightly (trailers
   /// are graded dark; a small lift keeps the region alive).
   ///
@@ -1282,26 +1212,26 @@ class _HeroTrailerLayerState extends State<_HeroTrailerLayer> {
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  const ColoredBox(color: _heroTrailerBrightnessLift),
+                  const ColoredBox(color: homeHeroTrailerBrightnessLift),
                   // Boxed-mode edge melts only — Canvas paints its own
                   // constant scrims above this whole layer instead.
                   if (!widget.fullBleed) ...[
                     // Left: melt into the darkened text zone.
-                    _heroEdgeFeather(
+                    homeHeroEdgeFeather(
                       Alignment.centerLeft,
                       Alignment.centerRight,
                       app.home.bg,
-                      _heroTrailerVideoFeatherFrac,
+                      homeHeroTrailerVideoFeatherFrac,
                     ),
                     // Top: soften the upper edge into the hero.
-                    _heroEdgeFeather(
+                    homeHeroEdgeFeather(
                       Alignment.topCenter,
                       Alignment.bottomCenter,
                       app.home.bg,
                       0.10,
                     ),
                     // Bottom: melt down into the darkened rows.
-                    _heroEdgeFeather(
+                    homeHeroEdgeFeather(
                       Alignment.bottomCenter,
                       Alignment.topCenter,
                       app.home.bg,
@@ -1464,338 +1394,6 @@ class _SpotlightIptvCardPreviewState extends State<SpotlightIptvCardPreview> {
         firstFrameTimeout: StremioIptvService.isStremioChannelUrl(channel.url)
             ? const Duration(seconds: 12)
             : null,
-      ),
-    );
-  }
-}
-
-/// The boxed hero video region's IPTV-favourite variant: plays a focused
-/// favourite channel's live stream in the SAME right-anchored region
-/// [_HeroTrailerLayer] uses for catalog trailers, via
-/// [HeroTrailerBackdrop]'s `live: true` mode — the exact mechanism the IPTV
-/// page's own inline channel preview uses
-/// (IptvResultsView._buildPreviewStage). Painted as a sibling ABOVE
-/// [_HeroTrailerLayer] in the host's Stack and shrinks to nothing when no
-/// IPTV favourite has focus, so the catalog trailer shows through unchanged;
-/// the two are mutually exclusive in practice because
-/// [_SearchScreenState._setHeroLiveIptv] tears the catalog trailer down the
-/// moment a live feed starts.
-///
-/// While the stream resolves/buffers, [_HeroSpotlight]'s idle key art (the
-/// previously-focused catalog title's Cinemeta poster) still sits BENEATH
-/// this layer — so as soon as [channel] is non-null this paints an opaque
-/// floor of the channel's OWN art ([_HeroLiveFloor]) rather than leaving that
-/// gap for the stale poster to show through.
-class _HeroLiveLayer extends StatefulWidget {
-  final ValueListenable<IptvChannel?> channel;
-  final ValueListenable<String?> streamUrl;
-  final double heroHeight;
-  final double volume;
-  final ValueChanged<bool>? onPlayingChanged;
-  final VoidCallback? onPlaybackFailed;
-
-  /// CANVAS mode — same contract as [_HeroTrailerLayer.fullBleed]: the region
-  /// (and the underlay hole with it) becomes the whole board and the boxed
-  /// edge feathers are skipped; the Canvas scrims above carry the lighting.
-  final bool fullBleed;
-
-  const _HeroLiveLayer({
-    required this.channel,
-    required this.streamUrl,
-    required this.heroHeight,
-    required this.volume,
-    this.onPlayingChanged,
-    this.onPlaybackFailed,
-    this.fullBleed = false,
-  });
-
-  @override
-  State<_HeroLiveLayer> createState() => _HeroLiveLayerState();
-}
-
-class _HeroLiveLayerState extends State<_HeroLiveLayer> {
-  /// Pins the live backdrop's element so its engine/texture survive rebuilds;
-  /// replaced per URL (channel switch, or a candidate-ladder step-down) so
-  /// each stream still gets a fresh engine.
-  GlobalKey _backdropKey = GlobalKey();
-  String? _backdropUrl;
-  IptvChannel? _channel;
-  String? _url;
-  bool _playing = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _channel = widget.channel.value;
-    _url = widget.streamUrl.value;
-    widget.channel.addListener(_onChannelChanged);
-    widget.streamUrl.addListener(_onUrlChanged);
-  }
-
-  @override
-  void didUpdateWidget(_HeroLiveLayer old) {
-    super.didUpdateWidget(old);
-    if (!identical(old.channel, widget.channel)) {
-      old.channel.removeListener(_onChannelChanged);
-      widget.channel.addListener(_onChannelChanged);
-      _channel = widget.channel.value;
-    }
-    if (!identical(old.streamUrl, widget.streamUrl)) {
-      old.streamUrl.removeListener(_onUrlChanged);
-      widget.streamUrl.addListener(_onUrlChanged);
-      _url = widget.streamUrl.value;
-      _playing = false;
-    }
-  }
-
-  @override
-  void dispose() {
-    widget.channel.removeListener(_onChannelChanged);
-    widget.streamUrl.removeListener(_onUrlChanged);
-    super.dispose();
-  }
-
-  void _onChannelChanged() {
-    if (!mounted) return;
-    setState(() => _channel = widget.channel.value);
-  }
-
-  void _onUrlChanged() {
-    if (!mounted) return;
-    setState(() {
-      _url = widget.streamUrl.value;
-      _playing = false;
-    });
-  }
-
-  void _onPlaying(bool playing) {
-    widget.onPlayingChanged?.call(playing);
-    if (_playing != playing && mounted) setState(() => _playing = playing);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final channel = _channel;
-    if (channel == null) return const SizedBox.shrink();
-    final url = _url;
-    if (url != null && url != _backdropUrl) {
-      _backdropUrl = url;
-      _backdropKey = GlobalKey();
-    }
-    return IgnorePointer(
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final boardH = constraints.maxHeight;
-          final boardW = constraints.maxWidth;
-          if (!boardH.isFinite ||
-              boardH <= 0 ||
-              !boardW.isFinite ||
-              boardW <= 0) {
-            return const SizedBox.shrink();
-          }
-          final heroH = widget.heroHeight.clamp(0.0, boardH);
-          final region = widget.fullBleed
-              ? (Offset.zero & Size(boardW, boardH))
-              : _heroTrailerRegionRect(boardW, heroH);
-          if (region == null) return const SizedBox.shrink();
-          return Stack(
-            fit: StackFit.expand,
-            children: [
-              Positioned.fromRect(
-                rect: region,
-                child: _buildRegion(channel, url),
-              ),
-            ],
-          );
-        },
-      ),
-    );
-  }
-
-  /// Same clip/feather/brightness-lift treatment as
-  /// [_HeroTrailerLayerState._buildRegion], plus the channel-art floor and a
-  /// LIVE/TUNING status chip in place of the trailer's TRAILER/AMBIENT pills.
-  /// Unlike the catalog trailer (whose feathers only appear once playing —
-  /// its OWN idle art beneath already carries them), the melt here is
-  /// unconditional: the floor is opaque from the first frame this builds, so
-  /// there's always something to feather.
-  Widget _buildRegion(IptvChannel channel, String? url) {
-    final app = AppThemeScope.of(context);
-    return ClipRect(
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          // Opaque floor: the channel's own art, so the previously-focused
-          // catalog title's poster never shows through the resolve/buffer
-          // gap. Crossfades out once real frames land.
-          AnimatedOpacity(
-            opacity: _playing ? 0.0 : 1.0,
-            duration: const Duration(milliseconds: 340),
-            curve: Curves.easeOut,
-            child: _HeroLiveFloor(channel: channel),
-          ),
-          if (url != null)
-            RepaintBoundary(
-              child: HeroTrailerBackdrop(
-                key: _backdropKey,
-                imageUrl: null,
-                videoUrl: url,
-                enabled: true,
-                live: true,
-                imageBlurSigma: 0,
-                videoBlurSigma: 0,
-                startDelay: const Duration(milliseconds: 300),
-                ambientVolume: widget.volume,
-                onPlayingChanged: _onPlaying,
-                onPlaybackFailed: widget.onPlaybackFailed,
-                // Only a Stremio-addon favourite has a ladder to fall back
-                // on — bound its wait so a dead candidate doesn't stall
-                // forever. A plain M3U/Xtream favourite has just the one
-                // URL, so give it an unbounded wait instead of abandoning an
-                // otherwise-valid but slow-to-buffer stream (matches
-                // IptvResultsView._buildPreviewStage's own timeout choice).
-                firstFrameTimeout:
-                    StremioIptvService.isStremioChannelUrl(channel.url)
-                    ? const Duration(seconds: 12)
-                    : null,
-              ),
-            ),
-          IgnorePointer(
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                const ColoredBox(color: _heroTrailerBrightnessLift),
-                // Boxed-mode edge melts only — Canvas paints its own constant
-                // scrims above this whole layer instead.
-                if (!widget.fullBleed) ...[
-                  _heroEdgeFeather(
-                    Alignment.centerLeft,
-                    Alignment.centerRight,
-                    app.home.bg,
-                    _heroTrailerVideoFeatherFrac,
-                  ),
-                  _heroEdgeFeather(
-                    Alignment.topCenter,
-                    Alignment.bottomCenter,
-                    app.home.bg,
-                    0.10,
-                  ),
-                  _heroEdgeFeather(
-                    Alignment.bottomCenter,
-                    Alignment.topCenter,
-                    app.home.bg,
-                    0.20,
-                  ),
-                ],
-              ],
-            ),
-          ),
-          Positioned(
-            top: 16,
-            right: 22,
-            child: _HeroLiveChip(playing: _playing),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// The IPTV favourite's own art, filling the boxed region while its stream
-/// resolves/buffers (and behind it, briefly, while frames settle) — the
-/// channel's logo over the same purple gradient + live-tv glyph fallback
-/// [HomeArtPoster] uses for its card, so the region reads as "this channel is
-/// tuning in" rather than an unrelated leftover poster.
-class _HeroLiveFloor extends StatelessWidget {
-  final IptvChannel channel;
-
-  const _HeroLiveFloor({required this.channel});
-
-  @override
-  Widget build(BuildContext context) {
-    final logo = channel.logoUrl;
-    final hasLogo = logo != null && logo.isNotEmpty;
-    return DecoratedBox(
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFF2A1D5C), Color(0xFF1A1440), Color(0xFF0D0B1A)],
-          stops: [0.0, 0.55, 1.0],
-        ),
-      ),
-      child: Center(
-        child: hasLogo
-            ? Padding(
-                padding: const EdgeInsets.all(56),
-                child: CachedNetworkImage(
-                  imageUrl: logo,
-                  fit: BoxFit.contain,
-                  errorWidget: (_, __, ___) => const _HeroLiveGlyph(),
-                ),
-              )
-            : const _HeroLiveGlyph(),
-      ),
-    );
-  }
-}
-
-class _HeroLiveGlyph extends StatelessWidget {
-  const _HeroLiveGlyph();
-
-  @override
-  Widget build(BuildContext context) {
-    final app = AppThemeScope.of(context);
-    return Icon(
-      Icons.live_tv_rounded,
-      size: 64,
-      color: app.fade(app.home.chromeAccent, 0.85),
-    );
-  }
-}
-
-/// Small "LIVE"/"TUNING" status pill for the boxed hero region while an IPTV
-/// favourite plays there — same glass-capsule language as
-/// [_HeroTrailerLoadingPill]/[_HeroAmbientChip], with a red dot (matching
-/// [HomeArtPoster]'s own LIVE badge) instead of the trailer pills' amber one.
-class _HeroLiveChip extends StatelessWidget {
-  final bool playing;
-
-  const _HeroLiveChip({required this.playing});
-
-  @override
-  Widget build(BuildContext context) {
-    final app = AppThemeScope.of(context);
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        // Glassy page ink — 0.8 of the opaque bg pins the legacy 0xCC alpha.
-        color: app.fade(app.home.bg, 0.8),
-        borderRadius: app.shape.brPill,
-        border: Border.all(color: app.fade(app.core.tx, 0.16)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 6,
-            height: 6,
-            decoration: const BoxDecoration(
-              color: homeCardProgressRed,
-              shape: BoxShape.circle,
-            ),
-          ),
-          const SizedBox(width: 6),
-          Text(
-            playing ? 'LIVE' : 'TUNING',
-            style: TextStyle(
-              fontSize: 10,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 1.2,
-              color: app.core.tx,
-            ),
-          ),
-        ],
       ),
     );
   }
