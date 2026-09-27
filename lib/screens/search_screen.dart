@@ -34,6 +34,8 @@ import '../features/home/application/home_hero_metadata_loader.dart';
 import '../features/home/application/home_hero_metadata_dependencies.dart';
 import '../features/home/application/home_hero_trailer_dependencies.dart';
 import '../features/home/application/home_hero_trailer_loader.dart';
+import '../features/home/application/home_hero_live_preview.dart';
+import '../features/home/application/home_hero_live_dependencies.dart';
 import '../features/home/presentation/home_classic_layout.dart';
 import '../features/home/presentation/home_takeover_info.dart';
 import '../features/home/presentation/home_trailer_transitions.dart';
@@ -1492,13 +1494,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   /// the spotlight fades its (now-stale) colour field and identity text on
   /// this, and has no other reason to know the IPTV-specific channel type.
   final ValueNotifier<bool> _heroLiveTakeover = ValueNotifier<bool>(false);
-  int _heroLiveReq = 0;
-
-  /// Candidate ladder for the live IPTV favourite when it's a Stremio-addon
-  /// channel (several upstream links to try in order) — mirrors the IPTV
-  /// page's own ladder (IptvResultsView._onPreviewPlaybackFailed). Null for a
-  /// plain M3U/Xtream favourite, which has just the one URL.
-  List<String>? _heroLiveCandidates;
+  late final ProviderSubscription<HomeHeroLivePreview> _heroLiveSubscription;
 
   final HomeHeroPreviewPolicy _heroPreviewPolicy = HomeHeroPreviewPolicy();
 
@@ -1843,6 +1839,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     );
     _homeSettingsRefreshSubscription = ref.listenManual(
       homeSettingsRefreshProvider(homeSession),
+      (previous, next) {},
+    );
+    _heroLiveSubscription = ref.listenManual(
+      homeHeroLivePreviewProvider(homeSession),
       (previous, next) {},
     );
     _heroTrailerLoaderSubscription = ref.listenManual(
@@ -2696,6 +2696,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     _heroTrailerLoading.dispose();
     _heroTrailerShowing.dispose();
     _heroTrailerTakeover.dispose();
+    _heroLiveSubscription.read().dispose();
     _heroLiveUrl.dispose();
     _heroLiveChannel.dispose();
     _heroLiveTakeover.dispose();
@@ -2712,6 +2713,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     _pikpakOnlySubscription.close();
     _boundCountsSubscription.close();
     _homeSettingsRefreshSubscription.close();
+    _heroLiveSubscription.close();
     _heroTrailerLoaderSubscription.close();
     _heroMetadataSubscription.close();
     _homeLayoutPreferenceSubscription.close();
@@ -9248,46 +9250,42 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   /// region to that channel's live stream. A plain M3U/Xtream favourite's URL
   /// is already playable; a Stremio-addon favourite resolves candidates first
   /// (same async ladder [IptvResultsView] uses for its own inline preview),
-  /// guarded by [_heroLiveReq] so a fast DPAD move past it can't land a stale
+  /// guarded by the live-preview owner so a fast DPAD move cannot land a stale
   /// resolve on top of whatever channel focus has since moved to.
   void _setHeroLiveIptv(IptvChannel channel) {
     if (!_heroTrailerActive) return;
     if (_heroLiveChannel.value?.url == channel.url) return;
     _heroLiveChannel.value = channel;
     if (!_heroLiveTakeover.value) _heroLiveTakeover.value = true;
-    _heroLiveCandidates = null;
-    final req = ++_heroLiveReq;
-    // A live feed pre-empts whatever catalog trailer is mid-flight/playing —
-    // instant teardown, same as any other hero change.
-    _clearHeroTrailer();
-    _heroLiveUrl.value = null;
-    // The shell's glass-stage backdrop and sidebar tint are ALSO the stale
-    // catalog title's art (published by [_publishAmbientArt]/
-    // [_publishHeroTintToShell], neither of which this focus path runs) —
-    // blank them too rather than leaving that art behind everything,
-    // including the sidebar, while an unrelated channel plays.
-    MainPageBridge.tvAmbientArt.value = null;
-    MainPageBridge.tvHeroTint.value = null;
-    if (!StremioIptvService.isStremioChannelUrl(channel.url)) {
-      _heroLiveUrl.value = channel.url;
-      return;
-    }
-    StremioIptvService.instance.resolveCandidates(channel.url).then((found) {
-      if (!mounted || req != _heroLiveReq || found.isEmpty) return;
-      _heroLiveCandidates = [for (final c in found) c.url];
-      _heroLiveUrl.value = _heroLiveCandidates!.first;
-    });
+    _heroLiveSubscription.read().load(
+      channel.url,
+      isCurrent: () => mounted,
+      prepare: () {
+        // A live feed pre-empts whatever catalog trailer is mid-flight/playing —
+        // instant teardown, same as any other hero change.
+        _clearHeroTrailer();
+        _heroLiveUrl.value = null;
+        // The shell's glass-stage backdrop and sidebar tint are ALSO the stale
+        // catalog title's art (published by [_publishAmbientArt]/
+        // [_publishHeroTintToShell], neither of which this focus path runs) —
+        // blank them too rather than leaving that art behind everything,
+        // including the sidebar, while an unrelated channel plays.
+        MainPageBridge.tvAmbientArt.value = null;
+        MainPageBridge.tvHeroTint.value = null;
+      },
+      publish: (url) => _heroLiveUrl.value = url,
+    );
   }
 
   /// DPAD focus left the IPTV favourites row (another favourites row, or a
   /// catalog/CW card) — drop the live feed so the boxed region falls back to
   /// whatever catalog trailer [_heroItem] owns.
   void _clearHeroLiveIptv() {
-    _heroLiveReq++;
+    _heroLiveSubscription.read().invalidateRequest();
     final wasLive = _heroLiveChannel.value != null;
     if (wasLive) _heroLiveChannel.value = null;
     if (_heroLiveTakeover.value) _heroLiveTakeover.value = false;
-    _heroLiveCandidates = null;
+    _heroLiveSubscription.read().clearCandidates();
     if (_heroLiveUrl.value != null) _heroLiveUrl.value = null;
     // The unmounting live backdrop can never report playing:false (its
     // dispose doesn't notify), and when the trailer path declines to re-arm
@@ -9320,20 +9318,11 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   /// (IptvResultsView._onPreviewPlaybackFailed). No-op for a plain M3U/Xtream
   /// favourite (single URL, no ladder) or once every candidate is exhausted.
   void _onHeroLivePlaybackFailed() {
-    final candidates = _heroLiveCandidates;
-    final current = _heroLiveUrl.value;
-    if (candidates == null || current == null) return;
-    final next = candidates.indexOf(current) + 1;
-    if (next <= 0 || next >= candidates.length) {
-      // Every candidate is dead: forget the cached list so a later attempt
-      // re-resolves fresh links instead of replaying the same dead ones for
-      // the rest of the 5-minute cache window.
-      final channel = _heroLiveChannel.value;
-      if (channel != null) StremioIptvService.instance.invalidate(channel.url);
-      _heroLiveUrl.value = null;
-      return;
-    }
-    _heroLiveUrl.value = candidates[next];
+    _heroLiveSubscription.read().playbackFailed(
+      currentUrl: _heroLiveUrl.value,
+      channelKey: () => _heroLiveChannel.value?.url,
+      publish: (url) => _heroLiveUrl.value = url,
+    );
   }
 
   /// Mirror the takeover arc onto the app-shell notifier (sidebar rail hide).
