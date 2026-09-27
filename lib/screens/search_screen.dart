@@ -1,3 +1,4 @@
+import '../features/home/presentation/home_stage_corner_painter.dart';
 import '../features/home/presentation/home_stage_favorite_identity.dart';
 import '../widgets/skeleton_poster.dart' show BrandLoadingStage;
 import '../features/home/presentation/home_trakt_skeleton_row.dart';
@@ -264,7 +265,6 @@ import 'alldebrid/alldebrid_files_screen.dart';
 import 'pikpak/pikpak_files_screen.dart';
 
 part 'search/search_hero_widgets.dart';
-part 'search/search_stage_widgets.dart';
 
 /// TV focus ring for board cards — violet-300, deliberately LIGHTER than the
 /// board's chrome accent: a light ring over dark art pops at 10ft, while the
@@ -9389,7 +9389,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
                   // hole in a saveLayer and break the blend.
                   IgnorePointer(
                     child: CustomPaint(
-                      painter: const _CornerWedges(
+                      painter: const HomeStageCornerPainter(
                         radius: _kDeckCardRadius,
                         color: Color(0xFF0C0A16),
                       ),
@@ -9941,7 +9941,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
                     ),
                     IgnorePointer(
                       child: CustomPaint(
-                        painter: const _CornerWedges(
+                        painter: const HomeStageCornerPainter(
                           radius: _kTonightCardRadius,
                           color: Color(0xFF100D1F),
                         ),
