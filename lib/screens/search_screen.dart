@@ -1,3 +1,4 @@
+import '../features/home/models/home_simkl_continuation.dart';
 import '../features/home/presentation/home_progress_view.dart';
 import '../features/home/application/home_trakt_continuation_controller.dart';
 import '../features/home/models/home_trakt_continuation_state.dart';
@@ -1145,10 +1146,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   /// in a dedicated mode a title the chosen source doesn't know simply renders
   /// as a plain poster. IPTV rows are exempt: they are routeKey-keyed player
   /// history that no tracker can describe.
-  String? _simklCardKey(StremioMeta item) {
-    final id = item.progressId ?? item.id;
-    return item.type == 'movie' && id.startsWith('tmdb:') ? 'movie|$id' : id;
-  }
+  String? _simklCardKey(StremioMeta item) =>
+      HomeSimklContinuation.cardKey(item);
 
   String? _cwCardKey(_CwKind kind, StremioMeta item) =>
       _cwProgressSource == WatchProgressSource.simkl ||
@@ -5318,86 +5317,42 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     // real disconnect returns empty lists, which fall through and clear them).
     if (result == null) return;
 
-    final movieMetas = <StremioMeta>[];
-    final showMetas = <StremioMeta>[];
-    final progress = <String, double>{};
-    final episode = <String, String>{};
-    final episodeRefs = <String, ({int season, int episode})>{};
-    final byImdb = <String, SimklContinueWatchingItem>{};
-    void ingest(List<SimklContinueWatchingItem> items, List<StremioMeta> into) {
-      for (final it in items) {
-        final id = _simklCardKey(it.meta)!;
-        if (id.isEmpty || byImdb.containsKey(id)) continue; // dedup by imdbId
-        into.add(it.meta);
-        byImdb[id] = it;
-        // "Up next" entries have no paused position — no progress bar for them.
-        final p = it.progress;
-        if (p != null) progress[id] = (p / 100).clamp(0.0, 1.0);
-        final se = continueWatchingEpisodeLabel(it.season, it.episode);
-        if (se != null) episode[id] = se;
-        if (MediaIdentity.isImdb(it.id) && it.season != null &&
-            it.episode != null &&
-            it.season! > 0 &&
-            it.episode! > 0) {
-          episodeRefs[id] = (season: it.season!, episode: it.episode!);
-        }
-      }
-    }
-
-    ingest(result.movies, movieMetas);
-    ingest(result.shows, showMetas);
-    // Merge into one paused-order list for the See-All grid: newest paused_at
-    // first, timestamp-less items last, ties fall back to movies-then-shows.
-    final allMetas = [...movieMetas, ...showMetas];
-    final origIndex = <StremioMeta, int>{
-      for (var i = 0; i < allMetas.length; i++) allMetas[i]: i,
-    };
-    allMetas.sort((a, b) {
-      final pa = byImdb[_simklCardKey(a)]?.pausedAtMs;
-      final pb = byImdb[_simklCardKey(b)]?.pausedAtMs;
-      if (pa != null && pb != null) {
-        final c = pb.compareTo(pa);
-        if (c != 0) return c;
-      } else if (pa == null && pb != null) {
-        return 1;
-      } else if (pa != null && pb == null) {
-        return -1;
-      }
-      return origIndex[a]!.compareTo(origIndex[b]!);
-    });
-
+    final snapshot = HomeSimklContinuation.fromRows(
+      movies: result.movies,
+      shows: result.shows,
+    );
     // Whether the board already showed Simkl rows before this load — only a
     // fresh appearance announces itself below; a refresh of rows the user can
     // already see stays quiet.
     final hadSimklRows = _simklMovies.isNotEmpty || _simklSeries.isNotEmpty;
     _syncCwNodes(
       _simklMovieNodes,
-      _cwMergeSimkl ? allMetas.length : movieMetas.length,
+      _cwMergeSimkl ? snapshot.all.length : snapshot.movies.length,
       'smovie',
     );
     _syncCwNodes(
       _simklSeriesNodes,
-      _cwMergeSimkl ? 0 : showMetas.length,
+      _cwMergeSimkl ? 0 : snapshot.series.length,
       'sseries',
     );
     setState(() {
-      _simklMovies = movieMetas;
-      _simklSeries = showMetas;
-      _simklAll = allMetas;
+      _simklMovies = snapshot.movies;
+      _simklSeries = snapshot.series;
+      _simklAll = snapshot.all;
       _simklProgress
         ..clear()
-        ..addAll(progress);
+        ..addAll(snapshot.progress);
       _simklEpisode
         ..clear()
-        ..addAll(episode);
+        ..addAll(snapshot.episode);
       _simklEpisodeArtwork.clear();
       _simklByImdb
         ..clear()
-        ..addAll(byImdb);
+        ..addAll(snapshot.byImdb);
     });
     unawaited(
       _enrichCwEpisodeArtwork(
-        refs: episodeRefs,
+        refs: snapshot.episodeRefs,
         target: _simklEpisodeArtwork,
         isCurrent: () => token == _simklCwToken,
       ),
