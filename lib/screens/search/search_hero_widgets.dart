@@ -1704,7 +1704,7 @@ class _HeroLiveLayerState extends State<_HeroLiveLayer> {
 /// The IPTV favourite's own art, filling the boxed region while its stream
 /// resolves/buffers (and behind it, briefly, while frames settle) — the
 /// channel's logo over the same purple gradient + live-tv glyph fallback
-/// [_ArtPoster] uses for its card, so the region reads as "this channel is
+/// [HomeArtPoster] uses for its card, so the region reads as "this channel is
 /// tuning in" rather than an unrelated leftover poster.
 class _HeroLiveFloor extends StatelessWidget {
   final IptvChannel channel;
@@ -1757,7 +1757,7 @@ class _HeroLiveGlyph extends StatelessWidget {
 /// Small "LIVE"/"TUNING" status pill for the boxed hero region while an IPTV
 /// favourite plays there — same glass-capsule language as
 /// [_HeroTrailerLoadingPill]/[_HeroAmbientChip], with a red dot (matching
-/// [_ArtPoster]'s own LIVE badge) instead of the trailer pills' amber one.
+/// [HomeArtPoster]'s own LIVE badge) instead of the trailer pills' amber one.
 class _HeroLiveChip extends StatelessWidget {
   final bool playing;
 
@@ -1781,7 +1781,7 @@ class _HeroLiveChip extends StatelessWidget {
             width: 6,
             height: 6,
             decoration: const BoxDecoration(
-              color: _kCwProgressRed,
+              color: homeCardProgressRed,
               shape: BoxShape.circle,
             ),
           ),

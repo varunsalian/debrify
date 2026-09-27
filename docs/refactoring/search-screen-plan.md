@@ -2540,10 +2540,56 @@ inline fallback and Spotlight has its own builder. Off-TV resolution deliberatel
 exposes only Classic/Spotlight without rewriting the stored TV preference. TV Search
 uses `_buildSearchSpotlightBoard` before Home-style dispatch. Spotlight with only
 favourites falls through to Classic because its shelves do not render those models.
-These dispatch/fallback cases must survive the layout extraction. The next leaf
-boundary is `_ArtPoster` plus its caption metrics: all twelve production call sites
-are in SearchScreen, and its focus node/callbacks are borrowed view inputs; it does
-not need a new application controller or DI registration.
+These dispatch/fallback cases must survive the layout extraction.
+
+#### Reviewed favourites-card presentation extraction
+
+`lib/features/home/presentation/home_art_poster.dart` (281 lines) now owns the
+artwork/fallback, badges, progress, caption and existing hover/key/focus behaviour.
+All twelve real SearchScreen call sites use `HomeArtPoster`; the old `_ArtPoster`
+classes were removed from the shared card part. The widget borrows its focus node
+and dispatches explicit open/focus callbacks. Its image cache, decode widths,
+contain-fit padding, animation helpers, theme reads and scroll-to-focus durations
+are unchanged. No data access/controller/DI registration is needed for this leaf.
+`home_card_style.dart` (20 lines) owns the caption metrics and the existing shared
+red colour; the legacy catalog card and hero live chip now read that same colour
+constant, keeping a single definition. The corrected caption-height contract from
+`f013220c` remains shared by the widget and all reserving layouts.
+
+Normalized class-body comparison against `f013220c` is identical after the public
+name/style-identifier changes, optional widget key and comments/whitespace. Six
+new direct widget tests exercise Enter/Space repeat and release, interrupted
+activation on focus loss, borrowed-node reuse after removal, hover/tap dispatch,
+optional title/live/progress rendering and 140ms TV/260ms off-TV scroll-to-focus.
+The initial scroll checks needed an extra frame to start the post-frame animation;
+the production callback/timing was not altered. The 40 existing real-screen
+favourites/caption/watchlist/playlist checks pass before and after extraction;
+the six direct checks pass after correcting that test scheduling assumption.
+The original `LIVE` label retains the migration's existing localization exception.
+
+Analyzer identities remain exactly 863. The 315-file architecture guard and diff
+checks pass. The first full run caught an audit-registration mistake: placing the
+new widget only in the residue-only manifest excluded its relocated shape-token
+call from the aggregate count (489 instead of 490). It is now correctly registered
+as a swept file with zero bare-radius residue. The manifest/location and 490-call
+floor tests pass; the pre-existing bare-radius failure remains. No assertion or
+threshold was weakened; the failed run is retained for review. The next full run
+passes both corrected shape checks, but reproduces the previously documented
+Xtream deadline race (`IOClient.send` after client closure at the unchanged
+`xtream_codes_service.dart:314`). A deadline can expire while opening the output
+file; `send(request)` is evaluated before the throwing `remaining()` argument,
+leaving the request future without its timeout handler. The existing deadline-zero
+probe documents this ordering. All ten unchanged ingest tests pass independently.
+Both receipts remain available; no failure allowance or unrelated service/test was
+changed. SearchScreen is 19,052 lines and the original card part is now 634 lines
+(down from 912); all three remaining parts still require retirement.
+Evidence: `art-poster-*`, `analyze-art-poster-*` and `full-art-poster*` under
+`.git/refactor-evidence/phase5/`. The final unchanged full-suite run completed with
+8,953 successes, the same 22 failures / 29 errors and 20 skips. Exact comparison of
+`full-art-poster-final.jsonl` against `full-caption-verified.jsonl` preserves every
+prior outcome and adds exactly six successful tests. This completes the card
+extraction, not the surrounding Home layouts, native playback/preview
+ownership, device/performance checks or final facade/size gates.
 
 Remaining phase-6 work:
 

@@ -1,3 +1,5 @@
+import '../features/home/presentation/home_art_poster.dart';
+import '../features/home/presentation/home_card_style.dart';
 import '../features/discover/presentation/discover_stage_layout.dart';
 import '../features/discover/presentation/discover_grid_layout.dart';
 import '../features/discover/presentation/discover_stage_backdrop.dart';
@@ -259,9 +261,6 @@ part 'search/search_stage_widgets.dart';
 /// the app theme as `app.home.chromeAccent` / `app.home.bg`.)
 const Color kStremioFocusRing = kCardFocusRing;
 
-/// Continue Watching progress-bar fill (Stremio shows a white line; we use red).
-const Color _kCwProgressRed = Color(0xFFE50914);
-
 /// Board (homepage) infinite scroll: how many catalog rows to fetch per batch as
 /// the user scrolls, and how many items to keep per row. Enumerating catalogs is
 /// free (manifest metadata) — only fetching each row's items costs a call — so we
@@ -330,27 +329,8 @@ const String _discEmby = DiscoverSources.emby;
 const String _discMdblist = DiscoverSources.mdblist;
 const String _discAddonPrefix = DiscoverSources.addonPrefix;
 
-// Metrics for the inline caption under an [_ArtPoster] (the favourites rails).
-// Kept as the single source of truth so anything reserving vertical space for
-// the caption (the cell height, the hero's row-reserve budget) can't drift from
-// the widget's own layout.
-const double _kArtTitleGap = 10;
-const double _kArtTitleFontSize = 14;
-const double _kArtTitleHeight = 1.25;
-const int _kArtTitleMaxLines = 2;
-
-/// Height of the caption band under an [_ArtPoster]: the gap plus its up-to-two
-/// lines at the current text scale. Paragraph layout rounds each line separately:
-/// two 17.5px lines render at 18px each, so reserve whole pixels per line.
-double _artPosterCaptionBand(BuildContext context) =>
-    _kArtTitleGap +
-    (MediaQuery.textScalerOf(context).scale(_kArtTitleFontSize) *
-                _kArtTitleHeight)
-            .ceilToDouble() *
-        _kArtTitleMaxLines;
-
 // Metrics for the Canvas bottom column (rail tabs + shelf). Same contract as
-// the caption band above: the widgets and the identity block that has to stay
+// HomeArtCaption: the widgets and the identity block that has to stay
 // CLEAR of them read the same numbers, so neither can drift into the other.
 // (It drifted once: growing the shelf box by the caption band silently ate the
 // identity's whole clearance and the tabs landed on the synopsis.)
@@ -1033,7 +1013,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   // Debrify TV favourites — a leading "Debrify TV" row of the user's starred
   // keyword channels, shown between Continue Watching and the catalog rows.
   // Channels have no artwork, so they render as Stremio-shaped cards with a
-  // gradient + glyph placeholder (see [_ArtPoster]).
+  // gradient + glyph placeholder (see [HomeArtPoster]).
   late final HomeTvFavoritesController _tvFavoritesController;
   late final ProviderSubscription<List<DebrifyTvChannel>>
   _tvFavoritesSubscription;
@@ -6040,7 +6020,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       _homeCardOrientation == HomeCardOrientation.landscape;
 
   double get _homeArtPosterCaptionBand =>
-      _hideHomeCardTitlesAndRatings ? 0 : _artPosterCaptionBand(context);
+      _hideHomeCardTitlesAndRatings ? 0 : HomeArtCaption.band(context);
 
   bool get _homeBoardMode =>
       widget.isTelevision && !widget.searchMode && !widget.discoverMode;
@@ -6386,7 +6366,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   }
 
   /// One favourites cell on the Canvas shelf — the SAME [_FavArtCell] +
-  /// [_ArtPoster] stack the classic rows use (identical art, badges, hold
+  /// [HomeArtPoster] stack the classic rows use (identical art, badges, hold
   /// behaviour and open actions), with UP/DOWN rewired to rail switching and
   /// focus driving the Canvas stage override (and the full-bleed live
   /// preview, for IPTV).
@@ -6423,7 +6403,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         onRight: onRight,
         onUpHold: onUpHold,
         onDownHold: onDownHold,
-        child: _ArtPoster(
+        child: HomeArtPoster(
           imageUrl: channel.logoUrl,
           title: channel.name,
           showTitle: !_hideHomeCardTitlesAndRatings,
@@ -6463,7 +6443,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
           onRight: onRight,
           onUpHold: onUpHold,
           onDownHold: onDownHold,
-          child: _ArtPoster(
+          child: HomeArtPoster(
             imageUrl: item.poster,
             title: item.name,
             showTitle: !_hideHomeCardTitlesAndRatings,
@@ -6494,7 +6474,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
           onRight: onRight,
           onUpHold: onUpHold,
           onDownHold: onDownHold,
-          child: _ArtPoster(
+          child: HomeArtPoster(
             imageUrl: channel.logoUrl,
             title: channel.name,
             showTitle: !_hideHomeCardTitlesAndRatings,
@@ -6533,7 +6513,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
           onRight: onRight,
           onUpHold: onUpHold,
           onDownHold: onDownHold,
-          child: _ArtPoster(
+          child: HomeArtPoster(
             imageUrl: null,
             title: channel.name,
             showTitle: !_hideHomeCardTitlesAndRatings,
@@ -6566,7 +6546,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
           onRight: onRight,
           onUpHold: onUpHold,
           onDownHold: onDownHold,
-          child: _ArtPoster(
+          child: HomeArtPoster(
             imageUrl: _firstNonEmpty(item?.poster, item?.background),
             title: channel.displayName,
             showTitle: !_hideHomeCardTitlesAndRatings,
@@ -6603,7 +6583,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
           onRight: onRight,
           onUpHold: onUpHold,
           onDownHold: onDownHold,
-          child: _ArtPoster(
+          child: HomeArtPoster(
             imageUrl: posterUrl,
             title: title,
             showTitle: !_hideHomeCardTitlesAndRatings,
@@ -18741,7 +18721,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
           rowNodes: nodes,
           onUp: _favRowOnUp(homeRowId, col),
           onDown: _favRowOnDown(homeRowId, col),
-          child: _ArtPoster(
+          child: HomeArtPoster(
             imageUrl: item.poster,
             title: item.name,
             showTitle: !_hideHomeCardTitlesAndRatings,
@@ -18850,7 +18830,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
           onDown: _favRowOnDown(homeRowId, col),
           // Debrify channels have no artwork — the glyph fallback + channel
           // number badge is the intended look.
-          child: _ArtPoster(
+          child: HomeArtPoster(
             imageUrl: null,
             title: channel.name,
             showTitle: !_hideHomeCardTitlesAndRatings,
@@ -18890,7 +18870,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
           rowNodes: _stvFavNodes,
           onUp: _favRowOnUp(homeRowId, col),
           onDown: _favRowOnDown(homeRowId, col),
-          child: _ArtPoster(
+          child: HomeArtPoster(
             imageUrl: art,
             title: channel.displayName,
             showTitle: !_hideHomeCardTitlesAndRatings,
@@ -18924,7 +18904,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
           rowNodes: _iptvFavNodes,
           onUp: _favRowOnUp(homeRowId, col),
           onDown: _favRowOnDown(homeRowId, col),
-          child: _ArtPoster(
+          child: HomeArtPoster(
             imageUrl: channel.logoUrl,
             title: channel.name,
             showTitle: !_hideHomeCardTitlesAndRatings,
@@ -18968,7 +18948,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
           rowNodes: nodes,
           onUp: _favRowOnUp(homeRowId, col),
           onDown: _favRowOnDown(homeRowId, col),
-          child: _ArtPoster(
+          child: HomeArtPoster(
             imageUrl: channel.logoUrl,
             title: channel.name,
             showTitle: !_hideHomeCardTitlesAndRatings,
@@ -19006,7 +18986,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
           rowNodes: _playlistFavNodes,
           onUp: _favRowOnUp(homeRowId, col),
           onDown: _favRowOnDown(homeRowId, col),
-          child: _ArtPoster(
+          child: HomeArtPoster(
             imageUrl: posterUrl,
             title: title,
             showTitle: !_hideHomeCardTitlesAndRatings,
