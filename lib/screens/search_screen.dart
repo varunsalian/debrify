@@ -137,7 +137,7 @@ import '../features/home/application/home_catalog_continuation_controller.dart';
 import '../features/home/models/home_catalog_state.dart';
 import '../features/home/models/home_catalog_plan.dart';
 import '../features/home/application/home_catalog_preferences_dependencies.dart';
-import '../features/sources/presentation/sources_screen.dart';
+import '../features/home/presentation/home_sources_navigation.dart';
 import '../ui/core/source_metadata_labels.dart';
 import '../features/search/application/keyword_snapshot_dependencies.dart';
 import '../features/search/data/keyword_snapshot_repository.dart';
@@ -12669,6 +12669,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   /// Open the source picker (bind mode) to pin a source for [show]. For a series
   /// this searches season/complete packs (no episode), matching Home.
   void _openBindSources(StremioMeta show) {
+    if (!_catalogNavigationCurrent()) return;
     final imdb = _imdbOf(show);
     if (imdb == null) {
       _snack('No IMDb match to pin a source for "${show.name}".');
@@ -12682,27 +12683,30 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       contentType: show.type,
       posterUrl: show.poster,
       stremioAddonId: show.sourceAddon?.id,
-      stremioAddonKey: CustomSeriesIdentity.isCustom(imdb) ? show.sourceAddon?.sourceBindingKey : null,
+      stremioAddonKey: CustomSeriesIdentity.isCustom(imdb)
+          ? show.sourceAddon?.sourceBindingKey
+          : null,
       stremioCatalogId: CustomSeriesIdentity.parse(imdb)?.catalogId,
     );
-    Navigator.of(context)
-        .push(
-          MaterialPageRoute(
-            builder: (_) => SourcesScreen(
-              selection: sel,
-              meta: _metaFor(sel, catalogItem: show),
-              isTelevision: widget.isTelevision,
-              bindMode: true,
-            ),
+    unawaited(
+      ref
+          .read(homeSourcesNavigationProvider)
+          .bind(
+            context,
+            selection: sel,
+            buildMeta: () => _metaFor(sel, catalogItem: show),
+            isTelevision: () => widget.isTelevision,
+            isCurrent: _catalogNavigationCurrent,
+            onReturned: _refreshBoundSources,
           ),
-        )
-        .then((_) => _refreshBoundSources());
+    );
   }
 
   /// Free-text keyword bind: push the sources screen seeded with a pack query
   /// (series → `name complete`, movie → `name year`), where tapping a result
   /// pins it as [show]'s bound source. The query is editable.
   void _openKeywordBind(StremioMeta show) {
+    if (!_catalogNavigationCurrent()) return;
     final imdb = _imdbOf(show);
     if (imdb == null) {
       _snack('No IMDb match to pin a source for "${show.name}".');
@@ -12722,22 +12726,24 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       contentType: show.type,
       posterUrl: show.poster,
       stremioAddonId: show.sourceAddon?.id,
-      stremioAddonKey: CustomSeriesIdentity.isCustom(imdb) ? show.sourceAddon?.sourceBindingKey : null,
+      stremioAddonKey: CustomSeriesIdentity.isCustom(imdb)
+          ? show.sourceAddon?.sourceBindingKey
+          : null,
       stremioCatalogId: CustomSeriesIdentity.parse(imdb)?.catalogId,
     );
-    Navigator.of(context)
-        .push(
-          MaterialPageRoute(
-            builder: (_) => SourcesScreen(
-              selection: sel,
-              meta: _metaFor(sel, catalogItem: show),
-              isTelevision: widget.isTelevision,
-              bindMode: true,
-              keywordSeed: seed,
-            ),
+    unawaited(
+      ref
+          .read(homeSourcesNavigationProvider)
+          .bind(
+            context,
+            selection: sel,
+            buildMeta: () => _metaFor(sel, catalogItem: show),
+            isTelevision: () => widget.isTelevision,
+            keywordSeed: seed,
+            isCurrent: _catalogNavigationCurrent,
+            onReturned: _refreshBoundSources,
           ),
-        )
-        .then((_) => _refreshBoundSources());
+    );
   }
 
   PlaybackMeta _metaFor(
@@ -12790,45 +12796,36 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         );
   }
 
+  bool _catalogNavigationCurrent() =>
+      mounted && _profileSessionOwner == ProfileSessionMemory.captureOwner();
+
   /// Manual sources list in-tab — the screen searches itself (own loading) and
   /// each tap plays with the full source list + content metadata.
   void _browseSelection(
     AdvancedSearchSelection sel, {
-    // Set only by the Play-button hand-off: the press already said "play", so
-    // the row the user picks must not re-ask via the post-torrent action.
+    // Play has already expressed intent; manual Sources keeps the usual prompt.
     bool forcePlayOnTap = false,
     String? metadataAddonId,
     StremioMeta? catalogItem,
   }) {
-    // Every route into the manual list lands here — the Play-button hand-off,
-    // the movie Sources button, and the episode long-press — so this is where
-    // the episode the list will search is finally fixed.
-    debugPrint(
-      '[SeriesResume] picker-open title="${sel.title}" id=${sel.imdbId} '
-      'target=S${sel.season}E${sel.episode} label="${sel.formattedLabel}"',
-    );
-    if (sel.imdbId.isEmpty) {
-      _snack('No IMDb match to find sources for "${sel.title}".');
-      return;
-    }
-    final meta = _metaFor(sel, addonId: metadataAddonId, catalogItem: catalogItem);
-    Navigator.of(context)
-        .push(
-          MaterialPageRoute(
-            builder: (_) => TvHeldKeyGuard(
-              child: SourcesScreen(
-                selection: sel,
-                meta: meta,
-                isTelevision: widget.isTelevision,
-                forcePlayOnTap: forcePlayOnTap,
-              ),
+    if (!_catalogNavigationCurrent()) return;
+    unawaited(
+      ref
+          .read(homeSourcesNavigationProvider)
+          .browse(
+            context,
+            selection: sel,
+            buildMeta: () => _metaFor(
+              sel,
+              addonId: metadataAddonId,
+              catalogItem: catalogItem,
             ),
+            isTelevision: () => widget.isTelevision,
+            forcePlayOnTap: forcePlayOnTap,
+            isCurrent: _catalogNavigationCurrent,
+            onReturned: _refreshAfterPlayback,
           ),
-        )
-        // A long-press pin/unpin may have happened in the sources list — and a
-        // tap PLAYS, so the board's Continue Watching can be stale too (the
-        // player sits above this screen, so nothing else refreshes for it).
-        .then((_) => _refreshAfterPlayback());
+    );
   }
 
   void _snack(String message) {
