@@ -16,6 +16,7 @@ import '../features/home/application/home_hero_tint_loader.dart';
 import '../features/home/application/home_hero_tint_dependencies.dart';
 import '../features/home/presentation/home_hero_swap.dart';
 import '../features/home/presentation/home_hero_spotlight.dart';
+import '../features/home/presentation/home_classic_hero.dart';
 import '../features/home/presentation/spotlight_iptv_card_preview.dart';
 export '../features/home/presentation/spotlight_iptv_card_preview.dart' show SpotlightIptvCardPreview;
 import '../features/home/presentation/home_hero_trailer_layer.dart';
@@ -15451,83 +15452,28 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
           // disambiguate similarly-named titles) but stays hidden on the blank
           // prompt. See [_heroActive].
           if (_heroActive)
-            ValueListenableBuilder<StremioMeta?>(
-              valueListenable: _heroItem,
-              builder: (context, item, _) {
-                if (item == null) return const SizedBox.shrink();
-                return ValueListenableBuilder<StremioMeta?>(
-                  valueListenable: _heroEnriched,
-                  builder: (context, enriched, __) {
-                    return HomeHeroSpotlight(
-                      item: item,
-                      background: item.background?.isNotEmpty == true
-                          ? item.background
-                          : enriched?.background,
-                      description: item.description?.isNotEmpty == true
-                          ? item.description
-                          : enriched?.description,
-                      // Catalog list items usually omit the rating; fall back
-                      // to the enriched /meta details.
-                      rating: item.imdbRating ?? enriched?.imdbRating,
-                      runtime: item.runtimeDisplay ?? enriched?.runtimeDisplay,
-                      // Catalog rows rarely carry the title-treatment
-                      // art; the enriched /meta details usually do —
-                      // but that roundtrip lands AFTER first paint, so
-                      // derive the metahub URL from the IMDb id and
-                      // start loading it immediately (for tt items the
-                      // enriched logo IS this URL, so nothing swaps
-                      // when the details arrive).
-                      logo: item.logo?.isNotEmpty == true
-                          ? item.logo
-                          : (enriched?.logo?.isNotEmpty == true
-                                ? enriched!.logo
-                                : homeStageLogoUrl(item)),
-                      compact: widget.searchMode,
-                      isTelevision: tv,
-                      height: heroH,
-                      artworkCacheWidth: tv
-                          ? (_homeBoardMode
-                                ? _tvHeroArtworkCacheWidth
-                                : HomeTheme.heroBackdropCacheWidthTv)
-                          : HomeTheme.heroBackdropCacheWidth,
-                      artworkCacheHeight: tv
-                          ? (_homeBoardMode
-                                ? _tvHeroArtworkCacheHeight
-                                : HomeTheme.heroBackdropCacheHeightTv)
-                          : null,
-                      tint: _heroTint,
-                      // The Concept-5 stage (region key art + colour
-                      // field, text capped at the region's left edge)
-                      // is the TV Home LAYOUT, full stop — driven by
-                      // the synchronous getter only, never by the
-                      // async Settings read (_heroTrailerEnabled).
-                      // That read used to pick the layout and could
-                      // land AFTER first paint (or never trigger a
-                      // rebuild), flipping the hero mid-session; now
-                      // it only gates whether a video actually plays
-                      // in the region (see _scheduleHeroTrailer).
-                      // Trailers-off users keep the same stage — the
-                      // region simply always shows the key art.
-                      boxedTrailer: _heroTrailerActive,
-                      // Pill lives in the trailer region now.
-                      trailerLoading: null,
-                      // Still passed so the backdrop's Ken Burns drift
-                      // freezes while the trailer plays (boxedTrailer
-                      // suppresses the image FADE, not this freeze).
-                      trailerShowing: _heroTrailerActive
-                          ? _heroTrailerShowing
-                          : null,
-                      // An IPTV favourite took the boxed region — this
-                      // item's colour field/identity text describe
-                      // something that isn't playing anymore, so hide
-                      // them (see [HomeHeroSpotlight.liveTakeover]).
-                      liveTakeover: _heroTrailerActive
-                          ? _heroLiveTakeover
-                          : null,
-                    );
-                  },
-                );
-              },
+            buildHomeClassicHero(
+              focused: _heroItem,
+              enriched: _heroEnriched,
+              height: heroH,
+              readConfiguration: () => (
+                compact: widget.searchMode,
+                isTelevision: tv,
+                artworkCacheWidth: tv
+                    ? (_homeBoardMode
+                          ? _tvHeroArtworkCacheWidth
+                          : HomeTheme.heroBackdropCacheWidthTv)
+                    : HomeTheme.heroBackdropCacheWidth,
+                artworkCacheHeight: tv
+                    ? (_homeBoardMode
+                          ? _tvHeroArtworkCacheHeight
+                          : HomeTheme.heroBackdropCacheHeightTv)
+                    : null,
+                trailerActive: _heroTrailerActive,
+              ),
+              tint: _heroTint,
+              trailerShowing: _heroTrailerShowing,
+              liveTakeover: _heroLiveTakeover,
             ),
           // Slim, non-focusable status strip for a streaming catalog search:
           // a hairline progress bar while rows are still arriving, then a
