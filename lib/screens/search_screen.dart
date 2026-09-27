@@ -1,3 +1,5 @@
+import '../features/home/application/home_episode_artwork_controller.dart';
+import '../features/home/models/home_episode_artwork.dart';
 import '../features/home/models/home_tracker_authentication.dart';
 import '../features/home/application/home_tracker_authentication_controller.dart';
 import '../features/home/models/home_return_snapshot.dart';
@@ -143,7 +145,6 @@ import '../models/torrent.dart';
 import '../models/torrent_filter_state.dart';
 import '../services/analytics_service.dart';
 import '../services/discover_prefs.dart';
-import '../services/episode_artwork_service.dart';
 import '../services/home_collection_rows.dart';
 import '../services/home_collections_store.dart';
 import '../services/home_list_rows.dart';
@@ -176,7 +177,6 @@ import '../services/trakt/trakt_service.dart';
 import '../services/simkl/simkl_service.dart';
 import '../services/video_player_launcher.dart';
 import '../services/tracking_source_policy.dart';
-import '../utils/concurrency.dart';
 import '../utils/continue_watching_presentation.dart';
 import '../utils/dialog_tap_guard.dart';
 import '../utils/episode_progress_merge.dart';
@@ -925,7 +925,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       _localContinuation.data.remainingMinutes;
   Set<String> get _cwIds => _localContinuation.data.ids;
   Map<String, String?> get _cwAddonId => _localContinuation.data.addonIds;
-  final Map<String, String> _cwEpisodeArtwork = {};
+  Map<String, String> get _cwEpisodeArtwork =>
+      _episodeArtworkController.current[HomeEpisodeArtworkSource.local] ??
+      const {};
 
   final List<FocusNode> _cwMovieNodes = [];
   final List<FocusNode> _cwSeriesNodes = [];
@@ -998,7 +1000,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       _traktContinuation.remainingMinutes;
   Map<String, TraktContinueWatchingItem> get _traktByImdb =>
       _traktContinuation.byImdb;
-  final Map<String, String> _traktEpisodeArtwork = {};
+  Map<String, String> get _traktEpisodeArtwork =>
+      _episodeArtworkController.current[HomeEpisodeArtworkSource.trakt] ??
+      const {};
   final List<FocusNode> _traktMovieNodes = [];
   final List<FocusNode> _traktSeriesNodes = [];
 
@@ -1018,7 +1022,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   Map<String, String> get _simklEpisode => _simklContinuation.episode;
   Map<String, SimklContinueWatchingItem> get _simklByImdb =>
       _simklContinuation.byImdb;
-  final Map<String, String> _simklEpisodeArtwork = {};
+  Map<String, String> get _simklEpisodeArtwork =>
+      _episodeArtworkController.current[HomeEpisodeArtworkSource.simkl] ??
+      const {};
 
   final List<FocusNode> _simklMovieNodes = [];
   final List<FocusNode> _simklSeriesNodes = [];
@@ -1907,6 +1913,13 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       (previous, next) {},
     );
     _homeCatalogController = ref.read(homeCatalogProvider(homeSession).notifier);
+    _episodeArtworkSubscription = ref.listenManual(
+      homeEpisodeArtworkProvider(homeSession),
+      (previous, next) {},
+    );
+    _episodeArtworkController = ref.read(
+      homeEpisodeArtworkProvider(homeSession).notifier,
+    );
     _trackerAuthSubscriptions = {
       for (final tracker in HomeTracker.values)
         tracker: ref.listenManual(
@@ -2778,6 +2791,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     _searchController.dispose();
     ProfileRuntime.scope.removeListener(_onSearchProfileChanged);
     _homeCatalogSubscription.close();
+    _episodeArtworkSubscription.close();
     for (final subscription in _trackerAuthSubscriptions.values) {
       subscription.close();
     }
@@ -3489,12 +3503,14 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       );
     },
     onRows: (next, current) {
-      setState(_cwEpisodeArtwork.clear);
+      setState(
+        () => _episodeArtworkController.clear(HomeEpisodeArtworkSource.local),
+      );
       if (!next.enabled) return;
       unawaited(
         _enrichCwEpisodeArtwork(
           refs: next.data.episodeRefs,
-          target: _cwEpisodeArtwork,
+          source: HomeEpisodeArtworkSource.local,
           isCurrent: current,
         ),
       );
@@ -3531,39 +3547,20 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   int? _iptvRemainingMinutes(String routeKey) =>
       _iptvContinuation.remainingMinutes[routeKey];
 
-  /// Resolve episode stills away from the build path, at TV-safe concurrency.
-  /// A provider refresh owns the result through [isCurrent], so an older batch
-  /// can never paint the episode that preceded a newly-resumed one.
-  int _metadataArtworkGeneration = 0;
-  final _metadataArtworkRequests = <Map<String, String>, ({
-    Map<String, ({int season, int episode})> refs,
-    bool Function() isCurrent,
-  })>{};
+  late final ProviderSubscription<HomeEpisodeArtwork>
+  _episodeArtworkSubscription;
+  late final HomeEpisodeArtworkController _episodeArtworkController;
 
   Future<void> _enrichCwEpisodeArtwork({
-    required Map<String, ({int season, int episode})> refs,
-    required Map<String, String> target,
+    required Map<String, HomeEpisodeReference> refs,
+    required HomeEpisodeArtworkSource source,
     required bool Function() isCurrent,
-  }) async {
-    _metadataArtworkRequests[target] = (refs: Map.of(refs), isCurrent: isCurrent);
-    if (refs.isEmpty) return;
-    final metadataGeneration = _metadataArtworkGeneration;
-    final resolved = await mapWithConcurrency(refs.entries, (entry) async {
-      final art = await EpisodeArtworkService.instance.resolve(
-        imdbId: entry.key,
-        season: entry.value.season,
-        episode: entry.value.episode,
-      );
-      return (id: entry.key, art: art);
-    }, concurrency: 3);
-    if (!mounted || !isCurrent() || metadataGeneration != _metadataArtworkGeneration) return;
-    final artwork = <String, String>{
-      for (final item in resolved)
-        if (item.art != null && item.art!.isNotEmpty) item.id: item.art!,
-    };
-    if (artwork.isEmpty) return;
-    setState(() => target.addAll(artwork));
-  }
+  }) => _episodeArtworkController.load(
+    source: source,
+    refs: refs,
+    isCurrent: () => mounted && isCurrent(),
+    onChanged: () => setState(() {}),
+  );
 
   /// Open an IPTV Continue Watching card: a series routes to the merged Xtream
   /// series page, a movie resumes playback. Both go through [IptvCwRouter];
@@ -4675,12 +4672,15 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
           );
         },
         onRows: (next, connected, hadRows, current) {
-          setState(_traktEpisodeArtwork.clear);
+          setState(
+            () =>
+                _episodeArtworkController.clear(HomeEpisodeArtworkSource.trakt),
+          );
           if (!connected) return;
           unawaited(
             _enrichCwEpisodeArtwork(
               refs: next.episodeRefs,
-              target: _traktEpisodeArtwork,
+              source: HomeEpisodeArtworkSource.trakt,
               isCurrent: current,
             ),
           );
@@ -5179,11 +5179,14 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
           );
         },
         onRows: (next, hadRows, current) {
-          setState(_simklEpisodeArtwork.clear);
+          setState(
+            () =>
+                _episodeArtworkController.clear(HomeEpisodeArtworkSource.simkl),
+          );
           unawaited(
             _enrichCwEpisodeArtwork(
               refs: next.episodeRefs,
-              target: _simklEpisodeArtwork,
+              source: HomeEpisodeArtworkSource.simkl,
               isCurrent: current,
             ),
           );
@@ -10552,17 +10555,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     _titleSearchPolicyReady = false;
     _cancelTitleSuggestions();
     unawaited(_refreshMetadataFeaturePolicy());
-    _metadataArtworkGeneration++;
-    final requests = _metadataArtworkRequests.entries.toList();
-    setState(() {
-      for (final request in requests) { request.key.clear(); }
-    });
-    for (final request in requests) {
-      if (request.value.isCurrent()) {
-        unawaited(_enrichCwEpisodeArtwork(refs: request.value.refs,
-          target: request.key, isCurrent: request.value.isCurrent));
-      }
-    }
+    _episodeArtworkController.refresh(
+      isCurrent: () => mounted,
+      onChanged: () => setState(() {}),
+    );
     _clearHeroTrailer();
     _heroEnriched.value = null;
     final item = _heroItem.value;
