@@ -1,3 +1,4 @@
+import '../features/home/models/home_trakt_continuation.dart';
 import '../features/home/application/home_continuation_layout_controller.dart';
 import '../features/home/models/home_continuation_layout.dart';
 import '../features/home/application/home_iptv_continuation_controller.dart';
@@ -4831,96 +4832,43 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     await _ensureCwMergeFlags();
     if (!mounted || token != _traktCwToken) return;
 
-    final movieMetas = <StremioMeta>[];
-    final showMetas = <StremioMeta>[];
-    final progress = <String, double>{};
-    final episode = <String, String>{};
-    final remainingMinutes = <String, int>{};
-    final episodeRefs = <String, ({int season, int episode})>{};
-    final byImdb = <String, TraktContinueWatchingItem>{};
-    void ingest(List<TraktContinueWatchingItem> items, List<StremioMeta> into) {
-      for (final it in items) {
-        final id = it.id;
-        if (id.isEmpty || byImdb.containsKey(id)) continue; // dedup by imdbId
-        into.add(it.meta);
-        byImdb[id] = it;
-        final p = it.progress;
-        if (p != null) progress[id] = (p / 100).clamp(0.0, 1.0);
-        final se = continueWatchingEpisodeLabel(it.season, it.episode);
-        if (se != null) episode[id] = se;
-        if (it.season != null &&
-            it.episode != null &&
-            it.season! > 0 &&
-            it.episode! > 0) {
-          episodeRefs[id] = (season: it.season!, episode: it.episode!);
-        }
-        final left = continueWatchingMinutesLeftFromProgress(
-          progress: it.progress,
-          runtimeMinutes: it.runtime,
-        );
-        if (left != null) remainingMinutes[id] = left;
-      }
-    }
-
-    ingest(movies, movieMetas);
-    ingest(shows, showMetas);
-    // Merge into one last-watched-ordered list for the See-All grid: sort by
-    // Trakt's paused_at / last_watched_at (newest first). Items without either
-    // sort last. Ties use the original movies-then-shows order so the sort is
-    // deterministic (Dart's List.sort isn't stable).
-    final allMetas = [...movieMetas, ...showMetas];
-    final origIndex = <StremioMeta, int>{
-      for (var i = 0; i < allMetas.length; i++) allMetas[i]: i,
-    };
-    allMetas.sort((a, b) {
-      final pa = byImdb[a.progressId]?.pausedAtMs;
-      final pb = byImdb[b.progressId]?.pausedAtMs;
-      if (pa != null && pb != null) {
-        final c = pb.compareTo(pa);
-        if (c != 0) return c;
-      } else if (pa == null && pb != null) {
-        return 1;
-      } else if (pa != null && pb == null) {
-        return -1;
-      }
-      return origIndex[a]!.compareTo(origIndex[b]!);
-    });
+    final snapshot = HomeTraktContinuation.fromRows(movies: movies, shows: shows);
     // Whether the board already showed Trakt rows before this load — only a
     // fresh appearance (skeleton → content) announces itself below; a refresh
     // of rows the user can already see stays quiet.
     final hadTraktRows = _traktMovies.isNotEmpty || _traktSeries.isNotEmpty;
     _syncCwNodes(
       _traktMovieNodes,
-      _cwMergeTrakt ? allMetas.length : movieMetas.length,
+      _cwMergeTrakt ? snapshot.all.length : snapshot.movies.length,
       'tmovie',
     );
     _syncCwNodes(
       _traktSeriesNodes,
-      _cwMergeTrakt ? 0 : showMetas.length,
+      _cwMergeTrakt ? 0 : snapshot.series.length,
       'tseries',
     );
     setState(() {
       _traktCwLoading = false;
-      _traktMovies = movieMetas;
-      _traktSeries = showMetas;
-      _traktAll = allMetas;
+      _traktMovies = snapshot.movies;
+      _traktSeries = snapshot.series;
+      _traktAll = snapshot.all;
       _traktProgress
         ..clear()
-        ..addAll(progress);
+        ..addAll(snapshot.progress);
       _traktEpisode
         ..clear()
-        ..addAll(episode);
+        ..addAll(snapshot.episode);
       _traktRemainingMinutes
         ..clear()
-        ..addAll(remainingMinutes);
+        ..addAll(snapshot.remainingMinutes);
       _traktEpisodeArtwork.clear();
       _traktByImdb
         ..clear()
-        ..addAll(byImdb);
+        ..addAll(snapshot.byImdb);
     });
     unawaited(
       _enrichCwEpisodeArtwork(
-        refs: episodeRefs,
+        refs: snapshot.episodeRefs,
         target: _traktEpisodeArtwork,
         isCurrent: () => token == _traktCwToken,
       ),

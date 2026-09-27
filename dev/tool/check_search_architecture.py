@@ -17,6 +17,7 @@ FEATURES = ("search", "home", "discover", "sources")
 EXTRACTED_ELSEWHERE: tuple[str, ...] = (
     "lib/models/home_preferences.dart",
     "lib/models/iptv_cw_entry.dart",
+    "lib/models/trakt_continue_watching_item.dart",
     "lib/services/iptv_cw_history.dart",
     "lib/models/local_source_document.dart",
     "lib/services/durable_source_binding.dart",
