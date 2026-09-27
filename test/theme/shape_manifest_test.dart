@@ -148,6 +148,7 @@ const Map<String, int> kExtractedShapeResidue = {
   'lib/features/discover/presentation/discover_grid_dim.dart': 0,
   'lib/features/discover/presentation/discover_grid_layout.dart': 0,
   'lib/features/discover/presentation/discover_stage_layout.dart': 0,
+  'lib/features/discover/presentation/discover_content.dart': 0,
   'lib/features/sources/presentation/source_keyword_field.dart': 1,
 };
 

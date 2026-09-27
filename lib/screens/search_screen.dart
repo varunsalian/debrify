@@ -1,3 +1,4 @@
+import '../features/discover/presentation/discover_content.dart';
 import '../features/discover/application/discover_card_settings_controller.dart';
 import '../features/discover/models/discover_card_settings.dart';
 import '../features/discover/application/discover_layout_controller.dart';
@@ -62,10 +63,6 @@ import '../features/home/models/home_favorite_row_ref.dart';
 import '../features/home/presentation/home_favorite_cell.dart';
 import '../features/home/presentation/home_art_poster.dart';
 import '../features/home/presentation/home_card_style.dart';
-import '../features/discover/presentation/discover_stage_layout.dart';
-import '../features/discover/presentation/discover_grid_layout.dart';
-import '../features/discover/presentation/discover_stage_backdrop.dart';
-import '../features/discover/presentation/discover_stage_veils.dart';
 import '../features/discover/application/discover_source_controller.dart';
 import '../features/discover/models/discover_source_state.dart';
 import '../features/discover/application/metadata_feature_controller.dart';
@@ -276,9 +273,7 @@ import '../services/mdblist/mdblist_service.dart';
 import '../services/mdblist/mdblist_continue_watching_service.dart';
 import '../services/mdblist/mdblist_models.dart';
 import '../services/mdblist/mdblist_menu_helpers.dart';
-import '../widgets/see_all/discover_detail_rail.dart';
 import '../widgets/see_all/discover_card_settings_scope.dart';
-import '../widgets/see_all/discover_trailer_stage.dart';
 import '../widgets/trakt/trakt_menu_helpers.dart';
 import '../services/simkl/simkl_menu_helpers.dart';
 import 'catalog_item_detail_screen.dart';
@@ -15057,143 +15052,18 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     child: _buildDiscoverContent(),
   );
 
-  Widget _buildDiscoverContent() {
-    final panel = DiscoverCardSettingsScope(
-      showTypeTags: _discCardSettings.showTypeTags,
-      showRatings: _discCardSettings.showRatings,
-      showTitles: _discCardSettings.showTitles,
-      child: _buildDiscoverPanel(),
-    );
-    // Touch has no persistent focus, so a reactive detail rail has nothing to
-    // react to — keep the full-width grid there. TV gets the glass-stage
-    // two-pane layout.
-    if (!widget.isTelevision ||
-        _discSource == _discJellyfin ||
-        _discSource == _discEmby) {
-      return panel;
-    }
-    return LayoutBuilder(
-      builder: (context, c) {
-        // Guard a degenerate canvas: too narrow leaves no room for a usable grid
-        // beside the rail; too short and the rail's fixed identity block can't
-        // fit. Either way, fall back to the full-width panel.
-        if (c.maxWidth < 720 || c.maxHeight < 420) {
-          // The trailer stage (which drives _discPreview.takeover → sidebar chrome-dim,
-          // and _discPreview.showing → the AMBIENT chip) is unmounted in this
-          // branch. Clear both post-frame so nothing sticks across the drop.
-          if (_discPreview.needsCompactReset) {
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (!mounted) return;
-              _discPreview.clearCompactEffects();
-            });
-          }
-          return panel;
-        }
-        if (_discStage) return _buildDiscoverStage(c, panel);
-        return buildDiscoverGridLayout(
-          context,
-          c: c,
-          panel: panel,
-          detailRail: ValueListenableBuilder<StremioMeta?>(
-            valueListenable: _discFocused,
-            builder: (_, item, __) => DiscoverDetailRail(
-              item: item,
-              trailerStreams: _discPreview.streams,
-              trailerLoading: _discPreview.loading,
-              trailerVolume: _discPreview.volume,
-              trailerMeta: _discPreview.meta,
-              shownItem: _discPreview.shown,
-            ),
-          ),
-          backdrop: DiscoverStageBackdrop(shown: _discPreview.shown),
-          trailer: DiscoverTrailerStage(
-            trailer: _discPreview.streams,
-            loading: _discPreview.loading,
-            volume: _discPreview.volume,
-            meta: _discPreview.meta,
-            railRect: Rect.zero,
-            takeover: _discPreview.takeover,
-            fullStage: true,
-            showing: _discPreview.showing,
-          ),
-          veils: DiscoverStageVeils(
-            showing: _discPreview.showing,
-            theater: _discPreview.theater,
-          ),
-          theater: _discPreview.theater,
-          showing: _discPreview.showing,
-          loading: _discPreview.loading,
-          takeover: _discPreview.takeover,
-          loadingIndicator: (visible) =>
-              HomeHeroTrailerLoadingPill(visible: visible),
-          ambientIndicator: (visible) => HomeHeroAmbientChip(visible: visible),
-        );
-      },
-    );
-  }
-
-  /// The Discover STAGE layout (`discover_layout` = 'stage', TV only).
-  ///
-  /// Same stage as the grid's two-pane — same backdrop, same full-canvas
-  /// trailer, same theater ladder — with the rail dissolved: the focused
-  /// title's art owns the whole frame, its identity block sits bottom-left over
-  /// it, and the results become ONE shelf across the bottom. The filter line
-  /// stays exactly where the grid put it (top-left of the panel), so UP from
-  /// the shelf lands on it just as UP from the grid does.
-  ///
-  /// It is the SAME panel widget as the grid layout: the See-All screen keeps
-  /// owning fetch, filters and paging, and only the arrangement of its results
-  /// changes — declared by the shelf scope wrapped around it by the Stage composition.
-  Widget _buildDiscoverStage(
-    BoxConstraints c,
-    Widget panel,
-  ) => buildDiscoverStageLayout(
+  Widget _buildDiscoverContent() => buildDiscoverContent(
     context,
-    constraints: c,
-    panel: panel,
-    buildIdentity: (maxWidth, budget) => ValueListenableBuilder<StremioMeta?>(
-      valueListenable: _discFocused,
-      builder: (_, item, __) => DiscoverDetailRail(
-        item: item,
-        layout: DiscoverDetailLayout.stage,
-        trailerShowing: _discPreview.showing,
-        stageMaxWidth: maxWidth,
-        stageBudget: budget,
-        // Holding a direction across the shelf settles identity updates;
-        // the trailer still releases on the first keypress.
-        settleDelay: const Duration(milliseconds: 260),
-        trailerStreams: _discPreview.streams,
-        trailerLoading: _discPreview.loading,
-        trailerVolume: _discPreview.volume,
-        trailerMeta: _discPreview.meta,
-        shownItem: _discPreview.shown,
-      ),
-    ),
-    backdrop: DiscoverStageBackdrop(
-      shown: _discPreview.shown,
-      // Identity already settles the feed: art and title land together.
-      dwell: Duration.zero,
-      crossfade: true,
-    ),
-    trailer: DiscoverTrailerStage(
-      trailer: _discPreview.streams,
-      loading: _discPreview.loading,
-      volume: _discPreview.volume,
-      meta: _discPreview.meta,
-      railRect: Rect.zero,
-      takeover: _discPreview.takeover,
-      fullStage: true,
-      showing: _discPreview.showing,
-    ),
-    veils: DiscoverStageVeils(
-      showing: _discPreview.showing,
-      theater: _discPreview.theater,
-      stage: true,
-    ),
-    theater: _discPreview.theater,
-    showing: _discPreview.showing,
-    loading: _discPreview.loading,
-    takeover: _discPreview.takeover,
+    sourcePanel: _buildDiscoverPanel(),
+    cardSettings: _discCardSettings,
+    showPreview:
+        widget.isTelevision &&
+        _discSource != _discJellyfin &&
+        _discSource != _discEmby,
+    stage: _discStage,
+    focused: _discFocused,
+    preview: _discPreview,
+    isCurrent: () => mounted,
     loadingIndicator: (visible) => HomeHeroTrailerLoadingPill(visible: visible),
     ambientIndicator: (visible) => HomeHeroAmbientChip(visible: visible),
   );
