@@ -1,3 +1,4 @@
+import '../features/home/presentation/home_favorite_row.dart';
 import '../features/home/application/home_post_playback_refresh_controller.dart';
 import '../features/discover/presentation/discover_source_panel.dart';
 import '../features/discover/presentation/discover_content.dart';
@@ -16427,74 +16428,21 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     );
   }
 
-  /// Shared scaffold for a favourites row: a header (title + tag pills) above a
-  /// horizontal strip of poster-shaped cards, sized exactly like the catalog
-  /// rows so the whole board reads as one grid. [cellBuilder] gets the poster
-  /// width and full cell height (poster + title band) for each column.
   Widget _buildFavRowShell({
     required String title,
     required List<Widget> tags,
     required int itemCount,
     required Widget Function(int col, double posterW, double cellH) cellBuilder,
-  }) {
-    final tv = widget.isTelevision;
-    final posterW = _railPosterW(context);
-    final posterH = posterW * 3 / 2;
-    // Reserve the inline caption band so a long title — e.g. a full release-name
-    // playlist item — doesn't overflow the cell into the next section's header.
-    final cellH = posterH + _homeArtPosterCaptionBand;
-    final rowH = cellH + 14;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(24, 22, 24, 12),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Flexible(
-                child: Text(
-                  title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: tv ? 20 : 19,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: -0.4,
-                    color: Theme.of(context).colorScheme.onSurface,
-                  ),
-                ),
-              ),
-              for (final t in tags) ...[const SizedBox(width: 6), t],
-            ],
-          ),
-        ),
-        SizedBox(
-          height: rowH,
-          child: ListView.builder(
-            scrollDirection: Axis.horizontal,
-            clipBehavior: Clip.hardEdge,
-            cacheExtent: 400,
-            padding: const EdgeInsets.symmetric(horizontal: 13),
-            itemCount: itemCount,
-            itemBuilder: (context, col) {
-              return Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 11),
-                child: Center(
-                  child: SizedBox(
-                    width: posterW,
-                    height: cellH,
-                    child: cellBuilder(col, posterW, cellH),
-                  ),
-                ),
-              );
-            },
-          ),
-        ),
-      ],
-    );
-  }
+  }) => buildHomeFavoriteRow(
+    context,
+    isTelevision: widget.isTelevision,
+    posterWidth: _railPosterW(context),
+    captionBand: _homeArtPosterCaptionBand,
+    title: title,
+    tags: tags,
+    itemCount: itemCount,
+    cellBuilder: cellBuilder,
+  );
 
   /// The "Debrify TV" row of favourited keyword channels, styled to match the
   /// catalog rows (same poster-shaped cards + title below).
