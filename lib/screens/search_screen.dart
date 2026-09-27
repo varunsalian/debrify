@@ -167,7 +167,7 @@ import '../features/search/application/keyword_providers.dart';
 import '../services/native_series_metadata_service.dart';
 import '../models/media_identity.dart';
 import '../widgets/random_playback_dialog.dart';
-import '../utils/show_shuffle.dart';
+import '../features/home/application/home_random_episode_dependencies.dart';
 import '../widgets/clear_pinned_sources_button.dart';
 import '../services/profiles/profile_runtime.dart';
 import 'metadata_explore_page.dart';
@@ -11383,8 +11383,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     final mode = await showRandomPlaybackDialog(context, title: item.name);
     if (!mounted || mode == null) return;
     final imdb = _imdbOf(item);
-    final metaAddon = MediaIdentity.isNative(item.progressId) && addon.baseUrl.isEmpty
-        ? NativeSeriesMetadataService.addon : await _metaAddonFor(addon);
+    final metaAddon =
+        MediaIdentity.isNative(item.progressId) && addon.baseUrl.isEmpty
+        ? NativeSeriesMetadataService.addon
+        : await _metaAddonFor(addon);
     // If we fell back to a different meta addon than the item's origin, its
     // content id won't match — query by IMDb id instead of the origin's id.
     final contentId = (metaAddon != null && metaAddon.id == addon.id)
@@ -11410,54 +11412,26 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       );
     }
 
-    final episodes = <({int season, int episode, String videoId})>[];
-    for (final v in videos ?? const <Map<String, dynamic>>[]) {
-      final sRaw = v['season'];
-      final s = sRaw is num ? sRaw.toInt() : null;
-      if (s == null || s <= 0) continue; // skip specials (season 0)
-      final eRaw = v['number'] ?? v['episode'];
-      final e = eRaw is num ? eRaw.toInt() : null;
-      if (e == null) continue;
-      if (!isShuffleEpisodeEligible({...v, 'season': s, 'number': e})) continue;
-      final videoId = StremioService.randomEpisodeVideoId(
-        catalogId: contentId,
-        imdbId: imdb,
-        season: s,
-        episode: e,
-        videoId: v['id'],
-      );
-      if (videoId == null) continue;
-      episodes.add((season: s, episode: e, videoId: videoId));
-    }
-    if (episodes.isEmpty) {
+    final selection = ref
+        .read(homeRandomEpisodeSelectorProvider)
+        .select(
+          item: item,
+          metadataAddon: metaAddon,
+          contentId: contentId,
+          progressId: imdb,
+          videos: videos,
+          continuous: mode == RandomPlaybackMode.continuous,
+        );
+    if (selection == null) {
       _snack("Couldn't load episodes for \"${item.name}\".");
       return;
     }
 
-    final pick = episodes[Random().nextInt(episodes.length)];
-    var selection = AdvancedSearchSelection(
-      initialContinuousShuffle: mode == RandomPlaybackMode.continuous,
-      imdbId: imdb ?? item.id,
-      isSeries: true,
-      title: item.name,
-      year: item.year,
-      season: pick.season,
-      episode: pick.episode,
-      contentType: item.type,
-      posterUrl: item.poster,
+    _playSelection(
+      selection,
+      metadataAddonId: addon.id,
+      catalogItem: item.withSourceAddon(addon),
     );
-    if (metaAddon != null &&
-        !StremioService.isCanonicalEpisodeId(
-          selection.imdbId, pick.videoId, pick.season, pick.episode,
-        )) {
-      selection = selection.withStremioEpisodeIdentity(
-        addonId: metaAddon.id,
-        addonKey: metaAddon.sourceBindingKey,
-        catalogId: contentId,
-        videoId: pick.videoId,
-      );
-    }
-    _playSelection(selection, metadataAddonId: addon.id, catalogItem: item.withSourceAddon(addon));
   }
 
   // Catalog Play = auto-best in-tab; Sources = manual list in-tab. For a series
