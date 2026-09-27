@@ -1,3 +1,4 @@
+import '../features/home/presentation/home_progress_publication.dart';
 import '../features/home/application/home_playlist_controller.dart';
 import '../features/home/models/home_playlist.dart';
 import '../features/home/application/home_watchlist_controller.dart';
@@ -813,25 +814,34 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   bool _progressiveHomeLoadPending = false;
   bool _homePaginationDeferred = false;
   double _classicAnchorTailPadding = 0;
-  ({List<CatalogSection> rows, bool first, int generation, Object? scope})?
-      _deferredHomeProgress;
-  bool _homeProgressApplyScheduled = false;
+  final _homePublication = HomeProgressPublication();
 
-  void _publishHomeProgress(List<CatalogSection> rows, bool first,
-      int generation, Object? scope) {
-    if (!mounted || generation != _boardLoadGen || scope != ProfileRuntime.scope.value) return;
+  void _publishHomeProgress(
+    List<CatalogSection> rows,
+    bool first,
+    int generation,
+    Object? scope,
+  ) {
+    if (!mounted ||
+        generation != _boardLoadGen ||
+        scope != ProfileRuntime.scope.value) {
+      return;
+    }
     _homeCatalogController.replaceRows(rows);
     if (_catalogQuery.isNotEmpty || _catalogSearching) return;
     if (!(ModalRoute.of(context)?.isCurrent ?? true)) {
       // Keep data, not new image widgets, while a detail page/player covers
       // Home. Returning first restores the old focused row, then inserts the
       // arrivals with the same scroll-anchor protection as foreground loads.
-      _deferredHomeProgress = (rows: rows,
-        first: _deferredHomeProgress?.first ?? first,
-        generation: generation, scope: scope);
+      _homePublication.defer((
+        rows: rows,
+        first: first,
+        generation: generation,
+        scope: scope,
+      ));
       return;
     }
-    _deferredHomeProgress = null;
+    _homePublication.clear();
     if (!first && _boardHasFocus()) _autoFocusSettled = true;
     setState(() {
       _loading = false;
@@ -844,23 +854,19 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     _maybeCompleteStageAdvance();
   }
 
-  void _resumeHomeProgress() {
-    if (_homeProgressApplyScheduled) return;
-    _homeProgressApplyScheduled = true;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _homeProgressApplyScheduled = false;
-      if (!mounted || !(ModalRoute.of(context)?.isCurrent ?? true)) return;
-      final pending = _deferredHomeProgress;
-      _deferredHomeProgress = null;
-      if (pending != null) {
-        if (pending.generation != _boardLoadGen || pending.scope != ProfileRuntime.scope.value) return;
-        _publishHomeProgress(pending.rows, pending.first, pending.generation, pending.scope);
-      }
-      // Applying rows above only scheduled their rebuild. Measure the new
-      // viewport on the NEXT frame, including returns with no new rows.
-      _maybeAutoFillBoard(resumeDeferred: true);
-    });
-  }
+  void _resumeHomeProgress() => _homePublication.resume(
+    isVisible: () => mounted && (ModalRoute.of(context)?.isCurrent ?? true),
+    isCurrent: (pending) =>
+        pending.generation == _boardLoadGen &&
+        pending.scope == ProfileRuntime.scope.value,
+    publish: (pending) => _publishHomeProgress(
+      pending.rows,
+      pending.first,
+      pending.generation,
+      pending.scope,
+    ),
+    onResumed: () => _maybeAutoFillBoard(resumeDeferred: true),
+  );
 
   void _resumeDeferredHomePagination() {
     if (!_homePaginationDeferred || _boardRefreshing || !mounted ||
@@ -906,7 +912,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   bool get _canPageHome => mounted &&
       (!PlatformUtil.isAndroidTvCached ||
         ((ModalRoute.of(context)?.isCurrent ?? true) &&
-          _deferredHomeProgress == null && !_homeProgressApplyScheduled));
+          !_homePublication.hasPending && !_homePublication.isScheduled));
 
   // LOCAL Continue Watching rows. Reads the SAME local store Home writes to
   // (StorageService `continue_watching_v1`) — read-only here, so Home is never
@@ -2566,6 +2572,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   @override
   void dispose() {
     _preserveHomeSnapshot();
+    _homePublication.dispose();
     MetadataPreferencesService.revision.removeListener(_metadataSettingsChanged);
     _catalogContinueNode.dispose();
     _catalogMoreNode.dispose();
@@ -3018,7 +3025,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     // A superseded pagination request may never return. Its finally block is
     // generation-guarded, so it cannot clear a newer request's loading flag.
     final gen = _homeCatalogController.beginLoad();
-    _deferredHomeProgress = null;
+    _homePublication.clear();
     final scope = ProfileRuntime.scope.value;
     bool current() =>
         mounted && gen == _boardLoadGen && scope == ProfileRuntime.scope.value;
@@ -3062,17 +3069,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
           expired = true;
           _progressiveHomeLoadPending = false;
           completionGen = _homeCatalogController.retireLoad(gen) ?? gen;
-          final pending = _deferredHomeProgress;
-          if (pending != null && pending.generation == gen) {
-            // Already accepted data remains valid after retiring requests,
-            // including when a detail route currently covers the Home board.
-            _deferredHomeProgress = (
-              rows: pending.rows,
-              first: pending.first,
-              generation: completionGen,
-              scope: pending.scope,
-            );
-          }
+          _homePublication.retireGeneration(gen, completionGen);
           // Retiring the generation stops stale batches. A refresh timeout
           // must restore the paging state belonging to the still-visible rows.
           final recovery = progress?.hasPublished == true
