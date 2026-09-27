@@ -1,3 +1,4 @@
+import '../features/home/application/home_bound_counts_controller.dart';
 import '../features/home/application/home_configuration_changes.dart';
 import '../features/home/application/home_settings_refresh.dart';
 import '../features/home/application/home_settings_refresh_dependencies.dart';
@@ -734,7 +735,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
 
   /// imdbId → number of pinned (bound) sources — drives the board tile badge,
   /// detail Sources tint, and the Episodes "Source(s)" button count.
-  final Map<String, int> _boundCounts = {};
+  late final HomeBoundCountsController _boundCountsController;
+  late final ProviderSubscription<Map<String, int>> _boundCountsSubscription;
+  Map<String, int> get _boundCounts => _boundCountsController.current;
 
   // Board state. [_homeSections] is the homepage cache; [_sections] is whatever
   // is currently shown (homepage OR per-addon catalog search results). Both the
@@ -1913,6 +1916,13 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       (previous, next) {},
     );
     _homeCatalogController = ref.read(homeCatalogProvider(homeSession).notifier);
+    _boundCountsSubscription = ref.listenManual(
+      homeBoundCountsProvider(homeSession),
+      (previous, next) {},
+    );
+    _boundCountsController = ref.read(
+      homeBoundCountsProvider(homeSession).notifier,
+    );
     _homeSettingsRefreshSubscription = ref.listenManual(
       homeSettingsRefreshProvider(homeSession),
       (previous, next) {},
@@ -2740,6 +2750,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     _searchController.dispose();
     ProfileRuntime.scope.removeListener(_onSearchProfileChanged);
     _homeCatalogSubscription.close();
+    _boundCountsSubscription.close();
     _homeSettingsRefreshSubscription.close();
     _homeLayoutPreferenceSubscription.close();
     _heroTrailerPreferencesSubscription.close();
@@ -3395,9 +3406,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
 
   /// Re-read how many pinned sources each currently-displayed title has. Called
   /// after sections load and after any bind/unbind/playback.
-  Future<void> _refreshBoundSources() async {
-    final counts = <String, int>{};
-    final seen = <String>{};
+  Future<void> _refreshBoundSources() {
     // Cover every on-screen tile that renders a bound badge: catalog sections
     // AND the Continue Watching rows (whose titles may not appear in any
     // section, so editing their sources must still refresh the CW card badge).
@@ -3412,17 +3421,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       ..._mdblistMovies,
       ..._mdblistSeries,
     ];
-    for (final item in items) {
-      final imdb = _imdbOf(item);
-      if (imdb == null || !seen.add(imdb)) continue;
-      final n = (await SeriesSourceService.getSources(imdb)).length;
-      if (n > 0) counts[imdb] = n;
-    }
-    if (!mounted) return;
-    setState(
-      () => _boundCounts
-        ..clear()
-        ..addAll(counts),
+    return _boundCountsController.load(
+      ids: items.map(_imdbOf),
+      isCurrent: () => mounted,
+      onAccepted: () => setState(() {}),
     );
   }
 
