@@ -1,4 +1,4 @@
-import 'package:debrify/screens/search_screen.dart';
+import 'package:debrify/features/discover/models/discover_source_state.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

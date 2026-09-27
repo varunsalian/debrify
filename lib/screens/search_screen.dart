@@ -1,3 +1,5 @@
+import '../features/discover/application/discover_source_controller.dart';
+import '../features/discover/models/discover_source_state.dart';
 import '../features/discover/application/metadata_feature_controller.dart';
 import '../features/discover/models/metadata_feature_policy.dart';
 import '../features/home/application/home_episode_artwork_controller.dart';
@@ -317,23 +319,14 @@ class SearchScreen extends ConsumerStatefulWidget {
 
 /// Fixed Discover sources; installed addons are appended dynamically (key
 /// 'a:{addonId}').
-const String _discCw = 'cw';
-const String _discTrakt = 'trakt';
-const String _discSimkl = 'simkl';
-const String _discTmdb = 'tmdb';
-const String _discJellyfin = 'jellyfin';
-const String _discEmby = 'emby';
-const String _discMdblist = 'mdblist';
-const String _discAddonPrefix = 'a:';
-
-/// Whether an asynchronously loaded Discover landing source may still update
-/// the screen. Public only so the lifecycle contract has a focused regression
-/// test; production callers are confined to this file.
-bool discoverLandingLoadIsCurrent({
-  required int capturedRevision,
-  required int currentRevision,
-  required bool hasPendingHandoff,
-}) => !hasPendingHandoff && capturedRevision == currentRevision;
+const String _discCw = DiscoverSources.cw;
+const String _discTrakt = DiscoverSources.trakt;
+const String _discSimkl = DiscoverSources.simkl;
+const String _discTmdb = DiscoverSources.tmdb;
+const String _discJellyfin = DiscoverSources.jellyfin;
+const String _discEmby = DiscoverSources.emby;
+const String _discMdblist = DiscoverSources.mdblist;
+const String _discAddonPrefix = DiscoverSources.addonPrefix;
 
 // Metrics for the inline caption under an [_ArtPoster] (the favourites rails).
 // Kept as the single source of truth so anything reserving vertical space for
@@ -1669,12 +1662,12 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   // DPAD focus node (the "Source" dropdown is the leading filter of whichever
   // embedded See-All panel is shown). [_discAddons] is the browsable addon list
   // appended to the Source dropdown.
-  String _discSource = _discCw;
-  // Incremented only for an explicit dropdown choice. Async preference/add-on
-  // hydration may apply its captured landing source only while this is still
-  // unchanged, so a late manifest response can never undo user input.
-  int _discSourceRevision = 0;
-  List<StremioAddon> _discAddons = const [];
+  late final ProviderSubscription<DiscoverSourceState>
+  _discoverSourceSubscription;
+  late final DiscoverSourceController _discoverSourceController;
+  String get _discSource => _discoverSourceController.current.source;
+  List<StremioAddon> get _discAddons =>
+      _discoverSourceController.current.addons;
   final FocusNode _discSourceNode = FocusNode(debugLabel: 'disc_source');
 
   /// An MDBList list handed off from the Search tab's Lists mode (consumed
@@ -2191,9 +2184,25 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
           liked: pending['liked'] == true,
           likes: (pending['likes'] as num?)?.toInt() ?? 0,
         );
-        _discSource = _discMdblist;
-        unawaited(StorageService.setDiscoverLastSource(_discMdblist));
       }
+    }
+    final discoverSession = (
+      owner: _profileSessionOwner,
+      viewIdentity: Object(),
+      initialSource: _discMdblistList == null ? _discCw : _discMdblist,
+      hasHandoff: _discMdblistList != null,
+    );
+    _discoverSourceSubscription = ref.listenManual(
+      discoverSourceProvider(discoverSession),
+      (previous, next) {},
+    );
+    _discoverSourceController = ref.read(
+      discoverSourceProvider(discoverSession).notifier,
+    );
+    if (_discMdblistList != null) {
+      unawaited(
+        _discoverSourceController.rememberCurrent(isCurrent: () => mounted),
+      );
     }
     // Ambient hero trailer gates (Home board TV only) — read before the board
     // loads so the seeded first spotlight can already schedule its trailer.
@@ -2803,6 +2812,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     _heroTint.dispose();
     _searchController.dispose();
     ProfileRuntime.scope.removeListener(_onSearchProfileChanged);
+    _discoverSourceSubscription.close();
     _metadataFeatureSubscription.close();
     _homeCatalogSubscription.close();
     _episodeArtworkSubscription.close();
@@ -16750,83 +16760,23 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   /// Apply fixed/remembered sources from local preferences immediately, then
   /// hydrate add-ons separately. Add-on defaults wait only for the inventory
   /// needed to validate them, and a source picked during that wait always wins.
-  Future<void> _loadDiscoverAddons() async {
-    final revision = _discSourceRevision;
-    final values = await Future.wait([
-      StorageService.getDiscoverDefaultSource(),
-      StorageService.getDiscoverLastSource(),
-    ]);
-    if (!mounted) return;
-    final defaultSource = values[0];
-    final lastSource = values[1];
-    var landing = defaultSource == StorageService.discoverDefaultRememberLast
-        ? lastSource
-        : defaultSource;
-    if (landing == _discTmdb) {
+  Future<void> _loadDiscoverAddons() => _discoverSourceController.load(
+    isCurrent: () => mounted,
+    mdblistEnabled: kMdblistEnabled,
+    discoveryEnabled: () async {
       if (_metadataFeaturePolicy == null) await _refreshMetadataFeaturePolicy();
-      if (!mounted) return;
-      if (_metadataFeaturePolicy?.features.contains(MetadataFeature.discovery) !=
-          true) {
-        landing = _discCw;
+      return _metadataFeaturePolicy?.features.contains(
+            MetadataFeature.discovery,
+          ) ==
+          true;
+    },
+    onInventory: (addons) {
+      for (final addon in addons) {
+        _addonsById.putIfAbsent(addon.id, () => addon);
       }
-    }
-    final fixedSource =
-        landing == _discCw ||
-        landing == _discTrakt ||
-        landing == _discSimkl ||
-        landing == _discTmdb ||
-        landing == _discJellyfin ||
-        landing == _discEmby ||
-        (kMdblistEnabled && landing == _discMdblist);
-
-    // Search→MDBList handoff is a stronger, explicit navigation intent. For
-    // ordinary fixed defaults, paint now instead of waiting on manifests.
-    if (fixedSource &&
-        discoverLandingLoadIsCurrent(
-          capturedRevision: revision,
-          currentRevision: _discSourceRevision,
-          hasPendingHandoff: _discMdblistList != null,
-        )) {
-      if (_discSource != landing) setState(() => _discSource = landing);
-      unawaited(StorageService.setDiscoverLastSource(landing));
-    }
-
-    List<StremioAddon> addons = const [];
-    try {
-      addons = await _stremio.getCatalogAddons();
-    } catch (_) {}
-    if (!mounted) return;
-    final browsable = [
-      for (final a in addons)
-        if (a.catalogs.any((c) => c.isBrowsable)) a,
-    ];
-    final addonAvailable =
-        landing.startsWith(_discAddonPrefix) &&
-        browsable.any((addon) => '$_discAddonPrefix${addon.id}' == landing);
-    if (!fixedSource && !addonAvailable) landing = _discCw;
-    setState(() {
-      _discAddons = browsable;
-      for (final a in addons) {
-        _addonsById.putIfAbsent(a.id, () => a);
-      }
-      if (!fixedSource &&
-          discoverLandingLoadIsCurrent(
-            capturedRevision: revision,
-            currentRevision: _discSourceRevision,
-            hasPendingHandoff: _discMdblistList != null,
-          )) {
-        _discSource = landing;
-      }
-    });
-    if (!fixedSource &&
-        discoverLandingLoadIsCurrent(
-          capturedRevision: revision,
-          currentRevision: _discSourceRevision,
-          hasPendingHandoff: _discMdblistList != null,
-        )) {
-      unawaited(StorageService.setDiscoverLastSource(landing));
-    }
-  }
+    },
+    onChanged: () => setState(() {}),
+  );
 
   /// The Discover tab: a "Source" dropdown over a single browsable grid. Each
   /// source is rendered by the matching See-All panel in [embedded] mode (no
@@ -17257,30 +17207,31 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   }
 
   void _selectDiscoverSource(String source) {
-    if (source == _discSource) return;
-    if (source == _discTmdb &&
-        _metadataFeaturePolicy?.features.contains(MetadataFeature.discovery) !=
-            true) {
-      return;
-    }
-    _discFocused.value = null;
-    _discShown.value = null;
-    if (source == _discJellyfin || source == _discEmby) {
-      _discTrailerStreams.value = null;
-      _discTrailerMeta.value = null;
-      _discTrailerLoading.value = false;
-      _discTrailerShowing.value = false;
-      _discTheater.value = false;
-      _discTheaterTimer?.cancel();
-      _discTakeover.value = 0;
-    }
-    setState(() {
-      _discSourceRevision++;
-      _discSource = source;
-    });
-    unawaited(StorageService.setDiscoverLastSource(source));
+    final selected = _discoverSourceController.select(
+      source,
+      discoveryEnabled:
+          _metadataFeaturePolicy?.features.contains(
+            MetadataFeature.discovery,
+          ) ==
+          true,
+      isCurrent: () => mounted,
+      beforeChange: () {
+        _discFocused.value = null;
+        _discShown.value = null;
+        if (source == _discJellyfin || source == _discEmby) {
+          _discTrailerStreams.value = null;
+          _discTrailerMeta.value = null;
+          _discTrailerLoading.value = false;
+          _discTrailerShowing.value = false;
+          _discTheater.value = false;
+          _discTheaterTimer?.cancel();
+          _discTakeover.value = 0;
+        }
+      },
+      onChanged: () => setState(() {}),
+    );
     // The embedded panel reattaches this shared node when the source changes.
-    if (widget.isTelevision) {
+    if (selected && widget.isTelevision) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _discSourceNode.requestFocus();
       });

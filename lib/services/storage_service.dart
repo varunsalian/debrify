@@ -1800,11 +1800,29 @@ class StorageService {
     return value != null && _isDiscoverSourceValue(value) ? value : 'cw';
   }
 
-  static Future<void> setDiscoverLastSource(String value) async {
+  static Future<void> setDiscoverLastSource(
+    String value, {
+    bool Function()? canContinue,
+  }) async {
     if (!_isDiscoverSourceValue(value)) return;
-    final prefs = await ProfilePreferences.instance();
-    if (prefs.getString(_discoverLastSourceKey) == value) return;
-    await prefs.setString(_discoverLastSourceKey, value);
+    if (canContinue == null) {
+      final prefs = await ProfilePreferences.instance();
+      if (prefs.getString(_discoverLastSourceKey) == value) return;
+      await prefs.setString(_discoverLastSourceKey, value);
+      return;
+    }
+    await ProfileRuntime.withoutCapturedScope(() async {
+      if (!canContinue()) return;
+      final prefs = await ProfilePreferences.instance();
+      if (!canContinue()) return;
+      await ProfilePreferences.synchronizeExternalMutation(() async {
+        if (!canContinue() ||
+            prefs.getString(_discoverLastSourceKey) == value) {
+          return;
+        }
+        await prefs.setString(_discoverLastSourceKey, value);
+      }, marksMutation: false);
+    });
   }
 
   /// TV Discover layout: 'stage' (the focused title full-bleed with one bottom
