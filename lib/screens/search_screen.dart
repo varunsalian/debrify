@@ -192,7 +192,7 @@ import 'package:flutter/services.dart';
 
 import '../models/advanced_search_selection.dart';
 import '../theme/app_theme_scope.dart';
-import '../utils/home_rail_metrics.dart';
+import '../features/home/presentation/home_classic_row_metrics.dart';
 import '../utils/platform_util.dart';
 import '../utils/tvos_device.dart';
 import '../models/debrify_tv/channel.dart';
@@ -249,7 +249,6 @@ import '../widgets/debrid_action_sheet.dart';
 import '../widgets/home/cw_card_menu.dart';
 import '../widgets/home/card_focus_rise.dart';
 import '../widgets/home/home_theme.dart';
-import '../widgets/home/row_tag_pill.dart';
 import '../widgets/home/spotlight_board.dart';
 import '../widgets/home/spotlight_catalog_card_cache.dart';
 import '../widgets/search_loading_animation.dart';
@@ -305,9 +304,6 @@ const Color kStremioFocusRing = kCardFocusRing;
 /// list every catalog up front and lazily pull batches on scroll (Stremio-style)
 /// instead of a hard global row cap.
 const int _kBoardBatchSize = 8;
-
-/// When a row's horizontal scroll gets within this many pixels of the end, the
-/// next page for that catalog is fetched (Stremio-style unlimited rows).
 
 /// Dedicated Search tab.
 ///
@@ -7510,7 +7506,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   /// caption band, so both end exactly on the box's bottom edge.
   /// TITLE cards follow the Home Cards orientation setting; everything else
   /// (favourites, channels, playlists) keeps its own fixed shape.
-  double get _titleCardAspect => _homeLandscapeCards ? 16 / 9 : 2 / 3;
+  double get _titleCardAspect =>
+      homeTitleCardAspect(landscape: _homeLandscapeCards);
 
   /// The art for a title card under the current orientation. Null keeps the
   /// cell's own default (the 2:3 poster) — only landscape needs a derived
@@ -14981,38 +14978,22 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       homeRailPosterWidth(context, isTelevision: widget.isTelevision,
         searchResults: widget.searchMode);
 
-  /// TITLE-card size for a classic board rail under the Home Cards
-  /// orientation. Landscape keeps Spotlight's proportions — about 1.6× the
-  /// poster's width, which lands the row at ~60% of the poster row's height —
-  /// so backdrops stay readable without a full-poster-height slab of 16:9.
-  /// Favourites/channel/playlist cells ignore this and stay on
-  /// [_railPosterW]'s portrait geometry.
-  double _railTitleCardW(BuildContext context) {
-    final posterW = _railPosterW(context);
-    return _homeLandscapeCards ? posterW * 1.6 : posterW;
-  }
+  Size _railTitleCardSize(BuildContext context) => homeClassicCardSize(
+    posterWidth: _railPosterW(context),
+    landscape: _homeLandscapeCards,
+  );
 
+  double _railTitleCardW(BuildContext context) =>
+      _railTitleCardSize(context).width;
   double _railTitleCardH(BuildContext context) =>
-      _railTitleCardW(context) / _titleCardAspect;
+      _railTitleCardSize(context).height;
 
-  /// TV hero band budget — Concept-5 geometry (tv_home_mockup): the hero owns
-  /// ~60% of the board; below it exactly ONE titleless card row fits, plus a
-  /// ~24px peek of the NEXT row's header — the "there's more" cue. Budgeted
-  /// against the short catalog-row height on purpose: a taller favourites rail
-  /// (inline captions) clips at the fold rather than shrinking the hero for
-  /// everyone. The Search tab keeps its compact strip via the clamp.
-  double _tvHeroBudget(double boardH) {
-    final catalogRowH = _railTitleCardH(context) + 14;
-    return (boardH - _railHeaderH - catalogRowH - 24).clamp(
-      150.0,
-      widget.searchMode ? 150.0 : 440.0,
-    );
-  }
-
-  /// Approximate height of a rail's header (title row). Matches the padding +
-  /// line height in [_railHeader]; used only to budget the hero so a row header
-  /// (current and next) stays visible.
-  double get _railHeaderH => widget.isTelevision ? 44.0 : 52.0;
+  double _tvHeroBudget(double boardH) => homeClassicHeroBudget(
+    boardHeight: boardH,
+    cardHeight: _railTitleCardH(context),
+    isTelevision: widget.isTelevision,
+    searchResults: widget.searchMode,
+  );
 
   // ── Discover tab ────────────────────────────────────────────────────────────
 
@@ -16006,36 +15987,13 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   double _classicCatalogRowExtent(
     BuildContext context, {
     CatalogSection? section,
-  }) {
-    double lineHeight(TextStyle style) {
-      final painter = TextPainter(
-        text: TextSpan(
-          text: 'Ag',
-          style: DefaultTextStyle.of(context).style.merge(style),
-        ),
-        textDirection: Directionality.of(context),
-        textScaler: MediaQuery.textScalerOf(context),
-        maxLines: 1,
-      )..layout();
-      final height = painter.height;
-      painter.dispose();
-      return height;
-    }
-
-    if (_hideHomeCollectionNames && section is HomeCollectionSection) {
-      return 8 + _railTitleCardH(context) + 14;
-    }
-    var header = lineHeight(
-      homeCatalogRowTitleStyle(this.context, fontSize: 15),
-    );
-    if (!_hideHomeCatalogAddonNames) {
-      header = max(
-        header,
-        lineHeight(RowTagPill.textStyle(9.5)) + 9.5 * .56 + 2,
-      );
-    }
-    return 14 + header + 10 + _railTitleCardH(context) + 14;
-  }
+  }) => measureHomeClassicRowExtent(
+    context,
+    hideHeader: _hideHomeCollectionNames && section is HomeCollectionSection,
+    hideSourceTags: _hideHomeCatalogAddonNames,
+    titleStyle: () => homeCatalogRowTitleStyle(this.context, fontSize: 15),
+    cardHeight: () => _railTitleCardH(context),
+  );
 
   Widget _railHeader({
     required String title,

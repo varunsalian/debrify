@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 
+/// When a row's horizontal scroll gets within this many pixels of the end, the
+/// next page for that catalog is fetched (Stremio-style unlimited rows).
 const double _loadMoreThreshold = 900;
 
 /// A classic catalog rail's header, lazy strip and paging notification boundary.
