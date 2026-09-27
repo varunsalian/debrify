@@ -207,7 +207,7 @@ import '../utils/tvos_device.dart';
 import '../models/debrify_tv/channel.dart';
 import '../models/home_collection.dart';
 import '../models/iptv_playlist.dart';
-import '../models/play_loader_art.dart';
+import '../features/home/presentation/home_playback_artwork.dart';
 import '../models/playlist_view_mode.dart';
 import '../models/stremio_addon.dart';
 import '../models/stremio_tv/stremio_tv_now_playing.dart';
@@ -5082,7 +5082,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   /// plays it, mirroring the Trakt quick-play.
   Future<void> _playSimklCwItem(StremioMeta item) async {
     _activeAddonId = NativeSeriesMetadataService.addonForItem(item).id;
-    _capturePlayArt(item);
+    _playbackArtwork.capture(item);
     final cw = _simklByImdb[_simklCardKey(item)];
     if (cw == null) {
       // Not in the CW map (a See-All grid title that fell out of the list) —
@@ -10620,7 +10620,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
                 startFromBeginning: true),
               // Enriched backdrop/logo/meta for the Marquee play loader —
               // the catalog row that opened this page rarely has any of it.
-              onLoaderArt: (art) => _adoptDetailPlayArt(item, art),
+              onLoaderArt: (art) => _playbackArtwork.adopt(item, art),
               onBrowse: () => _onCatalogBrowse(
                 item,
                 addon,
@@ -11413,7 +11413,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     // The loader's backdrop/logo/meta line for this title. Captured here (the
     // one play entry point that still holds the catalog meta) and read back in
     // [_metaFor], which only ever sees a selection.
-    _capturePlayArt(item);
+    _playbackArtwork.capture(item);
     var cancelled = false;
     final resolving = preferTraktResume
         ? TorrentPlaybackService.showResolvingOverlay(
@@ -11425,7 +11425,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
               posterUrl: item.poster,
               year: item.year,
               addonId: addon.id,
-              art: _pendingPlayArt,
+              art: _playbackArtwork.current,
             ),
             title: item.name,
             onCancel: () => cancelled = true,
@@ -12798,58 +12798,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     simklScrobble: sel.simklSource,
     mdblistProgressPercent: sel.mdblistProgressPercent,
     mdblistScrobble: sel.mdblistSource,
-    art: _artFor(sel.imdbId, sel.title),
+    art: _playbackArtwork.forSelection(sel.imdbId, sel.title),
   );
 
-  /// Loader artwork for the title being played, captured by [_onCatalogPlay]
-  /// from the catalog meta it already holds. Presentation only.
-  ///
-  /// Keyed, because plays reach [_metaFor] through selections this screen did
-  /// not build (tracker continue-watching rows, the episode picker) — an
-  /// unkeyed stash would paint the previous title's backdrop behind the next
-  /// play. A miss simply means no art, which the loader already handles.
-  PlayLoaderArt? _pendingPlayArt;
-  String? _pendingPlayArtKey;
-
-  void _capturePlayArt(StremioMeta item) {
-    final key = _playArtKey(item.progressId ?? item.id, item.name);
-    // The detail page publishes a strictly richer version of the same title
-    // (logo, runtime, rating, certificate — none of which catalog rows carry),
-    // so never let the row's sparse copy overwrite it.
-    if (_pendingPlayArt != null && _pendingPlayArtKey == key) return;
-    final art = PlayLoaderArt.fromMeta(item);
-    if (art.isEmpty) {
-      _pendingPlayArt = null;
-      _pendingPlayArtKey = null;
-      return;
-    }
-    _pendingPlayArt = art;
-    _pendingPlayArtKey = key;
-  }
-
-  /// The detail page's enrichment, replacing whatever the row had.
-  void _adoptDetailPlayArt(StremioMeta item, PlayLoaderArt art) {
-    _pendingPlayArt = art;
-    _pendingPlayArtKey = _playArtKey(
-      item.progressId ?? item.id,
-      item.name,
-    );
-  }
-
-  static String _playArtKey(String? id, String title) =>
-      '${id ?? ''}|${title.trim().toLowerCase()}';
-
-  PlayLoaderArt? _artFor(String? id, String title) {
-    final art = _pendingPlayArt;
-    if (art == null) return null;
-    // Either half matching is enough: tracker rows carry the IMDb id but often
-    // a differently-punctuated title, and id-less addon titles carry neither.
-    final key = _playArtKey(id, title);
-    if (key == _pendingPlayArtKey) return art;
-    final storedId = _pendingPlayArtKey?.split('|').first ?? '';
-    if (storedId.isNotEmpty && id == storedId) return art;
-    return null;
-  }
+  final HomePlaybackArtwork _playbackArtwork = HomePlaybackArtwork();
 
   /// Catalog auto-best play — the service picks the provider, shows the real
   /// cinematic overlay, searches, and plays (with source list + content
