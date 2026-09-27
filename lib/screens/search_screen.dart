@@ -1,3 +1,4 @@
+import '../features/home/application/home_local_history_removal_dependencies.dart';
 import '../features/home/presentation/home_continuation_row.dart';
 import '../features/home/presentation/home_catalog_row.dart';
 import '../features/home/presentation/home_catalog_row_header.dart';
@@ -4784,6 +4785,13 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     _playSelection(sel);
   }
 
+  Future<bool> _removeLocalHistory(String id) async {
+    if (!_catalogNavigationCurrent()) return false;
+    return ref
+        .read(homeLocalHistoryRemovalProvider(_profileSessionOwner))
+        .remove(id, isCurrent: _catalogNavigationCurrent);
+  }
+
   /// Detail-screen action for a Continue Watching title. Only handles removal;
   /// pops the detail and lets the push's `.then` refresh the row.
   Future<void> _handleContinueDetailAction(
@@ -4791,9 +4799,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     String imdbId,
   ) async {
     if (action != TraktItemMenuAction.removeFromPlayback) return;
-    await StorageService.removeContinueWatchingItem(imdbId);
-    await StorageService.clearPlaybackStateByImdbId(imdbId);
-    if (!mounted) return;
+    if (!await _removeLocalHistory(imdbId) || !mounted) return;
     Navigator.of(context).pop(); // close the detail; `.then` reloads the row
     _snack('Removed from Continue Watching');
   }
@@ -4881,9 +4887,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   Future<void> _removeLocalCwItem(StremioMeta item) async {
     final imdbId = _imdbOf(item) ?? item.id;
     if (imdbId.isEmpty) return;
-    await StorageService.removeContinueWatchingItem(imdbId);
-    await StorageService.clearPlaybackStateByImdbId(imdbId);
-    if (!mounted) return;
+    if (!await _removeLocalHistory(imdbId) || !mounted) return;
     _snack('Removed from Continue Watching');
     await _loadContinueWatching();
   }
@@ -10246,9 +10250,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       );
       if (!current()) return;
       if (remove == true) {
-        await StorageService.removeContinueWatchingItem(item.imdbId!);
-        await StorageService.clearPlaybackStateByImdbId(item.imdbId!);
-        if (!mounted) return;
+        if (!await _removeLocalHistory(item.imdbId!) || !mounted) return;
         _clearSeriesResume();
         await _loadContinueWatching();
       }

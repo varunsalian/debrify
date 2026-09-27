@@ -6,6 +6,42 @@ workflow checkpoints, reuse valid evidence, and run broader checks at integratio
 gates. Earlier entries retain their original slice history. No changes are pushed
 to the public repository.
 
+## Batch A checkpoint: local history removal — 2026-09-28
+
+The local card, detail action and unavailable-origin confirmation now use one
+injected `LocalHistoryRemoval` operation. The factory retains the initiating
+profile scope across both existing storage calls; those calls retain their actual
+WebDAV tombstone and native playback-recovery recording. No persisted format or
+storage implementation changed. Retired actions cannot start; accepted deletions
+finish both writes, while retired views/profiles receive no UI feedback.
+
+The small shared operation tracks only accepted work. The existing app lifecycle
+retires session memory and engine/shell registrations, then drains these removals
+before publishing the next profile. This keeps a normal switch/deletion flow from
+cleaning up the outgoing profile while its accepted removal still writes. The
+caller retains failures; drain completion is released on success or error. No
+preference mutation barrier is held across the sequence. The shared file is in
+the architecture guard's measured source set; StorageService remains unchanged.
+
+Validation: 31 affected tests pass (six new), including the actual Home unavailable
+origin path, playback recovery and profile lifecycle suites. New tests inspect
+both profiles' real preferences and native recovery journal after switching during
+a held tombstone callback; all journal callbacks retain the origin profile and
+unrelated titles survive. Tests also cover pre-start retirement, write failures,
+empty IDs and a pending preference snapshot. Analyzer identities remain 848;
+448 migrated files pass architecture checks. Reviewed all three production callers,
+accepted-write lifetime, lifecycle ordering and preservation of storage semantics.
+
+Receipts: `.git/refactor-evidence/phase5/local-removal-before.txt`,
+`local-removal-after.txt`, and `local-removal-analyze.txt`. Full-suite integration
+was brought forward because this checkpoint touches the shared profile lifecycle;
+it finished with 9,701 successes, the unchanged 22 failures / 29 errors / 20 skips,
+and all 31 added tests passing. Every previous test identity retains its outcome
+against `full-series-resume-readers.jsonl`. Full receipts: `full-local-removal.*`;
+the helper/test processes finished with the expected baseline exit 1. This is
+host-level evidence, not a new device/native-recovery certification. Remaining A work includes tracker
+playback/removal actions and the detail source-edit/add workflow.
+
 ## Batch A checkpoint: Continue Watching hold/menu workflow — 2026-09-28
 
 `HomeContinueWatchingActions` now owns the complete per-view hold/menu interaction:
