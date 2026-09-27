@@ -172,6 +172,8 @@ import '../features/home/application/home_random_episode_dependencies.dart';
 import '../features/home/application/home_catalog_episode_identity_dependencies.dart';
 import '../features/home/application/home_catalog_origin_dependencies.dart';
 import '../features/home/application/home_tracking_policy_dependencies.dart';
+import '../features/home/application/home_tracker_resume_dependencies.dart';
+import '../features/home/data/home_tracker_resume_repository.dart';
 import '../features/home/models/home_catalog_origin.dart';
 import '../widgets/clear_pinned_sources_button.dart';
 import '../services/profiles/profile_runtime.dart';
@@ -279,7 +281,7 @@ import 'see_all/mdblist_lists_see_all_screen.dart';
 import '../widgets/see_all/mdblist_list_card.dart';
 import '../services/mdblist/mdblist_list_source.dart';
 import '../services/mdblist/mdblist_service.dart';
-import '../services/mdblist/mdblist_continue_watching_service.dart';
+import '../models/mdblist_continue_watching.dart';
 import '../services/mdblist/mdblist_models.dart';
 import '../services/mdblist/mdblist_menu_helpers.dart';
 import '../widgets/see_all/discover_card_settings_scope.dart';
@@ -1446,6 +1448,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   );
   late final ProviderSubscription<HomeHeroMetadataLoader>
   _heroMetadataSubscription;
+  late final ProviderSubscription<HomeTrackerResumeRepository>
+  _trackerResumeSubscription;
 
   /// Settle debounce for the hero SWAP itself (260ms): while DPAD focus flies
   /// across cards only the card visuals update; the spotlight (backdrop
@@ -1816,6 +1820,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     );
     _heroTrailerLoaderSubscription = ref.listenManual(
       homeHeroTrailerLoaderProvider(homeSession),
+      (previous, next) {},
+    );
+    _trackerResumeSubscription = ref.listenManual(
+      homeTrackerResumeRepositoryProvider(homeSession),
       (previous, next) {},
     );
     _heroMetadataSubscription = ref.listenManual(
@@ -2628,6 +2636,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     _stageCol.dispose();
     _heroShellBinding?.dispose();
     _catalogDebounce?.cancel();
+    _trackerResumeSubscription.read().dispose();
     _heroMetadataSubscription.read().dispose();
     _heroSwap.dispose();
     _heroTrailerLoaderSubscription.read().dispose();
@@ -2662,6 +2671,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     _heroTintSubscription.close();
     _heroLiveSubscription.close();
     _heroTrailerLoaderSubscription.close();
+    _trackerResumeSubscription.close();
     _heroMetadataSubscription.close();
     _homeLayoutPreferenceSubscription.close();
     _heroTrailerPreferencesSubscription.close();
@@ -12455,14 +12465,11 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   Future<MdblistContinueWatchingItem?> _mdblistResumeItemFor(
     StremioMeta item,
   ) async {
-    final id = (item.progressId ?? item.id).toLowerCase();
-    if (!id.startsWith('tt')) return null;
-    final result = await MdblistContinueWatchingService.instance.fetch();
-    if (!result.isUsable) return null;
-    for (final candidate in [...result.data!.movies, ...result.data!.shows]) {
-      if (candidate.selection.imdbId.toLowerCase() == id) return candidate;
-    }
-    return null;
+    if (!mounted) return null;
+    return _trackerResumeSubscription.read().mdblistItem(
+      item.progressId ?? item.id,
+      isCurrent: () => mounted,
+    );
   }
 
   Future<TrackingSourcePolicy?> _loadTrackingPolicy(StremioMeta item) async {
@@ -12620,73 +12627,28 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     mdblistProgressPercent: mdblistProgressPercent,
   );
 
-  /// Trakt's paused position (0-100) for a movie, or null when it has none.
-  /// Reuses the existing Continue Watching resolver (which fetches
-  /// `/sync/playback/movies` and returns a selection carrying the percent) —
-  /// no new Trakt service code. Trakt is IMDb-keyed, so a non-`tt` id can't
-  /// match.
-  /// Short-TTL memo for [_traktMoviePercent]: the Resume label
-  /// (_resolveResumeInfo) and the Play press (_onCatalogPlay) both need the
-  /// percent seconds apart, and resolveSelection has no cache of its own — so
-  /// without this every detail open cost two identical /sync/playback/movies
-  /// fetches and Play blocked on the second. TTL matches SimklService's own
-  /// 30s playback cache (which already gives the Simkl helper this behavior).
-  final Map<String, (double?, DateTime)> _traktMoviePctMemo = {};
-
   Future<double?> _traktMoviePercent(StremioMeta item) async {
-    final id = item.progressId ?? item.id;
-    if (id.isEmpty || !id.startsWith('tt')) return null;
-    final memo = _traktMoviePctMemo[id];
-    if (memo != null &&
-        DateTime.now().difference(memo.$2) < const Duration(seconds: 30)) {
-      return memo.$1;
-    }
-    final sel = await TraktContinueWatchingService.instance.resolveSelection(
-      traktContentType: TraktContinueWatchingService.moviesContentType,
-      itemId: id,
+    if (!mounted) return null;
+    return _trackerResumeSubscription.read().traktMovie(
+      item.progressId ?? item.id,
+      isCurrent: () => mounted,
     );
-    final pct = _resumableMoviePercent(sel?.traktProgressPercent);
-    _traktMoviePctMemo[id] = (pct, DateTime.now());
-    return pct;
   }
 
-  /// Simkl's paused position (0-100) for a movie, or null when it has none.
-  /// Mirror of [_traktMoviePercent]; Simkl lookups are IMDb-keyed too.
   Future<double?> _simklMoviePercent(StremioMeta item) async {
-    final id = item.progressId ?? item.id;
-    if (id.isEmpty || (!MediaIdentity.isImdb(id) && !MediaIdentity.isNative(id))) return null;
-    return _resumableMoviePercent(
-      await SimklService.instance.fetchMoviePlaybackProgress(id),
+    if (!mounted) return null;
+    return _trackerResumeSubscription.read().simklMovie(
+      item.progressId ?? item.id,
+      isCurrent: () => mounted,
     );
   }
 
   Future<double?> _mdblistMoviePercent(StremioMeta item) async {
-    final candidate = await _mdblistResumeItemFor(item);
-    if (candidate == null ||
-        !candidate.paused ||
-        candidate.selection.isSeries) {
-      return null;
-    }
-    return _resumableMdblistPercent(candidate.selection.mdblistProgressPercent);
-  }
-
-  double? _resumableMdblistPercent(double? pct) {
-    if (pct == null || pct < 1 || pct >= 80) return null;
-    return pct;
-  }
-
-  /// A movie tracker percent, narrowed to what the player will actually
-  /// forward-seek, or null. The player's resume window is bounded on BOTH ends
-  /// (video_player_screen.dart): it seeks only `loMs < traktMs < hiMs`, where
-  /// hiMs = 90% of duration and loMs = the 2s minimum position. A percent
-  /// outside that band makes the detail button read "Resume" while Play starts
-  /// from 00:00 — a label↔Play mismatch. We only have the percent here (no
-  /// duration), so the lower guard is a conservative 1%, which maps above 2s for
-  /// any real-length movie (1% of even a 4-min clip is >2s). Keep both helpers
-  /// on this filter so the label promises only a Resume that Play honours.
-  double? _resumableMoviePercent(double? pct) {
-    if (pct == null || pct < 1 || pct >= 90) return null;
-    return pct;
+    if (!mounted) return null;
+    return _trackerResumeSubscription.read().mdblistMovie(
+      item.progressId ?? item.id,
+      isCurrent: () => mounted,
+    );
   }
 
   void _openEpisodes(
