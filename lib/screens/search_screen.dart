@@ -174,6 +174,7 @@ import '../features/home/application/home_catalog_origin_dependencies.dart';
 import '../features/home/application/home_tracking_policy_dependencies.dart';
 import '../features/home/application/home_tracker_resume_dependencies.dart';
 import '../features/home/data/home_tracker_resume_repository.dart';
+import '../features/home/data/home_catalog_playback_payload.dart';
 import '../features/home/models/home_catalog_origin.dart';
 import '../widgets/clear_pinned_sources_button.dart';
 import '../services/profiles/profile_runtime.dart';
@@ -11696,7 +11697,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         // Keep the detail page underneath — the cinematic loading overlay covers
         // it, and after playback Back returns to the detail (like Home).
         await launch(
-          _movieSelection(
+          homeCatalogMovieSelection(
             item,
             isTraktSource: isTraktSource,
             isMdblistSource: isMdblistSource,
@@ -12584,7 +12585,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       );
     } else {
       _browseSelection(
-        _movieSelection(
+        homeCatalogMovieSelection(
           item,
           isTraktSource: isTraktSource,
           isMdblistSource: isMdblistSource,
@@ -12593,39 +12594,6 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       );
     }
   }
-
-  AdvancedSearchSelection _movieSelection(
-    StremioMeta item, {
-    bool isTraktSource = false,
-    bool isMdblistSource = false,
-    // Cross-device resume percents for a movie (0-100), when a tracker has a
-    // paused position. Null = no tracker position → the player resumes from
-    // the local byte offset as before.
-    double? traktProgressPercent,
-    double? simklProgressPercent,
-    double? mdblistProgressPercent,
-  }) => AdvancedSearchSelection(
-    // Keep the raw catalog id when there's no `tt…` id — for IPTV/TV channels
-    // AND tmdb/kitsu-only movies — so playback/Sources resolve the addon's own
-    // /stream endpoint, matching old home (which passed effectiveImdbId ?? id).
-    // The torrent engines can't resolve a non-`tt` id, but the addon stream can
-    // (playFromSelection routes any non-`tt` id to _playAddonStream), so this
-    // plays instead of dead-ending on "No IMDb match".
-    imdbId: item.progressId ?? item.id,
-    isSeries: false,
-    title: item.name,
-    year: item.year,
-    contentType: item.type,
-    posterUrl: item.poster,
-    // Trakt-sourced movies scrobble to Trakt like the old home view; catalog
-    // movies leave this false so scrobble follows the Tracking master
-    // setting.
-    traktSource: isTraktSource,
-    traktProgressPercent: traktProgressPercent,
-    simklProgressPercent: simklProgressPercent,
-    mdblistSource: isMdblistSource,
-    mdblistProgressPercent: mdblistProgressPercent,
-  );
 
   Future<double?> _traktMoviePercent(StremioMeta item) async {
     if (!mounted) return null;
@@ -12771,33 +12739,15 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         .then((_) => _refreshBoundSources());
   }
 
-  /// Auto-best in-tab play: search torrents for the selection, pick the best
-  /// instantly-playable source, and play — never leaving the Search tab.
-  PlaybackMeta _metaFor(AdvancedSearchSelection sel, {String? addonId, StremioMeta? catalogItem}) => PlaybackMeta.catalog(
-    initialContinuousShuffle: sel.initialContinuousShuffle,
-    // Preserve native tracking identity; TrackingSourcePolicy filters out
-    // destinations that only accept IMDb. Arbitrary channel IDs stay untracked.
-    imdbId: sel.imdbId.startsWith('tt') || MediaIdentity.isNative(sel.imdbId) || CustomSeriesIdentity.isCustom(sel.imdbId) ? sel.imdbId : null,
-    contentType: sel.contentType ?? (sel.isSeries ? 'series' : 'movie'),
-    season: sel.season,
-    episode: sel.episode,
-    title: sel.title,
-    posterUrl: sel.posterUrl,
-    year: sel.year,
-    addonId: catalogItem?.sourceAddon?.id ?? addonId ?? _activeAddonId,
+  PlaybackMeta _metaFor(
+    AdvancedSearchSelection sel, {
+    String? addonId,
+    StremioMeta? catalogItem,
+  }) => homeCatalogPlaybackMeta(
+    sel,
+    addonId: addonId,
+    fallbackAddonId: _activeAddonId,
     catalogItem: catalogItem,
-    stremioAddonId: sel.stremioAddonId,
-    stremioAddonKey: sel.stremioAddonKey,
-    stremioCatalogId: sel.stremioCatalogId,
-    stremioVideoId: sel.stremioVideoId,
-    traktProgressPercent: sel.traktProgressPercent,
-    // Trakt-row plays scrobble to Trakt instead of saving a duplicate local
-    // Continue Watching entry (mirrors Home passing selection.traktSource).
-    traktScrobble: sel.traktSource,
-    simklProgressPercent: sel.simklProgressPercent,
-    simklScrobble: sel.simklSource,
-    mdblistProgressPercent: sel.mdblistProgressPercent,
-    mdblistScrobble: sel.mdblistSource,
     art: _playbackArtwork.forSelection(sel.imdbId, sel.title),
   );
 
