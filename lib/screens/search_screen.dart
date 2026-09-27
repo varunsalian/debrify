@@ -1,3 +1,4 @@
+import '../features/home/presentation/home_hero_swap.dart';
 import '../features/home/presentation/home_hero_spotlight.dart';
 import '../features/home/presentation/spotlight_iptv_card_preview.dart';
 export '../features/home/presentation/spotlight_iptv_card_preview.dart' show SpotlightIptvCardPreview;
@@ -1444,7 +1445,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   /// Settle debounce for the hero SWAP itself (260ms): while DPAD focus flies
   /// across cards only the card visuals update; the spotlight (backdrop
   /// decode, logo, meta, tint cascade) follows once focus rests.
-  Timer? _heroSwapTimer;
+  final HomeHeroSwap _heroSwap = HomeHeroSwap();
 
   // Hero ambient trailer (Home board, TV only): once DPAD focus RESTS on a
   // card, its trailer crossfades into the hero backdrop — same living-backdrop
@@ -2687,7 +2688,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     }
     _catalogDebounce?.cancel();
     _heroMetadataSubscription.read().dispose();
-    _heroSwapTimer?.cancel();
+    _heroSwap.dispose();
     _heroTrailerLoaderSubscription.read().dispose();
     _tintTimer?.cancel();
     _heroItem.dispose();
@@ -6177,7 +6178,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     // ever live in Tonight's RAIL zone, never its Continue queue.
     _atriumFocusedRailKey.value = railKey;
     _tonightZoneIsQueue = false;
-    _heroSwapTimer?.cancel();
+    _heroSwap.cancel();
     _clearHeroTrailer();
     if (liveChannel != null && _stageWantsLivePreview) {
       _setHeroLiveIptv(liveChannel);
@@ -9020,7 +9021,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     // Folders own the stage art too, but never request title metadata or video.
     if (item.type == 'folder') {
       _heroMetadataSubscription.read().cancel();
-      _heroSwapTimer?.cancel();
+      _heroSwap.cancel();
       _clearHeroTrailer();
       _clearHeroLiveIptv();
       _canvasFavFocus.value = null;
@@ -9046,7 +9047,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       // (cleared on the first keypress, never rescheduled — "some cards
       // never even show the loading pill"). A trailer that's already playing
       // or resolving is left completely alone.
-      _heroSwapTimer?.cancel();
+      _heroSwap.cancel();
       if (_heroTrailer.value == null && !_heroTrailerLoading.value) {
         _scheduleHeroTrailer(item);
       }
@@ -9067,10 +9068,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       _applyHero(item);
       return;
     }
-    _heroSwapTimer?.cancel();
-    _heroSwapTimer = Timer(const Duration(milliseconds: 260), () {
-      if (mounted) _applyHero(item);
-    });
+    _heroSwap.schedule(
+      isCurrent: () => mounted,
+      apply: () => _applyHero(item),
+    );
   }
 
   /// The real hero swap — everything downstream of "focus has RESTED here".
