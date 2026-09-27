@@ -1,3 +1,5 @@
+import '../features/home/application/home_playlist_controller.dart';
+import '../features/home/models/home_playlist.dart';
 import '../features/home/application/home_watchlist_controller.dart';
 import '../features/home/models/home_watchlist.dart';
 import '../features/home/application/home_iptv_lists_controller.dart';
@@ -1095,10 +1097,11 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   // random / view files / favorite / clear progress / launch-on-startup /
   // delete), so this row is a complete playlist manager on its own now that the
   // Home playlist section is being phased out. Loaded once on init.
-  List<Map<String, dynamic>> _playlistItems = [];
+  late final HomePlaylistController _playlistController;
+  late final ProviderSubscription<HomePlaylist> _playlistSubscription;
+  List<HomePlaylistItem> get _playlistItems =>
+      _playlistController.current.items;
   final List<FocusNode> _playlistFavNodes = [];
-  Map<String, Map<String, dynamic>> _playlistProgress = {};
-  Set<String> _playlistFavKeys = {};
   // Guards against launching a second concurrent playback while the first is
   // still resolving links (the menu closes immediately, giving no other cue).
   bool _playlistLaunching = false;
@@ -1940,6 +1943,15 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     _watchlistController = ref.read(
       homeWatchlistProvider(watchlistSession).notifier,
     );
+    final playlistSession = (
+      owner: _profileSessionOwner,
+      viewIdentity: Object(),
+    );
+    _playlistSubscription = ref.listenManual(
+      homePlaylistProvider(playlistSession),
+      (previous, next) {},
+    );
+    _playlistController = ref.read(homePlaylistProvider(playlistSession).notifier);
     final localContinuationSession = HomeContinuationSession(
       owner: _profileSessionOwner,
       viewIdentity: Object(),
@@ -2695,6 +2707,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     _iptvFavoritesSubscription.close();
     _iptvListsSubscription.close();
     _watchlistSubscription.close();
+    _playlistSubscription.close();
     _continuationLayoutSubscription.close();
     _listsSubscription.close();
     _catalogSubscription.close();
@@ -3841,7 +3854,6 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   final _pendingHomeRows = <HomeRowRefresh>{};
   Timer? _homeRefreshTimer;
   bool _homeAddonsPending = false;
-  int _playlistRevision = 0;
 
   void _onHomeAddonsChanged() {
     _homeAddonsPending = true;
@@ -4304,47 +4316,15 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     _openItem(item, _addonForContinue(item.sourceAddon?.id));
   }
 
-  /// Load the user's saved playlist items for the leading Playlist row. Applies
-  /// poster overrides and resume progress (same as the Home playlist section),
-  /// newest first. Silently leaves the row empty on any error.
-  Future<void> _loadPlaylistFavorites() async {
-    final revision = ++_playlistRevision;
-    try {
-      final results = await Future.wait([
-        StorageService.getPlaylistItemsRaw(),
-        StorageService.getPlaylistFavoriteKeys(),
-        StorageService.getAllPlaylistPosterOverrides(),
-      ]);
-      final items = results[0] as List<Map<String, dynamic>>;
-      final favKeys = results[1] as Set<String>;
-      final overrides = results[2] as Map<String, String>;
-
-      // Newest first (by addedAt), matching the Home playlist section.
-      items.sort((a, b) {
-        final at = a['addedAt'] as int? ?? 0;
-        final bt = b['addedAt'] as int? ?? 0;
-        return bt.compareTo(at);
-      });
-      // Apply any per-item poster override in a single pass.
-      for (final item in items) {
-        final key = StorageService.getPlaylistItemUniqueKey(item);
-        final ov = overrides[key];
-        if (ov != null && ov.isNotEmpty) item['posterUrl'] = ov;
-      }
-
-      final progress = await StorageService.buildPlaylistProgressMap(items);
-      if (!mounted || revision != _playlistRevision) return;
-      setState(() {
-        _playlistItems = items;
-        _playlistProgress = progress;
-        _playlistFavKeys = favKeys;
-      });
+  /// Refresh accepted playlist rows, posters, favourite flags and progress.
+  Future<void> _loadPlaylistFavorites() => _playlistController.load(
+    isCurrent: () => mounted,
+    onRows: () {
+      setState(() {});
       _syncPlaylistFavNodes();
       _maybeAutoFocusBoard();
-    } catch (_) {
-      // Row just stays hidden.
-    }
-  }
+    },
+  );
 
   void _syncPlaylistFavNodes() {
     while (_playlistFavNodes.length < _playlistItems.length) {
@@ -4367,32 +4347,19 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     }
   }
 
-  /// Resume fraction (0..1) for a playlist item, or null if it has no progress.
-  /// [StorageService.buildPlaylistProgressMap] emits `positionMs`/`durationMs`
-  /// (the Home section reads `position`/`duration`, which are never present — so
-  /// its bar silently never draws; read the real keys here so ours works).
-  double? _playlistProgressFor(Map<String, dynamic> item) {
-    final key = StorageService.computePlaylistDedupeKey(item);
-    final p = _playlistProgress[key];
-    if (p == null) return null;
-    final position = (p['positionMs'] as num?)?.toInt();
-    final duration = (p['durationMs'] as num?)?.toInt();
-    if (position == null || duration == null || duration <= 0) return null;
-    return (position / duration).clamp(0.0, 1.0);
-  }
-
   /// The full action menu for a playlist item — the same set of actions as the
   /// Home playlist section (Home is being phased out, so this row is a complete
   /// playlist manager on its own). Rendered with the post-torrent Neon action
   /// sheet: bottom sheet on phones, centered card on desktop/TV, with the
   /// first three actions as primary pills.
-  Future<void> _onPlaylistItemTap(Map<String, dynamic> item) async {
+  Future<void> _onPlaylistItemTap(HomePlaylistItem selected) async {
     if (!mounted) return;
-    final dedupeKey = StorageService.computePlaylistDedupeKey(item);
-    final isFavorited = _playlistFavKeys.contains(dedupeKey);
-    final hasProgress = _playlistProgress.containsKey(dedupeKey);
-    final isCollection = (item['kind'] as String?) != 'single';
-    final title = (item['title'] as String?) ?? 'Unknown';
+    final item = selected.toLegacyItem();
+    final playlist = _playlistController.current;
+    final isFavorited = playlist.isFavorite(selected);
+    final hasProgress = playlist.hasProgress(selected);
+    final isCollection = selected.isCollection;
+    final title = selected.title;
 
     // The sheet pops itself before running an action, so route every choice
     // through the handler instead of awaiting a dialog result.
@@ -6646,8 +6613,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         );
       case _FavKind.playlist:
         final item = _playlistItems[col];
-        final posterUrl = item['posterUrl'] as String?;
-        final title = (item['title'] as String?) ?? 'Unknown';
+        final posterUrl = item.posterUrl;
+        final title = item.title;
         return _FavArtCell(
           isTelevision: true,
           column: col,
@@ -6662,7 +6629,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
             imageUrl: posterUrl,
             title: title,
             showTitle: !_hideHomeCardTitlesAndRatings,
-            progress: _playlistProgressFor(item),
+            progress: _playlistController.current.progressFor(item),
             isTelevision: true,
             ringColor: Colors.white,
             focusNode: nodes[col],
@@ -7141,9 +7108,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
           items: [
             for (final item in _playlistItems)
               SpotlightCard(
-                image: item['posterUrl'] as String?,
-                title: (item['title'] as String?) ?? 'Unknown',
-                progress: _playlistProgressFor(item),
+                image: item.posterUrl,
+                title: item.title,
+                progress: _playlistController.current.progressFor(item),
                 onOpen: () => _onPlaylistItemTap(item),
               ),
           ],
@@ -19386,8 +19353,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       itemCount: _playlistItems.length,
       cellBuilder: (col, posterW, cellH) {
         final item = _playlistItems[col];
-        final posterUrl = item['posterUrl'] as String?;
-        final title = (item['title'] as String?) ?? 'Unknown';
+        final posterUrl = item.posterUrl;
+        final title = item.title;
         return _FavArtCell(
           isTelevision: tv,
           column: col,
@@ -19398,7 +19365,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
             imageUrl: posterUrl,
             title: title,
             showTitle: !_hideHomeCardTitlesAndRatings,
-            progress: _playlistProgressFor(item),
+            progress: _playlistController.current.progressFor(item),
             isTelevision: tv,
             focusNode: _playlistFavNodes[col],
             onOpen: () => _onPlaylistItemTap(item),
