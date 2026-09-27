@@ -20,3 +20,6 @@ typedef HomeLocalResumeSignal = ({
 
 /// A label can be started even when its tracker selection lacks coordinates.
 typedef HomeResumePosition = ({bool started, int? season, int? episode});
+
+/// Evaluated after tracking-policy reads, preserving auth-settlement timing.
+typedef HomeResumeAvailability = ({bool trakt, bool simkl, bool mdblist});

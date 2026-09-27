@@ -10,9 +10,11 @@ in the relevant plan. When sharing external URLs, show the complete URL.
 
 ## Refactoring approach
 
-- Refactor one bounded responsibility per change, starting with low-risk work.
-  Updating several callers is acceptable; redesigning several subsystems at once
-  is not. Keep the app usable between changes.
+- Refactor one cohesive workflow/responsibility per reviewable batch, starting
+  with low-risk work. Move related methods, state, and callers together; do not
+  require a separate extraction, provider, commit, or review for every helper.
+  Avoid redesigning unrelated subsystems together. Keep the app usable at batch
+  checkpoints and stop dependent work on unexplained regressions.
 - Preserve observable behavior: layouts, navigation, focus, ordering, timing,
   settings, profile ownership, provider behavior, and playback contracts.
   Separate intentional behavior changes and bug fixes from structural moves.
@@ -218,9 +220,12 @@ blank lines, for handwritten application code in Dart and native languages.
 
 ## Verification and completion
 
-- Before a code change, run the relevant existing tests and establish an analyzer
-  baseline. Compare diagnostic identities and test names, not only counts. The
-  checked-in failure list is historical evidence, not proof of current failures.
+- Before a batch, establish relevant test and analyzer evidence. Reuse a recorded
+  baseline when its revision, affected code/dependencies, SDK, and configuration
+  still apply; rerun only missing or invalidated coverage. Do not rerun the same
+  baseline for each mechanical move within a batch. Compare diagnostic identities
+  and test names, not only counts. The checked-in failure list is historical
+  evidence, not proof of current failures.
   Treat shifted line numbers from extraction separately from new diagnostics;
   use the rule, affected symbol, and message to establish correspondence.
   A test passing in the observed baseline must stay passing even if it appears in
@@ -238,9 +243,18 @@ blank lines, for handwritten application code in Dart and native languages.
   preserve each guard's purpose at its new location or replace it with equivalent
   executable coverage; do not delete assertions just to make the move pass.
 - Format changed project-owned Dart code, run `flutter analyze`, and run affected
-  tests. Broaden testing at integration milestones and run native/build/device
+  tests at each completed batch. Run fast focused checks during implementation
+  when useful. Broaden testing at integration milestones and run native/build/device
   checks when the changed boundary requires them. Reuse the same SDK/configuration
   for before/after comparisons; keep SDK upgrades separate and commit the lockfile.
+- Run the full suite at planned cross-feature integration gates and completion,
+  or earlier when a shared dependency change or unexplained failure warrants it.
+  A mechanical helper move alone does not require another full-suite run. Add
+  tests for uncovered contracts and meaningful risks, not boilerplate or every
+  moved method. Review each batch once; repeat only the parts affected by fixes.
+- Keep progress evidence concise: batch outcome, revision, check commands/results,
+  material risks, and remaining deliverables. Reuse evidence and fixtures rather
+  than duplicating logs or rebuilding old/new harnesses for covered behavior.
 - The full-suite comparison helper is `python3 dev/tool/test_baseline.py`. Never
   use `--record` to accept new regressions. Investigate failures and distinguish
   pre-existing issues, environment limitations, and changes introduced by the work.
@@ -251,7 +265,7 @@ blank lines, for handwritten application code in Dart and native languages.
   import boundaries, and file-size rules with documented exclusions. Do not weaken
   checks or meaningful tests to obtain a pass.
 - At the first migrated feature, add simple size/import checks scoped to migrated
-  code and keep them updated as it grows. Run them per slice and require them in CI
+  code and keep them updated as it grows. Run them at workflow/batch checkpoints and require them in CI
   before declaring the migration complete. Use existing tooling or a small script;
   dependency ownership and behavior still require review, not a bespoke framework.
 - Documentation-only changes need link, accuracy, consistency, and diff checks;

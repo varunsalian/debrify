@@ -1,8 +1,40 @@
 # Search refactor implementation evidence
 
 This log accompanies the [plan](search-screen-plan.md). A pending check is not a
-pass. Source moves are reviewed after each slice, with phase reviews before the
-next phase. No changes are pushed to the public repository.
+pass. Remaining work follows the plan's revised delivery batches: review cohesive
+workflow checkpoints, reuse valid evidence, and run broader checks at integration
+gates. Earlier entries retain their original slice history. No changes are pushed
+to the public repository.
+
+## Batch A checkpoint: series-resume resolver — 2026-09-28
+
+Production detail-label and Play callers now share a per-view/profile resolver
+through Riverpod. It owns the 45-second answer cache and concurrent signal reads;
+clear/dispose invalidate pending answers. Cancellation returns null and Play stops
+instead of interpreting retirement as an unstarted S1E1 result. Availability and
+cached-card reads remain after fresh policy loading. Started futures have error
+handlers immediately while active failure precedence remains ordered.
+
+Explicit capacity change: the formerly unbounded result cache now retains at most
+512 answers by recency of use. Hits do not renew expiry; TTL still begins before
+signal I/O. This matches the existing tracker memo capacity convention without
+changing progress precedence or introducing retries.
+
+Validation: 111 affected tests pass across resolver, provider lifetime/isolation,
+signal readers, decision policy, captured-scope dependencies, real Home Trakt
+continuation and rewatch routing. New checks cover cache expiry/invalidation/LRU,
+late availability, cancellation at policy/read/guide boundaries, and concurrent
+tracker errors. Analyzer diagnostic identities are unchanged: 848 before/after;
+architecture checks pass for 444 migrated files. Reviewed real caller guards,
+subscription disposal, old-cache removal and production provider dependencies.
+The cohesive resolver is within the 301–500-line allowance.
+
+Receipts: `.git/refactor-evidence/phase5/resume-workflow-targeted.txt` and
+`resume-workflow-analyze.txt`; both commands finished (tests exit 0, analyzer exit 1
+for unchanged legacy findings). The real Home tests emit font fixture warnings but
+pass. Full-suite comparison remains scheduled at A+B integration under the revised
+plan; this checkpoint does not establish full native/player or transitive-service
+parity. Remaining A work: Home action dispatch and deletion/persistence workflows.
 
 ## Phase 0: baseline and ownership review
 

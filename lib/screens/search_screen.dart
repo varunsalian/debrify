@@ -235,7 +235,6 @@ import '../services/series_source_service.dart';
 import '../services/stremio_iptv_service.dart';
 import '../services/stremio_service.dart';
 import '../services/next_episode_service.dart';
-import '../services/episode_tracker_snapshot_revision.dart';
 import '../services/storage_service.dart';
 import '../services/tv_hero_artwork_quality_controller.dart';
 import '../services/tvos_top_shelf_service.dart';
@@ -249,7 +248,8 @@ import '../services/video_player_launcher.dart';
 import '../services/tracking_source_policy.dart';
 import '../utils/continue_watching_presentation.dart';
 import '../utils/dialog_tap_guard.dart';
-import '../features/home/data/home_series_resume_resolution.dart';
+import '../features/home/data/home_series_resume_resolver.dart';
+import '../features/home/application/home_series_resume_resolver_dependencies.dart';
 import '../features/home/models/home_series_resume_result.dart';
 import '../features/home/models/home_series_resume_signals.dart';
 import '../features/home/data/home_series_resume_repository.dart';
@@ -1456,6 +1456,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   _heroMetadataSubscription;
   late final ProviderSubscription<HomeTrackerResumeRepository>
   _trackerResumeSubscription;
+  late final ProviderSubscription<HomeSeriesResumeResolver>
+  _seriesResumeResolverSubscription;
 
   /// Settle debounce for the hero SWAP itself (260ms): while DPAD focus flies
   /// across cards only the card visuals update; the spotlight (backdrop
@@ -1830,6 +1832,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     );
     _trackerResumeSubscription = ref.listenManual(
       homeTrackerResumeRepositoryProvider(homeSession),
+      (previous, next) {},
+    );
+    _seriesResumeResolverSubscription = ref.listenManual(
+      homeSeriesResumeResolverProvider(homeSession),
       (previous, next) {},
     );
     _heroMetadataSubscription = ref.listenManual(
@@ -2642,6 +2648,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     _stageCol.dispose();
     _heroShellBinding?.dispose();
     _catalogDebounce?.cancel();
+    _seriesResumeResolverSubscription.read().dispose();
     _trackerResumeSubscription.read().dispose();
     _heroMetadataSubscription.read().dispose();
     _heroSwap.dispose();
@@ -2677,6 +2684,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     _heroTintSubscription.close();
     _heroLiveSubscription.close();
     _heroTrailerLoaderSubscription.close();
+    _seriesResumeResolverSubscription.close();
     _trackerResumeSubscription.close();
     _heroMetadataSubscription.close();
     _homeLayoutPreferenceSubscription.close();
@@ -10343,7 +10351,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         await StorageService.removeContinueWatchingItem(item.imdbId!);
         await StorageService.clearPlaybackStateByImdbId(item.imdbId!);
         if (!mounted) return;
-        _seriesResumeCache.clear();
+        _clearSeriesResume();
         await _loadContinueWatching();
       }
       return;
@@ -10708,7 +10716,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     if (action == TraktItemMenuAction.clearWatchProgress) {
       await handleTraktMenuAction(context, item, action);
       if (!mounted) return;
-      _seriesResumeCache.clear();
+      _clearSeriesResume();
       await Future.wait([
         _loadContinueWatching(),
         _loadTraktContinueWatching(refreshBound: false),
@@ -11540,7 +11548,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
           preferBuiltIn: addon.id == NativeSeriesMetadataService.addon.id,
           catalogItem: item.withSourceAddon(addon),
         );
-        if (!mounted || cancelled) return;
+        if (!mounted || cancelled || r == null) return;
         // The caller's button already promised an episode the reconciler can't
         // see. Honor it: the label is the promise the user acted on, and a
         // silent disagreement here replays an episode they already watched.
@@ -11851,277 +11859,34 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     }
   }
 
-  /// Read-only mirror of [_onCatalogPlay]'s resume resolution, used to label the
-  /// detail screen's primary button. Returns whether the title has prior
-  /// progress and, for a series, the season/episode a Play would actually land
-  /// on (the next episode when the last one was finished). Never plays — keep in
-  /// sync with [_onCatalogPlay].
-  // ── Reconciled series resume ──────────────────────────────────────────────
-  // ONE answer per title for "where does Resume land", shared VERBATIM by the
-  // button label (_resolveResumeInfo) and Play (_onCatalogPlay) via a short
-  // cache — so a tracker call that flakes between page-open and button-press
-  // can never make the pill advertise one episode and playback open another.
-  final Map<String, ({int atMs, String rev, HomeSeriesResumeResult r})>
-  _seriesResumeCache = {};
+  void _clearSeriesResume() {
+    if (mounted) _seriesResumeResolverSubscription.read().clear();
+  }
 
-  /// Combined cache identity: per-title tracker revisions (any scrobble/
-  /// watched write bumps its provider's counter, so a cached reconciled
-  /// answer is invalidated the moment a tracker mutation lands) PLUS the
-  /// tracker-availability flags — auth settling, a connect/disconnect, or a
-  /// Trakt-sourced reopen must recompute rather than reuse an answer built
-  /// from a different set of eligible sources.
-  String _seriesResumeRev(
-    String playId,
-    bool isTraktSource,
-    WatchProgressSource progressSource,
-  ) =>
-      '${EpisodeTrackerSnapshotRevision.identity('trakt', playId)}.'
-      '${EpisodeTrackerSnapshotRevision.identity('simkl', playId)}.'
-      '${EpisodeTrackerSnapshotRevision.identity('mdblist', playId)}.'
-      // 'local' is bumped by in-page local-only mark watched/unwatched — the
-      // one resume input with no tracker revision of its own.
-      '${EpisodeTrackerSnapshotRevision.identity('local', playId)}.'
-      '${_isTraktAuthenticated ? 1 : 0}${_isSimklAuthenticated ? 1 : 0}'
-      '${_isMdblistAuthenticated ? 1 : 0}${isTraktSource ? 1 : 0}.'
-      '${progressSource.name}';
-
-  /// The reconciled series-resume answer (2026-08-25 redesign — fixes the
-  /// home-card / pill / Play three-way disagreement):
-  ///
-  ///  - Candidates are gathered CONCURRENTLY, each 4s-boxed: Trakt paused/next
-  ///    (when connected or Trakt-sourced), Simkl's newest paused session (with
-  ///    `paused_at`), MDBList's paused entry (with `updatedAt`), and local
-  ///    last-played (with its own timestamp).
-  ///  - RECENCY wins, not fixed priority: any candidate carrying a timestamp
-  ///    beats every timestampless one, newest first; timestampless candidates
-  ///    fall back to the legacy order (Trakt → Simkl → MDBList → local). A
-  ///    stale tracker session — orphaned by a failed scrobble stop — can no
-  ///    longer outrank last night's actual position.
-  ///  - A winner that is effectively DONE (locally finished, or progress ≥ 80,
-  ///    the trackers' own watched threshold) advances to the next episode:
-  ///    guide-aware [NextEpisodeService] first (handles season boundaries),
-  ///    Simkl's server-computed `next_to_watch` as backup — the same signal
-  ///    the home Continue Watching card shows, so the surfaces agree.
-  ///  - Nothing anywhere: `next_to_watch` → MDBList CW coordinate → an
-  ///    unstarted S01E01.
-  /// `sourcePrio` names the winning provider (0 Trakt, 1 Simkl, 2 MDBList,
-  /// 3 local, null fallback/none) — Play stamps the rebuilt selection's
-  /// source flags from it, so an ADVANCED tracker winner keeps its player
-  /// scrobbling attribution. The launcher's shared normalization still applies
-  /// the independent Scrobble masters before any write reaches a tracker.
-  Future<HomeSeriesResumeResult> _reconcileSeriesResume(
+  Future<HomeSeriesResumeResult?> _reconcileSeriesResume(
     StremioMeta item, {
     bool isTraktSource = false,
     bool preferBuiltIn = false,
     StremioMeta? catalogItem,
   }) async {
-    final trackingPolicy = await _loadTrackingPolicy(item);
-    if (trackingPolicy == null) {
-      return (
-        started: false,
-        season: 1,
-        episode: 1,
-        simklProgress: null,
-        selection: null,
-        sourcePrio: null,
-      );
-    }
-    final ttId = item.imdbId ?? (item.id.startsWith('tt') ? item.id : '');
-    final playId = ttId.isNotEmpty ? ttId : (item.progressId ?? item.id);
-    final nowMs = DateTime.now().millisecondsSinceEpoch;
-    final progressRev = _seriesResumeRev(
-      playId,
-      isTraktSource,
-      trackingPolicy.progressSource,
-    );
-    final rev =
-        '$progressRev:$preferBuiltIn:${catalogItem?.sourceAddon?.sourceBindingKey}:${catalogItem?.id}';
-    final hit = _seriesResumeCache[playId];
-    if (hit != null && nowMs - hit.atMs < 45000 && hit.rev == rev) {
-      debugPrint(
-        '[SeriesResume] reconcile-cache-hit title="${item.name}" '
-        'id=$playId ageMs=${nowMs - hit.atMs} rev=$rev '
-        'result=S${hit.r.season}E${hit.r.episode} '
-        'started=${hit.r.started} source=${_resumeSourceName(hit.r.sourcePrio)}',
-      );
-      return hit.r;
-    }
-    debugPrint(
-      '[SeriesResume] reconcile-start title="${item.name}" id=$playId '
-      'rawId=${item.id} effectiveId=${item.progressId} '
-      'traktAuth=$_isTraktAuthenticated simklAuth=$_isSimklAuthenticated '
-      'mdblistAuth=$_isMdblistAuthenticated traktSource=$isTraktSource '
-      'rev=$rev cache=${hit == null ? 'miss' : 'stale-or-revised'}',
-    );
-    _seriesResumeCache.removeWhere((_, v) => nowMs - v.atMs >= 45000);
-
-    // Kick everything off together; a degraded tracker API must never stall
-    // the Play press (same 4s boxes the old chain used).
-    final traktF =
-        trackingPolicy.progressFrom(TrackingSource.trakt) &&
-            (_isTraktAuthenticated || isTraktSource)
-        ? _traktSelectionFor(
-            item,
-          ).timeout(const Duration(seconds: 4), onTimeout: () => null)
-        : Future<({AdvancedSearchSelection sel, int? tsMs})?>.value(null);
-    final simklF =
-        trackingPolicy.progressFrom(TrackingSource.simkl) &&
-            _isSimklAuthenticated
-        ? _simklResumeFor(
-            item,
-          ).timeout(const Duration(seconds: 4), onTimeout: () => null)
-        : Future<
-            ({int season, int episode, double? progress, DateTime? pausedAt})?
-          >.value(null);
-    final mdbF =
-        trackingPolicy.progressFrom(TrackingSource.mdblist) &&
-            _isMdblistAuthenticated
-        ? _mdblistResumeItemFor(
-            item,
-          ).timeout(const Duration(seconds: 4), onTimeout: () => null)
-        : Future<MdblistContinueWatchingItem?>.value(null);
-    final localF = trackingPolicy.progressFrom(TrackingSource.local)
-        ? _localSeriesResumeFor(item, playId)
-        : Future<
-            ({int season, int episode, double? pct, int? tsMs, bool finished})?
-          >.value(null);
-    final nextF =
-        trackingPolicy.progressFrom(TrackingSource.simkl) &&
-            _isSimklAuthenticated
-        ? _simklNextToWatchFor(
-            item,
-          ).timeout(const Duration(seconds: 4), onTimeout: () => null)
-        : Future<({int season, int episode})?>.value(null);
-
-    final trakt = await traktF;
-    final simkl = await simklF;
-    final mdb = await mdbF;
-    final local = await localF;
-    final simklNext = await nextF;
-
-    debugPrint(
-      '[SeriesResume] reconcile-inputs title="${item.name}" id=$playId '
-      'trakt=${_formatTraktResume(trakt)} '
-      'simkl=${_formatSimklResume(simkl)} '
-      'mdblist=${_formatMdblistResume(mdb)} '
-      'local=${_formatLocalResume(local)} '
-      'simklNext=${simklNext == null ? 'none' : 'S${simklNext.season}E${simklNext.episode}'}',
-    );
-
-    final result = await resolveHomeSeriesResume(
-      trakt: trakt,
-      simkl: simkl,
-      mdb: mdb,
-      local: local,
-      simklNext: simklNext,
-      findNextEpisode: (season, episode) => NextEpisodeService.findNextEpisode(
-        playId,
-        season,
-        episode,
-        preferBuiltIn: preferBuiltIn,
-        catalogItem: catalogItem,
+    if (!mounted) return null;
+    return _seriesResumeResolverSubscription.read().resolve(
+      item,
+      isTraktSource: isTraktSource,
+      preferBuiltIn: preferBuiltIn,
+      catalogItem: catalogItem,
+      availability: () => (
+        trakt: _isTraktAuthenticated,
+        simkl: _isSimklAuthenticated,
+        mdblist: _isMdblistAuthenticated,
       ),
-      onWinner: (winner, {required trackerFrontierAhead, required willAdvance}) {
-        debugPrint(
-          '[SeriesResume] reconcile-winner title="${item.name}" id=$playId '
-          'source=${_resumeSourceName(winner.sourcePriority)} base=S${winner.season}E${winner.episode} '
-          'pct=${winner.progress} timestamp=${_formatResumeTimestamp(winner.timestampMs)} '
-          'finished=${winner.finished} trackerFrontierAhead=$trackerFrontierAhead '
-          'willAdvance=$willAdvance '
-          'progressPolicy=${trackingPolicy.progressSource.name}',
-        );
-      },
-      onAdvance: (from, next, adjacentTrackerFrontier, target) {
-        debugPrint(
-          '[SeriesResume] reconcile-advance title="${item.name}" id=$playId '
-          'guideNext=${next == null ? 'none' : 'S${next.season}E${next.episode}'} '
-          'adjacentTracker=${adjacentTrackerFrontier == null ? 'none' : 'S${adjacentTrackerFrontier.season}E${adjacentTrackerFrontier.episode}'} '
-          'chosen=${target == null ? 'keep-S${from.season}E${from.episode}' : 'S${target.season}E${target.episode}'}',
-        );
-      },
+      cachedTrakt: () => _traktByImdb[item.progressId] ?? _traktByImdb[item.id],
+      isCurrent: () => mounted,
     );
-    debugPrint(
-      '[SeriesResume] reconcile-result title="${item.name}" id=$playId '
-      'started=${result.started} target=S${result.season}E${result.episode} '
-      'source=${_resumeSourceName(result.sourcePrio)} '
-      'hasOriginalSelection=${result.selection != null} '
-      'simklPct=${result.simklProgress}',
-    );
-    _seriesResumeCache[playId] = (atMs: nowMs, rev: rev, r: result);
-    return result;
-  }
-
-  String _resumeSourceName(int? priority) => switch (priority) {
-    0 => 'trakt',
-    1 => 'simkl',
-    2 => 'mdblist',
-    3 => 'local',
-    _ => 'fallback',
-  };
-
-  String _formatResumeTimestamp(int? timestampMs) {
-    if (timestampMs == null) return 'none';
-    return DateTime.fromMillisecondsSinceEpoch(timestampMs).toIso8601String();
-  }
-
-  String _formatTraktResume(({AdvancedSearchSelection sel, int? tsMs})? value) {
-    if (value == null) return 'none';
-    return 'S${value.sel.season}E${value.sel.episode}'
-        '/pct=${value.sel.traktProgressPercent}'
-        '/at=${_formatResumeTimestamp(value.tsMs)}';
-  }
-
-  String _formatSimklResume(
-    ({int season, int episode, double? progress, DateTime? pausedAt})? value,
-  ) {
-    if (value == null) return 'none';
-    return 'S${value.season}E${value.episode}'
-        '/pct=${value.progress}'
-        '/at=${value.pausedAt?.toIso8601String() ?? 'none'}';
-  }
-
-  String _formatMdblistResume(MdblistContinueWatchingItem? value) {
-    if (value == null) return 'none';
-    return 'S${value.selection.season}E${value.selection.episode}'
-        '/pct=${value.selection.mdblistProgressPercent}'
-        '/paused=${value.paused}'
-        '/at=${value.updatedAt?.toIso8601String() ?? 'none'}';
-  }
-
-  String _formatLocalResume(
-    ({int season, int episode, double? pct, int? tsMs, bool finished})? value,
-  ) {
-    if (value == null) return 'none';
-    return 'S${value.season}E${value.episode}'
-        '/pct=${value.pct}'
-        '/finished=${value.finished}'
-        '/at=${_formatResumeTimestamp(value.tsMs)}';
   }
 
   HomeSeriesResumeRepository get _seriesResumeRepository =>
       ref.read(homeSeriesResumeRepositoryProvider(_profileSessionOwner));
-
-  /// Preserve the visible card's selection/timestamp before a live feed lookup.
-  Future<HomeTraktResumeSignal?> _traktSelectionFor(StremioMeta item) async {
-    if (!mounted) return null;
-    return _seriesResumeRepository.traktSelection(
-      item,
-      cached: _traktByImdb[item.progressId] ?? _traktByImdb[item.id],
-      isCurrent: () => mounted,
-    );
-  }
-
-  Future<HomeLocalResumeSignal?> _localSeriesResumeFor(
-    StremioMeta item,
-    String playId,
-  ) async {
-    if (!mounted) return null;
-    return _seriesResumeRepository.local(
-      item,
-      playId,
-      isCurrent: () => mounted,
-    );
-  }
 
   Future<HomeResumePosition?> _traktResumeFor(StremioMeta item) async {
     if (!mounted) return null;
@@ -12130,11 +11895,6 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       cached: _traktByImdb[item.progressId] ?? _traktByImdb[item.id],
       isCurrent: () => mounted,
     );
-  }
-
-  Future<HomeSimklResumeSignal?> _simklResumeFor(StremioMeta item) async {
-    if (!mounted) return null;
-    return _seriesResumeRepository.simklPaused(item, isCurrent: () => mounted);
   }
 
   Future<({int season, int episode})?> _simklNextToWatchFor(
@@ -12201,11 +11961,13 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         preferBuiltIn: addon.id == NativeSeriesMetadataService.addon.id,
           catalogItem: item.withSourceAddon(addon),
       );
-      if (!mounted) return (started: false, season: null, episode: null);
+      if (!mounted || r == null) {
+        return (started: false, season: null, episode: null);
+      }
       debugPrint(
         '[SeriesResume] label-resolve-result title="${item.name}" '
         'started=${r.started} target=S${r.season}E${r.episode} '
-        'source=${_resumeSourceName(r.sourcePrio)}',
+        'source=${HomeSeriesResumeResolver.sourceName(r.sourcePrio)}',
       );
       return (started: r.started, season: r.season, episode: r.episode);
     }
@@ -12341,7 +12103,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
           // EpisodesScreen can mark watched / play; its plays route through
           // _playSelection (which clears too), but marks don't — never let a
           // pre-visit reconciled answer survive the trip.
-          _seriesResumeCache.clear();
+          _clearSeriesResume();
           _refreshBoundSources();
         });
   }
@@ -12454,7 +12216,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     // Capture the originating detail's provider for delayed Sources handoffs.
     final addonId = metadataAddonId ?? _activeAddonId;
     // No pre-playback reconciled answer may survive into post-playback reads.
-    _seriesResumeCache.clear();
+    _clearSeriesResume();
     await ref
         .read(homeCatalogPlaybackBridgeProvider)
         .play(
@@ -15213,7 +14975,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         searchMode: widget.searchMode,
         trackers: trackers,
         isCurrent: () => mounted,
-        clearResume: _seriesResumeCache.clear,
+        clearResume: _clearSeriesResume,
         watchlist: _loadMyWatchlist,
         local: _loadContinueWatching,
         iptv: _loadIptvContinueWatching,
