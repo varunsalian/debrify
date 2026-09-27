@@ -4,6 +4,23 @@ import '../../../utils/continue_watching_presentation.dart';
 
 /// Read-only shelf containers; resume/removal descriptors retain their identity.
 class HomeMdblistContinuation {
+  const HomeMdblistContinuation.empty()
+    : movies = const [],
+      series = const [],
+      all = const [],
+      progress = const {},
+      episode = const {},
+      byImdb = const {};
+
+  HomeMdblistContinuation withoutRows() => HomeMdblistContinuation._(
+    movies: const [],
+    series: const [],
+    all: const [],
+    progress: progress,
+    episode: episode,
+    byImdb: const {},
+  );
+
   HomeMdblistContinuation._({
     required List<StremioMeta> movies,
     required List<StremioMeta> series,

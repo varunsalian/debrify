@@ -1,4 +1,4 @@
-import '../features/home/application/home_mdblist_continuation_dependencies.dart';
+import '../features/home/application/home_mdblist_continuation_controller.dart';
 import '../features/home/models/home_mdblist_continuation.dart';
 import '../features/home/application/home_simkl_continuation_controller.dart';
 import '../features/home/models/home_simkl_continuation.dart';
@@ -1017,15 +1017,20 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
 
   final List<FocusNode> _simklMovieNodes = [];
   final List<FocusNode> _simklSeriesNodes = [];
-  List<StremioMeta> _mdblistMovies = [];
-  List<StremioMeta> _mdblistSeries = [];
-  List<StremioMeta> _mdblistAll = [];
-  final Map<String, double> _mdblistProgress = {};
-  final Map<String, String> _mdblistEpisode = {};
-  final Map<String, MdblistContinueWatchingItem> _mdblistByImdb = {};
+  late final HomeMdblistContinuationController _mdblistContinuationController;
+  late final ProviderSubscription<HomeMdblistContinuation>
+  _mdblistContinuationSubscription;
+  HomeMdblistContinuation get _mdblistContinuation =>
+      _mdblistContinuationController.current;
+  List<StremioMeta> get _mdblistMovies => _mdblistContinuation.movies;
+  List<StremioMeta> get _mdblistSeries => _mdblistContinuation.series;
+  List<StremioMeta> get _mdblistAll => _mdblistContinuation.all;
+  late final Map<String, double> _mdblistProgress;
+  Map<String, String> get _mdblistEpisode => _mdblistContinuation.episode;
+  Map<String, MdblistContinueWatchingItem> get _mdblistByImdb =>
+      _mdblistContinuation.byImdb;
   final List<FocusNode> _mdblistMovieNodes = [];
   final List<FocusNode> _mdblistSeriesNodes = [];
-  int _mdblistCwToken = 0;
   int _mdblistRevisionRefreshToken = 0;
   // True while a revision-driven delayed CW reload is queued/running, so
   // [_refreshAfterPlayback] can skip its own MDBList reload instead of doing a
@@ -1035,7 +1040,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   // the delayed reload completes (clearing the pending flag) while
   // [_refreshAfterPlayback] is still awaiting its local loads — without this
   // it would immediately repeat the full fetch it just skipped for.
-  DateTime? _mdblistCwForcedLoadAt;
+  DateTime? get _mdblistCwForcedLoadAt =>
+      _mdblistContinuationController.forcedLoadAt;
 
   bool get _mdblistCwForceFresh {
     final at = _mdblistCwForcedLoadAt;
@@ -1923,6 +1929,16 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     _simklProgress = HomeProgressView(
       () => _simklContinuationController.current.progress,
     );
+    _mdblistContinuationSubscription = ref.listenManual(
+      homeMdblistContinuationProvider(localContinuationSession),
+      (previous, next) {},
+    );
+    _mdblistContinuationController = ref.read(
+      homeMdblistContinuationProvider(localContinuationSession).notifier,
+    );
+    _mdblistProgress = HomeProgressView(
+      () => _mdblistContinuationController.current.progress,
+    );
     _iptvContinuationSubscription = ref.listenManual(
       homeIptvContinuationProvider(localContinuationSession),
       (previous, next) {},
@@ -2622,6 +2638,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     _iptvContinuationSubscription.close();
     _traktContinuationSubscription.close();
     _simklContinuationSubscription.close();
+    _mdblistContinuationSubscription.close();
     _continuationLayoutSubscription.close();
     _listsSubscription.close();
     _catalogSubscription.close();
@@ -5412,74 +5429,34 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   Future<void> _loadMdblistContinueWatching({
     bool refreshBound = true,
     bool force = false,
-  }) async {
-    final token = ++_mdblistCwToken;
-    bool current() =>
-        mounted &&
-        token == _mdblistCwToken &&
-        _profileSessionOwner == ProfileSessionMemory.captureOwner();
-    debugPrint(
-      '[MDBListDiag] Home CW load start token=$token '
-      'refreshBound=$refreshBound force=$force flag=$kMdblistEnabled',
-    );
-    if (!current()) return;
-    if (!kMdblistEnabled) {
-      if (!mounted) return;
-      setState(() {
-        _mdblistMovies = [];
-        _mdblistSeries = [];
-        _mdblistAll = [];
-        _mdblistByImdb.clear();
-      });
-      return;
-    }
-    final result = await ref
-        .read(homeMdblistContinuationRepositoryProvider)
-        .read(force: force, isCurrent: current);
-    if (result == null) return;
-    await _ensureCwMergeFlags();
-    if (!current() || !result.isUsable) {
-      debugPrint(
-        '[MDBListDiag] Home CW load discarded token=$token mounted=$mounted '
-        'currentToken=$_mdblistCwToken kind=${result.kind.name}',
+  }) => _mdblistContinuationController.load(
+    enabled: kMdblistEnabled,
+    force: force,
+    refreshBound: refreshBound,
+    isCurrent: () => mounted,
+    ensureLayout: _ensureCwMergeFlags,
+    now: DateTime.now,
+    trace: debugPrint,
+    onDisabled: () => setState(() {}),
+    beforeRows: (next) {
+      _syncCwNodes(
+        _mdblistMovieNodes,
+        _cwMergeMdblist ? next.all.length : next.movies.length,
+        'mdbmovie',
       );
-      return;
-    }
-    final snapshot = HomeMdblistContinuation.fromSnapshot(result.data!);
-    debugPrint(
-      '[MDBListDiag] Home CW ingest token=$token movies=${snapshot.movies.length} '
-      'shows=${snapshot.series.length}',
-    );
-    final hadRows = _mdblistMovies.isNotEmpty || _mdblistSeries.isNotEmpty;
-    _syncCwNodes(
-      _mdblistMovieNodes,
-      _cwMergeMdblist ? snapshot.all.length : snapshot.movies.length,
-      'mdbmovie',
-    );
-    _syncCwNodes(
-      _mdblistSeriesNodes,
-      _cwMergeMdblist ? 0 : snapshot.series.length,
-      'mdbseries',
-    );
-    setState(() {
-      _mdblistMovies = snapshot.movies;
-      _mdblistSeries = snapshot.series;
-      _mdblistAll = snapshot.all;
-      _mdblistProgress
-        ..clear()
-        ..addAll(snapshot.progress);
-      _mdblistEpisode
-        ..clear()
-        ..addAll(snapshot.episode);
-      _mdblistByImdb
-        ..clear()
-        ..addAll(snapshot.byImdb);
-    });
-    if (force) _mdblistCwForcedLoadAt = DateTime.now();
-    _maybeAutoFocusBoard();
-    if (!hadRows) _maybeAnnounceMdblistRows();
-    if (refreshBound) unawaited(_refreshBoundSources());
-  }
+      _syncCwNodes(
+        _mdblistSeriesNodes,
+        _cwMergeMdblist ? 0 : next.series.length,
+        'mdbseries',
+      );
+    },
+    onRows: (next, hadRows) {
+      setState(() {});
+      _maybeAutoFocusBoard();
+      if (!hadRows) _maybeAnnounceMdblistRows();
+      if (refreshBound) unawaited(_refreshBoundSources());
+    },
+  );
 
   void _onMdblistPlaybackRevision() {
     if (widget.searchMode || widget.discoverMode) return;
