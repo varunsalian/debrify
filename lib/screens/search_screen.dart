@@ -1,3 +1,4 @@
+import '../features/discover/presentation/discover_source_panel.dart';
 import '../features/discover/presentation/discover_content.dart';
 import '../features/discover/application/discover_card_settings_controller.dart';
 import '../features/discover/models/discover_card_settings.dart';
@@ -355,13 +356,10 @@ class SearchScreen extends ConsumerStatefulWidget {
 /// Fixed Discover sources; installed addons are appended dynamically (key
 /// 'a:{addonId}').
 const String _discCw = DiscoverSources.cw;
-const String _discTrakt = DiscoverSources.trakt;
-const String _discSimkl = DiscoverSources.simkl;
 const String _discTmdb = DiscoverSources.tmdb;
 const String _discJellyfin = DiscoverSources.jellyfin;
 const String _discEmby = DiscoverSources.emby;
 const String _discMdblist = DiscoverSources.mdblist;
-const String _discAddonPrefix = DiscoverSources.addonPrefix;
 
 /// Smallest poster art a stage rail will draw before it is simply too small
 /// to recognise — the floor every derived rail box respects.
@@ -15100,7 +15098,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       isTelevision: widget.isTelevision,
       focusNode: _discSourceNode,
       discoveryEnabled:
-          _metadataFeaturePolicy?.features.contains(MetadataFeature.discovery) ==
+          _metadataFeaturePolicy?.features.contains(
+            MetadataFeature.discovery,
+          ) ==
           true,
       mdblistEnabled: kMdblistEnabled,
       mdblistAuthenticated: kMdblistEnabled && _isMdblistAuthenticated,
@@ -15108,38 +15108,33 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       onSelected: _selectDiscoverSource,
     );
 
-    if (_discSource == _discJellyfin || _discSource == _discEmby) {
-      return MediaServerLibraryPanel(
-        key: ValueKey(_discSource),
-        kind: _discSource == _discJellyfin
+    return buildDiscoverSourcePanel(
+      selected: _discSource,
+      mediaServer: (selected) => MediaServerLibraryPanel(
+        key: ValueKey(selected),
+        kind: selected == _discJellyfin
             ? MediaServerKind.jellyfin
             : MediaServerKind.emby,
         leading: source,
         isTelevision: widget.isTelevision,
-      );
-    }
-
-    if (_discSource == _discTmdb && _metadataFeaturePolicy != null) {
-      return MetadataBrowsePage(
-        key: const ValueKey('disc_tmdb'),
-        title: 'TMDB',
-        kind: 'discover',
-        preferences: _metadataFeaturePolicy!,
-        onOpen: (item) => _openItem(
-          item,
-          item.sourceAddon ?? _addonForContinue(null),
-        ),
-        onItemFocused: _onDiscFocused,
-        isBound: _isBound,
-        isTelevision: widget.isTelevision,
-        embedded: true,
-        leading: source,
-        leadingNode: _discSourceNode,
-      );
-    }
-
-    if (_discSource == _discTrakt) {
-      return TraktSeeAllScreen(
+      ),
+      tmdb: _metadataFeaturePolicy == null
+          ? null
+          : () => MetadataBrowsePage(
+              key: const ValueKey('disc_tmdb'),
+              title: 'TMDB',
+              kind: 'discover',
+              preferences: _metadataFeaturePolicy!,
+              onOpen: (item) =>
+                  _openItem(item, item.sourceAddon ?? _addonForContinue(null)),
+              onItemFocused: _onDiscFocused,
+              isBound: _isBound,
+              isTelevision: widget.isTelevision,
+              embedded: true,
+              leading: source,
+              leadingNode: _discSourceNode,
+            ),
+      trakt: () => TraktSeeAllScreen(
         key: const ValueKey('disc_trakt'),
         cwItems: _traktAll,
         cwProgress: _cwCardMaps(HomeContinuationKind.trakt).progress,
@@ -15151,11 +15146,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         embedded: true,
         leading: source,
         leadingNode: _discSourceNode,
-      );
-    }
-
-    if (_discSource == _discSimkl) {
-      return SimklSeeAllScreen(
+      ),
+      simkl: () => SimklSeeAllScreen(
         key: const ValueKey('disc_simkl'),
         // CW is folded in as the leading "List" option (like the Trakt source).
         // Plain open/play for the browse lists; the CW-aware handlers (resume at
@@ -15172,14 +15164,11 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         embedded: true,
         leading: source,
         leadingNode: _discSourceNode,
-      );
-    }
-
-    if (_discSource == _discMdblist) {
+      ),
       // MDBList items are plain catalog titles (StremioMeta w/ imdb id), so they
       // open and quick-play through the same generic catalog paths as an addon
       // catalog item — no MDBList-specific handlers needed.
-      return MdblistSeeAllScreen(
+      mdblist: () => MdblistSeeAllScreen(
         key: const ValueKey('disc_mdblist'),
         initialList: _discMdblistList,
         onOpen: (item) => _openItem(
@@ -15200,56 +15189,41 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         embedded: true,
         leading: source,
         leadingNode: _discSourceNode,
-      );
-    }
-
-    // An installed addon catalog source.
-    if (_discSource.startsWith(_discAddonPrefix)) {
-      final addon = _addonsById[_discSource.substring(_discAddonPrefix.length)];
-      final catalog = addon?.catalogs.cast<StremioAddonCatalog?>().firstWhere(
-        (c) => c != null && c.isBrowsable,
-        orElse: () => null,
-      );
-      if (addon != null && catalog != null) {
-        return CatalogSeeAllScreen(
-          key: ValueKey('disc_${addon.id}'),
-          addon: addon,
-          initialCatalog: catalog,
-          isTelevision: widget.isTelevision,
-          onOpenItem: (item) => _openItem(item, addon),
-          onQuickPlay: _pikpakOnly
-              ? null
-              : (item) => _onCatalogPlay(item, addon),
-          onItemFocused: _onDiscFocused,
-          embedded: true,
-          leading: source,
-          leadingNode: _discSourceNode,
-        );
-      }
-      // Addon vanished (uninstalled) — fall through to Continue Watching.
-    }
-
-    // Default: Continue Watching.
-    return ContinueWatchingSeeAllScreen(
-      key: const ValueKey('disc_cw'),
-      title: 'Continue Watching',
-      items: _cwAll,
-      progressOf: (m) => _cwCardProgress(HomeContinuationKind.local, m),
-      onOpen: _openContinueItem,
-      onQuickPlay: _pikpakOnly ? null : _onContinuePlay,
-      onItemFocused: _onDiscFocused,
-      isBound: _isBound,
-      isTelevision: widget.isTelevision,
-      embedded: true,
-      leading: source,
-      leadingNode: _discSourceNode,
-      // Re-fetch when a detail/player route pops back so finished titles drop out
-      // (the quick-play path doesn't reload _cwAll on its own).
-      onReload: () async {
-        await _loadContinueWatching();
-        if (!mounted) return const <StremioMeta>[];
-        return List<StremioMeta>.of(_cwAll);
-      },
+      ),
+      findAddon: (id) => _addonsById[id],
+      catalog: (addon, catalog) => CatalogSeeAllScreen(
+        key: ValueKey('disc_${addon.id}'),
+        addon: addon,
+        initialCatalog: catalog,
+        isTelevision: widget.isTelevision,
+        onOpenItem: (item) => _openItem(item, addon),
+        onQuickPlay: _pikpakOnly ? null : (item) => _onCatalogPlay(item, addon),
+        onItemFocused: _onDiscFocused,
+        embedded: true,
+        leading: source,
+        leadingNode: _discSourceNode,
+      ),
+      continueWatching: () => ContinueWatchingSeeAllScreen(
+        key: const ValueKey('disc_cw'),
+        title: 'Continue Watching',
+        items: _cwAll,
+        progressOf: (m) => _cwCardProgress(HomeContinuationKind.local, m),
+        onOpen: _openContinueItem,
+        onQuickPlay: _pikpakOnly ? null : _onContinuePlay,
+        onItemFocused: _onDiscFocused,
+        isBound: _isBound,
+        isTelevision: widget.isTelevision,
+        embedded: true,
+        leading: source,
+        leadingNode: _discSourceNode,
+        // Re-fetch when a detail/player route pops back so finished titles drop out
+        // (the quick-play path doesn't reload _cwAll on its own).
+        onReload: () async {
+          await _loadContinueWatching();
+          if (!mounted) return const <StremioMeta>[];
+          return List<StremioMeta>.of(_cwAll);
+        },
+      ),
     );
   }
 
