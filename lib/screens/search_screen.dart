@@ -1,3 +1,4 @@
+import '../features/discover/application/discover_layout_controller.dart';
 import '../features/discover/presentation/discover_preview.dart';
 import '../features/discover/presentation/discover_source_picker.dart';
 import '../features/home/presentation/home_stage_theater.dart';
@@ -1575,16 +1576,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
 
   // ── Discover layout (grid / stage) ───────────────────────────────────────
 
-  /// Last loaded `discover_layout`, kept for the life of the process. The
-  /// pref read is async but the layout is needed on the FIRST frame: without
-  /// this, every entry to the Discover tab would build the grid, then swap to
-  /// the stage a frame later — a visible flash on each tab switch. Only the
-  /// very first entry after launch pays it.
-  static String _discLayoutCached = 'stage';
-
-  /// Active Discover layout, from `discover_layout`. Stage is the default;
-  /// grid is the only thing phone/desktop ever render (see [_discStage]).
-  String _discLayout = _discLayoutCached;
+  late final ProviderSubscription<String> _discoverLayoutSubscription;
+  late final DiscoverLayoutController _discoverLayoutController;
+  String get _discLayout => _discoverLayoutController.current;
 
   // Warmed before runApp, so the first Discover frame already has the user's
   // poster-card choices instead of flashing the default chrome.
@@ -1599,12 +1593,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   bool get _discStage =>
       widget.discoverMode && widget.isTelevision && _discLayout == 'stage';
 
-  Future<void> _loadDiscoverLayout() async {
-    final layout = await StorageService.getDiscoverLayout();
-    _discLayoutCached = layout;
-    if (!mounted || layout == _discLayout) return;
-    setState(() => _discLayout = layout);
-  }
+  Future<void> _loadDiscoverLayout() => _discoverLayoutController.load(
+    isCurrent: () => mounted,
+    onChanged: () => setState(() {}),
+  );
 
   /// Settings picker fired: tear the trailer down BEFORE the relayout, so the
   /// player is never re-parented mid-play into the other layout's tree (the
@@ -2050,6 +2042,17 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       viewIdentity: Object(),
       initialSource: _discMdblistList == null ? _discCw : _discMdblist,
       hasHandoff: _discMdblistList != null,
+    );
+    final discoverLayoutSession = (
+      owner: _profileSessionOwner,
+      viewIdentity: discoverSession.viewIdentity,
+    );
+    _discoverLayoutSubscription = ref.listenManual(
+      discoverLayoutProvider(discoverLayoutSession),
+      (previous, next) {},
+    );
+    _discoverLayoutController = ref.read(
+      discoverLayoutProvider(discoverLayoutSession).notifier,
     );
     _discoverSourceSubscription = ref.listenManual(
       discoverSourceProvider(discoverSession),
@@ -2627,6 +2630,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     _heroTint.dispose();
     _searchController.dispose();
     ProfileRuntime.scope.removeListener(_onSearchProfileChanged);
+    _discoverLayoutSubscription.close();
     _discoverSourceSubscription.close();
     _metadataFeatureSubscription.close();
     _homeCatalogSubscription.close();

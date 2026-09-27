@@ -1834,18 +1834,24 @@ class StorageService {
   ///
   /// Unset reads as 'stage', so users who never opened the picker move to it.
   /// Everything else that holds a pre-load placeholder for this pref must
-  /// agree, or the UI paints one layout and then swaps: SearchScreen's
-  /// `_discLayoutCached`, DiscoverLayoutPage, SettingsScreen.
+  /// agree, or the UI paints one layout and then swaps: Discover's warm-start
+  /// layout memory, DiscoverLayoutPage, SettingsScreen.
   /// Synchronous mirror of `discoverLayout`, kept so a Look can read
   /// the current value without an await. Additive: every existing caller
   /// still goes through the async getter, which now also refreshes this.
   static String discoverLayoutCached = 'stage';
 
-  static Future<String> getDiscoverLayout() async {
+  /// Scoped callers suppress a retired request's shared-cache publication.
+  /// The normalized return value and unguarded callers keep their contract.
+  static Future<String> getDiscoverLayout({
+    bool Function()? canContinue,
+  }) async {
     final prefs = await ProfilePreferences.instance();
-    return discoverLayoutCached = prefs.getString(_discoverLayoutKey) == 'grid'
+    final layout = prefs.getString(_discoverLayoutKey) == 'grid'
         ? 'grid'
         : 'stage';
+    if (canContinue?.call() ?? true) discoverLayoutCached = layout;
+    return layout;
   }
 
   /// Normalizes toward 'stage' on the same terms [getDiscoverLayout] does —
