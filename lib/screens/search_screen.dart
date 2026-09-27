@@ -268,8 +268,7 @@ import '../widgets/trakt/trakt_menu_helpers.dart';
 import '../services/simkl/simkl_menu_helpers.dart';
 import 'catalog_item_detail_screen.dart';
 import 'merged_series_detail_screen.dart';
-import 'settings/tv_home_style_page.dart'
-    show effectiveOffTvHomeStyle, shouldUseOffTvSpotlightShell;
+import '../features/home/application/home_layout_policy.dart';
 import 'debrid_downloads_screen.dart';
 import 'episodes_screen.dart';
 import 'stremio_tv/widgets/stremio_tv_catalog_picker_dialog.dart';
@@ -6007,56 +6006,17 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     return _spotlightShellActive && !_searchSheetOpen ? 'spotlight' : 'classic';
   }
 
-  /// Any of the STAGE layouts (everything except classic). They all share one
-  /// model — a single active rail, identified by key, whose focused cell owns
-  /// a hero stage — so focus routing, rail switching, the favourites override
-  /// and the style-change teardown are common to all of them. Only the
-  /// painting differs, per `_build*Board`.
-  ///
-  /// Favourites are first-class rails on every stage layout, so there is no
-  /// fallback to classic: the pref alone decides. While everything is still
-  /// loading a stage shows the brand stage, and the shared empty-state guards
-  /// above the board branch handle the truly-nothing case.
-  bool get _stageActive => _homeStyleEffective != 'classic';
+  bool get _stageActive => isHomeStageLayout(_homeStyleEffective);
 
-  /// Whether this layout gives moving picture a place to live: the ambient
-  /// trailer and the IPTV favourite's live preview. Mosaic deliberately opts
-  /// out — it has no stage, only a heavily-veiled art wash behind a grid, so
-  /// a video there would be invisible AND the most expensive thing on screen.
-  bool get _stageWantsAmbient => switch (_homeStyleEffective) {
-    'canvas' ||
-    'promenade' ||
-    'deck' ||
-    'atrium' ||
-    'tonight' ||
-    'spotlight' => true,
-    _ => false,
-  };
+  bool get _stageWantsAmbient => homeStageWantsAmbient(_homeStyleEffective);
 
-  /// A focused IPTV favourite's LIVE feed is a different question from a
-  /// catalog trailer: it is the only way to see what a channel is actually
-  /// playing, so every stage layout keeps it — Mosaic included, where the
-  /// wall's veil lifts for it. Only the speculative catalog trailer is off
-  /// there (see [_stageWantsAmbient]).
+  // Live channel previews remain available on every stage, including Mosaic.
   bool get _stageWantsLivePreview => _stageActive;
 
-  /// Whether this layout's ground is the title's ART, edge to edge — the only
-  /// case where lighting the app shell behind the ghost rail continues the
-  /// board instead of cutting across it. See [_publishAmbientArt].
-  bool get _stagePublishesShellArt => switch (_homeStyleEffective) {
-    // Spotlight's hero IS the ground, edge to edge, so lighting the shell
-    // behind the rail continues the board rather than cutting across it.
-    'canvas' || 'promenade' || 'spotlight' => true,
-    _ => false,
-  };
+  bool get _stagePublishesShellArt =>
+      homeStagePublishesShellArt(_homeStyleEffective);
 
-  /// Theater mode (shelf recedes so the video owns the frame) only makes
-  /// sense where the video IS the frame. Atrium's art is a column, Tonight's
-  /// is a card among panels, and Mosaic has none.
-  bool get _theaterEligible => switch (_homeStyleEffective) {
-    'canvas' || 'promenade' || 'deck' || 'spotlight' => true,
-    _ => false,
-  };
+  bool get _theaterEligible => homeStageTheaterEligible(_homeStyleEffective);
 
   late final HomeStageFocusRequests _stageFocusRequests = HomeStageFocusRequests(
     isMounted: () => mounted,
