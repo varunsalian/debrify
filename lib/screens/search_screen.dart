@@ -32,6 +32,7 @@ import '../features/home/application/home_hero_metadata_policy.dart';
 import '../features/home/application/home_hero_metadata_loader.dart';
 import '../features/home/application/home_hero_metadata_dependencies.dart';
 import '../features/home/application/home_hero_trailer_dependencies.dart';
+import '../features/home/application/home_hero_trailer_loader.dart';
 import '../features/home/presentation/home_classic_layout.dart';
 import '../features/home/presentation/home_takeover_info.dart';
 import '../features/home/presentation/home_trailer_transitions.dart';
@@ -1449,8 +1450,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   // arriving rebuilds only the hero's video layer, never the board.
   final ValueNotifier<YoutubeResolvedStreams?> _heroTrailer =
       ValueNotifier<YoutubeResolvedStreams?>(null);
-  Timer? _heroTrailerTimer;
-  int _heroTrailerReq = 0;
+  late final ProviderSubscription<HomeHeroTrailerLoader>
+  _heroTrailerLoaderSubscription;
 
   /// True from the moment the rest-debounce commits to loading a trailer until
   /// either frames are on screen or the attempt dies (no trailer / resolve
@@ -1852,6 +1853,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     );
     _homeSettingsRefreshSubscription = ref.listenManual(
       homeSettingsRefreshProvider(homeSession),
+      (previous, next) {},
+    );
+    _heroTrailerLoaderSubscription = ref.listenManual(
+      homeHeroTrailerLoaderProvider(homeSession),
       (previous, next) {},
     );
     _heroMetadataSubscription = ref.listenManual(
@@ -2693,7 +2698,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     _catalogDebounce?.cancel();
     _heroMetadataSubscription.read().dispose();
     _heroSwapTimer?.cancel();
-    _heroTrailerTimer?.cancel();
+    _heroTrailerLoaderSubscription.read().dispose();
     _tintTimer?.cancel();
     _heroItem.dispose();
     _heroEnriched.dispose();
@@ -2717,6 +2722,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     _pikpakOnlySubscription.close();
     _boundCountsSubscription.close();
     _homeSettingsRefreshSubscription.close();
+    _heroTrailerLoaderSubscription.close();
     _heroMetadataSubscription.close();
     _homeLayoutPreferenceSubscription.close();
     _heroTrailerPreferencesSubscription.close();
@@ -9207,62 +9213,35 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       return;
     }
     if (!fromSpotlight && _heroPreviewAttemptedId == item.id) return;
-    _heroTrailerTimer?.cancel();
-    final req = ++_heroTrailerReq;
-    final scope = ProfileRuntime.scope.value;
-    bool current() =>
-        mounted &&
-        req == _heroTrailerReq &&
-        scope == ProfileRuntime.scope.value;
-    if (_heroTrailer.value != null) _heroTrailer.value = null;
-    if (_heroTrailerLoading.value) _heroTrailerLoading.value = false;
-    if (_heroTrailerShowing.value) _heroTrailerShowing.value = false;
-    // Spotlight has already decided that this hero owns the stage. Begin the
-    // useful network/decoder work immediately there; other layouts keep the
-    // shared 2.4s focus-rest debounce so flying across their rows stays cheap.
-    final resolveDelay = fromSpotlight
-        ? Duration.zero
-        : const Duration(seconds: 2);
-    _heroTrailerTimer = Timer(resolveDelay, () async {
-      if (!current()) return;
-      _heroPreviewAttemptedId = item.id;
-      // The layout may have changed during the dwell — a stage with nowhere
-      // to put moving picture must not spin up an engine.
-      if (_stageActive && !_stageWantsAmbient) return;
-      // Covered by ANY modal (bottom sheet, dialog — which never reach the
-      // PageRoute-only route observer) or a pushed page: a trailer must not
-      // start under it. The cover's dismissal path re-arms where relevant
-      // (didPopNext for pages); sheets simply wait for the next hero rest.
-      if (ModalRoute.of(context)?.isCurrent != true) return;
-      // From here the attempt is committed — surface the pill. Every exit
-      // below (no trailer, failed resolve, hero moved on) clears it; success
-      // keeps it up until the backdrop reports frames (_onHeroTrailerPlaying).
-      _heroTrailerLoading.value = true;
-      void fail() {
-        if (mounted && req == _heroTrailerReq) {
-          _heroTrailerLoading.value = false;
-        }
-      }
-
-      try {
-        final resolution = await ref
-            .read(homeHeroTrailerResolverProvider)
-            .resolve(item, isCurrent: current);
-        if (resolution.retired) return;
-        final streams = resolution.streams;
-        if (streams == null) return fail();
-        // Recheck after the resolver's await boundary before publishing video.
-        if (!current()) return;
-        _heroTrailer.value = streams;
-        // Failsafe: a dead/bot-blocked stream can error inside the engine
-        // before ever producing a frame, in which case onPlayingChanged never
-        // fires (it only reports real transitions) — don't let the pill spin
-        // forever on a trailer that will never come.
-        Timer(const Duration(seconds: 15), fail);
-      } catch (_) {
-        fail();
-      }
-    });
+    // Spotlight already owns the stage; other layouts wait for focus to rest.
+    _heroTrailerLoaderSubscription.read().schedule(
+      item,
+      delay: fromSpotlight ? Duration.zero : const Duration(seconds: 2),
+      isCurrent: () => mounted,
+      reset: () {
+        if (_heroTrailer.value != null) _heroTrailer.value = null;
+        if (_heroTrailerLoading.value) _heroTrailerLoading.value = false;
+        if (_heroTrailerShowing.value) _heroTrailerShowing.value = false;
+      },
+      begin: () {
+        _heroPreviewAttemptedId = item.id;
+        // The layout may have changed during the dwell — a stage with nowhere
+        // to put moving picture must not spin up an engine.
+        if (_stageActive && !_stageWantsAmbient) return false;
+        // Covered by ANY modal (bottom sheet, dialog — which never reach the
+        // PageRoute-only route observer) or a pushed page: a trailer must not
+        // start under it. The cover's dismissal path re-arms where relevant
+        // (didPopNext for pages); sheets simply wait for the next hero rest.
+        if (ModalRoute.of(context)?.isCurrent != true) return false;
+        // From here the attempt is committed — surface the pill. Every exit
+        // below (no trailer, failed resolve, hero moved on) clears it; success
+        // keeps it up until the backdrop reports frames (_onHeroTrailerPlaying).
+        _heroTrailerLoading.value = true;
+        return true;
+      },
+      publish: (streams) => _heroTrailer.value = streams,
+      fail: () => _heroTrailerLoading.value = false,
+    );
   }
 
   /// The hero backdrop's playing signal: frames on screen (true) or engine
@@ -9277,8 +9256,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
 
   /// Kill any pending/playing hero trailer (hero cleared, board reloading).
   void _clearHeroTrailer() {
-    _heroTrailerTimer?.cancel();
-    _heroTrailerReq++;
+    _heroTrailerLoaderSubscription.read().cancel();
     if (_heroTrailer.value != null) _heroTrailer.value = null;
     if (_heroTrailerLoading.value) _heroTrailerLoading.value = false;
     if (_heroTrailerShowing.value) _heroTrailerShowing.value = false;
