@@ -1,3 +1,5 @@
+import '../features/home/presentation/home_card_metadata_view.dart';
+import '../features/home/models/home_card_metadata.dart';
 import '../features/home/presentation/spotlight_iptv_card_preview.dart';
 export '../features/home/presentation/spotlight_iptv_card_preview.dart' show SpotlightIptvCardPreview;
 import '../features/home/presentation/home_hero_trailer_layer.dart';
@@ -158,7 +160,6 @@ import '../widgets/clear_pinned_sources_button.dart';
 import '../models/hero_metadata_presentation.dart';
 import '../services/profiles/profile_runtime.dart';
 import 'metadata_explore_page.dart';
-import '../widgets/metadata_presentation_mixin.dart';
 import '../models/metadata_preferences.dart';
 import '../services/metadata_preferences_service.dart';
 import '../widgets/see_all/discover_browsing_input.dart';

@@ -82,10 +82,9 @@ class _HeroSpotlight extends StatefulWidget {
 }
 
 class _HeroSpotlightState extends State<_HeroSpotlight>
-    with TickerProviderStateMixin, MetadataPresentationMixin<_HeroSpotlight> {
-  @override
+    with TickerProviderStateMixin {
   StremioMeta? _hostBaseline;
-  StremioMeta get originalMetadata => _hostBaseline ??= _buildHostBaseline();
+  StremioMeta get _originalMetadata => _hostBaseline ??= _buildHostBaseline();
 
   StremioMeta _buildHostBaseline() => mergeHeroMetadata(
     widget.item,
@@ -393,21 +392,33 @@ class _HeroSpotlightState extends State<_HeroSpotlight>
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) =>
+      HomeCardMetadataView(original: _originalMetadata, builder: _buildHero);
+
+  Widget _buildHero(BuildContext context, HomeCardMetadataState metadata) {
     final app = AppThemeScope.of(context);
-    final item = presentedMetadata!;
-    final background = usesMetadataProvider(MetadataCategory.backgrounds) ? item.background : widget.background;
-    final description = usesMetadataProvider(MetadataCategory.information) ? item.description : widget.description;
+    final item = metadata.presented;
+    final background = metadata.usesProvider(MetadataCategory.backgrounds)
+        ? item.background
+        : widget.background;
+    final description = metadata.usesProvider(MetadataCategory.information)
+        ? item.description
+        : widget.description;
     final isTelevision = widget.isTelevision;
     final height = widget.height;
     final rating = widget.rating;
     final compact = widget.compact;
     final scheme = Theme.of(context).colorScheme;
     final hasBackgroundArtwork = background != null && background.isNotEmpty;
-    final allowPosterFallback = !usesMetadataProvider(MetadataCategory.backgrounds) ||
-        metadataPreferences.fallback;
-    final bg = hasBackgroundArtwork ? background : (allowPosterFallback ? item.poster ?? '' : '');
-    final runtime = usesMetadataProvider(MetadataCategory.information) ? item.runtime : widget.runtime;
+    final allowPosterFallback =
+        !metadata.usesProvider(MetadataCategory.backgrounds) ||
+        metadata.effectivePreferences.fallback;
+    final bg = hasBackgroundArtwork
+        ? background
+        : (allowPosterFallback ? item.poster ?? '' : '');
+    final runtime = metadata.usesProvider(MetadataCategory.information)
+        ? item.runtime
+        : widget.runtime;
     // Chip-grammar meta line (type · year · runtime · genres, then the IMDb
     // mark) — replaces the old bordered type pill + star line for the flatter
     // OTT look. Facts-first order on purpose: the line ellipsizes from the
@@ -736,7 +747,11 @@ class _HeroSpotlightState extends State<_HeroSpotlight>
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  _cascade(_buildTitleArt(), 0.08, 0.72),
+                                  _cascade(
+                                    _buildTitleArt(metadata),
+                                    0.08,
+                                    0.72,
+                                  ),
                                   SizedBox(height: compact ? 6 : 10),
                                   // Meta chips + plot fade away while the ambient trailer
                                   // plays (boxed mode) — the title art above holds the
@@ -890,10 +905,12 @@ class _HeroSpotlightState extends State<_HeroSpotlight>
   }
 
   /// The hero's title — see [_HeroTitleArt] for the image-first grammar.
-  Widget _buildTitleArt() {
+  Widget _buildTitleArt(HomeCardMetadataState metadata) {
     return _HeroTitleArt(
-      title: presentedMetadata!.name,
-      logoUrl: usesMetadataProvider(MetadataCategory.backgrounds) ? presentedMetadata!.logo : widget.logo,
+      title: metadata.presented.name,
+      logoUrl: metadata.usesProvider(MetadataCategory.backgrounds)
+          ? metadata.presented.logo
+          : widget.logo,
       compact: widget.compact,
       isTelevision: widget.isTelevision,
     );

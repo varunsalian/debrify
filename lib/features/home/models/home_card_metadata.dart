@@ -22,6 +22,10 @@ class HomeCardMetadataState {
   MetadataPreferences get effectivePreferences =>
       preferences ?? MetadataPreferences();
 
+  bool usesProvider(MetadataCategory category) =>
+      preferences != null &&
+      preferences!.provider(category) != MetadataPreferences.current;
+
   bool artworkPending(MetadataCategory category) =>
       (original.type == 'movie' || original.type == 'series') &&
       (preferences == null ||
