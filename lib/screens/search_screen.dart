@@ -3271,19 +3271,11 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       // `skip` by the addon's RAW counts so paging never under-advances into a
       // false "exhausted", and with hide-watched on it tops the window up so a
       // page of watched titles doesn't end the row early.
-      final seen = section.items.map((m) => m.id).toSet();
-      final page = await fetchFilteredPage(
-        (skip, onRaw) => currentIndex() < 0
-            ? Future.value(const <StremioMeta>[])
-            : _stremio.fetchCatalog(
-          section.addon,
-          section.catalog,
-          skip: skip,
-          onRawCount: onRaw,
-        ),
+      final page = await _homeCatalogController.fetchRowPage(
+        (section.addon, section.catalog),
         skip: section.nextSkip,
-        hides: WatchedFilter.predicate,
-        seenIds: seen,
+        existingIds: section.items.map((item) => item.id),
+        isCurrent: () => currentIndex() >= 0,
       );
       // Progressive arrivals can move the SAME row. Only a removed/replaced
       // row or a changed session invalidates its page, not a new numeric index.

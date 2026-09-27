@@ -1,5 +1,6 @@
 import '../../../models/stremio_addon.dart';
 import '../../../services/home_catalog_refresh.dart';
+import '../../../services/filtered_catalog_pager.dart';
 import '../models/home_catalog_plan.dart';
 
 /// Catalog access and parallel row loading. The caller owns cursor reservation,
@@ -20,6 +21,26 @@ class HomeCatalogRepository {
   )
   fetchPage;
   final bool Function(StremioMeta)? Function() readHides;
+
+  /// Reads one horizontal page without mutating the displayed legacy row.
+  /// A moved row remains eligible; the caller checks its identity and profile
+  /// before every raw request and again before publishing the returned page.
+  Future<FilteredPage> fetchRowPage(
+    HomeCatalogReference reference, {
+    required int skip,
+    required Iterable<String> existingIds,
+    required bool Function() isCurrent,
+  }) {
+    final seen = existingIds.toSet();
+    return fetchFilteredPage(
+      (cursor, onRawCount) => isCurrent()
+          ? fetchPage(reference.$1, reference.$2, cursor, onRawCount)
+          : Future.value(const <StremioMeta>[]),
+      skip: skip,
+      hides: readHides(),
+      seenIds: seen,
+    );
+  }
 
   Future<List<CatalogSection>> fetchBatch(
     List<HomeCatalogReference> references, {

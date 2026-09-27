@@ -2,6 +2,7 @@ import '../models/home_board_configuration.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../models/stremio_addon.dart';
+import '../../../services/filtered_catalog_pager.dart';
 import '../models/home_catalog_plan.dart';
 import '../data/home_catalog_repository.dart';
 import 'home_catalog_dependencies.dart';
@@ -107,6 +108,20 @@ class HomeCatalogController extends Notifier<HomeCatalogState> {
   }
 
   Future<List<StremioAddon>> readAddons() => _repository.readAddons();
+
+  /// Horizontal requests belong to a displayed row, not the board generation:
+  /// a refresh may retain that same row. Publication remains identity-guarded.
+  Future<FilteredPage> fetchRowPage(
+    HomeCatalogReference reference, {
+    required int skip,
+    required Iterable<String> existingIds,
+    required bool Function() isCurrent,
+  }) => _repository.fetchRowPage(
+    reference,
+    skip: skip,
+    existingIds: existingIds,
+    isCurrent: isCurrent,
+  );
 
   /// Retain synchronous reservation and the repository's completion boundary.
   /// Generation ownership is checked before reserving; publication additionally
