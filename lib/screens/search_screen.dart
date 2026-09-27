@@ -29,6 +29,8 @@ import '../features/home/presentation/home_favorite_focus.dart';
 import '../features/home/models/home_tonight_card_info.dart';
 import '../features/home/application/home_stage_metadata.dart';
 import '../features/home/application/home_hero_metadata_policy.dart';
+import '../features/home/application/home_hero_metadata_loader.dart';
+import '../features/home/application/home_hero_metadata_dependencies.dart';
 import '../features/home/presentation/home_classic_layout.dart';
 import '../features/home/presentation/home_takeover_info.dart';
 import '../features/home/presentation/home_trailer_transitions.dart';
@@ -1433,8 +1435,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   final ValueNotifier<StremioMeta?> _heroEnriched = ValueNotifier<StremioMeta?>(
     null,
   );
-  int _heroReqId = 0;
-  Timer? _heroTimer;
+  late final ProviderSubscription<HomeHeroMetadataLoader>
+  _heroMetadataSubscription;
 
   /// Settle debounce for the hero SWAP itself (260ms): while DPAD focus flies
   /// across cards only the card visuals update; the spotlight (backdrop
@@ -1851,6 +1853,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     );
     _homeSettingsRefreshSubscription = ref.listenManual(
       homeSettingsRefreshProvider(homeSession),
+      (previous, next) {},
+    );
+    _heroMetadataSubscription = ref.listenManual(
+      homeHeroMetadataLoaderProvider(homeSession),
       (previous, next) {},
     );
     _homeLayoutPreferenceSubscription = ref.listenManual(
@@ -2686,7 +2692,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       }
     }
     _catalogDebounce?.cancel();
-    _heroTimer?.cancel();
+    _heroMetadataSubscription.read().dispose();
     _heroSwapTimer?.cancel();
     _heroTrailerTimer?.cancel();
     _tintTimer?.cancel();
@@ -2712,6 +2718,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     _pikpakOnlySubscription.close();
     _boundCountsSubscription.close();
     _homeSettingsRefreshSubscription.close();
+    _heroMetadataSubscription.close();
     _homeLayoutPreferenceSubscription.close();
     _heroTrailerPreferencesSubscription.close();
     _homeDefaultViewSubscription.close();
@@ -9009,8 +9016,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     if (!_heroActive) return;
     // Folders own the stage art too, but never request title metadata or video.
     if (item.type == 'folder') {
-      _heroTimer?.cancel();
-      _heroReqId++;
+      _heroMetadataSubscription.read().cancel();
       _heroSwapTimer?.cancel();
       _clearHeroTrailer();
       _clearHeroLiveIptv();
@@ -9587,42 +9593,16 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   /// omit `background`/`description` (they come from the /meta endpoint), so
   /// fetch them lazily — cached in [StremioService], and guarded against the
   /// focus moving on (req id) so a slow fetch never clobbers a newer hero.
-  Future<void> _enrichHero(StremioMeta item) async {
-    final reqId = ++_heroReqId;
-    final scope = ProfileRuntime.scope.value;
-    bool current() =>
-        mounted && reqId == _heroReqId && scope == ProfileRuntime.scope.value;
-    final prefs = await MetadataPreferencesService.loadForBackground(
-      isCurrent: current,
-    );
-    if (prefs == null) return;
-    _heroTimer?.cancel();
-    if (!needsHomeHeroMetadata(item, currentProvider: prefs.isCurrent)) return;
-    final imdb = item.imdbId ?? (item.id.startsWith('tt') ? item.id : null);
-    if (imdb == null && prefs.isCurrent) return;
-    // Short: on the board this only fires after the 260ms hero-swap settle.
-    _heroTimer = Timer(const Duration(milliseconds: 140), () async {
-      if (!current()) return;
-      try {
-        final originalDetails = imdb == null
-            ? item
-            : await _stremio.fetchMetaDetails(imdbId: imdb, type: item.type);
-        final presentation = await MetadataProviderService.instance.present(
-          mergeHeroMetadata(item, originalDetails),
-          preferences: prefs,
-          isRelevant: current,
-        );
-        final details = prefs.isCurrent ? originalDetails : presentation.item;
-        if (!current() || details == null) return;
-        _heroEnriched.value = HeroMetadataPresentation(details, prefs);
-        // The enrichment usually carries the real backdrop a catalog item
-        // lacked — upgrade the shell stage from the poster-blur to it.
-        _publishAmbientArt(item, _heroEnriched.value);
-      } catch (_) {
-        // Optional enrichment leaves the currently rendered hero intact.
-      }
-    });
-  }
+  Future<void> _enrichHero(StremioMeta item) =>
+      _heroMetadataSubscription.read().load(
+        item,
+        isCurrent: () => mounted,
+        onResolved: (details) {
+          _heroEnriched.value = details;
+          // Publish after enrichment so shell listeners see the accepted value.
+          _publishAmbientArt(item, _heroEnriched.value);
+        },
+      );
 
   // ── Search field ─────────────────────────────────────────────────────────
 

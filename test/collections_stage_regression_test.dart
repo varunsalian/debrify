@@ -104,8 +104,14 @@ void main() {
       start,
       source.indexOf('// A catalog/CW card owns', start),
     );
-    expect(body, contains('_heroReqId++'));
-    expect(body, contains('_heroTimer?.cancel()'));
+    const cancel = '_heroMetadataSubscription.read().cancel()';
+    expect(body, contains(cancel));
+    // The loader's executable cancellation tests cover request retirement;
+    // this guard checks the folder caller invokes it before replacing the hero.
+    expect(
+      body.indexOf(cancel),
+      lessThan(body.indexOf('_heroItem.value = item')),
+    );
     expect(body, contains('_clearHeroTrailer()'));
     expect(body, contains('_clearHeroLiveIptv()'));
     expect(body, contains('_heroItem.value = item'));
