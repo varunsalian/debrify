@@ -1,3 +1,4 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'dart:async';
 import 'dart:ui' show PointerDeviceKind;
 
@@ -1317,8 +1318,10 @@ void main() {
       contentType: 'live',
     );
     await tester.pumpWidget(
-      MaterialApp(
-        home: SpotlightIptvCardPreview(channel: channel, ambientVolume: volume),
+      ProviderScope(
+        child: MaterialApp(
+          home: SpotlightIptvCardPreview(channel: channel, ambientVolume: volume),
+        ),
       ),
     );
 
