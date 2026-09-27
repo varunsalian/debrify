@@ -8,6 +8,7 @@ import '../features/home/presentation/home_stage_row_label.dart';
 import '../features/home/presentation/home_tonight_layout.dart';
 import '../features/home/presentation/home_tonight_header.dart';
 import '../features/home/presentation/home_tonight_queue_list.dart';
+import '../features/home/presentation/home_stage_hold_latch.dart';
 import '../features/home/presentation/home_canvas_tabs.dart';
 import '../features/home/presentation/home_canvas_shelf.dart';
 import '../features/home/presentation/home_canvas_layout.dart';
@@ -2183,7 +2184,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         // _onTakeoverKey.
         _heroTrailerShowing.addListener(_onCanvasTrailerShowingChanged);
         HardwareKeyboard.instance.addHandler(_onCanvasTheaterKey);
-        HardwareKeyboard.instance.addHandler(_onStageHoldKey);
+        HardwareKeyboard.instance.addHandler(_stageHold.handleKeyEvent);
       } else {
         // Off-TV Home: system Back closes the Spotlight search sheet before
         // anything else may handle it. Routed through the bridge's tab-back
@@ -2640,7 +2641,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     if (widget.isTelevision && !widget.searchMode && !widget.discoverMode) {
       _heroTrailerShowing.removeListener(_onCanvasTrailerShowingChanged);
       HardwareKeyboard.instance.removeHandler(_onCanvasTheaterKey);
-      HardwareKeyboard.instance.removeHandler(_onStageHoldKey);
+      HardwareKeyboard.instance.removeHandler(_stageHold.handleKeyEvent);
     }
     _canvasTheaterTimer?.cancel();
     _canvasFavFocus.dispose();
@@ -6162,7 +6163,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     _pendingStageRightAt = null;
     _pendingStageRightCol = -1;
     _pendingStageRightOrigin = null;
-    _stageHoldLatchedKey = null;
+    _stageHold.reset();
     _stageGeneration++;
   }
 
@@ -7350,39 +7351,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   /// zone currently owns focus".
   bool _tonightZoneIsQueue = true;
 
-  /// A hold-jump fired: swallow the REST OF THAT HOLD. Without it a single
-  /// long press would jump zones and then keep acting on the cell it landed
-  /// on — repeats keep arriving, and the new cell never saw the key-down that
-  /// started them.
-  ///
-  /// Latched to the specific key until its key-up rather than to a timer: a
-  /// timer both let an uninterrupted hold resume once it expired AND ate a
-  /// deliberate tap made inside the window. Other keys are never affected.
-  LogicalKeyboardKey? _stageHoldLatchedKey;
-
-  bool _stageHoldSwallow(LogicalKeyboardKey key) => _stageHoldLatchedKey == key;
-
-  /// Perform a zone jump and latch the key. [jump] reports whether it
-  /// actually moved focus — a jump that found nothing mounted must NOT latch,
-  /// or the rest of the hold is swallowed for a move that never happened.
-  void _stageHoldJump(LogicalKeyboardKey key, bool Function() jump) {
-    if (_stageHoldSwallow(key)) return;
-    if (jump()) _stageHoldLatchedKey = key;
-  }
-
-  /// Global observer (registered with the theater handler): releases the hold
-  /// latch when the key is let go. Returns false — it never consumes the key.
-  /// A fresh key-DOWN of the same key also clears it, so a dropped key-up
-  /// (focus change, app backgrounded) can't latch it forever.
-  bool _onStageHoldKey(KeyEvent event) {
-    final latched = _stageHoldLatchedKey;
-    if (latched == null) return false;
-    if (event.logicalKey != latched) return false;
-    if (event is KeyUpEvent || event is KeyDownEvent) {
-      _stageHoldLatchedKey = null;
-    }
-    return false;
-  }
+  final HomeStageHoldLatch _stageHold = HomeStageHoldLatch();
 
   /// Remembered row within the queue — the INDEX is only a fallback. CW rows
   /// stream in and prepend (Trakt/Simkl land seconds after a cold start), so
@@ -8507,18 +8476,18 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
 
     final onUp = col - perRow >= 0
         ? () {
-            if (_stageHoldSwallow(LogicalKeyboardKey.arrowUp)) return;
+            if (_stageHold.swallows(LogicalKeyboardKey.arrowUp)) return;
             focusAt(col - perRow);
           }
         : () {
-            if (_stageHoldSwallow(LogicalKeyboardKey.arrowUp)) return;
+            if (_stageHold.swallows(LogicalKeyboardKey.arrowUp)) return;
             _stageSwitchRail(-1);
           };
     // DOWN steps a whole line, and at the LAST line always leaves for the
     // next rail (prefetching on the way out, so coming back finds more).
     // Consuming DOWN to paginate would trap the user inside a long catalog.
     Null onDown() {
-      if (_stageHoldSwallow(LogicalKeyboardKey.arrowDown)) return;
+      if (_stageHold.swallows(LogicalKeyboardKey.arrowDown)) return;
       if (col + perRow < count) {
         prefetch();
         focusAt(col + perRow);
@@ -8531,11 +8500,11 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     // A catalog keeps paging for as long as it has more, so the last grid
     // line is a moving target and DOWN alone can never reliably reach the
     // next rail. HOLDING the key changes rail from anywhere in the grid.
-    void onUpHold() => _stageHoldJump(LogicalKeyboardKey.arrowUp, () {
+    void onUpHold() => _stageHold.jump(LogicalKeyboardKey.arrowUp, () {
       _stageSwitchRail(-1);
       return true;
     });
-    void onDownHold() => _stageHoldJump(LogicalKeyboardKey.arrowDown, () {
+    void onDownHold() => _stageHold.jump(LogicalKeyboardKey.arrowDown, () {
       _stageSwitchRail(1);
       return true;
     });
@@ -9008,7 +8977,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
           onOpen: () => cw.onOpen(item),
           onLongPress: () => _openCwCardMenu(cw, item, e.rail.cwIndex, e.col),
           onUp: () {
-            if (_stageHoldSwallow(LogicalKeyboardKey.arrowUp)) return;
+            if (_stageHold.swallows(LogicalKeyboardKey.arrowUp)) return;
             if (i > 0) {
               _nearestMountedNode(
                 queue[i - 1].rail.cw!.nodes,
@@ -9017,7 +8986,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
             }
           },
           onDown: () {
-            if (_stageHoldSwallow(LogicalKeyboardKey.arrowDown)) return;
+            if (_stageHold.swallows(LogicalKeyboardKey.arrowDown)) return;
             if (i + 1 < queue.length) {
               _nearestMountedNode(
                 queue[i + 1].rail.cw!.nodes,
@@ -9032,7 +9001,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
           // source flattened into one column, so stepping past it a
           // row at a time can be a long walk.
           onDownHold: hasRail
-              ? () => _stageHoldJump(
+              ? () => _stageHold.jump(
                   LogicalKeyboardKey.arrowDown,
                   _tonightFocusRail,
                 )
@@ -9057,7 +9026,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     // UP walks back through the rails and then into the queue — the two zones
     // are one vertical column.
     void up() {
-      if (_stageHoldSwallow(LogicalKeyboardKey.arrowUp)) return;
+      if (_stageHold.swallows(LogicalKeyboardKey.arrowUp)) return;
       if (view.index > 0) {
         _stageSwitchRail(-1);
       } else if (queueAbove) {
@@ -9066,14 +9035,14 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     }
 
     void down() {
-      if (_stageHoldSwallow(LogicalKeyboardKey.arrowDown)) return;
+      if (_stageHold.swallows(LogicalKeyboardKey.arrowDown)) return;
       _stageSwitchRail(1);
     }
 
     // HELD up: back to the Continue queue from any rail, the mirror of the
     // queue's held DOWN.
     final upHold = queueAbove
-        ? () => _stageHoldJump(LogicalKeyboardKey.arrowUp, _tonightFocusQueue)
+        ? () => _stageHold.jump(LogicalKeyboardKey.arrowUp, _tonightFocusQueue)
         : null;
 
     return Column(
