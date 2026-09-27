@@ -1,3 +1,4 @@
+import '../features/home/application/home_mdblist_continuation_dependencies.dart';
 import '../features/home/models/home_mdblist_continuation.dart';
 import '../features/home/application/home_simkl_continuation_controller.dart';
 import '../features/home/models/home_simkl_continuation.dart';
@@ -191,7 +192,6 @@ import '../widgets/see_all/mdblist_list_card.dart';
 import '../services/mdblist/mdblist_list_source.dart';
 import '../services/mdblist/mdblist_service.dart';
 import '../services/mdblist/mdblist_continue_watching_service.dart';
-import '../services/mdblist/mdblist_sync_coordinator.dart';
 import '../services/mdblist/mdblist_models.dart';
 import '../services/mdblist/mdblist_menu_helpers.dart';
 import '../widgets/see_all/stremio_dropdown.dart';
@@ -5414,10 +5414,15 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     bool force = false,
   }) async {
     final token = ++_mdblistCwToken;
+    bool current() =>
+        mounted &&
+        token == _mdblistCwToken &&
+        _profileSessionOwner == ProfileSessionMemory.captureOwner();
     debugPrint(
       '[MDBListDiag] Home CW load start token=$token '
       'refreshBound=$refreshBound force=$force flag=$kMdblistEnabled',
     );
+    if (!current()) return;
     if (!kMdblistEnabled) {
       if (!mounted) return;
       setState(() {
@@ -5428,13 +5433,12 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       });
       return;
     }
-    await MdblistSyncCoordinator.instance.synchronizeInvalidations();
-    if (!mounted || token != _mdblistCwToken) return;
-    final result = await MdblistContinueWatchingService.instance.fetch(
-      force: force,
-    );
+    final result = await ref
+        .read(homeMdblistContinuationRepositoryProvider)
+        .read(force: force, isCurrent: current);
+    if (result == null) return;
     await _ensureCwMergeFlags();
-    if (!mounted || token != _mdblistCwToken || !result.isUsable) {
+    if (!current() || !result.isUsable) {
       debugPrint(
         '[MDBListDiag] Home CW load discarded token=$token mounted=$mounted '
         'currentToken=$_mdblistCwToken kind=${result.kind.name}',
