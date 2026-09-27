@@ -340,11 +340,13 @@ const double _kArtTitleHeight = 1.25;
 const int _kArtTitleMaxLines = 2;
 
 /// Height of the caption band under an [_ArtPoster]: the gap plus its up-to-two
-/// lines at the current text scale.
+/// lines at the current text scale. Paragraph layout rounds each line separately:
+/// two 17.5px lines render at 18px each, so reserve whole pixels per line.
 double _artPosterCaptionBand(BuildContext context) =>
     _kArtTitleGap +
-    MediaQuery.textScalerOf(context).scale(_kArtTitleFontSize) *
-        _kArtTitleHeight *
+    (MediaQuery.textScalerOf(context).scale(_kArtTitleFontSize) *
+                _kArtTitleHeight)
+            .ceilToDouble() *
         _kArtTitleMaxLines;
 
 // Metrics for the Canvas bottom column (rail tabs + shelf). Same contract as

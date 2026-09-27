@@ -1,7 +1,7 @@
 # Search screen incremental refactoring plan
 
 Status: implementation started on `refactor/search-screen`; the automated baseline
-and phases 1–3 are reviewed. Phases 4A catalog and 4B keyword extraction are implemented and reviewed; phase 4C source selection and phase 5 Home extraction are in progress. Remaining device/performance checks are pending.
+and phases 1–3 are reviewed. Phases 4A catalog and 4B keyword extraction are implemented and reviewed; phase 4C source selection, phase 5 Home extraction and phase 6 layout extraction are in progress. Remaining device/performance checks are pending.
 Reviews and actual results are recorded in the
 [implementation evidence](search-screen-evidence.md).
 
@@ -2486,11 +2486,67 @@ successful tests. This closes the Stage composition extraction, not native previ
 performance parity, the favourites-caption overflow, Home layouts or final facade
 and size/boundary gates.
 
-- Reproduce and correct the pre-existing `_ArtPoster` favourites-caption overflow
-  found in phase 5: at 800×600, show `Channel fixture`, focus it, refresh with a
-  database failure, then clear the favourites. Original and extracted screens both
-  report a one-pixel bottom overflow (102×198 Column). Add regression coverage with
-  actual font metrics and longer captions; compact-label state tests do not close it.
+#### Reviewed caption-height correction (intentional bug fix)
+
+The phase-5 overflow was rechecked against `62f24fd8`. A `RenderParagraph`/
+`TextPainter` probe measures two 18px lines (36px total), while the shared caption
+budget reserved `14 × 1.25 × 2 = 35px`. The correction rounds each scaled line's
+reservation upward before multiplying by the maximum line count. Every existing
+favourites cell/hero/Stage/Mosaic consumer still uses the same shared budget;
+poster aspect ratios, typography, title visibility, focus and refresh logic remain
+unchanged. This deliberately adds 1px at normal scale (0.25px at scale 1.25),
+rather than clipping text or reducing its size. Integer line heights are unchanged.
+
+`test/features/home/home_favorite_caption_layout_test.dart` exercises the actual
+SearchScreen and preference/database adapters with a fake channel database: publish
+a long title, focus it, fail a refresh while retaining the caption, clear favourites,
+and dispose. Twelve scenarios cover 800×600/1280×720, scales 1/1.25/2 and real bundled
+Inter/Poppins faces. The test validates each asset's TrueType header and the rendered
+font/scale; it does not silently rely on the invalid legacy Roboto font asset.
+It asserts no framework exception at each transition and stable caption size through
+failed refresh. Absolute position is intentionally not pinned: existing focus
+handling scrolls the card into view. An initial position assertion was corrected;
+failed diagnostic receipts are retained.
+
+With the final regression assertions, the original screen passes 32 focused cases
+and fails eight new overflow cases; after the fix all 40 pass. The four scale-2
+cases already passed because their 35px line height needs no rounding. Existing
+TV/IPTV/Stremio favourites, watchlist and playlist checks remain passing. Analyzer
+identities remain exactly 863, and the 313-file architecture guard passes. Evidence:
+`caption-*`, `analyze-caption-*` and `full-caption*` under
+`.git/refactor-evidence/phase5/`. The first full-suite run
+reproduced the previously recorded remote-transfer `.part` cleanup race and profile
+identity-save timing failure. The unchanged transfer service publishes completion
+before awaiting receipt persistence and partial-file deletion; the failing test
+asserts immediate deletion. The profile test uses fixed wall-clock settling before
+reading the saved name. Both test files pass independently (23 tests); the full run
+ended after the profile-test cleanup timeout. Its terminal result is 8,945 successes,
+23 failures / 30 errors and 20 skips; exact comparison changes only those two prior
+passing tests and adds all twelve new successes. An unchanged full-suite repeat
+completed with 8,947 successes, the same 22 failures / 29 errors and 20 skips.
+Exact identity comparison against `full-discover-stage.jsonl` preserves every prior
+outcome and adds exactly twelve successes (`full-caption-verified*` and
+`caption-verified-comparison.txt`). No production code, test assertion or failure
+allowance for these unrelated issues was changed. This closes the reproduced Latin-caption geometry
+defect at the checked fonts/scales, not all-font,
+native-renderer or whole-Home layout parity. Shared metrics and `_ArtPoster` still
+need their planned presentation extraction; no new structural exception is added.
+
+Home layout inventory rechecked against `kTvHomeStyleChoices` in
+`lib/screens/settings/tv_home_style_page.dart` and `_buildBoardContent`: all eight
+choices are enabled—Classic, Spotlight, Canvas, Atrium, Mosaic, Promenade, Deck and
+Tonight. The six stage styles have their own board builders; Classic remains the
+inline fallback and Spotlight has its own builder. Off-TV resolution deliberately
+exposes only Classic/Spotlight without rewriting the stored TV preference. TV Search
+uses `_buildSearchSpotlightBoard` before Home-style dispatch. Spotlight with only
+favourites falls through to Classic because its shelves do not render those models.
+These dispatch/fallback cases must survive the layout extraction. The next leaf
+boundary is `_ArtPoster` plus its caption metrics: all twelve production call sites
+are in SearchScreen, and its focus node/callbacks are borrowed view inputs; it does
+not need a new application controller or DI registration.
+
+Remaining phase-6 work:
+
 - Separate Discover selection/hydration from its grid/stage presentation. Preserve
   user-choice precedence over late startup defaults and Search handoff precedence.
 - Extract one Home layout at a time, including current Classic/Spotlight and
