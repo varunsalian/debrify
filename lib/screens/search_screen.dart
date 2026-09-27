@@ -1,3 +1,6 @@
+import '../features/home/presentation/home_source_editor.dart';
+import '../features/home/application/home_source_editing_dependencies.dart';
+import '../features/sources/presentation/local_source_picker_composition.dart';
 import '../features/home/application/home_local_history_removal_dependencies.dart';
 import '../features/home/presentation/home_continuation_row.dart';
 import '../features/home/presentation/home_catalog_row.dart';
@@ -178,7 +181,6 @@ import '../features/home/data/home_tracker_resume_repository.dart';
 import '../features/home/data/home_catalog_playback_payload.dart';
 import '../features/home/presentation/home_catalog_playback_bridge.dart';
 import '../features/home/models/home_catalog_origin.dart';
-import '../widgets/clear_pinned_sources_button.dart';
 import '../services/profiles/profile_runtime.dart';
 import 'metadata_explore_page.dart';
 import '../models/metadata_preferences.dart';
@@ -226,13 +228,11 @@ import '../services/hide_watched_prefs.dart';
 import '../services/watched_filter.dart';
 import '../services/iptv_cw_router.dart';
 import '../services/iptv_media_store.dart';
-import '../services/local_bound_source_service.dart';
 import '../services/main_page_bridge.dart';
 import '../models/profiles/profile_policy.dart';
 import '../services/profiles/profile_policy_guard.dart';
 import '../services/playlist_player_service.dart';
 import '../services/profiles/profile_session_memory.dart';
-import '../services/series_source_service.dart';
 import '../services/stremio_iptv_service.dart';
 import '../services/stremio_service.dart';
 import '../services/next_episode_service.dart';
@@ -259,7 +259,6 @@ import '../utils/format_tag_detector.dart';
 import '../utils/tv_keys.dart';
 import '../utils/tv_search_focus_handoff.dart';
 import '../services/youtube_service.dart';
-import '../widgets/add_source_picker_dialog.dart';
 import '../widgets/debrid_action_sheet.dart';
 import '../features/home/presentation/home_continue_watching_actions.dart';
 import '../features/home/application/home_cw_hold_preference.dart';
@@ -298,13 +297,8 @@ import '../services/simkl/simkl_menu_helpers.dart';
 import 'catalog_item_detail_screen.dart';
 import 'merged_series_detail_screen.dart';
 import '../features/home/application/home_layout_policy.dart';
-import 'debrid_downloads_screen.dart';
 import 'episodes_screen.dart';
 import 'stremio_tv/widgets/stremio_tv_catalog_picker_dialog.dart';
-import 'torbox/torbox_downloads_screen.dart';
-import 'premiumize/premiumize_files_screen.dart';
-import 'alldebrid/alldebrid_files_screen.dart';
-import 'pikpak/pikpak_files_screen.dart';
 
 
 /// TV focus ring for board cards — violet-300, deliberately LIGHTER than the
@@ -10717,501 +10711,22 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     }
   }
 
-  /// "Select/Edit Source" entry: edit dialog when a source is already bound,
-  /// otherwise the add-source picker.
   Future<void> _handleEditOrSelectSource(StremioMeta item) async {
-    final imdb = _imdbOf(item);
-    final bound = imdb == null
-        ? const <SeriesSource>[]
-        : await SeriesSourceService.getSources(imdb);
-    if (!mounted) return;
-    if (bound.isNotEmpty) {
-      await _showEditSourceDialog(item, bound);
-    } else {
-      await _showAddSourcePicker(item);
-    }
-  }
-
-  /// Manage the bound sources for [item]: list them, reorder by priority
-  /// (series — first match wins), delete individually, Remove All, or add
-  /// another via the picker. Ported from the catalog/aggregated detail flow.
-  Future<void> _showEditSourceDialog(
-    StremioMeta item,
-    List<SeriesSource> initial,
-  ) async {
-    final imdbId = _imdbOf(item);
-    if (imdbId == null) return;
-    final isMovie = item.type == 'movie';
-    final sources = List<SeriesSource>.of(initial);
-    if (sources.isEmpty) return;
-
-    // [closeIfEmpty] pops the dialog via its OWN route (passed in from the
-    // builder) when the last source is removed — robust to nested navigators,
-    // and a callback (not a BuildContext) so it's safe across the awaits here.
-    Future<void> refreshInto(
-      void Function(void Function()) setDialogState,
-      VoidCallback closeIfEmpty,
-    ) async {
-      final updated = await SeriesSourceService.getSources(imdbId);
-      if (!mounted) return;
-      setDialogState(() {
-        sources
-          ..clear()
-          ..addAll(updated);
-      });
-      await _refreshBoundSources();
-      if (updated.isEmpty) closeIfEmpty();
-    }
-
-    await showDialog<void>(
+    if (!_catalogNavigationCurrent()) return;
+    await HomeSourceEditor(
       context: context,
-      builder: (dialogContext) {
-        return StatefulBuilder(
-          builder: (dialogContext, setDialogState) {
-            final app = AppThemeScope.of(dialogContext);
-            void closeIfEmpty() {
-              if (dialogContext.mounted) Navigator.of(dialogContext).pop();
-            }
-
-            return Dialog(
-              backgroundColor: const Color(0xFF1E293B),
-              shape: RoundedRectangleBorder(borderRadius: app.shape.br(16)),
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(
-                  maxWidth: 450,
-                  maxHeight: 500,
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.all(20),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Row(
-                        children: [
-                          const Icon(
-                            Icons.link_rounded,
-                            color: Color(0xFF60A5FA),
-                            size: 24,
-                          ),
-                          const SizedBox(width: 8),
-                          Text(
-                            isMovie
-                                ? 'Movie Source'
-                                : 'Series Sources (${sources.length})',
-                            style: const TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
-                      ),
-                      if (!isMovie) ...[
-                        const SizedBox(height: 4),
-                        const Align(
-                          alignment: Alignment.centerLeft,
-                          child: Text(
-                            'First match wins — reorder by priority',
-                            style: TextStyle(
-                              color: Colors.white38,
-                              fontSize: 11,
-                            ),
-                          ),
-                        ),
-                      ],
-                      const SizedBox(height: 12),
-                      Flexible(
-                        child: isMovie
-                            ? ListView.builder(
-                                shrinkWrap: true,
-                                itemCount: sources.length,
-                                itemBuilder: (context, index) =>
-                                    _buildSourceListTile(
-                                      key: ValueKey(sources[index].bindingKey),
-                                      source: sources[index],
-                                      index: index,
-                                      showDragHandle: false,
-                                      onDelete: () async {
-                                        await SeriesSourceService.removeSourceEntry(
-                                          imdbId,
-                                          sources[index],
-                                        );
-                                        await refreshInto(
-                                          setDialogState,
-                                          closeIfEmpty,
-                                        );
-                                      },
-                                    ),
-                              )
-                            : ReorderableListView.builder(
-                                shrinkWrap: true,
-                                itemCount: sources.length,
-                                onReorder: (oldIndex, newIndex) {
-                                  if (newIndex > oldIndex) newIndex--;
-                                  setDialogState(() {
-                                    final moved = sources.removeAt(oldIndex);
-                                    sources.insert(newIndex, moved);
-                                  });
-                                  SeriesSourceService.setSources(
-                                    imdbId,
-                                    List.of(sources),
-                                  );
-                                  _refreshBoundSources();
-                                },
-                                proxyDecorator: (child, index, animation) =>
-                                    Material(
-                                      color: Colors.transparent,
-                                      elevation: 4,
-                                      child: child,
-                                    ),
-                                itemBuilder: (context, index) =>
-                                    _buildSourceListTile(
-                                      key: ValueKey(sources[index].bindingKey),
-                                      source: sources[index],
-                                      index: index,
-                                      onDelete: () async {
-                                        await SeriesSourceService.removeSourceEntry(
-                                          imdbId,
-                                          sources[index],
-                                        );
-                                        await refreshInto(
-                                          setDialogState,
-                                          closeIfEmpty,
-                                        );
-                                      },
-                                    ),
-                              ),
-                      ),
-                      const SizedBox(height: 12),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: FilledButton.icon(
-                              autofocus: true,
-                              onPressed: () {
-                                Navigator.of(dialogContext).pop();
-                                _showAddSourcePicker(item);
-                              },
-                              icon: Icon(
-                                isMovie
-                                    ? Icons.swap_horiz_rounded
-                                    : Icons.add_rounded,
-                                size: 18,
-                              ),
-                              label: Text(
-                                isMovie ? 'Change Source' : 'Add Source',
-                              ),
-                              style: FilledButton.styleFrom(
-                                backgroundColor: const Color(0xFF6366F1),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: app.shape.br(10),
-                                ),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: ClearPinnedSourcesButton(
-                              onClear: () async {
-                                await SeriesSourceService.removeAllSources(
-                                  imdbId,
-                                );
-                                await _refreshBoundSources();
-                                if (dialogContext.mounted) {
-                                  Navigator.of(dialogContext).pop();
-                                }
-                              },
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      TextButton(
-                        onPressed: () => Navigator.of(dialogContext).pop(),
-                        child: const Text(
-                          'Close',
-                          style: TextStyle(color: Colors.white54),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            );
-          },
-        );
-      },
-    );
-  }
-
-  /// Add-source picker: Torrent Search (imdb) / Keyword Search (free-text) /
-  /// Local file plus every configured cloud provider.
-  Future<void> _showAddSourcePicker(StremioMeta item) async {
-    final imdbId = _imdbOf(item);
-    if (imdbId == null) {
-      _snack('No IMDb match to pin a source for "${item.name}".');
-      return;
-    }
-    // Capture the navigator before the awaits so the RD/TorBox push closures
-    // don't reference `context` across an async gap.
-    final navigator = Navigator.of(context);
-    final rdKey = await StorageService.getApiKey();
-    final torboxKey = await StorageService.getTorboxApiKey();
-    final premiumizeKey = await StorageService.getPremiumizeApiKey();
-    final premiumizeIntegration =
-        await StorageService.getPremiumizeIntegrationEnabled();
-    final allDebridKey = await StorageService.getAllDebridApiKey();
-    final pikpakEnabled = await StorageService.getPikPakEnabled();
-    final rdEnabled = rdKey != null && rdKey.isNotEmpty;
-    final torboxEnabled = torboxKey != null && torboxKey.isNotEmpty;
-    final premiumizeEnabled =
-        premiumizeIntegration &&
-        premiumizeKey != null &&
-        premiumizeKey.isNotEmpty;
-    final allDebridEnabled = allDebridKey != null && allDebridKey.isNotEmpty;
-    if (!mounted) return;
-
-    final isMovie = item.type == 'movie';
-    final supportsLocal = !LocalBoundSourceService.isLocalBindingDisabled;
-
-    Future<void> saveSource(SeriesSource source) async {
-      if (isMovie) {
-        await SeriesSourceService.setSources(imdbId, [source]);
-      } else {
-        await SeriesSourceService.addSource(imdbId, source);
-      }
-      await _refreshBoundSources();
-    }
-
-    // No cloud providers and no local option → go straight to torrent search.
-    if (!rdEnabled &&
-        !torboxEnabled &&
-        !premiumizeEnabled &&
-        !allDebridEnabled &&
-        !pikpakEnabled &&
-        !supportsLocal) {
-      _openBindSources(item);
-      return;
-    }
-
-    await showAddSourcePickerDialog(
-      context,
-      onTorrentSearch: () => _openBindSources(item),
-      onKeywordSearch: () => _openKeywordBind(item),
-      onLocal: supportsLocal ? () => _pickAndSaveLocalSource(item) : null,
-      localDisabledReason: LocalBoundSourceService.localDisabledReason,
-      onRealDebrid: rdEnabled
-          ? () => navigator.push(
-              MaterialPageRoute(
-                builder: (_) => DebridDownloadsScreen(
-                  isPushedRoute: true,
-                  initialSearchQuery: item.name,
-                  selectSourceMode: true,
-                  onSourceSelected: saveSource,
-                ),
-              ),
-            )
-          : null,
-      onTorbox: torboxEnabled
-          ? () => navigator.push(
-              MaterialPageRoute(
-                builder: (_) => TorboxDownloadsScreen(
-                  isPushedRoute: true,
-                  initialSearchQuery: item.name,
-                  selectSourceMode: true,
-                  onSourceSelected: saveSource,
-                ),
-              ),
-            )
-          : null,
-      onPremiumize: premiumizeEnabled
-          ? () => navigator.push(
-              MaterialPageRoute(
-                builder: (_) => PremiumizeFilesScreen(
-                  isPushedRoute: true,
-                  initialSearchQuery: item.name,
-                  selectSourceMode: true,
-                  onSourceSelected: saveSource,
-                ),
-              ),
-            )
-          : null,
-      onAllDebrid: allDebridEnabled
-          ? () => navigator.push(
-              MaterialPageRoute(
-                builder: (_) => AllDebridFilesScreen(
-                  isPushedRoute: true,
-                  initialSearchQuery: item.name,
-                  selectSourceMode: true,
-                  onSourceSelected: saveSource,
-                ),
-              ),
-            )
-          : null,
-      onPikPak: pikpakEnabled
-          ? () => navigator.push(
-              MaterialPageRoute(
-                builder: (_) => PikPakFilesScreen(
-                  isPushedRoute: true,
-                  selectSourceMode: true,
-                  onSourceSelected: saveSource,
-                ),
-              ),
-            )
-          : null,
-    );
-  }
-
-  Future<void> _pickAndSaveLocalSource(StremioMeta item) async {
-    final imdbId = _imdbOf(item);
-    if (imdbId == null) return;
-    final SeriesSource? source;
-    if (item.type == 'series') {
-      source = await LocalBoundSourceService.pickSeriesSource(
-        context,
-        title: item.name,
-      );
-    } else {
-      source = await LocalBoundSourceService.pickMovieSource(
-        context,
-        title: item.name,
-        year: item.year,
-      );
-    }
-    if (source == null) return;
-    if (item.type == 'series') {
-      await SeriesSourceService.addSource(imdbId, source);
-    } else {
-      await SeriesSourceService.setSources(imdbId, [source]);
-    }
-    await _refreshBoundSources();
-    if (!mounted) return;
-    _snack('Local source set: ${source.torrentName}');
-  }
-
-  /// One bound-source row for the edit dialog (index badge, name, provider
-  /// chip, delete). Ported from the catalog/aggregated detail flow.
-  Widget _buildSourceListTile({
-    required Key key,
-    required SeriesSource source,
-    required int index,
-    required VoidCallback onDelete,
-    bool showDragHandle = true,
-  }) {
-    final app = AppThemeScope.of(context);
-    Color serviceColor;
-    String serviceLabel;
-    switch (source.debridService) {
-      case 'rd':
-        serviceColor = const Color(0xFF10B981);
-        serviceLabel = 'Real-Debrid';
-      case 'torbox':
-        serviceColor = const Color(0xFF3B82F6);
-        serviceLabel = 'TorBox';
-      case 'pikpak':
-        serviceColor = const Color(0xFFF59E0B);
-        serviceLabel = 'PikPak';
-      case 'premiumize':
-        serviceColor = const Color(0xFFFB923C);
-        serviceLabel = 'Premiumize';
-      case 'alldebrid':
-        serviceColor = const Color(0xFF26A69A);
-        serviceLabel = 'AllDebrid';
-      case SeriesSource.localService:
-        serviceColor = const Color(0xFF60A5FA);
-        serviceLabel = 'Local';
-      case SeriesSource.addonDirectService:
-        serviceColor = const Color(0xFFA78BFA);
-        serviceLabel = 'Direct addon';
-      case SeriesSource.iptvDirectService:
-        serviceColor = const Color(0xFFEF4444);
-        serviceLabel = 'IPTV';
-      default:
-        serviceColor = Colors.white54;
-        serviceLabel = source.debridService;
-    }
-
-    return Container(
-      key: key,
-      margin: const EdgeInsets.only(bottom: 6),
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-      decoration: BoxDecoration(
-        color: app.fade(app.core.tx, 0.05),
-        borderRadius: app.shape.br(8),
-        border: Border.all(color: app.fade(app.core.tx, 0.08)),
+      item: item,
+      id: _imdbOf(item),
+      repository: ref.read(
+        homeSourceEditingRepositoryProvider(_profileSessionOwner),
       ),
-      child: Row(
-        children: [
-          if (showDragHandle) ...[
-            Container(
-              width: 22,
-              height: 22,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: const Color(0xFF60A5FA).withValues(alpha: 0.15),
-                borderRadius: app.shape.br(6),
-              ),
-              child: Text(
-                '${index + 1}',
-                style: const TextStyle(
-                  color: Color(0xFF60A5FA),
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ),
-            const SizedBox(width: 8),
-          ],
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  source.torrentName,
-                  style: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
-                  ),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 3),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 5,
-                    vertical: 1,
-                  ),
-                  decoration: BoxDecoration(
-                    color: serviceColor.withValues(alpha: 0.15),
-                    borderRadius: app.shape.br(3),
-                  ),
-                  child: Text(
-                    serviceLabel,
-                    style: TextStyle(
-                      color: serviceColor,
-                      fontSize: 10,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          IconButton(
-            icon: Icon(Icons.close_rounded, size: 16, color: app.home.danger),
-            onPressed: onDelete,
-            tooltip: 'Remove source',
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
-          ),
-          if (showDragHandle)
-            Icon(
-              Icons.drag_handle_rounded,
-              size: 18,
-              color: app.core.tx.withValues(alpha: 0x3D / 0xFF),
-            ),
-        ],
-      ),
-    );
+      localPicker: ref.read(localSourcePickerProvider),
+      isCurrent: _catalogNavigationCurrent,
+      refreshBindings: _refreshBoundSources,
+      showMessage: _snack,
+      openTorrent: _openBindSources,
+      openKeyword: _openKeywordBind,
+    ).open();
   }
 
   Future<void> _addToStremioTvFromDetail(StremioMeta item) async {

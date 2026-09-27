@@ -6,6 +6,48 @@ workflow checkpoints, reuse valid evidence, and run broader checks at integratio
 gates. Earlier entries retain their original slice history. No changes are pushed
 to the public repository.
 
+## Batch A checkpoint: Home source editing — 2026-09-28
+
+The complete detail source-edit/add workflow now lives in `HomeSourceEditor`
+(444 lines), with a separate source-row presentation function (127 lines) and
+`HomeSourceEditingRepository` (121 lines), wired through a scoped Riverpod factory.
+The parent retains one guarded entry point; its direct SeriesSourceService,
+LocalBoundSourceService, credential reads, provider-screen construction and old
+editor implementation are removed. The native picker is borrowed from the existing
+Sources composition. No new cache, state controller or persistence format.
+
+The repository reuses SeriesSourceService's live-profile/mutation guards and
+rejects foreign captured zones as the existing Sources adapter does. It retains
+series append/dedupe, movie replacement, exact removal, complete-list order and
+sequential provider availability reads. Clear-all uses the equivalent guarded
+empty-list replacement instead of the unguarded remove-all API.
+
+Explicit interaction fixes: reorder now waits for persistence before refreshing
+badges; delayed reloads check that the dialog still exists; closing an emptied
+editor targets its own route, preserving any newer route. Entry, picker returns,
+provider handoffs and saves reject retired views/profiles. The editor remains a
+cohesive presentation workflow; business writes are outside it, and its local
+list is display state rather than a competing persistent-state owner.
+
+Validation: 10 baseline source/provider tests still pass, plus 17 new checks and
+nine affected Home navigation/unavailable-origin/rewatch tests: 36 passes total.
+The real editor is exercised for reorder, movie/series display, delete/clear,
+dismissal during reload, local selection, empty-provider fallback and retirement.
+All five cloud routes retain their selection-mode/search arguments and guarded
+save callbacks; these tests inspect constructed destinations without starting
+cloud transports. Repository checks verify real saved ordering/deduplication and
+unchanged preferences when a pending write retires at the mutation barrier.
+Analyzer identities remain 848 after accounting for the existing onReorder
+warning's new file; the test intentionally exercises that retained deprecated
+callback. Architecture checks pass for 452 files; diff whitespace checks pass.
+
+Receipts: `.git/refactor-evidence/phase5/source-edit-before.txt`,
+`source-edit-after.txt`, `source-edit-home.txt`, and `source-edit-analyze.txt`.
+All final runs are terminal. No full-suite repeat for this feature-only checkpoint;
+the latest integration baseline is `full-local-removal.*`. Cloud/native internals
+and the existing Sources tombstone/guard audit remain B/device acceptance work.
+Next A workflow: remaining tracker playback/removal and detail action dispatch.
+
 ## Batch A checkpoint: local history removal — 2026-09-28
 
 The local card, detail action and unavailable-origin confirmation now use one

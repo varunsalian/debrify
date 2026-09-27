@@ -128,7 +128,7 @@ until the batch ends. This replaces per-helper checkpoints, not incremental safe
 
 | Batch | Current status |
 | --- | --- |
-| A | In progress; resume resolver ownership/capacity and Continue Watching hold/menu workflow implemented and reviewed (111 and 27 affected tests pass); local history removal implemented with scoped writes/lifecycle drain (31 affected tests pass); remaining tracker actions and source editing pending |
+| A | In progress; resume resolver ownership/capacity and Continue Watching hold/menu workflow implemented and reviewed (111 and 27 affected tests pass); local history removal implemented with scoped writes/lifecycle drain (31 affected tests pass); source-edit/add workflow implemented and reviewed (36 affected tests pass); remaining tracker actions pending |
 | B | Pending remaining boundaries; substantial Sources extraction already complete |
 | C | Pending remaining boundaries; substantial layout/search extraction already complete |
 | D | Pending remaining boundaries and facade reduction |
