@@ -1,3 +1,4 @@
+import '../features/home/application/home_trakt_continuation_dependencies.dart';
 import '../features/home/models/home_trakt_continuation.dart';
 import '../features/home/application/home_continuation_layout_controller.dart';
 import '../features/home/models/home_continuation_layout.dart';
@@ -4782,6 +4783,11 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   Future<void> _loadTraktContinueWatching({bool refreshBound = true}) async {
     _lastTraktCwRefreshAttemptAt = DateTime.now();
     final token = ++_traktCwToken;
+    bool current() =>
+        mounted &&
+        token == _traktCwToken &&
+        _profileSessionOwner == ProfileSessionMemory.captureOwner();
+    if (!current()) return;
     // Mark the fetch in flight so the skeleton slot reserves while it runs (only
     // reserves when there are no real rows yet — see [_traktReserving]). Plain
     // assignment, not setState: the sync prefix runs during initState on cold
@@ -4790,9 +4796,11 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     final List<TraktContinueWatchingItem> movies;
     final List<TraktContinueWatchingItem> shows;
     try {
-      final authed = await TraktService.instance.isAuthenticated();
-      if (!mounted || token != _traktCwToken) return;
-      if (!authed) {
+      final rows = await ref
+          .read(homeTraktContinuationRepositoryProvider)
+          .read(isCurrent: current);
+      if (!current() || rows == null) return;
+      if (!rows.authenticated) {
         _syncCwNodes(_traktMovieNodes, 0, 'tmovie');
         _syncCwNodes(_traktSeriesNodes, 0, 'tseries');
         setState(() {
@@ -4808,31 +4816,24 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         });
         return;
       }
-      final cw = TraktContinueWatchingService.instance;
-      final reads = await Future.wait<Object?>([
-        cw.fetchMoviesOrNull(),
-        cw.fetchShowsOrNull(),
-      ]);
-      final movieRead = reads[0] as List<TraktContinueWatchingItem>?;
-      final showRead = reads[1] as List<TraktContinueWatchingItem>?;
-      if (movieRead == null || showRead == null) {
-        throw StateError('Trakt Continue Watching read failed');
-      }
-      movies = movieRead;
-      shows = showRead;
+      movies = rows.movies;
+      shows = rows.shows;
     } catch (e) {
       // Leave any existing rows in place on a transient Trakt/network error,
       // but stop reserving the skeleton slot so it doesn't shimmer forever.
       debugPrint('SearchScreen: Trakt continue-watching load failed: $e');
-      if (mounted && token == _traktCwToken) {
+      if (current()) {
         setState(() => _traktCwLoading = false);
       }
       return;
     }
     await _ensureCwMergeFlags();
-    if (!mounted || token != _traktCwToken) return;
+    if (!current()) return;
 
-    final snapshot = HomeTraktContinuation.fromRows(movies: movies, shows: shows);
+    final snapshot = HomeTraktContinuation.fromRows(
+      movies: movies,
+      shows: shows,
+    );
     // Whether the board already showed Trakt rows before this load — only a
     // fresh appearance (skeleton → content) announces itself below; a refresh
     // of rows the user can already see stays quiet.
@@ -4870,7 +4871,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       _enrichCwEpisodeArtwork(
         refs: snapshot.episodeRefs,
         target: _traktEpisodeArtwork,
-        isCurrent: () => token == _traktCwToken,
+        isCurrent: current,
       ),
     );
     _maybeAutoFocusBoard();
