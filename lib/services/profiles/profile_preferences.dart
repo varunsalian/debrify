@@ -362,12 +362,14 @@ class ProfilePreferences implements SharedPreferences {
   }
 
   @override
-  Future<bool> setBool(String key, bool value) => _write(
-    () => _delegate.setBool(_physical(key), value),
-    logicalKey: key,
-    budgetKey: _physical(key),
-    budgetValue: value,
-  );
+  Future<bool> setBool(String key, bool value, {bool Function()? canCommit}) =>
+      _write(
+        () => _delegate.setBool(_physical(key), value),
+        logicalKey: key,
+        budgetKey: _physical(key),
+        budgetValue: value,
+        canCommit: canCommit,
+      );
 
   @override
   Future<bool> setInt(String key, int value) => _write(
@@ -386,11 +388,16 @@ class ProfilePreferences implements SharedPreferences {
   );
 
   @override
-  Future<bool> setString(String key, String value) => _write(
+  Future<bool> setString(
+    String key,
+    String value, {
+    bool Function()? canCommit,
+  }) => _write(
     () => _delegate.setString(_physical(key), value),
     logicalKey: key,
     budgetKey: _physical(key),
     budgetValue: value,
+    canCommit: canCommit,
   );
 
   @override
@@ -455,10 +462,12 @@ class ProfilePreferences implements SharedPreferences {
   /// The lock covers the physical profile key, so callers can safely update an
   /// inactive captured profile without racing an active-session mutation.
   /// Returning null from [update] leaves the stored value unchanged.
+  /// [canCommit] is checked after the storage barrier, immediately before writing.
   Future<bool> mutateStringListAtomically(
     String key,
-    List<String>? Function(List<String>? current) update,
-  ) {
+    List<String>? Function(List<String>? current) update, {
+    bool Function()? canCommit,
+  }) {
     // Check before taking the list-specific lock. Otherwise a guarded WebDAV
     // callback could wait on a writer that is itself waiting for the WebDAV
     // barrier, recreating the lock inversion this guard is meant to prevent.
@@ -474,6 +483,7 @@ class ProfilePreferences implements SharedPreferences {
       final frozen = List<String>.unmodifiable(next);
       return _write(
         () => _delegate.setStringList(physical, frozen),
+        canCommit: canCommit,
         logicalKey: key,
         budgetKey: physical,
         budgetValue: frozen,
@@ -752,11 +762,14 @@ class ProfilePreferences implements SharedPreferences {
     String? budgetKey,
     Object? budgetValue,
     Object? Function()? prepareValue,
+    bool Function()? canCommit,
   }) async {
+    if (!(canCommit?.call() ?? true)) return false;
     _assertWritable();
     var unchanged = false;
     Object? mutationValue = budgetValue;
     final success = await _runOrdinaryMutation((markMutated) async {
+      if (!(canCommit?.call() ?? true)) return false;
       _assertWritable();
       final proposedValue = prepareValue != null ? prepareValue() : budgetValue;
       mutationValue = proposedValue;

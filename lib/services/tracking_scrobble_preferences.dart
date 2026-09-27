@@ -19,8 +19,10 @@ class TrackingScrobblePreferences {
         TrackingSource.mdblist: 'mdblist_sync_catalog_items',
       };
 
-  static Future<Set<TrackingSource>> readCurrent() async =>
-      _read(await ProfilePreferences.instance());
+  static Future<Set<TrackingSource>> readCurrent({
+    bool Function()? canContinue,
+  }) async =>
+      _read(await ProfilePreferences.instance(), canContinue: canContinue);
 
   static Future<void> writeCurrent(Set<TrackingSource> value) async {
     final prefs = await ProfilePreferences.instance();
@@ -52,19 +54,24 @@ class TrackingScrobblePreferences {
     );
   }
 
-  static Future<Set<TrackingSource>> _read(ProfilePreferences prefs) async {
+  static Future<Set<TrackingSource>> _read(
+    ProfilePreferences prefs, {
+    bool Function()? canContinue,
+  }) async {
+    if (!(canContinue?.call() ?? true)) return {};
     final stored = prefs.getStringList(key);
     if (stored != null) return _decode(stored);
 
-    late Set<TrackingSource> resolved;
+    Set<TrackingSource> resolved = {};
     await prefs.mutateStringListAtomically(key, (latest) {
+      if (!(canContinue?.call() ?? true)) return null;
       if (latest != null) {
         resolved = _decode(latest);
         return null;
       }
       resolved = _seedFromLegacy(prefs);
       return _encode(resolved);
-    });
+    }, canCommit: canContinue);
     return resolved;
   }
 

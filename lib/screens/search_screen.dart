@@ -170,6 +170,7 @@ import '../features/home/presentation/home_random_playback_action.dart';
 import '../features/home/application/home_random_episode_dependencies.dart';
 import '../features/home/application/home_catalog_episode_identity_dependencies.dart';
 import '../features/home/application/home_catalog_origin_dependencies.dart';
+import '../features/home/application/home_tracking_policy_dependencies.dart';
 import '../features/home/models/home_catalog_origin.dart';
 import '../widgets/clear_pinned_sources_button.dart';
 import '../services/profiles/profile_runtime.dart';
@@ -11395,7 +11396,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     final origin = prepared.addon;
     if (origin == null) { _snack('The addon configuration for this series is unavailable.'); return; }
     addon = origin;
-    final trackingPolicy = (await TrackingSourcePolicy.load()).forContent(item.progressId);
+    final trackingPolicy = await _loadTrackingPolicy(item);
+    if (!mounted || trackingPolicy == null) return;
     debugPrint(
       '[SeriesResume] play-pressed title="${item.name}" '
       'id=${item.progressId ?? item.id} type=${item.type} '
@@ -11921,7 +11923,17 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     })
   >
   _reconcileSeriesResume(StremioMeta item, {bool isTraktSource = false, bool preferBuiltIn = false, StremioMeta? catalogItem}) async {
-    final trackingPolicy = (await TrackingSourcePolicy.load()).forContent(item.progressId);
+    final trackingPolicy = await _loadTrackingPolicy(item);
+    if (trackingPolicy == null) {
+      return (
+        started: false,
+        season: 1,
+        episode: 1,
+        simklProgress: null,
+        selection: null,
+        sourcePrio: null,
+      );
+    }
     final ttId = item.imdbId ?? (item.id.startsWith('tt') ? item.id : '');
     final playId = ttId.isNotEmpty ? ttId : (item.progressId ?? item.id);
     final nowMs = DateTime.now().millisecondsSinceEpoch;
@@ -12457,13 +12469,25 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     return null;
   }
 
+  Future<TrackingSourcePolicy?> _loadTrackingPolicy(StremioMeta item) async {
+    bool current() =>
+        mounted && _profileSessionOwner == ProfileSessionMemory.captureOwner();
+    if (!current()) return null;
+    return ref
+        .read(homeTrackingPolicyRepositoryProvider(_profileSessionOwner))
+        .loadForContent(item.progressId, isCurrent: current);
+  }
+
   Future<({bool started, int? season, int? episode})> _resolveResumeInfo(
     StremioMeta item,
     StremioAddon addon, {
     bool isTraktSource = false,
     bool isMdblistSource = false,
   }) async {
-    final trackingPolicy = (await TrackingSourcePolicy.load()).forContent(item.progressId);
+    final trackingPolicy = await _loadTrackingPolicy(item);
+    if (trackingPolicy == null) {
+      return (started: false, season: null, episode: null);
+    }
     debugPrint(
       '[SeriesResume] label-resolve-start title="${item.name}" '
       'id=${item.progressId ?? item.id} type=${item.type} '

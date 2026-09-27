@@ -2337,8 +2337,12 @@ class StorageService {
     return SecretVault.getString(prefs, _mdblistApiKeyKey);
   }
 
-  static Future<bool> hasMdblistCredential() =>
-      _credentialConfigured(_mdblistApiKeyKey, () => getMdblistApiKey());
+  static Future<bool> hasMdblistCredential({bool Function()? canContinue}) =>
+      _credentialConfigured(
+        _mdblistApiKeyKey,
+        () => getMdblistApiKey(),
+        canContinue: canContinue,
+      );
 
   /// Manual binding reads retain the initiating action across preferences,
   /// resource routing and lazy legacy credential migration.
@@ -2362,12 +2366,23 @@ class StorageService {
 
   static Future<bool> _credentialConfigured(
     String key,
-    Future<String?> Function() legacyRead,
-  ) async {
+    Future<String?> Function() legacyRead, {
+    bool Function()? canContinue,
+  }) async {
+    bool current() => canContinue?.call() ?? true;
+    if (!current()) return false;
     final presence = await ProfileCredentialFacade.isConfigured(key);
+    if (!current()) return false;
     if (presence.handled) return presence.configured;
-    final value = await legacyRead();
-    return value != null && value.isNotEmpty;
+    String? value;
+    if (canContinue == null) {
+      value = await legacyRead();
+    } else {
+      final prefs = await ProfilePreferences.instance();
+      if (!current()) return false;
+      value = await SecretVault.getString(prefs, key, canContinue: canContinue);
+    }
+    return current() && value != null && value.isNotEmpty;
   }
 
   static Future<void> saveMdblistApiKey(String apiKey) async {
@@ -6814,8 +6829,9 @@ class StorageService {
   /// Reads the new master scrobble switches. On first read, adopt the retired
   /// per-tracker catalog switches once. An absent legacy value means ON: that
   /// matches interactive connection and old Trakt/Simkl restore behavior.
-  static Future<Set<TrackingSource>> getTrackingScrobbleTargets() =>
-      TrackingScrobblePreferences.readCurrent();
+  static Future<Set<TrackingSource>> getTrackingScrobbleTargets({
+    bool Function()? canContinue,
+  }) => TrackingScrobblePreferences.readCurrent(canContinue: canContinue);
 
   static Future<void> setTrackingScrobbleTargets(
     Set<TrackingSource> value,
@@ -6851,9 +6867,12 @@ class StorageService {
   }
 
   static Future<bool> fallbackDisconnectedProgressSource(
-    TrackingSource disconnected,
-  ) async {
+    TrackingSource disconnected, {
+    bool Function()? canContinue,
+  }) async {
+    if (!(canContinue?.call() ?? true)) return false;
     final current = await getWatchProgressSource();
+    if (!(canContinue?.call() ?? true)) return false;
     final owns = switch (current) {
       WatchProgressSource.trakt => disconnected == TrackingSource.trakt,
       WatchProgressSource.simkl => disconnected == TrackingSource.simkl,
@@ -6861,6 +6880,24 @@ class StorageService {
       _ => false,
     };
     if (!owns) return false;
+    if (canContinue != null) {
+      final prefs = await ProfilePreferences.instance();
+      if (!canContinue()) return false;
+      await prefs.setString(
+        watchProgressSourceKey,
+        WatchProgressSource.smart.name,
+        canCommit: canContinue,
+      );
+      if (!canContinue()) return false;
+      trackingSourceRevision.value++;
+      if (!canContinue()) return false;
+      await prefs.setBool(
+        'tracking_progress_fallback_notice',
+        true,
+        canCommit: canContinue,
+      );
+      return canContinue();
+    }
     await setWatchProgressSource(WatchProgressSource.smart);
     final prefs = await ProfilePreferences.instance();
     await prefs.setBool('tracking_progress_fallback_notice', true);
@@ -6995,8 +7032,12 @@ class StorageService {
     return SecretVault.getString(prefs, _traktAccessTokenKey);
   }
 
-  static Future<bool> hasTraktCredential() =>
-      _credentialConfigured(_traktAccessTokenKey, () => getTraktAccessToken());
+  static Future<bool> hasTraktCredential({bool Function()? canContinue}) =>
+      _credentialConfigured(
+        _traktAccessTokenKey,
+        () => getTraktAccessToken(),
+        canContinue: canContinue,
+      );
 
   static Future<void> setTraktAccessToken(String token) async {
     final prefs = await ProfilePreferences.instance();
@@ -7118,8 +7159,12 @@ class StorageService {
     return SecretVault.getString(prefs, _simklAccessTokenKey);
   }
 
-  static Future<bool> hasSimklCredential() =>
-      _credentialConfigured(_simklAccessTokenKey, () => getSimklAccessToken());
+  static Future<bool> hasSimklCredential({bool Function()? canContinue}) =>
+      _credentialConfigured(
+        _simklAccessTokenKey,
+        () => getSimklAccessToken(),
+        canContinue: canContinue,
+      );
 
   static Future<void> setSimklAccessToken(String token) async {
     final prefs = await ProfilePreferences.instance();
