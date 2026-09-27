@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'package:debrify/features/home/application/home_tracker_authentication_dependencies.dart';
+import 'package:debrify/features/home/models/home_tracker_authentication.dart';
 
 import 'package:debrify/features/search/application/lists_search_controller.dart';
 import 'package:debrify/features/search/application/lists_search_dependencies.dart';
@@ -33,6 +35,7 @@ void main() {
   late StateSetter rebuildScreen;
   late ProviderContainer container;
   late bool showScreen;
+  HomeTrackerAuthReader? mdblistAuthentication;
 
   setUp(() {
     disableRuntimeFonts();
@@ -46,6 +49,7 @@ void main() {
     navigator = GlobalKey<NavigatorState>();
     sessions = [];
     showScreen = true;
+    mdblistAuthentication = null;
   });
 
   tearDown(() {
@@ -79,6 +83,12 @@ void main() {
       () => tester.pumpWidget(
         ProviderScope(
           overrides: [
+            if (mdblistAuthentication != null)
+              homeTrackerAuthReaderProvider.overrideWith(
+                (ref, session) => session.tracker == HomeTracker.mdblist
+                    ? mdblistAuthentication!
+                    : () async => false,
+              ),
             listsSearchRepositoryProvider.overrideWith((ref, session) {
               sessions.add(session);
               return repository;
@@ -318,6 +328,45 @@ void main() {
       await tester.pumpWidget(const SizedBox());
     },
   );
+
+  testWidgets('older authentication cannot undo a newer Lists disconnect', (
+    tester,
+  ) async {
+    final older = Completer<bool>();
+    var reads = 0;
+    mdblistAuthentication = () {
+      reads++;
+      return reads == 1
+          ? Future.value(true)
+          : reads == 2
+          ? older.future
+          : Future.value(false);
+    };
+    await mount(tester);
+    await submit(tester, 'movies');
+    await drive(tester, MainPageBridge.notifyIntegrationChanged);
+    expect(reads, 2);
+    await drive(tester, MainPageBridge.notifyIntegrationChanged);
+    expect(reads, 3);
+    expect(find.text('Lists'), findsNothing);
+    await drive(tester, () => older.complete(true));
+    expect(find.text('Lists'), findsNothing);
+    expect(
+      tester.widget<SearchModeToggle>(find.byType(SearchModeToggle)).mode,
+      SearchMode.catalog,
+    );
+    expect(
+      tester.widget<TextField>(find.byType(TextField).first).controller!.text,
+      'movies',
+    );
+    expect(
+      container.read(listsSearchProvider(sessions.single)).results,
+      isEmpty,
+    );
+    expect(repository.queries, ['movies']);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
+  });
 
   testWidgets(
     'outgoing profile clears retained state before its route disposes',

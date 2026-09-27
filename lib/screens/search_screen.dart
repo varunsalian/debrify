@@ -1,3 +1,5 @@
+import '../features/home/models/home_tracker_authentication.dart';
+import '../features/home/application/home_tracker_authentication_controller.dart';
 import '../features/home/models/home_return_snapshot.dart';
 import '../features/home/data/home_return_repository.dart';
 import '../features/home/application/home_return_dependencies.dart';
@@ -1136,16 +1138,23 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   /// Whether Trakt is connected — gates the Trakt-syncing detail quick actions
   /// (watchlist / collection / watched / rate / list). App actions (Select
   /// Source, Add to Stremio TV, Search Packs) show regardless.
-  bool _isTraktAuthenticated = false;
+  late final Map<HomeTracker, ProviderSubscription<bool>>
+  _trackerAuthSubscriptions;
+  late final Map<HomeTracker, HomeTrackerAuthenticationController>
+  _trackerAuthControllers;
+  bool get _isTraktAuthenticated =>
+      _trackerAuthControllers[HomeTracker.trakt]!.current;
 
   /// Whether Simkl is connected — gates the Simkl detail quick actions,
   /// rendered as their own strip alongside Trakt's (see [_isTraktAuthenticated]).
-  bool _isSimklAuthenticated = false;
+  bool get _isSimklAuthenticated =>
+      _trackerAuthControllers[HomeTracker.simkl]!.current;
 
   /// Whether MDBList is connected — gates the MDBList entry in the Discover
   /// source dropdown (hidden when disconnected, so an unauthed user isn't shown
   /// a dead source; kept visible if it's somehow the active source).
-  bool _isMdblistAuthenticated = false;
+  bool get _isMdblistAuthenticated =>
+      _trackerAuthControllers[HomeTracker.mdblist]!.current;
 
   /// The Progress source, mirrored for the CW card lookups below. Smart until
   /// the first load resolves it (Smart = every row keeps its own numbers,
@@ -1898,6 +1907,25 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       (previous, next) {},
     );
     _homeCatalogController = ref.read(homeCatalogProvider(homeSession).notifier);
+    _trackerAuthSubscriptions = {
+      for (final tracker in HomeTracker.values)
+        tracker: ref.listenManual(
+          homeTrackerAuthenticationProvider((
+            view: homeSession,
+            tracker: tracker,
+          )),
+          (previous, next) {},
+        ),
+    };
+    _trackerAuthControllers = {
+      for (final tracker in HomeTracker.values)
+        tracker: ref.read(
+          homeTrackerAuthenticationProvider((
+            view: homeSession,
+            tracker: tracker,
+          )).notifier,
+        ),
+    };
     _pikpakOnlySubscription = ref.listenManual(
       homePikpakOnlyProvider(homeSession),
       (previous, next) {},
@@ -2475,43 +2503,46 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     }
   }
 
-  Future<void> _refreshTraktAuthState() async {
-    final auth = await TraktService.instance.isAuthenticated();
-    if (!mounted || auth == _isTraktAuthenticated) return;
-    setState(() => _isTraktAuthenticated = auth);
-  }
+  Future<void> _refreshTraktAuthState() =>
+      _trackerAuthControllers[HomeTracker.trakt]!.load(
+        isCurrent: () => mounted,
+        onChanged: (_) => setState(() {}),
+      );
 
-  Future<void> _refreshSimklAuthState() async {
-    final auth = await SimklService.instance.isAuthenticated();
-    if (!mounted || auth == _isSimklAuthenticated) return;
-    setState(() => _isSimklAuthenticated = auth);
-  }
+  Future<void> _refreshSimklAuthState() =>
+      _trackerAuthControllers[HomeTracker.simkl]!.load(
+        isCurrent: () => mounted,
+        onChanged: (_) => setState(() {}),
+      );
 
-  Future<void> _refreshMdblistAuthState() async {
-    final auth = await MdblistService.instance.isAuthenticated();
-    if (!mounted || auth == _isMdblistAuthenticated) return;
-    final leaveLists = !auth && _mode == SearchMode.lists;
-    if (leaveLists) _clearListsSearch();
-    setState(() {
-      _isMdblistAuthenticated = auth;
-      if (leaveLists) {
-        _mode = SearchMode.catalog;
-      }
-    });
-    // A disconnect can remove the currently selected mode. Keep the shared
-    // query useful by resolving it through Catalog after the selector falls
-    // back, unless those exact Catalog results are already present.
-    if (leaveLists) {
-      final query = _searchController.text.trim();
-      if (query.isNotEmpty && query != _catalogQuery) {
-        _runCatalogSearch(query);
-      }
-      if (widget.isTelevision) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) _searchFocusNode.requestFocus();
+  Future<void> _refreshMdblistAuthState() {
+    var leaveLists = false;
+    return _trackerAuthControllers[HomeTracker.mdblist]!.load(
+      isCurrent: () => mounted,
+      beforeChange: (auth) {
+        leaveLists = !auth && _mode == SearchMode.lists;
+        if (leaveLists) _clearListsSearch();
+      },
+      onChanged: (_) {
+        setState(() {
+          if (leaveLists) _mode = SearchMode.catalog;
         });
-      }
-    }
+        // A disconnect can remove the currently selected mode. Keep the shared
+        // query useful by resolving it through Catalog after the selector falls
+        // back, unless those exact Catalog results are already present.
+        if (leaveLists) {
+          final query = _searchController.text.trim();
+          if (query.isNotEmpty && query != _catalogQuery) {
+            _runCatalogSearch(query);
+          }
+          if (widget.isTelevision) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) _searchFocusNode.requestFocus();
+            });
+          }
+        }
+      },
+    );
   }
 
   /// Consume the borrowed snapshot once, before constructing providers. Seed
@@ -2747,6 +2778,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     _searchController.dispose();
     ProfileRuntime.scope.removeListener(_onSearchProfileChanged);
     _homeCatalogSubscription.close();
+    for (final subscription in _trackerAuthSubscriptions.values) {
+      subscription.close();
+    }
     _pikpakOnlySubscription.close();
     _boundCountsSubscription.close();
     _homeSettingsRefreshSubscription.close();
