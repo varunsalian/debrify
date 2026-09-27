@@ -1,3 +1,4 @@
+import '../features/home/presentation/home_stage_identity.dart';
 import '../features/home/presentation/home_stage_scrims.dart';
 import '../features/home/presentation/home_stage_art.dart';
 import '../features/home/presentation/home_tonight_queue_row.dart';
@@ -404,19 +405,16 @@ double _mosaicHeadHeight(BuildContext context) {
   final t = MediaQuery.textScalerOf(context);
   // A title with no logo art falls back to TEXT, which scales — the band has
   // to reserve whichever of the two is taller.
-  final titleH = max(_kMosaicLogoH, t.scale(_kStageHeadlineTitleSize) * 1.25);
+  final titleH = max(
+    homeStageHeadlineLogoHeight,
+    t.scale(homeStageHeadlineTitleSize) * 1.25,
+  );
   // Facts line, then the genres on their own line beneath it. The right-hand
   // column (rail label + hold hint) is shorter than that, so the identity
   // still sets the band's height.
   return titleH + 10 + t.scale(12.5) * 1.4 + 6 + t.scale(12.5) * 1.4 + 6;
 }
 
-const double _kMosaicLogoH = 52;
-
-/// The headline variant's text fallback is smaller than a stage title — it is
-/// a caption over a wall, not a billboard. Shared with [_mosaicHeadHeight] so
-/// the band that reserves space for it can't drift.
-const double _kStageHeadlineTitleSize = 24;
 const double _kMosaicHeadGap = 18;
 
 // ATRIUM metrics. The wall's height is DERIVED from these (never guessed),
@@ -7750,7 +7748,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
                         valueListenable: _canvasFavFocus,
                         builder: (context, fav, _) => fav != null
                             ? _StageFavIdentity(fav: fav)
-                            : _CanvasIdentity(
+                            : HomeStageIdentity(
                                 item: _heroItem,
                                 enriched: _heroEnriched,
                                 trailerShowing: _heroTrailerShowing,
@@ -8239,11 +8237,11 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
                         valueListenable: _canvasFavFocus,
                         builder: (context, fav, _) => fav != null
                             ? _StageFavIdentity(fav: fav, centered: true)
-                            : _CanvasIdentity(
+                            : HomeStageIdentity(
                                 item: _heroItem,
                                 enriched: _heroEnriched,
                                 trailerShowing: _heroTrailerShowing,
-                                variant: _StageIdentityVariant.centered,
+                                variant: HomeStageIdentityVariant.centered,
                                 maxWidth: boardW - 96,
                               ),
                       ),
@@ -8677,7 +8675,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
                         valueListenable: _canvasFavFocus,
                         builder: (context, fav, _) => fav != null
                             ? _StageFavIdentity(fav: fav)
-                            : _CanvasIdentity(
+                            : HomeStageIdentity(
                                 item: _heroItem,
                                 enriched: _heroEnriched,
                                 trailerShowing: _heroTrailerShowing,
@@ -8686,9 +8684,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
                                 // text scale).
                                 variant:
                                     boardH - 64 >=
-                                        _stageNarrowIdentityH(context) + 90
-                                    ? _StageIdentityVariant.narrow
-                                    : _StageIdentityVariant.headline,
+                                        homeStageNarrowIdentityHeight(context) + 90
+                                    ? HomeStageIdentityVariant.narrow
+                                    : HomeStageIdentityVariant.headline,
                                 maxWidth: (splitX - _kAtriumPanelPad * 2).clamp(
                                   120.0,
                                   520.0,
@@ -9019,11 +9017,11 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
                               alignment: Alignment.bottomLeft,
                               child: fav != null
                                   ? _StageFavIdentity(fav: fav)
-                                  : _CanvasIdentity(
+                                  : HomeStageIdentity(
                                       item: _heroItem,
                                       enriched: _heroEnriched,
                                       trailerShowing: _heroTrailerShowing,
-                                      variant: _StageIdentityVariant.headline,
+                                      variant: HomeStageIdentityVariant.headline,
                                       maxWidth: max(1.0, gridW * 0.5),
                                     ),
                             ),
@@ -9424,15 +9422,15 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
                     valueListenable: _canvasFavFocus,
                     builder: (context, fav, _) => fav != null
                         ? _StageFavIdentity(fav: fav)
-                        : _CanvasIdentity(
+                        : HomeStageIdentity(
                             item: _heroItem,
                             enriched: _heroEnriched,
                             trailerShowing: _heroTrailerShowing,
                             variant:
                                 boardH - railZoneH >=
-                                    _stageNarrowIdentityH(context)
-                                ? _StageIdentityVariant.narrow
-                                : _StageIdentityVariant.headline,
+                                    homeStageNarrowIdentityHeight(context)
+                                ? HomeStageIdentityVariant.narrow
+                                : HomeStageIdentityVariant.headline,
                             maxWidth: (cardLeft - _kDeckPanelPad - 40).clamp(
                               140.0,
                               560.0,
