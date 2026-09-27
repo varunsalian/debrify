@@ -2922,11 +2922,29 @@ class StremioService {
         (isCanonicalCatalogAlias(item.id, id) ? id : null);
   }
 
-  Future<void> _rememberCatalogProgress(StremioMeta item, StremioAddon addon) async {
+  Future<void> _rememberCatalogProgress(
+    StremioMeta item,
+    StremioAddon addon, {
+    bool Function()? canContinue,
+  }) async {
+    if (canContinue != null && !canContinue()) return;
     final key = '${addon.portableConfigurationKey}:${item.id}';
     final id = item.effectiveImdbId ?? item.id;
     final prefs = await ProfilePreferences.instance();
-    await prefs.setString('$_progressIdentityPrefix$key', id);
+    Future<void> write() async {
+      if (canContinue != null && !canContinue()) return;
+      await prefs.setString('$_progressIdentityPrefix$key', id);
+    }
+
+    if (canContinue == null) {
+      await prefs.setString('$_progressIdentityPrefix$key', id);
+    } else {
+      await ProfilePreferences.synchronizeExternalMutation(
+        write,
+        marksMutation: false,
+      );
+    }
+    if (canContinue != null && !canContinue()) return;
     if (_catalogProgressIdentities[key] == id) return;
     _catalogProgressIdentities[key] = id;
     catalogProgressRevision.value++;
@@ -2935,61 +2953,88 @@ class StremioService {
   /// Classify before reading history. Unknown catalog-owned series must never
   /// borrow the history of an IMDb match. Known canonical aliases stay shared.
   Future<StremioMeta> scopeSeriesProgress(
-    StremioMeta item, StremioAddon addon,
-  ) async {
+    StremioMeta item,
+    StremioAddon addon, {
+    bool Function()? canContinue,
+  }) async {
+    if (canContinue != null && !canContinue()) return item;
     if (item.type != 'series' || CustomSeriesIdentity.isCustom(item.imdbId)) {
-      if (item.type == 'series') await _rememberCatalogProgress(item, addon);
+      if (item.type == 'series') {
+        await _rememberCatalogProgress(item, addon, canContinue: canContinue);
+      }
       return item;
     }
-    if (MediaIdentity.isNative(item.id) && item.imdbId == null && addon.baseUrl.isEmpty) {
-      await _rememberCatalogProgress(item, addon);
+    if (MediaIdentity.isNative(item.id) &&
+        item.imdbId == null &&
+        addon.baseUrl.isEmpty) {
+      await _rememberCatalogProgress(item, addon, canContinue: canContinue);
       return item;
     }
     final imdb = item.effectiveImdbId ?? item.id;
     final canonical = isCanonicalCatalogAlias(item.id, imdb);
     final prefs = await ProfilePreferences.instance();
-    final previous = prefs.getString('$_progressIdentityPrefix${addon.portableConfigurationKey}:${item.id}');
+    if (canContinue != null && !canContinue()) return item;
+    final previous = prefs.getString(
+      '$_progressIdentityPrefix${addon.portableConfigurationKey}:${item.id}',
+    );
     // A proven custom catalog remains isolated even while its provider is down.
     if (CustomSeriesIdentity.isCustom(previous)) {
       final scoped = item.withCustomSeriesIdentity(addon);
-      await _rememberCatalogProgress(scoped, addon);
+      await _rememberCatalogProgress(scoped, addon, canContinue: canContinue);
       return scoped;
     }
-    final cached = _seriesMetaCache['${addon.portableConfigurationKey}:${item.id}'];
-    final cachedVideos = cached != null && DateTime.now().difference(cached.fetchedAt) < _seriesMetaCacheTtl
-        ? cached.videos : null;
-    final needsMetadata = addon.supportsMeta && addon.baseUrl.isNotEmpty &&
+    final cached =
+        _seriesMetaCache['${addon.portableConfigurationKey}:${item.id}'];
+    final cachedVideos =
+        cached != null &&
+            DateTime.now().difference(cached.fetchedAt) < _seriesMetaCacheTtl
+        ? cached.videos
+        : null;
+    final needsMetadata =
+        addon.supportsMeta &&
+        addon.baseUrl.isNotEmpty &&
         (!canonical || addon.id != 'com.linvo.cinemeta');
-    final videos = cachedVideos ?? (needsMetadata
-        ? await fetchSeriesMeta(addon, item.id)
-        : null);
+    final videos =
+        cachedVideos ??
+        (needsMetadata ? await fetchSeriesMeta(addon, item.id) : null);
+    if (canContinue != null && !canContinue()) return item;
     if (videos == null && previous == imdb) {
-      await _rememberCatalogProgress(item, addon);
+      await _rememberCatalogProgress(item, addon, canContinue: canContinue);
       return item;
     }
     // Do not read canonical history while an addon-owned episode identity is
     // unknown. Use the metadata request's normal bounded timeout, and allow a
     // retry on failure rather than committing a timing-dependent progress key.
     if (needsMetadata && videos == null && previous != imdb) {
-      throw StateError('Could not verify series episode identity. Please retry.');
+      throw StateError(
+        'Could not verify series episode identity. Please retry.',
+      );
     }
     final ids = (videos ?? const <Map<String, dynamic>>[])
-        .where((v) => v['id']?.toString().isNotEmpty == true).toList();
-    final custom = ids.isEmpty ? !canonical : ids.any((v) {
-      final s = _videoCoordinate(v['season']);
-      final e = _videoCoordinate(v['number'] ?? v['episode']);
-      return s == null || e == null ||
-          !isCanonicalEpisodeId(imdb, v['id'].toString(), s, e);
-    });
+        .where((v) => v['id']?.toString().isNotEmpty == true)
+        .toList();
+    final custom = ids.isEmpty
+        ? !canonical
+        : ids.any((v) {
+            final s = _videoCoordinate(v['season']);
+            final e = _videoCoordinate(v['number'] ?? v['episode']);
+            return s == null ||
+                e == null ||
+                !isCanonicalEpisodeId(imdb, v['id'].toString(), s, e);
+          });
     if (!custom) {
-      await _rememberCatalogProgress(item, addon);
+      await _rememberCatalogProgress(item, addon, canContinue: canContinue);
       return item;
     }
     final scoped = item.withCustomSeriesIdentity(addon);
-    await _rememberCatalogProgress(scoped, addon);
+    await _rememberCatalogProgress(scoped, addon, canContinue: canContinue);
+    if (canContinue != null && !canContinue()) return scoped;
     if (videos != null && videos.isNotEmpty) {
       await LocalSeriesCompletionService.instance.recordRawEpisodeInventory(
-        imdbId: scoped.imdbId!, seriesTitle: item.name, videos: videos,
+        imdbId: scoped.imdbId!,
+        seriesTitle: item.name,
+        videos: videos,
+        canCommit: canContinue,
       );
     }
     return scoped;

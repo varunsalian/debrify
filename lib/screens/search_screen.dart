@@ -169,6 +169,8 @@ import '../models/media_identity.dart';
 import '../features/home/presentation/home_random_playback_action.dart';
 import '../features/home/application/home_random_episode_dependencies.dart';
 import '../features/home/application/home_catalog_episode_identity_dependencies.dart';
+import '../features/home/application/home_catalog_origin_dependencies.dart';
+import '../features/home/models/home_catalog_origin.dart';
 import '../widgets/clear_pinned_sources_button.dart';
 import '../services/profiles/profile_runtime.dart';
 import 'metadata_explore_page.dart';
@@ -10278,12 +10280,6 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     }
   }
 
-  Future<StremioAddon?> _progressOriginAddon(StremioMeta item, StremioAddon fallback) async {
-    final custom = CustomSeriesIdentity.parse(item.imdbId);
-    if (custom == null) return fallback;
-    return _stremio.addonForCustomProgress(item.imdbId!);
-  }
-
   void _openItem(
     StremioMeta item,
     StremioAddon addon, {
@@ -10300,19 +10296,23 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     // cross-tab opener (the Calendar) return the user to where they came from.
     int? returnToTabOnClose,
   }) async {
-    try {
-      if (MediaIdentity.isNative(item.id) && item.imdbId == null &&
-          (item.sourceAddon == null || item.sourceAddon!.baseUrl.isEmpty)) {
-        addon = NativeSeriesMetadataService.addon;
-      }
-      item = await _stremio.scopeSeriesProgress(item, addon);
-    } on StateError {
-      if (mounted) _snack('Could not verify series episodes. Please retry.');
+    bool current() =>
+        mounted && _profileSessionOwner == ProfileSessionMemory.captureOwner();
+    if (!current()) return;
+    final prepared = await ref
+        .read(homeCatalogOriginRepositoryProvider(_profileSessionOwner))
+        .prepare(item, addon, isCurrent: current);
+    if (!mounted ||
+        !current() ||
+        prepared.status == HomeCatalogOriginStatus.retired) {
       return;
     }
-    if (!mounted) return;
-    final origin = await _progressOriginAddon(item, addon);
-    if (!mounted) return;
+    if (prepared.status == HomeCatalogOriginStatus.unverified) {
+      _snack('Could not verify series episodes. Please retry.');
+      return;
+    }
+    item = prepared.item;
+    final origin = prepared.addon;
     if (origin == null) {
       final remove = await showDialog<bool>(
         context: context,
@@ -10336,7 +10336,6 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       return;
     }
     addon = origin;
-    if (CustomSeriesIdentity.isCustom(item.imdbId)) item = item.withSourceAddon(origin);
     _activeAddonId = addon.id;
     final imdb = _imdbOf(item);
     // Show a "Remove from Continue Watching" action when this title is on the
@@ -11377,22 +11376,25 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     // callback and do not need to enter this resolver.
     bool browseSourcesOnly = false,
   }) async {
-    try {
-      if (MediaIdentity.isNative(item.id) && item.imdbId == null &&
-          (item.sourceAddon == null || item.sourceAddon!.baseUrl.isEmpty)) {
-        addon = NativeSeriesMetadataService.addon;
-      }
-      item = await _stremio.scopeSeriesProgress(item, addon);
-    } on StateError {
-      if (mounted) _snack('Could not verify series episodes. Please retry.');
+    bool current() =>
+        mounted && _profileSessionOwner == ProfileSessionMemory.captureOwner();
+    if (!current()) return;
+    final prepared = await ref
+        .read(homeCatalogOriginRepositoryProvider(_profileSessionOwner))
+        .prepare(item, addon, isCurrent: current);
+    if (!mounted ||
+        !current() ||
+        prepared.status == HomeCatalogOriginStatus.retired) {
       return;
     }
-    if (!mounted) return;
-    final origin = await _progressOriginAddon(item, addon);
-    if (!mounted) return;
+    if (prepared.status == HomeCatalogOriginStatus.unverified) {
+      _snack('Could not verify series episodes. Please retry.');
+      return;
+    }
+    item = prepared.item;
+    final origin = prepared.addon;
     if (origin == null) { _snack('The addon configuration for this series is unavailable.'); return; }
     addon = origin;
-    if (CustomSeriesIdentity.isCustom(item.imdbId)) item = item.withSourceAddon(origin);
     final trackingPolicy = (await TrackingSourcePolicy.load()).forContent(item.progressId);
     debugPrint(
       '[SeriesResume] play-pressed title="${item.name}" '
