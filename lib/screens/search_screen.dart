@@ -28,6 +28,7 @@ import '../features/home/presentation/home_tonight_card_caption.dart';
 import '../features/home/presentation/home_favorite_focus.dart';
 import '../features/home/models/home_tonight_card_info.dart';
 import '../features/home/application/home_stage_metadata.dart';
+import '../features/home/application/home_hero_metadata_policy.dart';
 import '../features/home/presentation/home_classic_layout.dart';
 import '../features/home/presentation/home_takeover_info.dart';
 import '../features/home/presentation/home_trailer_transitions.dart';
@@ -9103,29 +9104,15 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       }
       return;
     }
-    final authoritative = enriched is HeroMetadataPresentation && item != null &&
-        sameHomeStageTitle(item, enriched);
-    final resolvedFields = authoritative ? HeroMetadataFields(item, enriched) : null;
-    final fields = resolvedFields != null &&
-        (resolvedFields.selected(MetadataCategory.backgrounds) ||
-         resolvedFields.selected(MetadataCategory.posters)) ? resolvedFields : null;
-    final backdrop = fields != null ? fields.background :
-        (item?.background?.isNotEmpty == true ? item!.background :
-          (enriched?.background?.isNotEmpty == true ? enriched!.background : null));
-    // Same title, no backdrop in hand (only the poster fallback), and the
-    // stage already shows SOMETHING for it → keep what's showing; the
-    // enrichment landing republishes the real backdrop moments later.
-    if (fields == null && backdrop == null &&
-        item?.id != null &&
-        item!.id == _ambientArtItemId &&
-        MainPageBridge.tvAmbientArt.value != null) {
-      return;
-    }
-    final art = backdrop ?? (fields != null ? fields.posterFallback : item?.poster);
-    _ambientArtItemId = item?.id;
-    MainPageBridge.tvAmbientArt.value = (art == null || art.isEmpty)
-        ? null
-        : art;
+    final update = homeHeroAmbientArtUpdate(
+      item: item,
+      enriched: enriched,
+      publishedItemId: _ambientArtItemId,
+      publishedArt: MainPageBridge.tvAmbientArt.value,
+    );
+    if (update == null) return;
+    _ambientArtItemId = update.itemId;
+    MainPageBridge.tvAmbientArt.value = update.art;
   }
 
   /// Debounced ambient-trailer load for the spotlighted title. The previous
@@ -9596,19 +9583,6 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         : color;
   }
 
-  /// Title-treatment art URL derivable SYNCHRONOUSLY from an IMDb id — the
-  /// same metahub image Cinemeta's /meta `logo` field points at. Lets the
-  /// hero start fetching the logo the moment focus settles instead of after
-  /// the /meta roundtrip — the roundtrip gap is what flashed the text title
-  /// for a beat before the art swapped in over it (the "title comes as text
-  /// then updates to image" complaint). A dead URL (title has no logo art)
-  /// falls back to the text title inside [_HeroTitleArt].
-  String? _derivedHeroLogo(StremioMeta item) {
-    final imdb = item.imdbId ?? (item.id.startsWith('tt') ? item.id : null);
-    if (imdb == null) return null;
-    return 'https://images.metahub.space/logo/medium/$imdb/img';
-  }
-
   /// Debounced backdrop/description enrichment. Catalog list items usually
   /// omit `background`/`description` (they come from the /meta endpoint), so
   /// fetch them lazily — cached in [StremioService], and guarded against the
@@ -9623,25 +9597,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     );
     if (prefs == null) return;
     _heroTimer?.cancel();
-    final needsBg = item.background == null || item.background!.isEmpty;
-    final needsDesc = item.description == null || item.description!.isEmpty;
-    final needsRating = item.imdbRating == null;
-    // Catalog list items almost never carry runtime, so without this the /meta
-    // fetch (its only source) would be skipped whenever bg+desc+rating are
-    // already present — and the hero/takeover runtime would stay blank.
-    final needsRuntime = item.runtime == null;
-    // Same for the logo title-treatment: catalog items basically never carry
-    // it, and without this an item that happens to have bg+desc+rating+runtime
-    // (e.g. Continue Watching) would skip the fetch and stay text-titled.
-    final needsLogo = item.logo == null || item.logo!.isEmpty;
-    if (prefs.isCurrent &&
-        !needsBg &&
-        !needsDesc &&
-        !needsRating &&
-        !needsRuntime &&
-        !needsLogo) {
-      return;
-    }
+    if (!needsHomeHeroMetadata(item, currentProvider: prefs.isCurrent)) return;
     final imdb = item.imdbId ?? (item.id.startsWith('tt') ? item.id : null);
     if (imdb == null && prefs.isCurrent) return;
     // Short: on the board this only fires after the 260ms hero-swap settle.
@@ -16003,7 +15959,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
                           ? item.logo
                           : (enriched?.logo?.isNotEmpty == true
                                 ? enriched!.logo
-                                : _derivedHeroLogo(item)),
+                                : homeStageLogoUrl(item)),
                       compact: widget.searchMode,
                       isTelevision: tv,
                       height: heroH,
