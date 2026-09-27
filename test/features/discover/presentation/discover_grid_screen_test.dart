@@ -1,3 +1,6 @@
+import 'package:debrify/features/discover/application/discover_card_settings_dependencies.dart';
+import 'package:debrify/services/main_page_bridge.dart';
+import 'package:debrify/widgets/see_all/discover_card_settings_scope.dart';
 import 'package:debrify/widgets/see_all/discover_browsing_input.dart';
 import 'dart:async';
 import 'package:debrify/features/discover/application/discover_source_dependencies.dart';
@@ -39,6 +42,11 @@ void main() {
           ProfileRuntime.debugReset();
           StorageService.discoverLayoutCached = 'stage';
         });
+        var cardSettings = (
+          showTypeTags: false,
+          showRatings: true,
+          showTitles: false,
+        );
         var preferenceReads = 0;
         var addonReads = 0;
         final writes = <String>[];
@@ -56,6 +64,10 @@ void main() {
           () => tester.pumpWidget(
             ProviderScope(
               overrides: [
+                discoverCardSettingsReaderProvider.overrideWith(
+                  (ref, session) =>
+                      () => cardSettings,
+                ),
                 discoverSourceRepositoryProvider.overrideWith(
                   (ref, session) => DiscoverSourceRepository(
                     readDefault: () async {
@@ -91,6 +103,23 @@ void main() {
           expect(identity.stageBudget, 352);
           expect(identity.settleDelay, const Duration(milliseconds: 260));
         }
+        DiscoverCardSettingsScope settings() =>
+            tester.widget<DiscoverCardSettingsScope>(
+              find.byType(DiscoverCardSettingsScope),
+            );
+        expect(settings().showTypeTags, isFalse);
+        expect(settings().showRatings, isTrue);
+        expect(settings().showTitles, isFalse);
+        cardSettings = (
+          showTypeTags: true,
+          showRatings: false,
+          showTitles: true,
+        );
+        MainPageBridge.discoverCardSettingsChanged!();
+        await tester.pump();
+        expect(settings().showTypeTags, isTrue);
+        expect(settings().showRatings, isFalse);
+        expect(settings().showTitles, isTrue);
         final stage = tester.widget<DiscoverTrailerStage>(
           find.byType(DiscoverTrailerStage),
         );

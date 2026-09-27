@@ -1,3 +1,5 @@
+import '../features/discover/application/discover_card_settings_controller.dart';
+import '../features/discover/models/discover_card_settings.dart';
 import '../features/discover/application/discover_layout_controller.dart';
 import '../features/discover/presentation/discover_preview.dart';
 import '../features/discover/presentation/discover_source_picker.dart';
@@ -202,7 +204,6 @@ import '../models/stremio_tv/stremio_tv_now_playing.dart';
 import '../models/torrent.dart';
 import '../models/torrent_filter_state.dart';
 import '../services/analytics_service.dart';
-import '../services/discover_prefs.dart';
 import '../services/home_collection_rows.dart';
 import '../services/home_collections_store.dart';
 import '../services/home_list_rows.dart';
@@ -1580,11 +1581,11 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   late final DiscoverLayoutController _discoverLayoutController;
   String get _discLayout => _discoverLayoutController.current;
 
-  // Warmed before runApp, so the first Discover frame already has the user's
-  // poster-card choices instead of flashing the default chrome.
-  bool _discShowTypeTags = DiscoverPrefs.showTypeTags;
-  bool _discShowRatings = DiscoverPrefs.showRatings;
-  bool _discShowTitles = DiscoverPrefs.showTitles;
+  late final ProviderSubscription<DiscoverCardSettings>
+  _discoverCardSettingsSubscription;
+  late final DiscoverCardSettingsController _discoverCardSettingsController;
+  DiscoverCardSettings get _discCardSettings =>
+      _discoverCardSettingsController.current;
 
   /// Whether the STAGE layout is what this surface should render: the pref, on
   /// the Discover tab, on a TV. The canvas-size guard lives in the LayoutBuilder
@@ -1609,19 +1610,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
 
   void _onDiscoverCardSettingsChanged() {
     if (!mounted) return;
-    final showTypeTags = DiscoverPrefs.showTypeTags;
-    final showRatings = DiscoverPrefs.showRatings;
-    final showTitles = DiscoverPrefs.showTitles;
-    if (showTypeTags == _discShowTypeTags &&
-        showRatings == _discShowRatings &&
-        showTitles == _discShowTitles) {
-      return;
+    if (_discoverCardSettingsController.refresh(isCurrent: () => mounted)) {
+      setState(() {});
     }
-    setState(() {
-      _discShowTypeTags = showTypeTags;
-      _discShowRatings = showRatings;
-      _discShowTitles = showTitles;
-    });
   }
 
   @override
@@ -2046,6 +2037,13 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     final discoverLayoutSession = (
       owner: _profileSessionOwner,
       viewIdentity: discoverSession.viewIdentity,
+    );
+    _discoverCardSettingsSubscription = ref.listenManual(
+      discoverCardSettingsProvider(discoverLayoutSession),
+      (previous, next) {},
+    );
+    _discoverCardSettingsController = ref.read(
+      discoverCardSettingsProvider(discoverLayoutSession).notifier,
     );
     _discoverLayoutSubscription = ref.listenManual(
       discoverLayoutProvider(discoverLayoutSession),
@@ -2630,6 +2628,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     _heroTint.dispose();
     _searchController.dispose();
     ProfileRuntime.scope.removeListener(_onSearchProfileChanged);
+    _discoverCardSettingsSubscription.close();
     _discoverLayoutSubscription.close();
     _discoverSourceSubscription.close();
     _metadataFeatureSubscription.close();
@@ -15060,9 +15059,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
 
   Widget _buildDiscoverContent() {
     final panel = DiscoverCardSettingsScope(
-      showTypeTags: _discShowTypeTags,
-      showRatings: _discShowRatings,
-      showTitles: _discShowTitles,
+      showTypeTags: _discCardSettings.showTypeTags,
+      showRatings: _discCardSettings.showRatings,
+      showTitles: _discCardSettings.showTitles,
       child: _buildDiscoverPanel(),
     );
     // Touch has no persistent focus, so a reactive detail rail has nothing to
@@ -15859,10 +15858,13 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   /// their normal labels and badges.
   Widget _withHomeExpandedCardSettings(Widget child) {
     if (widget.searchMode || widget.discoverMode) return child;
+    final settings = _discoverCardSettingsController.readSnapshot(
+      isCurrent: () => mounted,
+    );
     return DiscoverCardSettingsScope(
-      showTypeTags: DiscoverPrefs.showTypeTags,
-      showRatings: DiscoverPrefs.showRatings,
-      showTitles: DiscoverPrefs.showTitles,
+      showTypeTags: settings.showTypeTags,
+      showRatings: settings.showRatings,
+      showTitles: settings.showTitles,
       child: child,
     );
   }
