@@ -66,7 +66,7 @@ const Map<String, int> kShapeResidue = {
   'lib/screens/playlist_screen.dart': 0,
   'lib/screens/premiumize/premiumize_files_screen.dart': 6,
   'lib/features/home/presentation/home_catalog_card.dart': 0,
-  'lib/screens/search/search_hero_widgets.dart': 2,
+  'lib/features/home/presentation/home_hero_trailer_indicators.dart': 1,
   'lib/features/home/presentation/home_hero_live_layer.dart': 0,
   'lib/screens/search_screen.dart': 1,
   'lib/screens/see_all/catalog_see_all_screen.dart': 0,
@@ -130,6 +130,9 @@ const Map<String, int> kShapeResidue = {
 // residue guarded without counting them as swept. The keyword field retains its
 // old literal; all Sources shape-token calls now live in registered widgets.
 const Map<String, int> kExtractedShapeResidue = {
+  'lib/screens/search/search_hero_widgets.dart': 1,
+  'lib/features/home/presentation/home_hero_trailer_layer.dart': 0,
+  'lib/features/home/presentation/home_spotlight_search_button.dart': 0,
   'lib/features/home/presentation/home_classic_layout.dart': 0,
   'lib/features/home/presentation/home_trailer_transitions.dart': 0,
   'lib/features/home/presentation/home_classic_rows.dart': 0,

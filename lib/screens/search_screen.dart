@@ -1,3 +1,6 @@
+import '../features/home/presentation/home_hero_trailer_layer.dart';
+import '../features/home/presentation/home_hero_trailer_indicators.dart';
+import '../features/home/presentation/home_spotlight_search_button.dart';
 import '../features/home/presentation/home_hero_live_layer.dart';
 import '../features/home/presentation/home_hero_surface.dart';
 import '../features/home/presentation/home_stage_rail_label.dart';
@@ -170,7 +173,6 @@ import 'media_server_library_panel.dart';
 import 'dart:convert';
 import 'dart:developer' as developer;
 import 'dart:math';
-import 'dart:ui' as ui show ImageFilter;
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/foundation.dart'
@@ -1470,7 +1472,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   final ValueNotifier<bool> _heroTrailerShowing = ValueNotifier<bool>(false);
 
   /// Takeover progress (0 ambient → 1 full-board), published by
-  /// [_HeroTrailerLayer] as its promote animation runs. The board content and
+  /// [HomeHeroTrailerLayer] as its promote animation runs. The board content and
   /// the sidebar rail fade fully OUT on it while the compact info overlay
   /// fades in — the film takes the room.
   final ValueNotifier<double> _heroTrailerTakeover = ValueNotifier<double>(0);
@@ -1480,7 +1482,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   // trailer above — reusing HeroTrailerBackdrop's `live: true` mode, exactly
   // like the IPTV page's own inline channel preview
   // (IptvResultsView._buildPreviewStage). Painted as a layer above
-  // [_HeroTrailerLayer] so the two never need to swap types; whichever one
+  // [HomeHeroTrailerLayer] so the two never need to swap types; whichever one
   // actually has a URL to show wins (see [_setHeroLiveIptv]).
   final ValueNotifier<String?> _heroLiveUrl = ValueNotifier<String?>(null);
 
@@ -7077,7 +7079,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       onDwell: (item) => _scheduleHeroTrailer(item, fromSpotlight: true),
       onTrailerStop: _clearHeroTrailer,
       trailer: _heroTrailerRenderable
-          ? _HeroTrailerLayer(
+          ? HomeHeroTrailerLayer(
               trailer: _heroTrailer,
               isTelevision: widget.isTelevision,
               heroHeight: 540,
@@ -7442,7 +7444,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
             cacheHeight: _tvHeroArtworkCacheHeight,
           ),
           trailer: _heroTrailerActive
-              ? _HeroTrailerLayer(
+              ? HomeHeroTrailerLayer(
                   trailer: _heroTrailer,
                   isTelevision: widget.isTelevision,
                   heroHeight: boardH,
@@ -7758,7 +7760,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
             cacheHeight: _tvHeroArtworkCacheHeight,
           ),
           trailer: _heroTrailerActive
-              ? _HeroTrailerLayer(
+              ? HomeHeroTrailerLayer(
                   trailer: _heroTrailer,
                   isTelevision: widget.isTelevision,
                   heroHeight: boardH,
@@ -7990,7 +7992,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
             cacheHeight: _tvHeroArtworkCacheHeight,
           ),
           trailer: _heroTrailerActive
-              ? _HeroTrailerLayer(
+              ? HomeHeroTrailerLayer(
                   trailer: _heroTrailer,
                   isTelevision: widget.isTelevision,
                   heroHeight: boardH,
@@ -8521,7 +8523,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
             cacheHeight: _tvHeroArtworkCacheHeight,
           ),
           trailer: _heroTrailerActive
-              ? _HeroTrailerLayer(
+              ? HomeHeroTrailerLayer(
                   trailer: _heroTrailer,
                   isTelevision: widget.isTelevision,
                   heroHeight: geometry.cardH,
@@ -8767,7 +8769,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
               cacheHeight: _tvHeroArtworkCacheHeight,
             ),
             trailer: _heroTrailerActive
-                ? _HeroTrailerLayer(
+                ? HomeHeroTrailerLayer(
                     trailer: _heroTrailer,
                     isTelevision: widget.isTelevision,
                     heroHeight: geometry.cardH,
@@ -13294,8 +13296,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
           Positioned.fill(child: _buildBody()),
           Positioned(
             top: topInset + 10,
-            right: _SpotlightSearchButton.rightInset,
-            child: _SpotlightSearchButton(
+            right: HomeSpotlightSearchButton.rightInset,
+            child: HomeSpotlightSearchButton(
               onTap: () => setState(() {
                 _searchSheetOpen = true;
                 // Focus the field once the sheet's frame exists, so the
@@ -15275,8 +15277,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
           loading: _discTrailerLoading,
           takeover: _discTakeover,
           loadingIndicator: (visible) =>
-              _HeroTrailerLoadingPill(visible: visible),
-          ambientIndicator: (visible) => _HeroAmbientChip(visible: visible),
+              HomeHeroTrailerLoadingPill(visible: visible),
+          ambientIndicator: (visible) => HomeHeroAmbientChip(visible: visible),
         );
       },
     );
@@ -15344,8 +15346,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     showing: _discTrailerShowing,
     loading: _discTrailerLoading,
     takeover: _discTakeover,
-    loadingIndicator: (visible) => _HeroTrailerLoadingPill(visible: visible),
-    ambientIndicator: (visible) => _HeroAmbientChip(visible: visible),
+    loadingIndicator: (visible) => HomeHeroTrailerLoadingPill(visible: visible),
+    ambientIndicator: (visible) => HomeHeroAmbientChip(visible: visible),
   );
 
   void _selectDiscoverSource(String source) {
@@ -15944,7 +15946,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
           ),
         ],
       ),
-      trailerBuilder: (heroH) => _HeroTrailerLayer(
+      trailerBuilder: (heroH) => HomeHeroTrailerLayer(
         trailer: _heroTrailer,
         isTelevision: widget.isTelevision,
         heroHeight: heroH,

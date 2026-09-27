@@ -16,6 +16,7 @@ FEATURES = ("search", "home", "discover", "sources")
 # add a retained facade here once its migration is complete.
 EXTRACTED_ELSEWHERE: tuple[str, ...] = (
     "lib/models/home_collection_rows.dart",
+    "lib/models/youtube_resolved_streams.dart",
     "lib/services/home_collection_rows.dart",
     "lib/core/metadata/metadata_presentation_cache.dart",
     "lib/models/metadata_presentation.dart",

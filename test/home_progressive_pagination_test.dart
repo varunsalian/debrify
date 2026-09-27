@@ -1,3 +1,4 @@
+import 'package:debrify/features/home/presentation/home_hero_trailer_layer.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'dart:async';
 import 'dart:convert';
@@ -427,10 +428,8 @@ void main() {
       await home.mount();
       await home.drive(() => home.slow.complete(page('Slow')));
       await home.settle();
-      final trailer = find.byWidgetPredicate(
-        (widget) => widget.runtimeType.toString() == '_HeroTrailerLayer',
-      );
-      double volume() => (tester.widget(trailer) as dynamic).volume as double;
+      final trailer = find.byType(HomeHeroTrailerLayer);
+      double volume() => tester.widget<HomeHeroTrailerLayer>(trailer).volume;
       expect(volume(), 70);
       final state = tester.state(find.byType(SearchScreen));
       final requests = List<String>.of(home.requests);
