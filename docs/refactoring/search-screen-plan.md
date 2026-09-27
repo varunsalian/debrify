@@ -569,6 +569,43 @@ files. The changed feature/test files pass formatting checks. Evidence:
 `full-collections-access*`. Full-load orchestration, independent Home responsibilities
 and overall device/performance/CI gates remain open.
 
+Accepted Home configuration now lives in the catalog application state. The
+24-line `HomeBoardConfiguration` groups the existing immutable catalog preferences,
+collection container/signature and hide-watched value. Seven mutable widget fields
+become read-only accessors; initial-load and settings-refresh acceptance replace one
+configuration value only after their existing guards. Catalog state (53 lines) retains
+that value across reservation, snapshot recovery and loading-flag changes. The
+controller remains 183 lines, with one explicit configuration-acceptance action.
+
+The in-memory Home return record carries this immutable configuration instead of
+separate shallow container copies. Its legacy collection objects retain the same
+borrowed identities; no persisted schema changes. The existing return-cache profile,
+revision and age gates are unchanged. The session's construction data (30 lines)
+seeds accepted cached configuration before the first frame, together with the board
+snapshot. Cold defaults still capture hide-watched and the empty collection signature
+at State construction; the new const empty preferences constructor preserves the
+original random-hero default. Bootstrap data is not another mutable state owner.
+
+Review checked the initial-load ordering and comparison timing: code after awaits
+still reads the current accepted configuration through the same view accessors, and
+the settings path still captures the previous hide-watched value before hashing.
+This prepares the remaining load orchestration to move without freezing live inputs
+at an earlier point. The screen is 20,063 lines and remains under the existing phase
+exception; render/focus state and full-load orchestration are not declared migrated.
+
+Five tests cover defensive containers, atomic publication/old snapshots, preservation
+through refresh/paging/timeout recovery, construction-time return state, and separate
+views/profile epochs/disposal. The real SearchScreen integration test observes the
+accepted configuration from the injected collection signature. All 24 existing
+pagination/cached-return tests pass. Wider targeted Home results: 286 successes
+versus 281 before, identical 12 failure identities and one skip. Analyzer identities
+remain 863; architecture checks pass for 193 migrated files. Full suite: 8,371
+successes, unchanged 51 failures/20 skips; every preceding outcome is preserved
+and five new tests pass. Changed feature/test files pass formatting checks.
+Evidence: `.git/refactor-evidence/phase5/configuration-state-*`,
+`analyze-configuration-state-*`, `full-configuration-state*`. Full phase and overall
+device/performance/CI/size gates remain open.
+
 ### 6. Discover and remaining layouts
 
 - Separate Discover selection/hydration from its grid/stage presentation. Preserve

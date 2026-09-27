@@ -1,3 +1,4 @@
+import '../models/home_board_configuration.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../models/stremio_addon.dart';
@@ -35,6 +36,7 @@ class HomeCatalogController extends Notifier<HomeCatalogState> {
       cursor: initial?.cursor,
       committed: initial,
       refreshing: session.initiallyRefreshing,
+      configuration: session.initialConfiguration,
     );
   }
 
@@ -82,6 +84,13 @@ class HomeCatalogController extends Notifier<HomeCatalogState> {
     if (owns(generation) && state.loadingMore) {
       state = state.copyWith(loadingMore: false);
     }
+  }
+
+  /// Both full loads and settings refresh validate their own request/profile
+  /// before accepting configuration; they share this one current value.
+  void applyConfiguration(HomeBoardConfiguration configuration) {
+    if (!ref.mounted) return;
+    state = state.copyWith(configuration: configuration);
   }
 
   void install(List<HomeCatalogReference> references) {

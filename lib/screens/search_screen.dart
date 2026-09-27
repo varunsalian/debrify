@@ -1,3 +1,4 @@
+import '../features/home/models/home_board_configuration.dart';
 import '../features/home/application/home_collections_dependencies.dart';
 import '../features/home/application/home_configuration_changes.dart';
 import '../features/home/data/home_collections_repository.dart';
@@ -281,15 +282,9 @@ class SearchScreen extends ConsumerStatefulWidget {
 typedef _HomePreservedState = ({
   List<CatalogSection> sections,
   HomeBoardSnapshot<(StremioAddon, StremioAddonCatalog), StremioAddon> board,
-  Set<String> disabled,
-  List<HomeExtraRow> extras,
-  List<String> order,
-  List<HomeCollection> collections,
-  String collectionsSignature,
-  HomeHeroSource heroSource,
+  HomeBoardConfiguration configuration,
   CatalogSection? hero,
   bool heroResolutionPending,
-  bool hideWatched,
   HomeCardOrientation cardOrientation,
   bool hideCardTitlesAndRatings,
   bool hideCatalogAddonNames,
@@ -743,24 +738,34 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   // leaves like `cw:movies`/`trakt:shows`/`fav:iptv` and catalog leaves
   // `addonId:type:catalogId`). Gates every Home board row below. Refreshed by
   // [_reloadForHomeSettings] when the manager saves.
-  Set<String> _homeDisabled = {};
+  // Bootstrap is captured at state construction, matching the previous field
+  // initialization. All accepted changes live in the controller afterwards.
+  final _initialHomeConfiguration = HomeBoardConfiguration(
+    preferences: const HomeCatalogPreferences.empty(),
+    collections: const [],
+    collectionsSignature: HomeCollectionsStore.signatureOf(const []),
+    hideWatched: HideWatchedPrefs.enabled,
+  );
+  HomeBoardConfiguration get _homeConfiguration =>
+      _homeCatalogController.current.configuration;
+  Set<String> get _homeDisabled => _homeConfiguration.preferences.disabled;
 
   // The OPT-IN extra rows (Trakt/Simkl list rows, IPTV custom-list rows) from
   // the same manager — default-off, so they live in their own store
   // (`home_extra_rows_v1`). Tracker ids become [HomeListSection]s at the head
   // of the board in [_load]; `iptvlist:` ids drive the IPTV list favourites
   // rows. Refreshed by [_reloadForHomeSettings].
-  List<HomeExtraRow> _homeExtras = const [];
+  List<HomeExtraRow> get _homeExtras => _homeConfiguration.preferences.extras;
 
   /// The hide-watched switch as of the last board load. Flipping it changes
   /// row membership, so [_reloadForHomeSettings] diffs it like a row toggle.
-  bool _hideWatched = HideWatchedPrefs.enabled;
+  bool get _hideWatched => _homeConfiguration.hideWatched;
 
   /// Imported collections — each enabled one is a [HomeCollectionSection] row
   /// of folder tiles. [_homeCollectionsSig] is the store's change token the
   /// settings-changed listener diffs against.
-  List<HomeCollection> _homeCollections = const [];
-  String _homeCollectionsSig = HomeCollectionsStore.signatureOf(const []);
+  List<HomeCollection> get _homeCollections => _homeConfiguration.collections;
+  String get _homeCollectionsSig => _homeConfiguration.collectionsSignature;
   int _homeSettingsReloadGen = 0;
   late final _spotlightCatalogCards = SpotlightCatalogCardCache(
     wideArtwork: _wideArtUrl,
@@ -769,13 +774,13 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
 
   /// Stable ids in the user's global Home-row order. Rows not present append
   /// canonically; ids whose backing row is temporarily unavailable stay saved.
-  List<String> _homeRowOrder = const [];
+  List<String> get _homeRowOrder => _homeConfiguration.preferences.rowOrder;
 
   /// The Spotlight hero-source pref (`home_hero_source_v1`): which catalog the
   /// hero reel is built from. Read in [_load], refreshed by
   /// [_reloadForHomeSettings]; resolved into [_spotlightHeroOverride] by
   /// [_resolveSpotlightHeroSource].
-  HomeHeroSource _heroSource = (mode: HomeHeroSourceMode.random, ids: const []);
+  HomeHeroSource get _heroSource => _homeConfiguration.preferences.heroSource;
 
   /// Whether any Trakt/Simkl list row is opted in — gates the tracker-row
   /// resolve in [_load] and the integrations-triggered reload.
@@ -1848,7 +1853,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         ? _homePreserved.take(_profileSessionOwner)
         : null;
     final restoredHome = homeSnapshot != null &&
-        homeSnapshot.hideWatched == HideWatchedPrefs.enabled;
+        homeSnapshot.configuration.hideWatched == HideWatchedPrefs.enabled;
     // Seed cached state in provider construction so the first return frame
     // does not mutate a provider during initState or wait for another frame.
     final homeSession = HomeCatalogSession(
@@ -1856,6 +1861,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       viewIdentity: Object(),
       initialBoard: restoredHome && keywordSnapshot == null
           ? homeSnapshot.board : null,
+      initialConfiguration: restoredHome && keywordSnapshot == null
+          ? homeSnapshot.configuration : _initialHomeConfiguration,
       initiallyRefreshing: !widget.searchMode && !widget.discoverMode &&
           !(restoredHome && keywordSnapshot == null),
     );
@@ -2349,14 +2356,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   Future<void> _restoreHomeSnapshot(_HomePreservedState snapshot) async {
     _homeReturnRevision = HomeReturnCache.revision;
     _homeLoadedAt = snapshot.loadedAt;
-    _homeDisabled = snapshot.disabled;
-    _homeExtras = snapshot.extras;
-    _homeRowOrder = snapshot.order;
-    _homeCollections = snapshot.collections;
-    _homeCollectionsSig = snapshot.collectionsSignature;
-    _heroSource = snapshot.heroSource;
     _spotlightHeroOverride = snapshot.hero;
-    _hideWatched = snapshot.hideWatched;
     _homeCardOrientation = snapshot.cardOrientation;
     _hideHomeCardTitlesAndRatings = snapshot.hideCardTitlesAndRatings;
     _hideHomeCatalogAddonNames = snapshot.hideCatalogAddonNames;
@@ -2424,15 +2424,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     _homePreserved.store(_profileSessionOwner, (
       sections: _homeSections.map(copy).toList(),
       board: board,
-      disabled: Set.of(_homeDisabled),
-      extras: List.of(_homeExtras),
-      order: List.of(_homeRowOrder),
-      collections: List.of(_homeCollections),
-      collectionsSignature: _homeCollectionsSig,
-      heroSource: _heroSource,
+      configuration: _homeConfiguration,
       hero: _spotlightHeroOverride == null ? null : copy(_spotlightHeroOverride!),
       heroResolutionPending: _heroSourceResolutionPending,
-      hideWatched: _hideWatched,
       cardOrientation: _homeCardOrientation,
       hideCardTitlesAndRatings: _hideHomeCardTitlesAndRatings,
       hideCatalogAddonNames: _hideHomeCatalogAddonNames,
@@ -2801,10 +2795,6 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     final preferences = await ref
         .read(homeCatalogPreferencesRepositoryProvider)
         .read();
-    final disabled = preferences.disabled;
-    final extras = preferences.extras;
-    final rowOrder = preferences.rowOrder;
-    final heroSource = preferences.heroSource;
     final collections = await _homeCollectionsRepository.read();
     if (!mounted) return;
     final hideWatched = HideWatchedPrefs.enabled;
@@ -2818,12 +2808,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       return;
     }
     final changes = homeConfigurationChanges(
-      previous: HomeCatalogPreferences(
-        disabled: _homeDisabled,
-        extras: _homeExtras,
-        rowOrder: _homeRowOrder,
-        heroSource: _heroSource,
-      ),
+      previous: _homeConfiguration.preferences,
       next: preferences,
       previousHideWatched: previousHideWatched,
       hideWatched: hideWatched,
@@ -2833,13 +2818,14 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     );
     if (!changes.changed) return;
     setState(() {
-      _homeDisabled = disabled;
-      _homeExtras = extras;
-      _homeRowOrder = rowOrder;
-      _heroSource = heroSource;
-      _hideWatched = hideWatched;
-      _homeCollections = collections;
-      _homeCollectionsSig = collectionsSig;
+      _homeCatalogController.applyConfiguration(
+        HomeBoardConfiguration(
+          preferences: preferences,
+          collections: collections,
+          collectionsSignature: collectionsSig,
+          hideWatched: hideWatched,
+        ),
+      );
     });
     // Hide-watched changes row MEMBERSHIP, so it takes the full reload path.
     if (changes.reloadBoard) {
@@ -2969,10 +2955,6 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
           final preferences = await ref
               .read(homeCatalogPreferencesRepositoryProvider)
               .read();
-          final disabled = preferences.disabled;
-          final extras = preferences.extras;
-          final rowOrder = preferences.rowOrder;
-          final heroSource = preferences.heroSource;
           final collections = await _homeCollectionsRepository.read();
           final collectionsSig = await _homeCollectionsRepository.signature(
             collections,
@@ -2982,13 +2964,14 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
           // resolve would double the concurrent tracker requests beside the
           // winning generation's and stale-write the shared settings fields.
           if (!current()) return;
-          _homeDisabled = disabled;
-          _homeExtras = extras;
-          _homeRowOrder = rowOrder;
-          _heroSource = heroSource;
-          _hideWatched = HideWatchedPrefs.enabled;
-          _homeCollections = collections;
-          _homeCollectionsSig = collectionsSig;
+          _homeCatalogController.applyConfiguration(
+            HomeBoardConfiguration(
+              preferences: preferences,
+              collections: collections,
+              collectionsSignature: collectionsSig,
+              hideWatched: HideWatchedPrefs.enabled,
+            ),
+          );
           if (progress != null) {
             _homeCatalogController.install(const []);
             _addonsById.clear();

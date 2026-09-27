@@ -3,6 +3,12 @@ import '../../../models/home_preferences.dart';
 /// Read-only settings snapshot. Loading generations and commits belong to the
 /// caller; this value owns no cached preference or profile state.
 class HomeCatalogPreferences {
+  const HomeCatalogPreferences.empty()
+    : disabled = const {},
+      extras = const [],
+      rowOrder = const [],
+      heroSource = const (mode: HomeHeroSourceMode.random, ids: <String>[]);
+
   HomeCatalogPreferences({
     required Set<String> disabled,
     required List<HomeExtraRow> extras,

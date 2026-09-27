@@ -124,6 +124,11 @@ void main() {
     expect(observer.updates.last.references, [(addon, catalog)]);
     expect(observer.updates.last.cursor, 1);
     expect(observer.updates.last.committed, isNull);
+    expect(
+      observer.updates.last.configuration.collectionsSignature,
+      'fixture-signature',
+    );
+    expect(observer.updates.last.configuration.preferences.disabled, isEmpty);
     final updatesBeforeDisposal = observer.updates.length;
     await tester.pumpWidget(const SizedBox());
     await tester.runAsync(() async {
