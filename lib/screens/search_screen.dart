@@ -166,9 +166,8 @@ import '../features/home/presentation/category_tag.dart';
 import '../features/search/application/keyword_providers.dart';
 import '../services/native_series_metadata_service.dart';
 import '../models/media_identity.dart';
-import '../widgets/random_playback_dialog.dart';
+import '../features/home/presentation/home_random_playback_action.dart';
 import '../features/home/application/home_random_episode_dependencies.dart';
-import '../features/home/models/home_random_playback_preparation.dart';
 import '../widgets/clear_pinned_sources_button.dart';
 import '../services/profiles/profile_runtime.dart';
 import 'metadata_explore_page.dart';
@@ -11366,36 +11365,27 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   Future<void> _playRandomEpisodeFromDetail(
     StremioMeta item,
     StremioAddon addon,
-  ) async {
+  ) {
     bool current() =>
         mounted && _profileSessionOwner == ProfileSessionMemory.captureOwner();
-    if (!current()) return;
-    final mode = await showRandomPlaybackDialog(context, title: item.name);
-    if (!current() || mode == null) return;
-    final result = await ref
-        .read(homeRandomPlaybackRepositoryProvider(_profileSessionOwner))
-        .prepare(
-          item: item,
-          addon: addon,
-          progressId: _imdbOf(item),
-          continuous: mode == RandomPlaybackMode.continuous,
-          isCurrent: current,
-        );
-    if (!current()) return;
-    switch (result.status) {
-      case HomeRandomPlaybackStatus.retired:
-        return;
-      case HomeRandomPlaybackStatus.loadFailed:
-        _snack('Could not load episodes. Please retry.');
-      case HomeRandomPlaybackStatus.noEpisodes:
-        _snack("Couldn't load episodes for \"${item.name}\".");
-      case HomeRandomPlaybackStatus.ready:
-        _playSelection(
-          result.selection!,
-          metadataAddonId: addon.id,
-          catalogItem: item.withSourceAddon(addon),
-        );
-    }
+    if (!current()) return Future.value();
+    return runHomeRandomPlayback(
+      context: context,
+      item: item,
+      addon: addon,
+      isCurrent: current,
+      prepare: (continuous) => ref
+          .read(homeRandomPlaybackRepositoryProvider(_profileSessionOwner))
+          .prepare(
+            item: item,
+            addon: addon,
+            progressId: _imdbOf(item),
+            continuous: continuous,
+            isCurrent: current,
+          ),
+      showMessage: _snack,
+      launch: _playSelection,
+    );
   }
 
   // Catalog Play = auto-best in-tab; Sources = manual list in-tab. For a series
