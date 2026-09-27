@@ -1,3 +1,4 @@
+import '../features/home/presentation/home_stage_theater.dart';
 import '../features/home/presentation/home_hero_shell_bridge.dart';
 import '../features/home/application/home_hero_tint_loader.dart';
 import '../features/home/application/home_hero_tint_dependencies.dart';
@@ -2640,7 +2641,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       HardwareKeyboard.instance.removeHandler(_onCanvasTheaterKey);
       HardwareKeyboard.instance.removeHandler(_stageHold.handleKeyEvent);
     }
-    _canvasTheaterTimer?.cancel();
+    _stageTheater.dispose();
     _canvasFavFocus.dispose();
     _atriumFocusedRailKey.dispose();
     _tonightCard.dispose();
@@ -6022,8 +6023,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   /// that means something else in its own geometry.
   void _resetStageNavigation() {
     _canvasFocusSeeded = false;
-    _canvasTheaterTimer?.cancel();
-    _canvasTheater = false;
+    _stageTheater.reset();
     _canvasFavFocus.value = null;
     _canvasRailKey = null;
     _canvasCols.clear();
@@ -6402,45 +6402,17 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   /// (observe-only: the key still does its job), and if playback continues
   /// uninterrupted the dwell re-arms. The shelf is hidden VISUALLY only
   /// (opacity/slide, never unmounted), so focus stays exactly where it was.
-  bool _canvasTheater = false;
-  Timer? _canvasTheaterTimer;
-  static const _canvasTheaterDwell = Duration(seconds: 5);
+  late final HomeStageTheater _stageTheater = HomeStageTheater(
+    isCurrent: () => mounted,
+    isEligible: () => _theaterEligible,
+    isShowing: () => _heroTrailerShowing.value,
+    onChanged: () => setState(() {}),
+  );
+  bool get _canvasTheater => _stageTheater.active;
 
-  void _onCanvasTrailerShowingChanged() {
-    if (!mounted) return;
-    if (!_theaterEligible) {
-      _canvasTheaterTimer?.cancel();
-      if (_canvasTheater) setState(() => _canvasTheater = false);
-      return;
-    }
-    if (_heroTrailerShowing.value) {
-      _armCanvasTheater();
-    } else {
-      // Trailer gone (DPAD move cleared it / playback ended) — lights up.
-      _canvasTheaterTimer?.cancel();
-      if (_canvasTheater) setState(() => _canvasTheater = false);
-    }
-  }
+  void _onCanvasTrailerShowingChanged() => _stageTheater.showingChanged();
 
-  void _armCanvasTheater() {
-    _canvasTheaterTimer?.cancel();
-    _canvasTheaterTimer = Timer(_canvasTheaterDwell, () {
-      if (!mounted || !_theaterEligible || !_heroTrailerShowing.value) {
-        return;
-      }
-      setState(() => _canvasTheater = true);
-    });
-  }
-
-  /// Global key observer (cheap first-compare on the common path): any
-  /// key-down during theater wakes the lights and re-arms the dwell. Never
-  /// handles the key — it must still perform its normal action.
-  bool _onCanvasTheaterKey(KeyEvent event) {
-    if (!_canvasTheater || event is! KeyDownEvent) return false;
-    if (mounted) setState(() => _canvasTheater = false);
-    _armCanvasTheater();
-    return false;
-  }
+  bool _onCanvasTheaterKey(KeyEvent event) => _stageTheater.handleKey(event);
 
   String _canvasRailKeyOf(HomeRail rail) {
     return 'row:${_canvasRailRowId(rail)}';
