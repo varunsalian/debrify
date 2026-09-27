@@ -51,15 +51,15 @@ void main() {
         readItems: () async {
           calls.add('items');
           return [
-            {'imdbId': 'tt1', 'title': 'Local fixture'},
-            {'imdbId': 'tt2', 'title': 'Second local fixture'},
+            {'imdbId': 'tmdb:movie:1', 'title': 'Local fixture'},
+            {'imdbId': 'tmdb:movie:2', 'title': 'Second local fixture'},
           ];
         },
         readAddons: () => throw StateError('Unexpected addons'),
         readEpisode: (_) => throw StateError('Unexpected episode'),
         readMovie: (id) {
           calls.add(id);
-          return id == 'tt1' ? first.future : Future.value(null);
+          return id == 'tmdb:movie:1' ? first.future : Future.value(null);
         },
       );
       final client = MockClient((_) async => http.Response('[]', 200));
@@ -82,7 +82,7 @@ void main() {
         calls,
         outcome == 'disabled'
             ? ['source', 'enabled']
-            : ['source', 'enabled', 'items', 'tt1'],
+            : ['source', 'enabled', 'items', 'tmdb:movie:1'],
       );
       if (outcome == 'dispose') await tester.pumpWidget(const SizedBox());
       if (outcome == 'profile') {
@@ -100,10 +100,48 @@ void main() {
       });
       await tester.pump(const Duration(milliseconds: 500));
       if (outcome == 'active') {
-        expect(calls, ['source', 'enabled', 'items', 'tt1', 'tt2']);
+        expect(calls, [
+          'source',
+          'enabled',
+          'items',
+          'tmdb:movie:1',
+          'tmdb:movie:2',
+        ]);
         expect(find.text('Local fixture'), findsWidgets);
+        FocusNode cardNode() => find
+            .text('Local fixture')
+            .evaluate()
+            .map((element) => Focus.maybeOf(element))
+            .whereType<FocusNode>()
+            .single;
+        final node = cardNode();
+        node.requestFocus();
+        await http.runWithClient(() => tester.pump(), () => client);
+        expect(node.hasFocus, isTrue);
+        await tester.runAsync(() async {
+          StorageService.localCompletionRevision.value++;
+          await Future<void>.delayed(const Duration(milliseconds: 100));
+        });
+        await http.runWithClient(
+          () => tester.pump(const Duration(milliseconds: 100)),
+          () => client,
+        );
+        expect(calls, [
+          'source',
+          'enabled',
+          'items',
+          'tmdb:movie:1',
+          'tmdb:movie:2',
+          'source',
+          'enabled',
+          'items',
+          'tmdb:movie:1',
+          'tmdb:movie:2',
+        ]);
+        expect(cardNode(), same(node));
+        expect(node.hasFocus, isTrue);
       } else {
-        expect(calls, isNot(contains('tt2')));
+        expect(calls, isNot(contains('tmdb:movie:2')));
         expect(find.text('Local fixture'), findsNothing);
       }
       await tester.pumpWidget(const SizedBox());

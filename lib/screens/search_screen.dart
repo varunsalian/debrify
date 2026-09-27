@@ -1,4 +1,6 @@
-import '../features/home/application/home_local_continuation_dependencies.dart';
+import '../features/home/application/home_local_continuation_controller.dart';
+import '../features/home/models/home_continuation_session.dart';
+import '../features/home/models/home_local_continuation_state.dart';
 import '../features/home/application/home_row_snapshot.dart';
 import '../features/home/application/home_board_load.dart';
 import '../features/home/application/home_board_dependencies.dart';
@@ -892,18 +894,23 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   // affected. Split into two recency-ordered rows (Movies, then Series), each
   // shown as a leading board row when non-empty. Removal happens only from the
   // detail screen's action.
-  bool _cwEnabled = true;
-  List<StremioMeta> _cwMovies = [];
-  List<StremioMeta> _cwSeries = [];
-  // Movies + series merged in last-watched order (newest first) — the source
-  // for the Continue Watching "See All" grid, which filters by type itself.
-  List<StremioMeta> _cwAll = [];
-  final Map<String, double> _cwProgress = {}; // imdbId → 0..1 watched fraction
-  final Map<String, String> _cwEpisode = {}; // imdbId → 'S2 · E5' (series only)
-  final Map<String, int> _cwRemainingMinutes = {};
+  late final HomeLocalContinuationController _localContinuationController;
+  late final ProviderSubscription<HomeLocalContinuationState>
+  _localContinuationSubscription;
+  HomeLocalContinuationState get _localContinuation =>
+      _localContinuationController.current;
+  bool get _cwEnabled => _localContinuation.enabled;
+  List<StremioMeta> get _cwMovies => _localContinuation.movies;
+  List<StremioMeta> get _cwSeries => _localContinuation.series;
+  List<StremioMeta> get _cwAll => _localContinuation.data.items;
+  Map<String, double> get _cwProgress => _localContinuation.data.progress;
+  Map<String, String> get _cwEpisode => _localContinuation.data.episode;
+  Map<String, int> get _cwRemainingMinutes =>
+      _localContinuation.data.remainingMinutes;
+  Set<String> get _cwIds => _localContinuation.data.ids;
+  Map<String, String?> get _cwAddonId => _localContinuation.data.addonIds;
   final Map<String, String> _cwEpisodeArtwork = {};
-  final Set<String> _cwIds = {}; // imdbIds currently in Continue Watching
-  final Map<String, String?> _cwAddonId = {}; // imdbId → source addon id
+
   final List<FocusNode> _cwMovieNodes = [];
   final List<FocusNode> _cwSeriesNodes = [];
 
@@ -954,11 +961,6 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   final Map<String, String> _iptvCwEpisode = {}; // routeKey → 'S2 · E5'
   final Map<String, IptvCwEntry> _iptvCwByKey = {}; // routeKey → routing entry
   int _iptvCwLoadToken = 0;
-
-  /// Monotonic guard so an earlier, slower Continue Watching load (which does
-  /// one SharedPreferences round-trip per item) can't finish after a newer one
-  /// and dispose the focus nodes / state the newer run just installed.
-  int _cwLoadToken = 0;
 
   /// Set when a real content player launches (any path — in-app route, native
   /// TV activity, external app; never trailers), consumed by
@@ -1133,7 +1135,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   /// The Progress source, mirrored for the CW card lookups below. Smart until
   /// the first load resolves it (Smart = every row keeps its own numbers,
   /// which is also the pre-Tracking behaviour).
-  WatchProgressSource _cwProgressSource = WatchProgressSource.smart;
+  WatchProgressSource get _cwProgressSource => _localContinuation.progressSource;
 
   /// Continue Watching cards show the title from whichever row owns it, but
   /// the PROGRESS comes from the selected Progress source — so a card can
@@ -1868,6 +1870,17 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       (previous, next) {},
     );
     _homeCatalogController = ref.read(homeCatalogProvider(homeSession).notifier);
+    final localContinuationSession = HomeContinuationSession(
+      owner: _profileSessionOwner,
+      viewIdentity: Object(),
+    );
+    _localContinuationSubscription = ref.listenManual(
+      homeLocalContinuationProvider(localContinuationSession),
+      (previous, next) {},
+    );
+    _localContinuationController = ref.read(
+      homeLocalContinuationProvider(localContinuationSession).notifier,
+    );
     _homeLastScroll = restoredHome && !widget.isTelevision
         ? homeSnapshot.scrollOffset : 0;
     _boardScroll = ScrollController(initialScrollOffset: _homeLastScroll);
@@ -2556,6 +2569,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     _searchController.dispose();
     ProfileRuntime.scope.removeListener(_onSearchProfileChanged);
     _homeCatalogSubscription.close();
+    _localContinuationSubscription.close();
     _listsSubscription.close();
     _catalogSubscription.close();
     _keywordResultsSubscription.close();
@@ -3351,98 +3365,37 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   /// Home's join (item list + per-title playback progress) but is read-only —
   /// it never writes, so Home's row is untouched. Safe to call repeatedly
   /// (e.g. after returning from a detail/playback).
-  Future<void> _loadContinueWatching() async {
-    final token = ++_cwLoadToken;
-    bool current() =>
-        mounted &&
-        token == _cwLoadToken &&
-        _profileSessionOwner == ProfileSessionMemory.captureOwner();
-    if (!current()) return;
-    final repository = ref.read(homeLocalContinuationRepositoryProvider);
-    // Every CW reload passes through here (init, Home-settings change,
-    // integration change, post-playback), so it is the one place the card
-    // lookups need their Progress source refreshed.
-    final progressSource = await repository.readProgressSource();
-    if (!current()) return;
-    final enabled = await repository.readEnabled();
-    if (!current()) return;
-    if (progressSource != _cwProgressSource) {
-      setState(() => _cwProgressSource = progressSource);
-    }
-    if (!enabled) {
-      // Free the focus nodes too — otherwise they linger allocated until
-      // dispose while the rows are hidden.
-      _syncCwNodes(_cwMovieNodes, 0, 'movie');
-      _syncCwNodes(_cwSeriesNodes, 0, 'series');
-      setState(() {
-        _cwEnabled = false;
-        _cwMovies = [];
-        _cwSeries = [];
-        _cwAll = [];
-        _cwIds.clear();
-        _cwProgress.clear();
-        _cwEpisode.clear();
-        _cwRemainingMinutes.clear();
-        _cwEpisodeArtwork.clear();
-        _cwAddonId.clear();
-      });
-      return;
-    }
-
-    final data = await repository.load(isCurrent: current);
-    if (data == null || !current()) return;
-    final items = data.items;
-
-    await _ensureCwMergeFlags();
-    // Bail if a newer load superseded this one while we were awaiting — never
-    // dispose/replace nodes or state a later run already committed.
-    if (!current()) return;
-
-    // Split into two recency-ordered rows; `items` is already most-recent-first.
-    final movies = items.where((m) => m.type != 'series').toList();
-    final series = items.where((m) => m.type == 'series').toList();
-    // Keep each row's focus-node list length in sync with its item count. Only
-    // rebuild when the count changes (a plain refresh keeps the same nodes so
-    // an active TV focus isn't dropped). Merged mode renders the combined list
-    // through the movies slot, so its node count follows `items`.
-    _syncCwNodes(
-      _cwMovieNodes,
-      _cwMergeLocal ? items.length : movies.length,
-      'movie',
-    );
-    _syncCwNodes(_cwSeriesNodes, _cwMergeLocal ? 0 : series.length, 'series');
-
-    setState(() {
-      _cwEnabled = true;
-      _cwMovies = movies;
-      _cwSeries = series;
-      _cwAll = items;
-      _cwIds
-        ..clear()
-        ..addAll(data.ids);
-      _cwProgress
-        ..clear()
-        ..addAll(data.progress);
-      _cwEpisode
-        ..clear()
-        ..addAll(data.episode);
-      _cwRemainingMinutes
-        ..clear()
-        ..addAll(data.remainingMinutes);
-      _cwEpisodeArtwork.clear();
-      _cwAddonId
-        ..clear()
-        ..addAll(data.addonIds);
-    });
-    unawaited(
-      _enrichCwEpisodeArtwork(
-        refs: data.episodeRefs,
-        target: _cwEpisodeArtwork,
-        isCurrent: current,
-      ),
-    );
-    _maybeAutoFocusBoard();
-  }
+  Future<void> _loadContinueWatching() => _localContinuationController.load(
+    isCurrent: () => mounted,
+    onProgressSourceChanged: () => setState(() {}),
+    beforeEnabledRows: _ensureCwMergeFlags,
+    beforeRows: (next) {
+      // Keep the same nodes on refresh. Merged mode uses the movies slot for
+      // every item; disabled rows release their nodes before data publication.
+      _syncCwNodes(
+        _cwMovieNodes,
+        _cwMergeLocal ? next.data.items.length : next.movies.length,
+        'movie',
+      );
+      _syncCwNodes(
+        _cwSeriesNodes,
+        _cwMergeLocal ? 0 : next.series.length,
+        'series',
+      );
+    },
+    onRows: (next, current) {
+      setState(_cwEpisodeArtwork.clear);
+      if (!next.enabled) return;
+      unawaited(
+        _enrichCwEpisodeArtwork(
+          refs: next.data.episodeRefs,
+          target: _cwEpisodeArtwork,
+          isCurrent: current,
+        ),
+      );
+      _maybeAutoFocusBoard();
+    },
+  );
 
   void _onLocalCompletionChanged() {
     if (!mounted || widget.searchMode || widget.discoverMode) return;

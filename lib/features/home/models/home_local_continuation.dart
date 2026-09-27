@@ -3,6 +3,15 @@ import '../../../models/stremio_addon.dart';
 /// One read-only join of local history and saved playback progress.
 /// Metadata identities are borrowed; all result containers are detached.
 class HomeLocalContinuation {
+  const HomeLocalContinuation.empty()
+    : items = const [],
+      ids = const {},
+      progress = const {},
+      episode = const {},
+      remainingMinutes = const {},
+      episodeRefs = const {},
+      addonIds = const {};
+
   HomeLocalContinuation({
     required List<StremioMeta> items,
     required Set<String> ids,
