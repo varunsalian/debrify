@@ -6,6 +6,7 @@ import '../../../services/filtered_catalog_pager.dart';
 import '../models/home_catalog_plan.dart';
 import '../data/home_catalog_repository.dart';
 import 'home_catalog_dependencies.dart';
+import 'home_row_snapshot.dart';
 import '../models/home_catalog_state.dart';
 import '../models/home_catalog_session.dart';
 
@@ -22,6 +23,12 @@ class HomeCatalogController extends Notifier<HomeCatalogState> {
   HomeCatalogController(this.session);
   final HomeCatalogSession session;
   late HomeCatalogRepository _repository;
+  List<CatalogSection>? _rows;
+
+  /// Read-only inventory; legacy row identities are borrowed by presentation.
+  /// Only this controller mutates their paging fields and item lists.
+  List<CatalogSection> get rows => _rows ?? const [];
+
   int _generation = 0;
   int get generation => _generation;
 
@@ -30,6 +37,8 @@ class HomeCatalogController extends Notifier<HomeCatalogState> {
   @override
   HomeCatalogState build() {
     _repository = ref.watch(homeCatalogRepositoryProvider);
+    // Dependency recomputation retires requests, not the retained visible rows.
+    _rows ??= List.unmodifiable(session.initialRows);
     ref.onDispose(() => _generation++);
     final initial = session.initialBoard;
     return const HomeCatalogState.empty().copyWith(
@@ -108,6 +117,57 @@ class HomeCatalogController extends Notifier<HomeCatalogState> {
   }
 
   Future<List<StremioAddon>> readAddons() => _repository.readAddons();
+
+  List<CatalogSection> rowsForReturn() =>
+      rows.map(copyHomeRowForReturn).toList();
+
+  void replaceRows(List<CatalogSection> rows) {
+    if (!ref.mounted) return;
+    _rows = List.unmodifiable(rows);
+    _rowsChanged();
+  }
+
+  void _rowsChanged() {
+    if (ref.mounted) {
+      state = state.copyWith(rowsRevision: state.rowsRevision + 1);
+    }
+  }
+
+  bool beginRowPage(CatalogSection row, {bool resume = false}) {
+    if (!ref.mounted ||
+        (row.pagingPaused && !resume) ||
+        row.loadingMore ||
+        row.exhausted) {
+      return false;
+    }
+    row.loadingMore = true;
+    _rowsChanged();
+    return true;
+  }
+
+  /// The view validates live row/profile ownership before accepting a page.
+  /// Metadata precedes focus allocation, including empty resumable windows.
+  void acceptRowPage(CatalogSection row, FilteredPage page) {
+    if (!ref.mounted) return;
+    row.nextSkip = page.nextSkip;
+    if (page.exhausted) row.exhausted = true;
+    row.pagingPaused = page.items.isEmpty && !page.exhausted;
+    _rowsChanged();
+  }
+
+  /// Focus nodes are allocated by presentation before items become visible.
+  void appendRowItems(CatalogSection row, List<StremioMeta> items) {
+    if (!ref.mounted) return;
+    row.items.addAll(items);
+    _rowsChanged();
+  }
+
+  void finishRowPage(CatalogSection row) {
+    // A removed view/row must still release its borrowed loading latch. It may
+    // be retained by a pending refresh, but disposal must not notify Riverpod.
+    row.loadingMore = false;
+    _rowsChanged();
+  }
 
   /// Horizontal requests belong to a displayed row, not the board generation:
   /// a refresh may retain that same row. Publication remains identity-guarded.

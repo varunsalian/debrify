@@ -12,6 +12,7 @@ class HomeCatalogState {
   const HomeCatalogState.empty()
     : references = const [],
       cursor = 0,
+      rowsRevision = 0,
       committed = null,
       refreshing = false,
       loadingMore = false,
@@ -24,6 +25,7 @@ class HomeCatalogState {
     this.refreshing,
     this.loadingMore,
     this.configuration,
+    this.rowsRevision,
   );
 
   final List<HomeCatalogReference> references;
@@ -32,6 +34,10 @@ class HomeCatalogState {
   final bool refreshing;
   final bool loadingMore;
   final HomeBoardConfiguration configuration;
+
+  /// Rendering still borrows stable legacy row objects from the controller.
+  /// Row mutations publish a new revision, never mutable rows as provider state.
+  final int rowsRevision;
 
   bool get hasMore => cursor < references.length;
 
@@ -42,6 +48,7 @@ class HomeCatalogState {
     bool? refreshing,
     bool? loadingMore,
     HomeBoardConfiguration? configuration,
+    int? rowsRevision,
   }) => HomeCatalogState._(
     references == null ? this.references : List.unmodifiable(references),
     cursor ?? this.cursor,
@@ -49,5 +56,6 @@ class HomeCatalogState {
     refreshing ?? this.refreshing,
     loadingMore ?? this.loadingMore,
     configuration ?? this.configuration,
+    rowsRevision ?? this.rowsRevision,
   );
 }

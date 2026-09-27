@@ -1,3 +1,4 @@
+import '../../../models/stremio_addon.dart';
 import 'home_board_configuration.dart';
 import '../../../services/profiles/profile_session_memory.dart';
 import 'home_catalog_state.dart';
@@ -9,6 +10,7 @@ class HomeCatalogSession {
     required this.owner,
     required this.viewIdentity,
     this.initialBoard,
+    this.initialRows = const [],
     this.initiallyRefreshing = false,
     this.initialConfiguration = const HomeBoardConfiguration.empty(),
   });
@@ -16,6 +18,7 @@ class HomeCatalogSession {
   final ProfileSessionOwner owner;
   final Object viewIdentity;
   final HomeCatalogSnapshot? initialBoard;
+  final List<CatalogSection> initialRows;
   final bool initiallyRefreshing;
   final HomeBoardConfiguration initialConfiguration;
 

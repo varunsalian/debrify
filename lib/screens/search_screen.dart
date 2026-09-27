@@ -1,3 +1,4 @@
+import '../features/home/application/home_row_snapshot.dart';
 import '../features/home/application/home_board_load.dart';
 import '../features/home/application/home_board_dependencies.dart';
 import '../features/home/models/home_board_configuration.dart';
@@ -717,7 +718,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   int _catalogContinueCursor = 0;
   bool _loading = true;
   String? _error;
-  List<CatalogSection> _homeSections = [];
+  List<CatalogSection> get _homeSections => _homeCatalogController.rows;
   List<CatalogSection> _sections = [];
   final List<List<FocusNode>> _rowNodes = [];
   // Per-row remembered focus column (leanback-style). DPAD up/down into a row
@@ -805,7 +806,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   void _publishHomeProgress(List<CatalogSection> rows, bool first,
       int generation, Object? scope) {
     if (!mounted || generation != _boardLoadGen || scope != ProfileRuntime.scope.value) return;
-    _homeSections = rows;
+    _homeCatalogController.replaceRows(rows);
     if (_catalogQuery.isNotEmpty || _catalogSearching) return;
     if (!(ModalRoute.of(context)?.isCurrent ?? true)) {
       // Keep data, not new image widgets, while a detail page/player covers
@@ -1864,6 +1865,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
           ? homeSnapshot.board : null,
       initialConfiguration: restoredHome && keywordSnapshot == null
           ? homeSnapshot.configuration : _initialHomeConfiguration,
+      initialRows: restoredHome && keywordSnapshot == null
+          ? homeSnapshot.sections : const [],
       initiallyRefreshing: !widget.searchMode && !widget.discoverMode &&
           !(restoredHome && keywordSnapshot == null),
     );
@@ -2362,7 +2365,6 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     _hideHomeCardTitlesAndRatings = snapshot.hideCardTitlesAndRatings;
     _hideHomeCatalogAddonNames = snapshot.hideCatalogAddonNames;
     _hideHomeCollectionNames = snapshot.hideCollectionNames;
-    _homeSections = snapshot.sections;
     _addonsById
       ..clear()
       ..addAll(snapshot.board.addons);
@@ -2407,26 +2409,11 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         _boardLoadingMore || _pendingBoardReload) {
       return;
     }
-    // Detach mutable paging state. An outgoing horizontal request may finish
-    // after disposal; the next screen must not inherit its loading latch/list.
-    CatalogSection copy(CatalogSection row) {
-      if (row is HomeCollectionSection) {
-        return HomeCollectionSection(collection: row.collection);
-      }
-      if (row is HomeListSection) {
-        return HomeListSection(rowId: row.rowId, title: row.title,
-          items: List.of(row.items), traktChoice: row.traktChoice,
-          simklList: row.simklList, mdblistList: row.mdblistList);
-      }
-      return CatalogSection(title: row.title, addon: row.addon,
-        catalog: row.catalog, items: List.of(row.items), nextSkip: row.nextSkip,
-        exhausted: row.exhausted, pagingPaused: row.pagingPaused, query: row.query);
-    }
     _homePreserved.store(_profileSessionOwner, (
-      sections: _homeSections.map(copy).toList(),
+      sections: _homeCatalogController.rowsForReturn(),
       board: board,
       configuration: _homeConfiguration,
-      hero: _spotlightHeroOverride == null ? null : copy(_spotlightHeroOverride!),
+      hero: _spotlightHeroOverride == null ? null : copyHomeRowForReturn(_spotlightHeroOverride!),
       heroResolutionPending: _heroSourceResolutionPending,
       cardOrientation: _homeCardOrientation,
       hideCardTitlesAndRatings: _hideHomeCardTitlesAndRatings,
@@ -3022,7 +3009,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
                 _homeLoadedAt = DateTime.now();
                 return;
               }
-              _homeSections = rows;
+              _homeCatalogController.replaceRows(rows);
               _commitBoardSnapshot();
               _homeLoadedAt = DateTime.now();
               setState(() => _loading = false);
@@ -3194,7 +3181,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
             Iterable<int>.generate(_homeSections.length)
                 .every((i) => identical(merged[i], _homeSections[i]));
         // Always keep the board cache growing so nothing is lost…
-        _homeSections = merged;
+        _homeCatalogController.replaceRows(merged);
         // …but only fold into the live view when the board is still what's
         // shown. If a catalog search started while this batch was in flight,
         // `_sections`/`_rowNodes` now hold search results — appending board rows
@@ -3252,19 +3239,14 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     int currentIndex() => !mounted || scope != ProfileRuntime.scope.value ||
         _catalogQuery.isNotEmpty || _catalogSearching
         ? -1 : _sections.indexWhere((row) => identical(row, section));
-    if (section.pagingPaused && !resume) return;
-    if (section.loadingMore || section.exhausted) return;
+    if (!_homeCatalogController.beginRowPage(section, resume: resume)) return;
     // Android TV: flip the guard silently. The setState exists to show the
     // classic row's tail spinner, but it fires on the exact keypress that
     // crossed the row-end threshold — a full-screen rebuild landing on the
     // input frame, which an Amlogic box renders as the cursor hitching every
     // time a row pages. The spinner is a nicety; the page landing repaints
     // either way.
-    if (PlatformUtil.isAndroidTvCached && !resume) {
-      section.loadingMore = true;
-    } else {
-      setState(() => section.loadingMore = true);
-    }
+    if (!PlatformUtil.isAndroidTvCached || resume) setState(() {});
     try {
       // Dedup against what we already have: some addons return valid ids but
       // repeat entries, and some ignore `skip` entirely. The pager advances
@@ -3281,10 +3263,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       // row or a changed session invalidates its page, not a new numeric index.
       final index = currentIndex();
       if (index < 0) return;
-      section.nextSkip = page.nextSkip;
-      if (page.exhausted) section.exhausted = true;
+      _homeCatalogController.acceptRowPage(section, page);
       final fresh = page.items;
-      section.pagingPaused = fresh.isEmpty && !page.exhausted;
       if (fresh.isEmpty) return;
       // Grow this row's focus nodes in lockstep with the new items.
       final nodes = _rowNodes[index];
@@ -3292,7 +3272,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       for (var i = 0; i < fresh.length; i++) {
         nodes.add(FocusNode(debugLabel: 'search_r${index}_c${base + i}'));
       }
-      setState(() => section.items.addAll(fresh));
+      setState(() => _homeCatalogController.appendRowItems(section, fresh));
       // A DPAD-right that ran off the end of this row may be waiting on it.
       _maybeCompleteStageRight();
       unawaited(_refreshBoundSources());
@@ -3300,9 +3280,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       // Transient fetch failure — leave the row as-is so a later scroll retries.
     } finally {
       if (currentIndex() >= 0) {
-        setState(() => section.loadingMore = false);
+        setState(() => _homeCatalogController.finishRowPage(section));
       } else {
-        section.loadingMore = false;
+        _homeCatalogController.finishRowPage(section);
       }
     }
   }
