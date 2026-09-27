@@ -168,6 +168,7 @@ import '../services/native_series_metadata_service.dart';
 import '../models/media_identity.dart';
 import '../widgets/random_playback_dialog.dart';
 import '../features/home/application/home_random_episode_dependencies.dart';
+import '../features/home/models/home_random_playback_preparation.dart';
 import '../widgets/clear_pinned_sources_button.dart';
 import '../services/profiles/profile_runtime.dart';
 import 'metadata_explore_page.dart';
@@ -227,7 +228,6 @@ import '../services/stremio_iptv_service.dart';
 import '../services/stremio_service.dart';
 import '../services/next_episode_service.dart';
 import '../services/episode_tracker_snapshot_revision.dart';
-import '../services/local_series_completion_service.dart';
 import '../services/storage_service.dart';
 import '../services/tv_hero_artwork_quality_controller.dart';
 import '../services/tvos_top_shelf_service.dart';
@@ -11318,19 +11318,6 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     );
   }
 
-  /// Keep the built-in guide for tracker titles. Otherwise use the preferred
-  /// addon if it serves meta, then the first enabled addon that does.
-  Future<StremioAddon?> _metaAddonFor(StremioAddon preferred) async {
-    if (preferred.id == NativeSeriesMetadataService.addon.id) return preferred;
-    if (preferred.resources.contains('meta') && preferred.baseUrl.isNotEmpty) {
-      return preferred;
-    }
-    for (final a in await _stremio.getEnabledAddons()) {
-      if (a.resources.contains('meta') && a.baseUrl.isNotEmpty) return a;
-    }
-    return null;
-  }
-
   Future<AdvancedSearchSelection> _withCatalogEpisodeIdentity(
     AdvancedSearchSelection selection,
     StremioMeta item,
@@ -11380,58 +11367,35 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     StremioMeta item,
     StremioAddon addon,
   ) async {
+    bool current() =>
+        mounted && _profileSessionOwner == ProfileSessionMemory.captureOwner();
+    if (!current()) return;
     final mode = await showRandomPlaybackDialog(context, title: item.name);
-    if (!mounted || mode == null) return;
-    final imdb = _imdbOf(item);
-    final metaAddon =
-        MediaIdentity.isNative(item.progressId) && addon.baseUrl.isEmpty
-        ? NativeSeriesMetadataService.addon
-        : await _metaAddonFor(addon);
-    // If we fell back to a different meta addon than the item's origin, its
-    // content id won't match — query by IMDb id instead of the origin's id.
-    final contentId = (metaAddon != null && metaAddon.id == addon.id)
-        ? item.id
-        : (imdb ?? item.id);
-    List<Map<String, dynamic>>? videos;
-    try {
-      videos = metaAddon == null
-          ? null
-          : await _stremio.fetchSeriesMeta(metaAddon, contentId);
-    } catch (_) {
-      if (mounted) _snack('Could not load episodes. Please retry.');
-      return;
-    }
-    if (!mounted) return;
-    if (videos != null && imdb != null) {
-      unawaited(
-        LocalSeriesCompletionService.instance.recordRawEpisodeInventory(
-          imdbId: imdb,
-          seriesTitle: item.name,
-          videos: videos,
-        ),
-      );
-    }
-
-    final selection = ref
-        .read(homeRandomEpisodeSelectorProvider)
-        .select(
+    if (!current() || mode == null) return;
+    final result = await ref
+        .read(homeRandomPlaybackRepositoryProvider(_profileSessionOwner))
+        .prepare(
           item: item,
-          metadataAddon: metaAddon,
-          contentId: contentId,
-          progressId: imdb,
-          videos: videos,
+          addon: addon,
+          progressId: _imdbOf(item),
           continuous: mode == RandomPlaybackMode.continuous,
+          isCurrent: current,
         );
-    if (selection == null) {
-      _snack("Couldn't load episodes for \"${item.name}\".");
-      return;
+    if (!current()) return;
+    switch (result.status) {
+      case HomeRandomPlaybackStatus.retired:
+        return;
+      case HomeRandomPlaybackStatus.loadFailed:
+        _snack('Could not load episodes. Please retry.');
+      case HomeRandomPlaybackStatus.noEpisodes:
+        _snack("Couldn't load episodes for \"${item.name}\".");
+      case HomeRandomPlaybackStatus.ready:
+        _playSelection(
+          result.selection!,
+          metadataAddonId: addon.id,
+          catalogItem: item.withSourceAddon(addon),
+        );
     }
-
-    _playSelection(
-      selection,
-      metadataAddonId: addon.id,
-      catalogItem: item.withSourceAddon(addon),
-    );
   }
 
   // Catalog Play = auto-best in-tab; Sources = manual list in-tab. For a series
