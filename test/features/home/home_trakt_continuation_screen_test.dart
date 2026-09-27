@@ -1,3 +1,5 @@
+import 'package:debrify/screens/see_all/trakt_see_all_screen.dart';
+import 'package:debrify/features/home/models/home_trakt_continuation_state.dart';
 import 'dart:async';
 
 import 'package:debrify/features/home/application/home_trakt_continuation_dependencies.dart';
@@ -18,8 +20,27 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+final class TraktStateObserver extends ProviderObserver {
+  final updates = <HomeTraktContinuationState>[];
+  @override
+  void didUpdateProvider(
+    ProviderObserverContext context,
+    Object? previousValue,
+    Object? newValue,
+  ) {
+    if (newValue is HomeTraktContinuationState) updates.add(newValue);
+  }
+}
+
 void main() {
-  for (final mode in ['active', 'profile', 'dispose', 'overlap']) {
+  for (final mode in [
+    'active',
+    'profile',
+    'dispose',
+    'overlap',
+    'search',
+    'discover',
+  ]) {
     testWidgets('Trakt Home reads scoped repository: $mode', (tester) async {
       ProfileRuntime.debugReset();
       ProfileRuntime.initializeLegacy();
@@ -28,6 +49,7 @@ void main() {
       SharedPreferences.setMockInitialValues({
         'stremio_addons_v1': '[]',
         'tv_home_style': 'classic',
+        if (mode == 'discover') 'discover_default_source': 'trakt',
         'home_hero_source_v1': '{"mode":"auto","ids":[]}',
       });
       StorageService.tvHomeStyleCached = 'classic';
@@ -52,6 +74,7 @@ void main() {
       var authenticated = true;
       var fail = false;
       final calls = <String>[];
+      final observer = TraktStateObserver();
       final client = MockClient((_) async => http.Response('[]', 200));
       Future<void> drive(FutureOr<void> Function() action) => tester.runAsync(
         () => http.runWithClient(() async {
@@ -66,6 +89,7 @@ void main() {
       await drive(
         () => tester.pumpWidget(
           ProviderScope(
+            observers: [observer],
             overrides: [
               homeTraktContinuationRepositoryProvider.overrideWithValue(
                 HomeTraktContinuationRepository(
@@ -89,7 +113,9 @@ void main() {
                         ),
                       ]);
                     }
-                    return pending.future;
+                    return calls.where((call) => call == 'movies').length == 1
+                        ? pending.future
+                        : Future.value(rows);
                   },
                   readShows: () async {
                     calls.add('shows');
@@ -98,11 +124,17 @@ void main() {
                 ),
               ),
             ],
-            child: const MaterialApp(home: SearchScreen(isTelevision: true)),
+            child: MaterialApp(
+              home: SearchScreen(
+                isTelevision: true,
+                searchMode: mode == 'search',
+                discoverMode: mode == 'discover',
+              ),
+            ),
           ),
         ),
       );
-      expect(calls, ['auth', 'movies', 'shows']);
+      expect(calls, mode == 'search' ? [] : ['auth', 'movies', 'shows']);
       if (mode == 'dispose') await tester.pumpWidget(const SizedBox());
       if (mode == 'profile') {
         ProfileRuntime.promoteLegacyToCommitted(
@@ -149,6 +181,31 @@ void main() {
           'auth',
         ]);
         expect(cardNodes(), isEmpty);
+      } else if (mode == 'search' || mode == 'discover') {
+        expect(calls, mode == 'search' ? [] : ['auth', 'movies', 'shows']);
+        if (mode == 'search') {
+          expect(observer.updates, isEmpty);
+        } else {
+          expect(observer.updates.last.loading, isFalse);
+          expect(
+            observer.updates.last.data.movies.single.name,
+            'Trakt fixture',
+          );
+          final retainedProgress = tester
+              .widget<TraktSeeAllScreen>(find.byType(TraktSeeAllScreen))
+              .cwProgress;
+          expect(retainedProgress['tmdb:movie:1'], .5);
+          rows[0] = TraktContinueWatchingItem(
+            meta: rows[0].meta,
+            traktContentType: 'movies',
+            progress: 75,
+          );
+          await drive(MainPageBridge.notifyIntegrationChanged);
+          await pump();
+          expect(observer.updates.last.loading, isFalse);
+          expect(observer.updates.last.data.progress['tmdb:movie:1'], .75);
+          expect(retainedProgress['tmdb:movie:1'], .75);
+        }
       } else {
         expect(cardNodes(), isEmpty);
         expect(

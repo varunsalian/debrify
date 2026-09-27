@@ -5,6 +5,16 @@ import '../../../utils/continue_watching_presentation.dart';
 /// Trakt shelf projection. Containers are detached and read-only; legacy
 /// metadata and playback descriptors retain their identities for handoff.
 class HomeTraktContinuation {
+  const HomeTraktContinuation.empty()
+    : movies = const [],
+      series = const [],
+      all = const [],
+      progress = const {},
+      episode = const {},
+      remainingMinutes = const {},
+      episodeRefs = const {},
+      byImdb = const {};
+
   HomeTraktContinuation._({
     required List<StremioMeta> movies,
     required List<StremioMeta> series,
