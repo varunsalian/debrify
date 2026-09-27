@@ -542,20 +542,6 @@ class _FavRowRef {
   int get hashCode => Object.hash(kind, list);
 }
 
-/// One opted-in IPTV custom list shown as a Home row. [channels] are rebuilt
-/// from the stored list metadata alone (no provider fetch) with their full
-/// presentation fields — a list can hold VOD alongside live channels, and the
-/// content type drives both the play routing and whether focus retunes the
-/// hero live preview. [nodes] are owned here and reconciled by [listId]
-/// across reloads (see [_SearchScreenState._loadIptvListRows]).
-class _IptvListRow {
-  final String listId;
-  String title;
-  List<IptvChannel> channels;
-  final List<FocusNode> nodes = [];
-  _IptvListRow(this.listId, this.title) : channels = const [];
-}
-
 /// Generic DPAD arrow-handling wrapper for a favourites-row card — the arrow
 /// counterpart to [_BoardCell] for the IPTV / Debrify TV / Stremio TV rows.
 /// Holds no focus itself — the inner [_ArtPoster] does; this only routes

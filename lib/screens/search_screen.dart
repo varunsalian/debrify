@@ -1,3 +1,6 @@
+import '../features/home/application/home_iptv_lists_controller.dart';
+import '../features/home/models/home_iptv_list.dart';
+import '../features/home/presentation/home_iptv_list_focus.dart';
 import '../features/home/application/home_iptv_favorites_controller.dart';
 import '../features/home/application/home_stremio_favorites_controller.dart';
 import '../features/home/models/home_stremio_favorites.dart';
@@ -1074,9 +1077,11 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   // through the favourites-row family after the IPTV favourites row. Rebuilt
   // by [_loadIptvListRows] on init, on Home Rows saves, and whenever
   // [IptvMediaStore.listsRevision] bumps (any list mutation anywhere in the
-  // app). Rows own their FocusNodes, reconciled by list id across reloads.
-  List<_IptvListRow> _iptvListRows = [];
-  int _iptvListRowsLoadToken = 0;
+  // app). The view owns FocusNodes, reconciled by list id across reloads.
+  late final HomeIptvListsController _iptvListsController;
+  late final ProviderSubscription<List<HomeIptvList>> _iptvListsSubscription;
+  List<HomeIptvList> get _iptvListRows => _iptvListsController.current;
+  final _iptvListFocus = HomeIptvListFocus();
 
   // Playlist favourites — a leading row of the user's saved playlist items
   // (movies / collections added from search or cloud). Cards show the item
@@ -1907,6 +1912,17 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     _iptvFavoritesController = ref.read(
       homeIptvFavoritesProvider(iptvFavoritesSession).notifier,
     );
+    final iptvListsSession = (
+      owner: _profileSessionOwner,
+      viewIdentity: Object(),
+    );
+    _iptvListsSubscription = ref.listenManual(
+      homeIptvListsProvider(iptvListsSession),
+      (previous, next) {},
+    );
+    _iptvListsController = ref.read(
+      homeIptvListsProvider(iptvListsSession).notifier,
+    );
     final localContinuationSession = HomeContinuationSession(
       owner: _profileSessionOwner,
       viewIdentity: Object(),
@@ -2584,12 +2600,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     _stremio.removeAddonsChangedListener(_onHomeAddonsChanged);
     _homeRefreshTimer?.cancel();
     IptvMediaStore.listsRevision.removeListener(_onIptvListsRevision);
-    for (final row in _iptvListRows) {
-      for (final n in row.nodes) {
-        n.dispose();
-      }
-      row.nodes.clear();
-    }
+    _iptvListFocus.dispose();
     if (MainPageBridge.tvHomeStyleChanged == _onTvHomeStyleChanged) {
       MainPageBridge.tvHomeStyleChanged = null;
     }
@@ -2665,6 +2676,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     _tvFavoritesSubscription.close();
     _stremioFavoritesSubscription.close();
     _iptvFavoritesSubscription.close();
+    _iptvListsSubscription.close();
     _continuationLayoutSubscription.close();
     _listsSubscription.close();
     _catalogSubscription.close();
@@ -3699,7 +3711,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
 
   /// The focus-node list backing a favourites row of the given [ref].
   List<FocusNode> _favNodesFor(_FavRowRef ref) {
-    if (ref.isIptvList) return _iptvListRows[ref.list].nodes;
+    if (ref.isIptvList) {
+      return _iptvListFocus.nodesFor(_iptvListRows[ref.list].listId);
+    }
     switch (ref.kind) {
       case _FavKind.watchlistMovies:
         return _watchlistMovieNodes;
@@ -3957,111 +3971,15 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     }
   }
 
-  /// Rebuild the opted-in IPTV custom-list rows from the store.
-  ///
-  /// Channels are rebuilt from the stored list metadata alone (no provider
-  /// fetch), keeping ALL presentation fields — content type and duration
-  /// drive play routing and the live-preview gate, so the favourites row's
-  /// lossy live-only mapping must not be copied here. Order is the list's
-  /// explicit saved channel position.
-  ///
-  /// Token-guarded: the list picker queues several immediate mutations, each
-  /// bumping [IptvMediaStore.listsRevision] — an older multi-list read must
-  /// not commit after a newer one (stale channels, node reconciliation
-  /// against the wrong rows). Only the newest load applies state.
-  ///
-  /// Nodes reconcile by list id: surviving rows keep their FocusNodes (grown/
-  /// shrunk to the channel count), removed rows' nodes are disposed — if one
-  /// held DPAD focus, the board's global dead-focus reclaim re-anchors it.
-  Future<void> _loadIptvListRows() async {
-    final token = ++_iptvListRowsLoadToken;
-    try {
-      // Read the extras store directly rather than [_homeExtras]: on a cold
-      // start this runs CONCURRENTLY with _load() (which populates that
-      // field), and losing the race would blank the list rows until the next
-      // trigger.
-      final extras = await StorageService.getHomeExtraRows();
-      if (token != _iptvListRowsLoadToken || !mounted) return;
-      final wanted = <String>{
-        for (final r in extras)
-          if (HomeExtraRowIds.iptvListId(r.id) != null)
-            HomeExtraRowIds.iptvListId(r.id)!,
-      }..remove(StorageService.iptvFavoritesListId);
-      List<_IptvListRow> next = const [];
-      if (wanted.isNotEmpty) {
-        final metas = await StorageService.getIptvLists();
-        final rows = <_IptvListRow>[];
-        final prevById = {for (final r in _iptvListRows) r.listId: r};
-        for (final meta in metas) {
-          if (!wanted.contains(meta.id) || meta.isFavorites) continue;
-          final map = await StorageService.getIptvListChannels(meta.id);
-          if (token != _iptvListRowsLoadToken || !mounted) return;
-          final channels = <IptvChannel>[];
-          map.forEach((url, m) {
-            final name = (m['name'] as String?) ?? '';
-            final logo = (m['logoUrl'] as String?) ?? '';
-            final group = (m['group'] as String?) ?? '';
-            channels.add(
-              IptvChannel(
-                name: name.isEmpty ? 'Unknown Channel' : name,
-                url: url,
-                logoUrl: logo.isEmpty ? null : logo,
-                group: group.isEmpty ? null : group,
-                channelNumber: (m['channelNumber'] as num?)?.toInt(),
-                duration: (m['duration'] as num?)?.toInt() ?? -1,
-                contentType: m['contentType'] as String?,
-                attributes: {
-                  if ((m['playlistId'] as String?)?.isNotEmpty ?? false)
-                    'list_playlist_id': m['playlistId'] as String,
-                },
-                httpHeaders: StorageService.iptvFavoriteHeaders(m),
-              ),
-            );
-          });
-          if (channels.isEmpty) continue;
-          final row = prevById.remove(meta.id) ?? _IptvListRow(meta.id, '');
-          row
-            ..title = meta.name
-            ..channels = channels;
-          while (row.nodes.length < channels.length) {
-            row.nodes.add(
-              FocusNode(
-                debugLabel: 'search_iptvlist_${meta.id}_${row.nodes.length}',
-              ),
-            );
-          }
-          while (row.nodes.length > channels.length) {
-            row.nodes.removeLast().dispose();
-          }
-          rows.add(row);
-        }
-        // Rows that fell out (list deleted/emptied/de-selected): dispose their
-        // nodes. The TV board's global focus watcher reclaims focus if one of
-        // them held it.
-        for (final gone in prevById.values) {
-          for (final n in gone.nodes) {
-            n.dispose();
-          }
-          gone.nodes.clear();
-        }
-        next = rows;
-      } else if (_iptvListRows.isEmpty) {
-        return; // nothing enabled, nothing shown — no state churn
-      } else {
-        for (final gone in _iptvListRows) {
-          for (final n in gone.nodes) {
-            n.dispose();
-          }
-          gone.nodes.clear();
-        }
-      }
-      if (!mounted || token != _iptvListRowsLoadToken) return;
-      setState(() => _iptvListRows = next);
+  /// Apply a complete custom-list snapshot while retaining surviving row nodes.
+  Future<void> _loadIptvListRows() => _iptvListsController.load(
+    isCurrent: () => mounted,
+    beforeRows: _iptvListFocus.reconcile,
+    onRows: () {
+      setState(() {});
       _maybeAutoFocusBoard();
-    } catch (_) {
-      // List rows just stay as they were (same policy as the favourites row).
-    }
-  }
+    },
+  );
 
   /// [IptvMediaStore.listsRevision] bumped — some list mutated somewhere in
   /// the app (picker, IPTV settings, provider deletion, reconcile, import).
@@ -19417,6 +19335,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   Widget _buildIptvListRow(_FavRowRef ref, String homeRowId) {
     final tv = widget.isTelevision;
     final row = _iptvListRows[ref.list];
+    final nodes = _iptvListFocus.nodesFor(row.listId);
     return _buildFavRowShell(
       title: row.title,
       tags: const [
@@ -19430,7 +19349,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         return _FavArtCell(
           isTelevision: tv,
           column: col,
-          rowNodes: row.nodes,
+          rowNodes: nodes,
           onUp: _favRowOnUp(homeRowId, col),
           onDown: _favRowOnDown(homeRowId, col),
           child: _ArtPoster(
@@ -19441,7 +19360,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
             // cropped; the gradient shows around them.
             imageFit: BoxFit.contain,
             isTelevision: tv,
-            focusNode: row.nodes[col],
+            focusNode: nodes[col],
             onOpen: () => _playIptvListChannel(channel),
             onFocused: live
                 ? () => _setHeroLiveIptv(channel)
