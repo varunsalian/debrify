@@ -18,7 +18,14 @@ import 'package:http/testing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
-  for (final mode in ['home', 'profile', 'dispose', 'search', 'discover']) {
+  for (final mode in [
+    'home',
+    'profile',
+    'dispose',
+    'search',
+    'discover',
+    'covered',
+  ]) {
     testWidgets('MDBList scoped access preserves $mode sequencing', (
       tester,
     ) async {
@@ -53,6 +60,7 @@ void main() {
             overrides: [
               homeMdblistContinuationRepositoryProvider.overrideWithValue(
                 HomeMdblistContinuationRepository(
+                  invalidate: () => calls.add('invalidate'),
                   synchronizeInvalidations: () {
                     calls.add('sync');
                     return calls.length == 1
@@ -105,7 +113,29 @@ void main() {
           await Future<void>.delayed(const Duration(milliseconds: 900));
         });
         await tester.pump(const Duration(milliseconds: 100));
-        expect(calls, ['sync', false, 'sync', true]);
+        expect(calls, ['sync', false, 'invalidate', 'sync', true]);
+      }
+      if (mode == 'covered') {
+        final navigator = tester.state<NavigatorState>(find.byType(Navigator));
+        await drive(() async {
+          unawaited(
+            navigator.push(
+              MaterialPageRoute<void>(
+                builder: (_) => const Scaffold(body: Text('Covering route')),
+              ),
+            ),
+          );
+          await tester.pump();
+          MdblistService.instance.playbackRevision.value++;
+          await Future<void>.delayed(const Duration(milliseconds: 900));
+        });
+        expect(calls, ['sync', false, 'invalidate']);
+        await drive(() async {
+          navigator.pop();
+          await Future<void>.delayed(const Duration(milliseconds: 1000));
+        });
+        await tester.pump(const Duration(milliseconds: 100));
+        expect(calls, ['sync', false, 'invalidate', 'sync', true]);
       }
       await tester.pumpWidget(const SizedBox());
       expect(tester.takeException(), isNull);

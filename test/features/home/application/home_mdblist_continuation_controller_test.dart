@@ -43,6 +43,7 @@ HomeMdblistContinuationController mount(
 
 HomeMdblistContinuationRepository repository(Future<Result> Function() read) =>
     HomeMdblistContinuationRepository(
+      invalidate: () {},
       synchronizeInvalidations: () async => false,
       fetch: ({required force}) => read(),
     );

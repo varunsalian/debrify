@@ -121,6 +121,7 @@ void main() {
             overrides: [
               homeMdblistContinuationRepositoryProvider.overrideWithValue(
                 HomeMdblistContinuationRepository(
+                  invalidate: () {},
                   synchronizeInvalidations: () async => true,
                   fetch: ({required force}) {
                     reads++;

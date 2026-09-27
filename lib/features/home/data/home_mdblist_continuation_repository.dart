@@ -4,13 +4,18 @@ import '../../../services/mdblist/mdblist_models.dart';
 /// Coordinates existing invalidation and feed services without owning caches.
 class HomeMdblistContinuationRepository {
   const HomeMdblistContinuationRepository({
+    required void Function() invalidate,
     required Future<bool> Function() synchronizeInvalidations,
     required Future<MdblistResult<MdblistContinueWatchingSnapshot>> Function({
       required bool force,
     })
     fetch,
-  }) : _synchronizeInvalidations = synchronizeInvalidations,
+  }) : _invalidate = invalidate,
+       _synchronizeInvalidations = synchronizeInvalidations,
        _fetch = fetch;
+
+  final void Function() _invalidate;
+  void invalidate() => _invalidate();
 
   final Future<bool> Function() _synchronizeInvalidations;
   final Future<MdblistResult<MdblistContinueWatchingSnapshot>> Function({

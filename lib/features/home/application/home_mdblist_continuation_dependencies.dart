@@ -6,6 +6,7 @@ import '../data/home_mdblist_continuation_repository.dart';
 final homeMdblistContinuationRepositoryProvider =
     Provider<HomeMdblistContinuationRepository>(
       (ref) => HomeMdblistContinuationRepository(
+        invalidate: () => MdblistContinueWatchingService.instance.invalidate(),
         synchronizeInvalidations: () =>
             MdblistSyncCoordinator.instance.synchronizeInvalidations(),
         fetch: ({required force}) =>

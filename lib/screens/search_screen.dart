@@ -1031,24 +1031,6 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       _mdblistContinuation.byImdb;
   final List<FocusNode> _mdblistMovieNodes = [];
   final List<FocusNode> _mdblistSeriesNodes = [];
-  int _mdblistRevisionRefreshToken = 0;
-  // True while a revision-driven delayed CW reload is queued/running, so
-  // [_refreshAfterPlayback] can skip its own MDBList reload instead of doing a
-  // second full fetch ~1s before the authoritative one lands.
-  bool _mdblistRevisionRefreshPending = false;
-  // When the last FORCED CW load finished. Covers the slow-device case where
-  // the delayed reload completes (clearing the pending flag) while
-  // [_refreshAfterPlayback] is still awaiting its local loads — without this
-  // it would immediately repeat the full fetch it just skipped for.
-  DateTime? get _mdblistCwForcedLoadAt =>
-      _mdblistContinuationController.forcedLoadAt;
-
-  bool get _mdblistCwForceFresh {
-    final at = _mdblistCwForcedLoadAt;
-    return at != null &&
-        DateTime.now().difference(at) < const Duration(seconds: 3);
-  }
-
   // Debrify TV favourites — a leading "Debrify TV" row of the user's starred
   // keyword channels, shown between Continue Watching and the catalog rows.
   // Channels have no artwork, so they render as Stremio-shaped cards with a
@@ -2502,7 +2484,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     _catalogContinueNode.dispose();
     _catalogMoreNode.dispose();
     WidgetsBinding.instance.removeObserver(this);
-    _mdblistRevisionRefreshToken++;
+    _mdblistContinuationController.cancelRevisionRefresh();
     _spotlightHeroNode.dispose();
     // Preserve a COMPLETED keyword search so returning to this tab restores
     // results + scroll instead of the blank prompt (the nav rebuilds us fresh).
@@ -5460,35 +5442,15 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
 
   void _onMdblistPlaybackRevision() {
     if (widget.searchMode || widget.discoverMode) return;
-    MdblistContinueWatchingService.instance.invalidate();
-    final token = ++_mdblistRevisionRefreshToken;
-    _mdblistRevisionRefreshPending = true;
-    unawaited(_refreshMdblistAfterMutation(token));
-  }
-
-  Future<void> _refreshMdblistAfterMutation(int token) async {
-    try {
-      // The stop response can arrive during the final frames of the player pop.
-      // Wait until Home is visible, then allow MDBList's watched snapshot a
-      // short propagation window before replacing the row with authoritative
-      // data.
-      for (var attempt = 0; attempt < 20; attempt++) {
-        if (!mounted || token != _mdblistRevisionRefreshToken) return;
-        if (ModalRoute.of(context)?.isCurrent ?? true) break;
-        await Future<void>.delayed(const Duration(milliseconds: 100));
-      }
-      if (!mounted || token != _mdblistRevisionRefreshToken) return;
-      if (!(ModalRoute.of(context)?.isCurrent ?? true)) return;
-      await Future<void>.delayed(const Duration(milliseconds: 750));
-      if (!mounted || token != _mdblistRevisionRefreshToken) return;
-      await _loadMdblistContinueWatching(refreshBound: false, force: true);
-    } finally {
-      // Only the newest queued refresh owns the pending flag; a superseded one
-      // must not clear it while its successor is still due to run.
-      if (token == _mdblistRevisionRefreshToken) {
-        _mdblistRevisionRefreshPending = false;
-      }
-    }
+    unawaited(
+      _mdblistContinuationController.refreshAfterRevision(
+        isCurrent: () => mounted,
+        isVisible: () => ModalRoute.of(context)?.isCurrent ?? true,
+        wait: (duration) => Future<void>.delayed(duration),
+        reload: () =>
+            _loadMdblistContinueWatching(refreshBound: false, force: true),
+      ),
+    );
   }
 
   void _openMdblistCwItem(StremioMeta item) {
@@ -18719,7 +18681,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
           // (force-fresh) the authoritative MDBList reload; loading here too
           // would only repeat it or fetch pre-propagation data it replaces.
           // When no scrobble fired (e.g. external playback), load as before.
-          if (!_mdblistRevisionRefreshPending && !_mdblistCwForceFresh)
+          if (_mdblistContinuationController.shouldRefreshAfterPlayback(
+            DateTime.now(),
+          ))
             _loadMdblistContinueWatching(refreshBound: false, force: true),
         ]);
         if (!mounted) return;

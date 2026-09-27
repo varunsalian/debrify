@@ -17,25 +17,76 @@ final homeMdblistContinuationProvider = NotifierProvider.autoDispose
     );
 
 /// Owns accepted shelves and request/forced-refresh bookkeeping. The view keeps
-/// node reconciliation, repaint, route eligibility and delayed revision work.
+/// node reconciliation, repaint and route visibility checks.
 class HomeMdblistContinuationController
     extends Notifier<HomeMdblistContinuation> {
   HomeMdblistContinuationController(this.session);
   final HomeContinuationSession session;
   late HomeMdblistContinuationRepository _repository;
   int _generation = 0;
+  int _revisionGeneration = 0;
+  bool _revisionPending = false;
+  bool get revisionPending => _revisionPending;
   DateTime? _forcedLoadAt;
   DateTime? get forcedLoadAt => _forcedLoadAt;
 
   @override
   HomeMdblistContinuation build() {
     _repository = ref.watch(homeMdblistContinuationRepositoryProvider);
-    ref.onDispose(() => _generation++);
+    ref.onDispose(() {
+      _generation++;
+      cancelRevisionRefresh();
+    });
     return const HomeMdblistContinuation.empty();
   }
 
   HomeMdblistContinuation get current =>
       ref.mounted ? state : const HomeMdblistContinuation.empty();
+
+  /// The return refresh skips work already queued or completed within three
+  /// seconds, including a forced refresh that finishes during other local loads.
+  bool shouldRefreshAfterPlayback(DateTime now) =>
+      !_revisionPending &&
+      (_forcedLoadAt == null ||
+          now.difference(_forcedLoadAt!) >= const Duration(seconds: 3));
+
+  void cancelRevisionRefresh() {
+    _revisionGeneration++;
+    _revisionPending = false;
+  }
+
+  Future<void> refreshAfterRevision({
+    required bool Function() isCurrent,
+    required bool Function() isVisible,
+    required Future<void> Function(Duration duration) wait,
+    required Future<void> Function() reload,
+  }) async {
+    bool active() =>
+        ref.mounted &&
+        session.owner == ProfileSessionMemory.captureOwner() &&
+        isCurrent();
+    if (!active()) return;
+    _repository.invalidate();
+    final token = ++_revisionGeneration;
+    _revisionPending = true;
+    bool current() => active() && token == _revisionGeneration;
+    try {
+      // A stop response may arrive during the player pop. Wait for Home, then
+      // preserve the service's propagation window before reading its snapshot.
+      for (var attempt = 0; attempt < 20; attempt++) {
+        if (!current()) return;
+        if (isVisible()) break;
+        await wait(const Duration(milliseconds: 100));
+      }
+      if (!current() || !isVisible()) return;
+      await wait(const Duration(milliseconds: 750));
+      if (!current()) return;
+      await reload();
+    } finally {
+      // Superseded work cannot clear the successor's pending marker.
+      if (token == _revisionGeneration) _revisionPending = false;
+    }
+  }
 
   Future<void> load({
     required bool enabled,
