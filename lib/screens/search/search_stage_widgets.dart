@@ -1,58 +1,5 @@
 part of '../search_screen.dart';
 
-enum _CwKind { local, trakt, simkl, mdblist, iptv }
-
-/// A leading "Continue Watching" board row (local or Trakt). Carries its own
-/// header, focus nodes, per-item progress lookup, and open / quick-play
-/// handlers so the local and Trakt sources render through one row builder.
-class _CwRow {
-  final String rowId;
-  final String title; // e.g. 'Continue Watching' or 'Trakt Movies'
-  final String? tag; // 'Movies' / 'Series' pill, or null
-  final _CwKind kind;
-  final List<StremioMeta> items;
-  final List<FocusNode> nodes;
-  final double? Function(StremioMeta) progressOf;
-
-  /// Subtle 'S2 · E5' label for series cards (null for movies / when unknown).
-  final String? Function(StremioMeta) episodeOf;
-
-  /// Whole minutes remaining when this provider has a trustworthy duration.
-  final int? Function(StremioMeta) remainingMinutesOf;
-
-  /// Episode still for landscape series cards, resolved asynchronously and
-  /// null until available. The card keeps its show-art fallback throughout.
-  final String? Function(StremioMeta) episodeArtworkOf;
-  final void Function(StremioMeta) onOpen;
-  final void Function(StremioMeta) onQuickPlay;
-
-  /// Takes the title off THIS row's source and reloads it. Long-press (hold-OK
-  /// on TV) offers it next to Play — see [_SearchScreenState._openCwCardMenu].
-  final Future<void> Function(StremioMeta) onRemove;
-  final bool Function(StremioMeta)? canRemove;
-
-  /// Opens the "See All" grid for this row's source, or null to hide the link.
-  final VoidCallback? onSeeAll;
-
-  const _CwRow({
-    required this.rowId,
-    required this.title,
-    required this.tag,
-    required this.kind,
-    required this.items,
-    required this.nodes,
-    required this.progressOf,
-    required this.episodeOf,
-    required this.remainingMinutesOf,
-    required this.episodeArtworkOf,
-    required this.onOpen,
-    required this.onQuickPlay,
-    required this.onRemove,
-    this.canRemove,
-    this.onSeeAll,
-  });
-}
-
 /// A reserved-but-not-yet-loaded Trakt row: a header above a strip of static
 /// poster placeholders (see [_SearchScreenState._buildTraktSkeletonRow]) that
 /// hold the Trakt slot open while its fetch runs. Static — nothing animates
@@ -113,26 +60,6 @@ class _SkeletonPoster extends StatelessWidget {
   }
 }
 
-/// One Canvas rail — a Continue Watching row ([cw] non-null, with its
-/// position among the CW rows in [cwIndex]), a favourites-family rail
-/// ([favKind] non-null: IPTV / Debrify TV / Stremio TV / Playlist / an IPTV
-/// custom-list row), or a catalog section ([sectionIndex] into
-/// `_sections`/`_rowNodes`).
-class _CanvasRail {
-  final _CwRow? cw;
-  final int cwIndex;
-  final HomeFavoriteRowRef? favKind;
-  final int? sectionIndex;
-  final int traktSkeletonIndex;
-  const _CanvasRail({
-    this.cw,
-    this.cwIndex = -1,
-    this.favKind,
-    this.sectionIndex,
-    this.traktSkeletonIndex = -1,
-  });
-}
-
 /// What the Canvas stage should show while a FAVOURITES cell has focus —
 /// favourites aren't StremioMeta, so the hero pipeline can't describe them;
 /// this lightweight override carries the focused item's own art + name
@@ -162,26 +89,6 @@ class _CornerWedges extends CustomPainter {
   @override
   bool shouldRepaint(_CornerWedges old) =>
       old.radius != radius || old.color != color;
-}
-
-/// What a stage board resolved for this frame (see
-/// [_SearchScreenState._resolveStageRail]) — the rail list, which one is
-/// active, its identity key, its items and its focus nodes.
-class _StageRailView {
-  final List<_CanvasRail> rails;
-  final int index;
-  final _CanvasRail rail;
-  final String key;
-  final List<StremioMeta> items;
-  final List<FocusNode> nodes;
-  const _StageRailView({
-    required this.rails,
-    required this.index,
-    required this.rail,
-    required this.key,
-    required this.items,
-    required this.nodes,
-  });
 }
 
 /// The identity block a stage shows while a FAVOURITES cell has focus.
@@ -231,15 +138,6 @@ class _StageFavIdentity extends StatelessWidget {
       ],
     );
   }
-}
-
-/// One row of Tonight's Continue Watching queue: which CW rail it came from
-/// and which column within it (so the cell's FocusNode, progress, episode
-/// label and open/remove actions all come from the row's own contract).
-class _TonightQueueEntry {
-  final _CanvasRail rail;
-  final int col;
-  const _TonightQueueEntry({required this.rail, required this.col});
 }
 
 // The board's card focus chrome ([CardFocusRise]) moved to

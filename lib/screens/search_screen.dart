@@ -1,3 +1,4 @@
+import '../features/home/presentation/home_stage_rows.dart';
 import '../features/home/presentation/home_stage_identity.dart';
 import '../features/home/presentation/home_stage_scrims.dart';
 import '../features/home/presentation/home_stage_art.dart';
@@ -1151,18 +1152,18 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   String? _simklCardKey(StremioMeta item) =>
       HomeSimklContinuation.cardKey(item);
 
-  String? _cwCardKey(_CwKind kind, StremioMeta item) =>
+  String? _cwCardKey(HomeContinuationKind kind, StremioMeta item) =>
       _cwProgressSource == WatchProgressSource.simkl ||
-          (_cwProgressSource == WatchProgressSource.smart && kind == _CwKind.simkl)
+          (_cwProgressSource == WatchProgressSource.smart && kind == HomeContinuationKind.simkl)
       ? _simklCardKey(item) : item.progressId;
 
-  double? _cwCardProgress(_CwKind kind, StremioMeta item) =>
+  double? _cwCardProgress(HomeContinuationKind kind, StremioMeta item) =>
       CustomSeriesIdentity.isCustom(item.imdbId) ? _cwProgress[item.imdbId] : _cwCardMaps(kind).progress[_cwCardKey(kind, item)];
 
-  String? _cwCardEpisode(_CwKind kind, StremioMeta item) =>
+  String? _cwCardEpisode(HomeContinuationKind kind, StremioMeta item) =>
       CustomSeriesIdentity.isCustom(item.imdbId) ? _cwEpisode[item.imdbId] : _cwCardMaps(kind).episode[_cwCardKey(kind, item)];
 
-  int? _cwCardRemainingMinutes(_CwKind kind, StremioMeta item) =>
+  int? _cwCardRemainingMinutes(HomeContinuationKind kind, StremioMeta item) =>
       CustomSeriesIdentity.isCustom(item.imdbId) ? _cwRemainingMinutes[item.imdbId] : _cwCardMaps(kind).remaining?[item.progressId];
 
   ({
@@ -1170,38 +1171,38 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     Map<String, String> episode,
     Map<String, int>? remaining,
   })
-  _cwCardMaps(_CwKind kind) {
-    final effective = kind == _CwKind.iptv
+  _cwCardMaps(HomeContinuationKind kind) {
+    final effective = kind == HomeContinuationKind.iptv
         ? kind
         : switch (_cwProgressSource) {
             WatchProgressSource.smart => kind,
-            WatchProgressSource.local => _CwKind.local,
-            WatchProgressSource.trakt => _CwKind.trakt,
-            WatchProgressSource.simkl => _CwKind.simkl,
-            WatchProgressSource.mdblist => _CwKind.mdblist,
+            WatchProgressSource.local => HomeContinuationKind.local,
+            WatchProgressSource.trakt => HomeContinuationKind.trakt,
+            WatchProgressSource.simkl => HomeContinuationKind.simkl,
+            WatchProgressSource.mdblist => HomeContinuationKind.mdblist,
           };
     return switch (effective) {
-      _CwKind.local => (
+      HomeContinuationKind.local => (
         progress: _cwProgress,
         episode: _cwEpisode,
         remaining: _cwRemainingMinutes,
       ),
-      _CwKind.trakt => (
+      HomeContinuationKind.trakt => (
         progress: _traktProgress,
         episode: _traktEpisode,
         remaining: _traktRemainingMinutes,
       ),
-      _CwKind.simkl => (
+      HomeContinuationKind.simkl => (
         progress: _simklProgress,
         episode: _simklEpisode,
         remaining: null,
       ),
-      _CwKind.mdblist => (
+      HomeContinuationKind.mdblist => (
         progress: _mdblistProgress,
         episode: _mdblistEpisode,
         remaining: null,
       ),
-      _CwKind.iptv => (
+      HomeContinuationKind.iptv => (
         progress: _iptvCwProgress,
         episode: _iptvCwEpisode,
         remaining: null,
@@ -1217,7 +1218,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   /// Series (when enabled), then Trakt Movies / Shows (when connected). Only
   /// non-empty groups are included. Each row carries its own progress lookup
   /// and open / quick-play handlers so local and Trakt sources coexist.
-  List<_CwRow> get _cwRows => [
+  List<HomeContinuationRow> get _cwRows => [
     // Merged providers ship their combined list through the MOVIES slot (same
     // row id, same node list — see the merge-pref field comment); the episode
     // and artwork lookups are imdbId-keyed maps that only hold series entries,
@@ -1225,18 +1226,18 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     if (_cwEnabled &&
         (_cwMergeLocal ? _cwAll : _cwMovies).isNotEmpty &&
         !_homeDisabled.contains('cw:movies'))
-      _CwRow(
+      HomeContinuationRow(
         rowId: 'cw:movies',
         title: 'Continue Watching',
         tag: _cwMergeLocal ? null : 'Movies',
-        kind: _CwKind.local,
+        kind: HomeContinuationKind.local,
         items: _cwMergeLocal ? _cwAll : _cwMovies,
         nodes: _cwMovieNodes,
-        progressOf: (m) => _cwCardProgress(_CwKind.local, m),
+        progressOf: (m) => _cwCardProgress(HomeContinuationKind.local, m),
         episodeOf: _cwMergeLocal
-            ? (m) => _cwCardEpisode(_CwKind.local, m)
+            ? (m) => _cwCardEpisode(HomeContinuationKind.local, m)
             : (_) => null,
-        remainingMinutesOf: (m) => _cwCardRemainingMinutes(_CwKind.local, m),
+        remainingMinutesOf: (m) => _cwCardRemainingMinutes(HomeContinuationKind.local, m),
         episodeArtworkOf: _cwMergeLocal
             ? (m) => _cwEpisodeArtwork[m.imdbId]
             : (_) => null,
@@ -1250,16 +1251,16 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         _cwEnabled &&
         _cwSeries.isNotEmpty &&
         !_homeDisabled.contains('cw:series'))
-      _CwRow(
+      HomeContinuationRow(
         rowId: 'cw:series',
         title: 'Continue Watching',
         tag: 'Series',
-        kind: _CwKind.local,
+        kind: HomeContinuationKind.local,
         items: _cwSeries,
         nodes: _cwSeriesNodes,
-        progressOf: (m) => _cwCardProgress(_CwKind.local, m),
-        episodeOf: (m) => _cwCardEpisode(_CwKind.local, m),
-        remainingMinutesOf: (m) => _cwCardRemainingMinutes(_CwKind.local, m),
+        progressOf: (m) => _cwCardProgress(HomeContinuationKind.local, m),
+        episodeOf: (m) => _cwCardEpisode(HomeContinuationKind.local, m),
+        remainingMinutesOf: (m) => _cwCardRemainingMinutes(HomeContinuationKind.local, m),
         episodeArtworkOf: (m) => _cwEpisodeArtwork[m.imdbId],
         onOpen: _openContinueItem,
         onQuickPlay: _onContinuePlay,
@@ -1268,18 +1269,18 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       ),
     if ((_cwMergeTrakt ? _traktAll : _traktMovies).isNotEmpty &&
         !_homeDisabled.contains('trakt:movies'))
-      _CwRow(
+      HomeContinuationRow(
         rowId: 'trakt:movies',
         title: 'Trakt Continue Watching',
         tag: _cwMergeTrakt ? null : 'Movies',
-        kind: _CwKind.trakt,
+        kind: HomeContinuationKind.trakt,
         items: _cwMergeTrakt ? _traktAll : _traktMovies,
         nodes: _traktMovieNodes,
-        progressOf: (m) => _cwCardProgress(_CwKind.trakt, m),
+        progressOf: (m) => _cwCardProgress(HomeContinuationKind.trakt, m),
         episodeOf: _cwMergeTrakt
-            ? (m) => _cwCardEpisode(_CwKind.trakt, m)
+            ? (m) => _cwCardEpisode(HomeContinuationKind.trakt, m)
             : (_) => null,
-        remainingMinutesOf: (m) => _cwCardRemainingMinutes(_CwKind.trakt, m),
+        remainingMinutesOf: (m) => _cwCardRemainingMinutes(HomeContinuationKind.trakt, m),
         episodeArtworkOf: _cwMergeTrakt
             ? (m) => _traktEpisodeArtwork[m.imdbId]
             : (_) => null,
@@ -1291,16 +1292,16 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     if (!_cwMergeTrakt &&
         _traktSeries.isNotEmpty &&
         !_homeDisabled.contains('trakt:shows'))
-      _CwRow(
+      HomeContinuationRow(
         rowId: 'trakt:shows',
         title: 'Trakt Continue Watching',
         tag: 'Shows',
-        kind: _CwKind.trakt,
+        kind: HomeContinuationKind.trakt,
         items: _traktSeries,
         nodes: _traktSeriesNodes,
-        progressOf: (m) => _cwCardProgress(_CwKind.trakt, m),
-        episodeOf: (m) => _cwCardEpisode(_CwKind.trakt, m),
-        remainingMinutesOf: (m) => _cwCardRemainingMinutes(_CwKind.trakt, m),
+        progressOf: (m) => _cwCardProgress(HomeContinuationKind.trakt, m),
+        episodeOf: (m) => _cwCardEpisode(HomeContinuationKind.trakt, m),
+        remainingMinutesOf: (m) => _cwCardRemainingMinutes(HomeContinuationKind.trakt, m),
         episodeArtworkOf: (m) => _traktEpisodeArtwork[m.imdbId],
         onOpen: _openTraktItem,
         onQuickPlay: _playTraktItem,
@@ -1315,18 +1316,18 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     // that zero-shift too, but it isn't worth the board index-math complexity.)
     if ((_cwMergeSimkl ? _simklAll : _simklMovies).isNotEmpty &&
         !_homeDisabled.contains('simkl:movies'))
-      _CwRow(
+      HomeContinuationRow(
         rowId: 'simkl:movies',
         title: 'Simkl Continue Watching',
         tag: _cwMergeSimkl ? null : 'Movies',
-        kind: _CwKind.simkl,
+        kind: HomeContinuationKind.simkl,
         items: _cwMergeSimkl ? _simklAll : _simklMovies,
         nodes: _simklMovieNodes,
-        progressOf: (m) => _cwCardProgress(_CwKind.simkl, m),
+        progressOf: (m) => _cwCardProgress(HomeContinuationKind.simkl, m),
         episodeOf: _cwMergeSimkl
-            ? (m) => _cwCardEpisode(_CwKind.simkl, m)
+            ? (m) => _cwCardEpisode(HomeContinuationKind.simkl, m)
             : (_) => null,
-        remainingMinutesOf: (m) => _cwCardRemainingMinutes(_CwKind.simkl, m),
+        remainingMinutesOf: (m) => _cwCardRemainingMinutes(HomeContinuationKind.simkl, m),
         episodeArtworkOf: _cwMergeSimkl
             ? (m) => _simklEpisodeArtwork[m.progressId]
             : (_) => null,
@@ -1338,16 +1339,16 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     if (!_cwMergeSimkl &&
         _simklSeries.isNotEmpty &&
         !_homeDisabled.contains('simkl:shows'))
-      _CwRow(
+      HomeContinuationRow(
         rowId: 'simkl:shows',
         title: 'Simkl Continue Watching',
         tag: 'Shows',
-        kind: _CwKind.simkl,
+        kind: HomeContinuationKind.simkl,
         items: _simklSeries,
         nodes: _simklSeriesNodes,
-        progressOf: (m) => _cwCardProgress(_CwKind.simkl, m),
-        episodeOf: (m) => _cwCardEpisode(_CwKind.simkl, m),
-        remainingMinutesOf: (m) => _cwCardRemainingMinutes(_CwKind.simkl, m),
+        progressOf: (m) => _cwCardProgress(HomeContinuationKind.simkl, m),
+        episodeOf: (m) => _cwCardEpisode(HomeContinuationKind.simkl, m),
+        remainingMinutesOf: (m) => _cwCardRemainingMinutes(HomeContinuationKind.simkl, m),
         episodeArtworkOf: (m) => _simklEpisodeArtwork[m.progressId],
         onOpen: _openSimklCwItem,
         onQuickPlay: _playSimklCwItem,
@@ -1356,18 +1357,18 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       ),
     if ((_cwMergeMdblist ? _mdblistAll : _mdblistMovies).isNotEmpty &&
         !_homeDisabled.contains('mdblist:movies'))
-      _CwRow(
+      HomeContinuationRow(
         rowId: 'mdblist:movies',
         title: 'MDBList Continue Watching',
         tag: _cwMergeMdblist ? null : 'Movies',
-        kind: _CwKind.mdblist,
+        kind: HomeContinuationKind.mdblist,
         items: _cwMergeMdblist ? _mdblistAll : _mdblistMovies,
         nodes: _mdblistMovieNodes,
-        progressOf: (m) => _cwCardProgress(_CwKind.mdblist, m),
+        progressOf: (m) => _cwCardProgress(HomeContinuationKind.mdblist, m),
         episodeOf: _cwMergeMdblist
-            ? (m) => _cwCardEpisode(_CwKind.mdblist, m)
+            ? (m) => _cwCardEpisode(HomeContinuationKind.mdblist, m)
             : (_) => null,
-        remainingMinutesOf: (m) => _cwCardRemainingMinutes(_CwKind.mdblist, m),
+        remainingMinutesOf: (m) => _cwCardRemainingMinutes(HomeContinuationKind.mdblist, m),
         episodeArtworkOf: (_) => null,
         onOpen: _openMdblistCwItem,
         onQuickPlay: _playMdblistCwItem,
@@ -1378,16 +1379,16 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     if (!_cwMergeMdblist &&
         _mdblistSeries.isNotEmpty &&
         !_homeDisabled.contains('mdblist:shows'))
-      _CwRow(
+      HomeContinuationRow(
         rowId: 'mdblist:shows',
         title: 'MDBList Continue Watching',
         tag: 'Shows',
-        kind: _CwKind.mdblist,
+        kind: HomeContinuationKind.mdblist,
         items: _mdblistSeries,
         nodes: _mdblistSeriesNodes,
-        progressOf: (m) => _cwCardProgress(_CwKind.mdblist, m),
-        episodeOf: (m) => _cwCardEpisode(_CwKind.mdblist, m),
-        remainingMinutesOf: (m) => _cwCardRemainingMinutes(_CwKind.mdblist, m),
+        progressOf: (m) => _cwCardProgress(HomeContinuationKind.mdblist, m),
+        episodeOf: (m) => _cwCardEpisode(HomeContinuationKind.mdblist, m),
+        remainingMinutesOf: (m) => _cwCardRemainingMinutes(HomeContinuationKind.mdblist, m),
         episodeArtworkOf: (_) => null,
         onOpen: _openMdblistCwItem,
         onQuickPlay: _playMdblistCwItem,
@@ -1400,11 +1401,11 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     // merged Xtream series page. Progress/episode key off the synthetic meta id
     // (routeKey) since these metas carry no imdbId.
     if (_iptvCwMovies.isNotEmpty && !_homeDisabled.contains('iptv:movies'))
-      _CwRow(
+      HomeContinuationRow(
         rowId: 'iptv:movies',
         title: 'IPTV Continue Watching',
         tag: 'Movies',
-        kind: _CwKind.iptv,
+        kind: HomeContinuationKind.iptv,
         items: _iptvCwMovies,
         nodes: _iptvCwMovieNodes,
         progressOf: (m) => _iptvCwProgress[m.id],
@@ -1416,11 +1417,11 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         onRemove: _removeIptvCwItem,
       ),
     if (_iptvCwSeries.isNotEmpty && !_homeDisabled.contains('iptv:series'))
-      _CwRow(
+      HomeContinuationRow(
         rowId: 'iptv:series',
         title: 'IPTV Continue Watching',
         tag: 'Series',
-        kind: _CwKind.iptv,
+        kind: HomeContinuationKind.iptv,
         items: _iptvCwSeries,
         nodes: _iptvCwSeriesNodes,
         progressOf: (m) => _iptvCwProgress[m.id],
@@ -4960,7 +4961,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   bool _cwMenuOpen = false;
 
   /// Long-press (hold-OK on TV) on a Continue Watching card: Play, or take the
-  /// title off the row. Each row supplies its own removal (see [_CwRow.onRemove])
+  /// title off the row. Each row supplies its own removal (see [HomeContinuationRow.onRemove])
   /// because the four sources write to four different places.
   /// When Home's Hold to Quick Play preference is on, the same gesture skips
   /// this menu and invokes the row's Quick Play action directly.
@@ -4968,7 +4969,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   /// [cwIndex]/[col] are the card's board coordinates, used to put TV focus back
   /// on a live card once the row rebuilds without the removed one.
   Future<void> _openCwCardMenu(
-    _CwRow row,
+    HomeContinuationRow row,
     StremioMeta item,
     int cwIndex,
     int col,
@@ -4976,7 +4977,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     if (_cwMenuOpen) return;
     _cwMenuOpen = true;
     final isSeries = item.type == 'series';
-    final playActionAvailable = row.kind == _CwKind.iptv || !_pikpakOnly;
+    final playActionAvailable = row.kind == HomeContinuationKind.iptv || !_pikpakOnly;
     final removeActionAvailable = row.canRemove?.call(item) ?? true;
     if (!playActionAvailable && !removeActionAvailable) {
       _cwMenuOpen = false;
@@ -4986,7 +4987,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     // still useful in the menu, but it is not the immediate playback this
     // preference promises.
     final quickPlayAvailable =
-        playActionAvailable && !(row.kind == _CwKind.iptv && isSeries);
+        playActionAvailable && !(row.kind == HomeContinuationKind.iptv && isSeries);
     try {
       final holdToQuickPlay = await StorageService.getHomeCwHoldToQuickPlay();
       if (!mounted) return;
@@ -5005,27 +5006,27 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     _cwMenuOpen = true;
     // An IPTV series card routes to its Xtream series page rather than playing
     // outright (see [_openIptvCwItem]) — so name the action for what it does.
-    final playLabel = (row.kind == _CwKind.iptv && isSeries)
+    final playLabel = (row.kind == HomeContinuationKind.iptv && isSeries)
         ? 'Open series'
         : 'Play';
     final String playDescription;
     final String removeDescription;
     switch (row.kind) {
-      case _CwKind.local:
+      case HomeContinuationKind.local:
         playDescription = isSeries
             ? 'Jump back into the episode you stopped on.'
             : 'Resume from where you left off.';
         removeDescription =
             'Takes it off this row and clears the position saved on this '
             'device.';
-      case _CwKind.trakt:
+      case HomeContinuationKind.trakt:
         playDescription = isSeries
             ? 'Jump back into the episode you stopped on.'
             : 'Resume from where you left off.';
         removeDescription =
             'Deletes this title\'s playback progress (and watch history) on '
             'Trakt, so it leaves the Trakt rows everywhere.';
-      case _CwKind.simkl:
+      case HomeContinuationKind.simkl:
         playDescription = isSeries
             ? 'Jump back into the episode you stopped on.'
             : 'Resume from where you left off.';
@@ -5033,13 +5034,13 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
             ? 'Moves the show to On Hold on Simkl and clears the paused '
                   'position, so it stops resurfacing as up next.'
             : 'Clears this movie\'s paused position on Simkl.';
-      case _CwKind.mdblist:
+      case HomeContinuationKind.mdblist:
         playDescription = isSeries
             ? 'Jump into the paused or next unwatched episode from MDBList.'
             : 'Resume from the position saved on MDBList.';
         removeDescription =
             'Clears this paused playback position from MDBList.';
-      case _CwKind.iptv:
+      case HomeContinuationKind.iptv:
         playDescription = isSeries
             ? 'Open the series and pick up where you left off.'
             : 'Resume from where you left off.';
@@ -5236,7 +5237,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       title: 'Simkl Continue Watching',
       initialCategory: initialCategory,
       items: _simklAll,
-      progressOf: (m) => _cwCardProgress(_CwKind.simkl, m),
+      progressOf: (m) => _cwCardProgress(HomeContinuationKind.simkl, m),
       onOpen: _openSimklCwItem,
       onQuickPlay: _pikpakOnly ? null : _playSimklCwItem,
       // One uniform pass instead of an explicit Simkl fetch followed by
@@ -5341,7 +5342,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       title: 'MDBList Continue Watching',
       initialCategory: initialCategory,
       items: _mdblistAll,
-      progressOf: (m) => _cwCardProgress(_CwKind.mdblist, m),
+      progressOf: (m) => _cwCardProgress(HomeContinuationKind.mdblist, m),
       onOpen: _openMdblistCwItem,
       onQuickPlay: _pikpakOnly ? null : _playMdblistCwItem,
       onReload: () async {
@@ -6664,13 +6665,13 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     return false;
   }
 
-  String _canvasRailKeyOf(_CanvasRail rail) {
+  String _canvasRailKeyOf(HomeRail rail) {
     return 'row:${_canvasRailRowId(rail)}';
   }
 
   /// Where the active rail currently sits in [rails] — re-resolved every
   /// build so insertions above it never change WHICH rail is shown.
-  int _resolveCanvasRailIndex(List<_CanvasRail> rails) {
+  int _resolveCanvasRailIndex(List<HomeRail> rails) {
     final key = _canvasRailKey;
     if (key != null) {
       final i = rails.indexWhere((r) => _canvasRailKeyOf(r) == key);
@@ -6873,7 +6874,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     for (final rail in _canvasRails) _spotlightShelfForRail(rail),
   ];
 
-  SpotlightShelf _spotlightShelfForRail(_CanvasRail rail) {
+  SpotlightShelf _spotlightShelfForRail(HomeRail rail) {
     // Rail identity — the same key Canvas/Atrium key their rails by — so the
     // board reuses shelf subtrees when tracker rows front-insert.
     final railKey = _canvasRailKeyOf(rail);
@@ -6965,7 +6966,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   }
 
   SpotlightCard _spotlightContinueWatchingCard(
-    _CwRow row,
+    HomeContinuationRow row,
     StremioMeta item,
     int cwIndex,
     int col,
@@ -6992,7 +6993,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       shape: _homeLandscapeCards
           ? SpotlightCardShape.wide
           : SpotlightCardShape.poster,
-      // `_CwRow` publishes a 0..1 fraction; the card draws 0..100.
+      // `HomeContinuationRow` publishes a 0..1 fraction; the card draws 0..100.
       progress: (row.progressOf(item) ?? 0) * 100,
       onOpen: () => row.onOpen(item),
       // Spotlight used to bypass the shared CW hold handler and Quick Play
@@ -7345,28 +7346,28 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   /// FocusNode lists are reused from the classic board's per-row lists — only
   /// one view is ever mounted, and reuse keeps node counts synced through
   /// paging for free.
-  List<_CanvasRail> get _canonicalCanvasRails {
-    final rails = <_CanvasRail>[];
+  List<HomeRail> get _canonicalCanvasRails {
+    final rails = <HomeRail>[];
     if (_cwVisible) {
       final cwRows = _cwRows;
       for (var i = 0; i < cwRows.length; i++) {
         if (cwRows[i].items.isEmpty) continue;
-        rails.add(_CanvasRail(cw: cwRows[i], cwIndex: i));
+        rails.add(HomeRail(cw: cwRows[i], cwIndex: i));
       }
     }
     for (final ref in _favRowKinds) {
       if (_canvasFavItemCount(ref) == 0) continue;
-      rails.add(_CanvasRail(favKind: ref));
+      rails.add(HomeRail(favKind: ref));
     }
     for (var i = 0; i < _sections.length; i++) {
       if (_sections[i].items.isEmpty || i >= _rowNodes.length) continue;
-      rails.add(_CanvasRail(sectionIndex: i));
+      rails.add(HomeRail(sectionIndex: i));
     }
     return HomeRowOrder.defaults(rails, _canvasRailRowId);
   }
 
   /// The canonical rails, globally sorted by the user's saved row ids.
-  List<_CanvasRail> get _canvasRails {
+  List<HomeRail> get _canvasRails {
     final rails = _canonicalCanvasRails;
     return _homeRowOrderActive
         ? HomeRowOrder.apply(rails, _effectiveHomeRowOrder, _canvasRailRowId)
@@ -7375,16 +7376,16 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
 
   /// Classic renders the same globally ordered rails as every stage layout,
   /// plus focusless Trakt placeholders while that account is loading.
-  List<_CanvasRail> get _classicHomeRails {
+  List<HomeRail> get _classicHomeRails {
     var rails = _canonicalCanvasRails;
     if (_traktReserving) {
-      final skeletons = <_CanvasRail>[];
+      final skeletons = <HomeRail>[];
       if (!_homeDisabled.contains('trakt:movies')) {
-        skeletons.add(const _CanvasRail(traktSkeletonIndex: 0));
+        skeletons.add(const HomeRail(traktSkeletonIndex: 0));
       }
       // Merged Trakt renders one combined row, so reserve one slot, not two.
       if (!_cwMergeTrakt && !_homeDisabled.contains('trakt:shows')) {
-        skeletons.add(const _CanvasRail(traktSkeletonIndex: 1));
+        skeletons.add(const HomeRail(traktSkeletonIndex: 1));
       }
       // In the built-in order placeholders belong after the real CW block and
       // before favourites/sections. Build that canonical sequence first, then
@@ -7400,7 +7401,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         : rails;
   }
 
-  String _canvasRailRowId(_CanvasRail rail) {
+  String _canvasRailRowId(HomeRail rail) {
     if (rail.cw != null) return rail.cw!.rowId;
     if (rail.favKind != null) return _favRowId(rail.favKind!);
     if (rail.traktSkeletonIndex >= 0) {
@@ -7498,15 +7499,15 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   /// The queue: every Continue Watching row flattened to (row, column) pairs
   /// in board order. Nodes come from the CW rows themselves — which is why
   /// [_stageRails] drops CW rails on Tonight (a node may be mounted once).
-  List<_TonightQueueEntry> get _tonightQueue {
-    final out = <_TonightQueueEntry>[];
+  List<HomeTonightQueueEntry> get _tonightQueue {
+    final out = <HomeTonightQueueEntry>[];
     if (!_cwVisible) return out;
     for (final rail in _canvasRails) {
       final cw = rail.cw;
       if (cw == null) continue;
       final n = min(cw.items.length, cw.nodes.length);
       for (var col = 0; col < n; col++) {
-        out.add(_TonightQueueEntry(rail: rail, col: col));
+        out.add(HomeTonightQueueEntry(rail: rail, col: col));
       }
     }
     return out;
@@ -7516,7 +7517,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   /// [_canvasRails] everywhere except Tonight, which lifts the Continue
   /// Watching rows out into its own vertical queue — leaving them in both
   /// places would mount the same FocusNodes twice.
-  List<_CanvasRail> get _stageRails => _homeStyleEffective == 'tonight'
+  List<HomeRail> get _stageRails => _homeStyleEffective == 'tonight'
       ? [
           for (final r in _canvasRails)
             if (r.cw == null) r,
@@ -7559,7 +7560,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     }
   }
 
-  String _canvasRailTitle(_CanvasRail rail) {
+  String _canvasRailTitle(HomeRail rail) {
     if (rail.cw != null) return rail.cw!.title;
     if (rail.favKind != null) return _canvasFavTitle(rail.favKind!);
     final section = _sections[rail.sectionIndex!];
@@ -7569,10 +7570,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     return section.title;
   }
 
-  List<StremioMeta> _canvasRailItems(_CanvasRail rail) =>
+  List<StremioMeta> _canvasRailItems(HomeRail rail) =>
       rail.cw?.items ?? _sections[rail.sectionIndex!].items;
 
-  List<FocusNode> _canvasRailNodes(_CanvasRail rail) {
+  List<FocusNode> _canvasRailNodes(HomeRail rail) {
     if (rail.cw != null) return rail.cw!.nodes;
     if (rail.favKind != null) return _favNodesFor(rail.favKind!);
     return _rowNodes[rail.sectionIndex!];
@@ -8030,17 +8031,17 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   String? _titleArtUrl(StremioMeta item) =>
       _homeLandscapeCards ? homeStageWideArtwork(item) : null;
 
-  HomeCollectionSection? _stageCollection(_CanvasRail rail) {
+  HomeCollectionSection? _stageCollection(HomeRail rail) {
     final index = rail.sectionIndex;
     if (index == null) return null;
     final section = _sections[index];
     return section is HomeCollectionSection ? section : null;
   }
 
-  double _stageCardAspect(_CanvasRail rail, {double? fallback}) =>
+  double _stageCardAspect(HomeRail rail, {double? fallback}) =>
       _stageCollection(rail)?.tileAspectRatio ?? fallback ?? _titleCardAspect;
 
-  String? _stageCardArt(_CanvasRail rail, StremioMeta item, {bool wide = false}) =>
+  String? _stageCardArt(HomeRail rail, StremioMeta item, {bool wide = false}) =>
       _stageCollection(rail) != null
           ? item.poster
           : wide
@@ -8089,7 +8090,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   /// streaming in above it can't swap the content under the user) and its
   /// nodes. Null means "nothing to show yet" — the caller holds the brand
   /// stage.
-  _StageRailView? _resolveStageRail() {
+  HomeStageRailView? _resolveStageRail() {
     final rails = _stageRails;
     if (rails.isEmpty) return null;
     final index = _resolveCanvasRailIndex(rails);
@@ -8100,7 +8101,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     // index 0 — in both cases an unpersisted identity would let a CW rail
     // prepending seconds later silently swap the shelf under the user.
     _canvasRailKey = key;
-    return _StageRailView(
+    return HomeStageRailView(
       rails: rails,
       index: index,
       rail: rail,
@@ -8332,7 +8333,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   /// box with derived landscape art, so hold-OK menus, quick-play, paging and
   /// the focus grammar are identical to Canvas's shelf.
   Widget _promenadeCell(
-    _CanvasRail rail,
+    HomeRail rail,
     String railKey,
     List<StremioMeta> items,
     List<FocusNode> nodes,
@@ -8386,7 +8387,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   /// affordance Canvas's tabs carry, and for the same reason: UP/DOWN is what
   /// changes rails, and nothing else on this screen says so.
   Widget _promenadeLabel(
-    _StageRailView view, {
+    HomeStageRailView view, {
     MainAxisAlignment align = MainAxisAlignment.center,
   }) {
     final app = AppThemeScope.of(context);
@@ -8738,7 +8739,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   /// One row of Atrium's wall: a quiet rail label over a horizontal strip of
   /// the SAME cells every other board uses.
   Widget _atriumRow(
-    List<_CanvasRail> rails,
+    List<HomeRail> rails,
     int index,
     double rowBoxH, {
     required bool isTopRow,
@@ -9121,7 +9122,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   /// the first), and UP/DOWN step a whole row before falling through to rail
   /// switching.
   Widget _mosaicCell(
-    _CanvasRail rail,
+    HomeRail rail,
     String railKey,
     List<StremioMeta> items,
     List<FocusNode> nodes,
@@ -9517,7 +9518,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
 
   /// Deck's rail label — the same quiet caps as Atrium's rows, with the
   /// stacked chevron pair that says UP/DOWN changes rails.
-  Widget _deckRailLabel(_StageRailView view) {
+  Widget _deckRailLabel(HomeStageRailView view) {
     final app = AppThemeScope.of(context);
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
@@ -9626,7 +9627,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   /// The shared poster shelf cell (Canvas grammar: L/R along the rail, U/D
   /// switches rails) — used by Deck and Tonight's bottom strip.
   Widget _stageShelfCell(
-    _CanvasRail rail,
+    HomeRail rail,
     String railKey,
     List<StremioMeta> items,
     List<FocusNode> nodes,
@@ -9686,13 +9687,13 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
 
   // ── TONIGHT view ─────────────────────────────────────────────────────────
 
-  String _tonightQueueKeyOf(_TonightQueueEntry e) =>
+  String _tonightQueueKeyOf(HomeTonightQueueEntry e) =>
       '${_canvasRailKeyOf(e.rail)}#${e.col}';
 
   /// Where the remembered queue row sits NOW. Identity first (CW rows stream
   /// in and prepend, so a raw index would silently point at another title),
   /// the remembered index only as a fallback.
-  int _resolveTonightQueueIndex(List<_TonightQueueEntry> queue) {
+  int _resolveTonightQueueIndex(List<HomeTonightQueueEntry> queue) {
     if (queue.isEmpty) return 0;
     final key = _tonightQueueKey;
     if (key != null) {
@@ -10066,7 +10067,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   }
 
   Widget _tonightQueueList(
-    List<_TonightQueueEntry> queue,
+    List<HomeTonightQueueEntry> queue,
     double rowH,
     double queueW,
     bool hasRail,
@@ -10161,7 +10162,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   }
 
   Widget _tonightRail(
-    _StageRailView view,
+    HomeStageRailView view,
     double boxH, {
     required bool queueAbove,
   }) {
@@ -10266,7 +10267,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   /// now ("Popular Movies" — [CatalogSection.rowTitle]), so the only way two
   /// tabs still collide is the same catalog name+type from two ADDONS — and
   /// the addon is exactly what tells those apart.
-  String _canvasTabTitle(List<_CanvasRail> rails, int i) {
+  String _canvasTabTitle(List<HomeRail> rails, int i) {
     final title = _canvasRailTitle(rails[i]);
     if (title.isEmpty) return '';
     final rail = rails[i];
@@ -10283,7 +10284,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   /// sized to what actually FITS: at some Screen Size settings the board is
   /// narrow enough that four capped labels + chevrons + the "+N more" tail
   /// would overflow the Row.
-  Widget _canvasTabs(List<_CanvasRail> rails, int active) {
+  Widget _canvasTabs(List<HomeRail> rails, int active) {
     final app = AppThemeScope.of(context);
     return LayoutBuilder(
       builder: (context, cons) {
@@ -17030,7 +17031,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       return TraktSeeAllScreen(
         key: const ValueKey('disc_trakt'),
         cwItems: _traktAll,
-        cwProgress: _cwCardMaps(_CwKind.trakt).progress,
+        cwProgress: _cwCardMaps(HomeContinuationKind.trakt).progress,
         onOpen: _openTraktItem,
         onQuickPlay: _pikpakOnly ? null : _playTraktItem,
         onItemFocused: _onDiscFocused,
@@ -17122,7 +17123,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       key: const ValueKey('disc_cw'),
       title: 'Continue Watching',
       items: _cwAll,
-      progressOf: (m) => _cwCardProgress(_CwKind.local, m),
+      progressOf: (m) => _cwCardProgress(HomeContinuationKind.local, m),
       onOpen: _openContinueItem,
       onQuickPlay: _pikpakOnly ? null : _onContinuePlay,
       onItemFocused: _onDiscFocused,
@@ -17486,7 +17487,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
                   final orderedHome = _homeRowOrderActive;
                   final homeRails = orderedHome
                       ? _classicHomeRails
-                      : const <_CanvasRail>[];
+                      : const <HomeRail>[];
                   return HomeClassicRows(
                     scrollController: _boardScroll,
                     generation: _boardGen,
@@ -17679,7 +17680,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       screen = TraktSeeAllScreen(
         initialList: section.traktChoice,
         cwItems: List<StremioMeta>.of(_traktAll),
-        cwProgress: _cwCardMaps(_CwKind.trakt).progress,
+        cwProgress: _cwCardMaps(HomeContinuationKind.trakt).progress,
         onOpen: _openTraktItem,
         onQuickPlay: _pikpakOnly ? null : _playTraktItem,
         isBound: _isBound,
@@ -17864,7 +17865,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       title: 'Continue Watching',
       initialCategory: initialCategory,
       items: _cwAll,
-      progressOf: (m) => _cwCardProgress(_CwKind.local, m),
+      progressOf: (m) => _cwCardProgress(HomeContinuationKind.local, m),
       onOpen: _openContinueItem,
       onQuickPlay: _pikpakOnly ? null : _onContinuePlay,
       // Reload CW + refresh bound sources (sequenced), then hand the grid the
@@ -17902,7 +17903,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
                 // bars reflect any refresh while the screen is open, matching the
                 // old live-closure behaviour; items stay a snapshot so the grid
                 // doesn't shift under the user.
-                cwProgress: _cwCardMaps(_CwKind.trakt).progress,
+                cwProgress: _cwCardMaps(HomeContinuationKind.trakt).progress,
                 onOpen: _openTraktItem,
                 onQuickPlay: _pikpakOnly ? null : _playTraktItem,
                 // CW items are all rail-loaded, so _boundCounts covers them.
@@ -18184,7 +18185,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   /// A leading Continue Watching row (local or Trakt) — same poster cards as the
   /// catalog rows, plus a bottom progress bar and an optional type tag. Vertical
   /// navigation resolves [homeRowId] against the live global order.
-  Widget _buildContinueWatchingRow(_CwRow row, int cwIndex, String homeRowId) {
+  Widget _buildContinueWatchingRow(HomeContinuationRow row, int cwIndex, String homeRowId) {
     final tv = widget.isTelevision;
     final posterW = _railTitleCardW(context);
     final cellH = _railTitleCardH(context);
