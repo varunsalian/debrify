@@ -167,6 +167,7 @@ import '../features/search/application/keyword_providers.dart';
 import '../services/native_series_metadata_service.dart';
 import '../models/media_identity.dart';
 import '../features/home/presentation/home_random_playback_action.dart';
+import '../features/home/presentation/home_unavailable_origin_dialog.dart';
 import '../features/home/application/home_random_episode_dependencies.dart';
 import '../features/home/application/home_catalog_episode_identity_dependencies.dart';
 import '../features/home/application/home_catalog_origin_dependencies.dart';
@@ -10315,18 +10316,13 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     item = prepared.item;
     final origin = prepared.addon;
     if (origin == null) {
-      final remove = await showDialog<bool>(
+      final remove = await confirmHomeUnavailableOriginRemoval(
         context: context,
-        builder: (dialogContext) => AlertDialog(
-          title: Text(item.name),
-          content: const Text('The addon configuration for this series is unavailable. Your local history is still saved.'),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Close')),
-            if (_cwIds.contains(item.imdbId))
-              TextButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('Remove from Continue Watching')),
-          ],
-        ),
+        title: item.name,
+        canRemove: () => _cwIds.contains(item.imdbId),
+        isCurrent: current,
       );
+      if (!current()) return;
       if (remove == true) {
         await StorageService.removeContinueWatchingItem(item.imdbId!);
         await StorageService.clearPlaybackStateByImdbId(item.imdbId!);
