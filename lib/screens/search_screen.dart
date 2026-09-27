@@ -2,6 +2,7 @@ import '../features/home/presentation/home_stage_rail_label.dart';
 import '../features/home/presentation/home_promenade_layout.dart';
 import '../features/home/presentation/home_atrium_layout.dart';
 import '../features/home/presentation/home_mosaic_layout.dart';
+import '../features/home/presentation/home_deck_layout.dart';
 import '../features/home/presentation/home_canvas_tabs.dart';
 import '../features/home/presentation/home_canvas_shelf.dart';
 import '../features/home/presentation/home_canvas_layout.dart';
@@ -367,13 +368,6 @@ const double _kTonightCardRadius = 14;
 /// The most of a queue row's width the still may take. The rest is the title
 /// and episode, which is what the row exists to tell you.
 const double _kTonightThumbShare = 0.40;
-
-// DECK metrics.
-const double _kDeckPanelPad = 48;
-const double _kDeckCardRightPad = 36;
-const double _kDeckCardRadius = 22;
-const double _kDeckRailGap = 18;
-const double _kDeckRailTail = 26;
 
 // ATRIUM metrics. The wall's height is DERIVED from these (never guessed),
 // so the dossier column beside it can't be crowded by a taller row.
@@ -8653,228 +8647,102 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
           boardH * 0.24,
           maxH: boardH * 0.34,
         );
-        final railZoneH =
-            _atriumLabelHeight(context) +
-            _kAtriumLabelGap +
-            railBoxH +
-            _kDeckRailTail;
-        final cardTop = boardH * 0.11;
-        // The TRUE remainder — never clamped up, which would hand the card
-        // height the rail has already been promised.
-        var cardH = max(0.0, boardH - cardTop - railZoneH - _kDeckRailGap);
-        var cardW = cardH * 16 / 9;
-        final maxCardW = boardW * 0.56;
-        if (cardW > maxCardW) {
-          cardW = maxCardW;
-          cardH = cardW * 9 / 16;
-        }
-        final cardLeft = boardW - cardW - _kDeckCardRightPad;
-
-        return Stack(
-          fit: StackFit.expand,
-          children: [
-            // Constant ground — a single radial, never tweened.
-            const IgnorePointer(
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  gradient: RadialGradient(
-                    center: Alignment(0.55, -0.35),
-                    radius: 1.15,
-                    colors: [
-                      Color(0xFF1B1730),
-                      Color(0xFF0C0A16),
-                      Color(0xFF08070F),
-                    ],
-                    stops: [0.0, 0.62, 1.0],
-                  ),
-                ),
-                child: SizedBox.expand(),
+        final geometry = HomeDeckGeometry(
+          boardW: boardW,
+          boardH: boardH,
+          railBoxH: railBoxH,
+          labelHeight: _atriumLabelHeight(context),
+          labelGap: _kAtriumLabelGap,
+        );
+        return buildHomeDeckLayout(
+          geometry: geometry,
+          theater: _canvasTheater,
+          railKey: railKey,
+          itemCount: count,
+          borderColor: app.fade(app.core.tx, 0.10),
+          peeks: ValueListenableBuilder<int>(
+            valueListenable: _stageCol,
+            builder: (context, focusedCol, _) => Stack(
+              children: _deckPeeks(
+                items: items,
+                favRail: favRail,
+                focused: focusedCol,
+                left: geometry.cardLeft,
+                top: geometry.cardTop,
+                width: geometry.cardW,
+                height: geometry.cardH,
               ),
             ),
-            // The deck's two peek cards — STATIC art of the next two titles
-            // on this rail. Never a second video: one engine, one card.
-            // Listens to the focused column so the stack DEALS as you move;
-            // only this subtree rebuilds.
-            ValueListenableBuilder<int>(
-              valueListenable: _stageCol,
-              builder: (context, focusedCol, _) => Stack(
-                children: _deckPeeks(
-                  items: items,
-                  favRail: favRail,
-                  focused: focusedCol,
-                  left: cardLeft,
-                  top: cardTop,
-                  width: cardW,
-                  height: cardH,
-                ),
-              ),
-            ),
-            // THE CARD.
-            Positioned(
-              left: cardLeft,
-              top: cardTop,
-              width: cardW,
-              height: cardH,
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  HomeStageArt(
+          ),
+          artwork: HomeStageArt(
+            item: _heroItem,
+            enriched: _heroEnriched,
+            fav: _canvasFavFocus,
+            cacheWidth: _tvHeroArtworkCacheWidth,
+            cacheHeight: _tvHeroArtworkCacheHeight,
+          ),
+          trailer: _heroTrailerActive
+              ? _HeroTrailerLayer(
+                  trailer: _heroTrailer,
+                  isTelevision: widget.isTelevision,
+                  heroHeight: geometry.cardH,
+                  fullBleed: true,
+                  volume: _heroTrailerVolume,
+                  loading: _heroTrailerLoading,
+                  onPlayingChanged: _onHeroTrailerPlaying,
+                  takeover: _heroTrailerTakeover,
+                )
+              : null,
+          live: _heroTrailerActive
+              ? _HeroLiveLayer(
+                  channel: _heroLiveChannel,
+                  streamUrl: _heroLiveUrl,
+                  heroHeight: geometry.cardH,
+                  fullBleed: true,
+                  volume: _heroTrailerVolume,
+                  onPlayingChanged: _onHeroTrailerPlaying,
+                  onPlaybackFailed: _onHeroLivePlaybackFailed,
+                )
+              : null,
+          identity: ValueListenableBuilder<HomeFavoriteFocus?>(
+            valueListenable: _canvasFavFocus,
+            builder: (context, fav, _) => fav != null
+                ? HomeStageFavoriteIdentity(fav: fav)
+                : HomeStageIdentity(
                     item: _heroItem,
                     enriched: _heroEnriched,
-                    fav: _canvasFavFocus,
-                    cacheWidth: _tvHeroArtworkCacheWidth,
-                    cacheHeight: _tvHeroArtworkCacheHeight,
+                    trailerShowing: _heroTrailerShowing,
+                    variant:
+                        boardH - geometry.railZoneH >=
+                            homeStageNarrowIdentityHeight(context)
+                        ? HomeStageIdentityVariant.narrow
+                        : HomeStageIdentityVariant.headline,
+                    maxWidth: geometry.identityWidth,
                   ),
-                  if (_heroTrailerActive)
-                    _HeroTrailerLayer(
-                      trailer: _heroTrailer,
-                      isTelevision: widget.isTelevision,
-                      heroHeight: cardH,
-                      fullBleed: true,
-                      volume: _heroTrailerVolume,
-                      loading: _heroTrailerLoading,
-                      onPlayingChanged: _onHeroTrailerPlaying,
-                      takeover: _heroTrailerTakeover,
-                    ),
-                  if (_heroTrailerActive)
-                    _HeroLiveLayer(
-                      channel: _heroLiveChannel,
-                      streamUrl: _heroLiveUrl,
-                      heroHeight: cardH,
-                      fullBleed: true,
-                      volume: _heroTrailerVolume,
-                      onPlayingChanged: _onHeroTrailerPlaying,
-                      onPlaybackFailed: _onHeroLivePlaybackFailed,
-                    ),
-                  // Rounded corners WITHOUT a clip: four ink wedges painted
-                  // over the layers. A ClipRRect here would wrap the punch
-                  // hole in a saveLayer and break the blend.
-                  IgnorePointer(
-                    child: CustomPaint(
-                      painter: const HomeStageCornerPainter(
-                        radius: _kDeckCardRadius,
-                        color: Color(0xFF0C0A16),
-                      ),
-                      child: const SizedBox.expand(),
-                    ),
-                  ),
-                  // A hairline inside the wedges reads as the card's edge.
-                  IgnorePointer(
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(_kDeckCardRadius),
-                        border: Border.all(
-                          color: app.fade(app.core.tx, 0.10),
-                          width: 1,
-                        ),
-                      ),
-                      child: const SizedBox.expand(),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            // IDENTITY column, left of the card.
-            Positioned(
-              left: _kDeckPanelPad,
-              top: 0,
-              width: (cardLeft - _kDeckPanelPad - 40).clamp(140.0, 560.0),
-              bottom: railZoneH,
-              child: IgnorePointer(
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: ValueListenableBuilder<HomeFavoriteFocus?>(
-                    valueListenable: _canvasFavFocus,
-                    builder: (context, fav, _) => fav != null
-                        ? HomeStageFavoriteIdentity(fav: fav)
-                        : HomeStageIdentity(
-                            item: _heroItem,
-                            enriched: _heroEnriched,
-                            trailerShowing: _heroTrailerShowing,
-                            variant:
-                                boardH - railZoneH >=
-                                    homeStageNarrowIdentityHeight(context)
-                                ? HomeStageIdentityVariant.narrow
-                                : HomeStageIdentityVariant.headline,
-                            maxWidth: (cardLeft - _kDeckPanelPad - 40).clamp(
-                              140.0,
-                              560.0,
-                            ),
-                          ),
-                  ),
-                ),
-              ),
-            ),
-            // The rail. Recedes with the lights in theater, cells still
-            // MOUNTED so focus survives.
-            Positioned(
-              left: _kDeckPanelPad,
-              right: 0,
-              bottom: 0,
-              child: AnimatedSlide(
-                offset: _canvasTheater ? const Offset(0, 0.12) : Offset.zero,
-                duration: _canvasTheater
-                    ? const Duration(milliseconds: 900)
-                    : const Duration(milliseconds: 250),
-                curve: Curves.easeOut,
-                child: AnimatedOpacity(
-                  opacity: _canvasTheater ? 0.0 : 1.0,
-                  duration: _canvasTheater
-                      ? const Duration(milliseconds: 900)
-                      : const Duration(milliseconds: 250),
-                  curve: Curves.easeOut,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.only(right: _kDeckPanelPad),
-                        child: _deckRailLabel(view),
-                      ),
-                      const SizedBox(height: _kAtriumLabelGap),
-                      SizedBox(
+          ),
+          railLabel: _deckRailLabel(view),
+          itemBuilder: (context, col) => Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 7),
+            child: Center(
+              child: SizedBox(
+                width: favRail
+                    ? _stageFavW(context, railBoxH)
+                    : railBoxH * _stageCardAspect(rail),
+                child: favRail
+                    ? _canvasFavCell(rail.favKind!, railKey, col)
+                    : SizedBox(
                         height: railBoxH,
-                        child: ListView.builder(
-                          key: ValueKey('deck-rail-$railKey'),
-                          scrollDirection: Axis.horizontal,
-                          clipBehavior: Clip.hardEdge,
-                          cacheExtent: 400,
-                          itemCount: count,
-                          itemBuilder: (context, col) => Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 7),
-                            child: Center(
-                              child: SizedBox(
-                                width: favRail
-                                    ? _stageFavW(context, railBoxH)
-                                    : railBoxH * _stageCardAspect(rail),
-                                child: favRail
-                                    ? _canvasFavCell(
-                                        rail.favKind!,
-                                        railKey,
-                                        col,
-                                      )
-                                    : SizedBox(
-                                        height: railBoxH,
-                                        child: _stageShelfCell(
-                                          rail,
-                                          railKey,
-                                          items,
-                                          nodes,
-                                          col,
-                                        ),
-                                      ),
-                              ),
-                            ),
-                          ),
+                        child: _stageShelfCell(
+                          rail,
+                          railKey,
+                          items,
+                          nodes,
+                          col,
                         ),
                       ),
-                      const SizedBox(height: _kDeckRailTail),
-                    ],
-                  ),
-                ),
               ),
             ),
-          ],
+          ),
         );
       },
     );
@@ -8967,7 +8835,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
                 child: Transform.scale(
                   scale: spec.scale,
                   child: ClipRRect(
-                    borderRadius: BorderRadius.circular(_kDeckCardRadius),
+                    borderRadius: BorderRadius.circular(homeDeckCardRadius),
                     child: CachedNetworkImage(
                       key: ValueKey('deck-peek-${spec.step}-$art'),
                       imageUrl: art,
