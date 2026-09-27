@@ -1,3 +1,4 @@
+import '../features/home/presentation/home_stage_art.dart';
 import '../features/home/presentation/home_tonight_queue_row.dart';
 import '../features/home/presentation/home_tonight_card_caption.dart';
 import '../features/home/presentation/home_favorite_focus.dart';
@@ -7666,7 +7667,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
             // so the video replaces it in place when the trailer starts.
             // While a favourites cell has focus, the favourite's own art
             // overrides the hero pipeline's.
-            _CanvasArtLayer(
+            HomeStageArt(
               item: _heroItem,
               enriched: _heroEnriched,
               fav: _canvasFavFocus,
@@ -8165,7 +8166,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
           children: [
             // Stage floor + full-bleed key art, BELOW the punch hole so the
             // video replaces it in place when the trailer starts.
-            _CanvasArtLayer(
+            HomeStageArt(
               item: _heroItem,
               enriched: _heroEnriched,
               fav: _canvasFavFocus,
@@ -8577,7 +8578,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  _CanvasArtLayer(
+                  HomeStageArt(
                     item: _heroItem,
                     enriched: _heroEnriched,
                     fav: _canvasFavFocus,
@@ -8937,7 +8938,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         return Stack(
           fit: StackFit.expand,
           children: [
-            _CanvasArtLayer(
+            HomeStageArt(
               item: _heroItem,
               enriched: _heroEnriched,
               fav: _canvasFavFocus,
@@ -9353,7 +9354,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  _CanvasArtLayer(
+                  HomeStageArt(
                     item: _heroItem,
                     enriched: _heroEnriched,
                     fav: _canvasFavFocus,
@@ -9889,7 +9890,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
                 child: Stack(
                   fit: StackFit.expand,
                   children: [
-                    _CanvasArtLayer(
+                    HomeStageArt(
                       item: _heroItem,
                       enriched: _heroEnriched,
                       fav: _canvasFavFocus,
