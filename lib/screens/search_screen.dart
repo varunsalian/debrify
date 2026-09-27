@@ -1,3 +1,5 @@
+import '../features/home/application/home_board_load.dart';
+import '../features/home/application/home_board_dependencies.dart';
 import '../features/home/models/home_board_configuration.dart';
 import '../features/home/application/home_collections_dependencies.dart';
 import '../features/home/application/home_configuration_changes.dart';
@@ -6,7 +8,6 @@ import '../features/home/models/home_catalog_preferences.dart';
 import '../features/home/models/home_catalog_session.dart';
 import '../features/home/application/home_catalog_controller.dart';
 import '../features/home/models/home_catalog_state.dart';
-import '../features/home/application/home_catalog_plan.dart';
 import '../features/home/models/home_catalog_plan.dart';
 import '../features/home/application/home_catalog_preferences_dependencies.dart';
 import '../features/sources/presentation/sources_screen.dart';
@@ -2879,9 +2880,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     _homeReturnRevision = HomeReturnCache.revision;
     _homeLoadedAt = null;
     final previousLists = _homeSections.whereType<HomeListSection>().toList();
-    var listRows = <HomeListSection>[];
-    var boardFinished = false;
-    final keepRows = preserveVisibleRows &&
+    HomeBoardLoad? operation;
+    final keepRows =
+        preserveVisibleRows &&
         _homeSections.isNotEmpty &&
         _committedBoard != null;
     final previousBoard = keepRows ? _committedBoard : null;
@@ -2896,21 +2897,28 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     final gen = _homeCatalogController.beginLoad();
     _deferredHomeProgress = null;
     final scope = ProfileRuntime.scope.value;
-    bool current() => mounted && gen == _boardLoadGen &&
-        scope == ProfileRuntime.scope.value;
+    bool current() =>
+        mounted && gen == _boardLoadGen && scope == ProfileRuntime.scope.value;
     // Refreshes already preserve visible rows. Only the Android TV initial
     // Home path changes publication behavior; Search, Discover and tvOS keep
     // their existing loading contract.
-    final progressive = PlatformUtil.isAndroidTvCached &&
-        !widget.searchMode && !widget.discoverMode && !keepRows;
-    final progress = progressive ? HomeLoadProgress(
-      isCurrent: current,
-      rowId: _sectionRowId,
-      onPublish: (rows, first) {
-        if (first) developer.Timeline.instantSync('Home.contentPublished');
-        _publishHomeProgress(rows, first, gen, scope);
-      },
-    ) : null;
+    final progressive =
+        PlatformUtil.isAndroidTvCached &&
+        !widget.searchMode &&
+        !widget.discoverMode &&
+        !keepRows;
+    final progress = progressive
+        ? HomeLoadProgress(
+            isCurrent: current,
+            rowId: _sectionRowId,
+            onPublish: (rows, first) {
+              if (first) {
+                developer.Timeline.instantSync('Home.contentPublished');
+              }
+              _publishHomeProgress(rows, first, gen, scope);
+            },
+          )
+        : null;
     if (progressive) developer.Timeline.instantSync('Home.loadStarted');
     var completionGen = gen;
     var expired = false;
@@ -2935,13 +2943,18 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
           if (pending != null && pending.generation == gen) {
             // Already accepted data remains valid after retiring requests,
             // including when a detail route currently covers the Home board.
-            _deferredHomeProgress = (rows: pending.rows, first: pending.first,
-              generation: completionGen, scope: pending.scope);
+            _deferredHomeProgress = (
+              rows: pending.rows,
+              first: pending.first,
+              generation: completionGen,
+              scope: pending.scope,
+            );
           }
           // Retiring the generation stops stale batches. A refresh timeout
           // must restore the paging state belonging to the still-visible rows.
           final recovery = progress?.hasPublished == true
-              ? _committedBoard : previousBoard;
+              ? _committedBoard
+              : previousBoard;
           if (recovery != null) {
             _homeCatalogController.restore(recovery);
             _addonsById
@@ -2951,153 +2964,81 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
             _homeCatalogController.install(const []);
           }
         },
-        load: () async {
-          final preferences = await ref
-              .read(homeCatalogPreferencesRepositoryProvider)
-              .read();
-          final collections = await _homeCollectionsRepository.read();
-          final collectionsSig = await _homeCollectionsRepository.signature(
-            collections,
+        load: () {
+          final load = HomeBoardLoad(
+            catalog: _homeCatalogController,
+            preferences: ref.read(homeCatalogPreferencesRepositoryProvider),
+            collections: _homeCollectionsRepository,
+            services: ref.read(homeBoardServicesProvider),
           );
-          // Commit the prefs and (crucially) start the tracker fan-out only if
-          // this load still owns the board — a superseded run kicking off its own
-          // resolve would double the concurrent tracker requests beside the
-          // winning generation's and stale-write the shared settings fields.
-          if (!current()) return;
-          _homeCatalogController.applyConfiguration(
-            HomeBoardConfiguration(
-              preferences: preferences,
-              collections: collections,
-              collectionsSignature: collectionsSig,
-              hideWatched: HideWatchedPrefs.enabled,
-            ),
-          );
-          if (progress != null) {
-            _homeCatalogController.install(const []);
-            _addonsById.clear();
-            _commitBoardSnapshot();
-            progress.collections(_buildCollectionSections());
-          }
-          // Home previews publish independently of catalog loading. Never drop
-          // a valid list merely because another list/catalog took longer.
-          if (!widget.searchMode && !widget.discoverMode && _trackerExtrasEnabled) {
-            final enabledIds = _homeExtras.map((r) => r.id).toSet();
-            listRows = previousLists.where((r) => enabledIds.contains(r.rowId)).toList();
-            progress?.lists(listRows);
-            unawaited(HomeListRowsService.instance.resolve(
-              _homeExtras,
-              previous: listRows,
-              isCurrent: current,
-              onUpdate: (rows) {
-                if (!current()) return;
-                listRows = rows;
-                if (!boardFinished) {
-                  progress?.lists(rows);
-                  return;
-                }
-                _publishHomeProgress(
-                  replaceHomeListRows(_homeSections, rows), false, gen, scope);
-              },
-            ).catchError((_) => listRows));
-          }
-          // With hide-watched on, wait briefly for the local watched snapshot so
-          // the first rows paint already filtered instead of losing titles a beat
-          // later. Tracker histories fold in asynchronously and apply from the
-          // next load; the timeout keeps a slow disk from stalling first paint.
-          if (HideWatchedPrefs.enabled) {
-            WatchedStatusService.instance.ensureStarted();
-            await WatchedStatusService.instance.firstSnapshot.timeout(
-              const Duration(milliseconds: 1500),
-              onTimeout: () {},
-            );
-            if (!current()) return;
-          }
-          final addons = await _homeCatalogController.readAddons();
-          if (!current()) return;
-          final plan = planHomeCatalogs(
-            addons,
-            disabled: _homeDisabled,
-            claimed: HomeCollectionsStore.claimedCatalogKeys(
-              _homeCollections,
-              addons,
-              disabledRows: _homeDisabled,
-              showsCollectionRows: !widget.searchMode && !widget.discoverMode,
-            ),
-            rowOrder: _homeRowOrderActive ? _homeRowOrder : null,
-          );
-          _homeCatalogController.install(plan.references);
-          _addonsById
-            ..clear()
-            ..addAll(plan.addonsById);
-          if (progress != null) {
-            progress.catalogOrder(_boardRefs.map(homeCatalogRowId).toList());
-            // This cursor is safe to resume even if only some of the first
-            // batch publishes. Never commit a reserved/in-flight cursor.
-            _commitBoardSnapshot();
-          }
-          // Resolve the Spotlight hero's own reel in parallel with the first
-          // batch — its catalog may sit far down the board (or be hidden as a
-          // row), so it can't wait for a batch to happen to include it. Home
-          // board only, like the list rows above.
-          if (!widget.searchMode && !widget.discoverMode) {
-            unawaited(_resolveSpotlightHeroSource(addons));
-          }
-          // First batch is blocking so the board isn't empty on first paint; skip
-          // runs of empty catalogs so we always land on some visible rows.
-          final first = await _fetchBoardBatchUntilNonEmpty(
-            gen,
+          operation = load;
+          return load.run(
+            generation: gen,
+            isHome: () => !widget.searchMode && !widget.discoverMode,
+            isCurrent: current,
+            useSavedOrder: () => _homeRowOrderActive,
+            canContinue: () => _canPageHome,
+            captureBatchAcceptance: () {
+              final batchScope = ProfileRuntime.scope.value;
+              return () =>
+                  mounted &&
+                  gen == _boardLoadGen &&
+                  batchScope == ProfileRuntime.scope.value;
+            },
+            batchSize: _kBoardBatchSize,
+            previouslyLoaded: previouslyLoaded,
             previousRows: previousRows,
-            onSection: progress?.catalog,
-            onBatchComplete: progress == null ? null : _commitBoardSnapshot,
-            pauseWhenCovered: progress != null,
+            previousLists: previousLists,
+            progress: progress,
+            onResetCatalogs: () {
+              _addonsById.clear();
+              _commitBoardSnapshot();
+            },
+            onInventory: (plan, addons) {
+              // The metadata lookup is also used by Discover and detail opens.
+              _addonsById
+                ..clear()
+                ..addAll(plan.addonsById);
+              if (progress != null) {
+                progress.catalogOrder(
+                  _boardRefs.map(homeCatalogRowId).toList(),
+                );
+                _commitBoardSnapshot();
+              }
+              if (!widget.searchMode && !widget.discoverMode) {
+                unawaited(_resolveSpotlightHeroSource(addons));
+              }
+            },
+            onCommitBatch: _commitBoardSnapshot,
+            onLateLists: (rows) => _publishHomeProgress(
+              replaceHomeListRows(_homeSections, rows),
+              false,
+              gen,
+              scope,
+            ),
+            onCompleted: (rows) {
+              if (rows == null) {
+                _commitBoardSnapshot();
+                _homeLoadedAt = DateTime.now();
+                return;
+              }
+              _homeSections = rows;
+              _commitBoardSnapshot();
+              _homeLoadedAt = DateTime.now();
+              setState(() => _loading = false);
+              MainPageBridge.homeBoardReady.value = true;
+              // Keep accepted Home data during a catalog search without
+              // replacing its visible results or stealing its focus.
+              if (_catalogQuery.isNotEmpty || _catalogSearching) return;
+              _applySections(rows, preserveFocus: keepRows);
+              _maybeAutoFocusBoard();
+            },
           );
-          // Keep the previously loaded vertical extent when addons change.
-          while (gen == _boardLoadGen && _boardCursor < previouslyLoaded &&
-              _boardCursor < _boardRefs.length) {
-            first.addAll(await _fetchBoardBatch(_kBoardBatchSize, gen, previousRows: previousRows));
-          }
-          if (!current()) return;
-          if (progress != null) {
-            progress.lists(listRows);
-            progress.flush(allowEmpty: true);
-            _commitBoardSnapshot();
-            _homeLoadedAt = DateTime.now();
-            return;
-          }
-          // List rows lead the sections — after the favourites rows, before every
-          // addon catalog row. Batching appends after them untouched.
-          // Pinned collections lead their family. The shared Home ordering
-          // places that family after Continue Watching. Folders are static tiles.
-          final collectionRows = widget.searchMode || widget.discoverMode
-              ? const <HomeCollectionSection>[]
-              : _buildCollectionSections();
-          final sections = <CatalogSection>[
-            for (final s in collectionRows)
-              if (s.collection.pinToTop) s,
-            ...listRows,
-            for (final s in collectionRows)
-              if (!s.collection.pinToTop) s,
-            ...first,
-          ];
-          _homeSections = sections;
-          _commitBoardSnapshot();
-          _homeLoadedAt = DateTime.now();
-          setState(() => _loading = false);
-          MainPageBridge.homeBoardReady.value = true;
-          // A catalog search may have STARTED while this load was in flight —
-          // `_sections` now holds (or is streaming) search results, and applying
-          // the board over them would permanently mix the two views. Same
-          // discipline as _loadMoreBoard: the Home cache above is refreshed, the
-          // visible view is not — _restoreHome re-applies _homeSections when the
-          // search ends.
-          if (_catalogQuery.isNotEmpty || _catalogSearching) return;
-          _applySections(sections, preserveFocus: keepRows);
-          _maybeAutoFocusBoard();
-          // Pagination resumes after the refresh releases its cursor below.
         },
       );
     } catch (e) {
-      if (!mounted || completionGen != _boardLoadGen ||
+      if (!mounted ||
+          completionGen != _boardLoadGen ||
           scope != ProfileRuntime.scope.value) {
         return;
       }
@@ -3121,7 +3062,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       if (expired && keepRows) {
         ScaffoldMessenger.maybeOf(context)?.showSnackBar(
           SnackBar(
-            content: const Text("Couldn't refresh Home. Showing previous rows."),
+            content: const Text(
+              "Couldn't refresh Home. Showing previous rows.",
+            ),
             action: SnackBarAction(
               label: 'Retry',
               onPressed: () {
@@ -3136,14 +3079,17 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       MainPageBridge.homeBoardReady.value = true;
     } finally {
       progress?.dispose();
-      boardFinished = true;
-      if (completionGen == _boardLoadGen && scope == ProfileRuntime.scope.value) {
+      operation?.finish();
+      if (completionGen == _boardLoadGen &&
+          scope == ProfileRuntime.scope.value) {
         _homeCatalogController.finishLoad(completionGen);
         _progressiveHomeLoadPending = false;
         // Empty/failed catalogs can end without another content publication.
         // Rebuild the initial Spotlight gate so its cards fallback is shown.
-        if (mounted && !_spotlightEntryRevealed &&
-            widget.isTelevision && _homeStyleEffective == 'spotlight') {
+        if (mounted &&
+            !_spotlightEntryRevealed &&
+            widget.isTelevision &&
+            _homeStyleEffective == 'spotlight') {
           setState(() {});
         }
         if (mounted && !expired) {
@@ -3152,6 +3098,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       }
     }
   }
+
   /// Fetch the next batch of catalog rows from [_boardCursor], skipping over any
   /// runs of empty catalogs, and return the non-empty sections (advancing the
   /// cursor as it goes). Empty result ⇒ the board is exhausted — or [gen] went
@@ -3177,25 +3124,6 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       excludeRows: excludeRows,
       onSection: onSection,
       onBatchComplete: onBatchComplete,
-    );
-  }
-
-  Future<List<CatalogSection>> _fetchBoardBatch(
-    int n,
-    int gen, {
-    Map<String, CatalogSection> previousRows = const {},
-    void Function(CatalogSection)? onSection,
-  }) {
-    final scope = ProfileRuntime.scope.value;
-    return _homeCatalogController.fetchBatch(
-      n,
-      generation: gen,
-      isCurrent: () =>
-          mounted &&
-          gen == _boardLoadGen &&
-          scope == ProfileRuntime.scope.value,
-      previousRows: previousRows,
-      onSection: onSection,
     );
   }
 
@@ -4967,13 +4895,6 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     }
     _onCatalogPlay(item, section.addon);
   }
-
-  /// Every enabled imported collection as a board row (hidden rows skipped).
-  List<HomeCollectionSection> _buildCollectionSections() => [
-    for (final c in _homeCollections)
-      if (c.enabled && c.folders.isNotEmpty && !_homeDisabled.contains(c.rowId))
-        HomeCollectionSection(collection: c),
-  ];
 
   /// A folder tile on a collection row opens that folder's merged grid.
   void _openCollectionFolder(HomeCollectionSection section, StremioMeta item) {

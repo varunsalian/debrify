@@ -606,6 +606,52 @@ Evidence: `.git/refactor-evidence/phase5/configuration-state-*`,
 `analyze-configuration-state-*`, `full-configuration-state*`. Full phase and overall
 device/performance/CI/size gates remain open.
 
+The initial Home data sequence now runs in the 177-line application operation
+`HomeBoardLoad`, with a 34-line plain `HomeBoardServices` contract and 25-line Riverpod
+factory. It reads preferences/collections/signature in order, accepts configuration,
+starts independent tracker previews, performs the bounded watched-snapshot wait,
+plans catalog inventory, fetches initial/refresh batches, and assembles completed
+row families. The old inline sequence, single-batch wrapper and collection-row
+builder are removed from SearchScreen. Its changed `_load` method was formatted
+in isolation; the whole legacy file was not formatted. SearchScreen is 19,984 lines.
+
+The operation owns only transient tracker rows and its catalog-phase-finished flag;
+accepted configuration/inventory remain in the existing controller. The view calls
+`finish` in its original finally position after disposing progressive publication.
+Late tracker updates remain eligible after catalog failure while their captured
+request is current. Small synchronous callbacks retain shared Discover addon lookup,
+hero launch, commit points and visible-row/focus handling. The deadline wrapper,
+timeout recovery and presentation error handling remain in the view for subsequent
+work. Provider construction starts no work; tracker/watched services retain borrowed
+lifetimes and existing concurrency/retry policies.
+
+Review preserved the async completion boundary by returning the operation Future
+from the deadline callback without another await. Initial and refresh-tail batches
+keep their existing acceptance-capture points. Accepted settings and saved-order
+policy stay live across awaits. Review also found that tab mode must stay live:
+`isHome` is a callback, rather than a boolean frozen at operation creation. Collection
+claiming and final collection-row composition therefore still follow current mode.
+Progressive reset/inventory snapshots commit cursor zero before any batch reserves;
+nonprogressive rows remain pinned collections, retained lists, ordinary collections,
+then catalogs. The 1,500ms watched wait and refresh vertical extent are unchanged.
+
+Nine new operation tests cover read/publication order and row families, retirement
+during hashing/watched waiting, exact watched timeout, live settings/tab mode,
+late trackers after failure, refresh extent across empty batches, and progressive
+commit points. The original focused feature/progressive/return run had 111 passes;
+the final wider Home run has 295 passes versus 286 before, identical 12 failure
+identities and one skip. The initial fake-clock fixture barrier was created outside
+its fake zone; the timing test now uses Flutter's built-in clock and no new package.
+A format-exposed brace lint was fixed. Final analyzer identities remain unchanged
+at 863; architecture checks pass for 196 migrated files. Final full suite: 8,380
+successes, unchanged 51 failures/20 skips; every preceding outcome is preserved
+and nine new tests pass. New feature/test files pass formatting checks. The earlier full run was
+started before the live-tab review correction; final verification uses the separate
+`full-board-load-final` receipt. Evidence: `.git/refactor-evidence/phase5/board-load-*`,
+`analyze-board-load-*`, `full-board-load*`. Remaining Home state/publication, horizontal
+pagination, independent continuation/tracker responsibilities and final native,
+performance, CI and size gates remain open.
+
 ### 6. Discover and remaining layouts
 
 - Separate Discover selection/hydration from its grid/stage presentation. Preserve
