@@ -1,3 +1,4 @@
+import '../features/home/presentation/home_tonight_queue_row.dart';
 import '../features/home/presentation/home_tonight_card_caption.dart';
 import '../features/home/presentation/home_favorite_focus.dart';
 import '../features/home/models/home_tonight_card_info.dart';
@@ -747,7 +748,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   late final ProviderSubscription<HomeSettingsRefresh>
   _homeSettingsRefreshSubscription;
   late final _spotlightCatalogCards = SpotlightCatalogCardCache(
-    wideArtwork: _wideArtUrl,
+    wideArtwork: homeStageWideArtwork,
     onOpen: (item, addon) => _openItem(item, addon),
   );
 
@@ -6969,7 +6970,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     int cwIndex,
     int col,
   ) {
-    final wideArt = _wideArtUrl(item);
+    final wideArt = homeStageWideArtwork(item);
     final episodeArt = item.type == 'series'
         ? row.episodeArtworkOf(item)
         : null;
@@ -7055,7 +7056,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
           items: [
             for (final item in items)
               SpotlightCard(
-                image: _homeLandscapeCards ? _wideArtUrl(item) : item.poster,
+                image: _homeLandscapeCards ? homeStageWideArtwork(item) : item.poster,
                 fallbackImage: _homeLandscapeCards ? item.poster : null,
                 title: item.name,
                 rating: item.imdbRating,
@@ -7162,7 +7163,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   String? _stvFavArt(HomeStremioFavorite ch, {bool landscape = false}) {
     final item = _stvNowPlaying(ch)?.item;
     if (item == null) return null;
-    if (landscape) return _wideArtUrl(item);
+    if (landscape) return homeStageWideArtwork(item);
     return _firstNonEmpty(item.poster, item.background);
   }
 
@@ -7197,7 +7198,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
                 for (final item in sections[i].items)
                   SpotlightCard(
                     metadata: item, title: item.name, rating: item.imdbRating,
-                    image: _homeLandscapeCards ? _wideArtUrl(item) : item.poster,
+                    image: _homeLandscapeCards ? homeStageWideArtwork(item) : item.poster,
                     fallbackImage: _homeLandscapeCards ? item.poster : null,
                     shape: _homeLandscapeCards ? SpotlightCardShape.wide : SpotlightCardShape.poster,
                     watchedImdbId: item.progressId ?? item.id,
@@ -8027,7 +8028,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   /// cell's own default (the 2:3 poster) — only landscape needs a derived
   /// wide still.
   String? _titleArtUrl(StremioMeta item) =>
-      _homeLandscapeCards ? _wideArtUrl(item) : null;
+      _homeLandscapeCards ? homeStageWideArtwork(item) : null;
 
   HomeCollectionSection? _stageCollection(_CanvasRail rail) {
     final index = rail.sectionIndex;
@@ -8043,7 +8044,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       _stageCollection(rail) != null
           ? item.poster
           : wide
-          ? _wideArtUrl(item)
+          ? homeStageWideArtwork(item)
           : _titleArtUrl(item);
 
   double _stageFavW(BuildContext context, double boxH) {
@@ -9581,7 +9582,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     ]) {
       final i = at + spec.step;
       if (i >= items.length) continue;
-      final art = _wideArtUrl(items[i]);
+      final art = homeStageWideArtwork(items[i]);
       if (art == null || art.isEmpty) continue;
       peeks.add(
         Positioned(
@@ -10092,7 +10093,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
               final item = cw.items[e.col];
               return Padding(
                 padding: const EdgeInsets.only(bottom: _kTonightRowGap),
-                child: _TonightQueueRow(
+                child: HomeTonightQueueRow(
                   item: item,
                   height: rowH,
                   thumbWidth: thumbW,
