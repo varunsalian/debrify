@@ -1,12 +1,10 @@
-import '../features/home/presentation/home_card_metadata_view.dart';
-import '../features/home/models/home_card_metadata.dart';
+import '../features/home/presentation/home_hero_spotlight.dart';
 import '../features/home/presentation/spotlight_iptv_card_preview.dart';
 export '../features/home/presentation/spotlight_iptv_card_preview.dart' show SpotlightIptvCardPreview;
 import '../features/home/presentation/home_hero_trailer_layer.dart';
 import '../features/home/presentation/home_hero_trailer_indicators.dart';
 import '../features/home/presentation/home_spotlight_search_button.dart';
 import '../features/home/presentation/home_hero_live_layer.dart';
-import '../features/home/presentation/home_hero_surface.dart';
 import '../features/home/presentation/home_stage_rail_label.dart';
 import '../features/home/presentation/home_promenade_layout.dart';
 import '../features/home/presentation/home_atrium_layout.dart';
@@ -157,7 +155,6 @@ import '../models/media_identity.dart';
 import '../widgets/random_playback_dialog.dart';
 import '../utils/show_shuffle.dart';
 import '../widgets/clear_pinned_sources_button.dart';
-import '../models/hero_metadata_presentation.dart';
 import '../services/profiles/profile_runtime.dart';
 import 'metadata_explore_page.dart';
 import '../models/metadata_preferences.dart';
@@ -178,8 +175,6 @@ import 'dart:developer' as developer;
 import 'dart:math';
 
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:flutter/foundation.dart'
-    show ValueListenable, visibleForTesting;
 import 'package:flutter/material.dart';
 import '../models/custom_series_identity.dart';
 import 'package:flutter/services.dart';
@@ -292,7 +287,6 @@ import 'premiumize/premiumize_files_screen.dart';
 import 'alldebrid/alldebrid_files_screen.dart';
 import 'pikpak/pikpak_files_screen.dart';
 
-part 'search/search_hero_widgets.dart';
 
 /// TV focus ring for board cards — violet-300, deliberately LIGHTER than the
 /// board's chrome accent: a light ring over dark art pops at 10ft, while the
@@ -1496,7 +1490,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   final ValueNotifier<IptvChannel?> _heroLiveChannel =
       ValueNotifier<IptvChannel?>(null);
 
-  /// Boolean mirror of [_heroLiveChannel] for [_HeroSpotlight.liveTakeover] —
+  /// Boolean mirror of [_heroLiveChannel] for [HomeHeroSpotlight.liveTakeover] —
   /// the spotlight fades its (now-stale) colour field and identity text on
   /// this, and has no other reason to know the IPTV-specific channel type.
   final ValueNotifier<bool> _heroLiveTakeover = ValueNotifier<bool>(false);
@@ -15817,7 +15811,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
                 return ValueListenableBuilder<StremioMeta?>(
                   valueListenable: _heroEnriched,
                   builder: (context, enriched, __) {
-                    return _HeroSpotlight(
+                    return HomeHeroSpotlight(
                       item: item,
                       background: item.background?.isNotEmpty == true
                           ? item.background
@@ -15879,7 +15873,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
                       // An IPTV favourite took the boxed region — this
                       // item's colour field/identity text describe
                       // something that isn't playing anymore, so hide
-                      // them (see [_HeroSpotlight.liveTakeover]).
+                      // them (see [HomeHeroSpotlight.liveTakeover]).
                       liveTakeover: _heroTrailerActive
                           ? _heroLiveTakeover
                           : null,

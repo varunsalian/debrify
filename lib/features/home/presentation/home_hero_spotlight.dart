@@ -1,6 +1,20 @@
-part of '../search_screen.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
+import '../../../models/stremio_addon.dart';
+import '../../../models/hero_metadata_presentation.dart';
+import '../../../models/metadata_preferences.dart';
+import '../../../theme/app_theme_scope.dart';
+import '../../../widgets/home/home_theme.dart';
+import '../models/home_card_metadata.dart';
+import 'home_card_metadata_view.dart';
+import 'home_hero_surface.dart';
+import 'home_hero_transitions.dart';
+import 'home_hero_tint_surface.dart';
+import 'home_hero_title_art.dart';
+import 'home_hero_trailer_indicators.dart';
 
-class _HeroSpotlight extends StatefulWidget {
+class HomeHeroSpotlight extends StatefulWidget {
   final StremioMeta item;
   final String? background;
   final String? description;
@@ -50,7 +64,7 @@ class _HeroSpotlight extends StatefulWidget {
   final ValueListenable<bool>? trailerShowing;
 
   /// Host-driven "an IPTV favourite has taken the boxed video region" signal
-  /// (see [_HeroLiveLayer]). [item]/[background]/[tint] all belong to the
+  /// (see the live hero layer). [item]/[background]/[tint] all belong to the
   /// previously-focused CATALOG title — once an unrelated live channel is
   /// playing in the region, this spotlight's colour field and identity block
   /// (title/meta/plot, all about that stale catalog title) fade out rather
@@ -58,7 +72,8 @@ class _HeroSpotlight extends StatefulWidget {
   /// Home (no IPTV favourites row to trigger it).
   final ValueListenable<bool>? liveTakeover;
 
-  const _HeroSpotlight({
+  const HomeHeroSpotlight({
+    super.key,
     required this.item,
     required this.background,
     required this.description,
@@ -78,10 +93,10 @@ class _HeroSpotlight extends StatefulWidget {
   });
 
   @override
-  State<_HeroSpotlight> createState() => _HeroSpotlightState();
+  State<HomeHeroSpotlight> createState() => _HomeHeroSpotlightState();
 }
 
-class _HeroSpotlightState extends State<_HeroSpotlight>
+class _HomeHeroSpotlightState extends State<HomeHeroSpotlight>
     with TickerProviderStateMixin {
   StremioMeta? _hostBaseline;
   StremioMeta get _originalMetadata => _hostBaseline ??= _buildHostBaseline();
@@ -182,26 +197,26 @@ class _HeroSpotlightState extends State<_HeroSpotlight>
   }
 
   @override
-  void didUpdateWidget(_HeroSpotlight old) {
-    if (!identical(old.item, widget.item) ||
-        old.background != widget.background ||
-        old.description != widget.description ||
-        old.runtime != widget.runtime ||
-        old.logo != widget.logo ||
-        old.rating != widget.rating) {
+  void didUpdateWidget(HomeHeroSpotlight oldWidget) {
+    if (!identical(oldWidget.item, widget.item) ||
+        oldWidget.background != widget.background ||
+        oldWidget.description != widget.description ||
+        oldWidget.runtime != widget.runtime ||
+        oldWidget.logo != widget.logo ||
+        oldWidget.rating != widget.rating) {
       _hostBaseline = null;
     }
-    super.didUpdateWidget(old);
-    if (!identical(old.trailerShowing, widget.trailerShowing)) {
-      old.trailerShowing?.removeListener(_onHeroCoverChanged);
+    super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.trailerShowing, widget.trailerShowing)) {
+      oldWidget.trailerShowing?.removeListener(_onHeroCoverChanged);
       widget.trailerShowing?.addListener(_onHeroCoverChanged);
     }
-    if (!identical(old.liveTakeover, widget.liveTakeover)) {
-      old.liveTakeover?.removeListener(_onHeroCoverChanged);
+    if (!identical(oldWidget.liveTakeover, widget.liveTakeover)) {
+      oldWidget.liveTakeover?.removeListener(_onHeroCoverChanged);
       widget.liveTakeover?.addListener(_onHeroCoverChanged);
     }
-    if (old.boxedTrailer != widget.boxedTrailer) _syncMotionGates();
-    if (old.item.id != widget.item.id && _textOk) {
+    if (oldWidget.boxedTrailer != widget.boxedTrailer) _syncMotionGates();
+    if (oldWidget.item.id != widget.item.id && _textOk) {
       _textFx.forward(from: 0);
     }
   }
@@ -213,162 +228,6 @@ class _HeroSpotlightState extends State<_HeroSpotlight>
     _ken.dispose();
     _textFx.dispose();
     super.dispose();
-  }
-
-  /// Legibility wrapper for the left tint SCRIM and the identity TEXT: in
-  /// [boxedTrailer] mode they must STAY while the trailer plays (only the
-  /// backdrop image yields — see [_fadeBackdropForTrailer]), so this is a pass-
-  /// through there. No-op too when the surface runs no trailers.
-  Widget _maybeFadeForTrailer(Widget child) {
-    final showing = widget.trailerShowing;
-    if (showing == null || widget.boxedTrailer) return child;
-    return ValueListenableBuilder<bool>(
-      valueListenable: showing,
-      builder: (context, on, kid) => AnimatedOpacity(
-        opacity: on ? 0.0 : 1.0,
-        duration: const Duration(milliseconds: 650),
-        curve: Curves.easeOut,
-        child: kid,
-      ),
-      child: child,
-    );
-  }
-
-  /// Fades the backdrop IMAGE out while the trailer plays (boxedTrailer). The
-  /// colour field beneath ([_trailerColorField]) takes its place, so the left of
-  /// the hero becomes a rich tint wash instead of a cropped half-poster beside
-  /// the trailer. Timing mirrors the 650ms crossfade the video uses internally.
-  Widget _fadeBackdropForTrailer(Widget child) {
-    final showing = widget.trailerShowing;
-    if (showing == null || !widget.boxedTrailer) return child;
-    return ValueListenableBuilder<bool>(
-      valueListenable: showing,
-      builder: (context, on, kid) => AnimatedOpacity(
-        opacity: on ? 0.0 : 1.0,
-        duration: const Duration(milliseconds: 650),
-        curve: Curves.easeOut,
-        child: kid,
-      ),
-      child: child,
-    );
-  }
-
-  /// Boxed-mode counterpart of [_maybeFadeForTrailer] for the SECONDARY
-  /// identity lines only (meta chips + plot): while the ambient trailer plays
-  /// they fade away and the title/logo stays — the Netflix/Nuvio "logo holds
-  /// the stage" move. Safe by construction: the identity block sits left of
-  /// the trailer region, so this Opacity never covers the underlay's
-  /// punch-through hole. Pass-through outside boxed mode (the full-block fade
-  /// above already handles that layout).
-  Widget _fadeMetaForTrailer(Widget child) {
-    final showing = widget.trailerShowing;
-    if (showing == null || !widget.boxedTrailer) return child;
-    return ValueListenableBuilder<bool>(
-      valueListenable: showing,
-      builder: (context, on, kid) => AnimatedOpacity(
-        opacity: on ? 0.0 : 1.0,
-        duration: const Duration(milliseconds: 480),
-        curve: Curves.easeOut,
-        child: kid,
-      ),
-      child: child,
-    );
-  }
-
-  /// An IPTV favourite has taken the boxed video region ([liveTakeover]) —
-  /// unlike the catalog trailer, that video has NOTHING to do with [item], so
-  /// its colour field / identity text must actually disappear rather than
-  /// stay put (the invariant [_maybeFadeForTrailer]/[_fadeMetaForTrailer] rely
-  /// on — "the text is still about what's playing" — doesn't hold here).
-  /// No-op when the surface never runs IPTV favourites.
-  Widget _fadeForLiveTakeover(Widget child) {
-    final live = widget.liveTakeover;
-    if (live == null) return child;
-    return ValueListenableBuilder<bool>(
-      valueListenable: live,
-      builder: (context, on, kid) => AnimatedOpacity(
-        opacity: on ? 0.0 : 1.0,
-        duration: const Duration(milliseconds: 340),
-        curve: Curves.easeOut,
-        child: kid,
-      ),
-      child: child,
-    );
-  }
-
-  /// The hero's colour STAGE (boxed mode): a diagonal wash in the focused
-  /// title's extracted tint plus a soft glow leaning toward the art region —
-  /// the left half of the Concept-5 hero. Always on (this IS the rest-state
-  /// background now that the key art lives in the region on the right, not
-  /// full-bleed), and the surface the idle art's tinted feathers melt into
-  /// (mid value ~0.30 meets their 0.34) — no half-poster seam, ever. During
-  /// playback the lights-off veil above quenches this to near-black so the
-  /// video's slim neutral feathers match. Baked gradients only — no
-  /// per-frame layer. Boxed mode only.
-  Widget _heroMoodField(ColorScheme scheme) {
-    if (!widget.boxedTrailer) return const SizedBox.shrink();
-    final base = AppThemeScope.of(context).home.bg; // the board's own bg
-    return IgnorePointer(
-      // RepaintBoundary so this layer's repaint never bubbles up and
-      // re-rasters the whole hero band (region art included). The colour used
-      // to SNAP between settles — a one-frame hue jump across ~60% of the
-      // screen. It now TWEENS, but only per settle: the tint changes on its
-      // 350ms debounce (never per DPAD step), so this costs ~24 frames of
-      // two-gradient repaint inside this boundary per rest — not a per-key
-      // cost — and the room's lighting follows the art instead of jumping.
-      child: RepaintBoundary(
-        child: ValueListenableBuilder<Color?>(
-          valueListenable:
-              widget.tint ?? const AlwaysStoppedAnimation<Color?>(null),
-          builder: (context, tint, __) {
-            // Retargets from the CURRENT colour when the settle lands a new
-            // one, so back-to-back settles blend instead of restarting.
-            return TweenAnimationBuilder<Color?>(
-              tween: ColorTween(end: tint ?? scheme.surface),
-              duration: const Duration(milliseconds: 400),
-              curve: Curves.easeOutCubic,
-              builder: (context, animTint, __) {
-                final t = animTint ?? scheme.surface;
-                return DecoratedBox(
-                  decoration: BoxDecoration(
-                    // Diagonal tint field: brighter top-left, deeper foot.
-                    // TRANSLUCENT washes (not opaque lerps) since the glass
-                    // stage landed: the blurred art behind glows through the
-                    // colour, which is what makes the hero read glossy.
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [
-                        Color.lerp(base, t, 0.55)!.withValues(alpha: 0.55),
-                        Color.lerp(base, t, 0.40)!.withValues(alpha: 0.36),
-                        Color.lerp(base, t, 0.25)!.withValues(alpha: 0.20),
-                      ],
-                      stops: const [0.0, 0.55, 1.0],
-                    ),
-                  ),
-                  child: DecoratedBox(
-                    // Soft glow leaning toward the art region (right of centre)
-                    // so the colour intensifies into it and the left stays calm
-                    // for the title text.
-                    decoration: BoxDecoration(
-                      gradient: RadialGradient(
-                        center: const Alignment(0.55, -0.25),
-                        radius: 1.3,
-                        colors: [
-                          Color.lerp(base, t, 0.62)!.withValues(alpha: 0.5),
-                          Colors.transparent,
-                        ],
-                        stops: const [0.0, 1.0],
-                      ),
-                    ),
-                  ),
-                );
-              },
-            );
-          },
-        ),
-      ),
-    );
   }
 
   /// Wraps one text-block line in its slice of the cascade: a quick fade plus
@@ -398,6 +257,11 @@ class _HeroSpotlightState extends State<_HeroSpotlight>
   Widget _buildHero(BuildContext context, HomeCardMetadataState metadata) {
     final app = AppThemeScope.of(context);
     final item = metadata.presented;
+    final transitions = HomeHeroTransitions(
+      boxedTrailer: widget.boxedTrailer,
+      showing: widget.trailerShowing,
+      liveTakeover: widget.liveTakeover,
+    );
     final background = metadata.usesProvider(MetadataCategory.backgrounds)
         ? item.background
         : widget.background;
@@ -420,12 +284,12 @@ class _HeroSpotlightState extends State<_HeroSpotlight>
         ? item.runtime
         : widget.runtime;
     // Chip-grammar meta line (type · year · runtime · genres, then the IMDb
-    // mark) — replaces the old bordered type pill + star line for the flatter
+    // mark) — replaces the oldWidget bordered type pill + star line for the flatter
     // OTT look. Facts-first order on purpose: the line ellipsizes from the
     // END when the identity block is narrow (boxed-trailer mode caps it at
     // the region's left edge), so the tail must be the part that reads fine
     // truncated. "MOVIE · 2023 · 1h 58m · Action · Adv…" still looks whole;
-    // the old genre-first order chopped the year off instead ("…").
+    // the oldWidget genre-first order chopped the year off instead ("…").
     final metaParts = <String>[
       item.type == 'series' ? 'SERIES' : 'MOVIE',
       if (item.year != null && item.year!.isNotEmpty) item.year!,
@@ -458,7 +322,14 @@ class _HeroSpotlightState extends State<_HeroSpotlight>
               // — the canvas the title text sits on, and the surface the region's
               // feathers melt into.
               if (widget.boxedTrailer)
-                _fadeForLiveTakeover(_heroMoodField(scheme)),
+                transitions.fadeForLiveTakeover(
+                  buildHomeHeroMoodField(
+                    boxedTrailer: widget.boxedTrailer,
+                    base: app.home.bg,
+                    surface: scheme.surface,
+                    tint: widget.tint,
+                  ),
+                ),
               if (bg.isNotEmpty && artRegion != null)
                 // Region-anchored key art: cover-crop + the same eased feathers
                 // the trailer uses, so still art and live video dissolve into the
@@ -468,7 +339,7 @@ class _HeroSpotlightState extends State<_HeroSpotlight>
                 // this exact rect in the overlay above.
                 Positioned.fromRect(
                   rect: artRegion,
-                  child: _fadeBackdropForTrailer(
+                  child: transitions.fadeBackdropForTrailer(
                     RepaintBoundary(
                       child: ClipRect(
                         child: Stack(
@@ -519,7 +390,10 @@ class _HeroSpotlightState extends State<_HeroSpotlight>
                                     const SizedBox.shrink(),
                               ),
                             ),
-                            _regionArtFeathers(scheme),
+                            buildHomeHeroArtFeathers(
+                              base: app.home.bg,
+                              tint: widget.tint,
+                            ),
                           ],
                         ),
                       ),
@@ -546,7 +420,7 @@ class _HeroSpotlightState extends State<_HeroSpotlight>
                 // trailer plays the image yields (fades out) to reveal the tint
                 // colour field beneath, so the left is a rich wash, not a cropped
                 // half-poster. Timing mirrors the 650ms crossfade the video uses.
-                _fadeBackdropForTrailer(
+                transitions.fadeBackdropForTrailer(
                   RepaintBoundary(
                     child: ClipRect(
                       child: ShaderMask(
@@ -634,7 +508,7 @@ class _HeroSpotlightState extends State<_HeroSpotlight>
               // repaints only when the settled tint changes, never per frame.
               // Fades out with the text once the trailer covers the hero, so the
               // full-bleed video reads clean (no purposeless left-darkening).
-              _maybeFadeForTrailer(
+              transitions.fadeIdentityForTrailer(
                 ValueListenableBuilder<Color?>(
                   valueListenable:
                       widget.tint ?? const AlwaysStoppedAnimation<Color?>(null),
@@ -706,8 +580,8 @@ class _HeroSpotlightState extends State<_HeroSpotlight>
               // [_fadeForLiveTakeover]).
               // RepaintBoundary: text + logo raster stays cached when siblings
               // (pill, veils, fields) repaint, and vice versa.
-              _fadeForLiveTakeover(
-                _maybeFadeForTrailer(
+              transitions.fadeForLiveTakeover(
+                transitions.fadeIdentityForTrailer(
                   RepaintBoundary(
                     child: Align(
                       alignment: Alignment.bottomLeft,
@@ -757,7 +631,7 @@ class _HeroSpotlightState extends State<_HeroSpotlight>
                                   // plays (boxed mode) — the title art above holds the
                                   // stage alone. Layout is opacity-only, so nothing
                                   // reflows when they go.
-                                  _fadeMetaForTrailer(
+                                  transitions.fadeMetaForTrailer(
                                     _cascade(
                                       Row(
                                         children: [
@@ -790,7 +664,7 @@ class _HeroSpotlightState extends State<_HeroSpotlight>
                                   if (description != null &&
                                       description.isNotEmpty) ...[
                                     SizedBox(height: compact ? 6 : 10),
-                                    _fadeMetaForTrailer(
+                                    transitions.fadeMetaForTrailer(
                                       _cascade(
                                         Text(
                                           description,
@@ -857,56 +731,9 @@ class _HeroSpotlightState extends State<_HeroSpotlight>
     );
   }
 
-  /// The idle key-art's edge dissolve — three eased feather shapes, TINTED
-  /// (lerped 0.34 toward the board bg) because at rest the art sits on the
-  /// coloured mood field. The live video paints the same shapes but NEUTRAL
-  /// and roughly half as wide (user call — heavy/tinted melt read as bleed
-  /// over the picture): by the time they fade in, the lights-off veils have
-  /// quenched the tint around the region, so slim near-black feathers land
-  /// seamlessly. Recolours only when the settled tint changes — never per
-  /// frame.
-  Widget _regionArtFeathers(ColorScheme scheme) {
-    // Hoisted out of the builder below: the tint notifier fires on every
-    // ambient artwork change, and an inherited-widget walk per tint frame is
-    // exactly the hot path this board cannot afford on a TV box.
-    final base = AppThemeScope.of(context).home.bg; // the board's own bg
-    return IgnorePointer(
-      child: ValueListenableBuilder<Color?>(
-        valueListenable:
-            widget.tint ?? const AlwaysStoppedAnimation<Color?>(null),
-        builder: (context, tint, __) {
-          final melt = tint == null ? base : Color.lerp(base, tint, 0.34)!;
-          return Stack(
-            fit: StackFit.expand,
-            children: [
-              homeHeroEdgeFeather(
-                Alignment.centerLeft,
-                Alignment.centerRight,
-                melt,
-                homeHeroTrailerFeatherFrac,
-              ),
-              homeHeroEdgeFeather(
-                Alignment.topCenter,
-                Alignment.bottomCenter,
-                melt,
-                0.16,
-              ),
-              homeHeroEdgeFeather(
-                Alignment.bottomCenter,
-                Alignment.topCenter,
-                melt,
-                0.36,
-              ),
-            ],
-          );
-        },
-      ),
-    );
-  }
-
-  /// The hero's title — see [_HeroTitleArt] for the image-first grammar.
+  /// The hero's title — see [HomeHeroTitleArt] for the image-first grammar.
   Widget _buildTitleArt(HomeCardMetadataState metadata) {
-    return _HeroTitleArt(
+    return HomeHeroTitleArt(
       title: metadata.presented.name,
       logoUrl: metadata.usesProvider(MetadataCategory.backgrounds)
           ? metadata.presented.logo
@@ -944,102 +771,3 @@ class _HeroSpotlightState extends State<_HeroSpotlight>
     ],
   );
 }
-
-/// The hero's title, IMAGE-FIRST: the studio title-treatment art when a
-/// `logo` URL is known, the plain text title only when it is genuinely
-/// unavailable (no URL, or the fetch failed). While the art is in flight the
-/// slot holds EMPTY — never the text — because text-flashing-then-swapping
-/// to the image read as a glitch (the old behaviour). Failed URLs are
-/// remembered for the session so revisiting a logo-less title shows its text
-/// immediately instead of re-probing (and re-flashing empty) every time.
-/// Bottom-left anchored in a fixed-height slot so successive titles sit on
-/// one baseline as DPAD focus flies.
-class _HeroTitleArt extends StatefulWidget {
-  final String title;
-  final String? logoUrl;
-  final bool compact;
-  final bool isTelevision;
-
-  const _HeroTitleArt({
-    required this.title,
-    required this.logoUrl,
-    required this.compact,
-    required this.isTelevision,
-  });
-
-  @override
-  State<_HeroTitleArt> createState() => _HeroTitleArtState();
-}
-
-class _HeroTitleArtState extends State<_HeroTitleArt> {
-  /// Session-wide memo of logo URLs that 404'd (metahub simply has no art
-  /// for many titles) — those heroes go straight to text with no empty beat
-  /// and no repeat network probe on every DPAD revisit.
-  static final Set<String> _deadLogoUrls = <String>{};
-
-  Text _titleText(int maxLines) => Text(
-    widget.title,
-    maxLines: maxLines,
-    overflow: TextOverflow.ellipsis,
-    // Poppins (rounded geometric) for the display title, airier and lighter
-    // than Inter-w800/-1 tracking — closer to Stremio's hero. Body/metadata
-    // stay on the Inter theme.
-    style: GoogleFonts.poppins(
-      fontSize: widget.compact
-          ? (widget.isTelevision ? 24 : 20)
-          : (widget.isTelevision ? 38 : 26),
-      fontWeight: FontWeight.w600,
-      letterSpacing: 0,
-      height: 1.06,
-      color: AppThemeScope.of(context).core.tx,
-    ),
-  );
-
-  @override
-  Widget build(BuildContext context) {
-    final logo = widget.logoUrl;
-    final compact = widget.compact;
-    final isTelevision = widget.isTelevision;
-    if (logo == null || logo.isEmpty || _deadLogoUrls.contains(logo)) {
-      // Known-no-art: the full two-line text title, exactly the old look.
-      return _titleText(2);
-    }
-    final logoH = compact
-        ? (isTelevision ? 46.0 : 38.0)
-        : (isTelevision ? 76.0 : 58.0);
-    return SizedBox(
-      height: logoH,
-      width: double.infinity,
-      child: Align(
-        alignment: Alignment.bottomLeft,
-        child: ConstrainedBox(
-          constraints: BoxConstraints(maxWidth: isTelevision ? 320 : 280),
-          child: CachedNetworkImage(
-            imageUrl: logo,
-            fit: BoxFit.contain,
-            alignment: Alignment.bottomLeft,
-            // Logos are wide PNGs (metahub ~800px) shown ~300px at most — cap
-            // the decode like every other art surface.
-            memCacheWidth: 480,
-            fadeInDuration: HomeTheme.imageFadeIn(isTelevision),
-            fadeOutDuration: HomeTheme.imageFadeOut(isTelevision),
-            // Empty while loading AND on error: the error frame only shows
-            // for the instant before errorListener rebuilds us onto the
-            // full-size text path below (a slot-cramped one-line fallback
-            // here would flash before that swap).
-            placeholder: (_, __) => const SizedBox.shrink(),
-            errorWidget: (_, __, ___) => const SizedBox.shrink(),
-            errorListener: (_) {
-              _deadLogoUrls.add(logo);
-              if (mounted) setState(() {});
-            },
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// Where a Continue Watching row's entries live — drives the long-press menu's
-/// wording, since "remove" means a different write per source (local store,
-/// Trakt playback API, Simkl status/session, IPTV watch history).
