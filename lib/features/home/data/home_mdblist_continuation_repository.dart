@@ -5,14 +5,19 @@ import '../../../services/mdblist/mdblist_models.dart';
 class HomeMdblistContinuationRepository {
   const HomeMdblistContinuationRepository({
     required void Function() invalidate,
+    required Future<bool> Function(MdblistContinueWatchingItem item) clear,
     required Future<bool> Function() synchronizeInvalidations,
     required Future<MdblistResult<MdblistContinueWatchingSnapshot>> Function({
       required bool force,
     })
     fetch,
-  }) : _invalidate = invalidate,
+  }) : _clear = clear,
+       _invalidate = invalidate,
        _synchronizeInvalidations = synchronizeInvalidations,
        _fetch = fetch;
+
+  final Future<bool> Function(MdblistContinueWatchingItem item) _clear;
+  Future<bool> clear(MdblistContinueWatchingItem item) => _clear(item);
 
   final void Function() _invalidate;
   void invalidate() => _invalidate();

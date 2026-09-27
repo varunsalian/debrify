@@ -60,6 +60,7 @@ void main() {
             overrides: [
               homeMdblistContinuationRepositoryProvider.overrideWithValue(
                 HomeMdblistContinuationRepository(
+                  clear: (_) async => false,
                   invalidate: () => calls.add('invalidate'),
                   synchronizeInvalidations: () {
                     calls.add('sync');

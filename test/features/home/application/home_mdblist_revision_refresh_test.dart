@@ -15,6 +15,7 @@ class Fixture {
       overrides: [
         homeMdblistContinuationRepositoryProvider.overrideWithValue(
           HomeMdblistContinuationRepository(
+            clear: (_) async => false,
             invalidate: () => invalidations++,
             synchronizeInvalidations: () async => true,
             fetch: ({required force}) async =>

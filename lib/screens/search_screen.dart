@@ -5481,10 +5481,15 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       _mdblistByImdb[_imdbOf(item)]?.paused == true;
 
   Future<void> _removeMdblistCwItem(StremioMeta item) async {
-    final cw = _mdblistByImdb[_imdbOf(item)];
-    if (cw == null || !cw.paused) return;
-    final removed = await MdblistContinueWatchingService.instance.clear(cw);
-    if (!mounted || !removed) return;
+    final removed = await _mdblistContinuationController.remove(
+      _imdbOf(item),
+      isCurrent: () => mounted,
+    );
+    if (!mounted ||
+        !removed ||
+        _profileSessionOwner != ProfileSessionMemory.captureOwner()) {
+      return;
+    }
     _snack('Removed from MDBList Continue Watching');
     await _loadMdblistContinueWatching();
   }

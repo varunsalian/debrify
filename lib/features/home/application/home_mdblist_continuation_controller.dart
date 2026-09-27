@@ -24,6 +24,7 @@ class HomeMdblistContinuationController
   final HomeContinuationSession session;
   late HomeMdblistContinuationRepository _repository;
   int _generation = 0;
+  int _lifetimeGeneration = 0;
   int _revisionGeneration = 0;
   bool _revisionPending = false;
   bool get revisionPending => _revisionPending;
@@ -35,6 +36,7 @@ class HomeMdblistContinuationController
     _repository = ref.watch(homeMdblistContinuationRepositoryProvider);
     ref.onDispose(() {
       _generation++;
+      _lifetimeGeneration++;
       cancelRevisionRefresh();
     });
     return const HomeMdblistContinuation.empty();
@@ -86,6 +88,26 @@ class HomeMdblistContinuationController
       // Superseded work cannot clear the successor's pending marker.
       if (token == _revisionGeneration) _revisionPending = false;
     }
+  }
+
+  /// Explicit removals are independent actions: an intervening feed refresh or
+  /// another title's removal must not cancel an already-issued remote command.
+  /// Only this controller's lifetime, originating profile and view gate feedback.
+  Future<bool> remove(
+    String? imdbId, {
+    required bool Function() isCurrent,
+  }) async {
+    final lifetime = _lifetimeGeneration;
+    bool current() =>
+        ref.mounted &&
+        lifetime == _lifetimeGeneration &&
+        session.owner == ProfileSessionMemory.captureOwner() &&
+        isCurrent();
+    if (!current()) return false;
+    final item = state.byImdb[imdbId];
+    if (item == null || !item.paused) return false;
+    final removed = await _repository.clear(item);
+    return current() && removed;
   }
 
   Future<void> load({

@@ -17,6 +17,7 @@ import 'package:debrify/services/stremio_service.dart';
 import 'package:debrify/services/storage_service.dart';
 import 'package:debrify/utils/platform_util.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -59,7 +60,15 @@ void main() {
   tearDownAll(() async {
     await images.delete(recursive: true);
   });
-  for (final mode in ['active', 'profile', 'dispose', 'search']) {
+  for (final mode in [
+    'active',
+    'profile',
+    'dispose',
+    'search',
+    'remove',
+    'remove-failed',
+    'remove-profile',
+  ]) {
     testWidgets('MDBList Home scoped reads preserve $mode behavior', (
       tester,
     ) async {
@@ -101,6 +110,8 @@ void main() {
           );
       final pending =
           Completer<MdblistResult<MdblistContinueWatchingSnapshot>>();
+      final clearResult = Completer<bool>();
+      final removals = <MdblistContinueWatchingItem>[];
       var reads = 0;
       var failed = false;
       var disconnected = false;
@@ -121,6 +132,10 @@ void main() {
             overrides: [
               homeMdblistContinuationRepositoryProvider.overrideWithValue(
                 HomeMdblistContinuationRepository(
+                  clear: (item) {
+                    removals.add(item);
+                    return clearResult.future;
+                  },
                   invalidate: () {},
                   synchronizeInvalidations: () async => true,
                   fetch: ({required force}) {
@@ -169,7 +184,49 @@ void main() {
           .evaluate()
           .map((e) => Focus.maybeOf(e))
           .whereType<FocusNode>();
-      if (mode == 'active') {
+      if (mode.startsWith('remove')) {
+        final node = nodes().single;
+        node.requestFocus();
+        await pump();
+        await tester.sendKeyDownEvent(LogicalKeyboardKey.select);
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 800));
+        await tester.sendKeyUpEvent(LogicalKeyboardKey.select);
+        await drive(() {});
+        await pump();
+        expect(find.text('Remove from Continue Watching'), findsOneWidget);
+        await drive(
+          () => tester.tap(find.text('Remove from Continue Watching')),
+        );
+        await pump();
+        await tester.pump(const Duration(milliseconds: 400));
+        expect(removals.single.selection.imdbId, 'tt1234567');
+        expect(removals.single.clearTarget!.ids.imdb, 'tt1234567');
+        expect(reads, 1);
+        if (mode == 'remove-profile') {
+          ProfileRuntime.promoteLegacyToCommitted(
+            ProfileScope(
+              profileId: 'incoming',
+              dataGeneration: 1,
+              sessionEpoch: 1,
+            ),
+          );
+        }
+        disconnected = mode == 'remove';
+        await drive(() => clearResult.complete(mode != 'remove-failed'));
+        await pump();
+        expect(reads, mode == 'remove' ? 2 : 1);
+        expect(
+          find.text('Removed from MDBList Continue Watching'),
+          mode == 'remove' ? findsOneWidget : findsNothing,
+        );
+        if (mode == 'remove') {
+          expect(nodes(), isEmpty);
+        } else if (mode == 'remove-failed') {
+          expect(nodes().single, same(node));
+          expect(node.hasFocus, isTrue);
+        }
+      } else if (mode == 'active') {
         final node = nodes().single;
         node.requestFocus();
         await pump();

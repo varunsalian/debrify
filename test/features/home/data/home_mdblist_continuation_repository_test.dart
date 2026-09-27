@@ -16,6 +16,7 @@ void main() {
         headers: {'fixture': 'value'},
       );
       final repository = HomeMdblistContinuationRepository(
+        clear: (_) async => false,
         invalidate: () {},
         synchronizeInvalidations: () {
           calls.add('sync');
@@ -45,6 +46,7 @@ void main() {
       var current = stage != 'before';
       var syncs = 0;
       final repository = HomeMdblistContinuationRepository(
+        clear: (_) async => false,
         invalidate: () {},
         synchronizeInvalidations: () async {
           syncs++;
@@ -67,6 +69,7 @@ void main() {
       var syncs = 0;
       var fetches = 0;
       final repository = HomeMdblistContinuationRepository(
+        clear: (_) async => false,
         invalidate: () {},
         synchronizeInvalidations: () async {
           syncs++;
@@ -97,6 +100,7 @@ void main() {
         retryAfter: Duration(seconds: 3),
       );
       final repository = HomeMdblistContinuationRepository(
+        clear: (_) async => false,
         invalidate: () {},
         synchronizeInvalidations: () async => true,
         fetch: ({required force}) async {
