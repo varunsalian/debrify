@@ -186,6 +186,7 @@ dependency_overrides:
     path: packages/path_provider_tvos_patched
 
 dev_dependencies:
+  fake_async: ^1.3.3
   file: ^7.0.1
   flutter_test:
     sdk: flutter

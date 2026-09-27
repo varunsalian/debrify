@@ -1,3 +1,5 @@
+import '../features/home/presentation/home_card_metadata_view.dart';
+import '../features/home/models/home_card_metadata.dart';
 import '../features/home/presentation/home_favorite_cell.dart';
 import '../features/home/presentation/home_art_poster.dart';
 import '../features/home/presentation/home_card_style.dart';
