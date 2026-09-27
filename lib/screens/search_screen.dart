@@ -1,3 +1,4 @@
+import '../features/discover/presentation/discover_source_picker.dart';
 import '../features/home/presentation/home_stage_theater.dart';
 import '../features/home/presentation/home_hero_shell_bridge.dart';
 import '../features/home/application/home_hero_tint_loader.dart';
@@ -272,7 +273,6 @@ import '../services/mdblist/mdblist_service.dart';
 import '../services/mdblist/mdblist_continue_watching_service.dart';
 import '../services/mdblist/mdblist_models.dart';
 import '../services/mdblist/mdblist_menu_helpers.dart';
-import '../widgets/see_all/stremio_dropdown.dart';
 import '../widgets/see_all/discover_detail_rail.dart';
 import '../widgets/see_all/discover_card_settings_scope.dart';
 import '../widgets/see_all/discover_trailer_stage.dart';
@@ -15283,36 +15283,16 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   }
 
   Widget _buildDiscoverPanel() {
-    final source = StremioDropdown<String>(
-      label: 'Source',
-      value: _discSource,
+    final source = buildDiscoverSourcePicker(
+      selected: _discSource,
       isTelevision: widget.isTelevision,
-      // TV: a quiet violet segment leading the filter line — the row's identity
-      // color (chrome accent), distinct from the white filter values.
-      quiet: widget.isTelevision,
-      quietAccent: true,
       focusNode: _discSourceNode,
-      options: [
-        const StremioDropdownOption(_discCw, 'Continue Watching'),
-        const StremioDropdownOption(_discTrakt, 'Trakt'),
-        const StremioDropdownOption(_discSimkl, 'Simkl'),
-        const StremioDropdownOption(_discJellyfin, 'Jellyfin'),
-        const StremioDropdownOption(_discEmby, 'Emby'),
-        if (_metadataFeaturePolicy?.features.contains(MetadataFeature.discovery) ==
-            true)
-          const StremioDropdownOption(_discTmdb, 'TMDB'),
-        // MDBList is hidden for the alpha (kMdblistEnabled) AND only when
-        // connected — kept if it's somehow already the active source so the
-        // dropdown's value always has a matching option.
-        if (kMdblistEnabled &&
-            (_isMdblistAuthenticated || _discSource == _discMdblist))
-          const StremioDropdownOption(_discMdblist, 'MDBList'),
-        for (final a in _discAddons)
-          StremioDropdownOption(
-            '$_discAddonPrefix${a.id}',
-            a.displayName,
-          ),
-      ],
+      discoveryEnabled:
+          _metadataFeaturePolicy?.features.contains(MetadataFeature.discovery) ==
+          true,
+      mdblistEnabled: kMdblistEnabled,
+      mdblistAuthenticated: kMdblistEnabled && _isMdblistAuthenticated,
+      addons: _discAddons,
       onSelected: _selectDiscoverSource,
     );
 
