@@ -1,3 +1,4 @@
+import '../features/home/presentation/home_catalog_row.dart';
 import '../features/home/presentation/home_catalog_row_header.dart';
 import '../features/home/presentation/home_favorite_row.dart';
 import '../features/home/application/home_post_playback_refresh_controller.dart';
@@ -306,7 +307,6 @@ const int _kBoardBatchSize = 8;
 
 /// When a row's horizontal scroll gets within this many pixels of the end, the
 /// next page for that catalog is fetched (Stremio-style unlimited rows).
-const double _kRowLoadMoreThreshold = 900;
 
 /// Dedicated Search tab.
 ///
@@ -16064,145 +16064,101 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     final posterW = collection == null
         ? _railTitleCardW(context)
         : cellH * cellAspect;
-    final rowH = cellH + 14;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        if (collection == null || !_hideHomeCollectionNames)
-          _railHeader(
-            title: section.title,
-            tag: _catalogSourceTag(section),
-            onSeeAll: () => _openCatalogSeeAll(section),
-          )
-        else
-          const SizedBox(height: 8),
-        SizedBox(
-          height: rowH,
-          child: NotificationListener<ScrollNotification>(
-            onNotification: (n) {
-              // Pull the next page as the row nears its right edge. Only this
-              // row's horizontal scroll reaches here (the vertical board list is
-              // an ancestor, so its notifications don't bubble down).
-              if (n.metrics.axis == Axis.horizontal &&
-                  n.metrics.pixels >=
-                      n.metrics.maxScrollExtent - _kRowLoadMoreThreshold) {
-                _loadMoreRow(rowIndex);
-              }
-              return false;
-            },
-            child: Builder(
-              builder: (context) {
-                // Rows start straight on the first poster (Stremio-style, no
-                // leading See-All tile). DPAD-up from row 0 leaves the board;
-                // col-0 DPAD-left drops to the sidebar (handled in HomeBoardCell
-                // when onLeftEdge is null).
-                VoidCallback up(int col) => homeRowId != null
-                    ? () => _focusRelativeHomeRail(homeRowId, -1, col)
-                    : rowIndex == 0
-                    ? (_anyFavVisible
-                          ? () => _focusFavRowAt(_favRowCount - 1, col)
-                          : (_cwVisible
-                                ? () => _focusCwRow(_cwRows.length - 1, col)
-                                : () => _leaveBoardTop()))
-                    : () => _focusRow(rowIndex - 1, col);
-                // Down past the last loaded row kicks the next batch load
-                // (inside _focusRow) and defers the move until it lands.
-                VoidCallback down(int col) => homeRowId != null
-                    ? () => _focusRelativeHomeRail(homeRowId, 1, col)
-                    : () {
-                        if (!_focusRow(rowIndex + 1, col)) {
-                          _deferDownMove(rowIndex: rowIndex, column: col);
-                        }
-                      };
-                return ListView.builder(
-                  scrollDirection: Axis.horizontal,
-                  // Clip the horizontal viewport so scrolled-off cards don't paint
-                  // over the sidebar to the left. rowH has enough headroom that the
-                  // hover/focus lift still isn't clipped.
-                  clipBehavior: Clip.hardEdge,
-                  // ~4 posters of pre-build either side (was 800 ≈ a dozen —
-                  // amplified every row mounted by the vertical cache).
-                  cacheExtent: 400,
-                  padding: const EdgeInsets.symmetric(horizontal: 13),
-                  // +1 trailing paging spinner.
-                  itemCount:
-                      section.items.length + (section.loadingMore ? 1 : 0),
-                  itemBuilder: (context, index) {
-                    final col = index;
-                    if (col >= section.items.length) {
-                      return SizedBox(
-                        width: 52,
-                        height: cellH,
-                        child: const Center(
-                          child: SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          ),
-                        ),
-                      );
-                    }
-                    final item = section.items[col];
-                    final itemAspect = collection?.tileAspectOf(item) ?? cellAspect;
-                    // Unique per cell AND per SearchScreen instance (Home,
-                    // Discover and Search coexist in the tab stack — a shared
-                    // tag across them would trip Hero's duplicate-tag assert).
-                    final heroTag =
-                        'poster-${identityHashCode(this)}-$rowIndex-$col';
-                    return Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 11),
-                      child: Center(
-                        child: SizedBox(
-                          width: collection == null ? posterW : cellH * itemAspect,
-                          height: cellH,
-                          child: HomeBoardCell(
-                            onLeftEdge: () =>
-                                MainPageBridge.focusTvSidebar?.call(),
-                            item: item,
-                            isTelevision: tv,
-                            focusNode: nodes[col],
-                            column: col,
-                            rowNodes: nodes,
-                            hasBoundSource: _isBound(item),
-                            aspectRatio: itemAspect,
-                            artUrl: collection != null
-                                ? item.poster
-                                : _titleArtUrl(item),
-                            focusArtUrl: collection?.focusArtOf(item),
-                            focusVideoUrl: collection?.focusVideoOf(item),
-                            focusGlowEnabled: collection?.collection.focusGlowEnabled ?? false,
-                            showTitleOverlay: collection != null
-                                ? !(collection.folderOf(item)?.hideTitle ??
-                                      false)
-                                : !_hideHomeCardTitlesAndRatings,
-                            onQuickPlay: _pikpakOnly || collection != null
-                                ? null
-                                : () => _sectionQuickPlay(section, item),
-                            onFocused: () {
-                              _setHero(item);
-                              _rowCol[rowIndex] = col;
-                            },
-                            onUp: up(col),
-                            onDown: down(col),
-                            onOpen: () => _sectionOpenItem(
-                              section,
-                              item,
-                              heroTag: heroTag,
-                            ),
-                            onNearEnd: () => _loadMoreRow(rowIndex),
-                            heroTag: heroTag,
-                          ),
-                        ),
-                      ),
-                    );
-                  },
-                );
-              },
+    // Rows start straight on the first poster (Stremio-style, no
+    // leading See-All tile). DPAD-up from row 0 leaves the board;
+    // col-0 DPAD-left drops to the sidebar (handled in HomeBoardCell
+    // when onLeftEdge is null).
+    VoidCallback up(int col) => homeRowId != null
+        ? () => _focusRelativeHomeRail(homeRowId, -1, col)
+        : rowIndex == 0
+        ? (_anyFavVisible
+              ? () => _focusFavRowAt(_favRowCount - 1, col)
+              : (_cwVisible
+                    ? () => _focusCwRow(_cwRows.length - 1, col)
+                    : () => _leaveBoardTop()))
+        : () => _focusRow(rowIndex - 1, col);
+    // Down past the last loaded row kicks the next batch load
+    // (inside _focusRow) and defers the move until it lands.
+    VoidCallback down(int col) => homeRowId != null
+        ? () => _focusRelativeHomeRail(homeRowId, 1, col)
+        : () {
+            if (!_focusRow(rowIndex + 1, col)) {
+              _deferDownMove(rowIndex: rowIndex, column: col);
+            }
+          };
+    return buildHomeCatalogRow(
+      header: collection == null || !_hideHomeCollectionNames
+          ? _railHeader(
+              title: section.title,
+              tag: _catalogSourceTag(section),
+              onSeeAll: () => _openCatalogSeeAll(section),
+            )
+          : const SizedBox(height: 8),
+      cellHeight: cellH,
+      readChildCount: () =>
+          section.items.length + (section.loadingMore ? 1 : 0),
+      onLoadMore: () => _loadMoreRow(rowIndex),
+      itemBuilder: (context, index) {
+        final col = index;
+        if (col >= section.items.length) {
+          return SizedBox(
+            width: 52,
+            height: cellH,
+            child: const Center(
+              child: SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+            ),
+          );
+        }
+        final item = section.items[col];
+        final itemAspect = collection?.tileAspectOf(item) ?? cellAspect;
+        // Unique per cell AND per SearchScreen instance (Home,
+        // Discover and Search coexist in the tab stack — a shared
+        // tag across them would trip Hero's duplicate-tag assert).
+        final heroTag = 'poster-${identityHashCode(this)}-$rowIndex-$col';
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 11),
+          child: Center(
+            child: SizedBox(
+              width: collection == null ? posterW : cellH * itemAspect,
+              height: cellH,
+              child: HomeBoardCell(
+                onLeftEdge: () => MainPageBridge.focusTvSidebar?.call(),
+                item: item,
+                isTelevision: tv,
+                focusNode: nodes[col],
+                column: col,
+                rowNodes: nodes,
+                hasBoundSource: _isBound(item),
+                aspectRatio: itemAspect,
+                artUrl: collection != null ? item.poster : _titleArtUrl(item),
+                focusArtUrl: collection?.focusArtOf(item),
+                focusVideoUrl: collection?.focusVideoOf(item),
+                focusGlowEnabled:
+                    collection?.collection.focusGlowEnabled ?? false,
+                showTitleOverlay: collection != null
+                    ? !(collection.folderOf(item)?.hideTitle ?? false)
+                    : !_hideHomeCardTitlesAndRatings,
+                onQuickPlay: _pikpakOnly || collection != null
+                    ? null
+                    : () => _sectionQuickPlay(section, item),
+                onFocused: () {
+                  _setHero(item);
+                  _rowCol[rowIndex] = col;
+                },
+                onUp: up(col),
+                onDown: down(col),
+                onOpen: () => _sectionOpenItem(section, item, heroTag: heroTag),
+                onNearEnd: () => _loadMoreRow(rowIndex),
+                heroTag: heroTag,
+              ),
             ),
           ),
-        ),
-      ],
+        );
+      },
     );
   }
 
