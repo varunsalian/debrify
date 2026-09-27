@@ -16,6 +16,8 @@ FEATURES = ("search", "home", "discover", "sources")
 # add a retained facade here once its migration is complete.
 EXTRACTED_ELSEWHERE: tuple[str, ...] = (
     "lib/models/home_preferences.dart",
+    "lib/models/iptv_cw_entry.dart",
+    "lib/services/iptv_cw_history.dart",
     "lib/models/local_source_document.dart",
     "lib/services/durable_source_binding.dart",
     "lib/models/playback_meta.dart",

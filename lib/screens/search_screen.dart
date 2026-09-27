@@ -1,3 +1,5 @@
+import '../features/home/application/home_iptv_continuation_controller.dart';
+import '../features/home/models/home_iptv_continuation_state.dart';
 import '../features/home/application/home_local_continuation_controller.dart';
 import '../features/home/models/home_continuation_session.dart';
 import '../features/home/models/home_local_continuation_state.dart';
@@ -953,14 +955,18 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   // metadata-addon rows above because IPTV items aren't IMDb-keyed, so their
   // progress/episode lookups and routing key off the router's routeKey (stored
   // as the synthetic meta id) instead of an imdbId.
-  List<StremioMeta> _iptvCwMovies = [];
-  List<StremioMeta> _iptvCwSeries = [];
+  late final HomeIptvContinuationController _iptvContinuationController;
+  late final ProviderSubscription<HomeIptvContinuationState>
+  _iptvContinuationSubscription;
+  HomeIptvContinuationState get _iptvContinuation =>
+      _iptvContinuationController.current;
+  List<StremioMeta> get _iptvCwMovies => _iptvContinuation.movies;
+  List<StremioMeta> get _iptvCwSeries => _iptvContinuation.series;
+  Map<String, double> get _iptvCwProgress => _iptvContinuation.progress;
+  Map<String, String> get _iptvCwEpisode => _iptvContinuation.episode;
+  Map<String, IptvCwEntry> get _iptvCwByKey => _iptvContinuation.byKey;
   final List<FocusNode> _iptvCwMovieNodes = [];
   final List<FocusNode> _iptvCwSeriesNodes = [];
-  final Map<String, double> _iptvCwProgress = {}; // routeKey → 0..1
-  final Map<String, String> _iptvCwEpisode = {}; // routeKey → 'S2 · E5'
-  final Map<String, IptvCwEntry> _iptvCwByKey = {}; // routeKey → routing entry
-  int _iptvCwLoadToken = 0;
 
   /// Set when a real content player launches (any path — in-app route, native
   /// TV activity, external app; never trailers), consumed by
@@ -1881,6 +1887,13 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     _localContinuationController = ref.read(
       homeLocalContinuationProvider(localContinuationSession).notifier,
     );
+    _iptvContinuationSubscription = ref.listenManual(
+      homeIptvContinuationProvider(localContinuationSession),
+      (previous, next) {},
+    );
+    _iptvContinuationController = ref.read(
+      homeIptvContinuationProvider(localContinuationSession).notifier,
+    );
     _homeLastScroll = restoredHome && !widget.isTelevision
         ? homeSnapshot.scrollOffset : 0;
     _boardScroll = ScrollController(initialScrollOffset: _homeLastScroll);
@@ -2570,6 +2583,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     ProfileRuntime.scope.removeListener(_onSearchProfileChanged);
     _homeCatalogSubscription.close();
     _localContinuationSubscription.close();
+    _iptvContinuationSubscription.close();
     _listsSubscription.close();
     _catalogSubscription.close();
     _keywordResultsSubscription.close();
@@ -3407,60 +3421,24 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   /// different data source, different (non-IMDb) identity — but follows the same
   /// token-guard + node-sync discipline so a slow reload can't clobber a newer
   /// one or drop the focus node the user is sitting on.
-  Future<void> _loadIptvContinueWatching() async {
-    // Never rendered on the dedicated Search tab (mirrors the tracker rows).
-    if (widget.searchMode) return;
-    final token = ++_iptvCwLoadToken;
-    final rows = await IptvCwRouter.load();
-    if (!mounted || token != _iptvCwLoadToken) return;
-
-    StremioMeta metaFor(IptvCwEntry e) => StremioMeta(
-      // routeKey as the id (no imdbId → all addon enrichment / bound-source /
-      // hero-trailer lookups no-op, which is what we want for IPTV).
-      id: e.routeKey,
-      type: e.isSeries ? 'series' : 'movie',
-      name: e.title,
-      poster: e.posterUrl,
-    );
-
-    final movies = [for (final e in rows.movies) metaFor(e)];
-    final series = [for (final e in rows.series) metaFor(e)];
-    final progress = <String, double>{};
-    final episode = <String, String>{};
-    final byKey = <String, IptvCwEntry>{};
-    for (final e in [...rows.movies, ...rows.series]) {
-      byKey[e.routeKey] = e;
-      progress[e.routeKey] = e.progress;
-      if (e.seLabel != null) episode[e.routeKey] = e.seLabel!;
-    }
-
-    _syncCwNodes(_iptvCwMovieNodes, movies.length, 'iptv-movie');
-    _syncCwNodes(_iptvCwSeriesNodes, series.length, 'iptv-series');
-
-    setState(() {
-      _iptvCwMovies = movies;
-      _iptvCwSeries = series;
-      _iptvCwProgress
-        ..clear()
-        ..addAll(progress);
-      _iptvCwEpisode
-        ..clear()
-        ..addAll(episode);
-      _iptvCwByKey
-        ..clear()
-        ..addAll(byKey);
-    });
-    _maybeAutoFocusBoard();
-  }
-
-  int? _iptvRemainingMinutes(String routeKey) {
-    final raw = _iptvCwByKey[routeKey]?.raw;
-    if (raw == null) return null;
-    return continueWatchingMinutesLeft(
-      positionMs: (raw['positionMs'] as num?)?.toInt() ?? 0,
-      durationMs: (raw['durationMs'] as num?)?.toInt() ?? 0,
+  Future<void> _loadIptvContinueWatching() {
+    // Dedicated Search does not load IPTV shelves, including playback returns.
+    if (widget.searchMode) return Future<void>.value();
+    return _iptvContinuationController.load(
+      isCurrent: () => mounted,
+      beforeRows: (next) {
+        _syncCwNodes(_iptvCwMovieNodes, next.movies.length, 'iptv-movie');
+        _syncCwNodes(_iptvCwSeriesNodes, next.series.length, 'iptv-series');
+      },
+      onRows: () {
+        setState(() {});
+        _maybeAutoFocusBoard();
+      },
     );
   }
+
+  int? _iptvRemainingMinutes(String routeKey) =>
+      _iptvContinuation.remainingMinutes[routeKey];
 
   /// Resolve episode stills away from the build path, at TV-safe concurrency.
   /// A provider refresh owns the result through [isCurrent], so an older batch
