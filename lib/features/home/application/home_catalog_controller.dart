@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../models/stremio_addon.dart';
 import '../../../services/filtered_catalog_pager.dart';
+import '../../../services/home_load_progress.dart';
 import '../models/home_catalog_plan.dart';
 import '../data/home_catalog_repository.dart';
 import 'home_catalog_dependencies.dart';
@@ -236,6 +237,57 @@ class HomeCatalogController extends Notifier<HomeCatalogState> {
       if (!canContinue()) return const [];
     }
     return const [];
+  }
+
+  /// Fetch and accept a vertical page independently of visible search results.
+  /// The view retains loading/focus ownership and decides when to show the rows.
+  Future<
+    ({
+      List<CatalogSection> additions,
+      List<CatalogSection> rows,
+      bool appendOnly,
+    })?
+  >
+  loadNextRows(
+    int batchSize, {
+    required int generation,
+    required bool Function() isCurrent,
+    required bool Function() canContinue,
+    required Map<String, StremioAddon> Function() currentAddons,
+    required String Function(CatalogSection) rowId,
+  }) async {
+    final existing = {for (final row in rows) rowId(row): row};
+    final additions = await fetchUntilNonEmpty(
+      batchSize,
+      generation: generation,
+      isCurrent: isCurrent,
+      canContinue: canContinue,
+      previousRows: existing,
+      excludeRows: existing.keys.toSet(),
+    );
+    if (!owns(generation) || !isCurrent()) return null;
+    // Commit the accepted cursor even when a covered empty batch pauses paging.
+    // Read addons at completion, matching the shared metadata lookup's lifetime.
+    commit(currentAddons());
+    if (additions.isEmpty) return null;
+    final previous = rows;
+    final merged = mergeHomeCatalogRows(
+      previous: previous,
+      additions: additions,
+      catalogOrder: state.references.map(homeCatalogRowId).toList(),
+      rowId: rowId,
+    );
+    final appendOnly =
+        merged.length == previous.length + additions.length &&
+        Iterable<int>.generate(
+          previous.length,
+        ).every((i) => identical(merged[i], previous[i]));
+    replaceRows(merged);
+    return (
+      additions: List<CatalogSection>.unmodifiable(additions),
+      rows: rows,
+      appendOnly: appendOnly,
+    );
   }
 
   void commit(Map<String, StremioAddon> addons) {

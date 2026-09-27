@@ -3222,34 +3222,6 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     }
   }
 
-  /// Fetch the next batch of catalog rows from [_boardCursor], skipping over any
-  /// runs of empty catalogs, and return the non-empty sections (advancing the
-  /// cursor as it goes). Empty result ⇒ the board is exhausted — or [gen] went
-  /// stale (a newer [_load] owns the cursor now; stop without touching it).
-  Future<List<CatalogSection>> _fetchBoardBatchUntilNonEmpty(
-    int gen, {
-    Map<String, CatalogSection> previousRows = const {},
-    void Function(CatalogSection)? onSection,
-    VoidCallback? onBatchComplete,
-    Set<String> excludeRows = const {},
-    bool pauseWhenCovered = false,
-  }) {
-    final scope = ProfileRuntime.scope.value;
-    return _homeCatalogController.fetchUntilNonEmpty(
-      _kBoardBatchSize,
-      generation: gen,
-      isCurrent: () =>
-          mounted &&
-          gen == _boardLoadGen &&
-          scope == ProfileRuntime.scope.value,
-      canContinue: () => !pauseWhenCovered || _canPageHome,
-      previousRows: previousRows,
-      excludeRows: excludeRows,
-      onSection: onSection,
-      onBatchComplete: onBatchComplete,
-    );
-  }
-
   /// After a batch lands, if the board still doesn't fill the viewport (so the
   /// user can't scroll to trigger more) keep pulling batches until it does or
   /// the board is exhausted. No-ops outside board mode (search sets no cursor).
@@ -3287,8 +3259,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       }
       return false;
     }
-    if (_boardLoadingMore ||
-        _boardCursor >= _boardRefs.length) {
+    if (_boardLoadingMore || _boardCursor >= _boardRefs.length) {
       return false;
     }
     // Bind this append to the load generation that owns the current cursor —
@@ -3300,34 +3271,34 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     if (!_homeCatalogController.beginPage(gen)) return false;
     setState(() {});
     try {
-      final existingRows = {
-        for (final row in _homeSections) _sectionRowId(row): row,
-      };
-      final more = await _fetchBoardBatchUntilNonEmpty(gen,
-        previousRows: existingRows, excludeRows: existingRows.keys.toSet(),
-        pauseWhenCovered: PlatformUtil.isAndroidTvCached);
-      if (!mounted || gen != _boardLoadGen || scope != ProfileRuntime.scope.value) return false;
-      _commitBoardSnapshot();
-      if (more.isNotEmpty) {
-        final merged = mergeHomeCatalogRows(previous: _homeSections,
-          additions: more,
-          catalogOrder: _boardRefs.map(homeCatalogRowId).toList(),
-          rowId: _sectionRowId);
-        final appendOnly = merged.length == _homeSections.length + more.length &&
-            Iterable<int>.generate(_homeSections.length)
-                .every((i) => identical(merged[i], _homeSections[i]));
-        // Always keep the board cache growing so nothing is lost…
-        _homeCatalogController.replaceRows(merged);
-        // …but only fold into the live view when the board is still what's
+      final page = await _homeCatalogController.loadNextRows(
+        _kBoardBatchSize,
+        generation: gen,
+        isCurrent: () =>
+            mounted &&
+            gen == _boardLoadGen &&
+            scope == ProfileRuntime.scope.value,
+        canContinue: () => !PlatformUtil.isAndroidTvCached || _canPageHome,
+        currentAddons: () => _addonsById,
+        rowId: _sectionRowId,
+      );
+      if (!mounted ||
+          gen != _boardLoadGen ||
+          scope != ProfileRuntime.scope.value) {
+        return false;
+      }
+      if (page != null) {
+        // Only fold into the live view when the board is still what's
         // shown. If a catalog search started while this batch was in flight,
         // `_sections`/`_rowNodes` now hold search results — appending board rows
         // there would corrupt the search view. They'll reappear on _restoreHome.
         if (_catalogQuery.isEmpty && !_catalogSearching) {
-          if (appendOnly && !(PlatformUtil.isAndroidTvCached &&
-              !(ModalRoute.of(context)?.isCurrent ?? true))) {
-            _appendSections(more);
+          if (page.appendOnly &&
+              !(PlatformUtil.isAndroidTvCached &&
+                  !(ModalRoute.of(context)?.isCurrent ?? true))) {
+            _appendSections(page.additions);
           } else {
-            _publishHomeProgress(merged, false, gen, scope);
+            _publishHomeProgress(page.rows, false, gen, scope);
           }
           appended = true;
           // A DPAD-down past the last row may be waiting on this batch —
@@ -3337,7 +3308,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         }
       }
     } finally {
-      if (mounted && gen == _boardLoadGen && scope == ProfileRuntime.scope.value) {
+      if (mounted &&
+          gen == _boardLoadGen &&
+          scope == ProfileRuntime.scope.value) {
         setState(() => _homeCatalogController.finishPage(gen));
         _maybeAutoFillBoard();
       }

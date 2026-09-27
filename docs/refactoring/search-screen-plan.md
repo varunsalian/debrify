@@ -1643,6 +1643,39 @@ Vertical/deferred Home orchestration, remaining configuration/refresh ownership,
 layouts, action/playback/lifecycle, native/performance and final retirement gates
 remain open; this checkpoint does not complete Home or the overall migration.
 
+Vertical-page acceptance checkpoint: the existing scoped `HomeCatalogController`
+now owns the fetch/deduplicate/commit/merge/cache sequence through `loadNextRows`.
+The production `_loadMoreBoard` uses its typed result and the redundant screen
+batch wrapper is removed. Cursor snapshots still commit before row replacement,
+including accepted empty batches. The merge uses the live accepted rows after the
+await, retaining horizontal pages and original row identities. The original row-ID
+policy remains an explicit input because tracker/collection rows have their own
+IDs; addon metadata is read at acceptance time, preserving the shared lookup's
+lifetime. Result membership is read-only; mutable legacy rows remain borrowed.
+
+The view retains page eligibility/loading finalization, Android TV route pausing,
+search visibility, focus allocation, deferred movement and post-frame autofill.
+Cache acceptance is independent of search visibility. Generation/profile/mounted
+checks run before acceptance and again when the asynchronous result reaches the
+view. This adds no timer or retry. The controller is 310 lines and still owns one
+catalog inventory/request/cache responsibility; it is within the 301–500 allowance.
+SearchScreen is 19,400 lines and retains its existing phase 5–8 size exception.
+
+Six new controller tests cover tail append with concurrent horizontal growth,
+earlier catalog recovery, covered empty-page commits, and late profile/generation/
+disposal rejection. Existing screen fixtures exercise covered-route request counts,
+cached return, layout focus and pagination. The affected run passes all 42 tests
+(36 before extraction); analyzer diagnostic identities remain exactly 863 and the
+262-file architecture guard passes. Full-suite comparison preserves every prior
+outcome: 8,692 successes, unchanged 22 failures / 29 errors / 20 skips, with all
+six new tests passing. Initial development runs caught a record generic
+inference error, a missing fixture title, the obsolete wrapper and a brace lint;
+those were fixed, with failed receipts retained. Evidence: `page-accept-*` and
+`analyze-page-accept-*` and `full-page-accept*` under
+`.git/refactor-evidence/phase5/`.
+Deferred publication, refresh/configuration ownership, later layouts/actions/native
+checks and the original final size/performance gates remain pending.
+
 ### 6. Discover and remaining layouts
 
 - Reproduce and correct the pre-existing `_ArtPoster` favourites-caption overflow
