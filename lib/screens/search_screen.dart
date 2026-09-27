@@ -32,7 +32,7 @@ import '../features/home/application/home_board_load.dart';
 import '../features/home/application/home_board_dependencies.dart';
 import '../features/home/models/home_board_configuration.dart';
 import '../features/home/application/home_collections_dependencies.dart';
-import '../features/home/application/home_configuration_changes.dart';
+import '../features/home/application/home_configuration_refresh.dart';
 import '../features/home/data/home_collections_repository.dart';
 import '../features/home/models/home_catalog_preferences.dart';
 import '../features/home/models/home_catalog_session.dart';
@@ -776,15 +776,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   // rows. Refreshed by [_reloadForHomeSettings].
   List<HomeExtraRow> get _homeExtras => _homeConfiguration.preferences.extras;
 
-  /// The hide-watched switch as of the last board load. Flipping it changes
-  /// row membership, so [_reloadForHomeSettings] diffs it like a row toggle.
-  bool get _hideWatched => _homeConfiguration.hideWatched;
-
-  /// Imported collections — each enabled one is a [HomeCollectionSection] row
-  /// of folder tiles. [_homeCollectionsSig] is the store's change token the
-  /// settings-changed listener diffs against.
+  /// Imported collections — each enabled one is a row of folder tiles.
   List<HomeCollection> get _homeCollections => _homeConfiguration.collections;
-  String get _homeCollectionsSig => _homeConfiguration.collectionsSignature;
   int _homeSettingsReloadGen = 0;
   late final _spotlightCatalogCards = SpotlightCatalogCardCache(
     wideArtwork: _wideArtUrl,
@@ -2919,41 +2912,18 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     unawaited(_reloadHeroTrailerPrefs());
     await _loadHomeDefaultView();
     if (!mounted) return;
-    final preferences = await ref
-        .read(homeCatalogPreferencesRepositoryProvider)
-        .read();
-    final collections = await _homeCollectionsRepository.read();
-    if (!mounted) return;
-    final hideWatched = HideWatchedPrefs.enabled;
-    final previousHideWatched = _hideWatched;
-    final collectionsSig = await _homeCollectionsRepository.signature(
-      collections,
-    );
-    if (!mounted ||
-        reloadSession != HomeCollectionsStore.captureSession() ||
-        reloadGen != _homeSettingsReloadGen) {
-      return;
-    }
-    final changes = homeConfigurationChanges(
-      previous: _homeConfiguration.preferences,
-      next: preferences,
-      previousHideWatched: previousHideWatched,
-      hideWatched: hideWatched,
-      previousCollectionsSignature: _homeCollectionsSig,
-      collectionsSignature: collectionsSig,
-      isHome: !widget.searchMode && !widget.discoverMode,
-    );
-    if (!changes.changed) return;
-    setState(() {
-      _homeCatalogController.applyConfiguration(
-        HomeBoardConfiguration(
-          preferences: preferences,
-          collections: collections,
-          collectionsSignature: collectionsSig,
-          hideWatched: hideWatched,
-        ),
-      );
-    });
+    final changes =
+        await HomeConfigurationRefresh(
+          catalog: _homeCatalogController,
+          preferences: ref.read(homeCatalogPreferencesRepositoryProvider),
+          collections: _homeCollectionsRepository,
+          readHideWatched: ref.read(homeBoardServicesProvider).hideWatched,
+        ).run(
+          isCurrent: current,
+          isHome: !widget.searchMode && !widget.discoverMode,
+        );
+    if (!current() || changes == null || !changes.changed) return;
+    setState(() {});
     // Hide-watched changes row MEMBERSHIP, so it takes the full reload path.
     if (changes.reloadBoard) {
       _requestBoardReload();

@@ -5,10 +5,16 @@ import '../../../services/home_list_rows.dart';
 import '../../../services/home_row_order.dart';
 import '../models/home_catalog_preferences.dart';
 
+typedef HomeConfigurationChanges = ({
+  bool changed,
+  bool reloadBoard,
+  bool reloadHero,
+  bool reloadIptv,
+});
+
 /// Decide which data families need refreshing. The caller owns committing the
 /// new configuration and dispatching effects after its request/profile checks.
-({bool changed, bool reloadBoard, bool reloadHero, bool reloadIptv})
-homeConfigurationChanges({
+HomeConfigurationChanges homeConfigurationChanges({
   required HomeCatalogPreferences previous,
   required HomeCatalogPreferences next,
   required bool previousHideWatched,
