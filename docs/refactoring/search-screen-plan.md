@@ -533,6 +533,42 @@ and six new tests pass. Evidence: `.git/refactor-evidence/phase5/catalog-ownersh
 `analyze-catalog-ownership-*` and `full-catalog-ownership*`. Device/performance and overall completion gates
 remain open.
 
+Home configuration access/decisions now have explicit boundaries. The 25-line
+`data/home_collections_repository.dart` and 15-line Riverpod factory supply collection
+reads and signatures to both loading and settings refresh. The old screen helper is
+removed. Reads retain the existing failure log and empty fallback; returned containers
+are read-only while legacy collection identities remain borrowed. Signature calls
+forward the existing worker-isolate implementation directly, preserving its Future
+and error behavior. The screen captures the stateless dependency while mounted, so
+pending reads/hash calls do not resolve a disposed Ref. Store session guards and the
+existing await/commit positions remain unchanged.
+
+The 65-line pure `application/home_configuration_changes.dart` owns reload decisions.
+Disabled rows, watched state, collection changes and board extras retain their reload
+rules; row-order/hero-only effects still depend on the Home variant. Board reload
+continues to take precedence over hero resolution, and IPTV reload stays independent.
+Extra-row IDs, titles and order are compared within each family, so moving an IPTV
+row across a tracker row alone remains a no-op. Saved order and hero IDs are not
+normalized. Review preserved the old hide-watched comparison snapshot from before
+collection hashing; other comparisons still read accepted settings after hashing
+and request/session validation. The screen now only commits the accepted values and
+dispatches the selected effects. It is 20,080 lines under the existing phase exception.
+
+Three repository tests cover fresh immutable containers, failed-read recovery and
+unchanged signature Future/error propagation. Six policy tests cover equality,
+per-family title/order changes, tab variants, full-reload causes, effect precedence
+and duplicate/order-sensitive IDs. The real SearchScreen override test now verifies
+collection read/hash order before addon discovery. The new fixture's default record
+list needed an explicit const, and the extracted comparison left an unused shown
+import; both were corrected. Targeted Home: 281 passes versus 272 before, identical
+12 failure identities and one skip. Analyzer identities remain unchanged at 863.
+Full suite: 8,366 successes, unchanged 51 failures/20 skips; all previous outcomes
+are preserved and nine new tests pass. Architecture checks pass for 192 migrated
+files. The changed feature/test files pass formatting checks. Evidence:
+`.git/refactor-evidence/phase5/collections-access-*`, `analyze-collections-access-*`,
+`full-collections-access*`. Full-load orchestration, independent Home responsibilities
+and overall device/performance/CI gates remain open.
+
 ### 6. Discover and remaining layouts
 
 - Separate Discover selection/hydration from its grid/stage presentation. Preserve

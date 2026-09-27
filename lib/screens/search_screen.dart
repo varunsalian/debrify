@@ -1,3 +1,7 @@
+import '../features/home/application/home_collections_dependencies.dart';
+import '../features/home/application/home_configuration_changes.dart';
+import '../features/home/data/home_collections_repository.dart';
+import '../features/home/models/home_catalog_preferences.dart';
 import '../features/home/models/home_catalog_session.dart';
 import '../features/home/application/home_catalog_controller.dart';
 import '../features/home/models/home_catalog_state.dart';
@@ -67,7 +71,7 @@ import 'dart:ui' as ui show ImageFilter;
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/foundation.dart'
-    show ValueListenable, listEquals, visibleForTesting;
+    show ValueListenable, visibleForTesting;
 import 'package:flutter/material.dart';
 import '../models/custom_series_identity.dart';
 import 'package:flutter/services.dart';
@@ -510,6 +514,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   int get _tabIndex => widget.searchMode ? 17 : (widget.discoverMode ? 18 : 15);
 
   final StremioService _stremio = StremioService.instance;
+  late final HomeCollectionsRepository _homeCollectionsRepository;
 
   final TextEditingController _searchController = TextEditingController();
   late final _titleSearch = widget.titleSearch ?? TmdbTitleSearch();
@@ -1767,6 +1772,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     unawaited(_refreshMetadataFeaturePolicy());
     WidgetsBinding.instance.addObserver(this);
     _profileSessionOwner = ProfileSessionMemory.captureOwner();
+    _homeCollectionsRepository = ref.read(homeCollectionsRepositoryProvider);
     _keywordSnapshots = ref.read(
       keywordSnapshotRepositoryProvider(_profileSessionOwner),
     );
@@ -2799,11 +2805,11 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     final extras = preferences.extras;
     final rowOrder = preferences.rowOrder;
     final heroSource = preferences.heroSource;
-    final collections = await _readHomeCollections();
+    final collections = await _homeCollectionsRepository.read();
     if (!mounted) return;
     final hideWatched = HideWatchedPrefs.enabled;
-    final hideWatchedUnchanged = hideWatched == _hideWatched;
-    final collectionsSig = await HomeCollectionsStore.signatureOfAsync(
+    final previousHideWatched = _hideWatched;
+    final collectionsSig = await _homeCollectionsRepository.signature(
       collections,
     );
     if (!mounted ||
@@ -2811,46 +2817,21 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         reloadGen != _homeSettingsReloadGen) {
       return;
     }
-    final collectionsUnchanged = collectionsSig == _homeCollectionsSig;
-    final disabledUnchanged =
-        disabled.length == _homeDisabled.length &&
-        disabled.containsAll(_homeDisabled);
-    final heroSourceUnchanged =
-        heroSource.mode == _heroSource.mode &&
-        listEquals(heroSource.ids, _heroSource.ids);
-    final rowOrderUnchanged = HomeRowOrder.equals(rowOrder, _homeRowOrder);
-    // Titles participate too: a stored rename must re-render the row header.
-    // Diffed per family: `iptvlist:` extras feed the favourites-family rows,
-    // everything else feeds the board pipeline — so toggling an IPTV list
-    // row must not refetch every addon catalog, and vice versa.
-    List<HomeExtraRow> family(List<HomeExtraRow> rows, {required bool iptv}) =>
-        [
-          for (final r in rows)
-            if (HomeExtraRowIds.isIptv(r.id) == iptv) r,
-        ];
-    bool sameRows(List<HomeExtraRow> a, List<HomeExtraRow> b) =>
-        a.length == b.length &&
-        List.generate(
-          a.length,
-          (i) => a[i].id == b[i].id && a[i].title == b[i].title,
-        ).every((same) => same);
-    final boardExtrasUnchanged = sameRows(
-      family(extras, iptv: false),
-      family(_homeExtras, iptv: false),
+    final changes = homeConfigurationChanges(
+      previous: HomeCatalogPreferences(
+        disabled: _homeDisabled,
+        extras: _homeExtras,
+        rowOrder: _homeRowOrder,
+        heroSource: _heroSource,
+      ),
+      next: preferences,
+      previousHideWatched: previousHideWatched,
+      hideWatched: hideWatched,
+      previousCollectionsSignature: _homeCollectionsSig,
+      collectionsSignature: collectionsSig,
+      isHome: !widget.searchMode && !widget.discoverMode,
     );
-    final iptvExtrasUnchanged = sameRows(
-      family(extras, iptv: true),
-      family(_homeExtras, iptv: true),
-    );
-    if (disabledUnchanged &&
-        boardExtrasUnchanged &&
-        iptvExtrasUnchanged &&
-        rowOrderUnchanged &&
-        heroSourceUnchanged &&
-        hideWatchedUnchanged &&
-        collectionsUnchanged) {
-      return;
-    }
+    if (!changes.changed) return;
     setState(() {
       _homeDisabled = disabled;
       _homeExtras = extras;
@@ -2861,15 +2842,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       _homeCollectionsSig = collectionsSig;
     });
     // Hide-watched changes row MEMBERSHIP, so it takes the full reload path.
-    if (!disabledUnchanged ||
-        !boardExtrasUnchanged ||
-        !hideWatchedUnchanged ||
-        !collectionsUnchanged ||
-        (!rowOrderUnchanged && !widget.searchMode && !widget.discoverMode)) {
+    if (changes.reloadBoard) {
       _requestBoardReload();
-    } else if (!heroSourceUnchanged &&
-        !widget.searchMode &&
-        !widget.discoverMode) {
+    } else if (changes.reloadHero) {
       // Only the hero source moved — re-roll the reel without refetching the
       // whole board. `_load` isn't rerun here, so resolve from the addons the
       // last load cached.
@@ -2877,7 +2852,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     }
     // IPTV list rows live outside the board's section pipeline. The loader
     // reads its own extras from storage, so it can't race the reload above.
-    if (!iptvExtrasUnchanged) unawaited(_loadIptvListRows());
+    if (changes.reloadIptv) unawaited(_loadIptvListRows());
   }
 
   /// Run [_load] for a TRIGGERED reload (Home Rows save, integration
@@ -2998,8 +2973,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
           final extras = preferences.extras;
           final rowOrder = preferences.rowOrder;
           final heroSource = preferences.heroSource;
-          final collections = await _readHomeCollections();
-          final collectionsSig = await HomeCollectionsStore.signatureOfAsync(
+          final collections = await _homeCollectionsRepository.read();
+          final collectionsSig = await _homeCollectionsRepository.signature(
             collections,
           );
           // Commit the prefs and (crucially) start the tracker fan-out only if
@@ -5008,15 +4983,6 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       return;
     }
     _onCatalogPlay(item, section.addon);
-  }
-
-  Future<List<HomeCollection>> _readHomeCollections() async {
-    try {
-      return await HomeCollectionsStore.instance.getCollections();
-    } catch (_) {
-      debugPrint('Home: saved collections could not be loaded');
-      return const [];
-    }
   }
 
   /// Every enabled imported collection as a board row (hidden rows skipped).

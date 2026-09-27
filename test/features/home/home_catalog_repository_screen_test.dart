@@ -1,3 +1,5 @@
+import 'package:debrify/features/home/application/home_collections_dependencies.dart';
+import 'package:debrify/features/home/data/home_collections_repository.dart';
 import 'dart:async';
 
 import 'package:debrify/features/home/application/home_catalog_dependencies.dart';
@@ -65,9 +67,11 @@ void main() {
       catalogs: [catalog],
     );
     var reads = 0;
+    final configurationCalls = <String>[];
     final requests = <(StremioAddon, StremioAddonCatalog, int)>[];
     final repository = HomeCatalogRepository(
       readAddons: () async {
+        expect(configurationCalls, ['collections', 'signature']);
         reads++;
         return [addon];
       },
@@ -88,6 +92,20 @@ void main() {
             observers: [observer],
             overrides: [
               homeCatalogRepositoryProvider.overrideWithValue(repository),
+              homeCollectionsRepositoryProvider.overrideWithValue(
+                HomeCollectionsRepository(
+                  read: () async {
+                    configurationCalls.add('collections');
+                    return [];
+                  },
+                  signature: (collections) async {
+                    expect(collections, isEmpty);
+                    configurationCalls.add('signature');
+                    return 'fixture-signature';
+                  },
+                  onReadFailure: () => fail('unexpected collection error'),
+                ),
+              ),
             ],
             child: const MaterialApp(home: SearchScreen(isTelevision: true)),
           ),
@@ -119,6 +137,7 @@ void main() {
     await tester.pump(const Duration(seconds: 2));
     expect(reads, 1);
     expect(requests, [(addon, catalog, 0)]);
+    expect(configurationCalls, ['collections', 'signature']);
     expect(observer.updates, hasLength(updatesBeforeDisposal));
     expect(tester.takeException(), isNull);
   });
