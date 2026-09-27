@@ -50,6 +50,7 @@ class HomeFixture {
     this.fastCount = 1,
     this.television = true,
     this.pendingHero = false,
+    this.fastPage,
   });
 
   final WidgetTester tester;
@@ -60,6 +61,7 @@ class HomeFixture {
   final int fastCount;
   final bool television;
   final bool pendingHero;
+  final http.Response? fastPage;
   final hero = Completer<http.Response>();
   final navigator = GlobalKey<NavigatorState>();
   final slow = Completer<http.Response>();
@@ -74,7 +76,7 @@ class HomeFixture {
     if (path.contains('/tail')) return page('Tail');
     if (path.contains('skip=100')) return secondPage.future;
     if (path.contains('skip=200')) return page('End', count: 0);
-    return page('Fast', count: horizontal ? 100 : fastCount);
+    return fastPage ?? page('Fast', count: horizontal ? 100 : fastCount);
   });
 
   Future<void> drive(

@@ -1,3 +1,5 @@
+import '../features/home/application/home_hero_tint_loader.dart';
+import '../features/home/application/home_hero_tint_dependencies.dart';
 import '../features/home/presentation/home_hero_swap.dart';
 import '../features/home/presentation/home_hero_spotlight.dart';
 import '../features/home/presentation/spotlight_iptv_card_preview.dart';
@@ -175,7 +177,6 @@ import 'dart:convert';
 import 'dart:developer' as developer;
 import 'dart:math';
 
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import '../models/custom_series_identity.dart';
 import 'package:flutter/services.dart';
@@ -183,7 +184,6 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../models/advanced_search_selection.dart';
 import '../theme/app_theme_scope.dart';
-import '../theme/artwork_accent.dart';
 import '../utils/home_rail_metrics.dart';
 import '../utils/platform_util.dart';
 import '../utils/tvos_device.dart';
@@ -1842,6 +1842,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       homeSettingsRefreshProvider(homeSession),
       (previous, next) {},
     );
+    _heroTintSubscription = ref.listenManual(
+      homeHeroTintLoaderProvider(homeSession),
+      (previous, next) {},
+    );
     _heroLiveSubscription = ref.listenManual(
       homeHeroLivePreviewProvider(homeSession),
       (previous, next) {},
@@ -2690,7 +2694,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     _heroMetadataSubscription.read().dispose();
     _heroSwap.dispose();
     _heroTrailerLoaderSubscription.read().dispose();
-    _tintTimer?.cancel();
+    _heroTintSubscription.read().dispose();
     _heroItem.dispose();
     _heroEnriched.dispose();
     _heroTrailer.dispose();
@@ -2714,6 +2718,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     _pikpakOnlySubscription.close();
     _boundCountsSubscription.close();
     _homeSettingsRefreshSubscription.close();
+    _heroTintSubscription.close();
     _heroLiveSubscription.close();
     _heroTrailerLoaderSubscription.close();
     _heroMetadataSubscription.close();
@@ -9428,46 +9433,16 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   // focus SETTLES — never per card while flying across a row), cached per
   // title, and decodes a 32px thumbnail — negligible on the TV chip.
   final ValueNotifier<Color?> _heroTint = ValueNotifier<Color?>(null);
-  final Map<String, Color?> _tintCache = {};
-  Timer? _tintTimer;
-  int _tintReq = 0;
+  late final ProviderSubscription<HomeHeroTintLoader> _heroTintSubscription;
 
-  void _updateHeroTint(StremioMeta item) {
-    _tintTimer?.cancel();
-    final req = ++_tintReq;
-    // ALWAYS defer — cache hits and empty posters included. Publishing a
-    // cached tint synchronously here meant every DPAD step over already-
-    // visited cards re-rastered every tint consumer (the full-screen mood
-    // field, the hero stage, the 450ms scrim tween, the art feathers) — the
-    // "navigation feels heavy" regression. The tint is scenery: it only
-    // needs to land once focus RESTS, never while scrubbing a row. (Short
-    // now that the 260ms hero-swap settle already ran before this fires.)
-    _tintTimer = Timer(const Duration(milliseconds: 120), () async {
-      final poster = item.poster;
-      if (poster == null || poster.isEmpty) {
-        _heroTint.value = null;
-        _publishHeroTintToShell(null);
-        return;
-      }
-      if (_tintCache.containsKey(item.id)) {
-        _heroTint.value = _tintCache[item.id];
-        _publishHeroTintToShell(_tintCache[item.id]);
-        return;
-      }
-      // Via the shared cache: the Home hero re-extracts on every focus rest,
-      // and the same posters come back constantly as the user arrows around.
-      final color = await DominantColorCache.of(
-        poster,
-        CachedNetworkImageProvider(poster),
-      );
-      if (!mounted || req != _tintReq) return; // focus moved on — stale
-      // Unbounded growth guard; a full clear is fine, extraction is cheap.
-      if (_tintCache.length > 300) _tintCache.clear();
-      _tintCache[item.id] = color;
+  void _updateHeroTint(StremioMeta item) => _heroTintSubscription.read().load(
+    item,
+    isCurrent: () => mounted,
+    publish: (color) {
       _heroTint.value = color;
       _publishHeroTintToShell(color);
-    });
-  }
+    },
+  );
 
   /// Relay the settled tint to the app shell — the sidebar's glass blends it
   /// in and the shell's art stage tints its washes with it. Rest-cadence and
