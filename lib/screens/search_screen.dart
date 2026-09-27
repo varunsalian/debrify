@@ -11,6 +11,7 @@ import '../features/home/presentation/home_tonight_queue_list.dart';
 import '../features/home/presentation/home_tonight_rail.dart';
 import '../features/home/presentation/home_stage_hold_latch.dart';
 import '../features/home/presentation/home_stage_focus_requests.dart';
+import '../features/home/presentation/home_stage_deferred_right.dart';
 import '../features/home/presentation/home_canvas_tabs.dart';
 import '../features/home/presentation/home_canvas_shelf.dart';
 import '../features/home/presentation/home_canvas_layout.dart';
@@ -6039,23 +6040,12 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   /// than scrolling the window on.
   bool _pendingStageAdvanceFillsLower = false;
 
-  /// A RIGHT that ran off the END of a rail whose catalog still had pages.
-  /// Mosaic's grid depends on it: DOWN there always leaves for the next rail,
-  /// so RIGHT is the only way through a long catalog and eating the keypress
-  /// would strand the user at the page boundary.
-  String? _pendingStageRightKey;
-  int _pendingStageRightCol = -1;
-  DateTime? _pendingStageRightAt;
-  FocusNode? _pendingStageRightOrigin;
-
-  void _deferStageRight(String railKey, int col) {
-    final origin = FocusManager.instance.primaryFocus;
-    if (origin == null) return;
-    _pendingStageRightKey = railKey;
-    _pendingStageRightCol = col;
-    _pendingStageRightAt = DateTime.now();
-    _pendingStageRightOrigin = origin;
-  }
+  late final HomeStageDeferredRight _stageDeferredRight = HomeStageDeferredRight(
+    currentRail: () => _canvasRailKey,
+    stageActive: () => _stageActive,
+    scheduleFocus: _stageFocusRequests.schedule,
+    maxAge: _pendingDownMaxAge,
+  );
 
   /// Record a deferred rail move, anchored to whoever pressed the key.
   void _deferStageAdvance(String railKey, {bool fillsLower = false}) {
@@ -6067,36 +6057,21 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     _pendingStageOrigin = origin;
   }
 
-  /// Shared staleness test for both deferred moves.
+  /// Staleness test for a deferred rail advance.
   bool _stageDeferralStillValid(DateTime at, FocusNode? origin) =>
       _stageActive &&
       origin != null &&
       identical(FocusManager.instance.primaryFocus, origin) &&
       DateTime.now().difference(at) <= _pendingDownMaxAge;
 
-  /// Called when a ROW's next page lands: completes a deferred RIGHT if the
-  /// user is still sitting on the cell they pressed it from.
   void _maybeCompleteStageRight() {
-    final key = _pendingStageRightKey;
-    final at = _pendingStageRightAt;
-    final col = _pendingStageRightCol;
-    final origin = _pendingStageRightOrigin;
-    if (key == null || at == null) return;
-    _pendingStageRightKey = null;
-    _pendingStageRightAt = null;
-    _pendingStageRightCol = -1;
-    _pendingStageRightOrigin = null;
-    if (_canvasRailKey != key) return;
-    if (!_stageDeferralStillValid(at, origin)) return;
-    _stageFocusRequests.schedule(() {
-      // Re-check INSIDE the frame: focus can move during the post-frame gap.
-      if (!identical(FocusManager.instance.primaryFocus, origin)) return null;
+    _stageDeferredRight.complete((key, column) {
       final rails = _stageRails;
       final i = rails.indexWhere((r) => _canvasRailKeyOf(r) == key);
       if (i < 0) return null;
       final nodes = _canvasRailNodes(rails[i]);
-      if (col + 1 >= nodes.length) return null;
-      return (nodes[col + 1].context?.mounted ?? false) ? nodes[col + 1] : null;
+      if (column >= nodes.length) return null;
+      return (nodes[column].context?.mounted ?? false) ? nodes[column] : null;
     });
   }
 
@@ -6121,10 +6096,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     _pendingStageAdvanceAt = null;
     _pendingStageAdvanceFillsLower = false;
     _pendingStageOrigin = null;
-    _pendingStageRightKey = null;
-    _pendingStageRightAt = null;
-    _pendingStageRightCol = -1;
-    _pendingStageRightOrigin = null;
+    _stageDeferredRight.reset();
     _stageHold.reset();
     _stageFocusRequests.invalidate();
   }
@@ -8418,7 +8390,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       } else if (rail.sectionIndex != null) {
         // At the very end with a page in flight: remember the move so it
         // completes when the cells land.
-        _deferStageRight(railKey, col);
+        _stageDeferredRight.defer(railKey, col);
       }
     }
 
