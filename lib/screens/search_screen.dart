@@ -14,6 +14,7 @@ import '../features/home/presentation/home_stage_hold_latch.dart';
 import '../features/home/presentation/home_stage_focus_requests.dart';
 import '../features/home/presentation/home_stage_deferred_right.dart';
 import '../features/home/presentation/home_stage_deferred_advance.dart';
+import '../features/home/presentation/home_hero_preview_policy.dart';
 import '../features/home/presentation/home_canvas_tabs.dart';
 import '../features/home/presentation/home_canvas_shelf.dart';
 import '../features/home/presentation/home_canvas_layout.dart';
@@ -1499,18 +1500,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   /// plain M3U/Xtream favourite, which has just the one URL.
   List<String>? _heroLiveCandidates;
 
-  /// Set when real content playback launches (any path — in-app route,
-  /// native TV activity, external app): the ambient trailer must not resume
-  /// behind or after the feature (the behavior ef5f555 shipped; the
-  /// backdrop's own per-instance latch dies with the widget when the route
-  /// cover kills the trailer, so the host has to remember). Cleared when a
-  /// NEW title takes the spotlight or the board reloads.
-  bool _heroTrailerSuppressed = false;
-
-  /// The item the last hero-trailer schedule was for — what the suppression
-  /// lift above compares against.
-  String? _heroTrailerScheduledItemId;
-  String? _heroPreviewAttemptedId;
+  final HomeHeroPreviewPolicy _heroPreviewPolicy = HomeHeroPreviewPolicy();
 
   /// Accepted trailer settings, refreshed on settings and sync notifications.
   late final HomeTrailerPreferencesController _heroTrailerPreferencesController;
@@ -2124,7 +2114,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       // the rail just stays its quiet dark self. (dispose() already resets
       // the shell's tvHeroTint post-frame, so no stale colour can survive.)
       // Real content playback (from a detail page, Quick Play, anywhere)
-      // suppresses the trailer for this spotlight — see _heroTrailerSuppressed.
+      // suppresses the trailer for this spotlight — see HomeHeroPreviewPolicy.
       MainPageBridge.addPlayerLaunchListener(_onContentPlayerLaunch);
       // While the takeover owns the screen the board is invisible — ANY key
       // must bring it back, even ones that don't change the hero (fav-row
@@ -5422,7 +5412,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         // (a reload landing while a favourite held focus would otherwise
         // keep its stale art/title on the stage — or resume its stream —
         // with no cell focused, and let the seeded trailer start beneath).
-        _heroTrailerSuppressed = false;
+        _heroPreviewPolicy.allowNewHero();
         _canvasFavFocus.value = null;
         _clearHeroLiveIptv();
         _scheduleHeroTrailer(first);
@@ -5674,7 +5664,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   /// stay put. (This used to hand focus to the sidebar, but the sidebar policy
   /// is now LEFT-only: no other direction may open it.)
   void _leaveBoardTop() {
-    _heroPreviewAttemptedId = null;
+    _heroPreviewPolicy.resetAttempt();
     if (widget.searchMode) {
       _searchFocusNode.requestFocus();
     }
@@ -7074,7 +7064,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       // this style — init, section loads, focus changes, `_applyHero`, route
       // return, sidebar return — so the board's clock is the single owner and
       // the two cannot start a trailer under different titles.
-      // NOT && !_heroTrailerSuppressed: suppression is enforced inside
+      // Suppression is enforced inside
       // _scheduleHeroTrailer. Folding it in here disarms the board's dwell
       // clock entirely — and the dwell is the only event that can LIFT the
       // suppression when the reel moves to a new title, so one post-playback
@@ -9015,7 +9005,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       widget.isTelevision && !widget.searchMode;
 
   void _setHero(StremioMeta item) {
-    if (_heroPreviewAttemptedId != item.id) _heroPreviewAttemptedId = null;
+    _heroPreviewPolicy.focus(item.id);
     // Off-TV / blank search prompt the hero isn't rendered, so don't track focus
     // or fire the per-item backdrop-enrichment /meta fetch behind it.
     if (!_heroActive) return;
@@ -9084,7 +9074,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     _updateHeroTint(item);
     // A NEW title in the spotlight lifts the after-the-feature suppression —
     // fresh context, fresh trailer.
-    _heroTrailerSuppressed = false;
+    _heroPreviewPolicy.allowNewHero();
     _scheduleHeroTrailer(item);
   }
 
@@ -9175,21 +9165,13 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     // Search previews belong to the focused result card, never a hidden hero.
     if (widget.isTelevision && widget.searchMode) return;
     if (item.type == 'folder') return;
-    // Off-TV nothing ever calls _applyHero (the TV paths that lift the
-    // after-playback suppression), so a NEW title arriving through the
-    // spotlight dwell lifts it here — fresh context, fresh trailer, the same
-    // rule _applyHero implements for TV.
-    if (_heroTrailerSuppressed &&
-        fromSpotlight &&
-        item.id != _heroTrailerScheduledItemId) {
-      _heroTrailerSuppressed = false;
-    }
-    if (!_heroTrailerRenderable ||
-        !_heroTrailerEnabled ||
-        _heroTrailerSuppressed) {
+    if (!_heroPreviewPolicy.admitSchedule(
+      item.id,
+      fromSpotlight: fromSpotlight,
+      renderableAndEnabled: () => _heroTrailerRenderable && _heroTrailerEnabled,
+    )) {
       return;
     }
-    _heroTrailerScheduledItemId = item.id;
     // Spotlight owns its own hero cadence, so the shared scheduler must not
     // also drive it — two systems interleaving on one hero is how a trailer
     // starts under the wrong title.
@@ -9212,7 +9194,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     if (_canvasFavFocus.value != null || _heroLiveChannel.value != null) {
       return;
     }
-    if (!fromSpotlight && _heroPreviewAttemptedId == item.id) return;
+    if (!fromSpotlight && _heroPreviewPolicy.hasAttempted(item.id)) return;
     // Spotlight already owns the stage; other layouts wait for focus to rest.
     _heroTrailerLoaderSubscription.read().schedule(
       item,
@@ -9224,7 +9206,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         if (_heroTrailerShowing.value) _heroTrailerShowing.value = false;
       },
       begin: () {
-        _heroPreviewAttemptedId = item.id;
+        _heroPreviewPolicy.recordAttempt(item.id);
         // The layout may have changed during the dwell — a stage with nowhere
         // to put moving picture must not spin up an engine.
         if (_stageActive && !_stageWantsAmbient) return false;
@@ -9415,15 +9397,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   /// off for this spotlight — it must not resume behind or after the feature.
   void _onContentPlayerLaunch() {
     if (!_heroTrailerRenderable || !mounted) return;
-    _heroTrailerSuppressed = true;
-    // The suppression baseline is the hero SHOWING at launch, not the last
-    // dwell's item — playback can start before the first dwell (cold open →
-    // open a card immediately), or after paging A→B with B's dwell still
-    // pending. Without this snapshot the stored id is stale/null and the
-    // just-watched title's own dwell would read as "new" and lift the
-    // suppression it was meant to hold.
-    final showing = _spotlightKey.currentState?.currentHeroId;
-    if (showing != null) _heroTrailerScheduledItemId = showing;
+    _heroPreviewPolicy.suppressForPlayback(
+      () => _spotlightKey.currentState?.currentHeroId,
+    );
     _clearHeroTrailer();
   }
 
