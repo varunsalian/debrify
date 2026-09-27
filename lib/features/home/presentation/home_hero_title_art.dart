@@ -3,6 +3,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../theme/app_theme_scope.dart';
 import '../../../widgets/home/home_theme.dart';
+import '../application/home_stage_art_failures.dart';
 
 /// The hero's title, IMAGE-FIRST: the studio title-treatment art when a
 /// `logo` URL is known, the plain text title only when it is genuinely
@@ -34,8 +35,9 @@ class HomeHeroTitleArt extends StatefulWidget {
 class _HomeHeroTitleArtState extends State<HomeHeroTitleArt> {
   /// Session-wide memo of logo URLs that 404'd (metahub simply has no art
   /// for many titles) — those heroes go straight to text with no empty beat
-  /// and no repeat network probe on every DPAD revisit.
-  static final Set<String> _deadLogoUrls = <String>{};
+  /// and no repeat network probe on every DPAD revisit. Bound retained failures
+  /// to the same 512-entry policy as stage artwork; forgotten URLs may retry.
+  static final _deadLogoUrls = HomeStageArtFailures();
 
   Text _titleText(int maxLines) => Text(
     widget.title,
@@ -90,7 +92,7 @@ class _HomeHeroTitleArtState extends State<HomeHeroTitleArt> {
             placeholder: (_, __) => const SizedBox.shrink(),
             errorWidget: (_, __, ___) => const SizedBox.shrink(),
             errorListener: (_) {
-              _deadLogoUrls.add(logo);
+              _deadLogoUrls.remember(logo);
               if (mounted) setState(() {});
             },
           ),

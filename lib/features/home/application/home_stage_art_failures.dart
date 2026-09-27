@@ -1,7 +1,7 @@
-/// Metahub backdrop URLs that failed this session. A bounded memo avoids
-/// repeatedly requesting missing derived stills while browsing title rails.
+/// Home artwork URLs that failed this session. A bounded memo avoids
+/// repeatedly requesting missing stills/logos while browsing title rails.
 ///
-/// A full clear preserves the original policy: forgetting a failure costs one
+/// The original stage full-clear policy: forgetting a failure costs one
 /// re-request, without retaining every missing URL for the process lifetime.
 class HomeStageArtFailures {
   static const _maximum = 512;
