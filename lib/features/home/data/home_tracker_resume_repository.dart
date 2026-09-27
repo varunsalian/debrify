@@ -19,6 +19,9 @@ class HomeTrackerResumeRepository {
   readMdblist;
   final bool Function() isOwnerCurrent;
   final DateTime Function() now;
+  // A long-lived view must not retain every movie it has ever inspected.
+  // Recency affects eviction only; reading an entry never extends its TTL.
+  static const _maxTraktMemoEntries = 512;
   final Map<String, (double?, DateTime)> _traktMemo = {};
   bool _disposed = false;
 
@@ -36,12 +39,18 @@ class HomeTrackerResumeRepository {
     final memo = _traktMemo[id];
     if (memo != null &&
         now().difference(memo.$2) < const Duration(seconds: 30)) {
+      _traktMemo.remove(id);
+      _traktMemo[id] = memo;
       return memo.$1;
     }
     final value = await readTraktMovie(id);
     if (!_current(isCurrent)) return null;
     final percent = _resumableMovie(value);
+    _traktMemo.remove(id);
     _traktMemo[id] = (percent, now());
+    if (_traktMemo.length > _maxTraktMemoEntries) {
+      _traktMemo.remove(_traktMemo.keys.first);
+    }
     return percent;
   }
 
