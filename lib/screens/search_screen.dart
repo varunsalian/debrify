@@ -251,6 +251,9 @@ import '../utils/continue_watching_presentation.dart';
 import '../utils/dialog_tap_guard.dart';
 import '../features/home/data/home_series_resume_resolution.dart';
 import '../features/home/models/home_series_resume_result.dart';
+import '../features/home/models/home_series_resume_signals.dart';
+import '../features/home/data/home_series_resume_repository.dart';
+import '../features/home/application/home_series_resume_dependencies.dart';
 import '../utils/format_tag_detector.dart';
 import '../utils/tv_keys.dart';
 import '../utils/tv_search_focus_handoff.dart';
@@ -12095,182 +12098,50 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         '/at=${_formatResumeTimestamp(value.tsMs)}';
   }
 
-  /// Trakt candidate for the reconciler — the full ready-to-play selection
-  /// (paused/next episode with Trakt progress) PLUS the item's `paused_at`,
-  /// so a Trakt pause competes on recency like every other source. A Trakt
-  /// win launches the exact selection Trakt resolved, never a re-derived
-  /// coordinate.
-  Future<({AdvancedSearchSelection sel, int? tsMs})?> _traktSelectionFor(
+  HomeSeriesResumeRepository get _seriesResumeRepository =>
+      ref.read(homeSeriesResumeRepositoryProvider(_profileSessionOwner));
+
+  /// Preserve the visible card's selection/timestamp before a live feed lookup.
+  Future<HomeTraktResumeSignal?> _traktSelectionFor(StremioMeta item) async {
+    if (!mounted) return null;
+    return _seriesResumeRepository.traktSelection(
+      item,
+      cached: _traktByImdb[item.progressId] ?? _traktByImdb[item.id],
+      isCurrent: () => mounted,
+    );
+  }
+
+  Future<HomeLocalResumeSignal?> _localSeriesResumeFor(
     StremioMeta item,
+    String playId,
   ) async {
-    final cached = _traktByImdb[item.progressId] ?? _traktByImdb[item.id];
-    if (cached != null) {
-      debugPrint(
-        '[SeriesResume] trakt-home-card-hit title="${item.name}" '
-        'lookupId=${item.progressId ?? item.id} cardId=${cached.id} '
-        'card=S${cached.season}E${cached.episode} '
-        'cardPct=${cached.progress} '
-        'cardPausedAt=${_formatResumeTimestamp(cached.pausedAtMs)}',
-      );
-      final sel = await TraktContinueWatchingService.instance.selectionForItem(
-        cached,
-      );
-      if (sel == null) return null;
-      debugPrint(
-        '[SeriesResume] trakt-home-card-selection title="${item.name}" '
-        'resolved=S${sel.season}E${sel.episode} '
-        'resolvedPct=${sel.traktProgressPercent}',
-      );
-      return (sel: sel, tsMs: cached.pausedAtMs);
-    }
-    if (item.type != 'series') return null;
-    final id = item.progressId ?? item.id;
-    if (id.isEmpty) return null;
-    // Mirror resolveSelection's lookup but keep the ITEM, so its Trakt activity
-    // timestamp survives.
-    final items = await TraktContinueWatchingService.instance.fetchItems(
-      TraktContinueWatchingService.showsContentType,
-    );
-    debugPrint(
-      '[SeriesResume] trakt-live-lookup title="${item.name}" id=$id '
-      'homeCacheMiss=true fetchedItems=${items.length}',
-    );
-    TraktContinueWatchingItem? selected;
-    for (final it in items) {
-      if (it.id == id) {
-        selected = it;
-        break;
-      }
-    }
-    if (selected == null) return null;
-    debugPrint(
-      '[SeriesResume] trakt-live-match title="${item.name}" id=$id '
-      'card=S${selected.season}E${selected.episode} '
-      'cardPct=${selected.progress} '
-      'cardPausedAt=${_formatResumeTimestamp(selected.pausedAtMs)}',
-    );
-    final sel = await TraktContinueWatchingService.instance.selectionForItem(
-      selected,
-    );
-    if (sel == null) return null;
-    return (sel: sel, tsMs: selected.pausedAtMs);
-  }
-
-  /// Local candidate for the reconciler: last-played episode by imdb id (then
-  /// by title, same fallback the old chain used), with its progress percent
-  /// and updatedAt so it can compete on recency.
-  Future<({int season, int episode, double? pct, int? tsMs, bool finished})?>
-  _localSeriesResumeFor(StremioMeta item, String playId) async {
-    Map<String, dynamic>? entry =
-        await StorageService.getLastPlayedEpisodeByImdbId(playId);
-    var finished = entry?['finished'] == true;
-    if (!MediaIdentity.isNative(playId) && !CustomSeriesIdentity.isCustom(playId) &&
-        (entry?['season'] is! int || entry?['episode'] is! int)) {
-      entry = await StorageService.getLastPlayedEpisode(seriesTitle: item.name);
-      finished = entry?['finished'] == true;
-    }
-    final season = entry?['season'];
-    final episode = entry?['episode'];
-    if (season is! int || episode is! int) return null;
-    // Series records store positionMs/durationMs (see saveSeriesPlaybackState);
-    // the bare names are kept as a fallback for the video-entry shape.
-    final pos = ((entry?['positionMs'] ?? entry?['position']) as num?)
-        ?.toDouble();
-    final dur = ((entry?['durationMs'] ?? entry?['duration']) as num?)
-        ?.toDouble();
-    final pct = (pos != null && dur != null && dur > 0)
-        ? (pos / dur * 100).clamp(0.0, 100.0)
-        : null;
-    final tsMs = (entry?['updatedAt'] as num?)?.toInt();
-    return (
-      season: season,
-      episode: episode,
-      pct: pct,
-      tsMs: tsMs != null && tsMs > 0 ? tsMs : null,
-      finished: finished,
+    if (!mounted) return null;
+    return _seriesResumeRepository.local(
+      item,
+      playId,
+      isCurrent: () => mounted,
     );
   }
 
-  /// Trakt's authoritative resume position for [item], or null when
-  /// disconnected / Trakt has no in-progress entry. Shared by the detail-button
-  /// label ([_resolveResumeInfo]) and the actual Play ([_onCatalogPlay]) so the
-  /// two never disagree ("Resume · S3E4" must play S3E4). Fast path: an
-  /// already-loaded Continue Watching item; general path: a one-shot live
-  /// playback lookup for any other title (progress made on another device).
-  Future<({bool started, int? season, int? episode})?> _traktResumeFor(
-    StremioMeta item,
-  ) async {
-    // No auth-flag short-circuit here: callers gate entry, and both the cached
-    // _traktByImdb read and resolveSelection (which self-checks isAuthenticated)
-    // are safe/null when disconnected — so a Trakt-sourced item still resolves
-    // even if _isTraktAuthenticated hasn't settled yet.
-    final cached = _traktByImdb[item.progressId] ?? _traktByImdb[item.id];
-    if (cached != null) {
-      final sel = await TraktContinueWatchingService.instance.selectionForItem(
-        cached,
-      );
-      if (sel == null) return null;
-      return (started: true, season: sel.season, episode: sel.episode);
-    }
-    // General (live) fallback only for SERIES here. An uncached movie returns
-    // null from THIS helper on purpose — its cross-device resume is resolved by
-    // the dedicated movie branch of _resolveResumeInfo/_onCatalogPlay (via
-    // _traktMoviePercent), which the player can now honour. So "null" means
-    // "not handled here", not "no Trakt resume for movies".
-    if (item.type != 'series') return null;
-    // resolveSelection treats an empty itemId as "the first CW item", which would
-    // match an unrelated title — so bail when we have no usable id.
-    final id = item.progressId ?? item.id;
-    if (id.isEmpty) return null;
-    // Use the SAME resolution _onCatalogPlay's general series branch uses
-    // (resolveSelection → fetchItems + selectionForItem). This includes Trakt's
-    // Up Next augmentation, so the label matches Play even
-    // when the title is only reachable via that augmentation and regardless of
-    // whether _traktByImdb has populated yet (fixes the open-before-CW-load race
-    // where the cached Play branch and the live label branch disagreed).
-    final sel = await TraktContinueWatchingService.instance.resolveSelection(
-      traktContentType: TraktContinueWatchingService.showsContentType,
-      itemId: id,
+  Future<HomeResumePosition?> _traktResumeFor(StremioMeta item) async {
+    if (!mounted) return null;
+    return _seriesResumeRepository.traktPosition(
+      item,
+      cached: _traktByImdb[item.progressId] ?? _traktByImdb[item.id],
+      isCurrent: () => mounted,
     );
-    if (sel == null) return null;
-    return (started: true, season: sel.season, episode: sel.episode);
   }
 
-  /// Simkl's resume position for [item] — SERIES ONLY, from the show's most
-  /// recently paused Simkl playback session. Consulted after Trakt returns
-  /// nothing and before local history (episode pick is priority-ordered
-  /// Trakt → Simkl → local). Shared by the detail-button label
-  /// ([_resolveResumeInfo]) and the actual Play ([_onCatalogPlay]) so the two
-  /// never disagree — same lock-step contract as [_traktResumeFor]. Movies
-  /// are excluded for the same reason as Trakt's uncached-movie rule: the
-  /// movie play path resumes from the local byte offset and can't honour a
-  /// tracker percent, so a Simkl-first label would over-promise.
-  Future<({int season, int episode, double? progress, DateTime? pausedAt})?>
-  _simklResumeFor(StremioMeta item) async {
-    if (item.type != 'series') return null;
-    final id = item.progressId ?? item.id;
-    // Use the exact IMDb, TMDB, or Simkl identity.
-    if (id.isEmpty || (!MediaIdentity.isImdb(id) && !MediaIdentity.isNative(id))) return null;
-    // The show's most recently paused session, WITH its paused_at timestamp —
-    // it competes on recency inside [_reconcileSeriesResume] rather than
-    // holding a fixed slot above local history, so a stale orphaned session
-    // (failed scrobble stop) can't outrank last night's actual position.
-    return SimklService.instance.fetchShowPlaybackSelection(id);
+  Future<HomeSimklResumeSignal?> _simklResumeFor(StremioMeta item) async {
+    if (!mounted) return null;
+    return _seriesResumeRepository.simklPaused(item, isCurrent: () => mounted);
   }
 
-  /// Simkl's next unwatched episode (server-computed `next_to_watch`) for a
-  /// series, or null. This is the WEAKEST resume signal — a computed "next"
-  /// rather than a real position — so callers apply it only when neither a
-  /// tracker session NOR local history resolved an episode (e.g. a fresh login
-  /// on a new device): it turns the default S01E01 into "resume at the next
-  /// unwatched episode", matching the Continue Watching up-next card.
   Future<({int season, int episode})?> _simklNextToWatchFor(
     StremioMeta item,
   ) async {
-    if (item.type != 'series') return null;
-    final id = item.progressId ?? item.id;
-    if (id.isEmpty || (!MediaIdentity.isImdb(id) && !MediaIdentity.isNative(id))) return null;
-    return SimklService.instance.fetchNextToWatch(id);
+    if (!mounted) return null;
+    return _seriesResumeRepository.simklNext(item, isCurrent: () => mounted);
   }
 
   Future<MdblistContinueWatchingItem?> _mdblistResumeItemFor(
