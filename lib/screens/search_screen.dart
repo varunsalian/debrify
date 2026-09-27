@@ -1,3 +1,5 @@
+import '../features/home/application/home_layout_preference.dart';
+import '../features/home/application/home_layout_preference_dependencies.dart';
 import '../models/source_appearance.dart';
 import '../features/search/application/keyword_appearance_controller.dart';
 import '../features/home/application/home_trailer_preferences_controller.dart';
@@ -1907,6 +1909,11 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       (previous, next) {},
     );
     _homeCatalogController = ref.read(homeCatalogProvider(homeSession).notifier);
+    _homeLayoutPreferenceSubscription = ref.listenManual(
+      homeLayoutPreferenceProvider(homeSession),
+      (previous, next) {},
+    );
+    _tvHomeStyle = _homeLayoutPreferenceSubscription.read().initialStyle;
     _heroTrailerPreferencesSubscription = ref.listenManual(
       homeTrailerPreferencesProvider(homeSession),
       (previous, next) {},
@@ -2723,6 +2730,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     _searchController.dispose();
     ProfileRuntime.scope.removeListener(_onSearchProfileChanged);
     _homeCatalogSubscription.close();
+    _homeLayoutPreferenceSubscription.close();
     _heroTrailerPreferencesSubscription.close();
     _homeDefaultViewSubscription.close();
     _homeDisplaySubscription.close();
@@ -5948,7 +5956,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   /// classic (via [_homeStyleEffective], regardless of this field). Canvas is
   /// the TV default; matching it here avoids a one-frame classic flash at
   /// boot there, and resolves to classic off-TV.
-  String _tvHomeStyle = StorageService.tvHomeStyleCached;
+  late String _tvHomeStyle;
+  late final ProviderSubscription<HomeLayoutPreference>
+  _homeLayoutPreferenceSubscription;
 
   // Landscape default matches the stored default, so a fresh boot doesn't
   // flash portrait rows before the async pref read lands.
@@ -6243,11 +6253,12 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     });
   }
 
-  Future<void> _loadTvHomeStyle() async {
-    final style = await StorageService.getTvHomeStyle();
-    if (!mounted || style == _tvHomeStyle) return;
-    _applyStageTransition(style);
-  }
+  Future<void> _loadTvHomeStyle() =>
+      _homeLayoutPreferenceSubscription.read().load(
+        isCurrent: () => mounted,
+        currentStyle: () => _tvHomeStyle,
+        transition: _applyStageTransition,
+      );
 
   Future<void> _loadHomeCardOrientation({bool Function()? isCurrent}) async {
     final changed = await _homeDisplayController.load(
