@@ -18,102 +18,114 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../../theme/golden_harness.dart' show disableRuntimeFonts;
 
 void main() {
-  testWidgets(
-    'Discover grid resize clears stage effects without refetching sources',
-    (tester) async {
-      disableRuntimeFonts();
-      ProfileRuntime.debugReset();
-      ProfileRuntime.initializeLegacy();
-      SharedPreferences.setMockInitialValues({
-        'discover_layout': 'grid',
-        'stremio_addons_v1': '[]',
-      });
-      StorageService.discoverLayoutCached = 'grid';
-      StremioService.instance.invalidateCache();
-      tester.view.physicalSize = const Size(1200, 700);
-      tester.view.devicePixelRatio = 1;
-      addTearDown(() {
-        tester.view.reset();
+  for (final layout in ['grid', 'stage']) {
+    testWidgets(
+      'Discover $layout resize clears stage effects without refetching sources',
+      (tester) async {
+        disableRuntimeFonts();
         ProfileRuntime.debugReset();
-        StorageService.discoverLayoutCached = 'stage';
-      });
-      var preferenceReads = 0;
-      var addonReads = 0;
-      final writes = <String>[];
-      Future<void> drive(FutureOr<void> Function() action) async {
-        await tester.runAsync(
-          () => http.runWithClient(() async {
-            await action();
-            await Future<void>.delayed(const Duration(milliseconds: 150));
-          }, () => MockClient((_) async => http.Response('{}', 404))),
-        );
-        await tester.pump(const Duration(milliseconds: 300));
-      }
+        ProfileRuntime.initializeLegacy();
+        SharedPreferences.setMockInitialValues({
+          'discover_layout': layout,
+          'stremio_addons_v1': '[]',
+        });
+        StorageService.discoverLayoutCached = layout;
+        StremioService.instance.invalidateCache();
+        tester.view.physicalSize = const Size(1200, 700);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(() {
+          tester.view.reset();
+          ProfileRuntime.debugReset();
+          StorageService.discoverLayoutCached = 'stage';
+        });
+        var preferenceReads = 0;
+        var addonReads = 0;
+        final writes = <String>[];
+        Future<void> drive(FutureOr<void> Function() action) async {
+          await tester.runAsync(
+            () => http.runWithClient(() async {
+              await action();
+              await Future<void>.delayed(const Duration(milliseconds: 150));
+            }, () => MockClient((_) async => http.Response('{}', 404))),
+          );
+          await tester.pump(const Duration(milliseconds: 300));
+        }
 
-      await drive(
-        () => tester.pumpWidget(
-          ProviderScope(
-            overrides: [
-              discoverSourceRepositoryProvider.overrideWith(
-                (ref, session) => DiscoverSourceRepository(
-                  readDefault: () async {
-                    preferenceReads++;
-                    return 'cw';
-                  },
-                  readLast: () async => 'cw',
-                  readAddons: () async {
-                    addonReads++;
-                    return [];
-                  },
-                  writeLast: (value, current) async {
-                    if (current()) writes.add(value);
-                  },
+        await drive(
+          () => tester.pumpWidget(
+            ProviderScope(
+              overrides: [
+                discoverSourceRepositoryProvider.overrideWith(
+                  (ref, session) => DiscoverSourceRepository(
+                    readDefault: () async {
+                      preferenceReads++;
+                      return 'cw';
+                    },
+                    readLast: () async => 'cw',
+                    readAddons: () async {
+                      addonReads++;
+                      return [];
+                    },
+                    writeLast: (value, current) async {
+                      if (current()) writes.add(value);
+                    },
+                  ),
                 ),
+              ],
+              child: const MaterialApp(
+                home: SearchScreen(discoverMode: true, isTelevision: true),
               ),
-            ],
-            child: const MaterialApp(
-              home: SearchScreen(discoverMode: true, isTelevision: true),
             ),
           ),
-        ),
-      );
-      expect(find.byType(DiscoverDetailRail), findsOneWidget);
-      expect(tester.getSize(find.byType(DiscoverDetailRail)).width, 450);
-      final stage = tester.widget<DiscoverTrailerStage>(
-        find.byType(DiscoverTrailerStage),
-      );
-      final veils = tester.widget<DiscoverStageVeils>(
-        find.byType(DiscoverStageVeils),
-      );
-      stage.showing!.value = true;
-      stage.takeover!.value = .5;
-      (veils.theater as ValueNotifier<bool>).value = true;
-      await tester.pump();
-      tester.view.physicalSize = const Size(700, 600);
-      await drive(() => tester.pump());
-      await tester.pump();
-      expect(find.byType(DiscoverTrailerStage), findsNothing);
-      expect(find.byType(DiscoverDetailRail), findsNothing);
-      expect(stage.showing!.value, isFalse);
-      expect(stage.takeover!.value, 0);
-      expect(veils.theater.value, isFalse);
-      tester.view.physicalSize = const Size(1200, 700);
-      await drive(() => tester.pump());
-      expect(find.byType(DiscoverDetailRail), findsOneWidget);
-      final selector = tester.widget<StremioDropdown<String>>(
-        find.byWidgetPredicate(
-          (widget) =>
-              widget is StremioDropdown<String> && widget.label == 'Source',
-        ),
-      );
-      expect(selector.value, 'cw');
-      expect(preferenceReads, 1);
-      expect(addonReads, 1);
-      expect(writes, ['cw']);
-      expect(tester.takeException(), isNull);
-      await tester.pumpWidget(const SizedBox());
-      await tester.pump(const Duration(seconds: 5));
-      expect(tester.takeException(), isNull);
-    },
-  );
+        );
+        expect(find.byType(DiscoverDetailRail), findsOneWidget);
+        if (layout == 'grid') {
+          expect(tester.getSize(find.byType(DiscoverDetailRail)).width, 450);
+        } else {
+          final identity = tester.widget<DiscoverDetailRail>(
+            find.byType(DiscoverDetailRail),
+          );
+          expect(identity.layout, DiscoverDetailLayout.stage);
+          expect(identity.stageMaxWidth, 560);
+          expect(identity.stageBudget, 352);
+          expect(identity.settleDelay, const Duration(milliseconds: 260));
+        }
+        final stage = tester.widget<DiscoverTrailerStage>(
+          find.byType(DiscoverTrailerStage),
+        );
+        final veils = tester.widget<DiscoverStageVeils>(
+          find.byType(DiscoverStageVeils),
+        );
+        stage.showing!.value = true;
+        stage.takeover!.value = .5;
+        (veils.theater as ValueNotifier<bool>).value = true;
+        await tester.pump();
+        tester.view.physicalSize = const Size(700, 600);
+        await drive(() => tester.pump());
+        await tester.pump();
+        expect(find.byType(DiscoverTrailerStage), findsNothing);
+        expect(find.byType(DiscoverDetailRail), findsNothing);
+        expect(stage.showing!.value, isFalse);
+        expect(stage.takeover!.value, 0);
+        expect(veils.theater.value, isFalse);
+        tester.view.physicalSize = const Size(1200, 700);
+        await drive(() => tester.pump());
+        expect(find.byType(DiscoverDetailRail), findsOneWidget);
+        final selector = tester.widget<StremioDropdown<String>>(
+          find.byWidgetPredicate(
+            (widget) =>
+                widget is StremioDropdown<String> && widget.label == 'Source',
+          ),
+        );
+        expect(selector.value, 'cw');
+        expect(preferenceReads, 1);
+        expect(addonReads, 1);
+        expect(writes, ['cw']);
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox());
+        await tester.pump(const Duration(seconds: 5));
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
 }

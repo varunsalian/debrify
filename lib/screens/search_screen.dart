@@ -1,3 +1,4 @@
+import '../features/discover/presentation/discover_stage_layout.dart';
 import '../features/discover/presentation/discover_grid_layout.dart';
 import '../features/discover/presentation/discover_stage_backdrop.dart';
 import '../features/discover/presentation/discover_stage_veils.dart';
@@ -232,7 +233,6 @@ import '../services/mdblist/mdblist_menu_helpers.dart';
 import '../widgets/see_all/stremio_dropdown.dart';
 import '../widgets/see_all/discover_detail_rail.dart';
 import '../widgets/see_all/discover_card_settings_scope.dart';
-import '../widgets/see_all/discover_shelf_scope.dart';
 import '../widgets/see_all/discover_trailer_stage.dart';
 import '../widgets/trakt/trakt_menu_helpers.dart';
 import '../services/simkl/simkl_menu_helpers.dart';
@@ -472,17 +472,6 @@ double _promenadeLabelHeight(BuildContext context) => max(
   _kCanvasTabChevronColumn,
   MediaQuery.textScalerOf(context).scale(_kPromLabelFontSize) * 1.35,
 );
-
-/// Discover STAGE: the air between the identity block and the shelf column
-/// below it. The block's clearance is [DiscoverShelfMetrics.columnHeight] plus
-/// this — derived from what the shelf actually occupies, never guessed.
-const double _kDiscStageIdentityGap = 22;
-
-/// Discover STAGE: the band the quiet filter line owns at the top of the
-/// panel — its 16px top padding, one line of segments and its 10px tail,
-/// measuring ~56, plus a little air. It never needs a second row: the quiet
-/// bar scrolls its segments horizontally rather than wrapping.
-const double _kDiscStageFilterBand = 62;
 
 /// Height of the Canvas rail-tab row at the current text scale.
 double _canvasTabsHeight(BuildContext context) => max(
@@ -16885,199 +16874,60 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   ///
   /// It is the SAME panel widget as the grid layout: the See-All screen keeps
   /// owning fetch, filters and paging, and only the arrangement of its results
-  /// changes — declared by the [DiscoverShelfScope] wrapped around it here.
-  Widget _buildDiscoverStage(BoxConstraints c, Widget panel) {
-    final app = AppThemeScope.of(context);
-    // Canvas's poster proportion (30% of the board, clamped) so the two
-    // full-bleed shelves on this TV read as the same furniture.
-    final cardH = (c.maxHeight * 0.30).clamp(140.0, 200.0);
-    final metrics = DiscoverShelfMetrics(cardHeight: cardH, hPad: 24);
-    // The identity block never crosses the middle of the frame — the art on
-    // the right half is the point of this layout.
-    final identityMax = (c.maxWidth * 0.5).clamp(320.0, 560.0);
-    // What the identity block may occupy while BROWSING: the canvas less the
-    // filter band above and the shelf column below. Computed here and handed
-    // down, because theater animates that box open — a block that measured
-    // its live constraint would gain a plot line mid-glide and jump.
-    final identityBudget =
-        c.maxHeight -
-        _kDiscStageFilterBand -
-        (metrics.columnHeight + _kDiscStageIdentityGap);
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        DecoratedBox(decoration: BoxDecoration(gradient: app.home.wash)),
-        RepaintBoundary(
-          child: DiscoverStageBackdrop(
-            shown: _discShown,
-            // The identity block settles this feed upstream, so no second
-            // dwell here — art and title land together, and they crossfade
-            // like the Home board's own full-bleed stage.
-            dwell: Duration.zero,
-            crossfade: true,
-          ),
-        ),
-        DiscoverTrailerStage(
-          trailer: _discTrailerStreams,
-          loading: _discTrailerLoading,
-          volume: _discTrailerVolume,
-          meta: _discTrailerMeta,
-          railRect: Rect.zero,
-          takeover: _discTakeover,
-          fullStage: true,
-          showing: _discTrailerShowing,
-        ),
-        RepaintBoundary(
-          child: DiscoverStageVeils(
-            showing: _discTrailerShowing,
-            theater: _discTheater,
-            stage: true,
-          ),
-        ),
-        // The identity block, bottom-left, clearing exactly what the shelf
-        // column below occupies — derived from the same metrics the shelf lays
-        // itself out with, never guessed.
-        //
-        // THEATER: the block glides to the top-left and shrinks — the Canvas
-        // board's billboard move, so a clean full-bleed trailer still carries
-        // a quiet signature. What actually travels is the title art alone:
-        // meta and plot faded out earlier, with [_discTrailerShowing], inside
-        // the rail widget. Padding/Align/Scale animate on ONE cadence (slow
-        // lights-down, instant lights-up) — three transforms and a layout
-        // inset, no repaint of the stage under them.
-        Positioned.fill(
-          child: IgnorePointer(
-            child: ValueListenableBuilder<bool>(
-              valueListenable: _discTheater,
-              child: RepaintBoundary(
-                child: ValueListenableBuilder<StremioMeta?>(
-                  valueListenable: _discFocused,
-                  builder: (_, item, __) => DiscoverDetailRail(
-                    item: item,
-                    layout: DiscoverDetailLayout.stage,
-                    trailerShowing: _discTrailerShowing,
-                    stageMaxWidth: identityMax,
-                    stageBudget: identityBudget,
-                    // The Home board's billboard settle: holding a direction
-                    // across the shelf costs only the cards' focus visuals,
-                    // never an identity rebuild plus a full-bleed decode per
-                    // step. The trailer still releases on the first keypress.
-                    settleDelay: const Duration(milliseconds: 260),
-                    trailerStreams: _discTrailerStreams,
-                    trailerLoading: _discTrailerLoading,
-                    trailerVolume: _discTrailerVolume,
-                    trailerMeta: _discTrailerMeta,
-                    shownItem: _discShown,
-                  ),
-                ),
-              ),
-              builder: (_, deep, kid) => AnimatedPadding(
-                // Browse — top: the filter line's band, so a short canvas
-                // makes the block shed its plot rather than grow up under the
-                // filters; bottom: exactly what the shelf column occupies.
-                // Theater — the block rides up to the top corner instead.
-                padding: EdgeInsets.only(
-                  top: deep ? 30 : _kDiscStageFilterBand,
-                  bottom: deep
-                      ? 0
-                      : metrics.columnHeight + _kDiscStageIdentityGap,
-                ),
-                duration: deep
-                    ? const Duration(milliseconds: 900)
-                    : const Duration(milliseconds: 250),
-                curve: Curves.easeInOutCubic,
-                child: AnimatedAlign(
-                  alignment: deep ? Alignment.topLeft : Alignment.bottomLeft,
-                  duration: deep
-                      ? const Duration(milliseconds: 900)
-                      : const Duration(milliseconds: 250),
-                  curve: Curves.easeInOutCubic,
-                  child: AnimatedScale(
-                    scale: deep ? 0.7 : 1.0,
-                    alignment: Alignment.topLeft,
-                    duration: deep
-                        ? const Duration(milliseconds: 900)
-                        : const Duration(milliseconds: 250),
-                    curve: Curves.easeInOutCubic,
-                    child: kid,
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
-        // Filter line + shelf. Theater recede: the Canvas cadence — slow
-        // lights-down, instant lights-up — as a slide + fade. The children
-        // stay MOUNTED (opacity only), so DPAD focus survives the dark and the
-        // wake keypress still performs its normal move. This is the one
-        // full-canvas Opacity on the page; it pays its saveLayer during the
-        // ease and composites as a cached raster at rest, exactly like the
-        // two-pane's panel fade it replaces.
-        Positioned.fill(
-          child: ValueListenableBuilder<bool>(
-            valueListenable: _discTheater,
-            child: RepaintBoundary(
-              child: DiscoverShelfScope(metrics: metrics, child: panel),
-            ),
-            builder: (_, deep, kid) => AnimatedSlide(
-              offset: deep ? const Offset(0, 0.12) : Offset.zero,
-              duration: deep
-                  ? const Duration(milliseconds: 900)
-                  : const Duration(milliseconds: 250),
-              curve: Curves.easeOut,
-              child: AnimatedOpacity(
-                opacity: deep ? 0.0 : 1.0,
-                duration: deep
-                    ? const Duration(milliseconds: 900)
-                    : const Duration(milliseconds: 250),
-                curve: Curves.easeOut,
-                child: kid,
-              ),
-            ),
-          ),
-        ),
-        // Recede everything as the trailer promotes to a fullscreen takeover —
-        // a baked scrim, never an Opacity layer. Dormant while the takeover
-        // stays disabled, kept wired for its revival (as in the two-pane).
-        ValueListenableBuilder<double>(
-          valueListenable: _discTakeover,
-          builder: (_, t, __) => t <= 0.001
-              ? const SizedBox.shrink()
-              : IgnorePointer(
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      color: app.fade(app.home.bg, 0.92 * t),
-                    ),
-                  ),
-                ),
-        ),
-        // Status corner: the same TRAILER→AMBIENT chip pair the two-pane
-        // shows, moved to the TOP-right — the bottom-left corner belongs to
-        // the identity block here.
-        Positioned(
-          top: 16,
-          right: 22,
-          child: ValueListenableBuilder<bool>(
-            valueListenable: _discTrailerLoading,
-            builder: (_, loading, __) =>
-                _HeroTrailerLoadingPill(visible: loading),
-          ),
-        ),
-        Positioned(
-          top: 16,
-          right: 22,
-          child: ValueListenableBuilder<bool>(
-            valueListenable: _discTrailerShowing,
-            builder: (_, showing, __) => ValueListenableBuilder<bool>(
-              valueListenable: _discTrailerLoading,
-              builder: (_, loading, __) =>
-                  _HeroAmbientChip(visible: showing && !loading),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
+  /// changes — declared by the shelf scope wrapped around it by the Stage composition.
+  Widget _buildDiscoverStage(
+    BoxConstraints c,
+    Widget panel,
+  ) => buildDiscoverStageLayout(
+    context,
+    constraints: c,
+    panel: panel,
+    buildIdentity: (maxWidth, budget) => ValueListenableBuilder<StremioMeta?>(
+      valueListenable: _discFocused,
+      builder: (_, item, __) => DiscoverDetailRail(
+        item: item,
+        layout: DiscoverDetailLayout.stage,
+        trailerShowing: _discTrailerShowing,
+        stageMaxWidth: maxWidth,
+        stageBudget: budget,
+        // Holding a direction across the shelf settles identity updates;
+        // the trailer still releases on the first keypress.
+        settleDelay: const Duration(milliseconds: 260),
+        trailerStreams: _discTrailerStreams,
+        trailerLoading: _discTrailerLoading,
+        trailerVolume: _discTrailerVolume,
+        trailerMeta: _discTrailerMeta,
+        shownItem: _discShown,
+      ),
+    ),
+    backdrop: DiscoverStageBackdrop(
+      shown: _discShown,
+      // Identity already settles the feed: art and title land together.
+      dwell: Duration.zero,
+      crossfade: true,
+    ),
+    trailer: DiscoverTrailerStage(
+      trailer: _discTrailerStreams,
+      loading: _discTrailerLoading,
+      volume: _discTrailerVolume,
+      meta: _discTrailerMeta,
+      railRect: Rect.zero,
+      takeover: _discTakeover,
+      fullStage: true,
+      showing: _discTrailerShowing,
+    ),
+    veils: DiscoverStageVeils(
+      showing: _discTrailerShowing,
+      theater: _discTheater,
+      stage: true,
+    ),
+    theater: _discTheater,
+    showing: _discTrailerShowing,
+    loading: _discTrailerLoading,
+    takeover: _discTakeover,
+    loadingIndicator: (visible) => _HeroTrailerLoadingPill(visible: visible),
+    ambientIndicator: (visible) => _HeroAmbientChip(visible: visible),
+  );
 
   void _selectDiscoverSource(String source) {
     final selected = _discoverSourceController.select(
