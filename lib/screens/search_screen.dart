@@ -1,3 +1,7 @@
+import '../features/home/presentation/home_tonight_card_caption.dart';
+import '../features/home/presentation/home_favorite_focus.dart';
+import '../features/home/models/home_tonight_card_info.dart';
+import '../features/home/application/home_stage_metadata.dart';
 import '../features/home/presentation/home_classic_layout.dart';
 import '../features/home/presentation/home_takeover_info.dart';
 import '../features/home/presentation/home_trailer_transitions.dart';
@@ -6332,11 +6336,11 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   bool _canvasFocusSeeded = false;
 
   /// Stage override while a favourites cell has focus (see
-  /// [_CanvasFavFocus]). A ValueNotifier — NOT setState — so scrubbing along
+  /// [HomeFavoriteFocus]). A ValueNotifier — NOT setState — so scrubbing along
   /// a favourites rail repaints only the stage layers that listen (art +
   /// identity), never the whole board (the hero pipeline's own pattern).
-  final ValueNotifier<_CanvasFavFocus?> _canvasFavFocus =
-      ValueNotifier<_CanvasFavFocus?>(null);
+  final ValueNotifier<HomeFavoriteFocus?> _canvasFavFocus =
+      ValueNotifier<HomeFavoriteFocus?>(null);
 
   /// A Canvas favourites cell took focus: remember the column, stop any
   /// catalog trailer machinery (a PENDING hero swap firing later would start
@@ -6346,7 +6350,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   void _canvasFavFocused(
     String railKey,
     int col,
-    _CanvasFavFocus focus, {
+    HomeFavoriteFocus focus, {
     IptvChannel? liveChannel,
   }) {
     _canvasCols[railKey] = col;
@@ -6417,7 +6421,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
           onFocused: () => _canvasFavFocused(
             railKey,
             col,
-            _CanvasFavFocus(
+            HomeFavoriteFocus(
               art: channel.logoUrl,
               fit: BoxFit.contain,
               title: channel.name,
@@ -6457,7 +6461,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
             onFocused: () => _canvasFavFocused(
               railKey,
               col,
-              _CanvasFavFocus(
+              HomeFavoriteFocus(
                 art: _firstNonEmpty(item.background, item.poster),
                 title: item.name,
                 subtitle: 'MY WATCHLIST · ${item.type.toUpperCase()}',
@@ -6492,7 +6496,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
             onFocused: () => _canvasFavFocused(
               railKey,
               col,
-              _CanvasFavFocus(
+              HomeFavoriteFocus(
                 art: channel.logoUrl,
                 fit: BoxFit.contain,
                 title: channel.name,
@@ -6530,7 +6534,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
             onFocused: () => _canvasFavFocused(
               railKey,
               col,
-              _CanvasFavFocus(
+              HomeFavoriteFocus(
                 art: null,
                 title: channel.name,
                 subtitle: 'DEBRIFY TV · CHANNEL $number',
@@ -6564,7 +6568,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
             onFocused: () => _canvasFavFocused(
               railKey,
               col,
-              _CanvasFavFocus(
+              HomeFavoriteFocus(
                 // The stage prefers the WIDE art; the card keeps the poster.
                 art: _firstNonEmpty(item?.background, item?.poster),
                 title: channel.displayName,
@@ -6602,7 +6606,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
             onFocused: () => _canvasFavFocused(
               railKey,
               col,
-              _CanvasFavFocus(
+              HomeFavoriteFocus(
                 art: posterUrl,
                 title: title,
                 subtitle: 'PLAYLIST · SAVED',
@@ -7483,8 +7487,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   /// OK hint in particular, which is 'Resume' only for a part-watched title
   /// and 'Play'/'Open' otherwise. A notifier, so a focus move repaints the
   /// caption alone rather than the board.
-  final ValueNotifier<_TonightCardInfo?> _tonightCard =
-      ValueNotifier<_TonightCardInfo?>(null);
+  final ValueNotifier<HomeTonightCardInfo?> _tonightCard =
+      ValueNotifier<HomeTonightCardInfo?>(null);
 
   /// Identity of the remembered queue row: '<rail key>#<column>'. Resolved
   /// against the rebuilt queue every time, exactly like [_canvasRailKey].
@@ -7739,7 +7743,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
                       // the hero identity (favourites aren't StremioMeta, so
                       // the logo/meta pipeline has nothing true to say).
                       // Notifier-driven, so a fav scrub repaints only this.
-                      child: ValueListenableBuilder<_CanvasFavFocus?>(
+                      child: ValueListenableBuilder<HomeFavoriteFocus?>(
                         valueListenable: _canvasFavFocus,
                         builder: (context, fav, _) => fav != null
                             ? _StageFavIdentity(fav: fav)
@@ -8228,7 +8232,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
                           ? const Duration(milliseconds: 900)
                           : const Duration(milliseconds: 250),
                       curve: Curves.easeInOutCubic,
-                      child: ValueListenableBuilder<_CanvasFavFocus?>(
+                      child: ValueListenableBuilder<HomeFavoriteFocus?>(
                         valueListenable: _canvasFavFocus,
                         builder: (context, fav, _) => fav != null
                             ? _StageFavIdentity(fav: fav, centered: true)
@@ -8666,7 +8670,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
                         },
                       ),
                       const SizedBox(height: 22),
-                      ValueListenableBuilder<_CanvasFavFocus?>(
+                      ValueListenableBuilder<HomeFavoriteFocus?>(
                         valueListenable: _canvasFavFocus,
                         builder: (context, fav, _) => fav != null
                             ? _StageFavIdentity(fav: fav)
@@ -9006,7 +9010,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Expanded(
-                          child: ValueListenableBuilder<_CanvasFavFocus?>(
+                          child: ValueListenableBuilder<HomeFavoriteFocus?>(
                             valueListenable: _canvasFavFocus,
                             builder: (context, fav, _) => Align(
                               alignment: Alignment.bottomLeft,
@@ -9413,7 +9417,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
               child: IgnorePointer(
                 child: Align(
                   alignment: Alignment.centerLeft,
-                  child: ValueListenableBuilder<_CanvasFavFocus?>(
+                  child: ValueListenableBuilder<HomeFavoriteFocus?>(
                     valueListenable: _canvasFavFocus,
                     builder: (context, fav, _) => fav != null
                         ? _StageFavIdentity(fav: fav)
@@ -9945,7 +9949,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
                       right: 24,
                       bottom: 20,
                       child: IgnorePointer(
-                        child: _TonightCardCaption(
+                        child: HomeTonightCardCaption(
                           item: _heroItem,
                           enriched: _heroEnriched,
                           fav: _canvasFavFocus,
@@ -10100,7 +10104,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
                     _tonightZoneIsQueue = true;
                     _tonightQueueCol = i;
                     _tonightQueueKey = _tonightQueueKeyOf(e);
-                    _tonightCard.value = _TonightCardInfo(
+                    _tonightCard.value = HomeTonightCardInfo(
                       // OK opens the detail page for a Continue Watching card
                       // everywhere in the app; the HOLD menu is what resumes.
                       action: 'Open',
@@ -10234,7 +10238,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
                             onUpHold: upHold,
                             onFocusedExtra: () {
                               _tonightZoneIsQueue = false;
-                              _tonightCard.value = _TonightCardInfo(
+                              _tonightCard.value = HomeTonightCardInfo(
                                 action: 'Open',
                                 // Only Continue Watching cards arm hold-OK on
                                 // TV (they are the ones with a menu); catalog
@@ -10511,7 +10515,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       return;
     }
     final authoritative = enriched is HeroMetadataPresentation && item != null &&
-        _sameCanvasTitle(item, enriched);
+        sameHomeStageTitle(item, enriched);
     final resolvedFields = authoritative ? HeroMetadataFields(item, enriched) : null;
     final fields = resolvedFields != null &&
         (resolvedFields.selected(MetadataCategory.backgrounds) ||

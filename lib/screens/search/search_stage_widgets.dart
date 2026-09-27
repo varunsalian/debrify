@@ -113,14 +113,6 @@ class _SkeletonPoster extends StatelessWidget {
   }
 }
 
-/// Metahub title-logo URL derived synchronously from an IMDb id (same trick
-/// the hero uses) — lets the Canvas identity show studio title art without
-/// waiting for /meta enrichment. Null when the item has no IMDb-shaped id.
-String? _metahubLogoUrl(StremioMeta item) {
-  final tt = item.imdbId ?? (item.id.startsWith('tt') ? item.id : null);
-  return tt == null ? null : 'https://images.metahub.space/logo/medium/$tt/img';
-}
-
 /// Metahub 16:9 still, derived the same synchronous way — catalog items carry
 /// a poster but rarely a backdrop, and the wide-cell layouts (Promenade's
 /// strip, Tonight's queue) need landscape art the moment a rail paints, not
@@ -138,19 +130,6 @@ String? _metahubBackgroundUrl(StremioMeta item) {
 String? _wideArtUrl(StremioMeta item) =>
     _firstNonEmpty(item.background, _metahubBackgroundUrl(item)) ??
     _firstNonEmpty(item.poster, null);
-
-/// Whether [enriched] describes the same title as [item]. Raw id equality is
-/// not enough: an addon can list a title as `tmdb:603` while the /meta
-/// record — fetched via the IMDb id the addon supplied — comes back as
-/// `tt0133093`. Compare canonical IMDb identity too, or valid enrichment
-/// gets rejected and Canvas loses its backdrop/description/rating.
-bool _sameCanvasTitle(StremioMeta item, StremioMeta enriched) {
-  if (enriched.id == item.id) return true;
-  final itTt = item.imdbId ?? (item.id.startsWith('tt') ? item.id : null);
-  final enTt =
-      enriched.imdbId ?? (enriched.id.startsWith('tt') ? enriched.id : null);
-  return itTt != null && itTt == enTt;
-}
 
 /// First non-empty of two optional strings (merge helper: enriched field
 /// wins only when it actually carries a value).
@@ -233,7 +212,7 @@ class _StageRailView {
 /// nothing true to say about them — this is the favourite's own name and
 /// source line, in the same type as the catalog identity above it.
 class _StageFavIdentity extends StatelessWidget {
-  final _CanvasFavFocus fav;
+  final HomeFavoriteFocus fav;
   final bool centered;
 
   const _StageFavIdentity({required this.fav, this.centered = false});
@@ -272,246 +251,6 @@ class _StageFavIdentity extends StatelessWidget {
             letterSpacing: 0.4,
           ),
         ),
-      ],
-    );
-  }
-}
-
-/// What Tonight's big card says about the focused entry. Derived per focus —
-/// the OK hint has to tell the truth: a part-watched title resumes, a catalog
-/// title opens, a favourite is watched.
-class _TonightCardInfo {
-  /// What OK actually does — never what the layout wishes it did. Continue
-  /// Watching cards open their detail page on OK across the whole app, and
-  /// Tonight keeps that grammar rather than diverging.
-  final String action;
-
-  /// What a HELD OK does, when that differs (resume, or the card menu).
-  final String? holdAction;
-  final String? episode;
-  final double? progress;
-  const _TonightCardInfo({
-    required this.action,
-    this.holdAction,
-    this.episode,
-    this.progress,
-  });
-}
-
-/// The caption block on Tonight's card: title art, what you are about to do,
-/// the episode, how much is left and the progress bar. Everything is driven
-/// by listenables so a DPAD move repaints this block alone.
-class _TonightCardCaption extends StatelessWidget {
-  final ValueListenable<StremioMeta?> item;
-  final ValueListenable<StremioMeta?> enriched;
-  final ValueListenable<_CanvasFavFocus?> fav;
-  final ValueListenable<_TonightCardInfo?> info;
-
-  const _TonightCardCaption({
-    required this.item,
-    required this.enriched,
-    required this.fav,
-    required this.info,
-  });
-
-  /// Minutes left from a '60 min'-shaped runtime and a 0..1 progress.
-  static String? _timeLeft(String? runtime, double? progress) {
-    if (runtime == null || progress == null || progress <= 0) return null;
-    final m = RegExp(r'(\d+)').firstMatch(runtime);
-    if (m == null) return null;
-    final total = int.tryParse(m.group(1)!);
-    if (total == null || total <= 0) return null;
-    final left = ((1 - progress.clamp(0.0, 1.0)) * total).round();
-    return left <= 0 ? null : '$left min left';
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    // Hoisted: `fav` fires on every focus move across the Tonight rail.
-    final tx = AppThemeScope.of(context).core.tx;
-    return ValueListenableBuilder<_CanvasFavFocus?>(
-      valueListenable: fav,
-      builder: (context, favFocus, _) {
-        if (favFocus != null) {
-          return _block(
-            context,
-            hold: null,
-            titleWidget: Text(
-              favFocus.title,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                color: tx,
-                fontSize: 22,
-                fontWeight: FontWeight.w900,
-                letterSpacing: -0.3,
-                shadows: const [Shadow(color: Colors.black54, blurRadius: 12)],
-              ),
-            ),
-            line: favFocus.subtitle,
-            action: 'Watch',
-            progress: null,
-          );
-        }
-        return ValueListenableBuilder<StremioMeta?>(
-          valueListenable: item,
-          builder: (context, it, _) => ValueListenableBuilder<StremioMeta?>(
-            valueListenable: enriched,
-            builder: (context, en, _) =>
-                ValueListenableBuilder<_TonightCardInfo?>(
-                  valueListenable: info,
-                  builder: (context, nfo, _) {
-                    final it0 = it;
-                    if (it0 == null) return const SizedBox.shrink();
-                    final enr = (en != null && _sameCanvasTitle(it0, en))
-                        ? en
-                        : null;
-                    final fields = HeroMetadataFields(it0, enr);
-                    final logo =
-                        fields.logo ??
-                        (fields.allowArtworkFallback ? _metahubLogoUrl(it0) : null);
-                    final runtime = fields.runtime;
-                    final left = _timeLeft(runtime, nfo?.progress);
-                    final parts = <String>[
-                      if (nfo?.episode != null) nfo!.episode!,
-                      if (left != null) left else if (runtime != null) runtime,
-                      if (nfo?.episode == null && left == null)
-                        (it0.type == 'series' ? 'SERIES' : 'MOVIE'),
-                    ];
-                    return _block(
-                      context,
-                      hold: nfo?.holdAction,
-                      titleWidget: logo != null
-                          ? ConstrainedBox(
-                              constraints: const BoxConstraints(
-                                maxHeight: 46,
-                                maxWidth: 300,
-                              ),
-                              child: CachedNetworkImage(
-                                imageUrl: logo,
-                                fit: BoxFit.contain,
-                                alignment: Alignment.bottomLeft,
-                                memCacheWidth: 400,
-                                fadeInDuration: Duration.zero,
-                                fadeOutDuration: Duration.zero,
-                                placeholder: (_, __) =>
-                                    const SizedBox(height: 46),
-                                errorWidget: (_, __, ___) =>
-                                    _fallbackTitle(fields.name),
-                              ),
-                            )
-                          : _fallbackTitle(fields.name),
-                      line: parts.join('  ·  '),
-                      action: nfo?.action ?? 'Open',
-                      progress: nfo?.progress,
-                    );
-                  },
-                ),
-          ),
-        );
-      },
-    );
-  }
-
-  static Widget _fallbackTitle(String name) => Text(
-    name,
-    maxLines: 1,
-    overflow: TextOverflow.ellipsis,
-    style: TextStyle(
-      color: Colors.white,
-      fontSize: 22,
-      fontWeight: FontWeight.w900,
-      letterSpacing: -0.3,
-      shadows: [Shadow(color: Colors.black54, blurRadius: 12)],
-    ),
-  );
-
-  Widget _block(
-    BuildContext context, {
-    required Widget titleWidget,
-    required String line,
-    required String action,
-    required String? hold,
-    required double? progress,
-  }) {
-    final app = AppThemeScope.of(context);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        titleWidget,
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            Flexible(
-              child: Text(
-                line,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  color: app.fade(app.core.tx, 0.74),
-                  fontSize: 12.5,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 0.3,
-                ),
-              ),
-            ),
-            const SizedBox(width: 16),
-            if (hold != null) ...[
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
-                decoration: BoxDecoration(
-                  border: Border.all(color: app.fade(app.core.tx, 0.30)),
-                  borderRadius: app.shape.br(20),
-                ),
-                child: Text(
-                  'HOLD  $hold',
-                  style: TextStyle(
-                    color: app.fade(app.core.tx, 0.72),
-                    fontSize: 10.5,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 0.4,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-            ],
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-              decoration: BoxDecoration(
-                color: app.core.tx.withValues(alpha: 0.92),
-                borderRadius: app.shape.br(20),
-              ),
-              child: Text(
-                'OK  $action',
-                style: const TextStyle(
-                  color: Color(0xFF12101F),
-                  fontSize: 11,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 0.4,
-                ),
-              ),
-            ),
-          ],
-        ),
-        if (progress != null && progress > 0) ...[
-          const SizedBox(height: 12),
-          ClipRRect(
-            borderRadius: app.shape.br(3),
-            child: SizedBox(
-              height: 5,
-              child: ColoredBox(
-                color: app.core.tx.withValues(alpha: 0.22),
-                child: FractionallySizedBox(
-                  alignment: Alignment.centerLeft,
-                  widthFactor: progress.clamp(0.0, 1.0),
-                  heightFactor: 1,
-                  child: const ColoredBox(color: Colors.white),
-                ),
-              ),
-            ),
-          ),
-        ],
       ],
     );
   }
@@ -829,19 +568,6 @@ class _TonightQueueEntry {
   const _TonightQueueEntry({required this.rail, required this.col});
 }
 
-class _CanvasFavFocus {
-  final String? art;
-  final BoxFit fit;
-  final String title;
-  final String subtitle;
-  const _CanvasFavFocus({
-    required this.art,
-    this.fit = BoxFit.cover,
-    required this.title,
-    required this.subtitle,
-  });
-}
-
 /// Canvas stage floor + full-bleed key art for the settled hero item. Sits
 /// BELOW the underlay punch hole; the AnimatedSwitcher fade wraps only this
 /// sibling, never the engine, so the hole's BlendMode.clear is untouched.
@@ -871,7 +597,7 @@ class _CanvasArtLayer extends StatelessWidget {
   /// Non-null while a favourites cell has focus: its art overrides the hero
   /// pipeline's (contain-fit logos render centred over the floor instead of
   /// being cover-stretched across the canvas).
-  final ValueListenable<_CanvasFavFocus?> fav;
+  final ValueListenable<HomeFavoriteFocus?> fav;
 
   const _CanvasArtLayer({
     required this.item,
@@ -888,13 +614,13 @@ class _CanvasArtLayer extends StatelessWidget {
       valueListenable: item,
       builder: (context, it, _) => ValueListenableBuilder<StremioMeta?>(
         valueListenable: enriched,
-        builder: (context, en, _) => ValueListenableBuilder<_CanvasFavFocus?>(
+        builder: (context, en, _) => ValueListenableBuilder<HomeFavoriteFocus?>(
           valueListenable: fav,
           builder: (context, fav, _) {
             // Enrichment merged over the catalog item: matched by canonical
             // IMDb identity (ids can differ in form), and a sparse /meta
             // record can't erase a backdrop the catalog already carried.
-            final enr = (it != null && en != null && _sameCanvasTitle(it, en))
+            final enr = (it != null && en != null && sameHomeStageTitle(it, en))
                 ? en
                 : null;
             // WIDE art first. The old chain fell straight from "no backdrop"
@@ -1272,11 +998,11 @@ class _CanvasIdentity extends StatelessWidget {
           // by canonical IMDb identity (catalog ids can be tmdb:… while the
           // /meta record is tt…), and a sparse /meta response — it may carry
           // only a rating — can never erase what the catalog already knew.
-          final enr = (en != null && _sameCanvasTitle(it0, en)) ? en : null;
+          final enr = (en != null && sameHomeStageTitle(it0, en)) ? en : null;
           final fields = HeroMetadataFields(it0, enr);
           final logo =
               fields.logo ??
-              (fields.allowArtworkFallback ? _metahubLogoUrl(it0) : null);
+              (fields.allowArtworkFallback ? homeStageLogoUrl(it0) : null);
           final rating = enr?.imdbRating ?? it0.imdbRating;
           final year = _firstNonEmpty(enr?.year, it0.year);
           final runtime = fields.runtime;
