@@ -8,6 +8,7 @@ import '../features/home/presentation/home_stage_row_label.dart';
 import '../features/home/presentation/home_tonight_layout.dart';
 import '../features/home/presentation/home_tonight_header.dart';
 import '../features/home/presentation/home_tonight_queue_list.dart';
+import '../features/home/presentation/home_tonight_rail.dart';
 import '../features/home/presentation/home_stage_hold_latch.dart';
 import '../features/home/presentation/home_stage_focus_requests.dart';
 import '../features/home/presentation/home_canvas_tabs.dart';
@@ -9032,74 +9033,59 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         ? () => _stageHold.jump(LogicalKeyboardKey.arrowUp, _tonightFocusQueue)
         : null;
 
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.only(right: homeTonightHorizontalPadding),
-          child: buildHomeStageRowLabel(
-            context: context,
-            title: _canvasTabTitle(view.rails, view.index),
+    return buildHomeTonightRail(
+      railHeight: boxH,
+      labelGap: _kAtriumLabelGap,
+      railKey: railKey,
+      itemCount: count,
+      label: buildHomeStageRowLabel(
+        context: context,
+        title: _canvasTabTitle(view.rails, view.index),
+      ),
+      itemBuilder: (context, col) => Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 7),
+        child: Center(
+          child: SizedBox(
+            width: favRail
+                ? _stageFavW(context, boxH)
+                : boxH * _stageCardAspect(rail),
+            child: favRail
+                ? _canvasFavCell(
+                    rail.favKind!,
+                    railKey,
+                    col,
+                    onUp: up,
+                    onDown: down,
+                    onUpHold: upHold,
+                  )
+                : SizedBox(
+                    height: boxH,
+                    child: _stageShelfCell(
+                      rail,
+                      railKey,
+                      items,
+                      nodes,
+                      col,
+                      onUp: up,
+                      onDown: down,
+                      onUpHold: upHold,
+                      onFocusedExtra: () {
+                        _tonightZoneIsQueue = false;
+                        _tonightCard.value = HomeTonightCardInfo(
+                          action: 'Open',
+                          // Only Continue Watching cards arm hold-OK on
+                          // TV (they are the ones with a menu); catalog
+                          // cards have no hold action, so no hint.
+                          holdAction: rail.cw != null ? 'Options' : null,
+                          episode: rail.cw?.episodeOf(items[col]),
+                          progress: rail.cw?.progressOf(items[col]),
+                        );
+                      },
+                    ),
+                  ),
           ),
         ),
-        const SizedBox(height: _kAtriumLabelGap),
-        SizedBox(
-          height: boxH,
-          child: ListView.builder(
-            key: ValueKey('tonight-rail-$railKey'),
-            scrollDirection: Axis.horizontal,
-            clipBehavior: Clip.hardEdge,
-            cacheExtent: 400,
-            itemCount: count,
-            itemBuilder: (context, col) => Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 7),
-              child: Center(
-                child: SizedBox(
-                  width: favRail
-                      ? _stageFavW(context, boxH)
-                      : boxH * _stageCardAspect(rail),
-                  child: favRail
-                      ? _canvasFavCell(
-                          rail.favKind!,
-                          railKey,
-                          col,
-                          onUp: up,
-                          onDown: down,
-                          onUpHold: upHold,
-                        )
-                      : SizedBox(
-                          height: boxH,
-                          child: _stageShelfCell(
-                            rail,
-                            railKey,
-                            items,
-                            nodes,
-                            col,
-                            onUp: up,
-                            onDown: down,
-                            onUpHold: upHold,
-                            onFocusedExtra: () {
-                              _tonightZoneIsQueue = false;
-                              _tonightCard.value = HomeTonightCardInfo(
-                                action: 'Open',
-                                // Only Continue Watching cards arm hold-OK on
-                                // TV (they are the ones with a menu); catalog
-                                // cards have no hold action, so no hint.
-                                holdAction: rail.cw != null ? 'Options' : null,
-                                episode: rail.cw?.episodeOf(items[col]),
-                                progress: rail.cw?.progressOf(items[col]),
-                              );
-                            },
-                          ),
-                        ),
-                ),
-              ),
-            ),
-          ),
-        ),
-        const SizedBox(height: homeTonightRailTail),
-      ],
+      ),
     );
   }
 
