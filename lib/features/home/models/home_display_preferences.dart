@@ -1,5 +1,5 @@
 import '../../../services/profiles/profile_session_memory.dart';
-import '../../../services/storage_service.dart' show HomeCardOrientation;
+import '../../../models/home_preferences.dart' show HomeCardOrientation;
 
 /// Scalar preference values; record equality avoids redundant presentation work.
 typedef HomeDisplayPreferences = ({

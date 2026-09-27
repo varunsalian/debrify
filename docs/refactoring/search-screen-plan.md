@@ -1719,8 +1719,8 @@ model provides immutable values and value equality; the 17-line provider factory
 wires the same storage methods. Seven mutable screen fields and both duplicated
 read/apply blocks are replaced by controller getters and changed-only repainting.
 Storage keys, style normalization, return-snapshot format and package versions are
-unchanged. The existing `HomeCardOrientation` enum remains in the storage service;
-its type-only use remains pending the phase 8 shared-boundary audit.
+unchanged. The orientation type initially remained in the storage service; the
+follow-up below closes that direct dependency for these migrated components.
 
 The controller is constructed without reads or writes. A cached Home seeds its
 four saved card preferences before the first build; focus-details/animation flags
@@ -1762,6 +1762,27 @@ the existing phase 5–8 exception. Evidence: `display-*`, `analyze-display-*` a
 `full-display*` in `.git/refactor-evidence/phase5/`. Remaining Home orchestration,
 layouts, actions/playback/lifecycle and native/performance/final size gates remain
 open.
+
+Orientation-type boundary follow-up: the unchanged `HomeCardOrientation` enum
+and its documentation now live in the existing `lib/models/home_preferences.dart`
+(14 lines). The storage service already imports and exports that model, so legacy
+storage imports and the new direct model imports resolve to the same enum. The
+new display model/repository no longer import storage merely for the value type.
+Enum order, names, preference keys, parsing and writes are unchanged. This closes
+the display checkpoint's direct storage-type dependency without adding a wrapper,
+new file or DI registration.
+
+The storage service remains a 10,807-line legacy boundary under the earlier phase 5
+exception: this follow-up only removes the six-line pure declaration block; no
+storage logic is moved or reformatted. The shared model was already in the measured
+source set. All 41 affected tests pass before and after, including actual storage
+round trips and screen rendering/cached return through both import paths. Analyzer
+identities remain exactly 863; changed-file formatting, diff and the 267-file
+architecture guard pass. No new boilerplate tests or full-suite rerun were needed
+for this declaration-only move. The latest full comparison remains the display
+checkpoint's 8,718 successes / unchanged 51 failures-errors / 20 skips. Evidence:
+`orientation-type-*` and `analyze-orientation-type-*` under
+`.git/refactor-evidence/phase5/`. The remaining phase 5–8 scope is unchanged.
 
 ### 6. Discover and remaining layouts
 

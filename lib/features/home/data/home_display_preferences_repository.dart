@@ -1,4 +1,4 @@
-import '../../../services/storage_service.dart' show HomeCardOrientation;
+import '../../../models/home_preferences.dart' show HomeCardOrientation;
 import '../models/home_display_preferences.dart';
 
 class HomeDisplayPreferencesRepository {

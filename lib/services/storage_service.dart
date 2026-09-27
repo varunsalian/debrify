@@ -53,12 +53,6 @@ export '../models/home_preferences.dart';
 /// a muted Home hero should not mute a detail page you opened deliberately.
 enum AmbientTrailerSurface { homeHero, detail }
 
-/// Artwork orientation for TITLE cards on the Home layouts: portrait 2:3
-/// posters or landscape 16:9 backdrops. Favourites, channel, and playlist
-/// rows keep their own geometry — a station logo or folder is not a title.
-/// Promenade is landscape by design and ignores the portrait setting.
-enum HomeCardOrientation { portrait, landscape }
-
 /// How the Android TV UI is rastered — see
 /// [StorageService.getTvRenderQuality]. Three states, not a switch: the
 /// automatic branch is the ABSENCE of the stored pref, because that absence is
