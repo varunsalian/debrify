@@ -4,6 +4,7 @@ import '../features/home/presentation/home_atrium_layout.dart';
 import '../features/home/presentation/home_mosaic_layout.dart';
 import '../features/home/presentation/home_deck_layout.dart';
 import '../features/home/presentation/home_deck_peeks.dart';
+import '../features/home/presentation/home_stage_row_label.dart';
 import '../features/home/presentation/home_canvas_tabs.dart';
 import '../features/home/presentation/home_canvas_shelf.dart';
 import '../features/home/presentation/home_canvas_layout.dart';
@@ -373,7 +374,6 @@ const double _kTonightThumbShare = 0.40;
 // ATRIUM metrics. The wall's height is DERIVED from these (never guessed),
 // so the dossier column beside it can't be crowded by a taller row.
 const double _kAtriumSplit = 0.38;
-const double _kAtriumLabelFontSize = 12.0;
 const double _kAtriumLabelGap = 10;
 
 /// The share of the board Atrium's two-row wall may occupy. The row box is
@@ -382,7 +382,7 @@ const double _kAtriumLabelGap = 10;
 const double _kAtriumWallBudget = 0.64;
 
 double _atriumLabelHeight(BuildContext context) =>
-    MediaQuery.textScalerOf(context).scale(_kAtriumLabelFontSize) * 1.35;
+    MediaQuery.textScalerOf(context).scale(homeStageRowLabelFontSize) * 1.35;
 
 /// Dim painted over every strip cell that isn't focused, so the centre-locked
 /// cell reads as the lit one. A flat fill inside the card's own clip (see
@@ -8277,7 +8277,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           style: TextStyle(
-            fontSize: _kAtriumLabelFontSize,
+            fontSize: homeStageRowLabelFontSize,
             // Match the reserved wall-label extent on the partial Android TV
             // board. tvOS keeps its existing typography and opening behavior.
             height: PlatformUtil.isAndroidTvCached ? 1.35 : null,
@@ -8721,7 +8721,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
                     maxWidth: geometry.identityWidth,
                   ),
           ),
-          railLabel: _deckRailLabel(view),
+          railLabel: buildHomeStageRowLabel(
+            context: this.context,
+            title: _canvasTabTitle(view.rails, view.index),
+          ),
           itemBuilder: (context, col) => Padding(
             padding: const EdgeInsets.symmetric(horizontal: 7),
             child: Center(
@@ -8746,49 +8749,6 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
           ),
         );
       },
-    );
-  }
-
-  /// Deck's rail label — the same quiet caps as Atrium's rows, with the
-  /// stacked chevron pair that says UP/DOWN changes rails.
-  Widget _deckRailLabel(HomeStageRailView view) {
-    final app = AppThemeScope.of(context);
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.keyboard_arrow_up_rounded,
-              size: 13,
-              color: app.fade(app.core.tx, 0.45),
-            ),
-            Transform.translate(
-              offset: const Offset(0, -5),
-              child: Icon(
-                Icons.keyboard_arrow_down_rounded,
-                size: 13,
-                color: app.fade(app.core.tx, 0.45),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(width: 12),
-        Flexible(
-          child: Text(
-            _canvasTabTitle(view.rails, view.index).toUpperCase(),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontSize: _kAtriumLabelFontSize,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 1.8,
-              color: app.fade(app.core.tx, 0.86),
-            ),
-          ),
-        ),
-      ],
     );
   }
 
@@ -9368,7 +9328,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       children: [
         Padding(
           padding: const EdgeInsets.only(right: _kTonightPadX),
-          child: _deckRailLabel(view),
+          child: buildHomeStageRowLabel(
+            context: context,
+            title: _canvasTabTitle(view.rails, view.index),
+          ),
         ),
         const SizedBox(height: _kAtriumLabelGap),
         SizedBox(
