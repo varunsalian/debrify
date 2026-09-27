@@ -1,3 +1,4 @@
+import '../features/home/presentation/home_canvas_shelf.dart';
 import '../features/home/presentation/home_canvas_layout.dart';
 import '../features/home/presentation/home_stage_corner_painter.dart';
 import '../features/home/presentation/home_stage_favorite_identity.dart';
@@ -7680,121 +7681,71 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
                   ),
           ),
           tabs: _canvasTabs(rails, railIndex),
-          shelfBuilder: (cardH, cardW, favCardW) => favRail
-              ? ListView.builder(
-                  // Keyed by rail IDENTITY, like the meta shelf.
-                  key: ValueKey('canvas-rail-$railKey'),
-                  scrollDirection: Axis.horizontal,
-                  clipBehavior: Clip.hardEdge,
-                  cacheExtent: 400,
-                  padding: const EdgeInsets.symmetric(horizontal: 48),
-                  itemCount: _canvasFavItemCount(rail.favKind!),
-                  itemBuilder: (context, col) => Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 7),
-                    // Centred like the meta cells: splits the
-                    // vertical slack so the focus scale's lift
-                    // isn't clipped at the viewport's top edge.
-                    child: Center(
-                      child: SizedBox(
-                        width: favCardW,
-                        child: _canvasFavCell(rail.favKind!, railKey, col),
+          shelfBuilder: (cardH, cardW, favCardW) => buildHomeCanvasShelf(
+            railKey: railKey,
+            itemCount: favRail
+                ? _canvasFavItemCount(rail.favKind!)
+                : items.length,
+            cardWidth: favRail ? favCardW : cardW,
+            cardHeight: favRail ? null : cardH,
+            itemBuilder: (context, col) {
+              if (favRail) return _canvasFavCell(rail.favKind!, railKey, col);
+              final item = items[col];
+              return HomeBoardCell(
+                onLeftEdge: () => MainPageBridge.focusTvSidebar?.call(),
+                item: item,
+                isTelevision: true,
+                focusNode: nodes[col],
+                column: col,
+                rowNodes: nodes,
+                hasBoundSource: _isBound(item),
+                // Canvas focus grammar: white ring (the
+                // violet stays with classic chrome).
+                ringColor: Colors.white,
+                aspectRatio: _stageCardAspect(rail),
+                artUrl: _stageCardArt(rail, item),
+                focusArtUrl: _stageCollection(rail)?.focusArtOf(item),
+                focusVideoUrl: _stageCollection(rail)?.focusVideoOf(item),
+                focusGlowEnabled:
+                    _stageCollection(rail)?.collection.focusGlowEnabled ??
+                    false,
+                showTitleOverlay:
+                    !(_stageCollection(rail)?.folderOf(item)?.hideTitle ??
+                        false),
+                progress: rail.cw?.progressOf(item),
+                episodeLabel: rail.cw?.episodeOf(item),
+                onQuickPlay: rail.cw != null || _pikpakOnly
+                    ? null
+                    : () => _sectionQuickPlay(
+                        _sections[rail.sectionIndex!],
+                        item,
                       ),
-                    ),
-                  ),
-                )
-              : ListView.builder(
-                  // Keyed by rail IDENTITY: insertions above the active
-                  // rail must never read as a content swap.
-                  key: ValueKey('canvas-rail-$railKey'),
-                  scrollDirection: Axis.horizontal,
-                  clipBehavior: Clip.hardEdge,
-                  cacheExtent: 400,
-                  padding: const EdgeInsets.symmetric(horizontal: 48),
-                  itemCount: items.length,
-                  itemBuilder: (context, col) {
-                    final item = items[col];
-                    return Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 7),
-                      child: Center(
-                        child: SizedBox(
-                          width: cardW,
-                          height: cardH,
-                          child: HomeBoardCell(
-                            onLeftEdge: () =>
-                                MainPageBridge.focusTvSidebar?.call(),
-                            item: item,
-                            isTelevision: true,
-                            focusNode: nodes[col],
-                            column: col,
-                            rowNodes: nodes,
-                            hasBoundSource: _isBound(item),
-                            // Canvas focus grammar: white ring (the
-                            // violet stays with classic chrome).
-                            ringColor: Colors.white,
-                            aspectRatio: _stageCardAspect(rail),
-                            artUrl: _stageCardArt(rail, item),
-                            focusArtUrl: _stageCollection(
-                              rail,
-                            )?.focusArtOf(item),
-                            focusVideoUrl: _stageCollection(
-                              rail,
-                            )?.focusVideoOf(item),
-                            focusGlowEnabled:
-                                _stageCollection(
-                                  rail,
-                                )?.collection.focusGlowEnabled ??
-                                false,
-                            showTitleOverlay:
-                                !(_stageCollection(
-                                      rail,
-                                    )?.folderOf(item)?.hideTitle ??
-                                    false),
-                            progress: rail.cw?.progressOf(item),
-                            episodeLabel: rail.cw?.episodeOf(item),
-                            onQuickPlay: rail.cw != null || _pikpakOnly
-                                ? null
-                                : () => _sectionQuickPlay(
-                                    _sections[rail.sectionIndex!],
-                                    item,
-                                  ),
-                            onLongPress: rail.cw == null
-                                ? null
-                                : () => _openCwCardMenu(
-                                    rail.cw!,
-                                    item,
-                                    rail.cwIndex,
-                                    col,
-                                  ),
-                            onFocused: () {
-                              _setHero(item);
-                              _canvasCols[railKey] = col;
-                            },
-                            onUp: () => _stageSwitchRail(-1),
-                            onDown: () => _stageSwitchRail(1),
-                            onOpen: () {
-                              if (rail.cw != null) {
-                                rail.cw!.onOpen(item);
-                              } else {
-                                _sectionOpenItem(
-                                  _sections[rail.sectionIndex!],
-                                  item,
-                                );
-                              }
-                            },
-                            onNearEnd: rail.sectionIndex == null
-                                ? null
-                                : () => _loadMoreRow(rail.sectionIndex!),
-                          ),
-                        ),
-                      ),
-                    );
-                  },
-                ),
+                onLongPress: rail.cw == null
+                    ? null
+                    : () => _openCwCardMenu(rail.cw!, item, rail.cwIndex, col),
+                onFocused: () {
+                  _setHero(item);
+                  _canvasCols[railKey] = col;
+                },
+                onUp: () => _stageSwitchRail(-1),
+                onDown: () => _stageSwitchRail(1),
+                onOpen: () {
+                  if (rail.cw != null) {
+                    rail.cw!.onOpen(item);
+                  } else {
+                    _sectionOpenItem(_sections[rail.sectionIndex!], item);
+                  }
+                },
+                onNearEnd: rail.sectionIndex == null
+                    ? null
+                    : () => _loadMoreRow(rail.sectionIndex!),
+              );
+            },
+          ),
         );
       },
     );
   }
-
   /// A post-frame focus request that is only honoured if BOTH the layout and
   /// the stage generation are unchanged when the frame lands. Without this a
   /// callback posted by one layout can grab focus inside the next one (style
