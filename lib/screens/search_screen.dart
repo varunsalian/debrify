@@ -12,6 +12,7 @@ import '../features/home/presentation/home_tonight_rail.dart';
 import '../features/home/presentation/home_stage_hold_latch.dart';
 import '../features/home/presentation/home_stage_focus_requests.dart';
 import '../features/home/presentation/home_stage_deferred_right.dart';
+import '../features/home/presentation/home_stage_deferred_advance.dart';
 import '../features/home/presentation/home_canvas_tabs.dart';
 import '../features/home/presentation/home_canvas_shelf.dart';
 import '../features/home/presentation/home_canvas_layout.dart';
@@ -5320,8 +5321,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       _boardAppliedAt = DateTime.now();
       // Rail keys are content-addressed by stable Home-row id, so a reload can
       // preserve the active rail even when its numeric section index changes.
-      _pendingStageAdvanceKey = null;
-      _pendingStageAdvanceAt = null;
+      _stageDeferredAdvance.invalidateForBoardReseed();
       _stageFocusRequests.invalidate();
     }
     if (preserveFocus) {
@@ -6024,21 +6024,11 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     readStyle: () => _homeStyleEffective,
   );
 
-  /// Deferred stage move: DOWN past the last rail asked for a batch that had
-  /// not arrived. Keyed by the rail the user pressed DOWN on, so a batch that
-  /// lands after they have moved elsewhere is ignored.
-  String? _pendingStageAdvanceKey;
-  DateTime? _pendingStageAdvanceAt;
-
-  /// The node that pressed the key. A deferred move is only ever completed
-  /// while THAT node still holds focus — the rail key alone isn't enough
-  /// (moving LEFT along the same rail, or out to the sidebar, leaves it
-  /// unchanged), and a late batch must never yank the user somewhere else.
-  FocusNode? _pendingStageOrigin;
-
-  /// Atrium-only: the pending move fills the window's EMPTY lower row rather
-  /// than scrolling the window on.
-  bool _pendingStageAdvanceFillsLower = false;
+  late final HomeStageDeferredAdvance _stageDeferredAdvance =
+      HomeStageDeferredAdvance(
+        stageActive: () => _stageActive,
+        maxAge: _pendingDownMaxAge,
+      );
 
   late final HomeStageDeferredRight _stageDeferredRight = HomeStageDeferredRight(
     currentRail: () => _canvasRailKey,
@@ -6046,23 +6036,6 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     scheduleFocus: _stageFocusRequests.schedule,
     maxAge: _pendingDownMaxAge,
   );
-
-  /// Record a deferred rail move, anchored to whoever pressed the key.
-  void _deferStageAdvance(String railKey, {bool fillsLower = false}) {
-    final origin = FocusManager.instance.primaryFocus;
-    if (origin == null) return;
-    _pendingStageAdvanceKey = railKey;
-    _pendingStageAdvanceAt = DateTime.now();
-    _pendingStageAdvanceFillsLower = fillsLower;
-    _pendingStageOrigin = origin;
-  }
-
-  /// Staleness test for a deferred rail advance.
-  bool _stageDeferralStillValid(DateTime at, FocusNode? origin) =>
-      _stageActive &&
-      origin != null &&
-      identical(FocusManager.instance.primaryFocus, origin) &&
-      DateTime.now().difference(at) <= _pendingDownMaxAge;
 
   void _maybeCompleteStageRight() {
     _stageDeferredRight.complete((key, column) {
@@ -6092,10 +6065,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     _atriumFocusedRailKey.value = null;
     _tonightCard.value = null;
     _stageCol.value = 0;
-    _pendingStageAdvanceKey = null;
-    _pendingStageAdvanceAt = null;
-    _pendingStageAdvanceFillsLower = false;
-    _pendingStageOrigin = null;
+    _stageDeferredAdvance.reset();
     _stageDeferredRight.reset();
     _stageHold.reset();
     _stageFocusRequests.invalidate();
@@ -7401,7 +7371,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       if (delta > 0 && _boardCanAdvance) {
         // Remember the move so it COMPLETES when the batch lands — otherwise
         // the keypress is silently eaten and the user has to press again.
-        _deferStageAdvance(_canvasRailKeyOf(rails[current]));
+        _stageDeferredAdvance.defer(_canvasRailKeyOf(rails[current]));
         _loadMoreBoard();
       } else if (delta > 0) {
         _focusCatalogContinuation();
@@ -7572,24 +7542,19 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   /// the rail they pressed DOWN from, and the request hasn't gone stale — a
   /// late batch must never yank focus out of wherever they went instead.
   void _maybeCompleteStageAdvance() {
-    final key = _pendingStageAdvanceKey;
-    final at = _pendingStageAdvanceAt;
-    final fillLower = _pendingStageAdvanceFillsLower;
-    final origin = _pendingStageOrigin;
-    if (key == null || at == null) return;
-    final rails = _stageRails;
-    final i = rails.indexWhere((r) => _canvasRailKeyOf(r) == key);
-    if (_boardRowsPending && i >= 0 && i + 1 >= rails.length &&
-        _stageDeferralStillValid(at, origin)) {
-      // A partial arrival above this rail hasn't supplied the requested next
-      // row yet. Keep the user's move pending for the rest of the batch.
-      return;
-    }
-    _pendingStageAdvanceKey = null;
-    _pendingStageAdvanceAt = null;
-    _pendingStageAdvanceFillsLower = false;
-    _pendingStageOrigin = null;
-    if (!_stageDeferralStillValid(at, origin)) return;
+    late final List<HomeRail> rails;
+    late final int i;
+    final move = _stageDeferredAdvance.take(
+      waitingForMore: (key) {
+        rails = _stageRails;
+        i = rails.indexWhere((r) => _canvasRailKeyOf(r) == key);
+        return _boardRowsPending && i >= 0 && i + 1 >= rails.length;
+      },
+    );
+    if (move == null) return;
+    final key = move.railKey;
+    final fillLower = move.fillsLower;
+    final origin = move.origin;
     if (i < 0 || i + 1 >= rails.length) return;
     // Still where the key was pressed? On Atrium that means the focused ROW,
     // everywhere else the active rail.
@@ -7920,7 +7885,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       // Nothing below the bottom row yet — pull the next catalog batch and
       // remember the move so it completes when the rail lands.
       if (_boardCanAdvance) {
-        _deferStageAdvance(
+        _stageDeferredAdvance.defer(
           _canvasRailKeyOf(rails[min(cur + 1, rails.length - 1)]),
         );
         _loadMoreBoard();
@@ -8136,7 +8101,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
                         // No lower row YET — remember the move so focus drops into
                         // it when the batch lands, instead of eating the keypress.
                         if (_boardCanAdvance) {
-                          _deferStageAdvance(railKey, fillsLower: true);
+                          _stageDeferredAdvance.defer(railKey, fillsLower: true);
                           _loadMoreBoard();
                         }
                       }))
@@ -9512,10 +9477,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         _resumeHomeProgress();
       } else {
         _clearDeferredDown();
-        _pendingStageAdvanceKey = null;
-        _pendingStageAdvanceAt = null;
-        _pendingStageOrigin = null;
-        _pendingStageAdvanceFillsLower = false;
+        _stageDeferredAdvance.reset();
       }
     }
     if (_heroTrailerActive) {
