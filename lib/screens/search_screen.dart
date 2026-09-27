@@ -1,3 +1,5 @@
+import '../models/source_appearance.dart';
+import '../features/search/application/keyword_appearance_controller.dart';
 import '../features/home/application/home_trailer_preferences_controller.dart';
 import '../features/home/models/home_trailer_preferences.dart';
 import '../features/home/application/home_default_view.dart';
@@ -1794,7 +1796,6 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   @override
   void initState() {
     super.initState();
-    unawaited(_loadSourceTextFormatting());
     _titleSearch.addListener(_publishTitleSuggestions);
     _searchController.addListener(_onTitleSearchEditingChanged);
     ProfileRuntime.scope.addListener(_onSearchProfileChanged);
@@ -1815,6 +1816,14 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       initialKeywordCache:
           keywordSnapshot?.cache ?? const KeywordCacheState.empty(),
     );
+    _keywordAppearanceSubscription = ref.listenManual(
+      keywordAppearanceProvider(_searchSession),
+      (previous, next) {},
+    );
+    _keywordAppearanceController = ref.read(
+      keywordAppearanceProvider(_searchSession).notifier,
+    );
+    unawaited(_loadSourceTextFormatting());
     // Retain state for this screen's mounted lifetime, including covered routes.
     // Returning from a pushed list must not discard results or replay a request.
     _listsSubscription = ref.listenManual(
@@ -2731,6 +2740,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     _continuationLayoutSubscription.close();
     _listsSubscription.close();
     _catalogSubscription.close();
+    _keywordAppearanceSubscription.close();
     _keywordResultsSubscription.close();
     _keywordSearchSubscription.close();
     _keywordCacheSubscription.close();
@@ -5949,14 +5959,16 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   HomeCardOrientation get _homeCardOrientation => _homeDisplay.orientation;
   bool get _hideHomeCardTitlesAndRatings => _homeDisplay.hideTitlesAndRatings;
   bool get _hideHomeCatalogAddonNames => _homeDisplay.hideCatalogAddonNames;
-  bool _useAddonSourceText = false;
-  bool _showAddonSourceLogos = false;
+  late final KeywordAppearanceController _keywordAppearanceController;
+  late final ProviderSubscription<SourceAppearance>
+  _keywordAppearanceSubscription;
+  bool get _useAddonSourceText => _keywordAppearanceSubscription.read().text;
+  bool get _showAddonSourceLogos => _keywordAppearanceSubscription.read().logos;
 
-  Future<void> _loadSourceTextFormatting() async {
-    final value = await StorageService.getUseAddonTextFormatting();
-    final logos = await StorageService.getShowAddonLogos();
-    if (mounted) setState(() { _useAddonSourceText = value; _showAddonSourceLogos = logos; });
-  }
+  Future<void> _loadSourceTextFormatting() => _keywordAppearanceController.load(
+    isCurrent: () => mounted,
+    onAccepted: () => setState(() {}),
+  );
 
   bool get _hideHomeCollectionNames => _homeDisplay.hideCollectionNames;
   bool get _spotlightFocusDetails => _homeDisplay.spotlightFocusDetails;

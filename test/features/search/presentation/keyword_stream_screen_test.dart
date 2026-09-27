@@ -1,3 +1,7 @@
+import 'package:debrify/features/search/application/keyword_appearance_dependencies.dart';
+import 'package:debrify/models/source_appearance.dart';
+import 'package:debrify/models/torrent.dart';
+import 'package:debrify/widgets/source_row.dart';
 import 'package:debrify/features/home/application/home_default_view_dependencies.dart';
 import 'package:debrify/features/search/application/keyword_defaults_dependencies.dart';
 import 'package:debrify/models/torrent_filter_state.dart';
@@ -32,9 +36,11 @@ void main() {
   late FakeKeywordDefaultsRepository defaults;
   late MockClient client;
   var homeDefaultReads = 0;
+  SourceAppearanceReader? appearanceReader;
 
   setUp(() {
     homeDefaultReads = 0;
+    appearanceReader = null;
     disableRuntimeFonts();
     ProfileRuntime.debugReset();
     ProfileRuntime.initializeLegacy();
@@ -80,6 +86,10 @@ void main() {
 
   Widget application({bool home = false}) => ProviderScope(
     overrides: [
+      if (appearanceReader != null)
+        keywordAppearanceReaderProvider.overrideWith(
+          (ref, session) => appearanceReader!,
+        ),
       homeDefaultViewReaderProvider.overrideWithValue(() async {
         homeDefaultReads++;
         return 'keyword';
@@ -108,6 +118,41 @@ void main() {
 
   CinemaSourcesLayout layout(WidgetTester tester) =>
       tester.widget<CinemaSourcesLayout>(find.byType(CinemaSourcesLayout));
+
+  testWidgets(
+    'keyword row appearance refresh preserves results and rejects late startup',
+    (tester) async {
+      final startup = Completer<SourceAppearance>();
+      var reads = 0;
+      appearanceReader = () => ++reads == 1
+          ? startup.future
+          : Future.value((text: true, logos: false));
+      await mount(tester, home: true);
+      final row = Torrent.fromJson({
+        ...keywordTorrent('Appearance fixture').toJson(),
+        'stream_label': 'Addon title',
+        'stream_description': 'Addon description',
+        'addon_display_name': 'Addon name',
+      });
+      await drive(tester, () => repository.requests.single.complete([row]));
+      SourceRow rendered() =>
+          tester.widget<SourceRow>(find.byType(SourceRow).first);
+      expect(rendered().addonText, isNull);
+      expect(rendered().addonName, isNull);
+      await drive(tester, MainPageBridge.notifyHomeSettingsChanged);
+      expect(rendered().addonText, row.addonPresentation);
+      expect(rendered().addonText, isNotNull);
+      expect(rendered().addonName, isNull);
+      await drive(tester, () => startup.complete((text: false, logos: true)));
+      expect(rendered().addonText, row.addonPresentation);
+      expect(rendered().addonName, isNull);
+      expect(reads, 2);
+      expect(repository.requests, hasLength(1));
+      expect(tester.takeException(), isNull);
+      await drive(tester, () => tester.pumpWidget(const SizedBox()));
+      await tester.pump(const Duration(seconds: 7));
+    },
+  );
 
   testWidgets(
     'frozen final snapshot retains authoritative raw rows and legacy displayed rows',

@@ -1,3 +1,5 @@
+import '../../../models/source_appearance.dart';
+import '../../../services/source_appearance_preferences.dart';
 import '../../../services/profiles/profile_runtime.dart';
 import '../../../services/profiles/profile_session_memory.dart';
 import '../../../services/source_priority.dart';
@@ -46,15 +48,6 @@ class StoredSourceSettingsRepository implements SourceSettingsRepository {
   }
 
   @override
-  Future<({bool text, bool logos})> loadAppearance() async {
-    if (!isCurrent) return (text: false, logos: false);
-    return _read(() async {
-      final text = await StorageService.getUseAddonTextFormatting();
-      if (!isCurrent) return (text: false, logos: false);
-      final logos = await StorageService.getShowAddonLogos();
-      return isCurrent
-          ? (text: text, logos: logos)
-          : (text: false, logos: false);
-    });
-  }
+  Future<SourceAppearance> loadAppearance() =>
+      readSourceAppearance(session.owner);
 }
