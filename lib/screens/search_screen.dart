@@ -31,6 +31,7 @@ import '../features/home/application/home_stage_metadata.dart';
 import '../features/home/application/home_hero_metadata_policy.dart';
 import '../features/home/application/home_hero_metadata_loader.dart';
 import '../features/home/application/home_hero_metadata_dependencies.dart';
+import '../features/home/application/home_hero_trailer_dependencies.dart';
 import '../features/home/presentation/home_classic_layout.dart';
 import '../features/home/presentation/home_takeover_info.dart';
 import '../features/home/presentation/home_trailer_transitions.dart';
@@ -149,7 +150,6 @@ import 'metadata_explore_page.dart';
 import '../widgets/metadata_presentation_mixin.dart';
 import '../models/metadata_preferences.dart';
 import '../services/metadata_preferences_service.dart';
-import '../services/metadata_provider_service.dart';
 import '../widgets/see_all/discover_browsing_input.dart';
 import '../services/home_load_deadline.dart';
 import '../services/home_load_progress.dart';
@@ -230,7 +230,6 @@ import '../utils/format_tag_detector.dart';
 import '../utils/tv_keys.dart';
 import '../utils/tv_search_focus_handoff.dart';
 import '../services/app_route_observer.dart';
-import '../services/imdb_trailer_service.dart';
 import '../services/youtube_service.dart';
 import '../widgets/add_source_picker_dialog.dart';
 import '../widgets/debrid_action_sheet.dart';
@@ -9246,67 +9245,14 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       }
 
       try {
-        // YouTube id: catalog rows rarely carry it, so fall back to the /meta
-        // details (the same fetch — and cache — the hero enrichment uses).
-        final imdb = item.imdbId ?? (item.id.startsWith('tt') ? item.id : null);
-        final metadataPrefs =
-            await MetadataPreferencesService.loadForBackground(
-              isCurrent: () =>
-                  mounted &&
-                  req == _heroTrailerReq &&
-                  scope == ProfileRuntime.scope.value,
-            );
-        if (metadataPrefs == null) {
-          fail();
-          return;
-        }
-        final candidates = await MetadataProviderService.instance.trailers(
-          item,
-          () async {
-            String? ytId = item.trailerYtId;
-            if (ytId == null || ytId.isEmpty) {
-              if (imdb == null) return null;
-              try {
-                final full = await _stremio.fetchMetaDetails(
-                  imdbId: imdb,
-                  type: item.type,
-                );
-                ytId = full?.trailerYtId;
-              } catch (_) {
-                // Meta fetch failed — the IMDb backup below may still carry it.
-              }
-            }
-            return ytId;
-          },
-          preferences: metadataPrefs,
-        );
-        final ytId = candidates.firstOrNull?.key;
-        final allowBackup =
-            metadataPrefs.provider(MetadataCategory.trailers) ==
-                MetadataPreferences.current ||
-            metadataPrefs.fallback;
+        final resolution = await ref
+            .read(homeHeroTrailerResolverProvider)
+            .resolve(item, isCurrent: current);
+        if (resolution.retired) return;
+        final streams = resolution.streams;
+        if (streams == null) return fail();
+        // Recheck after the resolver's await boundary before publishing video.
         if (!current()) return;
-        // Ambient hero backdrop: resolve at a low cap (small region, weak TV).
-        var streams = (ytId != null && ytId.isNotEmpty)
-            ? await YoutubeService.resolveStreams(
-                ytId,
-                maxHeightOverride: YoutubeService.ambientTrailerMaxHeight,
-                preferVp9: true,
-              )
-            : null;
-        // Backup source: IMDb hosts its own trailer MP4s, so a YouTube block
-        // (or a title with no YouTube id at all) still gets a moving hero.
-        if (allowBackup &&
-            (streams == null || !streams.hasPlayable) &&
-            imdb != null) {
-          if (!current()) return;
-          streams = await ImdbTrailerService.resolveTrailer(
-            imdb,
-            maxHeight: YoutubeService.ambientTrailerMaxHeight,
-          );
-        }
-        if (!current()) return;
-        if (streams == null || !streams.hasPlayable) return fail();
         _heroTrailer.value = streams;
         // Failsafe: a dead/bot-blocked stream can error inside the engine
         // before ever producing a frame, in which case onPlayingChanged never

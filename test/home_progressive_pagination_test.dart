@@ -102,7 +102,10 @@ class HomeFixture {
     await tester.sendKeyEvent(key);
   }, () => client);
 
-  Future<void> mount({Widget Function(Widget)? wrap}) async {
+  Future<void> mount({
+    Widget Function(Widget)? wrap,
+    List<NavigatorObserver> observers = const [],
+  }) async {
     addTearDown(() async {
       await tester.pumpWidget(const SizedBox());
       if (!slow.isCompleted) slow.complete(page('Cancelled', count: 0));
@@ -161,6 +164,7 @@ class HomeFixture {
       await tester.pumpWidget(
         ProviderScope(child: MaterialApp(
           navigatorKey: navigator,
+          navigatorObservers: observers,
           theme: AppThemeAdapter.themed(theme, TextBrightness.bright),
           home: AppThemeScope(
             theme: theme,
