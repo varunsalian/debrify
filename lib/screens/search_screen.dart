@@ -1,3 +1,5 @@
+import '../widgets/skeleton_poster.dart' show BrandLoadingStage;
+import '../features/home/presentation/home_trakt_skeleton_row.dart';
 import '../features/home/presentation/home_stage_rows.dart';
 import '../features/home/presentation/home_stage_identity.dart';
 import '../features/home/presentation/home_stage_scrims.dart';
@@ -218,7 +220,6 @@ import '../widgets/home/row_tag_pill.dart';
 import '../widgets/home/spotlight_board.dart';
 import '../widgets/home/spotlight_catalog_card_cache.dart';
 import '../widgets/search_loading_animation.dart';
-import '../widgets/skeleton_poster.dart';
 import '../widgets/source_row.dart';
 import '../widgets/cinema_sources_layout.dart';
 import '../widgets/source_list_scroll_anchor.dart';
@@ -18273,7 +18274,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     final posterW = _railTitleCardW(context);
     final cellH = _railTitleCardH(context);
     final rowH = cellH + 14;
-    return _TraktSkeletonRow(
+    return HomeTraktSkeletonRow(
       header: _railHeader(
         title: 'Trakt Continue Watching',
         tag: idx == 0 ? (_cwMergeTrakt ? null : 'Movies') : 'Shows',

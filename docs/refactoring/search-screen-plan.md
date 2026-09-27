@@ -3221,6 +3221,23 @@ identity and the corner painter; those are still pending extraction. The parent
 is 18,663 lines, with layout construction/actions/resources still to separate.
 This prerequisite does not itself close the layout or native/performance gates.
 
+#### Reviewed Trakt loading-row presentation
+
+The real reserved Trakt row uses the standalone 63-line
+`lib/features/home/presentation/home_trakt_skeleton_row.dart`, with its sized
+poster helper kept private. Complete body comparison preserves the six lazy
+horizontal placeholders, supplied header, static ShimmerBox, dimensions, padding,
+clipping and non-scrollable physics. No polling, focus, animation or data owner
+moves into the view. The initial import cleanup removed a still-used dependency
+for BrandLoadingStage; compilation caught it, and the parent now explicitly
+retains that symbol. The corrected run passes all 47 Trakt/row-order/progressive
+screen tests and preserves all 861 analyzer identities. Size/import checks pass
+for 345 files. Evidence: `stage-skeleton-*` and `analyze-stage-skeleton*` under
+`.git/refactor-evidence/phase5/`. Existing full-suite baseline is unchanged;
+retirement-wide verification follows the remaining two presentation extractions.
+The stage part is 89 lines and remains temporary; native/compositing checks remain
+open. No trivial constructor/render-copy tests were added for this body move.
+
 Remaining phase-6 work:
 
 - Separate Discover selection/hydration from its grid/stage presentation. Preserve
