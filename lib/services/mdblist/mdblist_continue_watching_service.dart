@@ -1,34 +1,11 @@
 import '../../models/advanced_search_selection.dart';
+import '../../models/mdblist_continue_watching.dart';
 import 'package:flutter/foundation.dart';
 
 import 'mdblist_models.dart';
 import 'mdblist_service.dart';
 
-class MdblistContinueWatchingItem {
-  final AdvancedSearchSelection selection;
-  final int? playbackId;
-  final bool paused;
-  final DateTime? updatedAt;
-  final MdblistScrobbleTarget? clearTarget;
-
-  const MdblistContinueWatchingItem({
-    required this.selection,
-    required this.paused,
-    this.playbackId,
-    this.updatedAt,
-    this.clearTarget,
-  });
-}
-
-class MdblistContinueWatchingSnapshot {
-  final List<MdblistContinueWatchingItem> movies;
-  final List<MdblistContinueWatchingItem> shows;
-
-  const MdblistContinueWatchingSnapshot({
-    this.movies = const [],
-    this.shows = const [],
-  });
-}
+export '../../models/mdblist_continue_watching.dart';
 
 class MdblistContinueWatchingService {
   final MdblistService service;

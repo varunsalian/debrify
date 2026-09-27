@@ -1,3 +1,4 @@
+import '../features/home/models/home_mdblist_continuation.dart';
 import '../features/home/application/home_simkl_continuation_controller.dart';
 import '../features/home/models/home_simkl_continuation.dart';
 import '../features/home/presentation/home_progress_view.dart';
@@ -5440,83 +5441,35 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       );
       return;
     }
-    final snapshot = result.data!;
-    final movies = <StremioMeta>[];
-    final shows = <StremioMeta>[];
-    final progress = <String, double>{};
-    final episodes = <String, String>{};
-    final byImdb = <String, MdblistContinueWatchingItem>{};
-    StremioMeta metaFor(MdblistContinueWatchingItem item) {
-      final selection = item.selection;
-      return StremioMeta(
-        id: selection.imdbId,
-        imdbId: selection.imdbId,
-        type: selection.isSeries ? 'series' : 'movie',
-        name: selection.title,
-        poster: selection.posterUrl,
-        background:
-            'https://images.metahub.space/background/medium/${selection.imdbId}/img',
-        year: selection.year,
-      );
-    }
-
-    void ingest(
-      Iterable<MdblistContinueWatchingItem> items,
-      List<StremioMeta> target,
-    ) {
-      for (final item in items) {
-        final id = item.selection.imdbId;
-        if (byImdb.containsKey(id)) continue;
-        target.add(metaFor(item));
-        byImdb[id] = item;
-        final pct = item.selection.mdblistProgressPercent;
-        if (pct != null) progress[id] = (pct / 100).clamp(0, 1);
-        final se = continueWatchingEpisodeLabel(
-          item.selection.season,
-          item.selection.episode,
-        );
-        if (se != null) episodes[id] = se;
-      }
-    }
-
-    ingest(snapshot.movies, movies);
-    ingest(snapshot.shows, shows);
+    final snapshot = HomeMdblistContinuation.fromSnapshot(result.data!);
     debugPrint(
-      '[MDBListDiag] Home CW ingest token=$token movies=${movies.length} '
-      'shows=${shows.length}',
+      '[MDBListDiag] Home CW ingest token=$token movies=${snapshot.movies.length} '
+      'shows=${snapshot.series.length}',
     );
-    final all = [...movies, ...shows]
-      ..sort((a, b) {
-        final aa = byImdb[a.progressId]?.updatedAt;
-        final bb = byImdb[b.progressId]?.updatedAt;
-        return (bb ?? DateTime.fromMillisecondsSinceEpoch(0)).compareTo(
-          aa ?? DateTime.fromMillisecondsSinceEpoch(0),
-        );
-      });
     final hadRows = _mdblistMovies.isNotEmpty || _mdblistSeries.isNotEmpty;
     _syncCwNodes(
       _mdblistMovieNodes,
-      _cwMergeMdblist ? all.length : movies.length,
+      _cwMergeMdblist ? snapshot.all.length : snapshot.movies.length,
       'mdbmovie',
     );
     _syncCwNodes(
       _mdblistSeriesNodes,
-      _cwMergeMdblist ? 0 : shows.length,
+      _cwMergeMdblist ? 0 : snapshot.series.length,
       'mdbseries',
     );
     setState(() {
-      _mdblistMovies = movies;
-      _mdblistSeries = shows;
-      _mdblistAll = all;
+      _mdblistMovies = snapshot.movies;
+      _mdblistSeries = snapshot.series;
+      _mdblistAll = snapshot.all;
       _mdblistProgress
         ..clear()
-        ..addAll(progress);
+        ..addAll(snapshot.progress);
       _mdblistEpisode
         ..clear()
-        ..addAll(episodes);
+        ..addAll(snapshot.episode);
       _mdblistByImdb
         ..clear()
-        ..addAll(byImdb);
+        ..addAll(snapshot.byImdb);
     });
     if (force) _mdblistCwForcedLoadAt = DateTime.now();
     _maybeAutoFocusBoard();
