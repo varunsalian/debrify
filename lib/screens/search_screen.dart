@@ -1,3 +1,4 @@
+import '../features/home/application/home_post_playback_refresh_controller.dart';
 import '../features/discover/presentation/discover_source_panel.dart';
 import '../features/discover/presentation/discover_content.dart';
 import '../features/discover/application/discover_card_settings_controller.dart';
@@ -868,7 +869,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   /// a session that actually played something can have moved a tracker's
   /// position. Tracker rows changed by menu actions (mark watched, remove from
   /// Continue Watching) are refreshed by those handlers directly.
-  bool _playedSinceRefresh = false;
+  late final ProviderSubscription<bool> _postPlaybackRefreshSubscription;
+  late final HomePostPlaybackRefreshController _postPlaybackRefreshController;
+  bool get _playedSinceRefresh =>
+      _postPlaybackRefreshController.playedSinceRefresh;
 
   // TRAKT Continue Watching rows ("Trakt Movies" / "Trakt Shows"), fetched live
   // from the Trakt account (no local store). Shown after the local rows when
@@ -1778,6 +1782,13 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     _boundCountsController = ref.read(
       homeBoundCountsProvider(homeSession).notifier,
     );
+    _postPlaybackRefreshSubscription = ref.listenManual(
+      homePostPlaybackRefreshProvider(homeSession),
+      (previous, next) {},
+    );
+    _postPlaybackRefreshController = ref.read(
+      homePostPlaybackRefreshProvider(homeSession).notifier,
+    );
     _homeSettingsRefreshSubscription = ref.listenManual(
       homeSettingsRefreshProvider(homeSession),
       (previous, next) {},
@@ -2632,6 +2643,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     }
     _pikpakOnlySubscription.close();
     _boundCountsSubscription.close();
+    _postPlaybackRefreshSubscription.close();
     _homeSettingsRefreshSubscription.close();
     _heroTintSubscription.close();
     _heroLiveSubscription.close();
@@ -3399,7 +3411,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   Future<void> _openIptvCwItem(StremioMeta item) async {
     final entry = _iptvCwByKey[item.id];
     if (entry == null) return;
-    _playedSinceRefresh = true;
+    _markPlaybackStarted();
     await IptvCwRouter.open(context, entry, isTelevision: widget.isTelevision);
     if (!mounted) return;
     // Off-TV push() awaits to the pop; on TV the native-return hook
@@ -15821,7 +15833,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   }
 
   /// A real content player launched — see [_playedSinceRefresh].
-  void _markPlaybackStarted() => _playedSinceRefresh = true;
+  void _markPlaybackStarted() =>
+      _postPlaybackRefreshController.markPlaybackStarted();
 
   /// Re-read everything a finished playback (or a detail/See-All visit) can
   /// change: local Continue Watching, then — when something actually played —
@@ -15838,41 +15851,25 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   /// Fire-and-forget from route callbacks and the playback-return listener, so
   /// a transient storage/network error must not become an unhandled async
   /// exception (a stale row is recoverable; a crash-log isn't warranted).
-  Future<void> _refreshAfterPlayback({bool trackers = false}) async {
-    _seriesResumeCache.clear();
-    // Consume the latch up front: a second refresh racing this one must not
-    // repeat the tracker fetches this one is already doing.
-    final withTrackers = trackers || _playedSinceRefresh;
-    _playedSinceRefresh = false;
-    try {
-      await _loadMyWatchlist();
-      if (!mounted) return;
-      await _loadContinueWatching();
-      if (!mounted) return;
-      await _loadIptvContinueWatching();
-      if (!mounted) return;
-      // The dedicated Search tab never renders the tracker rows (mirrors the
-      // guard in _onIntegrationsChanged) — don't spend the calls there.
-      if (withTrackers && !widget.searchMode) {
-        await Future.wait([
-          _loadTraktContinueWatching(refreshBound: false),
-          _loadSimklContinueWatching(refreshBound: false),
-          // A scrobble revision already queued (pending) or just completed
-          // (force-fresh) the authoritative MDBList reload; loading here too
-          // would only repeat it or fetch pre-propagation data it replaces.
-          // When no scrobble fired (e.g. external playback), load as before.
-          if (_mdblistContinuationController.shouldRefreshAfterPlayback(
-            DateTime.now(),
-          ))
+  Future<void> _refreshAfterPlayback({bool trackers = false}) =>
+      _postPlaybackRefreshController.refresh(
+        searchMode: widget.searchMode,
+        trackers: trackers,
+        isCurrent: () => mounted,
+        clearResume: _seriesResumeCache.clear,
+        watchlist: _loadMyWatchlist,
+        local: _loadContinueWatching,
+        iptv: _loadIptvContinueWatching,
+        trakt: () => _loadTraktContinueWatching(refreshBound: false),
+        simkl: () => _loadSimklContinueWatching(refreshBound: false),
+        shouldRefreshMdblist: () => _mdblistContinuationController
+            .shouldRefreshAfterPlayback(DateTime.now()),
+        mdblist: () =>
             _loadMdblistContinueWatching(refreshBound: false, force: true),
-        ]);
-        if (!mounted) return;
-      }
-      await _refreshBoundSources();
-    } catch (e) {
-      debugPrint('SearchScreen: post-playback refresh failed: $e');
-    }
-  }
+        boundSources: _refreshBoundSources,
+        onError: (error) =>
+            debugPrint('SearchScreen: post-playback refresh failed: $error'),
+      );
 
   /// Playback ran in a separate ACTIVITY and the app just came back (see
   /// [MainPageBridge.notifyPlaybackReturned]). Only refresh when the board is

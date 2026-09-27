@@ -1,3 +1,10 @@
+import 'package:debrify/features/home/application/home_watchlist_dependencies.dart';
+import 'package:debrify/features/home/application/home_local_continuation_dependencies.dart';
+import 'package:debrify/features/home/application/home_iptv_continuation_dependencies.dart';
+import 'package:debrify/features/home/application/home_bound_counts_dependencies.dart';
+import 'package:debrify/features/home/data/home_bound_counts_repository.dart';
+import 'package:debrify/services/iptv_cw_history.dart';
+import 'fixtures/home_continuation_fixture.dart' show continuationRepository;
 import 'package:debrify/screens/see_all/trakt_see_all_screen.dart';
 import 'package:debrify/features/home/models/home_trakt_continuation_state.dart';
 import 'dart:async';
@@ -35,6 +42,7 @@ final class TraktStateObserver extends ProviderObserver {
 void main() {
   for (final mode in [
     'active',
+    'playback',
     'profile',
     'dispose',
     'overlap',
@@ -91,6 +99,19 @@ void main() {
           ProviderScope(
             observers: [observer],
             overrides: [
+              if (mode == 'playback') ...[
+                homeWatchlistReaderProvider.overrideWithValue(() async => []),
+                homeLocalContinuationRepositoryProvider.overrideWithValue(
+                  continuationRepository(readItems: () async => []),
+                ),
+                homeIptvContinuationRepositoryProvider.overrideWithValue(
+                  IptvCwHistory(readHistory: () async => []),
+                ),
+                homeBoundCountsRepositoryProvider.overrideWith(
+                  (ref, session) =>
+                      HomeBoundCountsRepository(readCount: (_, _) async => 0),
+                ),
+              ],
               homeTraktContinuationRepositoryProvider.overrideWithValue(
                 HomeTraktContinuationRepository(
                   isAuthenticated: () async {
@@ -157,7 +178,29 @@ void main() {
           .evaluate()
           .map((element) => Focus.maybeOf(element))
           .whereType<FocusNode>();
-      if (mode == 'active') {
+      if (mode == 'playback') {
+        addTearDown(MainPageBridge.notifyContentPlaybackStopped);
+        Future<void> returnFromPlayback({bool? trailer}) async {
+          await drive(() {
+            if (trailer != null) {
+              MainPageBridge.notifyPlayerLaunching(isTrailer: trailer);
+            }
+            MainPageBridge.notifyPlaybackReturned();
+          });
+          for (var i = 0; i < 4; i++) {
+            await drive(() {});
+            await pump();
+          }
+        }
+
+        await returnFromPlayback(trailer: true);
+        expect(calls, ['auth', 'movies', 'shows']);
+        await returnFromPlayback(trailer: false);
+        expect(calls, ['auth', 'movies', 'shows', 'auth', 'movies', 'shows']);
+        await returnFromPlayback();
+        expect(calls, ['auth', 'movies', 'shows', 'auth', 'movies', 'shows']);
+        expect(cardNodes(), isNotEmpty);
+      } else if (mode == 'active') {
         final node = cardNodes().single;
         node.requestFocus();
         await pump();
