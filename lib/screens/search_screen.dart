@@ -1,3 +1,4 @@
+import '../features/home/presentation/home_hero_shell_bridge.dart';
 import '../features/home/application/home_hero_tint_loader.dart';
 import '../features/home/application/home_hero_tint_dependencies.dart';
 import '../features/home/presentation/home_hero_swap.dart';
@@ -236,7 +237,6 @@ import '../utils/episode_progress_merge.dart';
 import '../utils/format_tag_detector.dart';
 import '../utils/tv_keys.dart';
 import '../utils/tv_search_focus_handoff.dart';
-import '../services/app_route_observer.dart';
 import '../services/youtube_service.dart';
 import '../widgets/add_source_picker_dialog.dart';
 import '../widgets/debrid_action_sheet.dart';
@@ -1497,6 +1497,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   final ValueNotifier<bool> _heroLiveTakeover = ValueNotifier<bool>(false);
   late final ProviderSubscription<HomeHeroLivePreview> _heroLiveSubscription;
 
+  HomeHeroShellBridge? _heroShellBinding;
   final HomeHeroPreviewPolicy _heroPreviewPolicy = HomeHeroPreviewPolicy();
 
   /// Accepted trailer settings, refreshed on settings and sync notifications.
@@ -2102,30 +2103,16 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     // Ambient hero trailer gates (Home board TV only) — read before the board
     // loads so the seeded first spotlight can already schedule its trailer.
     if (_heroTrailerActive) {
-      // The hero doesn't change when the user steps out to the SIDEBAR, so
-      // the rest-debounce (or a playing trailer) would happily continue under
-      // the expanded rail. Kill it on sidebar enter; re-arm the current
-      // spotlight on exit so browsing resumes its normal rest-to-play.
-      MainPageBridge.addTvSidebarFocusListener(_onTvSidebarFocusChanged);
-      // Relay the takeover arc to the app shell so the sidebar rail hides in
-      // lock-step with the board.
-      _heroTrailerTakeover.addListener(_relayChromeDim);
-      // Relay the ambient lights-off state too: the rail dims with the rows
-      // while a trailer plays instead of glowing beside the darkened stage.
-      _heroTrailerShowing.addListener(_relayLightsOff);
-      // Deliberately NO sidebar tint relay any more: the "colour floods the
-      // chrome while the trailer plays" move read as noise, not mood (user
-      // call). Playback now dims the stage neutrally instead ("lights down");
-      // the rail just stays its quiet dark self. (dispose() already resets
-      // the shell's tvHeroTint post-frame, so no stale colour can survive.)
-      // Real content playback (from a detail page, Quick Play, anywhere)
-      // suppresses the trailer for this spotlight — see HomeHeroPreviewPolicy.
-      MainPageBridge.addPlayerLaunchListener(_onContentPlayerLaunch);
-      // While the takeover owns the screen the board is invisible — ANY key
-      // must bring it back, even ones that don't change the hero (fav-row
-      // tiles, a same-title card in another row). Observe-only: the key still
-      // performs its normal action (SELECT opens the showcased title).
-      HardwareKeyboard.instance.addHandler(_onTakeoverKey);
+      _heroShellBinding = HomeHeroShellBridge(
+        takeover: _heroTrailerTakeover,
+        showing: _heroTrailerShowing,
+        onSidebarFocus: _onTvSidebarFocusChanged,
+        onChromeDim: _relayChromeDim,
+        onLightsOff: _relayLightsOff,
+        onContentLaunch: _onContentPlayerLaunch,
+        onKey: _onTakeoverKey,
+        routeAware: this,
+      );
       unawaited(_reloadHeroTrailerPrefs(initial: true));
     }
     // Discover on TV: relay the trailer takeover to the sidebar chrome-dim so
@@ -2658,38 +2645,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     _atriumFocusedRailKey.dispose();
     _tonightCard.dispose();
     _stageCol.dispose();
-    MainPageBridge.removeTvSidebarFocusListener(_onTvSidebarFocusChanged);
-    if (_heroTrailerActive) {
-      _heroTrailerTakeover.removeListener(_relayChromeDim);
-      _heroTrailerShowing.removeListener(_relayLightsOff);
-      MainPageBridge.removePlayerLaunchListener(_onContentPlayerLaunch);
-      HardwareKeyboard.instance.removeHandler(_onTakeoverKey);
-      appRouteObserver.unsubscribe(this);
-      // Reset the shell notifiers AFTER this frame: dispose can run inside
-      // finalizeTree (tab switch mid-takeover) while the tree is locked, and
-      // a synchronous write would markNeedsBuild the sidebar's listener
-      // mid-unmount.
-      if (MainPageBridge.tvChromeDim.value != 0) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          MainPageBridge.tvChromeDim.value = 0;
-        });
-      }
-      if (MainPageBridge.tvHeroTint.value != null) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          MainPageBridge.tvHeroTint.value = null;
-        });
-      }
-      if (MainPageBridge.tvAmbientArt.value != null) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          MainPageBridge.tvAmbientArt.value = null;
-        });
-      }
-      if (MainPageBridge.tvStageLightsOff.value) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          MainPageBridge.tvStageLightsOff.value = false;
-        });
-      }
-    }
+    _heroShellBinding?.dispose();
     _catalogDebounce?.cancel();
     _heroMetadataSubscription.read().dispose();
     _heroSwap.dispose();
@@ -9370,7 +9326,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     }
     if (_heroTrailerActive) {
       final route = ModalRoute.of(context);
-      if (route is PageRoute) appRouteObserver.subscribe(this, route);
+      if (route is PageRoute) _heroShellBinding?.bindRoute(route);
     }
   }
 
