@@ -2,6 +2,10 @@ import 'dart:math' show max, min;
 import 'package:flutter/widgets.dart';
 import 'home_stage_corner_painter.dart';
 
+// TONIGHT metrics. The rail zone is reserved first and the main zone takes
+// what is left, so a short board shrinks the card and drops queue rows rather
+// than overlapping them.
+
 const double homeTonightHorizontalPadding = 48;
 const double _kTonightZoneGap = 22;
 const double homeTonightRailTail = 24;

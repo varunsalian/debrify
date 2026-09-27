@@ -7,6 +7,7 @@ import '../features/home/presentation/home_deck_peeks.dart';
 import '../features/home/presentation/home_stage_row_label.dart';
 import '../features/home/presentation/home_tonight_layout.dart';
 import '../features/home/presentation/home_tonight_header.dart';
+import '../features/home/presentation/home_tonight_queue_list.dart';
 import '../features/home/presentation/home_canvas_tabs.dart';
 import '../features/home/presentation/home_canvas_shelf.dart';
 import '../features/home/presentation/home_canvas_layout.dart';
@@ -354,14 +355,6 @@ const String _discAddonPrefix = DiscoverSources.addonPrefix;
 /// Smallest poster art a stage rail will draw before it is simply too small
 /// to recognise — the floor every derived rail box respects.
 const double _kStageMinPosterH = 56;
-
-// TONIGHT metrics. The rail zone is reserved first and the main zone takes
-// what is left, so a short board shrinks the card and drops queue rows rather
-// than overlapping them.
-
-/// The most of a queue row's width the still may take. The rest is the title
-/// and episode, which is what the row exists to tell you.
-const double _kTonightThumbShare = 0.40;
 
 // ATRIUM metrics. The wall's height is DERIVED from these (never guessed),
 // so the dossier column beside it can't be crowded by a taller row.
@@ -8980,92 +8973,73 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     double queueW,
     bool hasRail,
   ) {
-    // The thumb is capped by the row's WIDTH, not just its height. Sized
-    // purely as `rowH * 16/9` it ate two thirds of a narrow queue and left
-    // the title about ten characters — "Orange Is t…". Whatever is left of
-    // 16:9 after this cap, BoxFit.cover crops.
-    final thumbW = min(rowH * 16 / 9, queueW * _kTonightThumbShare);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Expanded(
-          child: ListView.builder(
-            key: const ValueKey('tonight-queue'),
-            padding: EdgeInsets.zero,
-            clipBehavior: Clip.hardEdge,
-            itemCount: queue.length,
-            itemExtent: rowH + homeTonightRowGap,
-            itemBuilder: (context, i) {
-              final e = queue[i];
-              final cw = e.rail.cw!;
-              final item = cw.items[e.col];
-              return Padding(
-                padding: const EdgeInsets.only(bottom: homeTonightRowGap),
-                child: HomeTonightQueueRow(
-                  item: item,
-                  height: rowH,
-                  thumbWidth: thumbW,
-                  focusNode: cw.nodes[e.col],
-                  episode: cw.episodeOf(item),
-                  progress: cw.progressOf(item),
-                  hasBoundSource: _isBound(item),
-                  onFocused: () {
-                    _tonightZoneIsQueue = true;
-                    _tonightQueueCol = i;
-                    _tonightQueueKey = _tonightQueueKeyOf(e);
-                    _tonightCard.value = HomeTonightCardInfo(
-                      // OK opens the detail page for a Continue Watching card
-                      // everywhere in the app; the HOLD menu is what resumes.
-                      action: 'Open',
-                      // HOLD opens the card menu (Play / Remove) — not a
-                      // direct resume, so it is named for what it is.
-                      holdAction: 'Options',
-                      episode: cw.episodeOf(item),
-                      progress: cw.progressOf(item),
-                    );
-                    _setHero(item);
-                  },
-                  onOpen: () => cw.onOpen(item),
-                  onLongPress: () =>
-                      _openCwCardMenu(cw, item, e.rail.cwIndex, e.col),
-                  onUp: () {
-                    if (_stageHoldSwallow(LogicalKeyboardKey.arrowUp)) return;
-                    if (i > 0) {
-                      _nearestMountedNode(
-                        queue[i - 1].rail.cw!.nodes,
-                        queue[i - 1].col,
-                      )?.requestFocus();
-                    }
-                  },
-                  onDown: () {
-                    if (_stageHoldSwallow(LogicalKeyboardKey.arrowDown)) return;
-                    if (i + 1 < queue.length) {
-                      _nearestMountedNode(
-                        queue[i + 1].rail.cw!.nodes,
-                        queue[i + 1].col,
-                      )?.requestFocus();
-                    } else if (hasRail) {
-                      _tonightFocusRail();
-                    }
-                  },
-                  // HELD down: leave the queue for the rail in one gesture.
-                  // The queue is every Continue Watching item from every
-                  // source flattened into one column, so stepping past it a
-                  // row at a time can be a long walk.
-                  onDownHold: hasRail
-                      ? () => _stageHoldJump(
-                          LogicalKeyboardKey.arrowDown,
-                          _tonightFocusRail,
-                        )
-                      : null,
-                  onLeft: () => MainPageBridge.focusTvSidebar?.call(),
-                ),
-              );
-            },
-          ),
-        ),
-      ],
+    return buildHomeTonightQueueList(
+      itemCount: queue.length,
+      rowHeight: rowH,
+      queueWidth: queueW,
+      itemBuilder: (context, i, thumbW) {
+        final e = queue[i];
+        final cw = e.rail.cw!;
+        final item = cw.items[e.col];
+        return HomeTonightQueueRow(
+          item: item,
+          height: rowH,
+          thumbWidth: thumbW,
+          focusNode: cw.nodes[e.col],
+          episode: cw.episodeOf(item),
+          progress: cw.progressOf(item),
+          hasBoundSource: _isBound(item),
+          onFocused: () {
+            _tonightZoneIsQueue = true;
+            _tonightQueueCol = i;
+            _tonightQueueKey = _tonightQueueKeyOf(e);
+            _tonightCard.value = HomeTonightCardInfo(
+              // OK opens the detail page for a Continue Watching card
+              // everywhere in the app; the HOLD menu is what resumes.
+              action: 'Open',
+              // HOLD opens the card menu (Play / Remove) — not a
+              // direct resume, so it is named for what it is.
+              holdAction: 'Options',
+              episode: cw.episodeOf(item),
+              progress: cw.progressOf(item),
+            );
+            _setHero(item);
+          },
+          onOpen: () => cw.onOpen(item),
+          onLongPress: () => _openCwCardMenu(cw, item, e.rail.cwIndex, e.col),
+          onUp: () {
+            if (_stageHoldSwallow(LogicalKeyboardKey.arrowUp)) return;
+            if (i > 0) {
+              _nearestMountedNode(
+                queue[i - 1].rail.cw!.nodes,
+                queue[i - 1].col,
+              )?.requestFocus();
+            }
+          },
+          onDown: () {
+            if (_stageHoldSwallow(LogicalKeyboardKey.arrowDown)) return;
+            if (i + 1 < queue.length) {
+              _nearestMountedNode(
+                queue[i + 1].rail.cw!.nodes,
+                queue[i + 1].col,
+              )?.requestFocus();
+            } else if (hasRail) {
+              _tonightFocusRail();
+            }
+          },
+          // HELD down: leave the queue for the rail in one gesture.
+          // The queue is every Continue Watching item from every
+          // source flattened into one column, so stepping past it a
+          // row at a time can be a long walk.
+          onDownHold: hasRail
+              ? () => _stageHoldJump(
+                  LogicalKeyboardKey.arrowDown,
+                  _tonightFocusRail,
+                )
+              : null,
+          onLeft: () => MainPageBridge.focusTvSidebar?.call(),
+        );
+      },
     );
   }
 
