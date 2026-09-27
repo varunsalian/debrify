@@ -1,3 +1,5 @@
+import 'package:debrify/features/search/application/keyword_appearance_dependencies.dart';
+import 'package:debrify/models/source_appearance.dart';
 import 'dart:async';
 import 'package:debrify/features/home/application/home_catalog_preferences_dependencies.dart';
 import 'package:debrify/features/home/application/home_collections_dependencies.dart';
@@ -20,6 +22,54 @@ HomeCatalogPreferencesRepository preferences(
 );
 
 void main() {
+  testWidgets(
+    'superseded appearance await cannot restart the remaining Home refresh',
+    (tester) async {
+      final appearance = Completer<SourceAppearance>();
+      var appearanceReads = 0;
+      var catalogReads = 0;
+      final home = HomeFixture(tester);
+      await home.mount(
+        wrap: (child) => ProviderScope(
+          overrides: [
+            keywordAppearanceReaderProvider.overrideWith(
+              (ref, session) => () {
+                appearanceReads++;
+                return appearanceReads == 2
+                    ? appearance.future
+                    : Future.value((text: true, logos: true));
+              },
+            ),
+            homeCatalogPreferencesRepositoryProvider.overrideWithValue(
+              preferences(() async {
+                catalogReads++;
+                return {};
+              }),
+            ),
+          ],
+          child: child,
+        ),
+      );
+      await home.drive(() => home.slow.complete(page('Slow')));
+      await home.settle();
+      final before = catalogReads;
+      final requests = List.of(home.requests);
+      await home.drive(MainPageBridge.notifyHomeSettingsChanged);
+      expect(appearanceReads, 2);
+      expect(catalogReads, before);
+      await home.drive(MainPageBridge.notifyHomeSettingsChanged);
+      await home.settle();
+      expect(catalogReads, before + 1);
+      await home.drive(() => appearance.complete((text: false, logos: false)));
+      await home.settle();
+      expect(catalogReads, before + 1);
+      expect(home.requests, requests);
+      expect(find.text('Fast 0'), findsWidgets);
+      await home.dispose();
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets(
     'settings refresh removes and restores a catalog; unchanged refresh does not fetch',
     (tester) async {

@@ -1,3 +1,6 @@
+import '../features/home/application/home_configuration_changes.dart';
+import '../features/home/application/home_settings_refresh.dart';
+import '../features/home/application/home_settings_refresh_dependencies.dart';
 import '../features/home/application/home_layout_preference.dart';
 import '../features/home/application/home_layout_preference_dependencies.dart';
 import '../models/source_appearance.dart';
@@ -786,7 +789,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
 
   /// Imported collections — each enabled one is a row of folder tiles.
   List<HomeCollection> get _homeCollections => _homeConfiguration.collections;
-  int _homeSettingsReloadGen = 0;
+  late final ProviderSubscription<HomeSettingsRefresh>
+  _homeSettingsRefreshSubscription;
   late final _spotlightCatalogCards = SpotlightCatalogCardCache(
     wideArtwork: _wideArtUrl,
     onOpen: (item, addon) => _openItem(item, addon),
@@ -1909,6 +1913,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       (previous, next) {},
     );
     _homeCatalogController = ref.read(homeCatalogProvider(homeSession).notifier);
+    _homeSettingsRefreshSubscription = ref.listenManual(
+      homeSettingsRefreshProvider(homeSession),
+      (previous, next) {},
+    );
     _homeLayoutPreferenceSubscription = ref.listenManual(
       homeLayoutPreferenceProvider(homeSession),
       (previous, next) {},
@@ -2376,22 +2384,24 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     unawaited(_reloadHeroTrailerPrefs());
   }
 
-  Future<void> _reloadHeroTrailerPrefs({bool initial = false}) =>
-      _heroTrailerPreferencesController.load(
-        useHomeAudio: widget.isTelevision,
-        isCurrent: () => mounted,
-        onAccepted: (preferences) {
-          setState(() {});
-          if (initial) {
-            if (!preferences.enabled) return;
-            // The board usually seeds the hero before this read lands.
-            final current = _heroItem.value;
-            if (current != null) _scheduleHeroTrailer(current);
-          } else if (!preferences.enabled) {
-            _clearHeroTrailer();
-          }
-        },
-      );
+  Future<void> _reloadHeroTrailerPrefs({
+    bool initial = false,
+    bool Function()? isCurrent,
+  }) => _heroTrailerPreferencesController.load(
+    useHomeAudio: widget.isTelevision,
+    isCurrent: () => mounted && (isCurrent?.call() ?? true),
+    onAccepted: (preferences) {
+      setState(() {});
+      if (initial) {
+        if (!preferences.enabled) return;
+        // The board usually seeds the hero before this read lands.
+        final current = _heroItem.value;
+        if (current != null) _scheduleHeroTrailer(current);
+      } else if (!preferences.enabled) {
+        _clearHeroTrailer();
+      }
+    },
+  );
 
   /// Off-TV Home's Back (via the bridge, tab key 'home'): close the Spotlight
   /// search sheet if it is up. Consuming the press here is what keeps the
@@ -2730,6 +2740,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     _searchController.dispose();
     ProfileRuntime.scope.removeListener(_onSearchProfileChanged);
     _homeCatalogSubscription.close();
+    _homeSettingsRefreshSubscription.close();
     _homeLayoutPreferenceSubscription.close();
     _heroTrailerPreferencesSubscription.close();
     _homeDefaultViewSubscription.close();
@@ -2863,83 +2874,80 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   /// either actually changed. Fires on any home-settings change (the
   /// broadcast is shared), so the equality guards skip reloads for unrelated
   /// settings.
-  Future<void> _reloadForHomeSettings() async {
-    await _loadSourceTextFormatting();
-    if (!mounted) return;
-    final reloadGen = ++_homeSettingsReloadGen;
-    final reloadSession = HomeCollectionsStore.captureSession();
-    bool current() =>
-        mounted &&
-        reloadGen == _homeSettingsReloadGen &&
-        reloadSession == HomeCollectionsStore.captureSession();
-    await _loadHomeCardOrientation(isCurrent: current);
-    if (!current()) return;
-    // Merged-CW toggles: re-read, and on a change re-sync each provider's node
-    // lists against the lists already in memory (no refetch needed — the data
-    // is the same, only which slot renders it changes).
-    final mergeChanged = await _continuationLayoutController.refresh(
-      isCurrent: () => mounted && reloadGen == _homeSettingsReloadGen,
-    );
-    if (!mounted) return;
-    if (mergeChanged) {
-      setState(() {
-        _syncCwNodes(
-          _cwMovieNodes,
-          _cwMergeLocal ? _cwAll.length : _cwMovies.length,
-          'movie',
-        );
-        _syncCwNodes(
-          _cwSeriesNodes,
-          _cwMergeLocal ? 0 : _cwSeries.length,
-          'series',
-        );
-        _syncCwNodes(
-          _traktMovieNodes,
-          _cwMergeTrakt ? _traktAll.length : _traktMovies.length,
-          'tmovie',
-        );
-        _syncCwNodes(
-          _traktSeriesNodes,
-          _cwMergeTrakt ? 0 : _traktSeries.length,
-          'tseries',
-        );
-        _syncCwNodes(
-          _simklMovieNodes,
-          _cwMergeSimkl ? _simklAll.length : _simklMovies.length,
-          'smovie',
-        );
-        _syncCwNodes(
-          _simklSeriesNodes,
-          _cwMergeSimkl ? 0 : _simklSeries.length,
-          'sseries',
-        );
-        _syncCwNodes(
-          _mdblistMovieNodes,
-          _cwMergeMdblist ? _mdblistAll.length : _mdblistMovies.length,
-          'mdbmovie',
-        );
-        _syncCwNodes(
-          _mdblistSeriesNodes,
-          _cwMergeMdblist ? 0 : _mdblistSeries.length,
-          'mdbseries',
-        );
-      });
-    }
-    // Sync can update volume on a surviving Home on every platform.
-    unawaited(_reloadHeroTrailerPrefs());
-    await _loadHomeDefaultView(isCurrent: current);
-    if (!mounted) return;
-    final changes =
-        await HomeConfigurationRefresh(
-          catalog: _homeCatalogController,
-          preferences: ref.read(homeCatalogPreferencesRepositoryProvider),
-          collections: _homeCollectionsRepository,
-          readHideWatched: ref.read(homeBoardServicesProvider).hideWatched,
-        ).run(
-          isCurrent: current,
-          isHome: !widget.searchMode && !widget.discoverMode,
-        );
-    if (!current() || changes == null || !changes.changed) return;
+  Future<void> _reloadForHomeSettings() =>
+      _homeSettingsRefreshSubscription.read().run(
+        isCurrent: () => mounted,
+        refreshAppearance: (current) =>
+            _loadSourceTextFormatting(isCurrent: current),
+        refreshDisplay: (current) =>
+            _loadHomeCardOrientation(isCurrent: current),
+        refreshContinuation: (current) =>
+            _continuationLayoutController.refresh(isCurrent: current),
+        reconcileContinuation: _reconcileContinuationLayout,
+        refreshTrailers: (current) =>
+            _reloadHeroTrailerPrefs(isCurrent: current),
+        selectDefaultView: (current) =>
+            _loadHomeDefaultView(isCurrent: current),
+        refreshConfiguration: (current) =>
+            HomeConfigurationRefresh(
+              catalog: _homeCatalogController,
+              preferences: ref.read(homeCatalogPreferencesRepositoryProvider),
+              collections: _homeCollectionsRepository,
+              readHideWatched: ref.read(homeBoardServicesProvider).hideWatched,
+            ).run(
+              isCurrent: current,
+              isHome: !widget.searchMode && !widget.discoverMode,
+            ),
+        applyConfiguration: _applyHomeConfigurationChanges,
+      );
+
+  // Reconcile nodes against accepted rows without refetching continuation data.
+  void _reconcileContinuationLayout() {
+    setState(() {
+      _syncCwNodes(
+        _cwMovieNodes,
+        _cwMergeLocal ? _cwAll.length : _cwMovies.length,
+        'movie',
+      );
+      _syncCwNodes(
+        _cwSeriesNodes,
+        _cwMergeLocal ? 0 : _cwSeries.length,
+        'series',
+      );
+      _syncCwNodes(
+        _traktMovieNodes,
+        _cwMergeTrakt ? _traktAll.length : _traktMovies.length,
+        'tmovie',
+      );
+      _syncCwNodes(
+        _traktSeriesNodes,
+        _cwMergeTrakt ? 0 : _traktSeries.length,
+        'tseries',
+      );
+      _syncCwNodes(
+        _simklMovieNodes,
+        _cwMergeSimkl ? _simklAll.length : _simklMovies.length,
+        'smovie',
+      );
+      _syncCwNodes(
+        _simklSeriesNodes,
+        _cwMergeSimkl ? 0 : _simklSeries.length,
+        'sseries',
+      );
+      _syncCwNodes(
+        _mdblistMovieNodes,
+        _cwMergeMdblist ? _mdblistAll.length : _mdblistMovies.length,
+        'mdbmovie',
+      );
+      _syncCwNodes(
+        _mdblistSeriesNodes,
+        _cwMergeMdblist ? 0 : _mdblistSeries.length,
+        'mdbseries',
+      );
+    });
+  }
+
+  void _applyHomeConfigurationChanges(HomeConfigurationChanges changes) {
     setState(() {});
     // Hide-watched changes row MEMBERSHIP, so it takes the full reload path.
     if (changes.reloadBoard) {
@@ -5975,10 +5983,11 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   bool get _useAddonSourceText => _keywordAppearanceSubscription.read().text;
   bool get _showAddonSourceLogos => _keywordAppearanceSubscription.read().logos;
 
-  Future<void> _loadSourceTextFormatting() => _keywordAppearanceController.load(
-    isCurrent: () => mounted,
-    onAccepted: () => setState(() {}),
-  );
+  Future<void> _loadSourceTextFormatting({bool Function()? isCurrent}) =>
+      _keywordAppearanceController.load(
+        isCurrent: () => mounted && (isCurrent?.call() ?? true),
+        onAccepted: () => setState(() {}),
+      );
 
   bool get _hideHomeCollectionNames => _homeDisplay.hideCollectionNames;
   bool get _spotlightFocusDetails => _homeDisplay.spotlightFocusDetails;
