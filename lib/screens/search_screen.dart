@@ -1,5 +1,6 @@
 import '../features/home/presentation/home_stage_rail_label.dart';
 import '../features/home/presentation/home_promenade_layout.dart';
+import '../features/home/presentation/home_atrium_layout.dart';
 import '../features/home/presentation/home_canvas_tabs.dart';
 import '../features/home/presentation/home_canvas_shelf.dart';
 import '../features/home/presentation/home_canvas_layout.dart';
@@ -9,7 +10,6 @@ import '../widgets/skeleton_poster.dart' show BrandLoadingStage;
 import '../features/home/presentation/home_trakt_skeleton_row.dart';
 import '../features/home/presentation/home_stage_rows.dart';
 import '../features/home/presentation/home_stage_identity.dart';
-import '../features/home/presentation/home_stage_scrims.dart';
 import '../features/home/presentation/home_stage_art.dart';
 import '../features/home/presentation/home_tonight_queue_row.dart';
 import '../features/home/presentation/home_tonight_card_caption.dart';
@@ -401,12 +401,8 @@ const double _kMosaicHeadGap = 18;
 // ATRIUM metrics. The wall's height is DERIVED from these (never guessed),
 // so the dossier column beside it can't be crowded by a taller row.
 const double _kAtriumSplit = 0.38;
-const double _kAtriumPanelPad = 48;
-const double _kAtriumWallPad = 40;
 const double _kAtriumLabelFontSize = 12.0;
 const double _kAtriumLabelGap = 10;
-const double _kAtriumRowGap = 18;
-const double _kAtriumWallTail = 26;
 
 /// The share of the board Atrium's two-row wall may occupy. The row box is
 /// derived from what fits inside this, so scaled labels shrink the posters
@@ -8142,8 +8138,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         final floorH = _homeArtPosterCaptionBand + _kStageMinPosterH;
         double chromeFor(int rows) =>
             rows * (labelH + _kAtriumLabelGap) +
-            (rows - 1) * _kAtriumRowGap +
-            _kAtriumWallTail;
+            (rows - 1) * homeAtriumRowGap +
+            homeAtriumWallTail;
         final wallBudget = boardH * _kAtriumWallBudget;
         final twoRowsFit =
             hasSecondRow && wallBudget - chromeFor(2) >= floorH * 2;
@@ -8157,176 +8153,102 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         );
         final rowUnit = labelH + _kAtriumLabelGap + rowBoxH;
         final wallH =
-            (showSecondRow ? rowUnit * 2 + _kAtriumRowGap : rowUnit) +
-            _kAtriumWallTail;
+            (showSecondRow ? rowUnit * 2 + homeAtriumRowGap : rowUnit) +
+            homeAtriumWallTail;
 
-        return Stack(
-          fit: StackFit.expand,
-          children: [
-            // ART COLUMN — the right side only. The trailer layer is laid out
-            // in the same rect, so the punch hole is exactly this box and the
-            // video replaces the art in place with no geometry jump.
-            Positioned(
-              left: splitX,
-              top: 0,
-              right: 0,
-              bottom: 0,
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  HomeStageArt(
+        return buildHomeAtriumLayout(
+          splitX: splitX,
+          wallH: wallH,
+          panelColor: app.home.bg,
+          seamColor: app.fade(app.core.tx, 0.09),
+          artwork: HomeStageArt(
+            item: _heroItem,
+            enriched: _heroEnriched,
+            fav: _canvasFavFocus,
+            cacheWidth: _tvHeroArtworkCacheWidth,
+            cacheHeight: _tvHeroArtworkCacheHeight,
+          ),
+          trailer: _heroTrailerActive
+              ? _HeroTrailerLayer(
+                  trailer: _heroTrailer,
+                  isTelevision: widget.isTelevision,
+                  heroHeight: boardH,
+                  fullBleed: true,
+                  volume: _heroTrailerVolume,
+                  loading: _heroTrailerLoading,
+                  onPlayingChanged: _onHeroTrailerPlaying,
+                  takeover: _heroTrailerTakeover,
+                )
+              : null,
+          live: _heroTrailerActive
+              ? _HeroLiveLayer(
+                  channel: _heroLiveChannel,
+                  streamUrl: _heroLiveUrl,
+                  heroHeight: boardH,
+                  fullBleed: true,
+                  volume: _heroTrailerVolume,
+                  onPlayingChanged: _onHeroTrailerPlaying,
+                  onPlaybackFailed: _onHeroLivePlaybackFailed,
+                )
+              : null,
+          railLabel: ValueListenableBuilder<String?>(
+            valueListenable: _atriumFocusedRailKey,
+            builder: (context, key, _) {
+              final i = key == null
+                  ? active
+                  : rails.indexWhere((r) => _canvasRailKeyOf(r) == key);
+              final title = _canvasTabTitle(rails, i < 0 ? active : i);
+              return Text(
+                title.toUpperCase(),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 2.6,
+                  color: kCardFocusRing,
+                ),
+              );
+            },
+          ),
+          identity: ValueListenableBuilder<HomeFavoriteFocus?>(
+            valueListenable: _canvasFavFocus,
+            builder: (context, fav, _) => fav != null
+                ? HomeStageFavoriteIdentity(fav: fav)
+                : HomeStageIdentity(
                     item: _heroItem,
                     enriched: _heroEnriched,
-                    fav: _canvasFavFocus,
-                    cacheWidth: _tvHeroArtworkCacheWidth,
-                    cacheHeight: _tvHeroArtworkCacheHeight,
-                  ),
-                  if (_heroTrailerActive)
-                    _HeroTrailerLayer(
-                      trailer: _heroTrailer,
-                      isTelevision: widget.isTelevision,
-                      heroHeight: boardH,
-                      fullBleed: true,
-                      volume: _heroTrailerVolume,
-                      loading: _heroTrailerLoading,
-                      onPlayingChanged: _onHeroTrailerPlaying,
-                      takeover: _heroTrailerTakeover,
+                    trailerShowing: _heroTrailerShowing,
+                    // Drop the synopsis rather than clip it when
+                    // the column is short (small board / large
+                    // text scale).
+                    variant:
+                        boardH - 64 >=
+                            homeStageNarrowIdentityHeight(context) + 90
+                        ? HomeStageIdentityVariant.narrow
+                        : HomeStageIdentityVariant.headline,
+                    maxWidth: (splitX - homeAtriumPanelPadding * 2).clamp(
+                      120.0,
+                      520.0,
                     ),
-                  if (_heroTrailerActive)
-                    _HeroLiveLayer(
-                      channel: _heroLiveChannel,
-                      streamUrl: _heroLiveUrl,
-                      heroHeight: boardH,
-                      fullBleed: true,
-                      volume: _heroTrailerVolume,
-                      onPlayingChanged: _onHeroTrailerPlaying,
-                      onPlaybackFailed: _onHeroLivePlaybackFailed,
-                    ),
-                  const IgnorePointer(
-                    child: HomeStageScrims(variant: HomeStageScrimVariant.seam),
                   ),
-                ],
-              ),
-            ),
-            // THE INK PANEL. Opaque: the board's own scaffold turns
-            // transparent while a trailer plays (the shell glass stage), so
-            // the column has to carry its own ground.
-            Positioned(
-              left: 0,
-              top: 0,
-              bottom: 0,
-              width: splitX,
-              child: ColoredBox(color: app.home.bg),
-            ),
-            // The seam itself — one hairline, so the cut reads as deliberate.
-            Positioned(
-              left: splitX,
-              top: 0,
-              bottom: 0,
-              width: 1,
-              child: ColoredBox(color: app.fade(app.core.tx, 0.09)),
-            ),
-            // THE DOSSIER. Never focusable; vertically centred in the column.
-            Positioned(
-              left: 0,
-              top: 0,
-              bottom: 0,
-              width: splitX,
-              child: IgnorePointer(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: _kAtriumPanelPad,
-                    vertical: 32,
-                  ),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      ValueListenableBuilder<String?>(
-                        valueListenable: _atriumFocusedRailKey,
-                        builder: (context, key, _) {
-                          final i = key == null
-                              ? active
-                              : rails.indexWhere(
-                                  (r) => _canvasRailKeyOf(r) == key,
-                                );
-                          final title = _canvasTabTitle(
-                            rails,
-                            i < 0 ? active : i,
-                          );
-                          return Text(
-                            title.toUpperCase(),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: 2.6,
-                              color: kCardFocusRing,
-                            ),
-                          );
-                        },
-                      ),
-                      const SizedBox(height: 22),
-                      ValueListenableBuilder<HomeFavoriteFocus?>(
-                        valueListenable: _canvasFavFocus,
-                        builder: (context, fav, _) => fav != null
-                            ? HomeStageFavoriteIdentity(fav: fav)
-                            : HomeStageIdentity(
-                                item: _heroItem,
-                                enriched: _heroEnriched,
-                                trailerShowing: _heroTrailerShowing,
-                                // Drop the synopsis rather than clip it when
-                                // the column is short (small board / large
-                                // text scale).
-                                variant:
-                                    boardH - 64 >=
-                                        homeStageNarrowIdentityHeight(context) + 90
-                                    ? HomeStageIdentityVariant.narrow
-                                    : HomeStageIdentityVariant.headline,
-                                maxWidth: (splitX - _kAtriumPanelPad * 2).clamp(
-                                  120.0,
-                                  520.0,
-                                ),
-                              ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-            // THE WALL — two rails, stacked, over the art's lower half.
-            Positioned(
-              left: splitX + _kAtriumWallPad,
-              right: _kAtriumWallPad,
-              bottom: 0,
-              height: wallH,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _atriumRow(
-                    rails,
-                    active,
-                    rowBoxH,
-                    isTopRow: true,
-                    hasRowBelow: showSecondRow,
-                  ),
-                  if (showSecondRow) ...[
-                    const SizedBox(height: _kAtriumRowGap),
-                    _atriumRow(
-                      rails,
-                      active + 1,
-                      rowBoxH,
-                      isTopRow: false,
-                      hasRowBelow: false,
-                    ),
-                  ],
-                  const SizedBox(height: _kAtriumWallTail),
-                ],
-              ),
-            ),
-          ],
+          ),
+          topRow: _atriumRow(
+            rails,
+            active,
+            rowBoxH,
+            isTopRow: true,
+            hasRowBelow: showSecondRow,
+          ),
+          bottomRow: showSecondRow
+              ? _atriumRow(
+                  rails,
+                  active + 1,
+                  rowBoxH,
+                  isTopRow: false,
+                  hasRowBelow: false,
+                )
+              : null,
         );
       },
     );
