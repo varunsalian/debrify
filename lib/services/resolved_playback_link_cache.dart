@@ -172,18 +172,27 @@ class ResolvedPlaybackLinkCache {
     int? season,
     int? episode,
     required SeriesSource pin,
+    bool Function()? canContinue,
   }) async {
+    if (canContinue?.call() == false) return;
     if (pin.addonCatalogId != null || pin.addonCatalogKey != null) return;
     final prefs = await ProfilePreferences.instance();
+    if (canContinue?.call() == false) return;
     await _lock.synchronized(() async {
+      if (canContinue?.call() == false) return;
       final entries = await _read(prefs);
       entries.remove(
         key(id, type, season, episode, pin.addonKey!, pin.streamKey ?? ''),
       );
-      await prefs.setString(
-        preferenceKey,
-        await SecretVault.seal(jsonEncode(entries)),
-      );
+      final sealed = await SecretVault.seal(jsonEncode(entries));
+      if (canContinue == null) {
+        await prefs.setString(preferenceKey, sealed);
+      } else {
+        await ProfilePreferences.synchronizeExternalMutation(() async {
+          if (!canContinue()) return;
+          await prefs.setString(preferenceKey, sealed);
+        }, marksMutation: false);
+      }
     });
   }
 }

@@ -1,3 +1,5 @@
+import '../../../services/profiles/profile_runtime.dart';
+import '../../../services/profiles/profile_session_memory.dart';
 import '../../../models/alldebrid_file.dart';
 import '../../../models/playlist_entry.dart';
 import '../../../models/premiumize_file.dart';
@@ -25,12 +27,31 @@ class SourceAcquisition {
     String magnet,
     Torrent torrent, {
     bool Function()? canContinue,
+    ProfileSessionOwner? owner,
+  }) {
+    if (owner == null) {
+      return _acquire(provider, magnet, torrent, canContinue: canContinue);
+    }
+    bool current() =>
+        owner == ProfileSessionMemory.captureOwner() &&
+        (canContinue?.call() ?? true);
+    Future<AcquiredSource> run() =>
+        _acquire(provider, magnet, torrent, canContinue: current);
+    final scope = owner.scope;
+    return scope == null
+        ? ProfileRuntime.withoutCapturedScope(run)
+        : ProfileRuntime.withCapturedScope(scope, run);
+  }
+
+  Future<AcquiredSource> _acquire(
+    String provider,
+    String magnet,
+    Torrent torrent, {
+    bool Function()? canContinue,
   }) async {
     void checkCurrent() {
       if (canContinue?.call() == false) {
-        throw StateError(
-          'Manual source acquisition belongs to a retired action',
-        );
+        throw StateError('Source acquisition belongs to a retired action');
       }
     }
 

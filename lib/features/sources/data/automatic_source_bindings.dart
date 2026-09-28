@@ -36,6 +36,39 @@ class AutomaticSourceBindings {
         : ProfileRuntime.withCapturedScope(scope, action);
   }
 
+  /// Remove an invalid saved source only while its playback action still owns it.
+  Future<void> removeInvalid(
+    String id,
+    SeriesSource source, {
+    required bool Function() canContinue,
+  }) => runOwned(
+    canContinue,
+    () => SeriesSourceService.removeSourceEntry(
+      id,
+      source,
+      canContinue: () => isCurrent && canContinue(),
+    ),
+  );
+
+  Future<void> removeCachedLink({
+    required String id,
+    required String type,
+    int? season,
+    int? episode,
+    required SeriesSource pin,
+    required bool Function() canContinue,
+  }) => runOwned(
+    canContinue,
+    () => ResolvedPlaybackLinkCache.remove(
+      id: id,
+      type: type,
+      season: season,
+      episode: episode,
+      pin: pin,
+      canContinue: () => isCurrent && canContinue(),
+    ),
+  );
+
   /// Old-screen parity: playing a catalog MOVIE remembers the just-played
   /// validated source as that title's single bound source (override), so the
   /// catalog flips "Select Source" → "Edit Source" and the next play reuses

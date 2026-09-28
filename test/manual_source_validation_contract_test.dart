@@ -88,42 +88,43 @@ void main() {
     },
   );
 
-  test(
-    'saved direct recovery snapshots its effective acquisition provider',
-    () {
-      final launch = _between(
-        playbackService,
-        'static Future<void> _launch(',
-        'static bool _isSeriesPlaylist(',
-      );
-      expect(launch, contains('final resolverProvider ='));
-      expect(launch, contains('await _defaultConfiguredProvider()'));
-      expect(launch, contains('_resolverFor(resolverProvider)'));
-      expect(launch, contains('startupResolverProvider: resolverProvider'));
-      expect(
-        launch,
-        contains('recoveryProvider ?? await _defaultConfiguredProvider()'),
-      );
-      expect(
-        launch,
-        matches(
-          RegExp(
-            r'_lazySourceCommitter\(\s*meta,\s*'
-            r'preferredProvider:\s*resolverProvider,\s*'
-            r'sourceBindings:\s*sourceBindings,\s*\)',
-          ),
+  test('saved direct recovery snapshots its effective acquisition provider', () {
+    final launch = _between(
+      playbackService,
+      'static Future<void> _launch(',
+      'static bool _isSeriesPlaylist(',
+    );
+    expect(launch, contains('final resolverProvider ='));
+    expect(launch, contains('await _defaultConfiguredProvider('));
+    expect(launch, contains('_resolverFor(resolverProvider, committer)'));
+    expect(launch, contains('startupResolverProvider: resolverProvider'));
+    expect(
+      launch,
+      matches(
+        RegExp(
+          r'recoveryProvider\s*\?\?\s*await _defaultConfiguredProvider\(\s*canContinue:',
         ),
-      );
-      expect(
-        nativePlayer,
-        contains('startupResolverProvider.equals("pikpak", ignoreCase = true)'),
-      );
-      expect(
-        nativePlayer,
-        contains('startupPikPakTorrentAcquisitionAttempted = true'),
-      );
-    },
-  );
+      ),
+    );
+    expect(
+      launch,
+      matches(
+        RegExp(
+          r'_lazySourceCommitter\(\s*meta,\s*'
+          r'preferredProvider:\s*resolverProvider,\s*'
+          r'sourceBindings:\s*sourceBindings,\s*\)',
+        ),
+      ),
+    );
+    expect(
+      nativePlayer,
+      contains('startupResolverProvider.equals("pikpak", ignoreCase = true)'),
+    );
+    expect(
+      nativePlayer,
+      contains('startupPikPakTorrentAcquisitionAttempted = true'),
+    );
+  });
 
   test(
     'native recovery reports candidate production before merging duplicates',
@@ -330,8 +331,8 @@ void main() {
       expect(startup, isNot(contains('_reportRejectedStremioSource')));
       expect(flutterPlayer, contains("'startupSourcesExhausted': true"));
       expect(playbackService, isNot(contains('_rejectedDirectSourceHandler')));
-      expect(directBinding, contains('removeSourceEntry(imdbId, source)'));
-      expect(directBinding, contains('ResolvedPlaybackLinkCache.remove'));
+      expect(directBinding, contains('sourceBindings.removeInvalid('));
+      expect(directBinding, contains('sourceBindings.removeCachedLink('));
       expect(directBinding, isNot(contains('[source, ...remainingSources]')));
       expect(
         directBinding,

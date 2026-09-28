@@ -6,6 +6,61 @@ workflow checkpoints, reuse valid evidence, and run broader checks at integratio
 gates. Earlier entries retain their original slice history. No changes are pushed
 to the public repository.
 
+## Batch B checkpoint: automatic acquisition and source-switch resolution — 2026-09-28
+
+Base revision: `ba0cfdc2`. Automatic selection/probes and saved torrent acquisition
+now pass their originating owner and action guard into `SourceAcquisition`.
+Optional owner-scoped execution retains the original endpoint/preferences even
+when the caller runs in a foreign captured zone. Provider configuration/picker
+calls reject retired actions. Existing provider request order, probe caps, episode
+checks and cleanup rules remain; retirement alone does not delete acquisitions.
+
+`SourcePlaylistResolver` replaces both duplicated in-player resolver bodies with
+one plain operation. It preserves direct headers, provider selection, magnet
+precedence and provider playlist order, including RD's existing playlist/start
+ordering. The launch committer supplies its profile/action lifetime. Rejection
+and wrong-episode cleanup now share plain functions that retain the original
+scope; cleanup may finish after retirement without changing accounts. This does
+not yet provide native switch-generation ownership: native handoff/recovery and
+supersession remain the next integration boundary.
+
+Invalid-source and cached-link removals now run through `AutomaticSourceBindings`.
+Actual cache removal rechecks its guard inside the preference mutation barrier,
+matching guarded saves. The real-profile tests cover foreign scopes, retirement
+inside provider calls, cleanup with original credentials, delayed pin removal and
+cache removal. Sources runtime/DI tests continue to use the actual production
+callers; the acquisition fake accepts the new optional owner argument.
+
+All 829 Sources/quick-play/addon/IPTV/direct-reuse tests pass. The validation
+contract group retains its four observed historical failures; moved assertions
+still check the provider snapshot, guarded removals and remaining-source recovery.
+Analyzer: 844 unchanged identities; architecture: 494 files pass. New test fixtures
+were corrected to initialize legacy runtime before capturing an owner, preserve
+RD's real playlist order and supply the cache stream index. Assertions were not
+relaxed to accept different application behavior.
+
+Final review found that the new retirement condition could return before dismissing
+an automatic-play overlay. Stopped the first full run intentionally, fixed that
+exit and added a production widget regression: retirement during RD acquisition
+removes the owned loader while preserving a newer route. Explicit acquisition now
+also dismisses its own loading handle instead of popping whichever route is top.
+The regression passes. The full retry completes with **10,136 passes / 22 failures / 29 errors / 20 skips**.
+Exact comparison with the automatic-binding checkpoint, including its subsequently
+corrected signature assertion as an observed pass, finds no new failures/errors,
+missing tests or newly skipped tests and **26 added passing cases** (download plus
+this checkpoint). The final analyzer still has 844 unchanged identities. The
+interrupted full log is not completion evidence. The loader fix and its new test
+are included in the completed full retry; the application/test revision stayed
+fixed during that run.
+
+Receipts in `.git/refactor-evidence/phase5/`:
+`automatic-acquisition-focused-final.txt`, `automatic-acquisition-binding-tests-final.txt`,
+`automatic-acquisition-loader-test.txt`, `automatic-acquisition-analyze-final-3.txt`,
+`full-automatic-acquisition-c4.jsonl` (interrupted), and
+`full-automatic-acquisition-retry-c4.jsonl`. Remaining B paths are provider-native
+saved-cloud preparation, pack/zip/not-ready actions, and native handoff/recovery
+ownership and device checks. C–E and final device/performance gates remain open.
+
 ## Batch B checkpoint: direct download preparation and queue handoff — 2026-09-28
 
 Base revision: `ab7b4fa2`. `SourceDownload` now owns direct-stream authorization,

@@ -132,7 +132,7 @@ until the batch ends. This replaces per-helper checkpoints, not incremental safe
 | Batch | Current status |
 | --- | --- |
 | A | Implemented and reviewed. Home actions, resume, detail mutation/reset boundaries and accepted local writes are wired and checked. Full gate: 10,058 passes, unchanged historical failures/errors, no missing or newly skipped tests. |
-| B | Shared acquisition/manual-pin DI, manual provider ownership and automatic binding writes reviewed. Latest full run adds seven passing ownership cases; one old-signature assertion was updated and passes its focused rerun. Historical failures/errors remain; no missing tests or new skips. Direct-stream download preparation/queue ownership also reviewed (77 focused passes, unchanged analyzer). Automatic provider preparation, remaining download/native handoff and device acceptance remain pending. |
+| B | Manual/provider acquisition, automatic bindings, direct downloads, automatic torrent probes and player source-switch resolution reviewed. Full retry: 10,136 passes, unchanged historical failures/errors/skips, no missing tests, 26 added passing cases. Remaining: provider-native saved-cloud preparation, pack/zip/not-ready actions, native handoff/recovery ownership and device checks; see concrete paths below. |
 | C | Pending remaining boundaries; substantial layout/search extraction already complete |
 | D | Pending remaining boundaries and facade reduction |
 | E | Pending final acceptance |
@@ -235,11 +235,23 @@ scheduler redesign are outside this migration; B closes only the reachable enque
 ownership boundary with focused operation, dispatch and existing job-policy checks.
 
 Next, finish provider preparation and download/native handoff ownership, then the
-remaining device checks in the checklist. Concrete gaps: automatic `_add` and
-in-player resolvers still omit the available acquisition guard; provider-backed
-pack download and native handoff paths still need their ownership review. Direct
-stream URL resolution and queue publication now retain the originating owner via
-the injected `SourceDownload` operation and guarded queue handoff. Preserve
+remaining device checks in the checklist. Automatic `_add`, probes and in-player resolver callbacks now forward the
+originating owner/action guard; direct-stream URL resolution and queue publication
+retain their owner through the injected `SourceDownload` operation. Rejected
+acquisition cleanup and invalid saved-source/cache removal retain that owner too.
+The plain resolver/cleanup owners are 84/58 lines; `SourceAcquisition` remains 481
+lines and `AutomaticSourceBindings` 440, each below the cohesive-file threshold.
+
+Concrete remaining B paths:
+- `_resolveProviderNativeBound` plus provider-backed pack/zip download and
+  `_handleNotCached` actions: preserve the original credentials, accepted queue
+  writes and existing retry/cleanup policies through their awaits.
+- `VideoPlayerLauncher` preparation and native automatic recovery: pass the
+  originating owner rather than recapturing after handoff; retain player/session
+  and source-switch generation checks across queued native work. The recovery
+  helper accepts an owner now, but its native caller still needs that wiring.
+- Relevant native/device checks and the combined A+B integration gate. Ordered
+  engine teardown remains D; do not re-audit unrelated engine/provider internals. Preserve
 request order, source-switch behavior and accepted download ownership while
 closing those gaps. Do not re-extract completed binding/data operations or reopen
 unrelated provider internals. Ordered native teardown remains D.

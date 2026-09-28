@@ -1,3 +1,5 @@
+import 'package:debrify/features/sources/data/automatic_source_bindings.dart';
+import 'package:debrify/services/torrent_playback_service.dart';
 import 'dart:async';
 import 'dart:convert';
 
@@ -82,68 +84,84 @@ void main() {
     await registry.close();
   });
 
-  for (final scenario in [
-    'foreignScope',
-    'retiredAfterAdd',
-    'rejectedCleanup',
-  ]) {
-    test('manual acquisition retains origin for $scenario', () async {
-      final f = fixture.Fixture('debrid', 'pack');
-      final client = MockClient((request) async {
-        if (scenario == 'retiredAfterAdd' &&
-            request.url.path.endsWith('/addMagnet')) {
-          ProfileRuntime.publish(incoming);
-        }
-        if (scenario == 'rejectedCleanup' &&
-            request.url.path.contains('/info/')) {
-          f.paths.add(request.url.path);
-          f.requests.add(request);
-          ProfileRuntime.publish(incoming);
-          return http.Response('{"id":"owned","files":[]}', 200);
-        }
-        return f.respond(request);
-      });
-      addTearDown(client.close);
-      final result = await http.runWithClient(
-        () => ProfileRuntime.withCapturedScope(
-          incoming,
-          () => const ManualSourcePreparation().prepare(
-            'debrid',
-            fixture.torrent,
-            canContinue: () => true,
-          ),
-        ),
-        () => client,
+  for (final automatic in [false, true]) {
+    for (final scenario in [
+      'foreignScope',
+      'retiredAfterAdd',
+      'rejectedCleanup',
+    ]) {
+      test(
+        '${automatic ? 'automatic' : 'manual'} acquisition retains origin for $scenario',
+        () async {
+          final f = fixture.Fixture('debrid', 'pack');
+          final client = MockClient((request) async {
+            if (scenario == 'retiredAfterAdd' &&
+                request.url.path.endsWith('/addMagnet')) {
+              ProfileRuntime.publish(incoming);
+            }
+            if (scenario == 'rejectedCleanup' &&
+                request.url.path.contains('/info/')) {
+              f.paths.add(request.url.path);
+              f.requests.add(request);
+              ProfileRuntime.publish(incoming);
+              return http.Response('{"id":"owned","files":[]}', 200);
+            }
+            return f.respond(request);
+          });
+          addTearDown(client.close);
+          final owner = AutomaticSourceBindings.capture();
+          final result = await http.runWithClient(
+            () => ProfileRuntime.withCapturedScope(incoming, () async {
+              if (automatic) {
+                return await TorrentPlaybackService.resolveRecoverySource(
+                      fixture.torrent,
+                      provider: 'debrid',
+                      sourceBindings: owner,
+                    ) !=
+                    null;
+              }
+              return (await const ManualSourcePreparation().prepare(
+                'debrid',
+                fixture.torrent,
+                canContinue: () => true,
+              )).ready;
+            }),
+            () => client,
+          );
+          expect(result, scenario == 'foreignScope');
+          expect(f.requests, isNotEmpty);
+          expect(f.requests.every((r) => r.url.host == 'origin.test'), isTrue);
+          expect(
+            f.requests.every(
+              (r) => r.headers['Authorization'] == 'Bearer origin-key',
+            ),
+            isTrue,
+          );
+          if (scenario == 'retiredAfterAdd') {
+            expect(f.paths, ['/torrents/addMagnet']);
+          } else if (scenario == 'rejectedCleanup') {
+            expect(f.paths, [
+              '/torrents/addMagnet',
+              '/torrents/info/owned',
+              '/torrents/delete/owned',
+            ]);
+          } else {
+            final selection = f.requests.singleWhere(
+              (r) => r.url.path.contains('/selectFiles/'),
+            );
+            expect(selection.bodyFields['files'], '2,1');
+          }
+          await ProfileRuntime.withCapturedScope(incoming, () async {
+            expect(await StorageService.getApiKey(), 'incoming-key');
+            expect(
+              await StorageService.getRdEndpoint(),
+              'https://incoming.test',
+            );
+            expect(await StorageService.getFileSelection(), 'largest');
+          });
+        },
       );
-      expect(result.ready, scenario == 'foreignScope');
-      expect(f.requests, isNotEmpty);
-      expect(f.requests.every((r) => r.url.host == 'origin.test'), isTrue);
-      expect(
-        f.requests.every(
-          (r) => r.headers['Authorization'] == 'Bearer origin-key',
-        ),
-        isTrue,
-      );
-      if (scenario == 'retiredAfterAdd') {
-        expect(f.paths, ['/torrents/addMagnet']);
-      } else if (scenario == 'rejectedCleanup') {
-        expect(f.paths, [
-          '/torrents/addMagnet',
-          '/torrents/info/owned',
-          '/torrents/delete/owned',
-        ]);
-      } else {
-        final selection = f.requests.singleWhere(
-          (r) => r.url.path.contains('/selectFiles/'),
-        );
-        expect(selection.bodyFields['files'], '2,1');
-      }
-      await ProfileRuntime.withCapturedScope(incoming, () async {
-        expect(await StorageService.getApiKey(), 'incoming-key');
-        expect(await StorageService.getRdEndpoint(), 'https://incoming.test');
-        expect(await StorageService.getFileSelection(), 'largest');
-      });
-    });
+    }
   }
   test(
     'PikPak profile switch cannot share an outgoing captcha request',

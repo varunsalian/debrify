@@ -37,6 +37,7 @@ Torrent source(String hash, {bool direct = false}) => Torrent(
   stremioAddonKey: direct ? 'configuration' : null,
   stremioStreamKey: direct ? hash : null,
   stremioVideoId: direct ? id : null,
+  stremioStreamIndex: direct ? 0 : null,
 );
 
 class ObservedBindings extends AutomaticSourceBindings {
@@ -244,6 +245,89 @@ void main() {
       await first(source('retired'));
       await second(source('current'));
       expect((await pins(origin)).single.torrentHash, 'current');
+    },
+  );
+  test(
+    'invalid-source removal stays in origin when called from a foreign scope',
+    () async {
+      final pin = AutomaticSourceBindings.describe(
+        source('invalid'),
+        'debrid',
+      )!;
+      await SeriesSourceService.setSources(id, [pin]);
+      final bindings = AutomaticSourceBindings.capture();
+      await ProfileRuntime.withCapturedScope(
+        incoming,
+        () => bindings.removeInvalid(id, pin, canContinue: () => true),
+      );
+      expect(await pins(origin), isEmpty);
+      expect(await pins(incoming), isEmpty);
+    },
+  );
+
+  test('retirement at removal tombstone preserves origin pins', () async {
+    final pin = AutomaticSourceBindings.describe(source('invalid'), 'debrid')!;
+    await SeriesSourceService.setSources(id, [pin]);
+    final bindings = AutomaticSourceBindings.capture();
+    final entered = Completer<void>();
+    final release = Completer<void>();
+    WebDavSyncTombstoneRecorder.debugInstall(
+      sink: (_, _) async {
+        entered.complete();
+        await release.future;
+      },
+    );
+    final pending = bindings.removeInvalid(id, pin, canContinue: () => true);
+    final checked = expectLater(pending, throwsStateError);
+    await entered.future;
+    ProfileRuntime.publish(incoming);
+    release.complete();
+    await checked;
+    expect((await pins(origin)).single.bindingKey, pin.bindingKey);
+    expect(await pins(incoming), isEmpty);
+  });
+
+  test(
+    'cache removal rechecks retirement at the actual preference barrier',
+    () async {
+      final direct = source('cached', direct: true);
+      final pin = AutomaticSourceBindings.describe(
+        direct,
+        SeriesSource.addonDirectService,
+      )!;
+      final bindings = AutomaticSourceBindings.capture();
+      await bindings.cacheDirect(movie, direct, canContinue: () => true);
+      expect(
+        (await ResolvedPlaybackLinkCache.get(
+          id: id,
+          type: 'movie',
+          pin: pin,
+        ))?.directUrl,
+        direct.directUrl,
+      );
+      final entered = Completer<void>();
+      final release = Completer<void>();
+      final barrier = ProfilePreferences.captureMutationSnapshot((_) async {
+        entered.complete();
+        await release.future;
+      });
+      await entered.future;
+      final pending = bindings.removeCachedLink(
+        id: id,
+        type: 'movie',
+        pin: pin,
+        canContinue: () => true,
+      );
+      await Future<void>.delayed(Duration.zero);
+      ProfileRuntime.publish(incoming);
+      release.complete();
+      await barrier;
+      await pending;
+      final retained = await ProfileRuntime.withCapturedScope(
+        origin,
+        () => ResolvedPlaybackLinkCache.get(id: id, type: 'movie', pin: pin),
+      );
+      expect(retained?.directUrl, direct.directUrl);
     },
   );
 }

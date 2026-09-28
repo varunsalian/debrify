@@ -1,3 +1,4 @@
+import 'package:debrify/services/profiles/profile_session_memory.dart';
 import 'dart:async';
 
 import 'package:debrify/features/sources/application/source_binding_dependencies.dart';
@@ -25,6 +26,7 @@ class HeldAcquisition extends SourceAcquisition {
     String magnet,
     Torrent torrent, {
     bool Function()? canContinue,
+    ProfileSessionOwner? owner,
   }) {
     this.provider = provider;
     this.magnet = magnet;
