@@ -6,6 +6,25 @@ workflow checkpoints, reuse valid evidence, and run broader checks at integratio
 gates. Earlier entries retain their original slice history. No changes are pushed
 to the public repository.
 
+## Batch C checkpoint: shared stage favorite cards — 2026-09-28
+
+Base: `897498f4`. `HomeStageFavoriteCards` (163 lines) owns the shared favorite
+cell/poster stack and typed IPTV, watchlist, Debrify TV, Stremio TV and playlist
+artwork/focus metadata. Production dispatch keeps source selection and playback
+callbacks in the host. Root: **11,809 → 11,639 lines**.
+
+Review preserves the exact widget stack, borrowed nodes, directional overrides,
+white focus ring, hidden-title setting, live preview eligibility, number fallback,
+playlist progress, captured playback items and focus-time metadata/subtitle reads.
+Stremio cards retain poster-first art while stage focus retains background-first art.
+**86 tests pass**: 84 existing card/favorites-screen/progressive/pagination cases
+and two new captured-action/focus-metadata tests. Analysis retains **836 identical
+diagnostic identities**; architecture passes **537 files**; formatting/diff checks
+pass. Receipts: `.git/refactor-evidence/phase5/stage-favorites-
+{tests,focused,analyze-final}.txt`. No emulator used.
+Remaining row composition, route/resource ownership, D lifecycle/facade reduction
+and E final acceptance are pending.
+
 ## Batch C checkpoint: Classic rail traversal — 2026-09-28
 
 Base: `c3cc4e2c`. `HomeClassicNavigation` (60 lines) owns stable-row vertical

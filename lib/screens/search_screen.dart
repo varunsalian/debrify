@@ -1,3 +1,4 @@
+import '../features/home/presentation/home_stage_favorite_cards.dart';
 import '../features/home/presentation/home_classic_navigation.dart';
 import '../features/home/presentation/home_stage_navigation.dart';
 import '../features/home/presentation/home_tonight_focus.dart';
@@ -5942,50 +5943,28 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     VoidCallback? onUpHold,
     VoidCallback? onDownHold,
   }) {
-    final nodes = _favNodesFor(ref);
-    // Rail switching is the default vertical grammar; Mosaic (grid) and
-    // Tonight (zones) pass their own.
-    final up = onUp ?? () => _stageSwitchRail(-1);
-    final down = onDown ?? () => _stageSwitchRail(1);
-    // An IPTV custom-list row: same cell stack as the favourites row below,
-    // but channels come from the list, play routes by CONTENT TYPE (a list
-    // can hold VOD), and only a live entry retunes the stage's live preview.
+    final cells = HomeStageFavoriteCards(
+      nodes: _favNodesFor(ref),
+      column: col,
+      showTitle: !_hideHomeCardTitlesAndRatings,
+      onLeftEdge: () => MainPageBridge.focusTvSidebar?.call(),
+      onUp: onUp ?? () => _stageSwitchRail(-1),
+      onDown: onDown ?? () => _stageSwitchRail(1),
+      onLeft: onLeft,
+      onRight: onRight,
+      onUpHold: onUpHold,
+      onDownHold: onDownHold,
+      onFocused: (focus, liveChannel) =>
+          _canvasFavFocused(railKey, col, focus, liveChannel: liveChannel),
+    );
     if (ref.isIptvList) {
       final row = _iptvListRows[ref.list];
       final channel = row.channels[col];
-      final live = channel.isLive;
-      return HomeFavoriteCell(
-        onLeftEdge: () => MainPageBridge.focusTvSidebar?.call(),
-        isTelevision: true,
-        column: col,
-        rowNodes: nodes,
-        onUp: up,
-        onDown: down,
-        onLeft: onLeft,
-        onRight: onRight,
-        onUpHold: onUpHold,
-        onDownHold: onDownHold,
-        child: HomeArtPoster(
-          imageUrl: channel.logoUrl,
-          title: channel.name,
-          showTitle: !_hideHomeCardTitlesAndRatings,
-          imageFit: BoxFit.contain,
-          isTelevision: true,
-          ringColor: Colors.white,
-          focusNode: nodes[col],
-          onOpen: () => _playIptvListChannel(channel),
-          onFocused: () => _canvasFavFocused(
-            railKey,
-            col,
-            HomeFavoriteFocus(
-              art: channel.logoUrl,
-              fit: BoxFit.contain,
-              title: channel.name,
-              subtitle: 'IPTV · ${row.title.toUpperCase()}',
-            ),
-            liveChannel: live ? channel : null,
-          ),
-        ),
+      return cells.iptv(
+        channel,
+        subtitle: () => 'IPTV · ${row.title.toUpperCase()}',
+        previewLive: channel.isLive,
+        onOpen: () => _playIptvListChannel(channel),
       );
     }
     switch (ref.kind) {
@@ -5995,180 +5974,31 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
             ? _watchlistMovieItems
             : _watchlistSeriesItems;
         final item = items[col];
-        return HomeFavoriteCell(
-          onLeftEdge: () => MainPageBridge.focusTvSidebar?.call(),
-          isTelevision: true,
-          column: col,
-          rowNodes: nodes,
-          onUp: up,
-          onDown: down,
-          onLeft: onLeft,
-          onRight: onRight,
-          onUpHold: onUpHold,
-          onDownHold: onDownHold,
-          child: HomeArtPoster(
-            imageUrl: item.poster,
-            title: item.name,
-            showTitle: !_hideHomeCardTitlesAndRatings,
-            isTelevision: true,
-            ringColor: Colors.white,
-            focusNode: nodes[col],
-            onOpen: () => _openMyWatchlistItem(item),
-            onFocused: () => _canvasFavFocused(
-              railKey,
-              col,
-              HomeFavoriteFocus(
-                art: _firstNonEmpty(item.background, item.poster),
-                title: item.name,
-                subtitle: 'MY WATCHLIST · ${item.type.toUpperCase()}',
-              ),
-            ),
-          ),
-        );
+        return cells.watchlist(item, onOpen: () => _openMyWatchlistItem(item));
       case HomeFavoriteKind.iptv:
         final channel = _iptvFavChannels[col];
-        return HomeFavoriteCell(
-          onLeftEdge: () => MainPageBridge.focusTvSidebar?.call(),
-          isTelevision: true,
-          column: col,
-          rowNodes: nodes,
-          onUp: up,
-          onDown: down,
-          onLeft: onLeft,
-          onRight: onRight,
-          onUpHold: onUpHold,
-          onDownHold: onDownHold,
-          child: HomeArtPoster(
-            imageUrl: channel.logoUrl,
-            title: channel.name,
-            showTitle: !_hideHomeCardTitlesAndRatings,
-            imageFit: BoxFit.contain,
-            isTelevision: true,
-            ringColor: Colors.white,
-            focusNode: nodes[col],
-            onOpen: () => _playIptvChannel(channel),
-            // Focus lights the whole stage with this channel's live feed —
-            // the classic boxed preview, promoted to full-bleed.
-            onFocused: () => _canvasFavFocused(
-              railKey,
-              col,
-              HomeFavoriteFocus(
-                art: channel.logoUrl,
-                fit: BoxFit.contain,
-                title: channel.name,
-                subtitle: 'IPTV · FAVORITES',
-              ),
-              liveChannel: channel,
-            ),
-          ),
+        return cells.iptv(
+          channel,
+          subtitle: () => 'IPTV · FAVORITES',
+          previewLive: true,
+          onOpen: () => _playIptvChannel(channel),
         );
       case HomeFavoriteKind.debrify:
         final channel = _tvFavChannels[col];
-        final number = channel.channelNumber > 0
-            ? channel.channelNumber
-            : col + 1;
-        return HomeFavoriteCell(
-          onLeftEdge: () => MainPageBridge.focusTvSidebar?.call(),
-          isTelevision: true,
-          column: col,
-          rowNodes: nodes,
-          onUp: up,
-          onDown: down,
-          onLeft: onLeft,
-          onRight: onRight,
-          onUpHold: onUpHold,
-          onDownHold: onDownHold,
-          child: HomeArtPoster(
-            imageUrl: null,
-            title: channel.name,
-            showTitle: !_hideHomeCardTitlesAndRatings,
-            badge: '$number',
-            isTelevision: true,
-            ringColor: Colors.white,
-            focusNode: nodes[col],
-            onOpen: () => _playChannel(channel),
-            onFocused: () => _canvasFavFocused(
-              railKey,
-              col,
-              HomeFavoriteFocus(
-                art: null,
-                title: channel.name,
-                subtitle: 'DEBRIFY TV · CHANNEL $number',
-              ),
-            ),
-          ),
-        );
+        return cells.debrify(channel, onOpen: () => _playChannel(channel));
       case HomeFavoriteKind.stremio:
         final channel = _stvFavChannels[col];
-        final item = _stvNowPlaying(channel)?.item;
-        return HomeFavoriteCell(
-          onLeftEdge: () => MainPageBridge.focusTvSidebar?.call(),
-          isTelevision: true,
-          column: col,
-          rowNodes: nodes,
-          onUp: up,
-          onDown: down,
-          onLeft: onLeft,
-          onRight: onRight,
-          onUpHold: onUpHold,
-          onDownHold: onDownHold,
-          child: HomeArtPoster(
-            imageUrl: _firstNonEmpty(item?.poster, item?.background),
-            title: channel.displayName,
-            showTitle: !_hideHomeCardTitlesAndRatings,
-            live: true,
-            isTelevision: true,
-            ringColor: Colors.white,
-            focusNode: nodes[col],
-            onOpen: () => _playStremioTvChannel(channel),
-            onFocused: () => _canvasFavFocused(
-              railKey,
-              col,
-              HomeFavoriteFocus(
-                // The stage prefers the WIDE art; the card keeps the poster.
-                art: _firstNonEmpty(item?.background, item?.poster),
-                title: channel.displayName,
-                subtitle: item != null
-                    ? 'STREMIO TV · NOW: ${item.name}'
-                    : 'STREMIO TV · CHANNEL',
-              ),
-            ),
-          ),
+        return cells.stremio(
+          channel,
+          item: _stvNowPlaying(channel)?.item,
+          onOpen: () => _playStremioTvChannel(channel),
         );
       case HomeFavoriteKind.playlist:
         final item = _playlistItems[col];
-        final posterUrl = item.posterUrl;
-        final title = item.title;
-        return HomeFavoriteCell(
-          onLeftEdge: () => MainPageBridge.focusTvSidebar?.call(),
-          isTelevision: true,
-          column: col,
-          rowNodes: nodes,
-          onUp: up,
-          onDown: down,
-          onLeft: onLeft,
-          onRight: onRight,
-          onUpHold: onUpHold,
-          onDownHold: onDownHold,
-          child: HomeArtPoster(
-            imageUrl: posterUrl,
-            title: title,
-            showTitle: !_hideHomeCardTitlesAndRatings,
-            progress: _playlistController.current.progressFor(item),
-            isTelevision: true,
-            ringColor: Colors.white,
-            focusNode: nodes[col],
-            onOpen: () => _onPlaylistItemTap(item),
-            onFocused: () => _canvasFavFocused(
-              railKey,
-              col,
-              HomeFavoriteFocus(
-                art: posterUrl,
-                title: title,
-                subtitle: 'PLAYLIST · SAVED',
-              ),
-            ),
-          ),
+        return cells.playlist(
+          item,
+          progress: _playlistController.current.progressFor(item),
+          onOpen: () => _onPlaylistItemTap(item),
         );
     }
   }
