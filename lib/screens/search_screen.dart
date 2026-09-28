@@ -446,7 +446,6 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   CatalogSearchController get _catalogController =>
       ref.read(catalogSearchProvider(_searchSession).notifier);
   String get _catalogQuery => _catalogState.query;
-  Timer? _catalogDebounce;
 
   /// The addon that produced the item currently being played/browsed, threaded
   /// into playback so Continue Watching can route resume / next-episode back to
@@ -2542,7 +2541,6 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     _tonightFocus.dispose();
     _stageCol.dispose();
     _heroShellBinding?.dispose();
-    _catalogDebounce?.cancel();
     _seriesResumeResolverSubscription.read().dispose();
     _trackerResumeSubscription.read().dispose();
     _heroMetadataSubscription.read().dispose();
@@ -7846,27 +7844,12 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   }
 
   void _publishTitleSuggestions() {
-    final query = _searchController.text.trim();
-    _titleSuggestions.value = [
-      for (final item in _titleSearch.value)
-        TextFieldSuggestion(
-          id: '${item.type}:${item.id}',
-          title: item.name,
-          subtitle: [
-            item.type == 'series' ? 'TV show' : 'Movie',
-            if (item.year?.isNotEmpty == true) item.year!,
-          ].join(' · '),
-          year: item.year,
-          onSelected: () => _openSuggestedTitle(item),
-        ),
-      if (_titleSearch.value.isNotEmpty)
-        TextFieldSuggestion(
-          id: 'search-query',
-          title: 'Search for “$query”',
-          subtitle: 'Search catalogs',
-          onSelected: () => _onQuerySubmitted(query),
-        ),
-    ];
+    _titleSuggestions.value = buildSearchTitleSuggestions(
+      _titleSearch.value,
+      query: _searchController.text.trim(),
+      onOpen: _openSuggestedTitle,
+      onSubmit: _onQuerySubmitted,
+    );
   }
 
   Future<void> _openSuggestedTitle(StremioMeta item) async {
@@ -7911,7 +7894,6 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     // Every mode searches on SUBMIT. Because the field is shared, emptying it
     // must invalidate EVERY mode's cached query/result state; otherwise a mode
     // switch can reveal results for text the field no longer contains.
-    _catalogDebounce?.cancel();
     if (value.trim().isEmpty) {
       _clearQuery();
     }
@@ -7919,7 +7901,6 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
 
   void _onQuerySubmitted(String value) {
     _cancelTitleSuggestions();
-    _catalogDebounce?.cancel();
     final q = value.trim();
     if (q.isEmpty) {
       _searchSubmitFocus.cancel();
@@ -7948,7 +7929,6 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   }
 
   void _clearQuery() {
-    _catalogDebounce?.cancel();
     _searchSubmitFocus.cancel();
     _searchController.clear();
     _cancelTitleSuggestions();

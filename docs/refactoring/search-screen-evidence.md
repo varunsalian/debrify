@@ -6,6 +6,23 @@ workflow checkpoints, reuse valid evidence, and run broader checks at integratio
 gates. Earlier entries retain their original slice history. No changes are pushed
 to the public repository.
 
+## Batch C/D checkpoint: query presentation cleanup — 2026-09-28
+
+Base: `4a32f4af`. Title-suggestion formatting/actions now live beside the query
+field (247 lines). Lookup cancellation, profile/request guards and navigation stay
+at their original call sites. Removed the never-assigned catalog debounce field
+and its four no-op cancellation calls; a repository search confirmed no assignment
+or external use. Root: **10,920 → 10,900 lines**.
+
+Review preserves item labels/year, query fallback visibility, captured selection
+arguments and submit-only search timing. **186 tests pass**: all 185 Search
+application/presentation tests plus a new suggestion capture/empty-state test.
+Analysis retains **836 identical diagnostic identities**; architecture passes
+**549 files**; formatting/diff checks pass. Receipts:
+`.git/refactor-evidence/phase5/query-cleanup-{tests,focused,analyze-final}.txt`.
+No emulator used. Remaining composition, suggestion lookup/navigation lifecycle,
+broader facade reduction and final acceptance remain pending.
+
 ## Batch D checkpoint: Search result provider bindings — 2026-09-28
 
 Base: `41bf6c67`. `SearchResultBindings` (106 lines) retains Lists, Catalog,

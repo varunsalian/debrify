@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../../theme/app_theme_scope.dart';
+import '../../../models/stremio_addon.dart';
 import '../../../widgets/text_field_suggestions.dart';
 import '../../../widgets/tv_text_field.dart';
 import '../models/search_mode.dart';
@@ -216,3 +217,31 @@ class _EmptyFieldLeftAction extends Action<_SearchLeftIntent> {
     return null;
   }
 }
+
+/// Suggestion actions capture the displayed title/query. Lookup ownership and
+/// stale-navigation guards remain with the host.
+List<TextFieldSuggestion> buildSearchTitleSuggestions(
+  List<StremioMeta> items, {
+  required String query,
+  required ValueChanged<StremioMeta> onOpen,
+  required ValueChanged<String> onSubmit,
+}) => [
+  for (final item in items)
+    TextFieldSuggestion(
+      id: '${item.type}:${item.id}',
+      title: item.name,
+      subtitle: [
+        item.type == 'series' ? 'TV show' : 'Movie',
+        if (item.year?.isNotEmpty == true) item.year!,
+      ].join(' · '),
+      year: item.year,
+      onSelected: () => onOpen(item),
+    ),
+  if (items.isNotEmpty)
+    TextFieldSuggestion(
+      id: 'search-query',
+      title: 'Search for “$query”',
+      subtitle: 'Search catalogs',
+      onSelected: () => onSubmit(query),
+    ),
+];
