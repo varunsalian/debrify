@@ -8,7 +8,7 @@ to the public repository.
 
 ## Batch D checkpoint: continuation focus pools — 2026-09-28
 
-Base: `5cf9fa74`. `HomeContinuationNodes` (94 lines) owns the ten movie/series
+Base: `5cf9fa74`. `HomeContinuationNodes` (92 lines) owns the ten movie/series
 focus pools, labels, resize policy and phased cleanup. The five loaders and layout
 refresh use its typed family API, retaining the existing accepted/merged counts.
 Root accessors borrow the same lists. Root: **10,162 → 10,088 lines**.
