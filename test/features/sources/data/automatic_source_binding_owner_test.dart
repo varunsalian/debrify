@@ -1,3 +1,4 @@
+import 'package:debrify/services/android_tv_player_bridge.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
@@ -471,6 +472,53 @@ void main() {
         ),
         isEmpty,
       );
+    },
+  );
+  test(
+    'native launch return keeps source commits alive until session drains',
+    () async {
+      final writer = committer();
+      final session = StremioSourcePersistenceSession(
+        1,
+        onRetired: writer.retain(),
+      );
+      writer
+          .close(); // Android launch returned; native playback is still active.
+      expect(writer.isCurrent, isTrue);
+      await session.enqueue(() => writer(source('native-initial')));
+      expect((await pins(origin)).single.torrentHash, 'native-initial');
+      final release = Completer<void>();
+      final queued = session.enqueue(() async {
+        await release.future;
+        await writer(source('native-switch'));
+      });
+      final draining = session.closeAndDrain();
+      expect(writer.isCurrent, isTrue);
+      release.complete();
+      await queued;
+      await draining;
+      expect((await pins(origin)).single.torrentHash, 'native-switch');
+      expect(writer.isCurrent, isFalse);
+      await writer(source('late'));
+      expect((await pins(origin)).single.torrentHash, 'native-switch');
+    },
+  );
+
+  test(
+    'failed native handoff releases only its lease, preserving player fallback',
+    () async {
+      final writer = committer();
+      final session = StremioSourcePersistenceSession(
+        2,
+        onRetired: writer.retain(),
+      );
+      session.retire();
+      session.retire();
+      expect(writer.isCurrent, isTrue);
+      await writer(source('fallback'));
+      expect((await pins(origin)).single.torrentHash, 'fallback');
+      writer.close();
+      expect(writer.isCurrent, isFalse);
     },
   );
 }

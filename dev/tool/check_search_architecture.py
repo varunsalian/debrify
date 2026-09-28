@@ -15,6 +15,10 @@ FEATURES = ("search", "home", "discover", "sources", "stremio_tv")
 # The original screen/parts are tracked temporary exceptions in the phase plan;
 # add a retained facade here once its migration is complete.
 EXTRACTED_ELSEWHERE: tuple[str, ...] = (
+    "lib/models/debrify_tv_channel_action.dart",
+    "lib/services/debrify_tv_channel_actions.dart",
+    "lib/widgets/debrify_tv_channel_add_bridge.dart",
+    "lib/widgets/channel_picker_dialog.dart",
     "lib/models/playlist_entry.dart",
     "lib/screens/video_player/models/playlist_entry.dart",
     "lib/services/profiles/profile_local_writes.dart",
@@ -75,6 +79,12 @@ EXTRACTED_ELSEWHERE: tuple[str, ...] = (
 # Context-dependent legacy actions are allowed only through these named bridges.
 # Phase 4C owns binding preparation; phase 7 retains playback lifecycle review.
 PRESENTATION_BRIDGE_IMPORTS = {
+    # Shared channel picker bridge composes owner-scoped data actions; widgets
+    # receive callbacks and cannot access the database/repository directly.
+    "lib/widgets/debrify_tv_channel_add_bridge.dart": {
+        "lib/services/debrify_tv_channel_actions.dart",
+        "lib/services/profiles/profile_session_memory.dart",
+    },
     # Named legacy menu factories perform presentation only; action handlers and
     # service classes remain forbidden by the explicit show-declaration guard.
     "lib/features/home/presentation/home_detail_menus.dart": {

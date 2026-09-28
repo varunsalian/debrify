@@ -22,7 +22,7 @@ import 'video_player_screen.dart';
 import '../services/video_player_launcher.dart';
 import '../services/download_service.dart';
 import '../services/main_page_bridge.dart';
-import '../services/debrify_tv_channel_add_service.dart';
+import '../widgets/debrify_tv_channel_add_bridge.dart';
 import '../widgets/cloud/cloud_file_row.dart';
 import '../widgets/cloud/cloud_row_skeleton.dart';
 import '../widgets/cloud/cloud_segmented_tabs.dart';
@@ -3854,9 +3854,9 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
 
   Future<void> _handleAddTorrentToDebrifyTv(RDTorrent torrent) async {
     try {
-      final result = await DebrifyTvChannelAddService.addTorrentsToChannel(
+      final result = await DebrifyTvChannelAddBridge.addTorrentsToChannel(
         context,
-        torrents: [DebrifyTvChannelAddService.fromRealDebridTorrent(torrent)],
+        torrents: [DebrifyTvChannelAddBridge.fromRealDebridTorrent(torrent)],
         searchKeyword: _torrentSearchQuery,
       );
 

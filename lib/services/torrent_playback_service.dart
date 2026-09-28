@@ -67,7 +67,7 @@ import '../widgets/pipeline_loading_overlay.dart';
 import '../widgets/provider_picker_dialog.dart';
 import 'alldebrid_service.dart';
 import 'debrid_service.dart';
-import 'debrify_tv_channel_add_service.dart';
+import '../widgets/debrify_tv_channel_add_bridge.dart';
 import 'local_bound_source_service.dart';
 import 'local_playback_resume_resolver.dart';
 import 'main_page_bridge.dart';
@@ -275,6 +275,7 @@ class TorrentPlaybackService {
             seriesSourceFetcher: fetcher,
             meta: meta,
           ),
+          retainSourceSession: committer.retain,
           onQuickPlayNextEpisode: _nextEpisodeHandlerFor(
             context,
             meta,
@@ -446,7 +447,7 @@ class TorrentPlaybackService {
         // Saved "Add to channel" action (parity with the old screen): cache the
         // torrent into a Debrify TV channel instead of playing it. Without this
         // case the switch fell through to `default` and silently played.
-        await DebrifyTvChannelAddService.addTorrentsToChannel(
+        await DebrifyTvChannelAddBridge.addTorrentsToChannel(
           context,
           torrents: [torrent],
           searchKeyword: searchKeyword,
@@ -607,6 +608,7 @@ class TorrentPlaybackService {
         await VideoPlayerLauncher.push(
           context,
           args,
+          retainSourceSession: committer.retain,
           onPlayerHandoff: loader?.dismiss,
           onQuickPlayNextEpisode: nextEpisodeHandler,
         );
@@ -5965,6 +5967,7 @@ class TorrentPlaybackService {
       await VideoPlayerLauncher.push(
         context,
         args,
+        retainSourceSession: committer.retain,
         onPlayerHandoff: overlay?.dismiss,
         onQuickPlayNextEpisode: nextEpisodeHandler,
       );
@@ -6438,10 +6441,12 @@ class TorrentPlaybackService {
           title: 'Add to channel',
           subtitle: 'Cache this torrent in a Debrify TV channel.',
           onTap: () => unawaited(
-            DebrifyTvChannelAddService.addTorrentsToChannel(
+            DebrifyTvChannelAddBridge.addTorrentsToChannel(
               context,
               torrents: [torrent],
               searchKeyword: searchKeyword,
+              owner: sourceBindings.owner,
+              canContinue: () => sourceBindings.isCurrent,
             ),
           ),
         ),

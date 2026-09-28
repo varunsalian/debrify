@@ -1,3 +1,5 @@
+import 'package:debrify/services/debrify_tv_channel_actions.dart';
+import 'package:debrify/services/profiles/profile_session_memory.dart';
 import 'dart:convert';
 import 'package:debrify/services/remote_control/remote_channel_file.dart';
 import 'package:debrify/services/community/channel_yaml_builder.dart';
@@ -1082,5 +1084,27 @@ void main() {
       expect(source, isNot(contains('tv_channel_keywords')), reason: file.path);
       expect(source, isNot(contains('tv_cached_torrents')), reason: file.path);
     }
+  });
+  test('channel picker actions override a foreign captured scope', () async {
+    final actions = DebrifyTvChannelActions(
+      owner: ProfileSessionMemory.captureOwner(),
+      canContinue: () => true,
+    );
+    final result = await ProfileRuntime.withCapturedScope(
+      profileB,
+      () => actions.createChannel('Origin channel', 'Keyword'),
+    );
+    expect((await actions.loadChannels()).single.channelId, result.channelId);
+    final incoming = await ProfileRuntime.withCapturedScope(
+      profileB,
+      DebrifyTvRepository.instance.fetchAllChannels,
+    );
+    expect(incoming, isEmpty);
+    ProfileRuntime.publish(profileB);
+    await expectLater(
+      actions.createChannel('Retired', 'Keyword'),
+      throwsStateError,
+    );
+    expect(await DebrifyTvRepository.instance.fetchAllChannels(), isEmpty);
   });
 }

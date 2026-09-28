@@ -6,7 +6,7 @@ import '../widgets/bulk_add_progress_dialog.dart';
 import '../widgets/channel_created_share_dialog.dart';
 import 'alldebrid_service.dart';
 import 'debrid_service.dart';
-import 'debrify_tv_channel_add_service.dart';
+import '../widgets/debrify_tv_channel_add_bridge.dart';
 import 'pikpak_api_service.dart';
 import 'premiumize_service.dart';
 import 'storage_service.dart';
@@ -697,7 +697,7 @@ class TorrentBulkAddService {
   ) async {
     if (torrentsToAdd.isEmpty) return;
     try {
-      final result = await DebrifyTvChannelAddService.addTorrentsToChannel(
+      final result = await DebrifyTvChannelAddBridge.addTorrentsToChannel(
         context,
         torrents: torrentsToAdd,
         searchKeyword: keyword,

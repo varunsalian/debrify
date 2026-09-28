@@ -826,6 +826,7 @@ class VideoPlayerLauncher {
     Future<void> Function(Map<String, dynamic> result)? onQuickPlayNextEpisode,
     bool isTrailer = false,
     VoidCallback? onPlayerHandoff,
+    VoidCallback Function()? retainSourceSession,
   }) async {
     // Exactly-once relay for [onPlayerHandoff]. _push fires one of these at
     // its launch points; the finally is the safety net so an exception mid
@@ -856,6 +857,7 @@ class VideoPlayerLauncher {
         isTrailer: isTrailer,
         handoffNow: handoffNow,
         handoffWhenCovered: handoffWhenCovered,
+        retainSourceSession: retainSourceSession,
       );
     } on NativePlayerSettingsUnavailable catch (error) {
       // No player opened, so no return observer will balance the launch signal.
@@ -879,6 +881,7 @@ class VideoPlayerLauncher {
     bool isTrailer = false,
     required VoidCallback handoffNow,
     required VoidCallback handoffWhenCovered,
+    VoidCallback Function()? retainSourceSession,
   }) async {
     // Apply the tracker master switches to catalog content with stable IDs.
     var args = originalArgs;
@@ -1273,6 +1276,7 @@ class VideoPlayerLauncher {
         args,
         onQuickPlayNextEpisode: onQuickPlayNextEpisode,
         isTrailer: isTrailer,
+        retainSourceSession: retainSourceSession,
       );
       if (launched) {
         handoffWhenCovered();
@@ -2253,6 +2257,7 @@ class VideoPlayerLauncher {
     VideoPlayerLaunchArgs args, {
     Future<void> Function(Map<String, dynamic> result)? onQuickPlayNextEpisode,
     bool isTrailer = false,
+    VoidCallback Function()? retainSourceSession,
   }) async {
     // Route IPTV playlists to dedicated IPTV launcher
     if (args.iptvChannels != null && args.iptvChannels!.isNotEmpty) {
@@ -3327,6 +3332,7 @@ class VideoPlayerLauncher {
 
       final launched = await AndroidTvPlayerBridge.launchTorrentPlayback(
         payload: payloadMap,
+        retainSourceSession: retainSourceSession,
         onProgress: (progress) {
           final season = (progress['season'] as num?)?.toInt();
           final episode = (progress['episode'] as num?)?.toInt();

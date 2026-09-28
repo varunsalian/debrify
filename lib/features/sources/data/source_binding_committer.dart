@@ -21,10 +21,30 @@ class SourceBindingCommitter {
   final Future<String?> Function(bool Function() canContinue) chooseProvider;
   bool _initialPending = true;
   bool _closed = false;
+  bool _launchClosed = false;
+  int _retainedSessions = 0;
   Future<void> _tail = Future<void>.value();
 
   bool get isCurrent => !_closed && bindings.isCurrent;
-  void close() => _closed = true;
+
+  /// Native launch returns before playback ends. Its persistence session owns
+  /// this additional lease until its accepted writes drain or it retires.
+  void Function() retain() {
+    if (_closed) return () {};
+    _retainedSessions++;
+    var released = false;
+    return () {
+      if (released) return;
+      released = true;
+      _retainedSessions--;
+      if (_launchClosed && _retainedSessions == 0) _closed = true;
+    };
+  }
+
+  void close() {
+    _launchClosed = true;
+    if (_retainedSessions == 0) _closed = true;
+  }
 
   Future<void> call(Torrent source) {
     if (!isCurrent) return Future<void>.value();

@@ -132,7 +132,7 @@ until the batch ends. This replaces per-helper checkpoints, not incremental safe
 | Batch | Current status |
 | --- | --- |
 | A | Implemented and reviewed. Home actions, resume, detail mutation/reset boundaries and accepted local writes are wired and checked. Full gate: 10,058 passes, unchanged historical failures/errors, no missing or newly skipped tests. |
-| B | Manual/provider acquisition, automatic bindings, direct downloads, automatic torrent probes and player source-switch resolution reviewed. Full retry: 10,136 passes, unchanged historical failures/errors/skips, no missing tests, 26 added passing cases. Saved-cloud preparation is also reviewed (813 affected passes, unchanged analyzer). Pack/ZIP/not-ready actions are reviewed (755 Sources passes plus three additional action cases, unchanged analyzer). Playlist payload/persistence and provider-tab dispatch are now reviewed (886 affected passes, two observed historical collection-browser failures, unchanged analyzer). Remaining: channel writes, native handoff/recovery ownership and device checks; see concrete paths below. |
+| B | Provider/manual acquisition, automatic bindings, saved cloud preparation, downloads/ZIPs, playlist persistence and channel actions are wired and reviewed. Native source commits now survive Android launch return and retire with the native session. Full retry: 10,198 passes, unchanged historical failures/errors/skips, no missing tests or new regressions; 62 added cases pass. Remaining: native preparation/recovery owner propagation, switch-generation cancellation and device checks. |
 | C | Pending remaining boundaries; substantial layout/search extraction already complete |
 | D | Pending remaining boundaries and facade reduction |
 | E | Pending final acceptance |
@@ -264,14 +264,34 @@ policy moves to the plain Sources operation, not into this oversized service.
 Verify real-profile/foreign-scope writes and delayed-save retirement before closing
 this B boundary; unrelated storage redesign remains outside this migration.
 
+Channel actions reuse the borrowed `DebrifyTvDatabase`, repository and cache
+service without changing their implementations. The extracted plain shared
+operation supplies existing transaction arguments so channel/cache/sync writes
+commit together and can roll back on retirement. The existing presentation bridge
+and picker are included in the measured source set; picker callbacks no longer
+perform database work. Their unchanged legacy copy remains under the existing
+localization exception. Verify ordering, duplicate merges, picker retirement and
+actual transactional rollback before closing this B workflow.
+
+The native handoff audit found that Android TV returns from launch while the
+player remains active. `SourceBindingCommitter.close` therefore cannot end the
+native session on launch return. The borrowed launcher/Android bridge may carry
+an optional retain/release callback into the existing source persistence session;
+release it exactly once after drain/retirement, preserving failed-launch fallback.
+This bounded lifetime correction adds no native payload fields or platform code.
+The rest of launch preparation, recovery owner propagation and switch generation
+remains B work; actual device verification is still required.
+
+Completed channel boundary:
+Channel creation/cache updates now use `DebrifyTvChannelActions` and the named
+`DebrifyTvChannelAddBridge`. The picker accepts data callbacks, including its
+creation-lifetime guard. Channel/cache/sync metadata commit atomically; tests
+cover rollback, original-profile execution, duplicate/order behavior and picker
+disposal. The 627-line picker remains one cohesive dialog with its focusable tile;
+it owns only presentation/local focus state and stays within the 800-line ceiling.
+The shared operation is 310 lines, bridge 51 and result model 53; all are measured.
+
 Concrete remaining B paths:
-- Channel actions (`DebrifyTvChannelAddService`, including creation inside
-  `ChannelPickerDialog`): preserve original ownership through picker callbacks,
-  repository transactions and cache saves. The picker itself writes before it
-  returns; guarding only the result is insufficient. Playlist additions now use
-  the reviewed `SourcePlaylist` operation and actual preference-write guard;
-  provider-tab dispatch checks its original owner. Pack/ZIP/not-ready actions
-  use `ProviderSourceActions`; saved-cloud preparation uses `ProviderCloudSource`.
 - `VideoPlayerLauncher` preparation and native automatic recovery: pass the
   originating owner rather than recapturing after handoff; retain player/session
   and source-switch generation checks across queued native work. The recovery

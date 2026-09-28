@@ -6,6 +6,53 @@ workflow checkpoints, reuse valid evidence, and run broader checks at integratio
 gates. Earlier entries retain their original slice history. No changes are pushed
 to the public repository.
 
+## Batch B checkpoint: channel actions and native source lifetime — 2026-09-28
+
+Base revision: `cb597482`. Shared channel merge/create/persistence moves from the
+context-dependent service and picker into `DebrifyTvChannelActions` (310 lines).
+The named `DebrifyTvChannelAddBridge` (51 lines) composes it; all four production
+callers use that bridge. The picker now receives callbacks and owns no database
+work. Its creation guard retires when the dialog is disposed. Existing native
+converters, keyword fallback, counts, provider filtering and cache read ordering
+are preserved. The old service file is removed; all four migrated files join the
+architecture check. Channel/cache/sync writes use existing transaction arguments
+and roll back together on failure or pre-commit retirement. No borrowed database,
+repository or cache implementation changes were needed.
+
+Focused channel verification: **25 passes**, including nine new cases for merge,
+rollback, transaction-wait retirement, accepted durable writes, real profile scopes,
+selection/Back and closing during creation. The first fixture expected in-memory
+insertion order; the real cache reads `added_at` in reverse order, and the assertion
+was corrected to preserve existing storage behavior. Analyzer identities unchanged.
+
+The native audit then found an early-close regression: Android launch returns
+before its player session ends, while the committer previously closed at return.
+The first full run (`full-channel-actions-c4.jsonl`) was deliberately interrupted
+and is not completion evidence. The launcher now forwards an optional retain hook
+from each Sources launch to the native source-persistence session. This lease
+survives launch return and releases exactly once after drain, timeout or retirement.
+Failed native launch releases its lease while leaving the launch owner alive for
+fallback. This does not change platform payloads, native code or existing queue
+ordering. Three new regression cases verify real profile commits after native
+launch return, final queued switches before release, fallback, and idempotent
+timeout release; **19 affected queue/ownership tests pass**.
+
+Final analyzer: **844 unchanged identities**; architecture: **502 files pass**.
+Formatting/diff checks pass. Receipts under `.git/refactor-evidence/phase5/`:
+`channel-actions-focused.txt`, `native-retention-tests.txt`,
+`channel-native-analyze-final.txt`. Full retry `full-channel-native-retry-c4.jsonl`: **10,198 successes / 22 failures /
+29 errors / 20 skips**. Identity comparison with the last full gate finds **no new
+failures/errors, missing tests or newly skipped tests**, with **62 added successes**
+across the saved-cloud, download/ZIP, playlist and channel/native checkpoints.
+Receipt: `channel-actions-full-comparison.txt`. The existing baseline helper was
+also applied to that completed recording: it flags 42 failures beyond its stale
+nine-name checked-in list. All 51 failure/error identities were already observed
+in the preceding full gate; that identity comparison passes. No baseline was
+rewritten. Receipt: `channel-native-baseline-helper.txt`. An attempted
+`--help` invocation unexpectedly started an extra suite because the helper has no
+argument parser; that redundant process was stopped and contributes no evidence. Native preparation/recovery owner propagation, source-switch request
+cancellation and device checks remain B work; C–E remain open.
+
 ## Batch B checkpoint: provider-native playlist persistence — 2026-09-28
 
 Base revision: `4ee21725`. The 115-line plain `SourcePlaylist` owns native playlist

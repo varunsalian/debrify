@@ -56,12 +56,17 @@ typedef MovieMetadataProvider =
 /// letting a stuck platform preference write poison later playback sessions.
 @visibleForTesting
 class StremioSourcePersistenceSession {
-  StremioSourcePersistenceSession(this.id, {this.waitTimeout = timeout});
+  StremioSourcePersistenceSession(
+    this.id, {
+    this.waitTimeout = timeout,
+    void Function()? onRetired,
+  }) : _onRetired = onRetired;
 
   static const timeout = Duration(seconds: 5);
   final Duration waitTimeout;
 
   final int id;
+  void Function()? _onRetired;
   Future<void> _tail = Future<void>.value();
   bool _accepting = true;
 
@@ -96,11 +101,20 @@ class StremioSourcePersistenceSession {
         'AndroidTvPlayerBridge: source persistence drain timed out '
         '(session=$id)',
       );
+    } finally {
+      _releaseOwner();
     }
   }
 
   void retire() {
     _accepting = false;
+    _releaseOwner();
+  }
+
+  void _releaseOwner() {
+    final release = _onRetired;
+    _onRetired = null;
+    release?.call();
   }
 }
 
@@ -1840,6 +1854,7 @@ class AndroidTvPlayerBridge {
     StremioTvNextProvider? onRequestStremioTvNext,
     Future<Map<String, dynamic>?> Function(Map<String, dynamic>)?
     onRequestIptvBrowse,
+    void Function() Function()? retainSourceSession,
   }) async {
     if (!Platform.isAndroid) {
       return false;
@@ -1860,7 +1875,10 @@ class AndroidTvPlayerBridge {
     }
     final lockOwner = _beginNativePlayback();
     _nativePlaybackLockOwner = lockOwner;
-    final persistenceSession = StremioSourcePersistenceSession(sessionId);
+    final persistenceSession = StremioSourcePersistenceSession(
+      sessionId,
+      onRetired: retainSourceSession?.call(),
+    );
     _sourcePersistenceSession = persistenceSession;
     final profileOwner = ProfileSessionMemory.captureOwner();
     final progressSession = onProgress == null &&

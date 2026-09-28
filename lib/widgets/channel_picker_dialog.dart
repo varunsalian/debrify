@@ -1,33 +1,29 @@
+import '../models/debrify_tv_channel_action.dart';
+export '../models/debrify_tv_channel_action.dart' show ChannelPickerResult;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../models/debrify_tv_channel_record.dart';
-import '../services/debrify_tv_repository.dart';
-import '../services/debrify_tv_cache_service.dart';
-import '../models/debrify_tv_cache.dart';
 import '../utils/dialog_tap_guard.dart';
 import '../utils/tv_keys.dart';
 import 'tv_text_field.dart';
 
-/// Result returned when user selects or creates a channel
-class ChannelPickerResult {
-  final String channelId;
-  final String channelName;
-  final bool isNewChannel;
-
-  const ChannelPickerResult({
-    required this.channelId,
-    required this.channelName,
-    required this.isNewChannel,
-  });
-}
-
 /// DPAD-compatible dialog for selecting existing channel or creating new one
 class ChannelPickerDialog extends StatefulWidget {
   final String searchKeyword;
+  final Future<List<DebrifyTvChannelRecord>> Function() loadChannels;
+  final Future<ChannelPickerResult> Function(
+    String name,
+    bool Function() canContinue,
+  )
+  createChannel;
+  final bool Function() canContinue;
 
   const ChannelPickerDialog({
     super.key,
     required this.searchKeyword,
+    required this.loadChannels,
+    required this.createChannel,
+    required this.canContinue,
   });
 
   @override
@@ -69,8 +65,8 @@ class _ChannelPickerDialogState extends State<ChannelPickerDialog> {
 
   Future<void> _loadChannels() async {
     try {
-      final channels = await DebrifyTvRepository.instance.fetchAllChannels();
-      if (mounted) {
+      final channels = await widget.loadChannels();
+      if (mounted && widget.canContinue()) {
         setState(() {
           _channels = channels;
           _isLoading = false;
@@ -79,13 +75,13 @@ class _ChannelPickerDialogState extends State<ChannelPickerDialog> {
 
         // Auto-focus create button after loading
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) {
+          if (mounted && widget.canContinue()) {
             _createButtonFocusNode.requestFocus();
           }
         });
       }
     } catch (e) {
-      if (mounted) {
+      if (mounted && widget.canContinue()) {
         setState(() {
           _isLoading = false;
         });
@@ -101,11 +97,14 @@ class _ChannelPickerDialogState extends State<ChannelPickerDialog> {
 
     // Add new nodes
     while (_itemFocusNodes.length < _channels.length) {
-      _itemFocusNodes.add(FocusNode(debugLabel: 'channel-${_itemFocusNodes.length}'));
+      _itemFocusNodes.add(
+        FocusNode(debugLabel: 'channel-${_itemFocusNodes.length}'),
+      );
     }
   }
 
   void _handleChannelSelect(DebrifyTvChannelRecord channel) {
+    if (!widget.canContinue()) return;
     Navigator.of(context).pop(
       ChannelPickerResult(
         channelId: channel.channelId,
@@ -122,13 +121,14 @@ class _ChannelPickerDialogState extends State<ChannelPickerDialog> {
 
     // Auto-focus name field
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
+      if (mounted && widget.canContinue()) {
         _nameFieldFocusNode.requestFocus();
       }
     });
   }
 
   Future<void> _createChannel() async {
+    if (!widget.canContinue()) return;
     final name = _nameController.text.trim();
 
     if (name.isEmpty) {
@@ -146,44 +146,15 @@ class _ChannelPickerDialogState extends State<ChannelPickerDialog> {
     });
 
     try {
-      final now = DateTime.now();
-      final channelId = now.microsecondsSinceEpoch.toString();
-
-      final channel = DebrifyTvChannelRecord(
-        channelId: channelId,
-        name: name,
-        keywords: [widget.searchKeyword],
-        avoidNsfw: true,
-        channelNumber: 0, // Auto-assigned by repository
-        createdAt: now,
-        updatedAt: now,
+      final result = await widget.createChannel(
+        name,
+        () => mounted && widget.canContinue(),
       );
-
-      await DebrifyTvRepository.instance.upsertChannel(channel);
-
-      if (!mounted) return;
-
-      // Initialize empty cache entry with warming status
-      final normalizedKeyword = widget.searchKeyword.toLowerCase();
-      final cacheEntry = DebrifyTvChannelCacheEntry.empty(
-        channelId: channelId,
-        normalizedKeywords: [normalizedKeyword],
-        status: DebrifyTvCacheStatus.warming,
-      );
-
-      await DebrifyTvCacheService.saveEntry(cacheEntry);
-
-      if (mounted) {
-        Navigator.of(context).pop(
-          ChannelPickerResult(
-            channelId: channelId,
-            channelName: name,
-            isNewChannel: true,
-          ),
-        );
+      if (mounted && widget.canContinue()) {
+        Navigator.of(context).pop(result);
       }
     } catch (e) {
-      if (mounted) {
+      if (mounted && widget.canContinue()) {
         setState(() {
           _isLoading = false;
         });
@@ -205,7 +176,7 @@ class _ChannelPickerDialogState extends State<ChannelPickerDialog> {
 
     // Refocus create button
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
+      if (mounted && widget.canContinue()) {
         _createButtonFocusNode.requestFocus();
       }
     });
@@ -271,10 +242,7 @@ class _ChannelPickerDialogState extends State<ChannelPickerDialog> {
                     SizedBox(height: 4),
                     Text(
                       'Select a channel or create new',
-                      style: TextStyle(
-                        color: Colors.white60,
-                        fontSize: 12,
-                      ),
+                      style: TextStyle(color: Colors.white60, fontSize: 12),
                     ),
                   ],
                 ),
@@ -290,9 +258,7 @@ class _ChannelPickerDialogState extends State<ChannelPickerDialog> {
         if (_isLoading)
           const Padding(
             padding: EdgeInsets.all(40),
-            child: CircularProgressIndicator(
-              color: Color(0xFF10B981),
-            ),
+            child: CircularProgressIndicator(color: Color(0xFF10B981)),
           )
         else
           Flexible(
@@ -316,7 +282,8 @@ class _ChannelPickerDialogState extends State<ChannelPickerDialog> {
                   return _ChannelSelectionTile(
                     icon: Icons.tv_rounded,
                     title: channel.name,
-                    subtitle: '${channel.keywords.length} keyword(s) • Channel ${channel.channelNumber}',
+                    subtitle:
+                        '${channel.keywords.length} keyword(s) • Channel ${channel.channelNumber}',
                     focusNode: _itemFocusNodes[index],
                     onTap: () => _handleChannelSelect(channel),
                   );
@@ -327,10 +294,7 @@ class _ChannelPickerDialogState extends State<ChannelPickerDialog> {
                     child: Center(
                       child: Text(
                         'No channels yet. Create your first one!',
-                        style: TextStyle(
-                          color: Colors.white38,
-                          fontSize: 13,
-                        ),
+                        style: TextStyle(color: Colors.white38, fontSize: 13),
                         textAlign: TextAlign.center,
                       ),
                     ),
@@ -367,10 +331,7 @@ class _ChannelPickerDialogState extends State<ChannelPickerDialog> {
               const SizedBox(width: 12),
               const Text(
                 'Create Channel',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w700,
-                ),
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
               ),
             ],
           ),
@@ -394,37 +355,40 @@ class _ChannelPickerDialogState extends State<ChannelPickerDialog> {
               return KeyEventResult.ignored;
             },
             child: TvTextField(
-            controller: _nameController,
-            focusNode: _nameFieldFocusNode,
-            textInputAction: TextInputAction.done,
-            onSubmitted: (_) {
-              // Move focus to Confirm button when Enter is pressed
-              if (_nameController.text.trim().isNotEmpty) {
-                _confirmButtonFocusNode.requestFocus();
-              }
-            },
-            decoration: InputDecoration(
-              labelText: 'Channel Name',
-              labelStyle: const TextStyle(color: Colors.white60),
-              hintText: 'e.g., Action Movies',
-              hintStyle: const TextStyle(color: Colors.white38),
-              filled: true,
-              fillColor: const Color(0xFF111827),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: const BorderSide(color: Color(0xFF1F2937)),
+              controller: _nameController,
+              focusNode: _nameFieldFocusNode,
+              textInputAction: TextInputAction.done,
+              onSubmitted: (_) {
+                // Move focus to Confirm button when Enter is pressed
+                if (_nameController.text.trim().isNotEmpty) {
+                  _confirmButtonFocusNode.requestFocus();
+                }
+              },
+              decoration: InputDecoration(
+                labelText: 'Channel Name',
+                labelStyle: const TextStyle(color: Colors.white60),
+                hintText: 'e.g., Action Movies',
+                hintStyle: const TextStyle(color: Colors.white38),
+                filled: true,
+                fillColor: const Color(0xFF111827),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: Color(0xFF1F2937)),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: Color(0xFF1F2937)),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(
+                    color: Color(0xFF10B981),
+                    width: 2,
+                  ),
+                ),
               ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: const BorderSide(color: Color(0xFF1F2937)),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: const BorderSide(color: Color(0xFF10B981), width: 2),
-              ),
-            ),
-            onUpArrow: () => _cancelButtonFocusNode.requestFocus(),
-            onDownArrow: () => _confirmButtonFocusNode.requestFocus(),
+              onUpArrow: () => _cancelButtonFocusNode.requestFocus(),
+              onDownArrow: () => _confirmButtonFocusNode.requestFocus(),
             ),
           ),
           const SizedBox(height: 12),
@@ -466,7 +430,10 @@ class _ChannelPickerDialogState extends State<ChannelPickerDialog> {
                       backgroundColor: _cancelButtonFocused
                           ? const Color(0xFF1F2937)
                           : Colors.transparent,
-                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 12,
+                      ),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
@@ -510,7 +477,10 @@ class _ChannelPickerDialogState extends State<ChannelPickerDialog> {
                           ? const Color(0xFF059669)
                           : const Color(0xFF10B981),
                       foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 12,
+                      ),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
@@ -595,7 +565,9 @@ class _ChannelSelectionTileState extends State<_ChannelSelectionTile> {
             color: const Color(0xFF111827),
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
-              color: _focused ? const Color(0xFF10B981) : const Color(0xFF1F2937),
+              color: _focused
+                  ? const Color(0xFF10B981)
+                  : const Color(0xFF1F2937),
               width: _focused ? 2 : 1,
             ),
             boxShadow: _focused
@@ -611,7 +583,9 @@ class _ChannelSelectionTileState extends State<_ChannelSelectionTile> {
             children: [
               Icon(
                 widget.icon,
-                color: widget.isCreateNew ? const Color(0xFF10B981) : Colors.white70,
+                color: widget.isCreateNew
+                    ? const Color(0xFF10B981)
+                    : Colors.white70,
                 size: 22,
               ),
               const SizedBox(width: 12),
@@ -623,7 +597,9 @@ class _ChannelSelectionTileState extends State<_ChannelSelectionTile> {
                       widget.title,
                       style: TextStyle(
                         fontSize: 14,
-                        fontWeight: widget.isCreateNew ? FontWeight.w600 : FontWeight.w500,
+                        fontWeight: widget.isCreateNew
+                            ? FontWeight.w600
+                            : FontWeight.w500,
                       ),
                     ),
                     const SizedBox(height: 2),

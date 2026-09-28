@@ -16,7 +16,7 @@ import '../../services/torbox_torrent_control_service.dart';
 import '../../services/storage_service.dart';
 import '../../services/main_page_bridge.dart';
 import '../../services/download_service.dart';
-import '../../services/debrify_tv_channel_add_service.dart';
+import '../../widgets/debrify_tv_channel_add_bridge.dart';
 import '../../theme/app_theme_scope.dart';
 import '../../utils/formatters.dart';
 import '../../utils/file_utils.dart';
@@ -445,9 +445,9 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
 
   Future<void> _handleAddToDebrifyTv(TorboxTorrent torrent) async {
     try {
-      final result = await DebrifyTvChannelAddService.addTorrentsToChannel(
+      final result = await DebrifyTvChannelAddBridge.addTorrentsToChannel(
         context,
-        torrents: [DebrifyTvChannelAddService.fromTorboxTorrent(torrent)],
+        torrents: [DebrifyTvChannelAddBridge.fromTorboxTorrent(torrent)],
         searchKeyword: _torrentSearchQuery,
       );
 

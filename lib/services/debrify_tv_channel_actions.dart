@@ -1,65 +1,102 @@
-import 'package:flutter/material.dart';
-
+import 'package:sqflite/sqflite.dart';
 import '../models/debrify_tv_cache.dart';
+import '../models/debrify_tv_channel_action.dart';
+import '../models/debrify_tv_channel_record.dart';
 import '../models/rd_torrent.dart';
 import '../models/torrent.dart';
 import '../models/torbox_torrent.dart';
-import '../widgets/channel_picker_dialog.dart';
+import 'debrify_tv_database.dart';
 import 'debrify_tv_cache_service.dart';
 import 'debrify_tv_repository.dart';
+import 'profiles/profile_runtime.dart';
+import 'profiles/profile_session_memory.dart';
 
-class DebrifyTvChannelAddException implements Exception {
-  const DebrifyTvChannelAddException(this.message);
+/// Channel actions retain their originating profile through picker callbacks.
+/// A retired transaction rolls back channel/cache/sync metadata together.
+class DebrifyTvChannelActions {
+  const DebrifyTvChannelActions({
+    required this.owner,
+    required this.canContinue,
+  });
+  final ProfileSessionOwner owner;
+  final bool Function() canContinue;
+  bool get isCurrent =>
+      owner == ProfileSessionMemory.captureOwner() && canContinue();
+  void _check() {
+    if (!isCurrent) {
+      throw StateError('Channel action retired');
+    }
+  }
 
-  final String message;
+  Future<T> _owned<T>(Future<T> Function() action) async {
+    _check();
+    final scope = owner.scope;
+    return scope == null
+        ? ProfileRuntime.withoutCapturedScope(action)
+        : ProfileRuntime.withCapturedScope(scope, action);
+  }
 
-  @override
-  String toString() => message;
-}
+  Future<void> _write(Future<void> Function(Transaction) action) =>
+      DebrifyTvDatabase.instance.runTxn((txn) async {
+        _check();
+        await action(txn);
+        _check();
+      });
 
-class DebrifyTvChannelAddResult {
-  const DebrifyTvChannelAddResult({
-    required this.channelId,
-    required this.channelName,
-    required this.isNewChannel,
-    required this.totalCount,
-    required this.addedCount,
-    required this.updatedCount,
+  Future<List<DebrifyTvChannelRecord>> loadChannels() => _owned(() async {
+    final channels = await DebrifyTvRepository.instance.fetchAllChannels();
+    _check();
+    return channels;
   });
 
-  final String channelId;
-  final String channelName;
-  final bool isNewChannel;
-  final int totalCount;
-  final int addedCount;
-  final int updatedCount;
-
-  String get successMessage {
-    final noun = totalCount == 1 ? '1 torrent' : '$totalCount torrents';
-    if (isNewChannel) {
-      return 'Channel "$channelName" created with $noun';
+  Future<ChannelPickerResult> createChannel(
+    String name,
+    String searchKeyword, {
+    bool Function()? canContinue,
+  }) => _owned(() async {
+    void checkPicker() {
+      _check();
+      if (canContinue?.call() == false) {
+        throw StateError('Channel picker retired');
+      }
     }
-    if (addedCount == 0) {
-      final updatedNoun = updatedCount == 1
-          ? 'Torrent'
-          : '$updatedCount torrents';
-      return '$updatedNoun updated in "$channelName"';
-    }
-    return '$noun added to "$channelName"';
-  }
-}
 
-class DebrifyTvChannelAddService {
-  const DebrifyTvChannelAddService._();
+    checkPicker();
+    final now = DateTime.now();
+    final channelId = now.microsecondsSinceEpoch.toString();
+    final channel = DebrifyTvChannelRecord(
+      channelId: channelId,
+      name: name,
+      keywords: [searchKeyword],
+      avoidNsfw: true,
+      channelNumber: 0,
+      createdAt: now,
+      updatedAt: now,
+    );
+    final cacheEntry = DebrifyTvChannelCacheEntry.empty(
+      channelId: channelId,
+      normalizedKeywords: [searchKeyword.toLowerCase()],
+      status: DebrifyTvCacheStatus.warming,
+    );
+    await _write((txn) async {
+      checkPicker();
+      await DebrifyTvRepository.instance.upsertChannel(
+        channel,
+        transaction: txn,
+      );
+      checkPicker();
+      await DebrifyTvCacheService.saveEntry(cacheEntry, transaction: txn);
+      checkPicker();
+    });
+    return ChannelPickerResult(
+      channelId: channelId,
+      channelName: name,
+      isNewChannel: true,
+    );
+  });
 
-  static Future<DebrifyTvChannelAddResult?> addTorrentsToChannel(
-    BuildContext context, {
-    required List<Torrent> torrents,
-    required String searchKeyword,
-  }) async {
-    final trimmedKeyword = searchKeyword.trim();
-
-    final filteredTorrents = torrents
+  static List<Torrent> prepare(List<Torrent> torrents) {
+    final supported = torrents
         .where(
           (torrent) =>
               !torrent.isDirectStream &&
@@ -68,23 +105,23 @@ class DebrifyTvChannelAddService {
         )
         .map(_normalizeTorrent)
         .toList();
-    if (filteredTorrents.isEmpty) {
+    if (supported.isEmpty) {
       throw const DebrifyTvChannelAddException(
         'No supported torrents to add to channel',
       );
     }
+    return supported;
+  }
 
-    final pickerResult = await showDialog<ChannelPickerResult>(
-      context: context,
-      builder: (ctx) => ChannelPickerDialog(searchKeyword: trimmedKeyword),
-    );
-
-    if (pickerResult == null || !context.mounted) {
-      return null;
-    }
-
+  Future<DebrifyTvChannelAddResult> add(
+    ChannelPickerResult pickerResult,
+    List<Torrent> filteredTorrents,
+    String trimmedKeyword,
+  ) => _owned(() async {
     final repo = DebrifyTvRepository.instance;
-    final channel = (await repo.fetchAllChannels()).firstWhere(
+    final channels = await repo.fetchAllChannels();
+    _check();
+    final channel = channels.firstWhere(
       (ch) => ch.channelId == pickerResult.channelId,
       orElse: () =>
           throw const DebrifyTvChannelAddException('Channel no longer exists'),
@@ -98,6 +135,7 @@ class DebrifyTvChannelAddService {
     var cacheEntry = await DebrifyTvCacheService.getEntry(
       pickerResult.channelId,
     );
+    _check();
     cacheEntry ??= DebrifyTvChannelCacheEntry.empty(
       channelId: pickerResult.channelId,
       normalizedKeywords: sanitizedChannelKeywords
@@ -160,20 +198,12 @@ class DebrifyTvChannelAddService {
       updatedTorrents.insertAll(0, newTorrents);
     }
 
-    if (hasKeyword) {
-      final keywordExists = channelKeywords.any(
-        (keyword) => keyword.toLowerCase() == normalizedKeyword,
-      );
-      if (!keywordExists) {
-        channelKeywords.add(effectiveKeyword);
-        await repo.upsertChannel(
-          channel.copyWith(
-            keywords: channelKeywords,
-            updatedAt: DateTime.now(),
-          ),
+    final needsKeyword =
+        hasKeyword &&
+        !channelKeywords.any(
+          (keyword) => keyword.toLowerCase() == normalizedKeyword,
         );
-      }
-    }
+    if (needsKeyword) channelKeywords.add(effectiveKeyword);
 
     final updatedEntry = cacheEntry.copyWith(
       torrents: updatedTorrents,
@@ -182,7 +212,19 @@ class DebrifyTvChannelAddService {
           .toList(),
       status: DebrifyTvCacheStatus.ready,
     );
-    await DebrifyTvCacheService.saveEntry(updatedEntry);
+    await _write((txn) async {
+      if (needsKeyword) {
+        await repo.upsertChannel(
+          channel.copyWith(
+            keywords: channelKeywords,
+            updatedAt: DateTime.now(),
+          ),
+          transaction: txn,
+        );
+      }
+      _check();
+      await DebrifyTvCacheService.saveEntry(updatedEntry, transaction: txn);
+    });
 
     return DebrifyTvChannelAddResult(
       channelId: pickerResult.channelId,
@@ -192,7 +234,7 @@ class DebrifyTvChannelAddService {
       addedCount: addedCount,
       updatedCount: updatedCount,
     );
-  }
+  });
 
   static Torrent fromRealDebridTorrent(RDTorrent torrent) {
     return Torrent(

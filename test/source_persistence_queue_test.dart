@@ -59,4 +59,25 @@ void main() {
     expect(committed, isTrue);
     await session.closeAndDrain();
   });
+  test(
+    'timed-out drain releases owner once despite late writes and retirement',
+    () async {
+      var released = 0;
+      final held = Completer<void>();
+      final session = StremioSourcePersistenceSession(
+        4,
+        waitTimeout: const Duration(milliseconds: 1),
+        onRetired: () {
+          released++;
+        },
+      );
+      await session.enqueue(() => held.future);
+      await session.closeAndDrain();
+      expect(released, 1);
+      session.retire();
+      held.complete();
+      await session.closeAndDrain();
+      expect(released, 1);
+    },
+  );
 }
