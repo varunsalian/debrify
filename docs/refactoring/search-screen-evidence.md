@@ -6,6 +6,26 @@ workflow checkpoints, reuse valid evidence, and run broader checks at integratio
 gates. Earlier entries retain their original slice history. No changes are pushed
 to the public repository.
 
+## Batch D checkpoint: Discover shell lifecycle — 2026-09-28
+
+Base: `82cc9955`. `DiscoverShellBridge` owns app-shell settings slots, preview
+listener registration and deferred sidebar reset. It borrows the preview and
+releases listeners before the route's original preview disposal point. Off-TV
+preview creation remains lazy. Root: **11,323 → 11,295 lines**.
+
+Review preserves TV gating, load-before-layout-slot registration, ownership-aware
+slot clearing, listener removal and post-frame sidebar reset. The architecture
+checker permits only this named UI adapter's MainPageBridge import, matching the
+existing Home shell bridge; no data API exception was added.
+**13 tests pass**, covering preview behavior, grid/layout/source startup and a new
+teardown test for listener release and newer-route callback preservation. Its first
+run lacked a scheduled frame; the corrected harness explicitly schedules the frame
+needed by the original deferred reset. Analysis retains **836 identical diagnostic
+identities**; architecture passes **543 files**; formatting/diff checks pass.
+Receipts: `.git/refactor-evidence/phase5/discover-shell-
+{tests-final,analyze-final}.txt`. No emulator used. Remaining navigation, broader
+screen lifecycle/facade reduction and final acceptance remain pending.
+
 ## Batch D checkpoint: Discover provider bindings — 2026-09-28
 
 Base: `a8881ad1`. `DiscoverBindings` (42 lines) owns the three manual Riverpod

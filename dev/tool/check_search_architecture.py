@@ -84,6 +84,10 @@ EXTRACTED_ELSEWHERE: tuple[str, ...] = (
 # Context-dependent legacy actions are allowed only through these named bridges.
 # Phase 4C owns binding preparation; phase 7 retains playback lifecycle review.
 PRESENTATION_BRIDGE_IMPORTS = {
+    # App-shell callback/listener adapter; no persistence or business operations.
+    "lib/features/discover/presentation/discover_shell_bridge.dart": {
+        "lib/services/main_page_bridge.dart",
+    },
     # Shared channel picker bridge composes owner-scoped data actions; widgets
     # receive callbacks and cannot access the database/repository directly.
     "lib/widgets/debrify_tv_channel_add_bridge.dart": {

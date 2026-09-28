@@ -1,3 +1,4 @@
+import '../features/discover/presentation/discover_shell_bridge.dart';
 import '../features/discover/presentation/discover_bindings.dart';
 import '../features/discover/presentation/discover_focus.dart';
 import '../features/home/presentation/home_classic_favorite_rows.dart';
@@ -1555,10 +1556,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     isCurrent: () => mounted,
   );
 
-  /// Relay the Discover takeover to the app shell so the TV sidebar hides in
-  /// lock-step (a cinema has no menu) — the same signal the Home board uses.
-  void _relayDiscoverChromeDim() =>
-      MainPageBridge.tvChromeDim.value = _discPreview.takeover.value;
+  DiscoverShellBridge? _discoverShellBridge;
 
   // ── Discover layout (grid / stage) ───────────────────────────────────────
 
@@ -2068,17 +2066,13 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     // the rail hides when the trailer goes fullscreen. The showing listener
     // arms the theater timer (deep lights-off a few seconds into playback).
     if (widget.discoverMode) {
-      MainPageBridge.discoverCardSettingsChanged =
-          _onDiscoverCardSettingsChanged;
-    }
-    if (widget.discoverMode && widget.isTelevision) {
-      _discPreview.takeover.addListener(_relayDiscoverChromeDim);
-      _discPreview.observePlayback();
-      // Layout pref (grid/stage): read once here, then live-reloaded whenever
-      // the Settings picker fires the bridge. DISCOVER instance only — Home
-      // and Search never render this layout and must not take the slot.
-      unawaited(_loadDiscoverLayout());
-      MainPageBridge.discoverLayoutChanged = _onDiscoverLayoutChanged;
+      _discoverShellBridge = DiscoverShellBridge(
+        readPreview: () => _discPreview,
+        isTelevision: widget.isTelevision,
+        onCardSettings: _onDiscoverCardSettingsChanged,
+        onLayout: _onDiscoverLayoutChanged,
+        loadLayout: _loadDiscoverLayout,
+      );
     }
     MainPageBridge.addIntegrationListener(_onIntegrationsChanged);
     // Playback that ran in a separate ACTIVITY (Android TV native player,
@@ -2660,29 +2654,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     _searchFocus.dispose();
     _disposeListsNodes();
     _discoverFocus.dispose();
-    if (MainPageBridge.discoverCardSettingsChanged ==
-        _onDiscoverCardSettingsChanged) {
-      MainPageBridge.discoverCardSettingsChanged = null;
-    }
-    if (widget.discoverMode && widget.isTelevision) {
-      _discPreview.takeover.removeListener(_relayDiscoverChromeDim);
-      _discPreview.stopObservingPlayback();
-      // Only clear the bridge slot if it's still OURS — a newly-mounted
-      // Discover instance may have claimed it before this one tears down.
-      if (MainPageBridge.discoverLayoutChanged == _onDiscoverLayoutChanged) {
-        MainPageBridge.discoverLayoutChanged = null;
-      }
-      // Never leave the sidebar hidden after Discover is torn down mid-takeover,
-      // but reset AFTER this frame: dispose can run inside finalizeTree (tab
-      // switch mid-takeover) while the tree is locked, and a synchronous write
-      // would markNeedsBuild the sidebar's listener mid-unmount (matches the
-      // Home path above).
-      if (MainPageBridge.tvChromeDim.value != 0) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          MainPageBridge.tvChromeDim.value = 0;
-        });
-      }
-    }
+    _discoverShellBridge?.dispose();
     _discPreview.dispose();
     _boardScroll.dispose();
     _kwScroll.dispose();
