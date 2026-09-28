@@ -6,6 +6,22 @@ workflow checkpoints, reuse valid evidence, and run broader checks at integratio
 gates. Earlier entries retain their original slice history. No changes are pushed
 to the public repository.
 
+## Batch C checkpoint: shared Search Sources control — 2026-09-28
+
+Base: `58dfc9a2`. Catalog and Keyword now use the same Sources control factory,
+removing the duplicate Keyword widget/key handling. Each mode supplies its own
+borrowed node and dialog action. The root's now-unused keyboard helper import
+was removed. Root: **10,810 → 10,739 lines**.
+
+Review confirms identical styling, pointer behavior, key-down activation and
+Up/Left callbacks; unhandled keys and key-repeat behavior remain unchanged.
+**190 tests pass**: Search application/presentation and TV focus handoff checks.
+Final analysis retains **836 identical diagnostic identities**; architecture
+passes **550 files**; formatting/diff checks pass. Receipts:
+`.git/refactor-evidence/phase5/shared-sources-{tests,analyze-final}.txt`.
+No emulator used. Remaining Keyword composition, other feature/navigation wiring,
+lifecycle/facade reduction and final acceptance remain pending.
+
 ## Batch C checkpoint: Continue Watching family composition — 2026-09-28
 
 Base: `0e5c0146`. The existing `home_stage_rows.dart` (176 lines) now builds the

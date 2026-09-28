@@ -54,10 +54,9 @@ Widget buildCatalogSearchPrompt(
   );
 }
 
-/// "Sources" button for catalog search — opens a dialog to enable/disable
-/// the search-capable addons, persisted across launches. Catalog-mode twin
-/// of the Keyword Sources control.
-Widget buildCatalogSourcesButton(
+/// Shared Sources control for Catalog and Keyword, with borrowed focus and
+/// mode-specific dialog actions.
+Widget buildSearchSourcesButton(
   BuildContext context, {
   required FocusNode focusNode,
   required VoidCallback onOpen,

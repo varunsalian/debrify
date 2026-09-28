@@ -270,7 +270,6 @@ import '../features/home/application/home_series_resume_resolver_dependencies.da
 import '../features/home/models/home_series_resume_signals.dart';
 import '../features/home/data/home_series_resume_repository.dart';
 import '../features/home/application/home_series_resume_dependencies.dart';
-import '../utils/tv_keys.dart';
 import '../utils/tv_search_focus_handoff.dart';
 import '../services/youtube_service.dart';
 import '../widgets/debrid_action_sheet.dart';
@@ -9499,7 +9498,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     sourcesButton: _catalogSourcesButton,
   );
 
-  Widget _catalogSourcesButton() => buildCatalogSourcesButton(
+  Widget _catalogSourcesButton() => buildSearchSourcesButton(
     context,
     focusNode: _catalogSourcesBtnFocus,
     onOpen: _openCatalogSources,
@@ -9690,83 +9689,13 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
 
   /// Standalone "Sources" pill shown in the pre-search keyword state so users
   /// can pick which trackers are queried before typing a query.
-  Widget _kwSourcesButton() {
-    final app = AppThemeScope.of(context);
-    final scheme = Theme.of(context).colorScheme;
-    return Focus(
-      focusNode: _kwSourcesBtnFocus,
-      onKeyEvent: (node, event) {
-        if (event is! KeyDownEvent) return KeyEventResult.ignored;
-        final key = event.logicalKey;
-        if (isActivateKey(key) || key == LogicalKeyboardKey.space) {
-          _openKeywordSources();
-          return KeyEventResult.handled;
-        }
-        // It's the only content in the pre-search state: Up returns to the
-        // search field, Left hands off to the sidebar. Down has nowhere to go.
-        if (key == LogicalKeyboardKey.arrowUp) {
-          _focusSearchFieldAtEnd();
-          return KeyEventResult.handled;
-        }
-        if (key == LogicalKeyboardKey.arrowLeft) {
-          MainPageBridge.focusTvSidebar?.call();
-          return KeyEventResult.handled;
-        }
-        return KeyEventResult.ignored;
-      },
-      child: ListenableBuilder(
-        listenable: _kwSourcesBtnFocus,
-        builder: (context, _) {
-          final focused = _kwSourcesBtnFocus.hasFocus;
-          return Material(
-            color: Colors.transparent,
-            child: InkWell(
-              onTap: _openKeywordSources,
-              borderRadius: app.shape.brPill,
-              canRequestFocus: false,
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 14,
-                  vertical: 9,
-                ),
-                decoration: BoxDecoration(
-                  color: scheme.surfaceContainerHigh,
-                  borderRadius: app.shape.brPill,
-                  // 1.5px always so focus never shifts layout: white ring when
-                  // focused, else the faint idle border.
-                  border: Border.all(
-                    color: focused
-                        ? app.fade(app.core.tx, 0.9)
-                        : app.fade(app.core.tx, 0.10),
-                    width: 1.5,
-                  ),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      Icons.dns_rounded,
-                      size: 16,
-                      color: scheme.onSurfaceVariant,
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      'Sources',
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: scheme.onSurface,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          );
-        },
-      ),
-    );
-  }
+  Widget _kwSourcesButton() => buildSearchSourcesButton(
+    context,
+    focusNode: _kwSourcesBtnFocus,
+    onOpen: _openKeywordSources,
+    onUp: _focusSearchFieldAtEnd,
+    onSidebar: () => MainPageBridge.focusTvSidebar?.call(),
+  );
 
   /// Horizontal source tabs (All / per-source with counts) above the toolbar —
   /// the fast single-select layer on top of the Providers multi-select. Only
