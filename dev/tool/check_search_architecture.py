@@ -10,7 +10,7 @@ import re
 import sys
 
 ROOT = Path(__file__).resolve().parents[2]
-FEATURES = ("search", "home", "discover", "sources")
+FEATURES = ("search", "home", "discover", "sources", "stremio_tv")
 # Register extracted/adopted application files outside the feature directories.
 # The original screen/parts are tracked temporary exceptions in the phase plan;
 # add a retained facade here once its migration is complete.

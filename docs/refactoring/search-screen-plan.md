@@ -83,6 +83,9 @@ until the batch ends. This replaces per-helper checkpoints, not incremental safe
   full run if it already covers the exact final application/test revision and
   configuration. Run earlier for shared-infrastructure changes with broad impact,
   unexplained failures or gaps in targeted coverage; record the reason briefly.
+  A stalled or interrupted run is incomplete evidence. Inspect the live process
+  and last test, retain its logs, then isolate that test before a justified rerun;
+  never run competing full suites or infer success from partial counts.
 - Compare test outcomes and analyzer identities, not just totals. Never weaken
   guards, lower thresholds, change the failure allowlist, or accept a newly failing
   previously passing test. Stop dependent work to investigate a new regression.
@@ -128,7 +131,7 @@ until the batch ends. This replaces per-helper checkpoints, not incremental safe
 
 | Batch | Current status |
 | --- | --- |
-| A | In progress; resume resolver ownership/capacity and Continue Watching hold/menu workflow implemented and reviewed (111 and 27 affected tests pass); local history removal implemented with scoped writes/lifecycle drain (31 affected tests pass); source-edit/add workflow implemented and reviewed (36 affected tests pass); detail tracker dispatch/refresh and quick-play wiring reviewed (84 affected tests pass); catalog playback target resolution reviewed (121 affected tests pass); IPTV history removal reviewed (58 affected tests pass); Trakt remote removal boundary reviewed (115 affected tests pass); Simkl/MDBList removal and shared cache retirement reviewed (154 affected tests pass); exact detail-route dismissal/return ownership reviewed (47 affected tests pass); shared reset-dialog ownership reviewed (52 affected tests pass); tracker menu continuation ownership reviewed (67 affected tests pass); Resume-label policy now shares the injected catalog resolver (122 affected tests pass); catalog Play/Sources presentation and detail-route retirement reviewed (53 affected tests pass); Simkl movie-rewatch write ownership reviewed (124 affected tests pass); remaining action audit is enumerated below |
+| A | In progress. Resume/cache, history removal, source editing, catalog play, tracker-menu continuation and Stremio TV picker boundaries have focused evidence. Remaining workflows are listed below. The picker full-suite gate completed with 9,889 passes and unchanged baseline failures/skips; see the evidence log. |
 | B | Pending remaining boundaries; substantial Sources extraction already complete |
 | C | Pending remaining boundaries; substantial layout/search extraction already complete |
 | D | Pending remaining boundaries and facade reduction |
@@ -136,17 +139,16 @@ until the batch ends. This replaces per-helper checkpoints, not incremental safe
 
 ### Batch A remaining action checklist
 
-Close these reachable workflows before calling A complete. Reuse their existing
-owners and fixtures; these are workflow boundaries, not requests for one new class
+Close these pending reachable workflows before calling A complete. Completed
+removal workflows are recorded in the evidence log; reuse their existing owners
+and fixtures; these are workflow boundaries, not requests for one new class
 or provider per entry point. Record destinations and evidence as each row closes.
 
 | Remaining workflow / production entries | Required closing evidence |
 | --- | --- |
-| Tracker removal: `_removeFromTraktContinueWatching`, `_removeTraktCwItem`, `_removeSimklCwItem`, `_removeMdblistCwItem` | Remote/data boundaries reviewed for all three trackers: originating-account capture, guarded sequential writes and retired feedback. Simkl series/movie success rules and MDBList accepted-action ownership retained; 154 affected tests pass. Exact dismissal/return ownership is also reviewed (47 affected tests); remaining mutation/dialog and composition work is listed below. |
-| IPTV history removal: `_removeIptvCwItem` | Closed: `HomeIptvHistoryRemoval` and scoped factory wired; movie/series deletion, actual separate-profile databases, retirement and sync tombstones verified (58 affected tests). Existing database transaction/drain retained. |
 | Detail mutations: `_handleDetailQuickAction`, `_handleDetailSimklQuickAction`, `_handleDetailMdblistQuickAction`, including rating dialogs and clear-progress | Shared reset confirmation/loader ownership is reviewed (52 affected tests), with originating profile captured before confirmation and exact loader cleanup. Rating/list/collection dialog returns and exact Home detail-route guards are now reviewed (67 affected tests pass), with originating scope retained for accepted work. Finish mutation data boundaries and the reset service's transitive write/deletion audit; preserve the reviewed refresh ordering. |
 | Catalog action composition: `_onCatalogPlay`, tracker quick-play entries and `_openItem` detail callbacks | Exact detail dismissal/return ownership is reviewed through `HomeDetailRoute`; Resume-label policy and local movie reads now use the injected catalog resolver (122 affected tests pass; its cohesive 513-line policy reviewed). Catalog Play/Sources orchestration now uses the 242-line `HomeCatalogPlayAction` with loader cancellation, promised episode, exact launch arguments and detail-route retirement reviewed (53 affected tests pass). `HomeCatalogPlaybackReaders.prepareMovieRewatch`'s reachable Simkl write is now reviewed (124 affected tests pass), including credential barriers, timeout retirement and accepted-response cache ownership. Finish remaining tracker quick-play preparation and `_openItem` callback boundaries. |
-| Remaining detail dispatch: `_addToStremioTvFromDetail` and source/bind callbacks | Explicit presentation owner, guarded modal return and dependency handoff; keep transitive Sources binding verification in B without duplicating that work. |
+| Remaining detail dispatch: `_addToStremioTvFromDetail` and source/bind callbacks | Stremio TV picker closed: production uses its feature view/editor and Riverpod factory, originating-profile guarded persistence, exact modal cleanup and guarded detail return (122 affected tests pass; adopted 780-line modal responsibility reviewed). Finish source/bind callback handoff; keep transitive Sources binding verification in B without duplicating that work. |
 
 Resume/cache, hold/menu, accepted local deletion, source editor and detail-dispatch
 checkpoints already have evidence; reopen them only for a discovered defect or an

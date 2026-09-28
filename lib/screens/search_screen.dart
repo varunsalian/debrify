@@ -10696,7 +10696,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         onEditSource: _handleEditOrSelectSource,
         onPlayRandomEpisode: (m) => _playRandomEpisodeFromDetail(m, addon),
         onSearchPacks: _searchPacksFromDetail,
-        onAddToStremioTv: _addToStremioTvFromDetail,
+        onAddToStremioTv: (item) => _addToStremioTvFromDetail(item, detailRoute),
         presetRating: presetRating,
         isCurrent: () => _catalogNavigationCurrent() && detailRoute.isActive,
       );
@@ -10762,9 +10762,18 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     ).open();
   }
 
-  Future<void> _addToStremioTvFromDetail(StremioMeta item) async {
-    final result = await StremioTvCatalogPickerDialog.show(context, item: item);
-    if (!mounted || result == null) return;
+  Future<void> _addToStremioTvFromDetail(
+    StremioMeta item,
+    HomeDetailRoute route,
+  ) async {
+    bool current() => _catalogNavigationCurrent() && route.isActive;
+    if (!current()) return;
+    final result = await StremioTvCatalogPickerDialog.show(
+      context,
+      item: item,
+      isCurrent: current,
+    );
+    if (!current() || result == null) return;
     _snack(result.message);
   }
 

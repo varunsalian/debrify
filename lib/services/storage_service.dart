@@ -10519,16 +10519,41 @@ class StorageService {
     }
   }
 
+  /// The picker keeps its captured namespace while waiting for snapshots.
+  /// Recheck at the actual commit and propagate persistence/budget refusal.
+  static Future<bool> _setStremioTvLocalCatalogsIfCurrent(
+    List<Map<String, dynamic>> catalogs,
+    bool Function() canContinue,
+  ) async {
+    if (!canContinue()) return false;
+    final prefs = await ProfilePreferences.instance();
+    return ProfilePreferences.synchronizeExternalMutation(() async {
+      if (!canContinue()) return false;
+      return catalogs.isEmpty
+          ? await prefs.remove(_stremioTvLocalCatalogsKey)
+          : await prefs.setString(
+              _stremioTvLocalCatalogsKey,
+              jsonEncode(catalogs),
+            );
+    }, marksMutation: false);
+  }
+
   /// Add a single local catalog. Returns false if a catalog with the same ID
   /// already exists.
   static Future<bool> addStremioTvLocalCatalog(
-    Map<String, dynamic> catalog,
-  ) async {
+    Map<String, dynamic> catalog, {
+    bool Function()? canContinue,
+  }) async {
+    if (canContinue?.call() == false) return false;
     final existing = await getStremioTvLocalCatalogs();
+    if (canContinue?.call() == false) return false;
     final id = catalog['id'] as String?;
     if (id == null) return false;
     if (existing.any((c) => c['id'] == id)) return false;
     existing.add(catalog);
+    if (canContinue != null) {
+      return _setStremioTvLocalCatalogsIfCurrent(existing, canContinue);
+    }
     await setStremioTvLocalCatalogs(existing);
     return true;
   }
@@ -10542,14 +10567,20 @@ class StorageService {
 
   /// Update an existing local catalog by its ID (replaces the entry in-place).
   static Future<bool> updateStremioTvLocalCatalog(
-    Map<String, dynamic> catalog,
-  ) async {
+    Map<String, dynamic> catalog, {
+    bool Function()? canContinue,
+  }) async {
+    if (canContinue?.call() == false) return false;
     final existing = await getStremioTvLocalCatalogs();
+    if (canContinue?.call() == false) return false;
     final id = catalog['id'] as String?;
     if (id == null) return false;
     final idx = existing.indexWhere((c) => c['id'] == id);
     if (idx < 0) return false;
     existing[idx] = catalog;
+    if (canContinue != null) {
+      return _setStremioTvLocalCatalogsIfCurrent(existing, canContinue);
+    }
     await setStremioTvLocalCatalogs(existing);
     return true;
   }

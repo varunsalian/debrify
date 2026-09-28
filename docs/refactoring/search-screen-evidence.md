@@ -6,6 +6,60 @@ workflow checkpoints, reuse valid evidence, and run broader checks at integratio
 gates. Earlier entries retain their original slice history. No changes are pushed
 to the public repository.
 
+## Batch A checkpoint: Stremio TV catalog picker — 2026-09-28
+
+The reachable Add to Stremio TV workflow now lives under `features/stremio_tv`:
+a 148-line data editor, immutable option/result models, a Riverpod factory that
+captures the opening profile synchronously, and the existing picker presentation.
+The original screen path remains a compatibility export. Presentation no longer
+reads preferences or edits raw catalog records; it retains dialog-local loading,
+saving, filtering and focus state. The two identical focus-frame builders share
+one borrowed-node widget. The adopted dialog is **780 lines**, reviewed as one
+modal interaction/focus owner in the 501–800 band; the old file was **922 lines**.
+All six new feature files are included in the architecture guard.
+
+Creation/append retain catalog schemas, exact duplicate identity/name rules,
+sorting, messages and TV navigation. The data editor captures the original profile
+and checks its live view guard; guarded add/update writes check again at the actual
+preference commit after any snapshot barrier. Existing unguarded storage callers
+retain their behavior. Explicit corrections: rejected persistence no longer reports
+successful creation; a disposed load cannot allocate late focus nodes; completion
+removes only its own dialog route; a retired save suppresses feedback and permits
+Cancel. Home passes the original detail-route guard through the picker and its
+return message. Full-list read/modify/write semantics are otherwise unchanged.
+
+Validation: **122 affected tests pass**, including nineteen new editor/picker
+cases. Tests verify real two-profile preference writes despite a foreign ambient
+scope, view/profile retirement while held behind a snapshot, actual preference-budget
+refusal with tvOS policy enforced in host tests, payload/duplicate rules, create/append/error feedback, TV Select,
+covered-route cleanup, retired-save dismissal and disposal during reads/writes.
+Existing Home detail/dispatch, tracker menu, Stremio episode policy and preference/
+budget tests pass. Analyzer identities remain **848**; **468** migrated files pass
+architecture checks. Initial context guards and two new test formatting lints were
+corrected before final verification. Only changed legacy members were formatted.
+
+Receipts: `.git/refactor-evidence/phase5/sttv-picker-final-tests.txt` and
+`sttv-picker-final-analyze.txt`; original widget/editor retained in
+`sttv-picker-original.dart`. Full-suite verification was brought forward because
+this picker and its persistence path are shared infrastructure. The first run
+stalled on `identity save persists without changing access` for over seven minutes;
+its live process was sampled and explicitly interrupted. It is incomplete evidence,
+not a regression-free run. All five tests in that file passed separately. The
+subsequent `flutter test --no-pub --concurrency 4 --reporter json` completed in
+362 seconds: **9,889 successes, 22 baseline failures, 29 baseline errors and 20
+skips**. Identity comparisons against both `full-local-removal.jsonl` and
+`full-reset-dialog.jsonl` found no missing tests, newly skipped tests or new
+failures. The repaired shape-manifest substantial-sweep check passes; eighty tests
+were added since the reset-dialog run. Terminal receipt: `full-sttv-picker-c4.jsonl`;
+the interrupted run and isolated profile-settings receipt remain alongside it.
+Analyzer comparison was independently rechecked at 848 identical diagnostics and
+the architecture/diff guards pass. No failure allowances or thresholds changed.
+
+The active plan table now separates remaining workflows from completed removals,
+and explicitly requires terminal evidence after a stalled-run investigation.
+Remaining source/bind dispatch stays with its recorded Sources boundary review;
+other Batch A mutations and later batches remain open.
+
 ## Batch A checkpoint: Simkl movie-rewatch write ownership — 2026-09-28
 
 The catalog movie-rewatch reader now forwards its view/profile guard through
