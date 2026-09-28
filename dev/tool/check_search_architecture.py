@@ -70,6 +70,10 @@ EXTRACTED_ELSEWHERE: tuple[str, ...] = (
 # Context-dependent legacy actions are allowed only through these named bridges.
 # Phase 4C owns binding preparation; phase 7 retains playback lifecycle review.
 PRESENTATION_BRIDGE_IMPORTS = {
+    # Resolving-overlay UI only; playback data comes from injected feature owners.
+    "lib/features/home/presentation/home_catalog_play_action.dart": {
+        "lib/services/torrent_playback_service.dart",
+    },
     # Enum-only dependencies for the borrowed legacy detail action contracts.
     "lib/features/home/presentation/home_detail_action_bridge.dart": {
         "lib/services/simkl/simkl_menu_helpers.dart",

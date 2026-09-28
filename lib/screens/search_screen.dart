@@ -1,3 +1,4 @@
+import '../features/home/presentation/home_catalog_play_action.dart';
 import '../features/home/presentation/home_detail_route.dart';
 import '../features/home/application/home_simkl_continuation_dependencies.dart';
 import '../features/home/application/home_iptv_continuation_dependencies.dart';
@@ -10405,6 +10406,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
             onResume: (promised) => _onCatalogPlay(
               item,
               addon,
+              isCurrent: () => detailRoute.isActive,
               isTraktSource: isTraktSource,
               isMdblistSource: isMdblistSource,
               skipEpisodeFallback: true,
@@ -10419,6 +10421,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
             onRewatch: () => _onCatalogPlay(
               item,
               addon,
+              isCurrent: () => detailRoute.isActive,
               isTraktSource: isTraktSource,
               isMdblistSource: isMdblistSource,
               startFromBeginning: true,
@@ -10445,6 +10448,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
             onBrowsePrimaryEpisodeSources: (promised) => _onCatalogPlay(
               item,
               addon,
+              isCurrent: () => detailRoute.isActive,
               isTraktSource: isTraktSource,
               isMdblistSource: isMdblistSource,
               skipEpisodeFallback: true,
@@ -10567,6 +10571,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
           onPlay: () => _onCatalogPlay(
             item,
             addon,
+            isCurrent: () => detailRoute.isActive,
             isTraktSource: isTraktSource,
             isMdblistSource: isMdblistSource,
             preferTraktResume: true,
@@ -10574,6 +10579,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
           onRewatch: () => _onCatalogPlay(
             item,
             addon,
+            isCurrent: () => detailRoute.isActive,
             isTraktSource: isTraktSource,
             isMdblistSource: isMdblistSource,
             startFromBeginning: true,
@@ -10591,6 +10597,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
               ? () => _onCatalogPlay(
                   item,
                   addon,
+                  isCurrent: () => detailRoute.isActive,
                   isTraktSource: isTraktSource,
                   isMdblistSource: isMdblistSource,
                   skipEpisodeFallback: true,
@@ -10805,172 +10812,61 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     );
   }
 
-  // Catalog Play = auto-best in-tab; Sources = manual list in-tab. For a series
-  // Play auto-plays the resume episode (last-played by imdbId → title, else
-  // S01E01) — the Episodes button is the manual picker. Nothing jumps to Home.
   Future<void> _onCatalogPlay(
     StremioMeta item,
     StremioAddon addon, {
     bool isTraktSource = false,
     bool isMdblistSource = false,
     bool startFromBeginning = false,
-    // Merged series page: episodes are already shown inline, so a no-IMDb
-    // series must NOT fall back to pushing a standalone EpisodesScreen (that
-    // would stack a duplicate episode list on top). It resolves the resume
-    // episode against the raw catalog id and plays via the addon /stream path.
     bool skipEpisodeFallback = false,
-    // Merged detail Resume: honour Trakt's paused position for ANY authenticated
-    // title (not just Trakt-CW-sourced ones), so Play matches the Trakt-first
-    // label from [_resolveResumeInfo]. Off elsewhere (Home/row quick-play keep
-    // their local-vs-Trakt-CW split untouched).
     bool preferTraktResume = false,
-    // The episode the pressed button was promising, when the caller had already
-    // resolved one (merged detail). It wins over the series resume resolver: that
-    // reconciler only reads resume/CW positions, while the merged page's episode
-    // engine also advances off watched state. A show whose progress lives in a
-    // tracker's WATCHED list but not its continue-watching list reconciles to the
-    // empty-candidates fallback (S01E01) while the label correctly reads S1E2 —
-    // and Play would then start the pilot under a "Resume · S1E2" button.
     ({bool started, int season, int episode})? promisedTarget,
-    // Primary-button hold: run the exact same target/scrobble reconciliation,
-    // but hand the resulting selection to the manual Sources page instead of
-    // auto-playing it. Used for series; movies already have a direct Sources
-    // callback and do not need to enter this resolver.
     bool browseSourcesOnly = false,
+    bool Function()? isCurrent,
   }) async {
     bool current() =>
-        mounted && _profileSessionOwner == ProfileSessionMemory.captureOwner();
+        _catalogNavigationCurrent() && (isCurrent?.call() ?? true);
     if (!current()) return;
-    final prepared = await ref
-        .read(homeCatalogOriginRepositoryProvider(_profileSessionOwner))
-        .prepare(item, addon, isCurrent: current);
-    if (!mounted ||
-        !current() ||
-        prepared.status == HomeCatalogOriginStatus.retired) {
-      return;
-    }
-    if (prepared.status == HomeCatalogOriginStatus.unverified) {
-      _snack('Could not verify series episodes. Please retry.');
-      return;
-    }
-    item = prepared.item;
-    final origin = prepared.addon;
-    if (origin == null) { _snack('The addon configuration for this series is unavailable.'); return; }
-    addon = origin;
-    final trackingPolicy = await _loadTrackingPolicy(item);
-    if (!mounted || trackingPolicy == null) return;
-    debugPrint(
-      '[SeriesResume] play-pressed title="${item.name}" '
-      'id=${item.progressId ?? item.id} type=${item.type} '
-      'traktSource=$isTraktSource mdblistSource=$isMdblistSource '
-      'preferTrackerResume=$preferTraktResume',
+    await HomeCatalogPlayAction(
+      log: debugPrint,
+      origin: ref.read(
+        homeCatalogOriginRepositoryProvider(_profileSessionOwner),
+      ),
+      policies: ref.read(
+        homeTrackingPolicyRepositoryProvider(_profileSessionOwner),
+      ),
+      targets: ref.read(
+        homeCatalogPlaybackResolverProvider(_homeCatalogSession),
+      ),
+      identity: ref.read(
+        homeCatalogEpisodeIdentityProvider(_profileSessionOwner),
+      ),
+      artwork: _playbackArtwork,
+    ).run(
+      context,
+      item,
+      addon,
+      isCurrent: current,
+      availability: () => (
+        trakt: _isTraktAuthenticated,
+        simkl: _isSimklAuthenticated,
+        mdblist: _isMdblistAuthenticated,
+      ),
+      cachedTrakt: (item) =>
+          _traktByImdb[item.progressId] ?? _traktByImdb[item.id],
+      showMessage: _snack,
+      activateAddon: (id) => _activeAddonId = id,
+      openEpisodes: _openEpisodes,
+      browse: _browseSelection,
+      play: _playSelection,
+      isTraktSource: isTraktSource,
+      isMdblistSource: isMdblistSource,
+      startFromBeginning: startFromBeginning,
+      skipEpisodeFallback: skipEpisodeFallback,
+      preferTraktResume: preferTraktResume,
+      promisedTarget: promisedTarget,
+      browseSourcesOnly: browseSourcesOnly,
     );
-    // The loader's backdrop/logo/meta line for this title. Captured here (the
-    // one play entry point that still holds the catalog meta) and read back in
-    // [_metaFor], which only ever sees a selection.
-    _playbackArtwork.capture(item);
-    var cancelled = false;
-    final resolving = preferTraktResume
-        ? TorrentPlaybackService.showResolvingOverlay(
-            context,
-            meta: PlaybackMeta.catalog(
-              imdbId: item.progressId,
-              contentType: item.type,
-              title: item.name,
-              posterUrl: item.poster,
-              year: item.year,
-              addonId: addon.id,
-              art: _playbackArtwork.current,
-            ),
-            title: item.name,
-            onCancel: () => cancelled = true,
-          )
-        : null;
-    Future<void> launch(AdvancedSearchSelection selection) async {
-      bool current() =>
-          mounted &&
-          !cancelled &&
-          _profileSessionOwner == ProfileSessionMemory.captureOwner();
-      if (!current()) {
-        resolving?.dismiss();
-        return;
-      }
-      final resolved = await ref
-          .read(homeCatalogEpisodeIdentityProvider(_profileSessionOwner))
-          .resolve(selection, item, addon, isCurrent: current);
-      if (resolved == null || !current()) {
-        resolving?.dismiss();
-        return;
-      }
-      selection = resolved;
-      debugPrint(
-        '[SeriesResume] ${browseSourcesOnly ? 'sources-open' : 'play-launch'} '
-        'title="${selection.title}" '
-        'id=${selection.imdbId} season=${selection.season} '
-        'episode=${selection.episode} trakt=${selection.traktSource} '
-        'traktPct=${selection.traktProgressPercent} '
-        'simkl=${selection.simklSource} '
-        'simklPct=${selection.simklProgressPercent} '
-        'mdblist=${selection.mdblistSource} '
-        'mdblistPct=${selection.mdblistProgressPercent}',
-      );
-      resolving?.dismiss();
-      if (!current()) return;
-      if (browseSourcesOnly) {
-        _browseSelection(
-          selection,
-          metadataAddonId: addon.id,
-          catalogItem: item.withSourceAddon(addon),
-        );
-      } else {
-        await _playSelection(
-          selection,
-          metadataAddonId: addon.id,
-          catalogItem: item.withSourceAddon(addon),
-        );
-      }
-    }
-
-    try {
-      // Set the active addon before any early return so a movie play carries the
-      // right addon id into meta.addonId (addon-stream resume/next), instead of a
-      // stale one left over from a previously-browsed series.
-      _activeAddonId = addon.id;
-      final target = await ref
-          .read(homeCatalogPlaybackResolverProvider(_homeCatalogSession))
-          .resolve(
-            item,
-            addon,
-            trackingPolicy: trackingPolicy,
-            availability: () => (
-              trakt: _isTraktAuthenticated,
-              simkl: _isSimklAuthenticated,
-              mdblist: _isMdblistAuthenticated,
-            ),
-            cachedTrakt: () =>
-                _traktByImdb[item.progressId] ?? _traktByImdb[item.id],
-            isCurrent: () => current() && !cancelled,
-            isTraktSource: isTraktSource,
-            isMdblistSource: isMdblistSource,
-            startFromBeginning: startFromBeginning,
-            skipEpisodeFallback: skipEpisodeFallback,
-            preferTraktResume: preferTraktResume,
-            promisedTarget: promisedTarget,
-          );
-      if (!current() || cancelled || target == null) return;
-      if (target.openEpisodes) {
-        _openEpisodes(
-          item,
-          addon,
-          isTraktSource: isTraktSource,
-          isMdblistSource: isMdblistSource,
-        );
-      } else {
-        await launch(target.selection!);
-      }
-    } finally {
-      resolving?.dismiss();
-    }
   }
 
   void _clearSeriesResume() {

@@ -6,6 +6,43 @@ workflow checkpoints, reuse valid evidence, and run broader checks at integratio
 gates. Earlier entries retain their original slice history. No changes are pushed
 to the public repository.
 
+## Batch A checkpoint: catalog Play/Sources presentation — 2026-09-28
+
+`HomeCatalogPlayAction` now owns origin/policy preparation sequencing, resolving
+loader presentation, cancellation, episode-identity resolution and final
+Play/Sources/Episodes dispatch. It borrows the existing injected repositories,
+resolver and artwork owner; no new provider, cache, request policy or native player
+was added. Its only allowed legacy-service call renders the existing resolving
+overlay. The production screen wires the existing Riverpod dependencies and UI
+callbacks; the old orchestration is removed. The bridge is **242 lines**, and the
+screen shrinks **14,620 → 14,516 lines**.
+
+Review preserves policy-before-loader timing, addon activation before target
+resolution, promised episode and source flags, original catalog metadata, loader
+dismissal before launch and in `finally`, awaited player completion and unawaited
+Sources dispatch. A separately covered ownership correction passes the exact
+detail-route guard through all six detail Play/Rewatch/resolved-Sources callbacks:
+closing a detail page during preparation now retires that launch. Non-detail
+quick-play callers retain their profile/view guard.
+
+Validation: **53 affected tests pass**, including eighteen direct presentation
+cases and four real Home detail Play cases. Coverage includes cancellation,
+retirement at preparation/target/identity boundaries, missing outcomes, errors,
+view disposal, held player completion, exact target flags/launch payloads, ordinary
+versus resolving-overlay flows, and both detail layouts with held origin reads.
+Active detail routes launch; closed routes do not. Existing resolver, player
+bridge, rewatch guards and removal-route tests pass. Analyzer identities remain
+**848**; **462** migrated files pass architecture checks. Only edited legacy screen
+members were formatted. Initial verification caught a logging-default/context
+check and a test fixture teardown typo; all are corrected in the final receipts.
+
+Receipts: `.git/refactor-evidence/phase5/catalog-play-final-tests.txt` and
+`catalog-play-final-analyze.txt`; pre-move orchestration is retained in
+`catalog-play-original.dart`. This structural move reuses unchanged loader/native
+implementations; it does not certify native/performance acceptance. Remaining
+tracker quick-play preparation, reachable mutation writes (including Simkl movie
+rewatch), Stremio TV/source dispatch and later batches remain open.
+
 ## Batch A checkpoint: catalog Resume-label policy — 2026-09-28
 
 The production Resume label now delegates to `HomeCatalogPlaybackResolver.label`,

@@ -1,3 +1,4 @@
+import 'package:debrify/features/home/presentation/home_catalog_playback_bridge.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -24,22 +25,26 @@ import '../../../home_progressive_pagination_test.dart' show HomeFixture;
 import '../home_mdblist_continuation_screen_test.dart' show FixtureImages;
 
 class ReadyOrigin extends HomeCatalogOriginRepository {
-  ReadyOrigin()
+  ReadyOrigin({this.beforePrepare})
     : super(
         nativeAddon: NativeSeriesMetadataService.addon,
         isOwnerCurrent: () => true,
         scopeProgress: (item, _, _) async => item,
         readCustomOrigin: (_) async => null,
       );
+  final Future<void> Function()? beforePrepare;
   @override
   Future<HomeCatalogOrigin> prepare(
     StremioMeta item,
     StremioAddon addon, {
     required bool Function() isCurrent,
-  }) async => HomeCatalogOrigin.ready(
-    const StremioMeta(id: 'tt123', name: 'Fixture detail', type: 'movie'),
-    addon,
-  );
+  }) async {
+    await beforePrepare?.call();
+    return HomeCatalogOrigin.ready(
+      const StremioMeta(id: 'tt123', name: 'Fixture detail', type: 'movie'),
+      addon,
+    );
+  }
 }
 
 void main() {
@@ -56,6 +61,90 @@ void main() {
   });
   tearDownAll(() => images.delete(recursive: true));
   for (final merged in [false, true]) {
+    for (final retire in [false, true]) {
+      testWidgets(
+        'real detail Play reaches catalog player: merged=$merged retired=$retire',
+        (tester) async {
+          var launches = 0;
+          var preparingPlay = false;
+          final release = Completer<void>(), entered = Completer<void>();
+          final home = HomeFixture(tester);
+          await home.mount(
+            initialPreferences: {'merged_series_page_enabled': merged},
+            wrap: (child) => ProviderScope(
+              overrides: [
+                homeCatalogOriginRepositoryProvider.overrideWith(
+                  (ref, owner) => ReadyOrigin(
+                    beforePrepare: () async {
+                      if (preparingPlay) {
+                        entered.complete();
+                        await release.future;
+                      }
+                    },
+                  ),
+                ),
+                homeCatalogPlaybackBridgeProvider.overrideWithValue(
+                  HomeCatalogPlaybackBridge(
+                    launch:
+                        (
+                          context, {
+                          required imdbId,
+                          required isMovie,
+                          season,
+                          episode,
+                          required meta,
+                          openSourcePicker,
+                        }) async {
+                          launches++;
+                          expect(imdbId, 'tt123');
+                          expect(isMovie, isTrue);
+                          expect(season, isNull);
+                          expect(episode, isNull);
+                          expect(meta.addonId, isNotEmpty);
+                          expect(meta.title, 'Fixture detail');
+                          expect(openSourcePicker, isNotNull);
+                        },
+                  ),
+                ),
+              ],
+              child: child,
+            ),
+          );
+          await home.settle();
+          await home.focusFast();
+          await home.key(LogicalKeyboardKey.enter);
+          await home.settle();
+          preparingPlay = true;
+          await home.drive(() {
+            if (merged) {
+              unawaited(
+                tester
+                    .widget<MergedDetailScreen>(find.byType(MergedDetailScreen))
+                    .onResume(null),
+              );
+            } else {
+              tester
+                  .widget<CatalogItemDetailScreen>(
+                    find.byType(CatalogItemDetailScreen),
+                  )
+                  .onPlay();
+            }
+          });
+          expect(entered.isCompleted, isTrue);
+          if (retire) {
+            home.navigator.currentState!.pop();
+            await home.settle();
+          }
+          await home.drive(() => release.complete());
+          for (var i = 0; i < 8 && launches == 0; i++) {
+            await home.settle();
+          }
+          expect(launches, retire ? 0 : 1);
+          await home.settle();
+          await home.dispose();
+        },
+      );
+    }
     for (final replace in [false, true]) {
       testWidgets(
         'real detail delayed removal retains newer route: merged=$merged replaced=$replace',
