@@ -137,7 +137,7 @@ until the batch ends. This replaces per-helper checkpoints, not incremental safe
 | --- | --- |
 | A | Implemented and reviewed. Home actions, resume, detail mutation/reset boundaries and accepted local writes are wired and checked. Full gate: 10,058 passes, unchanged historical failures/errors, no missing or newly skipped tests. |
 | B | Provider/manual acquisition, automatic bindings, saved cloud preparation, downloads/ZIPs, playlist persistence and channel actions are wired and reviewed. Native source commits now survive Android launch return and retire with the native session. Original-owner preparation/recovery and switch-generation cancellation are wired. Latest full gate: 10,205 passes, unchanged historical failures/errors/skips, no missing tests or new regressions; seven added cases pass. External-player/DeoVR admission and native metadata retirement checks now pass their affected tests. Device/playback acceptance remains pending; no further emulator work per user instruction. Next implementation: C feature presentation/navigation. |
-| C | Pending remaining boundaries; substantial layout/search extraction already complete |
+| C | Query field and responsive header now use feature widgets; existing search/focus checks retain their observed outcomes. Next: cohesive Keyword results/toolbar/selection presentation, then actual Home/Search/Discover view composition. |
 | D | Pending remaining boundaries and facade reduction |
 | E | Pending final acceptance |
 

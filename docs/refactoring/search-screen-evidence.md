@@ -6,6 +6,32 @@ workflow checkpoints, reuse valid evidence, and run broader checks at integratio
 gates. Earlier entries retain their original slice history. No changes are pushed
 to the public repository.
 
+## Batch C checkpoint: query editing and header presentation — 2026-09-28
+
+Base revision: `d41d1775`. The real Search route now composes `SearchQueryField`
+(218 lines) and `SearchHeader` (58 lines). Query editing, clear affordance, keyboard
+shortcut actions and responsive placement move out of the root. Controllers and
+focus nodes retain their existing route owner; submission, mode/content/sidebar
+navigation and data work remain explicit callbacks. No provider or duplicate state
+owner was added. Existing Riverpod application dependencies remain unchanged.
+The original query-field implementation and private shortcut classes are removed;
+SearchScreen shrinks **14,252 → 14,057 lines**, still far above its final facade target.
+
+Review preserves caret-versus-navigation rules, TV shell/keyboard behavior, nullable
+suggestions, submit-on-tvOS-end-editing, clear control, styling, widths and breakpoints.
+The visibility-dependent Down target remains in the caller and is shared by both
+keyboard paths. There is no intentional layout/loading/preview behavior change.
+**254 affected tests pass; the two unresolved-suggestion cases remain the same
+observed errors in `full-native-owner-c4.jsonl`**. No new analyzer identities: **839**.
+**506 files pass** the architecture guard; formatting and diff checks pass. Receipts:
+`.git/refactor-evidence/phase5/search-query-view-tests.txt` and
+`search-query-view-analyze.txt`. Existing integration coverage was reused instead
+of adding tests that mirror this structural move or rerunning the full suite.
+No emulator was used. Device/performance acceptance remains pending under the
+user's no-emulator constraint. Next: move Keyword results/toolbar/selection as a
+cohesive presentation workflow; remaining query/navigation/lifecycle ownership is
+still C/D work, not declared complete by this extraction.
+
 ## Batch B checkpoint: external launch admission — 2026-09-28
 
 Base revision: `165fd015`. External-player and DeoVR preparation now check the

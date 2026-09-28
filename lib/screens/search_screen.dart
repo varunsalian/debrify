@@ -1,3 +1,5 @@
+import '../features/search/presentation/search_header.dart';
+import '../features/search/presentation/search_query_field.dart';
 import '../features/home/application/home_detail_action_dependencies.dart';
 import '../features/home/application/home_detail_dependencies.dart';
 import '../features/home/presentation/home_detail_menus.dart';
@@ -277,7 +279,6 @@ import '../widgets/source_row.dart';
 import '../widgets/cinema_sources_layout.dart';
 import '../widgets/source_list_scroll_anchor.dart';
 import '../widgets/torrent_filters_sheet.dart';
-import '../widgets/tv_text_field.dart';
 import '../widgets/text_field_suggestions.dart';
 import '../widgets/metadata_title_navigation.dart';
 import '../services/tmdb_title_search.dart';
@@ -393,33 +394,6 @@ double _atriumLabelHeight(BuildContext context) =>
 /// cell reads as the lit one. A flat fill inside the card's own clip (see
 /// [CardFocusRise.restVeil]) — no Opacity, no saveLayer.
 const Color _kPromRestVeil = Color(0x8C0D0B1A);
-
-/// Intent for a left-arrow on the search field, remapped (via a [Shortcuts]
-/// override closer than the default text-editing shortcuts) so an empty field
-/// escapes to the sidebar instead of the EditableText silently eating the key.
-class _SearchLeftIntent extends Intent {
-  const _SearchLeftIntent();
-}
-
-/// Escapes an *empty* TV search field to the sidebar on left-arrow. It disables
-/// itself the moment there's text, so [Shortcuts] falls through to the default
-/// caret/selection handling — meaning the wrapper can stay mounted at all times
-/// (a stable subtree root) without the action ever swallowing a real caret move.
-class _EmptyFieldLeftAction extends Action<_SearchLeftIntent> {
-  _EmptyFieldLeftAction(this._controller, this._onEscape);
-
-  final TextEditingController _controller;
-  final VoidCallback _onEscape;
-
-  @override
-  bool isEnabled(_SearchLeftIntent intent) => _controller.text.isEmpty;
-
-  @override
-  Object? invoke(_SearchLeftIntent intent) {
-    _onEscape();
-    return null;
-  }
-}
 
 class _SearchScreenState extends ConsumerState<SearchScreen>
     with RouteAware, WidgetsBindingObserver {
@@ -11094,210 +11068,42 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       onLeaveToContent: _focusContent,
     );
 
-    if (narrow) {
-      return Padding(
-        padding: EdgeInsets.fromLTRB(16, tv ? 16 : 12, 16, 8),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [field, const SizedBox(height: 10), toggle],
-        ),
-      );
-    }
-
-    // Dedicated TV Search uses a compact toolbar without the balancing spacer.
-    // Other wide surfaces retain their centered search field.
-    return Padding(
-      padding: tv && widget.searchMode
-          ? const EdgeInsets.fromLTRB(24, 8, 24, 8)
-          : EdgeInsets.fromLTRB(20, tv ? 18 : 14, 20, 10),
-      child: Row(
-        children: [
-          if (!tv || !widget.searchMode)
-            SizedBox(width: compactModeMenu ? 156 : 252),
-          Expanded(
-            child: Center(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 680),
-                child: field,
-              ),
-            ),
-          ),
-          const SizedBox(width: 12),
-          toggle,
-        ],
-      ),
+    return SearchHeader(
+      tv: tv,
+      dedicatedSearch: widget.searchMode,
+      narrow: narrow,
+      compactModeMenu: compactModeMenu,
+      field: field,
+      toggle: toggle,
     );
   }
 
   /// Centered translucent pill search — mirrors Stremio's search bar (rounded
   /// pill, centered text, a search glyph on the right that becomes a clear ✕).
-  Widget _buildSearchField(bool tv) {
-    final app = AppThemeScope.of(context);
-    final scheme = Theme.of(context).colorScheme;
-    final compactSearch = tv && widget.searchMode;
-    final radius = app.shape.br(compactSearch ? 12 : 26);
-    return Focus(
-      canRequestFocus: false,
-      skipTraversal: true,
-      onKeyEvent: (node, event) {
-        if (event is! KeyDownEvent) return KeyEventResult.ignored;
-        if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
-          // Pre-search Sources button (keyword or catalog empty state) is the
-          // only content, and _focusContent keeps focus on the field there —
-          // so target it directly, otherwise Down is a dead end.
-          if (_kwSourcesButtonVisible) {
-            _kwSourcesBtnFocus.requestFocus();
-          } else if (_catalogSourcesButtonVisible) {
-            _catalogSourcesBtnFocus.requestFocus();
-          } else {
-            _focusContent();
-          }
-          return KeyEventResult.handled;
-        }
-        // Arrow-up jumps to the Catalog/Keyword toggle (top-right). Works on
-        // both TV (DPAD) and desktop (keyboard) — up is safe to intercept, a
-        // single-line field doesn't use it for the cursor and nothing sits
-        // above the search field.
-        if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
-          _focusModeToggle();
-          return KeyEventResult.handled;
-        }
-        // Arrow-right reaches the toggle too — its natural spatial direction —
-        // but only once the caret is at the very end of the text, so right
-        // still moves the cursor through what you've typed first. A blank field
-        // (or caret already at the end) jumps to the toggle immediately.
-        if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
-          final text = _searchController.text;
-          final sel = _searchController.selection;
-          final atEnd =
-              text.isEmpty ||
-              sel.baseOffset < 0 ||
-              (sel.isCollapsed && sel.baseOffset >= text.length);
-          if (atEnd) {
-            _focusModeToggle();
-            return KeyEventResult.handled;
-          }
-          return KeyEventResult.ignored; // let the caret move right first
-        }
-        // Arrow-left is handled via a Shortcuts override on the field (below),
-        // not here — an EditableText consumes left-at-start for the caret before
-        // an ancestor Focus.onKeyEvent can see it.
-        return KeyEventResult.ignored;
-      },
-      child: ValueListenableBuilder<TextEditingValue>(
-        valueListenable: _searchController,
-        builder: (context, value, _) {
-          final hasText = value.text.isNotEmpty;
-          // TvTextField: on TV (Debrify keyboard on) this is a shell — DPAD
-          // landing draws the focus ring but never opens a keyboard; OK
-          // starts editing with the in-app DPAD keyboard. Off TV / opted out
-          // it renders the same plain TextField as before.
-          final field = TvTextField(
-            controller: _searchController,
-            suggestions: widget.searchMode && _mode == SearchMode.catalog
-                ? _titleSuggestions : null,
-            suggestionsLabel: 'Titles from TMDB',
-            focusNode: _searchFocusNode,
-            onChanged: _onQueryChanged,
-            onSubmitted: _onQuerySubmitted,
-            // Apple's fullscreen keyboard emits only an ambiguous end-editing
-            // signal for both Search and Back. On this dedicated search field,
-            // executing the typed query is preferable to silently revealing a
-            // suggestion strip and leaving Catalog search unsubmitted.
-            submitOnTvosEndEditing: widget.searchMode,
-            textInputAction: TextInputAction.search,
-            textAlign: compactSearch ? TextAlign.start : TextAlign.center,
-            style: TextStyle(color: scheme.onSurface, fontSize: tv ? 16 : 15),
-            // Shell-mode LEFT: no caret exists at the shell, so left always
-            // escapes to the sidebar (the LEFT-only sidebar policy). While
-            // EDITING, left moves the keyboard highlight instead — TvTextField
-            // consumes it internally. The Shortcuts wrapper below still covers
-            // the opted-out plain-TextField path.
-            onLeftArrow: tv
-                ? () => MainPageBridge.focusTvSidebar?.call()
-                : null,
-            // Explicit up/down so BOTH keyboard modes use the curated targets
-            // (mirrors the ancestor Focus handler below, which otherwise only
-            // sees keys the field lets bubble).
-            onUpArrow: tv ? _focusModeToggle : null,
-            onDownArrow: tv
-                ? () {
-                    if (_kwSourcesButtonVisible) {
-                      _kwSourcesBtnFocus.requestFocus();
-                    } else if (_catalogSourcesButtonVisible) {
-                      _catalogSourcesBtnFocus.requestFocus();
-                    } else {
-                      _focusContent();
-                    }
-                  }
-                : null,
-            decoration: InputDecoration(
-              hintText: switch (_mode) {
-                SearchMode.catalog => 'Search or paste link',
-                SearchMode.keyword => 'Search torrents by keyword',
-                SearchMode.lists => 'Search MDBList lists',
-              },
-              hintStyle: TextStyle(color: app.fade(app.core.tx, 0.32)),
-              suffixIcon: hasText
-                  ? IconButton(
-                      icon: Icon(
-                        Icons.close_rounded,
-                        color: app.fade(app.core.tx, 0.55),
-                      ),
-                      onPressed: _clearQuery,
-                    )
-                  : Icon(
-                      Icons.search_rounded,
-                      color: app.fade(app.core.tx, 0.4),
-                    ),
-              border: OutlineInputBorder(
-                borderRadius: radius,
-                borderSide: BorderSide.none,
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: radius,
-                borderSide: BorderSide.none,
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: radius,
-                borderSide: BorderSide(
-                  color: app.fade(app.home.chromeAccent, 0.6),
-                ),
-              ),
-              filled: true,
-              fillColor: app.fade(app.core.tx, 0.06),
-              contentPadding: EdgeInsets.symmetric(
-                horizontal: 20,
-                vertical: compactSearch ? 10 : (tv ? 16 : 14),
-              ),
-            ),
-          );
-          // TV: wrap the field so left-arrow on an EMPTY field escapes to the
-          // sidebar (the intuitive direction) — the text editor would otherwise
-          // silently eat it. The wrapper is ALWAYS present (a stable subtree root,
-          // so typing/clearing never tears the EditableText down); the action
-          // disables itself once there's text, so the framework's own caret and
-          // selection handling takes over untouched.
-          if (!tv) return field;
-          return Shortcuts(
-            shortcuts: const <ShortcutActivator, Intent>{
-              SingleActivator(LogicalKeyboardKey.arrowLeft):
-                  _SearchLeftIntent(),
-            },
-            child: Actions(
-              actions: <Type, Action<Intent>>{
-                _SearchLeftIntent: _EmptyFieldLeftAction(
-                  _searchController,
-                  () => MainPageBridge.focusTvSidebar?.call(),
-                ),
-              },
-              child: field,
-            ),
-          );
-        },
-      ),
-    );
-  }
+  Widget _buildSearchField(bool tv) => SearchQueryField(
+    tv: tv,
+    dedicatedSearch: widget.searchMode,
+    mode: _mode,
+    controller: _searchController,
+    focusNode: _searchFocusNode,
+    suggestions: widget.searchMode && _mode == SearchMode.catalog
+        ? _titleSuggestions
+        : null,
+    onChanged: _onQueryChanged,
+    onSubmitted: _onQuerySubmitted,
+    onClear: _clearQuery,
+    onFocusMode: _focusModeToggle,
+    onFocusContent: () {
+      if (_kwSourcesButtonVisible) {
+        _kwSourcesBtnFocus.requestFocus();
+      } else if (_catalogSourcesButtonVisible) {
+        _catalogSourcesBtnFocus.requestFocus();
+      } else {
+        _focusContent();
+      }
+    },
+    onFocusSidebar: () => MainPageBridge.focusTvSidebar?.call(),
+  );
 
   Widget _buildBody() {
     if (_mode == SearchMode.keyword) return _buildKeyword();
