@@ -68,6 +68,10 @@ until the batch ends. This replaces per-helper checkpoints, not incremental safe
 
 ### Verification budget and regression safeguards
 
+- User constraint: do not run or interact with emulators for this refactor. Use
+  code review and targeted automated checks; keep unperformed device/performance
+  acceptance pending. Existing device requirements are not counted as passed.
+
 - At batch start, list affected contracts and choose existing test groups. Reuse
   baseline evidence when its revision, relevant code/dependencies, SDK and settings
   still apply; establish a fresh baseline only for uncovered or invalidated areas.
@@ -132,7 +136,7 @@ until the batch ends. This replaces per-helper checkpoints, not incremental safe
 | Batch | Current status |
 | --- | --- |
 | A | Implemented and reviewed. Home actions, resume, detail mutation/reset boundaries and accepted local writes are wired and checked. Full gate: 10,058 passes, unchanged historical failures/errors, no missing or newly skipped tests. |
-| B | Provider/manual acquisition, automatic bindings, saved cloud preparation, downloads/ZIPs, playlist persistence and channel actions are wired and reviewed. Native source commits now survive Android launch return and retire with the native session. Original-owner preparation/recovery and switch-generation cancellation are wired. Latest full gate: 10,205 passes, unchanged historical failures/errors/skips, no missing tests or new regressions; seven added cases pass. Remaining: external-player/DeoVR dispatch, native metadata preparation review and device checks. |
+| B | Provider/manual acquisition, automatic bindings, saved cloud preparation, downloads/ZIPs, playlist persistence and channel actions are wired and reviewed. Native source commits now survive Android launch return and retire with the native session. Original-owner preparation/recovery and switch-generation cancellation are wired. Latest full gate: 10,205 passes, unchanged historical failures/errors/skips, no missing tests or new regressions; seven added cases pass. External-player/DeoVR admission and native metadata retirement checks now pass their affected tests. Device/playback acceptance remains pending; no further emulator work per user instruction. Next implementation: C feature presentation/navigation. |
 | C | Pending remaining boundaries; substantial layout/search extraction already complete |
 | D | Pending remaining boundaries and facade reduction |
 | E | Pending final acceptance |
@@ -300,10 +304,22 @@ disposal. The 627-line picker remains one cohesive dialog with its focusable til
 it owns only presentation/local focus state and stays within the 800-line ceiling.
 The shared operation is 310 lines, bridge 51 and result model 53; all are measured.
 
+External launch follow-up scope: the borrowed
+`lib/services/external_player_service.dart` (1,059 lines) retains platform discovery,
+command parsing and dispatch. Permit optional admission guards on the reachable
+preferred/specific-player launch methods and their asynchronous fallbacks only;
+check after settings/installation reads and immediately before process/URL dispatch.
+The launcher retains dialogs and episode choice, routing accepted episode writes
+through the existing preparation drain. Preserve existing player selection, command
+arguments, success/failure fallback and unguarded callers. No extraction of screen
+logic into this service or new launch framework is allowed. B closes this admission
+audit with focused transport/retirement tests; D owns ordered return/teardown and E
+still requires supported-device acceptance.
+
 Concrete remaining B paths:
-- Finish review of external-player/DeoVR asynchronous dispatch and native metadata
-  preparation admission. Original-owner propagation and native recovery/source
-  switch cancellation are now wired; do not repeat the completed provider audit.
+- External-player/DeoVR dispatch and native metadata admission are reviewed with
+  affected tests. Do not reopen these or the completed provider audit without a
+  discovered defect. Continue implementation with C; preserve pending acceptance.
 - Relevant native/device checks and the combined A+B integration gate. Ordered
   engine teardown remains D. Preserve request order, source-switch behavior and
   accepted download ownership; do not re-extract completed binding/data operations.

@@ -502,4 +502,33 @@ void main() {
       expect(requests, 2);
     },
   );
+  test(
+    'native preparation rejects retirement during final movie metadata lookup',
+    () async {
+      var active = true;
+      var requests = 0;
+      final client = MockClient((request) async {
+        requests++;
+        active = false;
+        return http.Response('{"metas":[]}', 200);
+      });
+      addTearDown(client.close);
+      await expectLater(
+        http.runWithClient(
+          () => VideoPlayerLauncher.debugNativePlaybackSession(
+            const VideoPlayerLaunchArgs(
+              videoUrl: 'https://example.test/movie.mp4',
+              title: 'Retirement Fixture (2020)',
+              contentType: 'movie',
+            ),
+            [],
+            canContinue: () => active,
+          ),
+          () => client,
+        ),
+        throwsStateError,
+      );
+      expect(requests, greaterThan(0));
+    },
+  );
 }

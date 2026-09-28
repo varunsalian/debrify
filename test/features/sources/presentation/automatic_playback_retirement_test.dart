@@ -1,3 +1,7 @@
+import 'package:debrify/services/main_page_bridge.dart';
+import 'dart:io';
+import 'package:debrify/services/storage_service.dart';
+import 'package:flutter/services.dart';
 import 'package:debrify/services/video_player_launcher.dart';
 import 'dart:async';
 
@@ -141,4 +145,96 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+  for (final afterDispatch in [false, true]) {
+    testWidgets(
+      'external handoff rejects stale follow-up afterDispatch=$afterDispatch',
+      (tester) async {
+        ProfileRuntime.debugReset();
+        ProfileRuntime.initializeLegacy();
+        SharedPreferences.setMockInitialValues({});
+        addTearDown(ProfileRuntime.debugReset);
+        await StorageService.setDefaultPlayerMode('external');
+        await StorageService.setPreferredExternalPlayer('infuse');
+        const channel = MethodChannel('plugins.flutter.io/url_launcher');
+        var launches = 0;
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(channel, (_) async {
+              launches++;
+              if (afterDispatch) ProfileSessionMemory.clearAll();
+              return true;
+            });
+        addTearDown(
+          () => TestDefaultBinaryMessengerBinding
+              .instance
+              .defaultBinaryMessenger
+              .setMockMethodCallHandler(channel, null),
+        );
+        late BuildContext page;
+        final routes = Routes();
+        await tester.pumpWidget(
+          MaterialApp(
+            navigatorObservers: [routes],
+            home: Builder(
+              builder: (context) {
+                page = context;
+                return const Scaffold(body: Text('Origin'));
+              },
+            ),
+          ),
+        );
+        final owner = ProfileSessionMemory.captureOwner();
+        var returns = 0;
+        void returned() {
+          returns++;
+        }
+
+        MainPageBridge.addPlaybackReturnListener(returned);
+        addTearDown(
+          () => MainPageBridge.removePlaybackReturnListener(returned),
+        );
+        var handoffs = 0;
+        final launch = VideoPlayerLauncher.push(
+          page,
+          VideoPlayerLaunchArgs(
+            videoUrl: afterDispatch
+                ? 'https://example.test/movie.mp4'
+                : 'https://example.test/movie.mp4?token=fixture',
+            title: 'Movie',
+          ),
+          sourceOwner: owner,
+          onPlayerHandoff: () {
+            handoffs++;
+          },
+        );
+        await tester.pumpAndSettle();
+        if (!afterDispatch) {
+          expect(find.text('Share stream with another app?'), findsOneWidget);
+          ProfileSessionMemory.clearAll();
+          await tester.tap(find.text('Continue'));
+          await tester.pumpAndSettle();
+        }
+        await launch;
+        expect(launches, afterDispatch ? 1 : 0);
+        expect(handoffs, 1);
+        expect(
+          routes.pushed,
+          hasLength(afterDispatch ? 1 : 2),
+        ); // No player route.
+        if (afterDispatch) {
+          tester.binding.handleAppLifecycleStateChanged(
+            AppLifecycleState.paused,
+          );
+          tester.binding.handleAppLifecycleStateChanged(
+            AppLifecycleState.resumed,
+          );
+          expect(returns, 1);
+          // Consume the existing return-observer timeout in fake time.
+          await tester.pump(const Duration(seconds: 31));
+          expect(returns, 1);
+        }
+        expect(tester.takeException(), isNull);
+      },
+      skip: afterDispatch && !Platform.isMacOS,
+    );
+  }
 }

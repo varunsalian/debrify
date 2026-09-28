@@ -1293,20 +1293,23 @@ class VideoPlayerLauncher {
       final launched = await _launchWithExternalPlayer(
         context,
         args,
+        preparation: preparation,
         onSeriesEntryChosen: (s, e) {
           chosenSeason = s;
           chosenEpisode = e;
         },
       );
       if (launched) {
-        await _commitExternalLaunchSource(args);
-        unawaited(
-          _seedTrackerContinueWatching(
-            args,
-            seasonOverride: chosenSeason,
-            episodeOverride: chosenEpisode,
-          ),
-        );
+        if (active()) await _commitExternalLaunchSource(args);
+        if (active()) {
+          unawaited(
+            _seedTrackerContinueWatching(
+              args,
+              seasonOverride: chosenSeason,
+              episodeOverride: chosenEpisode,
+            ),
+          );
+        }
         handoffWhenCovered();
         if (!isTrailer) _notifyOnReturnFromExternalActivity();
         MainPageBridge.notifyExternalPlayerLaunched();
@@ -1316,10 +1319,14 @@ class VideoPlayerLauncher {
     } else if (!args.disableExternalPlayer &&
         defaultPlayerMode == 'deovr' &&
         Platform.isAndroid) {
-      final launched = await _launchWithDeoVR(context, args);
+      final launched = await _launchWithDeoVR(
+        context,
+        args,
+        preparation: preparation,
+      );
       if (launched) {
-        await _commitExternalLaunchSource(args);
-        unawaited(_seedTrackerContinueWatching(args));
+        if (active()) await _commitExternalLaunchSource(args);
+        if (active()) unawaited(_seedTrackerContinueWatching(args));
         handoffWhenCovered();
         if (!isTrailer) _notifyOnReturnFromExternalActivity();
         MainPageBridge.notifyExternalPlayerLaunched();
@@ -1580,9 +1587,12 @@ class VideoPlayerLauncher {
     // a different episode than args.contentSeason/Episode describe, and the
     // tracker CW seed must tag the episode actually handed over.
     void Function(int season, int episode)? onSeriesEntryChosen,
+    ProfilePlaybackPreparation? preparation,
   }) async {
+    bool active() => context.mounted && (preparation?.isCurrent ?? true);
+    if (!context.mounted || !active()) return false;
     if (!await ProfilePolicyGuard.allows(ProfileFeature.externalPlayers)) {
-      if (context.mounted) {
+      if (context.mounted && active()) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('External players are disabled for this profile.'),
@@ -1591,6 +1601,7 @@ class VideoPlayerLauncher {
       }
       return false;
     }
+    if (!context.mounted || !active()) return false;
     // Determine the correct URL to play (considering resume state for series)
     String url = externalPlaybackUrlFor(args);
     String title = args.title;
@@ -1613,12 +1624,14 @@ class VideoPlayerLauncher {
           // to tracker Continue Watching, so a dedicated-tracker mode must
           // not replay stale local state (falls to first episode instead).
           final trackingPolicy = await TrackingSourcePolicy.load();
+          if (!context.mounted || !active()) return false;
           final lastEpisode = trackingPolicy.progressFrom(TrackingSource.local)
               ? await StorageService.getLastPlayedEpisode(
                   seriesTitle: seriesPlaylist.seriesTitle ?? 'Unknown Series',
                 )
               : null;
 
+          if (!context.mounted || !active()) return false;
           if (lastEpisode != null) {
             final lastSeason = lastEpisode['season'] as int;
             final lastEpisodeNum = lastEpisode['episode'] as int;
@@ -1634,6 +1647,7 @@ class VideoPlayerLauncher {
                 episode: lastEpisodeNum,
               );
 
+              if (!context.mounted || !active()) return false;
               if (isFinished) {
                 // Find next episode in allEpisodes (already sorted by season/episode)
                 final currentEpisodeIdx = seriesPlaylist.allEpisodes.indexWhere(
@@ -1666,7 +1680,12 @@ class VideoPlayerLauncher {
         // Resolve the URL for the target entry
         if (startIndex >= 0 && startIndex < playlist.length) {
           final targetEntry = playlist[startIndex];
-          final resolvedUrl = await _resolveEntryUrl(targetEntry, args);
+          final resolvedUrl = await _resolveEntryUrl(
+            targetEntry,
+            args,
+            canContinue: active,
+          );
+          if (!context.mounted || !active()) return false;
           if (resolvedUrl.isNotEmpty) {
             url = resolvedUrl;
             title = targetEntry.title;
@@ -1689,12 +1708,20 @@ class VideoPlayerLauncher {
                   episode.seriesInfo.season!,
                   episode.seriesInfo.episode!,
                 );
-                await StorageService.markEpisodeAsFinished(
-                  seriesTitle: seriesPlaylist.seriesTitle ?? 'Unknown Series',
-                  season: episode.seriesInfo.season!,
-                  episode: episode.seriesInfo.episode!,
-                  imdbId: seriesPlaylist.imdbId,
-                );
+                Future<void> markFinished() =>
+                    StorageService.markEpisodeAsFinished(
+                      seriesTitle:
+                          seriesPlaylist.seriesTitle ?? 'Unknown Series',
+                      season: episode.seriesInfo.season!,
+                      episode: episode.seriesInfo.episode!,
+                      imdbId: seriesPlaylist.imdbId,
+                    );
+                if (preparation == null) {
+                  await markFinished();
+                } else {
+                  await preparation.write(markFinished);
+                }
+                if (!context.mounted || !active()) return false;
                 debugPrint(
                   'ExternalPlayer: Marked S${episode.seriesInfo.season}E${episode.seriesInfo.episode} as watched',
                 );
@@ -1709,20 +1736,23 @@ class VideoPlayerLauncher {
       }
     }
 
+    if (!context.mounted || !active()) return false;
     if (_mayDiscloseCredential(url) &&
         !await _confirmExternalDisclosure(context)) {
       return false;
     }
 
+    if (!context.mounted || !active()) return false;
     if (Platform.isMacOS) {
       // macOS: Use configured external player
       final result = await ExternalPlayerService.launchWithPreferredPlayer(
         url,
         title: title,
+        canContinue: active,
       );
 
       if (result.success) {
-        if (context.mounted) {
+        if (context.mounted && active()) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(
@@ -1736,7 +1766,7 @@ class VideoPlayerLauncher {
       } else {
         // Show error but fall back to in-app player
         debugPrint('External player failed: ${result.errorMessage}');
-        if (context.mounted) {
+        if (context.mounted && active()) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(
@@ -1765,10 +1795,11 @@ class VideoPlayerLauncher {
       final result = await ExternalPlayerService.launchWithPreferredIOSPlayer(
         url,
         title: title,
+        canContinue: active,
       );
 
       if (result.success) {
-        if (context.mounted) {
+        if (context.mounted && active()) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(
@@ -1782,7 +1813,7 @@ class VideoPlayerLauncher {
       } else {
         // Show error but fall back to in-app player
         debugPrint('iOS External player failed: ${result.errorMessage}');
-        if (context.mounted) {
+        if (context.mounted && active()) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(
@@ -1800,10 +1831,11 @@ class VideoPlayerLauncher {
           await LinuxExternalPlayerServiceExtension.launchWithPreferredLinuxPlayer(
             url,
             title: title,
+            canContinue: active,
           );
 
       if (result.success) {
-        if (context.mounted) {
+        if (context.mounted && active()) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(
@@ -1817,7 +1849,7 @@ class VideoPlayerLauncher {
       } else {
         // Show error but fall back to in-app player
         debugPrint('Linux External player failed: ${result.errorMessage}');
-        if (context.mounted) {
+        if (context.mounted && active()) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(
@@ -1835,10 +1867,11 @@ class VideoPlayerLauncher {
           await WindowsExternalPlayerServiceExtension.launchWithPreferredWindowsPlayer(
             url,
             title: title,
+            canContinue: active,
           );
 
       if (result.success) {
-        if (context.mounted) {
+        if (context.mounted && active()) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(
@@ -1852,7 +1885,7 @@ class VideoPlayerLauncher {
       } else {
         // Show error but fall back to in-app player
         debugPrint('Windows External player failed: ${result.errorMessage}');
-        if (context.mounted) {
+        if (context.mounted && active()) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(
@@ -1874,29 +1907,38 @@ class VideoPlayerLauncher {
   /// Returns true if successfully launched, false if should fall back to in-app player
   static Future<bool> _launchWithDeoVR(
     BuildContext context,
-    VideoPlayerLaunchArgs args,
-  ) async {
+    VideoPlayerLaunchArgs args, {
+    ProfilePlaybackPreparation? preparation,
+  }) async {
+    bool active() => context.mounted && (preparation?.isCurrent ?? true);
+    if (!context.mounted || !active()) return false;
     final url = args.videoUrl;
     final title = args.title;
 
     if (!await ProfilePolicyGuard.allows(ProfileFeature.externalPlayers)) {
       return false;
     }
+    if (!context.mounted || !active()) return false;
     if (_mayDiscloseCredential(url) &&
         !await _confirmExternalDisclosure(context)) {
       return false;
     }
 
+    if (!context.mounted || !active()) return false;
     try {
       // Load VR settings
       final vrAutoDetectFormat =
           await StorageService.getQuickPlayVrAutoDetectFormat();
+      if (!context.mounted || !active()) return false;
       final vrShowDialog = await StorageService.getQuickPlayVrShowDialog();
+      if (!context.mounted || !active()) return false;
       final vrDefaultScreenType =
           await StorageService.getQuickPlayVrDefaultScreenType();
+      if (!context.mounted || !active()) return false;
       final vrDefaultStereoMode =
           await StorageService.getQuickPlayVrDefaultStereoMode();
 
+      if (!context.mounted || !active()) return false;
       // Detect or use default format
       String selectedScreenType = vrDefaultScreenType;
       String selectedStereoMode = vrDefaultStereoMode;
@@ -1908,7 +1950,7 @@ class VideoPlayerLauncher {
       }
 
       // Show format selection dialog if enabled
-      if (vrShowDialog && context.mounted) {
+      if (vrShowDialog && active()) {
         final result = await _showDeoVRFormatDialog(
           context,
           title: title,
@@ -1916,7 +1958,7 @@ class VideoPlayerLauncher {
           initialStereoMode: selectedStereoMode,
         );
 
-        if (result == null) {
+        if (!active() || result == null) {
           // User cancelled
           return false;
         }
@@ -1936,6 +1978,7 @@ class VideoPlayerLauncher {
 
       debugPrint('DeoVR JSON content: $jsonString');
 
+      if (!context.mounted || !active()) return false;
       // Upload JSON to jsonblob.com
       final response = await http.post(
         Uri.parse('https://jsonblob.com/api/jsonBlob'),
@@ -1943,6 +1986,7 @@ class VideoPlayerLauncher {
         body: jsonString,
       );
 
+      if (!context.mounted || !active()) return false;
       if (response.statusCode != 201) {
         throw Exception('Failed to upload JSON: ${response.statusCode}');
       }
@@ -1962,7 +2006,7 @@ class VideoPlayerLauncher {
       final intent = AndroidIntent(action: 'action_view', data: deOvrUri);
       await intent.launch();
 
-      if (context.mounted) {
+      if (context.mounted && active()) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Launching DeoVR...'),
@@ -1974,7 +2018,7 @@ class VideoPlayerLauncher {
       return true;
     } catch (e) {
       debugPrint('Failed to launch DeoVR: $e');
-      if (context.mounted) {
+      if (context.mounted && active()) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Failed to open DeoVR: $e'),
@@ -2331,6 +2375,7 @@ class VideoPlayerLauncher {
       args.contentImdbId,
     );
 
+    if (!sessionActive()) return false;
     // Reset Trakt scrobble state for clean session
     _traktHeartbeatTimer?.cancel();
     _traktHeartbeatTimer = null;
@@ -5592,9 +5637,11 @@ class _AndroidTvPlaybackPayloadBuilder {
             isMovie: contentType != _PlaybackContentType.series,
           )
         : null;
+    if (canContinue?.call() == false) return null;
     final trackingPolicy = (await TrackingSourcePolicy.load()).forContent(
       args.contentImdbId,
     );
+    if (canContinue?.call() == false) return null;
     final localCompletionTracking =
         trackingPolicy.usesLocalCompletionTracking(
           traktScrobble: args.traktScrobble,
@@ -5612,11 +5659,13 @@ class _AndroidTvPlaybackPayloadBuilder {
             StorageService.defaultLocalCompletionThreshold,
             StorageService.defaultLocalCompletionThreshold,
           ];
+    if (canContinue?.call() == false) return null;
     final perItemStates = await _fetchPerItemPlaybackState(
       playlistEntries,
       contentType: contentType,
       seriesPlaylist: seriesPlaylist,
     );
+    if (canContinue?.call() == false) return null;
     final stableSeriesTitle =
         args.contentTitle ?? seriesPlaylist?.seriesTitle ?? args.title;
     final locallyFinished = contentType == _PlaybackContentType.series
@@ -5629,6 +5678,7 @@ class _AndroidTvPlaybackPayloadBuilder {
     // bars and in-session episode resume. The native payload retains its legacy
     // `traktProgressPercent` field name, but each value is the furthest of
     // Trakt, Simkl, and MDBList.
+    if (canContinue?.call() == false) return null;
     final trackerProgressMaps = args.contentImdbId != null
         ? await Future.wait([
             StorageService.getEpisodeTraktProgress(imdbId: args.contentImdbId!),
@@ -5638,6 +5688,7 @@ class _AndroidTvPlaybackPayloadBuilder {
             ),
           ])
         : const <Map<String, double>>[];
+    if (canContinue?.call() == false) return null;
     final traktProgress = trackerProgressMaps.isNotEmpty
         ? trackerProgressMaps[0]
         : const <String, double>{};
@@ -5655,7 +5706,9 @@ class _AndroidTvPlaybackPayloadBuilder {
       trackingPolicy,
     );
 
+    if (canContinue?.call() == false) return null;
     final preparedEntries = await _prepareEntries(playlistEntries, startIndex);
+    if (canContinue?.call() == false) return null;
     final seasons = _buildSeriesSeasons(seriesPlaylist);
 
     final launcherEntries = <_LauncherEntry>[];
@@ -5664,9 +5717,6 @@ class _AndroidTvPlaybackPayloadBuilder {
     for (int i = 0; i < preparedEntries.length; i++) {
       final entry = preparedEntries[i];
       final resumeId = _resumeIdForEntry(entry);
-      if (entry.url.isNotEmpty) {
-        _cacheResolvedStream(resumeId, entry.url);
-      }
       launcherEntries.add(
         _LauncherEntry(entry: entry, resumeId: resumeId, index: i),
       );
@@ -5865,6 +5915,12 @@ class _AndroidTvPlaybackPayloadBuilder {
       effectiveImdbId = await _fetchMovieImdbId(items, startIndex);
     }
 
+    if (canContinue?.call() == false) return null;
+    for (final entry in launcherEntries) {
+      if (entry.entry.url.isNotEmpty) {
+        _cacheResolvedStream(entry.resumeId, entry.entry.url);
+      }
+    }
     final payload = _AndroidTvPlaybackPayload(
       contentType: contentType,
       declaredContentType: args.contentType,

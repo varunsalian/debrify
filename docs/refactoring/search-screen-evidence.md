@@ -6,6 +6,42 @@ workflow checkpoints, reuse valid evidence, and run broader checks at integratio
 gates. Earlier entries retain their original slice history. No changes are pushed
 to the public repository.
 
+## Batch B checkpoint: external launch admission — 2026-09-28
+
+Base revision: `165fd015`. External-player and DeoVR preparation now check the
+original launch lifetime after asynchronous settings, selection and disclosure.
+The borrowed external-player service accepts optional guards through preferred
+player selection, installation checks, custom settings and final process/URL
+launches, including fallbacks. Unguarded callers retain their existing behavior.
+Accepted episode writes use the existing original-profile write drain. Accepted
+external dispatch still emits its return signal if the profile retires while its
+response is pending, while stale source/tracker follow-up is rejected. Native
+preparation checks retirement between metadata stages and publishes stream-cache
+entries only after its final metadata lookup is accepted.
+
+Review: player order, command arguments, disclosure, existing episode-choice and
+fallback semantics retained; no platform payload changes or additional framework.
+Seven new tests cover scheme discovery retirement, accepted late launch responses,
+unguarded behavior, real disclosure-dialog retirement, exactly-once return and
+native metadata retirement. **847 affected passes / four unchanged historical
+manual-source contract failures**. Final integration after the accepted-return
+review: **54 passes**. The initial return test left the existing 30-second timer
+pending; it now exercises pause/resume and advances fake time, verifying one return
+without changing production timeout behavior. Analyzer: **839 identities**, no
+additions against 841; architecture: **504 files pass**. Receipts under
+`.git/refactor-evidence/phase5/`: `external-owner-regression.txt`,
+`external-owner-final-integration-fixed.txt`, `external-owner-analyze-final-3.txt`.
+The last full run remains the 10,205-pass gate at `165fd015`; this follow-up uses
+focused coverage and is not represented as a new full-suite pass.
+
+Android debug build passed before the final accepted-return adjustment. A dedicated
+TV emulator exercised profile opening, setup skip, Home and remote menu → Search;
+no Flutter/AndroidRuntime error entries were recorded. These limited checks do not
+prove playback/device parity. On the user's instruction, the emulator was stopped
+and further emulator work removed from execution. Device/performance acceptance
+stays pending. Continue with C presentation/navigation and D facade/lifecycle work;
+do not spend further batches re-auditing closed provider operations.
+
 ## Batch B checkpoint: native preparation ownership — 2026-09-28
 
 Base revision: `6aa15644`. All three Sources launch paths now pass their captured
