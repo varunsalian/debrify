@@ -1,3 +1,5 @@
+import '../application/source_binding_dependencies.dart';
+import '../data/manual_source_preparation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -12,14 +14,21 @@ import 'local_source_picker_composition.dart';
 /// Stateless compatibility boundary for context-dependent legacy pickers.
 /// Persistence must use the calling Sources session's guarded writer.
 final sourceBindingBridgeProvider = Provider<SourceBindingBridge>(
-  (ref) =>
-      SourceBindingBridge(localPicker: ref.watch(localSourcePickerProvider)),
-  dependencies: [localSourcePickerProvider],
+  (ref) => SourceBindingBridge(
+    localPicker: ref.watch(localSourcePickerProvider),
+    preparation: ref.watch(manualSourcePreparationProvider),
+  ),
+  dependencies: [localSourcePickerProvider, manualSourcePreparationProvider],
 );
 
 class SourceBindingBridge {
-  const SourceBindingBridge({LocalSourcePicker? localPicker})
-    : _localPicker = localPicker;
+  const SourceBindingBridge({
+    LocalSourcePicker? localPicker,
+    ManualSourcePreparation preparation = const ManualSourcePreparation(),
+  }) : _localPicker = localPicker,
+       _preparation = preparation;
+
+  final ManualSourcePreparation _preparation;
 
   final LocalSourcePicker? _localPicker;
   LocalSourcePicker get _picker => _localPicker ?? localSourcePicker;
@@ -58,6 +67,7 @@ class SourceBindingBridge {
       : TorrentPlaybackService.bindSource(
           context,
           torrent,
+          preparation: _preparation,
           imdbId: imdbId,
           isMovie: isMovie,
           saveBinding: saveBinding,

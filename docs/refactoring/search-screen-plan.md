@@ -45,9 +45,9 @@ The full retry matches the recorded regression baseline with 37 added passing
 tests; remaining execution starts with B below. Final device/performance and
 cross-feature acceptance remain pending.
 
-| Batch | Remaining deliverable | Acceptance gate |
+| Batch | Deliverable | Acceptance gate |
 | --- | --- | --- |
-| A — Home actions and resume | Finish series-resume cache ownership/capacity; migrate remaining Continue Watching/tracker playback and removal actions, detail/source-edit preparation, and accepted history-deletion sequencing. | Production callers use bounded action/data owners; resume precedence, launch arguments, actual profile-owned writes, sync/recovery records, and cancellation behavior are covered. No duplicate legacy implementation or unfinished resolver changes remain. |
+| A — Home actions and resume | Implemented and reviewed: resume/cache ownership, playback/removal, detail/source-edit preparation and accepted local-write sequencing. | Host integration gate reviewed; see Batch A review below. Reopen only for a discovered defect or invalidated contract. Final device/performance acceptance remains pending. |
 | B — Sources integration | Finish legacy manual/automatic binding and provider-operation boundaries, including the remaining transitive persistence/native checks. Reuse the standalone Sources view and existing adapters. | Binding, copy, pin/unpin, local selection, playback and download flows preserve their contracts; stale operations cannot write into another profile. Run affected native checks and the first combined A+B full-suite gate. |
 | C — Feature presentation and navigation | Finish Search focus/mode/navigation wrappers, Home layout action/navigation ownership, and Discover detail/preview boundaries. Compose actual Home/Search/Discover feature views. | All existing tabs, search modes, enabled layouts, touch/remote paths and return-focus contracts retain coverage; business operations stay outside presentation. No giant state bundle or replacement controller. |
 | D — Lifecycle and entry point | Finish shared preview/player eligibility, route/app callbacks, snapshots, timers/listeners, native teardown and remaining composition wiring. Reduce the original entry point to a routing/composition facade. | Explicit resource ownership and teardown order; retirement/overlap coverage; facade at most 300 lines; completed handwritten source files at most 800 lines. Run the second combined C+D full-suite gate. |
@@ -132,7 +132,7 @@ until the batch ends. This replaces per-helper checkpoints, not incremental safe
 | Batch | Current status |
 | --- | --- |
 | A | Implemented and reviewed. Home actions, resume, detail mutation/reset boundaries and accepted local writes are wired and checked. Full gate: 10,058 passes, unchanged historical failures/errors, no missing or newly skipped tests. |
-| B | Pending remaining boundaries; substantial Sources extraction already complete |
+| B | Shared provider acquisition/manual-pin DI extracted and reviewed; full gate preserves the baseline with 17 added passes. Internal provider ownership, automatic binding writes and native handoff remain pending. |
 | C | Pending remaining boundaries; substantial layout/search extraction already complete |
 | D | Pending remaining boundaries and facade reduction |
 | E | Pending final acceptance |
@@ -164,11 +164,43 @@ Use the existing Sources view, controllers and bridges. Close these workflows
 end to end; do not repeat completed picker/layout extraction or audit unrelated
 playback-engine internals.
 
+For each workflow, name the concrete remaining ownership gap before editing a
+legacy provider service. Close that gap through the smallest cohesive operation
+and wire the production caller; an injected wrapper around UI-coupled acquisition
+alone does not close the boundary. Preserve request order, cache/file selection,
+retry ownership, error messages and existing cleanup behavior. Retirement does not
+by itself authorize deleting a provider torrent/download: distinguish work created
+by this action from pre-existing or shared acquisitions, and retain the existing
+provider-specific cleanup contract. Do not add a new acquisition framework or
+refactor an entire provider service. Once the workflow's contracts and affected
+checks pass, proceed to the next checklist row; record unrelated debt separately.
+
 | Remaining production path | Destination and closing checks |
 | --- | --- |
 | `SourceBindingBridge.pin/pinLocal` → manual `bindSource`/direct/IPTV/local entry points, `_prepareManualTorrentBinding`, `_pickProvider`, `_add` | Keep dialogs/native selection in the named presentation bridges; finish provider readiness/credential and acquisition ownership behind plain injected operations. Reuse `SourceBindingController` and the guarded saved-source repository. Cover actual provider requests, cleanup of accepted acquisitions, preference/default writes, modal return and binding persistence. Existing binding controller/screen/navigation/loader, provider preparation and local-picker suites are the starting coverage. |
 | `SourcePlaybackBridge.play` → automatic movie/series binding and `_rebindOnSourceSwitch` | Give preparation and durable binding writes an explicit originating profile/action owner, reusing source descriptors and `SeriesSourceService` guards. Preserve binding precedence, fallback order, source-switch behavior and launch arguments. Use real saved-source persistence and retirement tests; ordered player teardown remains D. |
 | `SourcePlaybackBridge.play/download` → provider preparation and native handoff | Complete guards through reachable authentication/retries and queued operations; preserve accepted request cleanup, download payloads and existing native capabilities. Reuse playback wiring, source-link and provider tests. Run affected native checks for changed boundaries, then the combined A+B integration gate. |
+
+### Batch B acquisition checkpoint
+
+Manual pins now resolve `ManualSourcePreparation` through Riverpod and share the
+plain `SourceAcquisition` operation with legacy playback. Provider results contain
+folder descriptors and playlist data; the retained `_add` presentation adapter
+constructs navigation callbacks. Magnet precedence, file ordering and PikPak
+playlist preparation have one data implementation. `PlaylistEntry` now belongs to
+`lib/models/playlist_entry.dart`; its former screen path re-exports the same type.
+No provider/native API payload or stored binding schema changed.
+Review: 10,075 full-suite passes with unchanged historical failures/errors/skips,
+no missing tests, 845 unchanged analyzer identities, and 486 files passing the
+architecture guard. The 17 added cases cover provider requests/results and pin DI.
+
+This closes the UI-coupled acquisition extraction, not Batch B's ownership audit.
+Next, follow manual guards through the existing provider methods: RD's internal
+preference reads/file selection/unrestrict sequence, AllDebrid delayed unlock,
+TorBox lookup retries, and PikPak authenticated requests. Preserve accepted
+acquisition cleanup and automatic callers while closing concrete stale-operation
+gaps. Then finish automatic binding writes and native handoff in the checklist.
+Do not re-extract these completed data operations.
 
 ## Starting point
 
@@ -6472,7 +6504,9 @@ are stored as feature state. Existing resolution/native exceptions retain their
 propagation behavior, and an already-issued clipboard write cannot be undone.
 
 The legacy `lib/services/torrent_playback_service.dart` retains manual binding
-UI, provider preparation and automatic playback/binding paths. Phase 4C may add a
+UI composition and automatic playback/binding paths. Provider preparation now
+lives in the bounded Sources data operations listed in the Batch B checkpoint.
+Phase 4C may add a
 narrow persistence callback to its four manual binding entry points while the
 original dialogs/native pickers remain there. Sources must supply its captured
 repository writer. Its optional manual-operation cancellation callback is also
@@ -6491,9 +6525,10 @@ requests. PikPak's preparation may move into a plain Sources data operation with
 injected API readers/delay and typed immutable video descriptors. Preserve its
 seven task attempts, five detail attempts, two-second waits, recursive depth limit,
 partial-folder behavior and error-to-message mapping. Manual calls must stop between
-waits/requests; automatic calls retain their unguarded behavior. Playlist rendering,
-navigation closures and shared authenticated API internals stay in the legacy
-service under the phase-7 exception; this extraction does not prove their ownership.
+waits/requests; automatic calls retain their unguarded behavior. Playlist data preparation now lives in Sources data; navigation closures stay in
+the legacy presentation adapter. Shared authenticated API internals retain their
+bounded dependency exception pending Batch B's reachable-operation audit; this
+extraction does not prove their ownership.
 Manual binding loader cleanup may also adopt an owned route handle from the
 existing `lib/widgets/debrid_loading_overlay.dart` (718 lines). Preserve its
 provider styling, animation, barrier and Back behavior, and the existing callers

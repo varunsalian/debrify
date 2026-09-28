@@ -6,6 +6,48 @@ workflow checkpoints, reuse valid evidence, and run broader checks at integratio
 gates. Earlier entries retain their original slice history. No changes are pushed
 to the public repository.
 
+## Batch B checkpoint: shared provider acquisition and manual-pin DI — 2026-09-28
+
+Manual binding now obtains `ManualSourcePreparation` through Riverpod's
+`sourceAcquisitionProvider`/`manualSourcePreparationProvider`. The operation owns
+readiness and the existing RD/AllDebrid rejection cleanup. Legacy playback shares
+`SourceAcquisition`; its retained `_add` adapter translates provider folder data
+into the same navigation callbacks. Acquisition no longer constructs UI callbacks
+or imports screens. The 436-line main operation and 216-line PikPak operation keep
+existing requests, file selection, ordering, lazy links and error semantics.
+Magnet precedence and ordering have shared data implementations. `PlaylistEntry`
+is now a plain shared model with a compatibility export at its former screen path.
+The replaced legacy implementations are removed, not retained as parallel paths.
+
+Focused existing coverage: 688 passes and the same four historical failures in
+`manual_source_validation_contract_test.dart`, verified against the latest full
+baseline by identity. New coverage: 14 real-provider HTTP fixture cases exercise
+single files/packs/cache rejection for RD/TorBox/Premiumize/AllDebrid, cleanup of
+owned rejected acquisitions, TorBox cached-only payload and stopping subsequent
+TorBox/Premiumize operations after retirement. Three production pin DI cases cover
+ready/retired/failed responses and actual writer dispatch. Existing PikPak bridge
+cases cover its request sequence, polling outcomes and retirement. The DI fixture
+required a configured email and completers created outside the widget fake-async
+zone; initial fixture timeouts were corrected without application changes.
+
+Analyzer comparison preserves all 845 diagnostic identities; 486 measured files
+pass architecture checks. Receipts: `source-acquisition-focused.txt`,
+`source-acquisition-provider-tests.txt`, `source-acquisition-di-tests.txt`, and
+`source-acquisition-final-analyze.txt` under `.git/refactor-evidence/phase5/`.
+The full gate was required because the shared automatic acquisition path and
+playlist model ownership changed. `full-source-acquisition-c4.jsonl` completed with
+10,075 passes / 22 failures / 29 errors / 20 skips. Exact identity comparison with
+`full-title-actions-retry-c4.jsonl` finds no new failures/errors, missing tests or
+new skips, and 17 added passing cases. Historical failures remain unchanged.
+
+Review scope: no native payloads, provider APIs, persisted schemas or native
+engines changed. Existing device evidence remains scoped to its prior scenarios;
+this host checkpoint does not claim native/device acceptance. Batch B remains open
+for reachable internal provider authentication/retry/preferences guards, automatic
+binding writes and native handoff. In particular, high-level `canContinue` checks
+do not prove that a multi-request legacy provider API stops internally on retirement.
+Base revision: `a619feb2`.
+
 ## Batch A checkpoint: title-write acceptance and transitive ownership — 2026-09-28
 
 The existing accepted-local-write registry now lives in the 28-line
