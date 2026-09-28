@@ -1,3 +1,4 @@
+import '../features/home/presentation/home_classic_navigation.dart';
 import '../features/home/presentation/home_stage_navigation.dart';
 import '../features/home/presentation/home_tonight_focus.dart';
 import '../features/home/presentation/home_mosaic_cell_navigation.dart';
@@ -6682,33 +6683,25 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     return _sectionRowId(_sections[rail.sectionIndex!]);
   }
 
-  bool _focusHomeRailAt(int index, int column) {
-    final rails = _canvasRails;
-    if (index < 0 || index >= rails.length) return false;
-    final nodes = _canvasRailNodes(rails[index]);
-    if (nodes.isEmpty) return false;
-    _requestRowFocus(nodes, column.clamp(0, nodes.length - 1));
-    return true;
-  }
+  late final _classicNavigation = HomeClassicNavigation(
+    rails: () => _canvasRails,
+    rowIdOf: _canvasRailRowId,
+    nodesFor: _canvasRailNodes,
+    requestFocus: _requestRowFocus,
+    leaveTop: _leaveBoardTop,
+    loadingMore: () => _boardLoadingMore,
+    hasMore: () => _boardHasMore,
+    focusContinuation: _focusCatalogContinuation,
+    loadMore: _loadMoreBoard,
+    deferDown: (rowId, column) =>
+        _deferDownMove(homeRowId: rowId, column: column),
+  );
 
-  /// Classic-board vertical focus by stable row id. The ordered list is
-  /// re-resolved on every press because tracker/favourite rows can arrive
-  /// asynchronously and catalog batches can insert around the current row.
-  void _focusRelativeHomeRail(String rowId, int delta, int column) {
-    final rails = _canvasRails;
-    final current = rails.indexWhere((rail) => _canvasRailRowId(rail) == rowId);
-    if (current < 0) return;
-    for (var i = current + delta; i >= 0 && i < rails.length; i += delta) {
-      if (_focusHomeRailAt(i, column)) return;
-    }
-    if (delta < 0) {
-      _leaveBoardTop();
-      return;
-    }
-    if (!_boardLoadingMore && _focusCatalogContinuation()) return;
-    if (_boardHasMore) _loadMoreBoard();
-    _deferDownMove(homeRowId: rowId, column: column);
-  }
+  bool _focusHomeRailAt(int index, int column) =>
+      _classicNavigation.focusAt(index, column);
+
+  void _focusRelativeHomeRail(String rowId, int delta, int column) =>
+      _classicNavigation.move(rowId, delta, column);
 
   // ── TONIGHT zone state ───────────────────────────────────────────────────
 

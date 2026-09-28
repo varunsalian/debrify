@@ -6,6 +6,23 @@ workflow checkpoints, reuse valid evidence, and run broader checks at integratio
 gates. Earlier entries retain their original slice history. No changes are pushed
 to the public repository.
 
+## Batch C checkpoint: Classic rail traversal — 2026-09-28
+
+Base: `c3cc4e2c`. `HomeClassicNavigation` (60 lines) owns stable-row vertical
+traversal, empty-row skipping, column clamping and continuation/paging fallback.
+The actual screen delegates both direct and relative focus entry points. Row
+snapshots and nodes are borrowed, with fresh row resolution for each focus attempt;
+no provider or competing state was added. Root: **11,816 → 11,809 lines**.
+
+Review preserves top exit, continuation priority, lazy paging reads, load-before-
+defer ordering and original requested column retention in deferred moves.
+**56 tests pass**: one focused traversal test and all 55 real-screen progressive/
+pagination tests. Analysis retains **836 identical diagnostic identities**;
+architecture checks pass **536 files**; formatting/diff checks pass. Receipts:
+`.git/refactor-evidence/phase5/classic-navigation-{tests,analyze}.txt`.
+No emulator used. Remaining C work includes favorite-card/row composition and
+route/resource ownership; D facade/lifecycle and E acceptance are still pending.
+
 ## Batch C checkpoint: stage rail transitions — 2026-09-28
 
 Base: `4e7c1ab6`. The existing `HomeStageNavigation` now owns rail switching,
