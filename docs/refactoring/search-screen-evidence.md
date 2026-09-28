@@ -6,6 +6,48 @@ workflow checkpoints, reuse valid evidence, and run broader checks at integratio
 gates. Earlier entries retain their original slice history. No changes are pushed
 to the public repository.
 
+## Batch A checkpoint: addon inventory and hydration ownership — 2026-09-28
+
+Addon inventory reads now capture session ownership and invalidation generation
+before awaiting. Cache hits use a stable captured list while authorizing resources;
+retired reads cannot borrow another profile's cache or repopulate invalidated
+inventory. Hydration checks ownership between manifests and before failure-memo
+publication/persistence. Its failed-URL memo now belongs to the profile session.
+The existing captured authorization still owns durable collection replacement;
+management/transfer errors remain actionable and retired display reads return no
+inventory. Legacy preference reads receive the same publication guard.
+
+The real-profile tests also exposed an existing recursive-save loop for a borrowed
+URL-only addon: its reader cannot persist hydration into the owner's resource, so
+the post-save executable reread kept hydrating and saving again. That reread now
+re-authorizes once without repeating the hydration save. Ordinary owned hydration
+still fetches once; borrowed hydration terminates and preserves the owner's sealed
+record. This is an explicit reachable bug fix, not a schema or resource migration.
+
+Validation: **58 targeted tests pass**, including seven new real-registry/cipher
+cases for active/failing hydration, profile retirement, invalidation, failure-memo
+retirement, encrypted-record preservation and borrowed-record termination/cache
+reuse. Tests account for inherited profile grants and resource IDs. Existing
+unreadable-sibling preservation, addon imports, metadata policy/cache, series
+metadata and catalog-origin tests pass. Analyzer identities remain **848**;
+**473** migrated files pass architecture checks; diff checks pass. Changed legacy
+members alone were formatted. Targeted receipts:
+`.git/refactor-evidence/phase5/addon-inventory-final-tests-3.txt` and
+`addon-inventory-final-analyze.txt`.
+
+Because `getAddons()` is a shared Home/Search/Sources/settings boundary, a full
+concurrency-4 gate was run: **10,021 successes / 22 failures / 29 errors / 20 skips**,
+with a terminal result and exit 1 for historical failures. Exact comparison against
+`full-stremio-detail-c4.jsonl` retains all tests, adds 35 across intervening
+checkpoints, has no new skips, and confirms the rewatch source assertion now passes.
+Against the earlier picker baseline, there are no new failures/errors. Receipt:
+`.git/refactor-evidence/phase5/full-addon-inventory-c4.jsonl`.
+
+Catalog action composition is reviewed for A. Remaining A work is detail mutation
+and reset data/write sequencing. Remaining feature composition, Sources integration,
+lifecycle/facade/CI and native/device/performance gates remain B–E; no whole-phase
+or final migration completion is claimed.
+
 ## Batch A checkpoint: detail opening orchestration — 2026-09-28
 
 The 69-line `HomeDetailNavigation` now owns origin preparation outcomes,

@@ -101,6 +101,9 @@ class StremioService {
 
   // In-memory cache of addons
   List<StremioAddon>? _addonsCache;
+  ProfileSessionOwner? _addonsCacheOwner;
+  ProfileSessionOwner? _hydrationCacheOwner;
+  int _addonsGeneration = 0;
 
   // Resolved "Watch Next" recommendations, keyed by '<type>:<imdbId>'.
   // Session-lived; recommendations are stable enough not to need a TTL.
@@ -214,6 +217,8 @@ class StremioService {
     bool forSettings = false,
     bool forRemoteTransfer = false,
   }) async {
+    final owner = ProfileSessionMemory.captureOwner();
+    final generation = _addonsGeneration;
     final startingScope =
         ProfileRuntime.isInitialized && ProfileRuntime.isProfileCommitted
         ? ProfileRuntime.capture()
@@ -233,7 +238,9 @@ class StremioService {
       // must remain visible rather than masquerading as an empty collection.
       if (forSettings ||
           forRemoteTransfer ||
-          ProfileRuntime.scope.value == startingScope) {
+          (ProfileRuntime.scope.value == startingScope &&
+              owner == ProfileSessionMemory.captureOwner() &&
+              generation == _addonsGeneration)) {
         rethrow;
       }
       return [];
@@ -243,7 +250,24 @@ class StremioService {
   Future<List<StremioAddon>> _getAddons({
     required bool forSettings,
     required bool forRemoteTransfer,
+    bool persistHydration = true,
   }) async {
+    final owner = ProfileSessionMemory.captureOwner();
+    final generation = _addonsGeneration;
+    void checkCurrent() {
+      if (owner != ProfileSessionMemory.captureOwner() ||
+          generation != _addonsGeneration ||
+          (owner.scope != null && ProfileRuntime.capture() != owner.scope)) {
+        throw StateError('Addon inventory read retired');
+      }
+    }
+
+    checkCurrent();
+    if (_hydrationCacheOwner != owner) {
+      _hydrationFailedUrls.clear();
+      _hydrationCacheOwner = owner;
+    }
+
     // READING addons is an operation every profile keeps ([ProfileFeature
     // .addonUse]) — Home shelves and catalog search must survive "Manage own
     // sources" being off. The management entry points (add/remove/import/
@@ -253,13 +277,17 @@ class StremioService {
           ? ProfileFeature.remoteTransfer
           : ProfileFeature.addonUse,
     );
-    if (!forSettings && !forRemoteTransfer && _addonsCache != null) {
+    checkCurrent();
+    final cached = _addonsCacheOwner == owner ? _addonsCache : null;
+    if (!forSettings && !forRemoteTransfer && cached != null) {
+      var usable = true;
       if (authorization != null) {
         await authorization.runIfCurrent(() async {});
       }
       if (ProfileCollectionResourceFacade.active) {
         try {
-          for (final addon in _addonsCache!) {
+          for (final addon in cached) {
+            checkCurrent();
             await ProfileCollectionResourceFacade.authorizeExecution(
               resourceId: addon.connectionResourceId,
               resourceRevision: addon.connectionResourceRevision,
@@ -273,10 +301,13 @@ class StremioService {
           // A resource was rotated, revoked, disabled, or deleted without
           // going through this singleton. Never serve its decrypted URL from
           // process memory; rebuild the cache from the current graph below.
-          _addonsCache = null;
+          checkCurrent();
+          if (identical(_addonsCache, cached)) _addonsCache = null;
+          usable = false;
         }
       }
-      if (_addonsCache != null) return List.from(_addonsCache!);
+      checkCurrent();
+      if (usable) return List.from(cached);
     }
 
     if (ProfileCollectionResourceFacade.active) {
@@ -292,6 +323,7 @@ class StremioService {
       final rows = authorization == null
           ? await read()
           : await authorization.runIfCurrent(read);
+      checkCurrent();
       // Restored rows (remote import, file backup) carry only a manifest URL
       // — the restore adapters cannot fetch manifests. The strict parse used
       // to throw on the first such row, which took EVERY catalog down with a
@@ -320,7 +352,9 @@ class StremioService {
         final hydrated = await _hydrateRestoredAddons(
           restoredRows,
           stubUnfetchable: true,
+          checkCurrent: checkCurrent,
         );
+        checkCurrent();
         addons = <StremioAddon>[...parsed, ...hydrated];
         final anyReal = hydrated.any(
           (a) => !a.id.startsWith(_restoredPendingIdPrefix),
@@ -331,7 +365,7 @@ class StremioService {
         // recreation instant, a settings-read persist becomes an endless
         // save→notify→reload loop that re-seals secrets and bumps every
         // addon's authorization revision each turn.
-        if (anyReal && !forRemoteTransfer && !forSettings) {
+        if (anyReal && persistHydration && !forRemoteTransfer && !forSettings) {
           // Best-effort: a profile allowed to USE addons but not manage
           // them cannot write the collection — serve the hydrated list for
           // this session and let a manager's read repair it durably. The
@@ -348,9 +382,17 @@ class StremioService {
             // management callers retain disabled rows. Re-read through the
             // execution path here; a playback caller must never receive that
             // settings representation (including redacted shared addons).
+            // Our own hydration save invalidates the inventory generation.
+            // Keep the originating owner, then re-read the committed inventory.
+            if (owner != ProfileSessionMemory.captureOwner()) {
+              throw StateError('Addon hydration owner retired');
+            }
             return await _getAddons(
               forSettings: false,
               forRemoteTransfer: false,
+              // Borrowed restored records cannot be rewritten by this owner.
+              // Re-authorize once without recursively retrying their save.
+              persistHydration: false,
             );
           } on ResourceAuthorizationException {
             rethrow;
@@ -362,32 +404,40 @@ class StremioService {
           }
         }
       }
+      checkCurrent();
       if (!forSettings && !forRemoteTransfer) {
         if (authorization != null && !authorization.isCurrentlyActive) {
           throw StateError('Profile session changed before addon publication');
         }
         _addonsCache = addons;
+        _addonsCacheOwner = owner;
       }
       return List<StremioAddon>.from(addons);
     }
 
     final prefs = await ProfilePreferences.instance();
+    checkCurrent();
     final jsonString = prefs.getString(_addonsKey);
 
     if (jsonString == null || jsonString.isEmpty) {
       _addonsCache = [];
+      _addonsCacheOwner = owner;
       return [];
     }
 
     try {
       final List<dynamic> jsonList = await decodeJsonAsync(jsonString);
+      checkCurrent();
       _addonsCache = jsonList
           .map((j) => StremioAddon.fromJson(j as Map<String, dynamic>))
           .toList();
+      _addonsCacheOwner = owner;
       return List.from(_addonsCache!);
     } catch (_) {
+      checkCurrent();
       debugPrint('StremioService: Addon storage could not be decoded');
       _addonsCache = [];
+      _addonsCacheOwner = owner;
       return [];
     }
   }
@@ -453,7 +503,7 @@ class StremioService {
 
   /// URLs whose manifest fetch failed this session — without this memo an
   /// offline device would pay a full network timeout on EVERY catalog load
-  /// until the fetch succeeds. Cleared by restart (retry is cheap then).
+  /// until the fetch succeeds. Cleared on profile-session change or restart.
   static final Set<String> _hydrationFailedUrls = <String>{};
 
   /// Fetches the real manifest for restored URL-only rows and rebinds each
@@ -467,9 +517,11 @@ class StremioService {
   Future<List<StremioAddon>> _hydrateRestoredAddons(
     List<Map<String, dynamic>> rows, {
     bool stubUnfetchable = false,
+    required void Function() checkCurrent,
   }) async {
     final result = <StremioAddon>[];
     for (final row in rows) {
+      checkCurrent();
       final raw = (row['manifestUrl'] ?? row['manifest_url']) as String?;
       final url = raw?.trim() ?? '';
       void addStub() {
@@ -497,6 +549,7 @@ class StremioService {
       }
       try {
         final fetched = await fetchManifest(_normalizeManifestUrl(url));
+        checkCurrent();
         result.add(
           fetched.copyWith(
             connectionResourceId: row['_connectionResourceId'] as String?,
@@ -505,6 +558,7 @@ class StremioService {
           ),
         );
       } catch (_) {
+        checkCurrent();
         debugPrint('StremioService: could not hydrate restored addon');
         _hydrationFailedUrls.add(url);
         addStub();
@@ -635,6 +689,7 @@ class StremioService {
     // disabled rows. It may also contain redacted borrowed rows, so it must
     // never seed the executable cache; the next playback read rebuilds that
     // cache from an authorized use-mode read.
+    _addonsGeneration++;
     _addonsCache = null;
     // Addon set changed — drop recommendation caches so a title viewed
     // before installing a "Watch Next"-style addon picks it up without an
@@ -936,6 +991,7 @@ class StremioService {
       if (authorization != null && !authorization.isCurrentlyActive) {
         throw StateError('Profile session changed before addon publication');
       }
+      _addonsGeneration++;
       _addonsCache = null;
       _clearDetailCaches();
       _catalogCache.clear();
@@ -3788,6 +3844,7 @@ class StremioService {
   void invalidateCache() {
     _clearDetailCaches();
     HomeReturnCache.invalidate();
+    _addonsGeneration++;
     _addonsCache = null;
     _catalogCache.clear();
     _seriesMetaCache.clear();
