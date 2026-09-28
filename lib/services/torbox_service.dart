@@ -9,6 +9,12 @@ import '../models/torbox_web_download.dart';
 import '../utils/json_isolate.dart';
 
 class TorboxService {
+  static void _checkAcquisition(bool Function()? canContinue) {
+    if (canContinue?.call() == false) {
+      throw StateError('Source acquisition belongs to a retired action');
+    }
+  }
+
   static const String _baseUrl = 'https://api.torbox.app/v1/api';
 
   static Future<TorboxUser> getUserInfo(String apiKey) async {
@@ -280,7 +286,9 @@ class TorboxService {
     bool seed = true,
     bool allowZip = true,
     bool addOnlyIfCached = true,
+    bool Function()? canContinue,
   }) async {
+    _checkAcquisition(canContinue);
     final uri = Uri.parse('$_baseUrl/torrents/createtorrent');
     final headers = {'Authorization': _formatAuthHeader(apiKey)};
     final trimmedMagnet = magnet.trim();
@@ -308,6 +316,7 @@ class TorboxService {
       debugPrint(
         'TorboxService: createtorrent input=${_safeInputLabel(trimmedMagnet)}',
       );
+      _checkAcquisition(canContinue);
       final response = await request.send().timeout(
         const Duration(seconds: 20),
       );
@@ -378,7 +387,9 @@ class TorboxService {
     required String apiKey,
     required int torrentId,
     required int fileId,
+    bool Function()? canContinue,
   }) async {
+    _checkAcquisition(canContinue);
     final uri = Uri.parse('$_baseUrl/torrents/requestdl').replace(
       queryParameters: {
         'token': apiKey.trim(),
@@ -454,8 +465,11 @@ class TorboxService {
     int torrentId, {
     int attempts = 5,
     Duration delayBetweenAttempts = const Duration(milliseconds: 300),
+    bool Function()? canContinue,
   }) async {
+    _checkAcquisition(canContinue);
     for (int attempt = 0; attempt < attempts; attempt++) {
+      _checkAcquisition(canContinue);
       try {
         final result = await getTorrents(apiKey, torrentId: torrentId);
         final TorboxTorrent? torrent =
@@ -469,6 +483,7 @@ class TorboxService {
           'TorboxService: getTorrentById attempt ${attempt + 1} failed: $e',
         );
       }
+      _checkAcquisition(canContinue);
       if (attempt < attempts - 1) {
         await Future.delayed(delayBetweenAttempts);
       }

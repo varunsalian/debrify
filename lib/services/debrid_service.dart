@@ -21,6 +21,12 @@ class TorrentNotCachedException implements Exception {
 }
 
 class DebridService {
+  static void _checkAcquisition(bool Function()? canContinue) {
+    if (canContinue?.call() == false) {
+      throw StateError('Source acquisition belongs to a retired action');
+    }
+  }
+
   static const String _primaryEndpoint = 'https://api.real-debrid.com/rest/1.0';
   static const String _backupEndpoint =
       'https://api-2.real-debrid.com/rest/1.0';
@@ -308,10 +314,13 @@ class DebridService {
   // Add magnet to Real Debrid
   static Future<Map<String, dynamic>> addMagnet(
     String apiKey,
-    String magnetLink,
-  ) async {
+    String magnetLink, {
+    bool Function()? canContinue,
+  }) async {
     try {
+      _checkAcquisition(canContinue);
       final baseUrl = await _getBaseUrl();
+      _checkAcquisition(canContinue);
       final response = await http.post(
         Uri.parse('$baseUrl/torrents/addMagnet'),
         headers: {
@@ -335,10 +344,13 @@ class DebridService {
 
   static Future<Map<String, dynamic>> addTorrentFile(
     String apiKey,
-    List<int> torrentBytes,
-  ) async {
+    List<int> torrentBytes, {
+    bool Function()? canContinue,
+  }) async {
     try {
+      _checkAcquisition(canContinue);
       final baseUrl = await _getBaseUrl();
+      _checkAcquisition(canContinue);
       final response = await http.put(
         Uri.parse('$baseUrl/torrents/addTorrent'),
         headers: {
@@ -373,10 +385,13 @@ class DebridService {
   // Get torrent info
   static Future<Map<String, dynamic>> getTorrentInfo(
     String apiKey,
-    String torrentId,
-  ) async {
+    String torrentId, {
+    bool Function()? canContinue,
+  }) async {
     try {
+      _checkAcquisition(canContinue);
       final baseUrl = await _getBaseUrl();
+      _checkAcquisition(canContinue);
       final response = await http.get(
         Uri.parse('$baseUrl/torrents/info/$torrentId'),
         headers: {'Authorization': 'Bearer $apiKey'},
@@ -398,10 +413,13 @@ class DebridService {
   static Future<void> selectFiles(
     String apiKey,
     String torrentId,
-    List<int> fileIds,
-  ) async {
+    List<int> fileIds, {
+    bool Function()? canContinue,
+  }) async {
     try {
+      _checkAcquisition(canContinue);
       final baseUrl = await _getBaseUrl();
+      _checkAcquisition(canContinue);
       String fileIdsString;
       if (fileIds.isEmpty) {
         fileIdsString = 'all';
@@ -433,10 +451,13 @@ class DebridService {
   // Unrestrict link
   static Future<Map<String, dynamic>> unrestrictLink(
     String apiKey,
-    String link,
-  ) async {
+    String link, {
+    bool Function()? canContinue,
+  }) async {
     try {
+      _checkAcquisition(canContinue);
       final baseUrl = await _getBaseUrl();
+      _checkAcquisition(canContinue);
       final response = await http.post(
         Uri.parse('$baseUrl/unrestrict/link'),
         headers: {
@@ -547,16 +568,26 @@ class DebridService {
     String apiKey,
     String magnetLink, {
     String? tempFileSelection,
+    bool Function()? canContinue,
   }) async {
     try {
+      _checkAcquisition(canContinue);
       // Step 1: Add magnet or protected .torrent file URL
       final addResponse = magnetLink.trim().toLowerCase().startsWith('http')
-          ? await addTorrentFile(apiKey, await _downloadTorrentFile(magnetLink))
-          : await addMagnet(apiKey, magnetLink);
+          ? await addTorrentFile(
+              apiKey,
+              await _downloadTorrentFile(magnetLink),
+              canContinue: canContinue,
+            )
+          : await addMagnet(apiKey, magnetLink, canContinue: canContinue);
       final torrentId = addResponse['id'];
 
       // Step 2: Get torrent info
-      final torrentInfo = await getTorrentInfo(apiKey, torrentId);
+      final torrentInfo = await getTorrentInfo(
+        apiKey,
+        torrentId,
+        canContinue: canContinue,
+      );
       final files = (torrentInfo['files'] as List<dynamic>? ?? const []);
 
       if (files.isEmpty) {
@@ -564,9 +595,12 @@ class DebridService {
         throw Exception('No files found in torrent');
       }
 
+      _checkAcquisition(canContinue);
+
       // Step 3: Get file selection preference (use temp selection if provided, otherwise use saved preference)
       final fileSelection =
           tempFileSelection ?? await StorageService.getFileSelection();
+      _checkAcquisition(canContinue);
       List<int> fileIdsToSelect = [];
 
       if (fileSelection == 'all') {
@@ -671,18 +705,32 @@ class DebridService {
       }
 
       // Step 4: Select files based on preference
-      await selectFiles(apiKey, torrentId, fileIdsToSelect);
+      await selectFiles(
+        apiKey,
+        torrentId,
+        fileIdsToSelect,
+        canContinue: canContinue,
+      );
 
       // Step 5: Wait a bit and get updated torrent info
+      _checkAcquisition(canContinue);
       await Future.delayed(const Duration(seconds: 2));
-      final updatedInfo = await getTorrentInfo(apiKey, torrentId);
+      _checkAcquisition(canContinue);
+      final updatedInfo = await getTorrentInfo(
+        apiKey,
+        torrentId,
+        canContinue: canContinue,
+      );
       // 'links' is absent while RD still reports downloading/queued statuses —
       // treat as empty (the fallback chain below handles it) like the retries.
       List<dynamic> links = updatedInfo['links'] as List<dynamic>? ?? const [];
 
       // Smart media fallback chain if initial 'smart' video selection yielded no links
-      if ((tempFileSelection ?? await StorageService.getFileSelection()) ==
-          'smart') {
+      _checkAcquisition(canContinue);
+      final fallbackSelection =
+          tempFileSelection ?? await StorageService.getFileSelection();
+      _checkAcquisition(canContinue);
+      if (fallbackSelection == 'smart') {
         // If we selected videos in smart mode and there are no links, try largest video then all files
         // Determine whether we selected videos by checking if fileIdsToSelect is not 'all' and all are videos
         final selectedIdsSet = fileIdsToSelect.toSet();
@@ -711,17 +759,36 @@ class DebridService {
                 largestVideoId = f['id'] as int;
               }
             }
-            await selectFiles(apiKey, torrentId, [largestVideoId]);
+            await selectFiles(apiKey, torrentId, [
+              largestVideoId,
+            ], canContinue: canContinue);
+            _checkAcquisition(canContinue);
             await Future.delayed(const Duration(seconds: 2));
-            final updatedInfo2 = await getTorrentInfo(apiKey, torrentId);
+            _checkAcquisition(canContinue);
+            final updatedInfo2 = await getTorrentInfo(
+              apiKey,
+              torrentId,
+              canContinue: canContinue,
+            );
             links = (updatedInfo2['links'] as List<dynamic>? ?? const []);
           }
 
           // If still empty, try all files
           if (links.isEmpty) {
-            await selectFiles(apiKey, torrentId, []); // 'all'
+            await selectFiles(
+              apiKey,
+              torrentId,
+              [],
+              canContinue: canContinue,
+            ); // 'all'
+            _checkAcquisition(canContinue);
             await Future.delayed(const Duration(seconds: 2));
-            final updatedInfo3 = await getTorrentInfo(apiKey, torrentId);
+            _checkAcquisition(canContinue);
+            final updatedInfo3 = await getTorrentInfo(
+              apiKey,
+              torrentId,
+              canContinue: canContinue,
+            );
             links = (updatedInfo3['links'] as List<dynamic>? ?? const []);
           }
         }
@@ -732,7 +799,11 @@ class DebridService {
       }
 
       // Step 6: Unrestrict the link
-      final unrestrictResponse = await unrestrictLink(apiKey, links[0]);
+      final unrestrictResponse = await unrestrictLink(
+        apiKey,
+        links[0],
+        canContinue: canContinue,
+      );
       final downloadLink = unrestrictResponse['download'] as String?;
 
       if (downloadLink == null) {

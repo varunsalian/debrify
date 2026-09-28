@@ -6,6 +6,47 @@ workflow checkpoints, reuse valid evidence, and run broader checks at integratio
 gates. Earlier entries retain their original slice history. No changes are pushed
 to the public repository.
 
+## Batch B checkpoint: manual provider operation ownership — 2026-09-28
+
+Manual preparation now captures the live originating profile/session and runs its
+acquisition and rejection cleanup in that scope. It rejects retired work before
+magnet resolution and after readiness. The existing live-profile credential
+getters remain guarded; a foreign captured zone cannot change the endpoint,
+selection preferences or credentials used by the action.
+
+Optional action guards now reach RD add/file-upload/info/select/unrestrict steps,
+AllDebrid upload/files/delayed unlock and TorBox torrent-file upload/lookup retries.
+PikPak acquisition methods forward guards through authorization, credential reads,
+request sending, refresh continuations and captcha retries. An accepted token
+refresh retains its existing `ProfileAsyncAuthorization` owner; subsequent
+acquisition requests stop after retirement. Captcha coalescing now keys by captured
+profile/generation, device and account/action. A retired waiter cannot start a new
+captcha request after a borrowed failure, and delayed removal only removes its
+own pending entry. Ordinary callers omitting guards retain their request/retry
+contract. No cancellation-based torrent deletion policy was introduced: existing
+rejection cleanup remains origin-owned, and pre-existing/shared downloads are not
+deleted simply because a view retires.
+
+Focused checks: 33 provider/preparation/DI cases, 17 PikPak authentication and
+concurrent-device cases, and four real-profile cases pass. The 28 added tests cover
+retirement inside provider operations, delayed polling, accepted renewal with no
+late acquisition retry, foreign-zone preferences, incoming credentials remaining
+intact, rejection cleanup after retirement, and concurrent captcha requests for
+two profiles sharing an account/device. Fixture setup corrections supplied the
+actual token host and committed/activated the real profile registry; they required
+no relaxation of application assertions. Receipts under
+`.git/refactor-evidence/phase5/`: `provider-guards-focused-tests.txt`,
+`provider-guards-pikpak-final-tests.txt`, `provider-guards-profile-final-tests.txt`.
+
+Architecture checks pass 486 measured files. All 845 analyzer diagnostic identities
+are unchanged (`provider-guards-final-analyze-2.txt`). The shared-provider full gate
+(`full-provider-guards-c4.jsonl`) completed with 10,103 passes / 22 failures /
+29 errors / 20 skips. Exact comparison with `full-source-acquisition-c4.jsonl`
+finds no new failures/errors, missing tests or newly skipped tests, and 28 added
+passing cases. Base revision: `8d37de44`. Native payloads, engines, dependency
+versions and storage formats are unchanged. Automatic binding/action ownership and native/device acceptance remain
+open in B; this checkpoint does not close C–E or the whole migration.
+
 ## Batch B checkpoint: shared provider acquisition and manual-pin DI — 2026-09-28
 
 Manual binding now obtains `ManualSourcePreparation` through Riverpod's

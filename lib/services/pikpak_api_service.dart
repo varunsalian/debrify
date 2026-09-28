@@ -6,10 +6,17 @@ import 'package:http/http.dart' as http;
 
 import '../models/profiles/profile_policy.dart';
 import 'profiles/profile_async_authorization.dart';
+import 'profiles/profile_runtime.dart';
 import 'profiles/connection_resource_service.dart';
 import 'storage_service.dart';
 
 class PikPakApiService {
+  void _checkAcquisition(bool Function()? canContinue) {
+    if (canContinue?.call() == false) {
+      throw StateError('Source acquisition belongs to a retired action');
+    }
+  }
+
   static final PikPakApiService instance = PikPakApiService._internal();
   factory PikPakApiService() => instance;
   PikPakApiService._internal();
@@ -101,9 +108,16 @@ class PikPakApiService {
     required String deviceId,
     String? email,
     String? userId,
+    bool Function()? canContinue,
   }) async {
+    _checkAcquisition(canContinue);
     // Create a unique key for this captcha request
-    final requestKey = '$action:${userId ?? email ?? 'anonymous'}';
+    final scope =
+        ProfileRuntime.isInitialized && ProfileRuntime.isProfileCommitted
+        ? ProfileRuntime.capture()
+        : null;
+    final requestKey =
+        '${scope?.profileId}:${scope?.dataGeneration}:$deviceId:$action:${userId ?? email ?? 'anonymous'}';
 
     // Check if a refresh is already in progress for this key
     final existingRefresh = _captchaRefreshInProgress[requestKey];
@@ -121,6 +135,7 @@ class PikPakApiService {
       }
     }
 
+    _checkAcquisition(canContinue);
     // Create a new completer for this refresh
     final completer = Completer<String>();
     _captchaRefreshInProgress[requestKey] = completer;
@@ -140,7 +155,9 @@ class PikPakApiService {
     } finally {
       // Remove the completer after a short delay to allow all waiting requests to get the result
       Future.delayed(const Duration(milliseconds: 100), () {
-        _captchaRefreshInProgress.remove(requestKey);
+        if (identical(_captchaRefreshInProgress[requestKey], completer)) {
+          _captchaRefreshInProgress.remove(requestKey);
+        }
       });
     }
   }
@@ -689,13 +706,16 @@ class PikPakApiService {
 
   /// Ensure we have valid authentication tokens
   /// Always syncs from storage to ensure we have the latest tokens
-  Future<void> _ensureAuthenticated() async {
+  Future<void> _ensureAuthenticated({bool Function()? canContinue}) async {
     // Always load from storage to ensure we have the latest tokens
     // This handles cases where tokens were refreshed in a different session
     // or the in-memory token became stale
+    _checkAcquisition(canContinue);
     final storedAccessToken = await StorageService.getPikPakAccessToken();
+    _checkAcquisition(canContinue);
     final storedRefreshToken = await StorageService.getPikPakRefreshToken();
 
+    _checkAcquisition(canContinue);
     if (storedAccessToken == null || storedRefreshToken == null) {
       throw Exception('Not authenticated. Please login first.');
     }
@@ -725,28 +745,46 @@ class PikPakApiService {
   Future<Map<String, dynamic>> _makeAuthenticatedRequest(
     String method,
     String url,
-    Map<String, dynamic>? body,
-  ) async {
+    Map<String, dynamic>? body, {
+    bool Function()? canContinue,
+  }) async {
+    _checkAcquisition(canContinue);
     final authorization = await ProfileAsyncAuthorization.capture(
       ProfileFeature.cloud,
     );
+    _checkAcquisition(canContinue);
     if (authorization == null) {
-      return _makeAuthenticatedRequestScoped(method, url, body);
+      return _makeAuthenticatedRequestScoped(
+        method,
+        url,
+        body,
+        canContinue: canContinue,
+      );
     }
     return authorization.run(
-      () => _makeAuthenticatedRequestScoped(method, url, body),
+      () => _makeAuthenticatedRequestScoped(
+        method,
+        url,
+        body,
+        canContinue: canContinue,
+      ),
     );
   }
 
   Future<Map<String, dynamic>> _makeAuthenticatedRequestScoped(
     String method,
     String url,
-    Map<String, dynamic>? body,
-  ) async {
-    await _ensureAuthenticated();
+    Map<String, dynamic>? body, {
+    bool Function()? canContinue,
+  }) async {
+    _checkAcquisition(canContinue);
+    await _ensureAuthenticated(canContinue: canContinue);
+    _checkAcquisition(canContinue);
 
     var accessToken = (await StorageService.getPikPakAccessToken())!;
+    _checkAcquisition(canContinue);
     final deviceId = await StorageService.getPikPakDeviceId();
+    _checkAcquisition(canContinue);
     final captchaToken = await StorageService.getPikPakCaptchaToken();
 
     final headers = {
@@ -766,6 +804,7 @@ class PikPakApiService {
 
     http.Response response;
 
+    _checkAcquisition(canContinue);
     if (method == 'POST') {
       response = await http.post(
         Uri.parse(url),
@@ -778,10 +817,12 @@ class PikPakApiService {
       throw Exception('Unsupported HTTP method: $method');
     }
 
+    _checkAcquisition(canContinue);
     // Handle 401 - token expired
     if (response.statusCode == 401) {
       debugPrint('PikPak: Access token expired, refreshing...');
       if (await refreshAccessToken()) {
+        _checkAcquisition(canContinue);
         // Retry the request with new token
         accessToken = (await StorageService.getPikPakAccessToken())!;
         headers['Authorization'] = 'Bearer $accessToken';
@@ -793,6 +834,7 @@ class PikPakApiService {
           headers['X-Captcha-Token'] = updatedCaptchaToken;
         }
 
+        _checkAcquisition(canContinue);
         if (method == 'POST') {
           response = await http.post(
             Uri.parse(url),
@@ -807,6 +849,7 @@ class PikPakApiService {
       }
     }
 
+    _checkAcquisition(canContinue);
     if (response.statusCode == 429) {
       throw Exception('Rate limit exceeded. Please try again later.');
     }
@@ -831,6 +874,7 @@ class PikPakApiService {
 
         if (await refreshAccessToken()) {
           debugPrint('PikPak: Token refreshed, retrying request...');
+          _checkAcquisition(canContinue);
           // Retry the request with new token
           accessToken = (await StorageService.getPikPakAccessToken())!;
           headers['Authorization'] = 'Bearer $accessToken';
@@ -842,6 +886,7 @@ class PikPakApiService {
             headers['X-Captcha-Token'] = updatedCaptchaToken;
           }
 
+          _checkAcquisition(canContinue);
           if (method == 'POST') {
             response = await http.post(
               Uri.parse(url),
@@ -869,6 +914,7 @@ class PikPakApiService {
           debugPrint(
             'PikPak: Token refresh failed, clearing auth and requiring re-login',
           );
+          _checkAcquisition(canContinue);
           await logout();
           throw Exception('Session expired. Please login again.');
         }
@@ -879,6 +925,7 @@ class PikPakApiService {
         debugPrint(
           'PikPak: Captcha token invalid (error 4002), clearing token',
         );
+        _checkAcquisition(canContinue);
         await StorageService.clearPikPakCaptchaToken();
       }
 
@@ -1080,7 +1127,9 @@ class PikPakApiService {
   Future<Map<String, dynamic>> addOfflineDownload(
     String magnetLink, {
     String? parentFolderId,
+    bool Function()? canContinue,
   }) async {
+    _checkAcquisition(canContinue);
     try {
       debugPrint(
         'PikPak: Adding offline download to folder ${parentFolderId ?? "root"}...',
@@ -1098,11 +1147,13 @@ class PikPakApiService {
           'url': {'url': magnetLink},
           'folder_type': '',
         },
+        canContinue: canContinue,
       );
 
       debugPrint('PikPak: Offline download added successfully');
       return response;
     } catch (e) {
+      _checkAcquisition(canContinue);
       // If we get verification error, try requesting a fresh captcha token
       if (e.toString().contains('Verification code is invalid')) {
         debugPrint('PikPak: Captcha token invalid, requesting fresh token...');
@@ -1121,12 +1172,15 @@ class PikPakApiService {
         }
 
         final action = 'POST:/drive/v1/files';
+        _checkAcquisition(canContinue);
         final captchaToken = await _getCaptchaTokenSynchronized(
           action: action,
           deviceId: deviceId,
           userId: userId,
+          canContinue: canContinue,
         );
 
+        _checkAcquisition(canContinue);
         await StorageService.setPikPakCaptchaToken(captchaToken);
         debugPrint('PikPak: Retrying with fresh captcha token');
 
@@ -1142,6 +1196,7 @@ class PikPakApiService {
             'url': {'url': magnetLink},
             'folder_type': '',
           },
+          canContinue: canContinue,
         );
 
         debugPrint('PikPak: Offline download added successfully');
@@ -1155,19 +1210,25 @@ class PikPakApiService {
 
   /// Get task status by task ID
   /// Returns task details including progress (0-100) and phase
-  Future<Map<String, dynamic>> getTaskStatus(String taskId) async {
+  Future<Map<String, dynamic>> getTaskStatus(
+    String taskId, {
+    bool Function()? canContinue,
+  }) async {
+    _checkAcquisition(canContinue);
     try {
       debugPrint('PikPak: Getting task status');
       final response = await _makeAuthenticatedRequest(
         'GET',
         '$_driveBaseUrl/drive/v1/tasks/$taskId',
         null,
+        canContinue: canContinue,
       );
       debugPrint(
         'PikPak: Task status retrieved - progress: ${response['progress']}, phase: ${response['phase']}',
       );
       return response;
     } catch (e) {
+      _checkAcquisition(canContinue);
       // If captcha verification fails, get fresh token and retry
       if (e.toString().contains('Verification code is invalid')) {
         debugPrint(
@@ -1181,12 +1242,15 @@ class PikPakApiService {
 
         final userId = await StorageService.getPikPakUserId();
         final action = 'GET:/drive/v1/tasks';
+        _checkAcquisition(canContinue);
         final captchaToken = await _getCaptchaTokenSynchronized(
           action: action,
           deviceId: deviceId,
           userId: userId,
+          canContinue: canContinue,
         );
 
+        _checkAcquisition(canContinue);
         await StorageService.setPikPakCaptchaToken(captchaToken);
         debugPrint('PikPak: Retrying task status with fresh captcha token');
 
@@ -1194,6 +1258,7 @@ class PikPakApiService {
           'GET',
           '$_driveBaseUrl/drive/v1/tasks/$taskId',
           null,
+          canContinue: canContinue,
         );
         debugPrint(
           'PikPak: Task status retrieved (after retry) - progress: ${response['progress']}, phase: ${response['phase']}',
@@ -1464,7 +1529,11 @@ class PikPakApiService {
   }
 
   /// Get file details by ID (including streaming URLs - slower)
-  Future<Map<String, dynamic>> getFileDetails(String fileId) async {
+  Future<Map<String, dynamic>> getFileDetails(
+    String fileId, {
+    bool Function()? canContinue,
+  }) async {
+    _checkAcquisition(canContinue);
     try {
       debugPrint('PikPak: Getting file details');
       // CRITICAL FIX: Adding usage=FETCH parameter to populate download URLs
@@ -1473,10 +1542,12 @@ class PikPakApiService {
         'GET',
         '$_driveBaseUrl/drive/v1/files/$fileId?usage=FETCH&_magic=2021&thumbnail_size=SIZE_LARGE&with_audit=true',
         null,
+        canContinue: canContinue,
       );
       debugPrint('PikPak: File details retrieved successfully');
       return response;
     } catch (e) {
+      _checkAcquisition(canContinue);
       // If captcha verification fails, get fresh token and retry
       if (e.toString().contains('Verification code is invalid')) {
         debugPrint('PikPak: Captcha token invalid, requesting fresh token...');
@@ -1494,12 +1565,15 @@ class PikPakApiService {
         }
 
         final action = 'GET:/drive/v1/files';
+        _checkAcquisition(canContinue);
         final captchaToken = await _getCaptchaTokenSynchronized(
           action: action,
           deviceId: deviceId,
           userId: userId,
+          canContinue: canContinue,
         );
 
+        _checkAcquisition(canContinue);
         await StorageService.setPikPakCaptchaToken(captchaToken);
         debugPrint('PikPak: Retrying with fresh captcha token');
 
@@ -1508,6 +1582,7 @@ class PikPakApiService {
           'GET',
           '$_driveBaseUrl/drive/v1/files/$fileId?usage=FETCH&_magic=2021&thumbnail_size=SIZE_LARGE&with_audit=true',
           null,
+          canContinue: canContinue,
         );
 
         debugPrint('PikPak: File details retrieved successfully (after retry)');
@@ -1522,7 +1597,13 @@ class PikPakApiService {
   /// List files in a directory with pagination support
   /// Returns a record containing the files list and optional next page token
   Future<({List<Map<String, dynamic>> files, String? nextPageToken})>
-  listFiles({String? parentId, int limit = 50, String? pageToken}) async {
+  listFiles({
+    String? parentId,
+    int limit = 50,
+    String? pageToken,
+    bool Function()? canContinue,
+  }) async {
+    _checkAcquisition(canContinue);
     try {
       debugPrint('PikPak: Listing files');
       // IMPORTANT: Adding with_audit=true to get media links populated for each file
@@ -1533,12 +1614,18 @@ class PikPakApiService {
       if (pageToken != null && pageToken.isNotEmpty) {
         url += '&page_token=$pageToken';
       }
-      final response = await _makeAuthenticatedRequest('GET', url, null);
+      final response = await _makeAuthenticatedRequest(
+        'GET',
+        url,
+        null,
+        canContinue: canContinue,
+      );
       final files = List<Map<String, dynamic>>.from(response['files'] ?? []);
       final nextPageToken = response['next_page_token'] as String?;
       debugPrint('PikPak: Found ${files.length} files');
       return (files: files, nextPageToken: nextPageToken);
     } catch (e) {
+      _checkAcquisition(canContinue);
       // If captcha verification fails, get fresh token and retry
       if (e.toString().contains('Verification code is invalid')) {
         debugPrint('PikPak: Captcha token invalid, requesting fresh token...');
@@ -1556,12 +1643,15 @@ class PikPakApiService {
         }
 
         final action = 'GET:/drive/v1/files';
+        _checkAcquisition(canContinue);
         final captchaToken = await _getCaptchaTokenSynchronized(
           action: action,
           deviceId: deviceId,
           userId: userId,
+          canContinue: canContinue,
         );
 
+        _checkAcquisition(canContinue);
         await StorageService.setPikPakCaptchaToken(captchaToken);
         debugPrint('PikPak: Retrying with fresh captcha token');
 
@@ -1572,7 +1662,12 @@ class PikPakApiService {
         if (pageToken != null && pageToken.isNotEmpty) {
           retryUrl += '&page_token=$pageToken';
         }
-        final response = await _makeAuthenticatedRequest('GET', retryUrl, null);
+        final response = await _makeAuthenticatedRequest(
+          'GET',
+          retryUrl,
+          null,
+          canContinue: canContinue,
+        );
 
         final files = List<Map<String, dynamic>>.from(response['files'] ?? []);
         final nextPageToken = response['next_page_token'] as String?;

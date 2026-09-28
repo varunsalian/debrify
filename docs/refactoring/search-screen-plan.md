@@ -132,7 +132,7 @@ until the batch ends. This replaces per-helper checkpoints, not incremental safe
 | Batch | Current status |
 | --- | --- |
 | A | Implemented and reviewed. Home actions, resume, detail mutation/reset boundaries and accepted local writes are wired and checked. Full gate: 10,058 passes, unchanged historical failures/errors, no missing or newly skipped tests. |
-| B | Shared provider acquisition/manual-pin DI extracted and reviewed; full gate preserves the baseline with 17 added passes. Internal provider ownership, automatic binding writes and native handoff remain pending. |
+| B | Shared acquisition/manual-pin DI and reachable manual provider ownership reviewed. Latest full gate: 10,103 passes, unchanged historical failures/errors/skips, 28 added passing cases. Automatic binding writes and native handoff/device acceptance remain pending. |
 | C | Pending remaining boundaries; substantial layout/search extraction already complete |
 | D | Pending remaining boundaries and facade reduction |
 | E | Pending final acceptance |
@@ -194,13 +194,32 @@ Review: 10,075 full-suite passes with unchanged historical failures/errors/skips
 no missing tests, 845 unchanged analyzer identities, and 486 files passing the
 architecture guard. The 17 added cases cover provider requests/results and pin DI.
 
-This closes the UI-coupled acquisition extraction, not Batch B's ownership audit.
-Next, follow manual guards through the existing provider methods: RD's internal
-preference reads/file selection/unrestrict sequence, AllDebrid delayed unlock,
-TorBox lookup retries, and PikPak authenticated requests. Preserve accepted
-acquisition cleanup and automatic callers while closing concrete stale-operation
-gaps. Then finish automatic binding writes and native handoff in the checklist.
-Do not re-extract these completed data operations.
+The reviewed provider-ownership checkpoint extends manual guards through RD's
+internal preference/file-selection/unrestrict sequence, AllDebrid delayed unlock,
+TorBox lookup retries and PikPak authenticated acquisition/retry calls. Manual
+preparation captures the live originating profile, including rejection cleanup.
+PikPak captcha sharing is isolated by profile/generation and device; accepted token
+refresh retains its existing credential authorization owner, but cannot cause a
+retired acquisition to retry. Automatic callers retain their no-guard contract
+until the next workflow; this is not a service-wide cancellation rewrite.
+Its full comparison has 10,103 passes and 28 added cases, with unchanged historical
+failures/errors/skips, no missing tests, 845 unchanged analyzer identities and
+486 files passing architecture checks.
+
+Borrowed provider dependencies remain outside the migrated source-size target:
+`lib/services/debrid_service.dart` (1,096 lines) and
+`lib/services/pikpak_api_service.dart` (1,961 lines) retain existing account/cloud
+APIs and authentication; `lib/services/alldebrid_service.dart` and
+`lib/services/torbox_service.dart` retain their existing provider APIs. B permits
+only the reachable guard/coalescing changes described above. No original screen
+logic is moved into them. The B exit is verified acquisition/binding ownership,
+not an unrelated rewrite of these services; their other responsibilities remain
+separately scoped debt.
+
+Next, finish automatic binding writes and their originating playback action owner,
+then native handoff/remaining device checks in the checklist. Preserve precedence,
+source-switch behavior and accepted writes. Do not re-extract these completed data
+operations or reopen provider internals absent a specific uncovered contract.
 
 ## Starting point
 

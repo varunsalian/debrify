@@ -42,7 +42,11 @@ class SourceAcquisition {
           final apiKey =
               (await StorageService.getApiKey(canContinue: canContinue)) ?? '';
           checkCurrent();
-          final result = await DebridService.addTorrentToDebrid(apiKey, magnet);
+          final result = await DebridService.addTorrentToDebrid(
+            apiKey,
+            magnet,
+            canContinue: canContinue,
+          );
           checkCurrent();
           final playUrl = result['downloadLink'] as String?;
           final linksRaw = (result['links'] as List?) ?? const [];
@@ -68,7 +72,12 @@ class SourceAcquisition {
             added: DateTime.now().toIso8601String(),
             links: links,
           );
-          final playlist = await _buildRdPlaylist(linksRaw, filesRaw, apiKey);
+          final playlist = await _buildRdPlaylist(
+            linksRaw,
+            filesRaw,
+            apiKey,
+            canContinue: canContinue,
+          );
           checkCurrent();
           if (playlist != null && playlist.length > 1) {
             var startIndex = playlist.indexWhere((e) => e.url.isNotEmpty);
@@ -116,6 +125,7 @@ class SourceAcquisition {
             apiKey: apiKey,
             magnet: magnet,
             addOnlyIfCached: true,
+            canContinue: canContinue,
           );
           checkCurrent();
           final ok =
@@ -132,7 +142,11 @@ class SourceAcquisition {
               ? (data['torrent_id'] as num?)?.toInt()
               : null;
           if (torrentId == null) throw Exception('TorBox: no torrent id');
-          final tt = await TorboxService.getTorrentById(apiKey, torrentId);
+          final tt = await TorboxService.getTorrentById(
+            apiKey,
+            torrentId,
+            canContinue: canContinue,
+          );
           checkCurrent();
           final videos = (tt?.files ?? const <TorboxFile>[])
               .where((f) => FileUtils.isVideoFile(f.name))
@@ -147,6 +161,7 @@ class SourceAcquisition {
                     apiKey: apiKey,
                     torrentId: torrentId,
                     fileId: file.id,
+                    canContinue: canContinue,
                   );
             checkCurrent();
             return AcquiredSource(
@@ -165,6 +180,7 @@ class SourceAcquisition {
             apiKey: apiKey,
             torrentId: torrentId,
             fileId: sorted[startIndex].id,
+            canContinue: canContinue,
           );
           checkCurrent();
           final entries = [
@@ -253,6 +269,7 @@ class SourceAcquisition {
           final result = await AllDebridService.addMagnetAndResolveFiles(
             apiKey,
             magnet,
+            canContinue: canContinue,
           );
           checkCurrent();
           final videos = result.files
@@ -264,7 +281,11 @@ class SourceAcquisition {
                 : _pickAllDebrid(result.files);
             final playUrl = file == null
                 ? null
-                : await AllDebridService.unlockLink(apiKey, file.link);
+                : await AllDebridService.unlockLink(
+                    apiKey,
+                    file.link,
+                    canContinue: canContinue,
+                  );
             checkCurrent();
             return AcquiredSource(
               title: title,
@@ -279,6 +300,7 @@ class SourceAcquisition {
           final startUrl = await AllDebridService.unlockLink(
             apiKey,
             sorted[startIndex].link,
+            canContinue: canContinue,
           );
           checkCurrent();
           final entries = [
@@ -335,8 +357,9 @@ class SourceAcquisition {
   static Future<List<PlaylistEntry>?> _buildRdPlaylist(
     List<dynamic> links,
     List<dynamic> files,
-    String apiKey,
-  ) async {
+    String apiKey, {
+    bool Function()? canContinue,
+  }) async {
     final selectedFiles = files.where((file) => file['selected'] == 1).toList();
     final allFilesToUse = selectedFiles.isNotEmpty ? selectedFiles : files;
 
@@ -407,6 +430,7 @@ class SourceAcquisition {
           final unrestrictResult = await DebridService.unrestrictLink(
             apiKey,
             links[i],
+            canContinue: canContinue,
           );
           url = unrestrictResult['download']?.toString() ?? '';
         } catch (_) {

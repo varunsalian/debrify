@@ -17,10 +17,12 @@ Future<AcquiredSource> acquirePikPakSource(
   final pikpak = PikPakApiService.instance;
   final prepared = await preparePikPakSource(
     magnet: magnet,
-    addDownload: pikpak.addOfflineDownload,
-    readTask: pikpak.getTaskStatus,
-    readFile: pikpak.getFileDetails,
-    listFolder: (id) async => (await pikpak.listFiles(parentId: id)).files,
+    addDownload: (magnet) =>
+        pikpak.addOfflineDownload(magnet, canContinue: canContinue),
+    readTask: (id) => pikpak.getTaskStatus(id, canContinue: canContinue),
+    readFile: (id) => pikpak.getFileDetails(id, canContinue: canContinue),
+    listFolder: (id) async =>
+        (await pikpak.listFiles(parentId: id, canContinue: canContinue)).files,
     canContinue: canContinue,
   );
   if (canContinue?.call() == false) throw const PikPakSourceRetired();
@@ -70,7 +72,10 @@ Future<List<PlaylistEntry>?> buildPikPakSourcePlaylist(
   if (videoFiles.length == 1) {
     final file = videoFiles.first;
     try {
-      final fullData = await pikpak.getFileDetails(file.id.toString());
+      final fullData = await pikpak.getFileDetails(
+        file.id.toString(),
+        canContinue: canContinue,
+      );
       if (canContinue?.call() == false) return null;
       final url = pikpak.getStreamingUrl(fullData);
       if (url == null) return null;
@@ -129,6 +134,7 @@ Future<List<PlaylistEntry>?> buildPikPakSourcePlaylist(
   try {
     final fullData = await pikpak.getFileDetails(
       sorted[startIndex].file.id.toString(),
+      canContinue: canContinue,
     );
     if (canContinue?.call() == false) return null;
     initialUrl = pikpak.getStreamingUrl(fullData) ?? '';

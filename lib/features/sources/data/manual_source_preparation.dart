@@ -1,3 +1,5 @@
+import '../../../services/profiles/profile_runtime.dart';
+import '../../../services/profiles/profile_session_memory.dart';
 import '../../../models/torrent.dart';
 import '../../../services/alldebrid_service.dart';
 import '../../../services/debrid_service.dart';
@@ -18,19 +20,39 @@ class ManualSourcePreparation {
     String provider,
     Torrent torrent, {
     bool Function()? canContinue,
+  }) {
+    final owner = ProfileSessionMemory.captureOwner();
+    bool current() =>
+        owner == ProfileSessionMemory.captureOwner() &&
+        (canContinue?.call() ?? true);
+    Future<({bool ready, String? failureMessage})> run() =>
+        _prepare(provider, torrent, canContinue: current);
+    final scope = owner.scope;
+    return scope == null
+        ? ProfileRuntime.withoutCapturedScope(run)
+        : ProfileRuntime.withCapturedScope(scope, run);
+  }
+
+  Future<({bool ready, String? failureMessage})> _prepare(
+    String provider,
+    Torrent torrent, {
+    required bool Function() canContinue,
   }) async {
+    if (!canContinue()) return (ready: false, failureMessage: null);
     AcquiredSource? res;
     String? failMessage;
     try {
       final magnet = await sourceMagnet(torrent);
-      if (magnet != null && (canContinue?.call() ?? true)) {
+      if (magnet != null && canContinue()) {
         final r = await acquisition.acquire(
           provider,
           magnet,
           torrent,
           canContinue: canContinue,
         );
-        if (r.playUrl != null && r.playUrl!.isNotEmpty) res = r;
+        if (canContinue() && r.playUrl != null && r.playUrl!.isNotEmpty) {
+          res = r;
+        }
       }
     } on TorrentNotCachedException catch (e) {
       try {

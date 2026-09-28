@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:async';
 
 import 'package:debrify/features/sources/data/manual_source_preparation.dart';
 import 'package:debrify/features/sources/data/source_acquisition.dart';
@@ -28,6 +29,8 @@ class Fixture {
   final paths = <String>[];
   final requests = <http.Request>[];
   bool active = true;
+  String? retireAt;
+  void Function(http.Request)? onRequest;
   bool get single => scenario == 'single';
   bool get uncached => scenario == 'uncached';
   List<int> get episodes => single ? [2] : [2, 1];
@@ -36,6 +39,8 @@ class Fixture {
     requests.add(request);
     final path = request.url.path;
     paths.add(path);
+    onRequest?.call(request);
+    if (retireAt != null && path.endsWith(retireAt!)) active = false;
     if (scenario == 'retired' && paths.length == 1) active = false;
     Object body;
     if (provider == 'premiumize') {
@@ -69,7 +74,9 @@ class Fixture {
             'id': 7,
             'created_at': '2026-01-01T00:00:00Z',
             'updated_at': '2026-01-01T00:00:00Z',
-            'download_state': 'cached',
+            'download_state': scenario == 'lookupPending'
+                ? 'downloading'
+                : 'cached',
             'files': [
               for (final e in episodes)
                 {'id': e, 'name': 'Fixture.S01E0$e.mkv', 'size': e * 100},
@@ -104,10 +111,12 @@ class Fixture {
           ],
         };
       } else if (path.endsWith('/link/unlock')) {
-        data = {
-          'link':
-              'https://stream.test/${request.bodyFields['link']!.split('-').last}',
-        };
+        data = scenario == 'delayed'
+            ? {'delayed': 'pending'}
+            : {
+                'link':
+                    'https://stream.test/${request.bodyFields['link']!.split('-').last}',
+              };
       } else {
         expect(path, endsWith('/magnet/delete'));
         expect(request.bodyFields['id'], 'owned');
@@ -235,7 +244,7 @@ void main() {
       );
     }
   }
-  for (final provider in ['torbox', 'premiumize']) {
+  for (final provider in ['debrid', 'torbox', 'premiumize', 'alldebrid']) {
     test(
       '$provider retirement prevents subsequent provider operation',
       () async {
@@ -255,4 +264,80 @@ void main() {
       },
     );
   }
+  for (final path in [
+    '/torrents/info/owned',
+    '/torrents/selectFiles/owned',
+    '/unrestrict/link',
+  ]) {
+    test('RD retirement at $path stops later acquisition steps', () async {
+      final f = Fixture('debrid', 'pack')..retireAt = path;
+      final client = MockClient(f.respond);
+      addTearDown(client.close);
+      final result = await http.runWithClient(
+        () => const ManualSourcePreparation().prepare(
+          'debrid',
+          torrent,
+          canContinue: () => f.active,
+        ),
+        () => client,
+      );
+      expect(result.ready, isFalse);
+      expect(f.paths.last, endsWith(path));
+      if (path == '/unrestrict/link') {
+        expect(f.paths.where((p) => p.endsWith(path)), hasLength(1));
+      }
+      expect(f.paths.where((p) => p.contains('/delete')), isEmpty);
+    });
+  }
+
+  test(
+    'TorBox retirement during lookup prevents retries and download requests',
+    () async {
+      final f = Fixture('torbox', 'lookupPending')
+        ..retireAt = '/torrents/mylist';
+      final client = MockClient(f.respond);
+      addTearDown(client.close);
+      final result = await http.runWithClient(
+        () => const ManualSourcePreparation().prepare(
+          'torbox',
+          torrent,
+          canContinue: () => f.active,
+        ),
+        () => client,
+      );
+      expect(result.ready, isFalse);
+      expect(f.paths.map((p) => p.split('/').last), [
+        'createtorrent',
+        'mylist',
+      ]);
+    },
+  );
+
+  test(
+    'AllDebrid retirement during delayed unlock wait prevents polling',
+    () async {
+      final f = Fixture('alldebrid', 'delayed');
+      f.onRequest = (request) {
+        if (request.url.path.endsWith('/link/unlock')) {
+          Timer(const Duration(milliseconds: 100), () => f.active = false);
+        }
+      };
+      final client = MockClient(f.respond);
+      addTearDown(client.close);
+      final result = await http.runWithClient(
+        () => const ManualSourcePreparation().prepare(
+          'alldebrid',
+          torrent,
+          canContinue: () => f.active,
+        ),
+        () => client,
+      );
+      expect(result.ready, isFalse);
+      expect(f.paths.map((p) => p.split('/').last), [
+        'upload',
+        'files',
+        'unlock',
+      ]);
+    },
+  );
 }
