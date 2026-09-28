@@ -1871,6 +1871,7 @@ class PikPakApiService {
     required String folderId,
     int limit = 50,
     bool includePaths = false,
+    bool Function()? canContinue,
   }) async {
     final allFiles = <Map<String, dynamic>>[];
     await _listFilesRecursiveHelper(
@@ -1878,6 +1879,7 @@ class PikPakApiService {
       limit: limit,
       allFiles: allFiles,
       includePaths: includePaths,
+      canContinue: canContinue,
       currentPath: '', // Start with empty path at root
     );
     return allFiles;
@@ -1895,19 +1897,23 @@ class PikPakApiService {
     required List<Map<String, dynamic>> allFiles,
     required bool includePaths,
     required String currentPath,
+    bool Function()? canContinue,
   }) async {
     String? nextPageToken;
 
     do {
+      if (canContinue?.call() == false) return;
       // List files in current folder
       final result = await listFiles(
         parentId: folderId,
         limit: limit,
         pageToken: nextPageToken,
+        canContinue: canContinue,
       );
 
       // Process each file
       for (final file in result.files) {
+        if (canContinue?.call() == false) return;
         final kind = file['kind'] ?? '';
         final fileName = file['name'] as String? ?? 'Unknown';
 
@@ -1924,6 +1930,7 @@ class PikPakApiService {
             allFiles: allFiles,
             includePaths: includePaths,
             currentPath: subfolderPath,
+            canContinue: canContinue,
           );
         } else {
           // Add file to results

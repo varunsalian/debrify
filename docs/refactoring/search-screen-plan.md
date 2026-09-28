@@ -132,7 +132,7 @@ until the batch ends. This replaces per-helper checkpoints, not incremental safe
 | Batch | Current status |
 | --- | --- |
 | A | Implemented and reviewed. Home actions, resume, detail mutation/reset boundaries and accepted local writes are wired and checked. Full gate: 10,058 passes, unchanged historical failures/errors, no missing or newly skipped tests. |
-| B | Manual/provider acquisition, automatic bindings, direct downloads, automatic torrent probes and player source-switch resolution reviewed. Full retry: 10,136 passes, unchanged historical failures/errors/skips, no missing tests, 26 added passing cases. Remaining: provider-native saved-cloud preparation, pack/zip/not-ready actions, native handoff/recovery ownership and device checks; see concrete paths below. |
+| B | Manual/provider acquisition, automatic bindings, direct downloads, automatic torrent probes and player source-switch resolution reviewed. Full retry: 10,136 passes, unchanged historical failures/errors/skips, no missing tests, 26 added passing cases. Saved-cloud preparation is also reviewed (813 affected passes, unchanged analyzer). Remaining: pack/zip/not-ready actions, native handoff/recovery ownership and device checks; see concrete paths below. |
 | C | Pending remaining boundaries; substantial layout/search extraction already complete |
 | D | Pending remaining boundaries and facade reduction |
 | E | Pending final acceptance |
@@ -242,10 +242,18 @@ acquisition cleanup and invalid saved-source/cache removal retain that owner too
 The plain resolver/cleanup owners are 84/58 lines; `SourceAcquisition` remains 481
 lines and `AutomaticSourceBindings` 440, each below the cohesive-file threshold.
 
+Provider-cloud preparation extends the borrowed RD paginated-download lookup,
+Premiumize recursive folder listing and PikPak recursive file listing only with
+optional retirement guards. Existing account APIs, page/depth limits and unguarded
+callers retain their behavior; no screen logic moves into these provider services.
+The B exit is a guarded plain cloud-preparation operation plus its actual playback
+caller and affected request/selection tests.
+
 Concrete remaining B paths:
-- `_resolveProviderNativeBound` plus provider-backed pack/zip download and
-  `_handleNotCached` actions: preserve the original credentials, accepted queue
-  writes and existing retry/cleanup policies through their awaits.
+- Provider-backed pack/zip download and `_handleNotCached` actions: preserve the
+  original credentials, accepted queue writes and existing retry/cleanup policies
+  through their awaits. `_resolveProviderNativeBound` now delegates to the reviewed
+  393-line `ProviderCloudSource` operation with originating owner/action guards.
 - `VideoPlayerLauncher` preparation and native automatic recovery: pass the
   originating owner rather than recapturing after handoff; retain player/session
   and source-switch generation checks across queued native work. The recovery

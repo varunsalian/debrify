@@ -169,9 +169,16 @@ class DebridService {
     String apiKey, {
     int page = 1,
     int limit = 100,
+    bool Function()? canContinue,
   }) async {
     try {
+      if (canContinue?.call() == false) {
+        throw StateError('Source request retired');
+      }
       final baseUrl = await _getBaseUrl();
+      if (canContinue?.call() == false) {
+        throw StateError('Source request retired');
+      }
       final queryParams = <String, String>{
         'page': page.toString(),
         'limit': limit.toString(),
@@ -234,10 +241,18 @@ class DebridService {
     String apiKey,
     String downloadId, {
     int maxPages = 100,
+    bool Function()? canContinue,
   }) async {
     const pageSize = 100;
     for (var page = 1; page <= maxPages; page++) {
-      final result = await getDownloads(apiKey, page: page, limit: pageSize);
+      if (canContinue?.call() == false) return null;
+      final result = await getDownloads(
+        apiKey,
+        page: page,
+        limit: pageSize,
+        canContinue: canContinue,
+      );
+      if (canContinue?.call() == false) return null;
       final downloads = (result['downloads'] as List).cast<DebridDownload>();
       for (final download in downloads) {
         if (download.id == downloadId) return download;

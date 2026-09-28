@@ -431,21 +431,26 @@ class PremiumizeService {
     String folderId, {
     String basePath = '',
     int depth = 0,
+    bool Function()? canContinue,
   }) async {
     // Guard against pathological/cyclic structures.
-    if (depth > 12) return const [];
+    if (depth > 12 || canContinue?.call() == false) return const [];
     final result = <PremiumizeFolderItem>[];
     final listing = await listFolder(apiKey, folderId: folderId);
+    if (canContinue?.call() == false) return const [];
     for (final item in listing.items) {
+      if (canContinue?.call() == false) return const [];
       if (item.isFolder) {
-        final childBase =
-            basePath.isEmpty ? item.name : '$basePath/${item.name}';
+        final childBase = basePath.isEmpty
+            ? item.name
+            : '$basePath/${item.name}';
         result.addAll(
           await listFolderRecursive(
             apiKey,
             item.id,
             basePath: childBase,
             depth: depth + 1,
+            canContinue: canContinue,
           ),
         );
       } else {

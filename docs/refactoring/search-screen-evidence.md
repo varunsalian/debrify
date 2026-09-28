@@ -6,6 +6,38 @@ workflow checkpoints, reuse valid evidence, and run broader checks at integratio
 gates. Earlier entries retain their original slice history. No changes are pushed
 to the public repository.
 
+## Batch B checkpoint: saved provider-cloud preparation — 2026-09-28
+
+Base revision: `9ec8a796`. The 393-line plain `ProviderCloudSource` operation now
+owns hashless RD/TorBox/AllDebrid web-download and Premiumize/PikPak file/folder
+preparation. The saved-source production path delegates to it with the original
+profile owner and live action guard; its retained wrapper only maps playback data.
+The legacy playback service shrinks to 7,266 lines. No native player payload or
+binding format changes.
+
+Review preserves stable-id lookup, per-play URL refresh, largest-video movie
+selection, series ordering/start index, lazy file identities, non-video/ZIP
+filtering, Premiumize/PikPak paths, and RD's freshly listed URL fallback when
+unrestrict fails. The operation checks ownership across every asynchronous stage.
+RD pagination and Premiumize/PikPak recursion forward optional guards through
+subsequent requests; unguarded callers retain existing behavior and limits.
+Retired operations return no result; current provider failures retain their
+existing caller handling. No provider entries are created or deleted here.
+
+All **813 affected tests pass**: Sources plus provider-native binding/picker,
+collection-source and PikPak acquisition-retirement suites. The 22 added cases
+cover five-provider movie/series preparation, file identities, first-response
+retirement, RD pagination/fallback and real-profile endpoint/credential ownership
+under a foreign scope. Fixture corrections supplied PikPak's required refresh
+token and accounted for AllDebrid's existing POST unlock request. Analyzer:
+**844 unchanged identities**; architecture: **495 files pass**. Formatting and
+diff checks pass. Receipts in `.git/refactor-evidence/phase5/`:
+`provider-cloud-operation-tests.txt`, `provider-cloud-regression-tests.txt`,
+`provider-cloud-analyze-final-2.txt`. The last full gate remains the previous
+checkpoint's 10,136 passes; this additive guard/extraction uses affected checks,
+with the next full run at remaining Sources integration. Native/device and final
+migration acceptance remain pending.
+
 ## Batch B checkpoint: automatic acquisition and source-switch resolution — 2026-09-28
 
 Base revision: `ba0cfdc2`. Automatic selection/probes and saved torrent acquisition

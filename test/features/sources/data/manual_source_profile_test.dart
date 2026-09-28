@@ -1,3 +1,5 @@
+import 'package:debrify/features/sources/data/provider_cloud_source.dart';
+import 'provider_cloud_source_test.dart' show CloudFixture;
 import 'package:debrify/features/sources/data/automatic_source_bindings.dart';
 import 'package:debrify/services/torrent_playback_service.dart';
 import 'dart:async';
@@ -259,4 +261,43 @@ void main() {
       await Future<void>.delayed(const Duration(milliseconds: 110));
     },
   );
+  for (final retired in [false, true]) {
+    test(
+      'saved cloud refresh keeps origin credentials; retired=$retired',
+      () async {
+        final f = CloudFixture('rd');
+        final owner = ProfileSessionMemory.captureOwner();
+        final client = MockClient((request) async {
+          if (retired) ProfileRuntime.publish(incoming);
+          return f.respond(request);
+        });
+        addTearDown(client.close);
+        final result = await http.runWithClient(
+          () => ProfileRuntime.withCapturedScope(
+            incoming,
+            () => const ProviderCloudSource().resolve(
+              f.pin,
+              const PlaybackMeta(contentType: 'movie'),
+              owner: owner,
+              canContinue: () => true,
+            ),
+          ),
+          () => client,
+        );
+        expect(
+          result?.playUrl,
+          retired ? null : 'https://stream.test/refreshed',
+        );
+        expect(f.requests, hasLength(retired ? 1 : 2));
+        expect(
+          f.requests.every(
+            (r) =>
+                r.url.host == 'origin.test' &&
+                r.headers['Authorization'] == 'Bearer origin-key',
+          ),
+          isTrue,
+        );
+      },
+    );
+  }
 }
