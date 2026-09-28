@@ -1,3 +1,5 @@
+import '../features/search/presentation/catalog_search_status.dart';
+import '../features/home/presentation/home_classic_board.dart';
 import '../features/home/presentation/home_canvas_board.dart';
 import '../features/home/presentation/home_tonight_board.dart';
 import '../features/home/presentation/home_board_media.dart';
@@ -44,7 +46,6 @@ import '../features/home/application/home_hero_tint_loader.dart';
 import '../features/home/application/home_hero_tint_dependencies.dart';
 import '../features/home/presentation/home_hero_swap.dart';
 import '../features/home/presentation/home_hero_spotlight.dart';
-import '../features/home/presentation/home_classic_hero.dart';
 import '../features/home/presentation/spotlight_iptv_card_preview.dart';
 export '../features/home/presentation/spotlight_iptv_card_preview.dart' show SpotlightIptvCardPreview;
 import '../features/home/presentation/home_hero_trailer_indicators.dart';
@@ -76,9 +77,6 @@ import '../features/home/application/home_hero_trailer_dependencies.dart';
 import '../features/home/application/home_hero_trailer_loader.dart';
 import '../features/home/application/home_hero_live_preview.dart';
 import '../features/home/application/home_hero_live_dependencies.dart';
-import '../features/home/presentation/home_classic_layout.dart';
-import '../features/home/presentation/home_takeover_info.dart';
-import '../features/home/presentation/home_trailer_transitions.dart';
 import '../features/home/presentation/home_classic_rows.dart';
 import '../features/home/presentation/home_board_cell.dart';
 import '../features/home/models/home_favorite_row_ref.dart';
@@ -11508,146 +11506,84 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
 
   Widget _buildClassicBoard() {
     final tv = widget.isTelevision;
-    return buildHomeClassicLayout(
+    return buildHomeClassicBoard(
+      context: context,
       isTelevision: tv,
-      viewportWidth: MediaQuery.of(context).size.width,
       tvHeroBudget: _tvHeroBudget,
-      trailerActive: _heroTrailerActive,
-      takeover: _heroTrailerTakeover,
-      boardBuilder: (heroH) => Column(
-        children: [
-          // The hero spotlight only changes as DPAD focus moves across tiles, so
-          // it's meaningful on TV only. On phones/desktop (no DPAD) it would just
-          // sit frozen on the first item and waste vertical space — hide it.
-          // On the dedicated Search tab it shows once there are results (to help
-          // disambiguate similarly-named titles) but stays hidden on the blank
-          // prompt. See [_heroActive].
-          if (_heroActive)
-            buildHomeClassicHero(
-              focused: _heroItem,
-              enriched: _heroEnriched,
-              height: heroH,
-              readConfiguration: () => (
-                compact: widget.searchMode,
-                isTelevision: tv,
-                artworkCacheWidth: tv
-                    ? (_homeBoardMode
-                          ? _tvHeroArtworkCacheWidth
-                          : HomeTheme.heroBackdropCacheWidthTv)
-                    : HomeTheme.heroBackdropCacheWidth,
-                artworkCacheHeight: tv
-                    ? (_homeBoardMode
-                          ? _tvHeroArtworkCacheHeight
-                          : HomeTheme.heroBackdropCacheHeightTv)
-                    : null,
-                trailerActive: _heroTrailerActive,
-              ),
-              tint: _heroTint,
-              trailerShowing: _heroTrailerShowing,
-              liveTakeover: _heroLiveTakeover,
-            ),
-          // Slim, non-focusable status strip for a streaming catalog search:
-          // a hairline progress bar while rows are still arriving, then a
-          // quiet "N sources didn't respond" note if any catalog errored.
-          // Lives above the rows so it never takes DPAD focus and appends
-          // below never move it.
-          if (_catalogQuery.isNotEmpty &&
-              (_catalogSearching || _catalogSearchFailures > 0))
-            _buildSearchStatusStrip(),
-          Expanded(
-            child: buildHomeTrailerRowsDim(
-              active: _heroTrailerActive,
-              showing: _heroTrailerShowing,
-              rows: Builder(
-                builder: (context) {
-                  // Home uses one globally ordered descriptor list across
-                  // every row family. Catalog search results never read
-                  // that Home order.
-                  final orderedHome = _homeRowOrderActive;
-                  final homeRails = orderedHome
-                      ? _classicHomeRails
-                      : const <HomeRail>[];
-                  return HomeClassicRows(
-                    scrollController: _boardScroll,
-                    generation: _boardGen,
-                    catalogRowCount: _sections.length,
-                    orderedRowIds: orderedHome
-                        ? homeRails.map(_canvasRailRowId).toList()
-                        : null,
-                    showFooter: _boardLoadingMore,
-                    tailPadding: _classicAnchorTailPadding,
-                    footerBuilder: (_) => _buildBoardFooter(),
-                    isFresh: () =>
-                        DateTime.now().difference(_boardAppliedAt) <
-                        const Duration(milliseconds: 1800),
-                    rowBuilder: (context, i) {
-                      if (!orderedHome) return _buildRow(i);
-                      final rail = homeRails[i];
-                      final rowId = _canvasRailRowId(rail);
-                      if (rail.traktSkeletonIndex >= 0) {
-                        return _buildTraktSkeletonRow(rail.traktSkeletonIndex);
-                      }
-                      if (rail.cw != null) {
-                        return _buildContinueWatchingRow(
-                          rail.cw!,
-                          rail.cwIndex,
-                          rowId,
-                        );
-                      }
-                      if (rail.favKind != null) {
-                        return _buildFavRow(rail.favKind!, rowId);
-                      }
-                      return _buildRow(rail.sectionIndex!, homeRowId: rowId);
-                    },
-                  );
-                },
-              ),
-            ),
-          ),
-        ],
+      media: () => _boardMedia,
+      trailerActive: () => _heroTrailerActive,
+      heroActive: () => _heroActive,
+      readHeroConfiguration: () => (
+        compact: widget.searchMode,
+        isTelevision: tv,
+        artworkCacheWidth: tv
+            ? (_homeBoardMode
+                  ? _tvHeroArtworkCacheWidth
+                  : HomeTheme.heroBackdropCacheWidthTv)
+            : HomeTheme.heroBackdropCacheWidth,
+        artworkCacheHeight: tv
+            ? (_homeBoardMode
+                  ? _tvHeroArtworkCacheHeight
+                  : HomeTheme.heroBackdropCacheHeightTv)
+            : null,
+        trailerActive: _heroTrailerActive,
       ),
-      trailerBuilder: (heroH) => _boardMedia.trailerLayer(heroH),
-      liveBuilder: (heroH) => _boardMedia.liveLayer(heroH),
-      infoBuilder: () => buildHomeTakeoverInfo(
-        context,
-        heroItem: _heroItem,
-        heroEnriched: _heroEnriched,
-        heroTakeover: _heroTrailerTakeover,
-      ),
+      tint: _heroTint,
+      trailerShowing: _heroTrailerShowing,
+      liveTakeover: _heroLiveTakeover,
+      showSearchStatus: () =>
+          _catalogQuery.isNotEmpty &&
+          (_catalogSearching || _catalogSearchFailures > 0),
+      searchStatus: _buildSearchStatusStrip,
+      rowsBuilder: (_) => _buildClassicRows(),
+    );
+  }
+
+  Widget _buildClassicRows() {
+    // Home uses one globally ordered descriptor list across
+    // every row family. Catalog search results never read
+    // that Home order.
+    final orderedHome = _homeRowOrderActive;
+    final homeRails = orderedHome ? _classicHomeRails : const <HomeRail>[];
+    return HomeClassicRows(
+      scrollController: _boardScroll,
+      generation: _boardGen,
+      catalogRowCount: _sections.length,
+      orderedRowIds: orderedHome
+          ? homeRails.map(_canvasRailRowId).toList()
+          : null,
+      showFooter: _boardLoadingMore,
+      tailPadding: _classicAnchorTailPadding,
+      footerBuilder: (_) => _buildBoardFooter(),
+      isFresh: () =>
+          DateTime.now().difference(_boardAppliedAt) <
+          const Duration(milliseconds: 1800),
+      rowBuilder: (context, i) {
+        if (!orderedHome) return _buildRow(i);
+        final rail = homeRails[i];
+        final rowId = _canvasRailRowId(rail);
+        if (rail.traktSkeletonIndex >= 0) {
+          return _buildTraktSkeletonRow(rail.traktSkeletonIndex);
+        }
+        if (rail.cw != null) {
+          return _buildContinueWatchingRow(rail.cw!, rail.cwIndex, rowId);
+        }
+        if (rail.favKind != null) {
+          return _buildFavRow(rail.favKind!, rowId);
+        }
+        return _buildRow(rail.sectionIndex!, homeRowId: rowId);
+      },
     );
   }
 
   /// Status strip for a streaming catalog search (see the call site in
   /// [_buildBoard]). Fixed height so the swap from "searching" bar to the
   /// failure note doesn't reflow the rows under DPAD focus.
-  Widget _buildSearchStatusStrip() {
-    final app = AppThemeScope.of(context);
-    return SizedBox(
-      height: 16,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 20),
-        child: _catalogSearching
-            ? Center(
-                child: LinearProgressIndicator(
-                  minHeight: 2,
-                  color: app.home.chromeAccent,
-                  backgroundColor: const Color(0x22FFFFFF),
-                ),
-              )
-            : Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  '$_catalogSearchFailures source'
-                  '${_catalogSearchFailures == 1 ? '' : 's'} didn\'t respond',
-                  style: TextStyle(
-                    color: app.fade(app.core.tx, 0.45),
-                    fontSize: 11,
-                  ),
-                ),
-              ),
-      ),
-    );
-  }
+  Widget _buildSearchStatusStrip() => buildCatalogSearchStatus(
+    context,
+    searching: _catalogSearching,
+    failures: _catalogSearchFailures,
+  );
 
   /// "Movies" / "Series" (etc.) tag for a catalog row, so two "Popular" rows
   /// (one movies, one series) are distinguishable. Null for unknown types.

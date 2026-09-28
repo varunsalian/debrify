@@ -6,6 +6,27 @@ workflow checkpoints, reuse valid evidence, and run broader checks at integratio
 gates. Earlier entries retain their original slice history. No changes are pushed
 to the public repository.
 
+## Batch C checkpoint: Classic composition and catalog status — 2026-09-28
+
+Base: `54b76d11`. Classic's hero/status/rows/media composition now lives in
+`home_classic_board.dart` (66 lines); Search owns its shared fixed-height status
+strip in `catalog_search_status.dart` (36 lines). Production callers use both.
+Root: **12,458 → 12,394 lines**. Ordered-row selection remains in a named root
+method, evaluated at the original Builder boundary; its final ownership remains
+open with the row/action composition work.
+
+Review preserves live hero configuration reads, hero/status visibility, layer
+order, dimming signals, boxed video geometry, row evaluation timing and separate
+Home/Search ordering. The status strip keeps its 16-pixel reservation, colors,
+text/pluralization and non-focusable behavior. No new resource owner or data call.
+
+**26 tests pass**: 18 Classic layout/hero/rows and Catalog screen checks, plus
+eight real-screen Classic progressive-loading/paging/focus checks. Receipts:
+`.git/refactor-evidence/phase5/classic-board-{tests,integration,analyze-final}.txt`.
+Analysis retains **838 identical diagnostic identities**; architecture passes
+**528 files**; formatting/diff checks pass. No emulator used. Remaining navigation,
+composition, lifecycle and final acceptance remain pending.
+
 ## Batch C checkpoint: Tonight and Canvas composition — 2026-09-28
 
 Base: `231b8fd8`. Tonight (90 lines) and Canvas (78 lines) now compose their
