@@ -1,3 +1,6 @@
+import 'profiles/profile_local_writes.dart';
+import 'profiles/profile_runtime.dart';
+import 'profiles/profile_session_memory.dart';
 import '../models/media_identity.dart';
 import 'episode_tracker_snapshot_revision.dart';
 import '../models/custom_series_identity.dart';
@@ -11,10 +14,12 @@ import 'trakt/trakt_service.dart';
 import 'watched_status_service.dart';
 
 class WatchedActionResult {
-  const WatchedActionResult(this.failedTargets);
+  const WatchedActionResult(this.failedTargets, {this.cancelled = false});
+
+  final bool cancelled;
 
   final List<String> failedTargets;
-  bool get success => failedTargets.isEmpty;
+  bool get success => !cancelled && failedTargets.isEmpty;
 }
 
 /// Single fan-out point for every user-initiated watched/unwatched action.
@@ -34,63 +39,130 @@ class WatchedActionCoordinator {
     TrackingSourcePolicy policy,
     Set<TrackingSource> forceTargets,
     TrackingSource source,
-  ) =>
-      policy.scrobbleTargets.contains(source) || forceTargets.contains(source);
+  ) => policy.scrobbleTargets.contains(source) || forceTargets.contains(source);
 
   static Future<WatchedActionResult> setTitleWatched({
     required String imdbId,
     required String contentType,
     required bool watched,
     Set<TrackingSource> forceTargets = const <TrackingSource>{},
+    bool Function()? canContinue,
+  }) {
+    final owner = ProfileSessionMemory.captureOwner();
+    bool current() =>
+        owner == ProfileSessionMemory.captureOwner() &&
+        (canContinue?.call() ?? true) &&
+        (owner.scope == null || ProfileRuntime.capture() == owner.scope);
+    if (!current()) {
+      return Future.value(const WatchedActionResult([], cancelled: true));
+    }
+    Future<WatchedActionResult> run() => _setTitleWatched(
+      imdbId: imdbId,
+      contentType: contentType,
+      watched: watched,
+      forceTargets: forceTargets,
+      current: current,
+    );
+    final scope = owner.scope;
+    return scope == null ? run() : ProfileRuntime.withCapturedScope(scope, run);
+  }
+
+  static Future<WatchedActionResult> _setTitleWatched({
+    required String imdbId,
+    required String contentType,
+    required bool watched,
+    required Set<TrackingSource> forceTargets,
+    required bool Function() current,
   }) async {
     final id = MediaIdentity.progressId(imdbId.trim(), contentType);
     if (id.isEmpty) return const WatchedActionResult(['this device']);
     final series = contentType == 'series' || contentType == 'show';
-    if (series) {
-      await StorageService.setSeriesExplicitlyWatched(id, watched: watched);
-      if (!watched) {
-        await LocalSeriesCompletionService.instance.clearCompletedHistory(id);
+    // Once accepted, complete local flags/history/recovery writes in the
+    // originating scope. The profile lifecycle drains this whole sequence.
+    await ProfileLocalWrites.run(() async {
+      if (series) {
+        await StorageService.setSeriesExplicitlyWatched(id, watched: watched);
+        if (!watched) {
+          await LocalSeriesCompletionService.instance.clearCompletedHistory(id);
+        }
+      } else if (watched) {
+        await StorageService.markMovieAsFinished(id);
+      } else {
+        await StorageService.unmarkMovieAsFinished(id);
       }
-    } else if (watched) {
-      await StorageService.markMovieAsFinished(id);
-    } else {
-      await StorageService.unmarkMovieAsFinished(id);
-    }
-
-    if (CustomSeriesIdentity.isCustom(id)) return const WatchedActionResult([]);
-    final policy = (await TrackingSourcePolicy.load()).forContent(id);
+    });
     final failures = <String>[];
-    if (_writes(policy, forceTargets, TrackingSource.trakt) &&
-        await TraktService.instance.isAuthenticated()) {
-      final ok = watched
-          ? await TraktService.instance.addToHistory(id, contentType)
-          : await TraktService.instance.removeFromHistory(id, contentType);
-      if (!ok) failures.add('Trakt');
+    WatchedActionResult retired() =>
+        WatchedActionResult(failures, cancelled: true);
+    if (!current()) return retired();
+    if (CustomSeriesIdentity.isCustom(id)) return const WatchedActionResult([]);
+    late TrackingSourcePolicy policy;
+    try {
+      policy = (await TrackingSourcePolicy.load(
+        canContinue: current,
+      )).forContent(id);
+    } catch (_) {
+      if (!current()) return retired();
+      rethrow;
     }
-    if (_writes(policy, forceTargets, TrackingSource.simkl) &&
-        await SimklService.instance.isAuthenticated()) {
-      var ok = watched
-          ? await SimklService.instance.markWatched(id, contentType)
-          : await SimklService.instance.markUnwatched(id, contentType);
-      if (watched && ok) {
-        // Completed titles are NOT hidden by status (a paused session on them
-        // is an active rewatch), so clearing the paused session is what takes
-        // the title OFF Simkl's Continue Watching — fold the result in, and
-        // keep this write behind the same Scrobble gate as the mark itself.
-        ok = await SimklService.instance.deletePlaybackForImdb(id, contentType: contentType);
+    if (!current()) return retired();
+    if (_writes(policy, forceTargets, TrackingSource.trakt)) {
+      final service = TraktService.instance;
+      final connected = await service.isAuthenticated(canContinue: current);
+      if (!current()) return retired();
+      if (connected) {
+        final ok = watched
+            ? await service.addToHistory(id, contentType, canContinue: current)
+            : await service.removeFromHistory(
+                id,
+                contentType,
+                canContinue: current,
+              );
+        if (!ok) failures.add('Trakt');
       }
-      if (!ok) failures.add('Simkl');
     }
+    if (!current()) return retired();
+    if (_writes(policy, forceTargets, TrackingSource.simkl)) {
+      final service = SimklService.instance;
+      final connected = await service.isAuthenticated(canContinue: current);
+      if (!current()) return retired();
+      if (connected) {
+        var ok = watched
+            ? await service.markWatched(id, contentType, canContinue: current)
+            : await service.markUnwatched(
+                id,
+                contentType,
+                canContinue: current,
+              );
+        if (!current()) return retired();
+        if (watched && ok) {
+          // Completed titles may still be rewatching: clear the paused session
+          // after marking history and include cleanup failure in the result.
+          ok = await service.deletePlaybackForImdb(
+            id,
+            contentType: contentType,
+            canContinue: current,
+          );
+        }
+        if (!ok) failures.add('Simkl');
+      }
+    }
+    if (!current()) return retired();
     if ((MediaIdentity.isImdb(id) || MediaIdentity.isNative(id)) &&
-        _writes(policy, forceTargets, TrackingSource.mdblist) &&
-        await MdblistService.instance.isAuthenticated()) {
-      final ids = MdblistMediaIds.forContent(id);
-      final type = series ? 'show' : 'movie';
-      final ok = watched
-          ? await MdblistService.instance.markWatched(ids, type)
-          : await MdblistService.instance.markUnwatched(ids, type);
-      if (!ok) failures.add('MDBList');
+        _writes(policy, forceTargets, TrackingSource.mdblist)) {
+      final service = MdblistService.instance;
+      final connected = await service.isAuthenticated(canContinue: current);
+      if (!current()) return retired();
+      if (connected) {
+        final ids = MdblistMediaIds.forContent(id);
+        final type = series ? 'show' : 'movie';
+        final ok = watched
+            ? await service.markWatched(ids, type, canContinue: current)
+            : await service.markUnwatched(ids, type, canContinue: current);
+        if (!ok) failures.add('MDBList');
+      }
     }
+    if (!current()) return retired();
     WatchedStatusService.instance.ensureStarted();
     return WatchedActionResult(failures);
   }
@@ -120,7 +192,9 @@ class WatchedActionCoordinator {
     }
     EpisodeTrackerSnapshotRevision.invalidateTitle('local', imdbId);
 
-    if (CustomSeriesIdentity.isCustom(imdbId)) return const WatchedActionResult([]);
+    if (CustomSeriesIdentity.isCustom(imdbId)) {
+      return const WatchedActionResult([]);
+    }
 
     final policy = (await TrackingSourcePolicy.load()).forContent(imdbId);
     final failures = <String>[];

@@ -27,51 +27,74 @@ void main() {
   });
   tearDown(ProfileRuntime.debugReset);
 
-  for (final write in ['seed', 'fallback', 'credential']) {
-    test('retired $write cannot commit through the preference barrier', () async {
-      SharedPreferences.setMockInitialValues({
-        if (write != 'seed')
-          StorageService.trackingScrobbleTargetsKey: ['local'],
-        StorageService.watchProgressSourceKey: 'trakt',
-        if (write == 'credential') 'trakt_access_token': 'fixture-token',
-      });
-      final container = ProviderContainer.test();
-      final repository = container.read(
-        homeTrackingPolicyRepositoryProvider(
-          ProfileSessionMemory.captureOwner(),
-        ),
+  for (final direct in [false, true]) {
+    for (final write in ['seed', 'fallback', 'credential']) {
+      test(
+        direct
+            ? 'direct policy: retired $write cannot commit through the preference barrier'
+            : 'retired $write cannot commit through the preference barrier',
+        () async {
+          SharedPreferences.setMockInitialValues({
+            if (write != 'seed')
+              StorageService.trackingScrobbleTargetsKey: ['local'],
+            StorageService.watchProgressSourceKey: 'trakt',
+            if (write == 'credential') 'trakt_access_token': 'fixture-token',
+          });
+          final container = ProviderContainer.test();
+          final repository = container.read(
+            homeTrackingPolicyRepositoryProvider(
+              ProfileSessionMemory.captureOwner(),
+            ),
+          );
+          final entered = Completer<void>(), release = Completer<void>();
+          final snapshot = ProfilePreferences.captureMutationSnapshot((
+            _,
+          ) async {
+            entered.complete();
+            await release.future;
+          });
+          await entered.future;
+          final revision = StorageService.trackingSourceRevision.value;
+          final owner = ProfileSessionMemory.captureOwner();
+          Future<TrackingSourcePolicy?> directLoad() async {
+            try {
+              return await TrackingSourcePolicy.load(
+                canContinue: () => owner == ProfileSessionMemory.captureOwner(),
+              );
+            } on StateError {
+              expect(owner == ProfileSessionMemory.captureOwner(), isFalse);
+              return null;
+            }
+          }
+
+          final operation = direct
+              ? directLoad()
+              : repository.loadForContent('tt123', isCurrent: () => true);
+          // Let the real storage path reach the held commit, including vault sealing.
+          await Future<void>.delayed(const Duration(milliseconds: 50));
+          ProfileSessionMemory.clearAll();
+          release.complete();
+          await snapshot;
+          expect(await operation, isNull);
+          final prefs = await SharedPreferences.getInstance();
+          expect(
+            prefs.getString(StorageService.watchProgressSourceKey),
+            'trakt',
+          );
+          expect(prefs.getBool('tracking_progress_fallback_notice'), isNull);
+          expect(StorageService.trackingSourceRevision.value, revision);
+          if (write == 'seed') {
+            expect(
+              prefs.getStringList(StorageService.trackingScrobbleTargetsKey),
+              isNull,
+            );
+          }
+          if (write == 'credential') {
+            expect(prefs.getString('trakt_access_token'), 'fixture-token');
+          }
+        },
       );
-      final entered = Completer<void>(), release = Completer<void>();
-      final snapshot = ProfilePreferences.captureMutationSnapshot((_) async {
-        entered.complete();
-        await release.future;
-      });
-      await entered.future;
-      final revision = StorageService.trackingSourceRevision.value;
-      final operation = repository.loadForContent(
-        'tt123',
-        isCurrent: () => true,
-      );
-      // Let the real storage path reach the held commit, including vault sealing.
-      await Future<void>.delayed(const Duration(milliseconds: 50));
-      ProfileSessionMemory.clearAll();
-      release.complete();
-      await snapshot;
-      expect(await operation, isNull);
-      final prefs = await SharedPreferences.getInstance();
-      expect(prefs.getString(StorageService.watchProgressSourceKey), 'trakt');
-      expect(prefs.getBool('tracking_progress_fallback_notice'), isNull);
-      expect(StorageService.trackingSourceRevision.value, revision);
-      if (write == 'seed') {
-        expect(
-          prefs.getStringList(StorageService.trackingScrobbleTargetsKey),
-          isNull,
-        );
-      }
-      if (write == 'credential') {
-        expect(prefs.getString('trakt_access_token'), 'fixture-token');
-      }
-    });
+    }
   }
 
   test(

@@ -1,3 +1,4 @@
+import 'package:debrify/services/watched_action_coordinator.dart';
 import 'dart:async';
 import 'dart:convert';
 
@@ -65,97 +66,117 @@ void main() {
     ProfileRuntime.debugReset();
   });
 
-  for (final publish in [false, true]) {
-    test(
-      'accepted reset drains all origin records after retirement; publish=$publish',
-      () async {
-        final entered = Completer<void>(), release = Completer<void>();
-        final journalProfiles = <String>[];
-        WebDavSyncTombstoneRecorder.debugInstall(
-          sink: (profile, keys) async {
-            journalProfiles.add(profile);
-            if (!entered.isCompleted) {
-              entered.complete();
-              await release.future;
-            }
-          },
-        );
-        var requests = 0;
-        await http.runWithClient(
-          () async {
-            final reset = SeriesProgressResetService.clear(
-              'tt1',
-              'Reset',
-              isMovie: true,
+  for (final markWatched in [false, true]) {
+    for (final publish in [false, true]) {
+      test(
+        'accepted local sequence drains all origin records; watched=$markWatched publish=$publish',
+        () async {
+          if (markWatched) {
+            final prefs = await SharedPreferences.getInstance();
+            await prefs.setStringList(
+              origin.preferenceKey('finished_movies_v1'),
+              ['tt2'],
             );
-            await entered.future;
-            ProfileSessionMemory.clearAll();
-            if (publish) ProfileRuntime.publish(other);
-            var drained = false;
-            final drain = LocalHistoryRemoval.drain().then(
-              (_) => drained = true,
-            );
-            await Future<void>.delayed(Duration.zero);
-            expect(drained, isFalse);
-            release.complete();
-            expect(await reset, ['Trakt', 'Simkl', 'MDBList']);
-            await drain;
-            expect(drained, isTrue);
-          },
-          () => MockClient((_) async {
-            requests++;
-            return http.Response('{}', 500);
-          }),
-        );
-        expect(requests, 0);
-        final prefs = await SharedPreferences.getInstance();
-        final rows =
-            jsonDecode(
-                  prefs.getString(
-                    origin.preferenceKey('continue_watching_v1'),
-                  )!,
-                )
-                as List;
-        expect(rows.map((row) => row['imdbId']), ['tt2']);
-        final positions =
-            jsonDecode(
-                  prefs.getString(origin.preferenceKey('playback_state_v1'))!,
-                )
-                as Map;
-        expect(positions.keys, ['imdb:tt2']);
-        expect(
-          prefs.getStringList(origin.preferenceKey('finished_movies_v1')),
-          ['tt2'],
-        );
-        expect(
-          prefs.getString(other.preferenceKey('continue_watching_v1')),
-          history,
-        );
-        expect(
-          prefs.getString(other.preferenceKey('playback_state_v1')),
-          playback,
-        );
-        expect(prefs.getStringList(other.preferenceKey('finished_movies_v1')), [
-          'tt1',
-          'tt2',
-        ]);
-        expect(journalProfiles.toSet(), {'origin'});
-        expect(
-          prefs.getString(
-            origin.preferenceKey('remote_tv_playback_recovery_deletions_v1'),
-          ),
-          isNotNull,
-        );
-        expect(
-          prefs.getString(
-            other.preferenceKey('remote_tv_playback_recovery_deletions_v1'),
-          ),
-          isNull,
-        );
-      },
-    );
+          }
+          final entered = Completer<void>(), release = Completer<void>();
+          final journalProfiles = <String>[];
+          WebDavSyncTombstoneRecorder.debugInstall(
+            sink: (profile, keys) async {
+              journalProfiles.add(profile);
+              if (!entered.isCompleted) {
+                entered.complete();
+                await release.future;
+              }
+            },
+          );
+          var requests = 0;
+          await http.runWithClient(
+            () async {
+              final operation = markWatched
+                  ? WatchedActionCoordinator.setTitleWatched(
+                      imdbId: 'tt1',
+                      contentType: 'movie',
+                      watched: true,
+                    )
+                  : SeriesProgressResetService.clear(
+                      'tt1',
+                      'Reset',
+                      isMovie: true,
+                    );
+              await entered.future;
+              ProfileSessionMemory.clearAll();
+              if (publish) ProfileRuntime.publish(other);
+              var drained = false;
+              final drain = LocalHistoryRemoval.drain().then(
+                (_) => drained = true,
+              );
+              await Future<void>.delayed(Duration.zero);
+              expect(drained, isFalse);
+              release.complete();
+              final result = await operation;
+              if (markWatched) {
+                expect((result as WatchedActionResult).cancelled, isTrue);
+                expect(result.success, isFalse);
+              } else {
+                expect(result, ['Trakt', 'Simkl', 'MDBList']);
+              }
+              await drain;
+              expect(drained, isTrue);
+            },
+            () => MockClient((_) async {
+              requests++;
+              return http.Response('{}', 500);
+            }),
+          );
+          expect(requests, 0);
+          final prefs = await SharedPreferences.getInstance();
+          final rows =
+              jsonDecode(
+                    prefs.getString(
+                      origin.preferenceKey('continue_watching_v1'),
+                    )!,
+                  )
+                  as List;
+          expect(rows.map((row) => row['imdbId']), ['tt2']);
+          final positions =
+              jsonDecode(
+                    prefs.getString(origin.preferenceKey('playback_state_v1'))!,
+                  )
+                  as Map;
+          expect(positions.keys, ['imdb:tt2']);
+          expect(
+            prefs.getStringList(origin.preferenceKey('finished_movies_v1')),
+            markWatched ? ['tt1', 'tt2'] : ['tt2'],
+          );
+          expect(
+            prefs.getString(other.preferenceKey('continue_watching_v1')),
+            history,
+          );
+          expect(
+            prefs.getString(other.preferenceKey('playback_state_v1')),
+            playback,
+          );
+          expect(
+            prefs.getStringList(other.preferenceKey('finished_movies_v1')),
+            ['tt1', 'tt2'],
+          );
+          expect(journalProfiles.toSet(), {'origin'});
+          expect(
+            prefs.getString(
+              origin.preferenceKey('remote_tv_playback_recovery_deletions_v1'),
+            ),
+            isNotNull,
+          );
+          expect(
+            prefs.getString(
+              other.preferenceKey('remote_tv_playback_recovery_deletions_v1'),
+            ),
+            isNull,
+          );
+        },
+      );
+    }
   }
-
   test('foreign captured scope cannot start a reset', () async {
     var journals = 0;
     WebDavSyncTombstoneRecorder.debugInstall(sink: (_, _) => journals++);

@@ -7,6 +7,7 @@ import 'mdblist/mdblist_continue_watching_service.dart';
 import 'mdblist/mdblist_models.dart';
 import 'mdblist/mdblist_service.dart';
 import 'profiles/profile_runtime.dart';
+import 'profiles/profile_local_writes.dart';
 import 'profiles/profile_session_memory.dart';
 import 'simkl/simkl_service.dart';
 import 'storage_service.dart';
@@ -168,9 +169,11 @@ class SeriesProgressResetService {
         }
         if (!current()) return false;
         if (ok && !isMovie)
-          await StorageService.saveEpisodeTraktProgress(
-            imdbId: id,
-            percents: {},
+          await ProfileLocalWrites.run(
+            () => StorageService.saveEpisodeTraktProgress(
+              imdbId: id,
+              percents: {},
+            ),
           );
         return ok;
       });
@@ -200,16 +203,18 @@ class SeriesProgressResetService {
         );
         if (!current()) return false;
         if (history && playback && !isMovie)
-          await StorageService.saveEpisodeSimklProgress(
-            imdbId: id,
-            percents: {},
+          await ProfileLocalWrites.run(
+            () => StorageService.saveEpisodeSimklProgress(
+              imdbId: id,
+              percents: {},
+            ),
           );
         return history && playback;
       });
     if (provider == null || provider == TrackingSource.mdblist)
       await attempt('MDBList', () async {
         final service = mdblistService ?? MdblistService.instance;
-        if (!await service.isAuthenticated()) {
+        if (!await service.isAuthenticated(canContinue: current)) {
           return current() && provider == null;
         }
         if (!current()) return false;
@@ -219,7 +224,9 @@ class SeriesProgressResetService {
         );
         if (wanted == null || !current()) return false;
         final targetIds = MdblistMediaIds.forContent(id);
-        final sessions = await service.fetchPlaybackSessions();
+        final sessions = await service.fetchPlaybackSessions(
+          canContinue: current,
+        );
         if (!current()) return false;
         var ok = sessions.isSuccess;
         for (final row in sessions.data ?? <MdblistPlaybackSession>[]) {
@@ -240,19 +247,26 @@ class SeriesProgressResetService {
                     season: row.season!,
                     episode: row.episode!,
                   ),
+            canContinue: current,
           );
           if (!result.isSuccess) ok = false;
         }
         if (!current()) return false;
-        if (!await service.markUnwatched(targetIds, isMovie ? 'movie' : 'show'))
+        if (!await service.markUnwatched(
+          targetIds,
+          isMovie ? 'movie' : 'show',
+          canContinue: current,
+        ))
           ok = false;
         if (!current()) return false;
         MdblistContinueWatchingService.instance.invalidate();
         if (!current()) return false;
         if (ok && !isMovie)
-          await StorageService.saveEpisodeMdblistProgress(
-            imdbId: id,
-            percents: {},
+          await ProfileLocalWrites.run(
+            () => StorageService.saveEpisodeMdblistProgress(
+              imdbId: id,
+              percents: {},
+            ),
           );
         return ok;
       });

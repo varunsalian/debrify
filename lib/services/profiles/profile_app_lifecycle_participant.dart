@@ -22,7 +22,7 @@ import '../premiumize_account_service.dart';
 import '../remote_control/remote_command_router.dart';
 import '../simkl/simkl_service.dart';
 import '../storage_service.dart';
-import '../local_history_removal.dart';
+import 'profile_local_writes.dart';
 import '../stream_badges_service.dart';
 import '../stremio_service.dart';
 import '../subtitle_font_service.dart';
@@ -51,7 +51,7 @@ class ProfileAppLifecycleParticipant implements ProfileLifecycleParticipant {
     ProfileSessionMemory.clearAll();
     EngineProfileLifecycle.prepareDeactivate();
     MainPageBridge.clearProfileSessionState();
-    await LocalHistoryRemoval.drain();
+    await ProfileLocalWrites.drain();
     await TvosTopShelfService.instance.clear();
     RemoteCommandRouter().clearProfileSessionState();
     await DownloadService.instance.prepareProfileSwitch();

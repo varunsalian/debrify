@@ -1001,20 +1001,45 @@ class TraktService {
     return ok;
   }
 
-  Future<bool> addToWatchlist(String imdbId, String type) =>
-      _syncAction('/sync/watchlist', imdbId, type);
+  Future<bool> addToWatchlist(
+    String imdbId,
+    String type, {
+    bool Function()? canContinue,
+  }) => _syncAction('/sync/watchlist', imdbId, type, canContinue: canContinue);
 
-  Future<bool> removeFromWatchlist(String imdbId, String type) =>
-      _syncAction('/sync/watchlist/remove', imdbId, type);
+  Future<bool> removeFromWatchlist(
+    String imdbId,
+    String type, {
+    bool Function()? canContinue,
+  }) => _syncAction(
+    '/sync/watchlist/remove',
+    imdbId,
+    type,
+    canContinue: canContinue,
+  );
 
-  Future<bool> addToCollection(String imdbId, String type) =>
-      _syncAction('/sync/collection', imdbId, type);
+  Future<bool> addToCollection(
+    String imdbId,
+    String type, {
+    bool Function()? canContinue,
+  }) => _syncAction('/sync/collection', imdbId, type, canContinue: canContinue);
 
-  Future<bool> removeFromCollection(String imdbId, String type) =>
-      _syncAction('/sync/collection/remove', imdbId, type);
+  Future<bool> removeFromCollection(
+    String imdbId,
+    String type, {
+    bool Function()? canContinue,
+  }) => _syncAction(
+    '/sync/collection/remove',
+    imdbId,
+    type,
+    canContinue: canContinue,
+  );
 
-  Future<bool> addToHistory(String imdbId, String type) =>
-      _syncAction('/sync/history', imdbId, type);
+  Future<bool> addToHistory(
+    String imdbId,
+    String type, {
+    bool Function()? canContinue,
+  }) => _syncAction('/sync/history', imdbId, type, canContinue: canContinue);
 
   Future<bool> removeFromHistory(
     String imdbId,
@@ -1027,18 +1052,41 @@ class TraktService {
     canContinue: canContinue,
   );
 
-  Future<bool> rateItem(String imdbId, String type, int rating) => _syncAction(
+  Future<bool> rateItem(
+    String imdbId,
+    String type,
+    int rating, {
+    bool Function()? canContinue,
+  }) => _syncAction(
     '/sync/ratings',
     imdbId,
     type,
     extraItemFields: {'rating': rating},
+    canContinue: canContinue,
   );
 
-  Future<bool> removeRating(String imdbId, String type) =>
-      _syncAction('/sync/ratings/remove', imdbId, type);
+  Future<bool> removeRating(
+    String imdbId,
+    String type, {
+    bool Function()? canContinue,
+  }) => _syncAction(
+    '/sync/ratings/remove',
+    imdbId,
+    type,
+    canContinue: canContinue,
+  );
 
-  Future<bool> addToCustomList(String listId, String imdbId, String type) =>
-      _syncAction('/users/me/lists/$listId/items', imdbId, type);
+  Future<bool> addToCustomList(
+    String listId,
+    String imdbId,
+    String type, {
+    bool Function()? canContinue,
+  }) => _syncAction(
+    '/users/me/lists/$listId/items',
+    imdbId,
+    type,
+    canContinue: canContinue,
+  );
 
   Future<bool> removeFromCustomList(
     String listId,
@@ -1287,9 +1335,16 @@ class TraktService {
   }
 
   /// Fetch the user's custom lists.
-  Future<List<Map<String, dynamic>>> fetchCustomLists({bool strict = false}) async {
+  Future<List<Map<String, dynamic>>> fetchCustomLists({
+    bool strict = false,
+    bool Function()? canContinue,
+  }) async {
+    if (canContinue?.call() == false) return [];
     if (strict) return _fetchHomeListDirectory('/users/me/lists');
-    final response = await _authenticatedGet('/users/me/lists');
+    final response = await _authenticatedGet(
+      '/users/me/lists',
+      canContinue: canContinue,
+    );
     if (response == null || response.statusCode != 200) {
       debugPrint('Trakt: fetchCustomLists failed (${response?.statusCode})');
       return [];

@@ -30,6 +30,9 @@ class MdblistTransport {
     Object? body,
     ProfileAsyncAuthorization? capability,
     bool Function()? canContinue,
+    // Accepted writes may refresh their owning profile after a view closes.
+    // Reads default to the same guard for sending and accepting a response.
+    bool Function()? canAcceptResponse,
     bool allowWhenDisabled = false,
     bool allowNotFound = false,
   }) async {
@@ -92,7 +95,7 @@ class MdblistTransport {
       final response = capability == null
           ? await send()
           : await capability.runIfCurrentAsOutbound(send);
-      if (canContinue?.call() == false) {
+      if ((canAcceptResponse ?? canContinue)?.call() == false) {
         return const MdblistResult.failure(MdblistResultKind.denied);
       }
       final status = response.statusCode;

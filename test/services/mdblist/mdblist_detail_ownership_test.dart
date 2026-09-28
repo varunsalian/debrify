@@ -209,6 +209,68 @@ void main() {
     },
   );
 
+  for (final stage in ['credential', 'response']) {
+    for (final retirement in ['none', 'view', 'profile']) {
+      test('mutation $stage ownership: $retirement', () async {
+        final entered = Completer<void>(), release = Completer<void>();
+        var active = true, requests = 0;
+        final service = MdblistService.forTesting(
+          apiKeyProvider: () async {
+            if (stage == 'credential') {
+              entered.complete();
+              await release.future;
+            }
+            return 'key';
+          },
+          client: MockClient((request) async {
+            requests++;
+            if (stage == 'response') {
+              entered.complete();
+              await release.future;
+            }
+            return http.Response('{}', 200);
+          }),
+        );
+        final pending = service.markWatched(
+          const MdblistMediaIds(imdb: 'tt1234567'),
+          'movie',
+          canContinue: () => active,
+        );
+        await entered.future;
+        if (retirement == 'view') active = false;
+        if (retirement == 'profile') ProfileSessionMemory.clearAll();
+        release.complete();
+        final accepted =
+            retirement == 'none' ||
+            (retirement == 'view' && stage == 'response');
+        expect(await pending, accepted);
+        expect(requests, stage == 'response' || retirement == 'none' ? 1 : 0);
+        expect(service.libraryRevision.value, accepted ? 1 : 0);
+        expect(service.watchedRevision.value, accepted ? 1 : 0);
+      });
+    }
+  }
+
+  test(
+    'mutation listener retirement stops later watched notifications',
+    () async {
+      final service = MdblistService.forTesting(
+        apiKeyProvider: () async => 'key',
+        client: MockClient((_) async => http.Response('{}', 200)),
+      );
+      service.libraryRevision.addListener(ProfileSessionMemory.clearAll);
+      expect(
+        await service.markWatched(
+          const MdblistMediaIds(imdb: 'tt1234567'),
+          'movie',
+        ),
+        isFalse,
+      );
+      expect(service.libraryRevision.value, 1);
+      expect(service.watchedRevision.value, 0);
+    },
+  );
+
   test('production key migration stops at retired session barrier', () async {
     SharedPreferences.setMockInitialValues({'mdblist_api_key': 'legacy-key'});
     SecretVault.debugReset(deviceIdOverride: 'mdblist-detail-fixture');

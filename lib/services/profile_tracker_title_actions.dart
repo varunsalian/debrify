@@ -48,6 +48,7 @@ class ProfileTrackerTitleActions implements TrackerTitleActions {
           contentType: type,
           watched: mutation == TrackerTitleMutation.markWatched,
           forceTargets: {tracker},
+          canContinue: current,
         );
         if (result.success && tracker == TrackingSource.mdblist && current()) {
           WatchedStatusService.instance.ensureStarted();
@@ -61,23 +62,30 @@ class ProfileTrackerTitleActions implements TrackerTitleActions {
             TrackerTitleMutation.addToWatchlist => service.addToWatchlist(
               id,
               type,
+              canContinue: current,
             ),
             TrackerTitleMutation.removeFromWatchlist =>
-              service.removeFromWatchlist(id, type),
+              service.removeFromWatchlist(id, type, canContinue: current),
             TrackerTitleMutation.addToCollection => service.addToCollection(
               id,
               type,
+              canContinue: current,
             ),
             TrackerTitleMutation.removeFromCollection =>
-              service.removeFromCollection(id, type),
+              service.removeFromCollection(id, type, canContinue: current),
             TrackerTitleMutation.rate when rating != null => service.rateItem(
               id,
               type,
               rating,
+              canContinue: current,
             ),
-            TrackerTitleMutation.removeRating => service.removeRating(id, type),
+            TrackerTitleMutation.removeRating => service.removeRating(
+              id,
+              type,
+              canContinue: current,
+            ),
             TrackerTitleMutation.addToCustomList when listId != null =>
-              service.addToCustomList(listId, id, type),
+              service.addToCustomList(listId, id, type, canContinue: current),
             _ => false,
           };
         case TrackingSource.simkl:
@@ -124,9 +132,9 @@ class ProfileTrackerTitleActions implements TrackerTitleActions {
             case TrackerTitleMutation.rate:
               return rating == null
                   ? false
-                  : service.rateItem(id, type, rating);
+                  : service.rateItem(id, type, rating, canContinue: current);
             case TrackerTitleMutation.removeRating:
-              return service.removeRating(id, type);
+              return service.removeRating(id, type, canContinue: current);
             default:
               return false;
           }
@@ -138,28 +146,41 @@ class ProfileTrackerTitleActions implements TrackerTitleActions {
             TrackerTitleMutation.addToWatchlist => service.addToWatchlist(
               ids,
               mediaType,
+              canContinue: current,
             ),
             TrackerTitleMutation.removeFromWatchlist =>
-              service.removeFromWatchlist(ids, mediaType),
+              service.removeFromWatchlist(ids, mediaType, canContinue: current),
             TrackerTitleMutation.addToCollection => service.addToCollection(
               ids,
               mediaType,
+              canContinue: current,
             ),
             TrackerTitleMutation.removeFromCollection =>
-              service.removeFromCollection(ids, mediaType),
+              service.removeFromCollection(
+                ids,
+                mediaType,
+                canContinue: current,
+              ),
             TrackerTitleMutation.rate when rating != null => service.rateTitle(
               ids,
               mediaType,
               rating,
+              canContinue: current,
             ),
             TrackerTitleMutation.removeRating => service.removeRating(
               ids,
               mediaType,
+              canContinue: current,
             ),
-            TrackerTitleMutation.drop => service.setDropped(ids, dropped: true),
+            TrackerTitleMutation.drop => service.setDropped(
+              ids,
+              dropped: true,
+              canContinue: current,
+            ),
             TrackerTitleMutation.restore => service.setDropped(
               ids,
               dropped: false,
+              canContinue: current,
             ),
             _ => false,
           };
@@ -175,7 +196,11 @@ class ProfileTrackerTitleActions implements TrackerTitleActions {
     required bool Function() isCurrent,
   }) async {
     if (!_current(isCurrent)) return [];
-    final lists = await _scoped(() => TraktService.instance.fetchCustomLists());
+    final lists = await _scoped(
+      () => TraktService.instance.fetchCustomLists(
+        canContinue: () => _current(isCurrent),
+      ),
+    );
     return _current(isCurrent) ? lists : [];
   }
 

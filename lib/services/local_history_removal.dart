@@ -1,4 +1,4 @@
-import 'dart:async';
+import 'profiles/profile_local_writes.dart';
 
 /// One accepted removal includes its history, position and recovery records.
 /// Once started, the writer finishes in its captured scope; retirement suppresses
@@ -9,30 +9,17 @@ class LocalHistoryRemoval {
     required this.isOwnerCurrent,
   });
 
-  // Shared with the profile lifecycle: callbacks belong to accepted operations,
-  // not to the view/provider that initiated them. Failures stay with the caller.
-  static final _pending = <Future<void>>{};
-
-  /// Retire views first. Never hold a preference snapshot barrier while draining.
-  static Future<void> drain() async {
-    while (_pending.isNotEmpty) {
-      await Future.wait(_pending.toList());
-    }
-  }
+  /// Compatibility entry point for accepted history operations.
+  static Future<void> drain() => ProfileLocalWrites.drain();
 
   final Future<void> Function(String) write;
   final bool Function() isOwnerCurrent;
 
   Future<bool> remove(String id, {required bool Function() isCurrent}) async {
     if (id.trim().isEmpty || !isOwnerCurrent() || !isCurrent()) return false;
-    final completed = Completer<void>();
-    _pending.add(completed.future);
-    try {
+    return ProfileLocalWrites.run(() async {
       await write(id);
       return isOwnerCurrent() && isCurrent();
-    } finally {
-      _pending.remove(completed.future);
-      completed.complete();
-    }
+    });
   }
 }

@@ -46,9 +46,22 @@ class TrackingSourcePolicy {
         )
       : this;
 
-  static Future<TrackingSourcePolicy> load() async {
-    final scrobbleTargets = await StorageService.getTrackingScrobbleTargets();
+  static Future<TrackingSourcePolicy> load({
+    bool Function()? canContinue,
+  }) async {
+    void checkCurrent() {
+      if (canContinue?.call() == false) {
+        throw StateError('Tracking action retired');
+      }
+    }
+
+    checkCurrent();
+    final scrobbleTargets = await StorageService.getTrackingScrobbleTargets(
+      canContinue: canContinue,
+    );
+    checkCurrent();
     var progressSource = await StorageService.getWatchProgressSource();
+    checkCurrent();
     final dedicated = switch (progressSource) {
       WatchProgressSource.trakt => TrackingSource.trakt,
       WatchProgressSource.simkl => TrackingSource.simkl,
@@ -57,20 +70,34 @@ class TrackingSourcePolicy {
     };
     if (dedicated != null) {
       final connected = switch (dedicated) {
-        TrackingSource.trakt => StorageService.hasTraktCredential(),
-        TrackingSource.simkl => StorageService.hasSimklCredential(),
-        TrackingSource.mdblist => StorageService.hasMdblistCredential(),
+        TrackingSource.trakt => StorageService.hasTraktCredential(
+          canContinue: canContinue,
+        ),
+        TrackingSource.simkl => StorageService.hasSimklCredential(
+          canContinue: canContinue,
+        ),
+        TrackingSource.mdblist => StorageService.hasMdblistCredential(
+          canContinue: canContinue,
+        ),
         TrackingSource.local => Future<bool>.value(true),
       };
-      if (!await connected) {
-        await StorageService.fallbackDisconnectedProgressSource(dedicated);
+      final hasCredential = await connected;
+      checkCurrent();
+      if (!hasCredential) {
+        await StorageService.fallbackDisconnectedProgressSource(
+          dedicated,
+          canContinue: canContinue,
+        );
+        checkCurrent();
         progressSource = WatchProgressSource.smart;
       }
     }
+    final ticks = await StorageService.getHomeTickSources();
+    checkCurrent();
     return TrackingSourcePolicy(
       scrobbleTargets: scrobbleTargets,
       progressSource: progressSource,
-      homeTickSources: await StorageService.getHomeTickSources(),
+      homeTickSources: ticks,
     );
   }
 

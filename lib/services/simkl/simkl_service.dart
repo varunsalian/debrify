@@ -722,69 +722,108 @@ class SimklService {
   }
 
   /// Rate a title 1–10 via `POST /sync/ratings`.
-  Future<bool> rateItem(String imdbId, String type, int rating) async {
-    final token = await StorageService.getSimklAccessToken();
-    if (token == null || token.isEmpty) return false;
+  Future<bool> rateItem(
+    String imdbId,
+    String type,
+    int rating, {
+    bool Function()? canContinue,
+  }) async {
+    if (canContinue?.call() == false) return false;
+    final owner = canContinue == null
+        ? null
+        : ProfileSessionMemory.captureOwner();
+    final token = await StorageService.getSimklAccessToken(
+      canContinue: canContinue,
+    );
+    if (token == null || token.isEmpty || canContinue?.call() == false) {
+      return false;
+    }
     final typeKey = _typeKey(type);
     final result = await _postOrNull(
       '/sync/ratings',
       {
         typeKey: [
-          {
-            'rating': rating,
-            'ids': MediaIdentity.apiIds(imdbId),
-          },
+          {'rating': rating, 'ids': MediaIdentity.apiIds(imdbId)},
         ],
       },
       token: token,
       label: 'rateItem $typeKey',
     );
-    if (!_wasMatched(result, typeKey)) return false;
+    if (!_wasMatched(result, typeKey) ||
+        (owner != null && owner != ProfileSessionMemory.captureOwner())) {
+      return false;
+    }
     _invalidateLibraryCache();
     return true;
   }
 
   /// Clear a title's rating via `POST /sync/ratings/remove`.
-  Future<bool> removeRating(String imdbId, String type) async {
-    final token = await StorageService.getSimklAccessToken();
-    if (token == null || token.isEmpty) return false;
+  Future<bool> removeRating(
+    String imdbId,
+    String type, {
+    bool Function()? canContinue,
+  }) async {
+    if (canContinue?.call() == false) return false;
+    final owner = canContinue == null
+        ? null
+        : ProfileSessionMemory.captureOwner();
+    final token = await StorageService.getSimklAccessToken(
+      canContinue: canContinue,
+    );
+    if (token == null || token.isEmpty || canContinue?.call() == false) {
+      return false;
+    }
     final typeKey = _typeKey(type);
     final result = await _postOrNull(
       '/sync/ratings/remove',
       {
         typeKey: [
-          {
-            'ids': MediaIdentity.apiIds(imdbId),
-          },
+          {'ids': MediaIdentity.apiIds(imdbId)},
         ],
       },
       token: token,
       label: 'removeRating $typeKey',
     );
-    if (!_wasMatched(result, typeKey)) return false;
+    if (!_wasMatched(result, typeKey) ||
+        (owner != null && owner != ProfileSessionMemory.captureOwner())) {
+      return false;
+    }
     _invalidateLibraryCache();
     return true;
   }
 
   /// Mark a whole title (movie, or every aired episode of a show) watched via
   /// `POST /sync/history`.
-  Future<bool> markWatched(String imdbId, String type) async {
-    final token = await StorageService.getSimklAccessToken();
-    if (token == null || token.isEmpty) return false;
+  Future<bool> markWatched(
+    String imdbId,
+    String type, {
+    bool Function()? canContinue,
+  }) async {
+    if (canContinue?.call() == false) return false;
+    final owner = canContinue == null
+        ? null
+        : ProfileSessionMemory.captureOwner();
+    final token = await StorageService.getSimklAccessToken(
+      canContinue: canContinue,
+    );
+    if (token == null || token.isEmpty || canContinue?.call() == false) {
+      return false;
+    }
     final typeKey = _typeKey(type);
     final result = await _postOrNull(
       '/sync/history',
       {
         typeKey: [
-          {
-            'ids': MediaIdentity.apiIds(imdbId),
-          },
+          {'ids': MediaIdentity.apiIds(imdbId)},
         ],
       },
       token: token,
       label: 'markWatched $typeKey',
     );
-    if (!_wasMatched(result, typeKey)) return false;
+    if (!_wasMatched(result, typeKey) ||
+        (owner != null && owner != ProfileSessionMemory.captureOwner())) {
+      return false;
+    }
     _invalidateLibraryCache();
     StorageService.movieFinishedRevision.value++;
     if (type == 'series') {

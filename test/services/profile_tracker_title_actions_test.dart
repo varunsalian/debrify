@@ -1,3 +1,5 @@
+import 'package:debrify/services/profiles/profile_preferences.dart';
+import 'package:debrify/services/watched_action_coordinator.dart';
 import 'package:debrify/models/custom_series_identity.dart';
 import 'package:debrify/services/profiles/profile_scope.dart';
 import 'dart:async';
@@ -137,6 +139,108 @@ void main() {
       },
     );
   }
+
+  for (final tracker in [
+    TrackingSource.trakt,
+    TrackingSource.simkl,
+    TrackingSource.mdblist,
+  ]) {
+    test(
+      '$tracker mutation retires during credential migration before sending',
+      () async {
+        await Future<void>.delayed(Duration.zero);
+        final key = switch (tracker) {
+          TrackingSource.trakt => 'trakt_access_token',
+          TrackingSource.simkl => 'simkl_access_token',
+          _ => 'mdblist_api_key',
+        };
+        SharedPreferences.setMockInitialValues({key: 'legacy-token'});
+        final actions = ProfileTrackerTitleActions(
+          ProfileSessionMemory.captureOwner(),
+        );
+        final entered = Completer<void>(), release = Completer<void>();
+        final snapshot = ProfilePreferences.captureMutationSnapshot((_) async {
+          entered.complete();
+          await release.future;
+        });
+        await entered.future;
+        var requests = 0;
+        await runWithFixtureClient(
+          () async {
+            final mutation = actions.mutate(
+              tracker,
+              TrackerTitleMutation.rate,
+              'tt1234567',
+              'movie',
+              rating: 8,
+              isCurrent: () => true,
+            );
+            await Future<void>.delayed(const Duration(milliseconds: 50));
+            ProfileSessionMemory.clearAll();
+            release.complete();
+            await snapshot;
+            expect(await mutation, isFalse);
+          },
+          () => fixtureClient((_) async {
+            requests++;
+            return http.Response('{}', 200);
+          }),
+        );
+        expect(requests, 0);
+        expect(
+          (await SharedPreferences.getInstance()).getString(key),
+          'legacy-token',
+        );
+      },
+    );
+  }
+
+  test(
+    'watched action retires after accepted Trakt write without starting later trackers',
+    () async {
+      final entered = Completer<void>(), release = Completer<void>();
+      final writes = <http.Request>[];
+      await runWithFixtureClient(
+        () async {
+          final operation = WatchedActionCoordinator.setTitleWatched(
+            imdbId: 'tt1234567',
+            contentType: 'movie',
+            watched: true,
+            forceTargets: {
+              TrackingSource.trakt,
+              TrackingSource.simkl,
+              TrackingSource.mdblist,
+            },
+          );
+          await entered.future;
+          ProfileSessionMemory.clearAll();
+          release.complete();
+          final result = await operation;
+          expect(result.cancelled, isTrue);
+          expect(result.success, isFalse);
+        },
+        () => fixtureClient((request) async {
+          if (request.method == 'POST') {
+            writes.add(request);
+            if (!entered.isCompleted) {
+              entered.complete();
+              await release.future;
+            }
+            return http.Response('{}', 200);
+          }
+          return http.Response('[]', 200);
+        }),
+      );
+      expect(writes, hasLength(1));
+      expect(writes.single.url.host, contains('trakt'));
+      expect(
+        (await SharedPreferences.getInstance()).getStringList(
+          'finished_movies_v1',
+        ),
+        contains('tt1234567'),
+      );
+    },
+  );
 
   for (final retirement in ['none', 'view', 'profile']) {
     test(

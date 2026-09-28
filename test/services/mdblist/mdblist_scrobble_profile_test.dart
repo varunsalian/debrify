@@ -39,6 +39,7 @@ class RetiredClearService extends Fake implements MdblistService {
   Future<MdblistResult<Map<String, dynamic>>> scrobbleClear(
     MdblistScrobbleTarget target, {
     ProfileAsyncAuthorization? capability,
+    bool Function()? canContinue,
   }) async {
     ProfileSessionMemory.clearAll();
     return const MdblistResult.success({});

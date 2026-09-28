@@ -6,6 +6,62 @@ workflow checkpoints, reuse valid evidence, and run broader checks at integratio
 gates. Earlier entries retain their original slice history. No changes are pushed
 to the public repository.
 
+## Batch A checkpoint: title-write acceptance and transitive ownership — 2026-09-28
+
+The existing accepted-local-write registry now lives in the 28-line
+`ProfileLocalWrites` helper. History removal retains its compatibility drain;
+the profile lifecycle drains the same registry at the same handoff point.
+Watched-title actions and successful reset snapshot writes join it. This keeps
+accepted local flags, history, resume, recovery and sync-journal sequences inside
+the originating profile's handoff. Writer failures still reach their caller and
+do not strand the drain; no second registry or mutation lock was added.
+
+Watched-title actions capture their scope before awaiting and distinguish
+retirement from success. Their tracking-policy reads forward the existing guards
+through scrobble-preference migration, credential reads and disconnected fallback
+writes. Trakt, Simkl and MDBList title commands now forward action guards through
+authentication/credentials and sending; retirement prevents later tracker steps.
+The pre-existing shared token-refresh owner remains unchanged. Episode-only
+coordinator flows are outside this title-action change.
+
+MDBList separates sending permission from acceptance of an already-issued write.
+A retired profile cannot accept its response or invalidate incoming state; a closed
+view may still invalidate its owning profile's cache after an accepted success.
+The common mutation path also checks ownership between synchronous revision
+listeners. Reset playback reads, clears, history writes and local snapshot commits
+use their existing profile guard/drain policies. The UI-facing action contract and
+reviewed refresh order remain unchanged.
+
+Focused validation: 89 existing checks, 45 ownership/policy/scrobble checks and 93
+MDBList/action/reset checks pass (overlapping groups). New cases cover accepted
+watched deletion/recovery, held credential/preference barriers for each tracker,
+retirement between forced tracker writes, late MDBList responses and synchronous
+listener retirement. Analyzer identities remain 845 and architecture checks pass
+477 measured files. Receipts in `.git/refactor-evidence/phase5/`:
+`title-write-existing-tests.txt`, `title-write-new-tests.txt`,
+`title-write-mdblist-tests.txt`, `title-write-final-analyze-2.txt`.
+
+A full run was required because the local lifecycle drain and shared mutation
+transport changed. `full-title-actions-c4.jsonl` completed with 10,049 successes,
+22 failures, 38 errors and 20 skips. Its nine extra errors came from one ten-minute
+Home pagination timeout followed by eight test-framework conflicts in the same
+file. The first case passed in isolation (4.5 seconds), then the entire file passed
+(25 seconds) without an application change; receipts are
+`title-write-pagination-isolated.jsonl` and `title-write-pagination-file.jsonl`.
+Three existing policy test names were restored after expanding their matrix so
+baseline identities remain directly comparable. The full retry
+(`full-title-actions-retry-c4.jsonl`) completed in about six minutes with **10,058
+successes / 22 failures / 29 errors / 20 skips**. Exact comparison against
+`full-addon-inventory-c4.jsonl` shows no new failures/errors, missing tests or new
+skips, and 37 added passing tests across the intervening checkpoints. The first
+run's pagination errors did not recur; both full receipts remain available.
+
+Batch A's listed workflows are now implemented and reviewed. Base revision:
+`be638f0a`; this entry belongs to the title-write checkpoint commit. B's remaining
+Sources/provider/native boundaries, C/D feature composition and lifecycle/facade,
+and E's CI/device/performance acceptance remain open. Closing A does not claim the
+whole original numbered phases or migration are complete.
+
 ## Batch A checkpoint: injected tracker title mutations — 2026-09-28
 
 Home detail actions now obtain `TrackerTitleActions` through the profile-family
