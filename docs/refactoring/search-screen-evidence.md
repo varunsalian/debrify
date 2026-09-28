@@ -24,6 +24,8 @@ progressive-loading/focus checks. The new focused test covers prepended rows,
 unmounted fallback, caption policy, reset ordering and disposal without owning
 borrowed nodes. Receipts:
 `.git/refactor-evidence/phase5/tonight-focus-{tests,integration,analyze-final}.txt`.
+Analysis reports **836 diagnostics**, with no added identities; two doc-comment
+HTML notices disappeared with the moved queue-key documentation.
 Architecture passes **534 files**; formatting/diff checks pass. No emulator used.
 Remaining shared navigation, lifecycle, composition and final acceptance stay open.
 
