@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../models/advanced_search_selection.dart';
+import '../../../models/custom_series_identity.dart';
 import '../../../models/playback_meta.dart';
+import '../../../models/stremio_addon.dart';
 import '../../../utils/tv_keys.dart';
 import '../../sources/presentation/sources_screen.dart';
 
@@ -28,6 +30,60 @@ class HomeSourcesNavigation {
   }) : _buildScreen = buildScreen;
 
   final HomeSourcesBuilder _buildScreen;
+
+  /// Detail/source-editor binding searches the whole title, never an episode.
+  /// Both torrent and editable keyword entry points retain the same identity.
+  Future<void> bindCatalog(
+    BuildContext context, {
+    required StremioMeta item,
+    required String? progressId,
+    required bool keyword,
+    required PlaybackMeta Function(AdvancedSearchSelection) buildMeta,
+    required bool Function() isTelevision,
+    required bool Function() isCurrent,
+    required Future<void> Function() onReturned,
+  }) {
+    if (!context.mounted || !isCurrent()) return Future.value();
+    if (progressId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('No IMDb match to pin a source for "${item.name}".'),
+          duration: const Duration(seconds: 3),
+        ),
+      );
+      return Future.value();
+    }
+    final isSeries = item.type == 'series';
+    final selection = AdvancedSearchSelection(
+      imdbId: progressId,
+      isSeries: isSeries,
+      title: item.name,
+      year: item.year,
+      contentType: item.type,
+      posterUrl: item.poster,
+      stremioAddonId: item.sourceAddon?.id,
+      stremioAddonKey: CustomSeriesIdentity.isCustom(progressId)
+          ? item.sourceAddon?.sourceBindingKey
+          : null,
+      stremioCatalogId: CustomSeriesIdentity.parse(progressId)?.catalogId,
+    );
+    final seed = !keyword
+        ? null
+        : isSeries
+        ? '${item.name} complete'
+        : (item.year != null && item.year!.isNotEmpty
+              ? '${item.name} ${item.year}'
+              : item.name);
+    return bind(
+      context,
+      selection: selection,
+      buildMeta: () => buildMeta(selection),
+      isTelevision: isTelevision,
+      keywordSeed: seed,
+      isCurrent: isCurrent,
+      onReturned: onReturned,
+    );
+  }
 
   Future<void> browse(
     BuildContext context, {

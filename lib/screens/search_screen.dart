@@ -10458,8 +10458,12 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
             ),
             boundSourceCount: _boundCountFor,
             onSelectSource: (show) {
+              if (!detailRoute.isActive) return Future.value();
               _activeAddonId = addon.id;
-              return _handleEditOrSelectSource(show.withSourceAddon(addon));
+              return _handleEditOrSelectSource(
+                show.withSourceAddon(addon),
+                isCurrent: () => detailRoute.isActive,
+              );
             },
             traktMenuOptions: options,
             traktMenuBuilder: buildMenuOptions,
@@ -10692,8 +10696,14 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         context,
         item.withSourceAddon(addon),
         action,
-        onSelectSource: _openBindSources,
-        onEditSource: _handleEditOrSelectSource,
+        onSelectSource: (item) => _openSourceBinding(
+          item,
+          isCurrent: () => detailRoute.isActive,
+        ),
+        onEditSource: (item) => _handleEditOrSelectSource(
+          item,
+          isCurrent: () => detailRoute.isActive,
+        ),
         onPlayRandomEpisode: (m) => _playRandomEpisodeFromDetail(m, addon),
         onSearchPacks: _searchPacksFromDetail,
         onAddToStremioTv: (item) => _addToStremioTvFromDetail(item, detailRoute),
@@ -10744,8 +10754,13 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     ),
   );
 
-  Future<void> _handleEditOrSelectSource(StremioMeta item) async {
-    if (!_catalogNavigationCurrent()) return;
+  Future<void> _handleEditOrSelectSource(
+    StremioMeta item, {
+    bool Function()? isCurrent,
+  }) async {
+    bool current() =>
+        _catalogNavigationCurrent() && (isCurrent?.call() ?? true);
+    if (!current()) return;
     await HomeSourceEditor(
       context: context,
       item: item,
@@ -10754,11 +10769,12 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         homeSourceEditingRepositoryProvider(_profileSessionOwner),
       ),
       localPicker: ref.read(localSourcePickerProvider),
-      isCurrent: _catalogNavigationCurrent,
+      isCurrent: current,
       refreshBindings: _refreshBoundSources,
       showMessage: _snack,
-      openTorrent: _openBindSources,
-      openKeyword: _openKeywordBind,
+      openTorrent: (item) => _openSourceBinding(item, isCurrent: current),
+      openKeyword: (item) =>
+          _openSourceBinding(item, keyword: true, isCurrent: current),
     ).open();
   }
 
@@ -10994,81 +11010,26 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         });
   }
 
-  /// Open the source picker (bind mode) to pin a source for [show]. For a series
-  /// this searches season/complete packs (no episode), matching Home.
-  void _openBindSources(StremioMeta show) {
-    if (!_catalogNavigationCurrent()) return;
-    final imdb = _imdbOf(show);
-    if (imdb == null) {
-      _snack('No IMDb match to pin a source for "${show.name}".');
-      return;
-    }
-    final sel = AdvancedSearchSelection(
-      imdbId: imdb,
-      isSeries: show.type == 'series',
-      title: show.name,
-      year: show.year,
-      contentType: show.type,
-      posterUrl: show.poster,
-      stremioAddonId: show.sourceAddon?.id,
-      stremioAddonKey: CustomSeriesIdentity.isCustom(imdb)
-          ? show.sourceAddon?.sourceBindingKey
-          : null,
-      stremioCatalogId: CustomSeriesIdentity.parse(imdb)?.catalogId,
-    );
+  /// Binding payloads and keyword seeds belong to the Sources presentation bridge.
+  void _openSourceBinding(
+    StremioMeta item, {
+    bool keyword = false,
+    bool Function()? isCurrent,
+  }) {
+    bool current() =>
+        _catalogNavigationCurrent() && (isCurrent?.call() ?? true);
+    if (!current()) return;
     unawaited(
       ref
           .read(homeSourcesNavigationProvider)
-          .bind(
+          .bindCatalog(
             context,
-            selection: sel,
-            buildMeta: () => _metaFor(sel, catalogItem: show),
+            item: item,
+            progressId: _imdbOf(item),
+            keyword: keyword,
+            buildMeta: (selection) => _metaFor(selection, catalogItem: item),
             isTelevision: () => widget.isTelevision,
-            isCurrent: _catalogNavigationCurrent,
-            onReturned: _refreshBoundSources,
-          ),
-    );
-  }
-
-  /// Free-text keyword bind: push the sources screen seeded with a pack query
-  /// (series → `name complete`, movie → `name year`), where tapping a result
-  /// pins it as [show]'s bound source. The query is editable.
-  void _openKeywordBind(StremioMeta show) {
-    if (!_catalogNavigationCurrent()) return;
-    final imdb = _imdbOf(show);
-    if (imdb == null) {
-      _snack('No IMDb match to pin a source for "${show.name}".');
-      return;
-    }
-    final isSeries = show.type == 'series';
-    final seed = isSeries
-        ? '${show.name} complete'
-        : (show.year != null && show.year!.isNotEmpty
-              ? '${show.name} ${show.year}'
-              : show.name);
-    final sel = AdvancedSearchSelection(
-      imdbId: imdb,
-      isSeries: isSeries,
-      title: show.name,
-      year: show.year,
-      contentType: show.type,
-      posterUrl: show.poster,
-      stremioAddonId: show.sourceAddon?.id,
-      stremioAddonKey: CustomSeriesIdentity.isCustom(imdb)
-          ? show.sourceAddon?.sourceBindingKey
-          : null,
-      stremioCatalogId: CustomSeriesIdentity.parse(imdb)?.catalogId,
-    );
-    unawaited(
-      ref
-          .read(homeSourcesNavigationProvider)
-          .bind(
-            context,
-            selection: sel,
-            buildMeta: () => _metaFor(sel, catalogItem: show),
-            isTelevision: () => widget.isTelevision,
-            keywordSeed: seed,
-            isCurrent: _catalogNavigationCurrent,
+            isCurrent: current,
             onReturned: _refreshBoundSources,
           ),
     );

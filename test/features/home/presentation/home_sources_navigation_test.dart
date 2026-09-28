@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:debrify/features/home/presentation/home_sources_navigation.dart';
 import 'package:debrify/models/advanced_search_selection.dart';
+import 'package:debrify/models/custom_series_identity.dart';
+import 'package:debrify/models/stremio_addon.dart';
 import 'package:debrify/models/playback_meta.dart';
 import 'package:debrify/utils/tv_keys.dart';
 import 'package:flutter/material.dart';
@@ -124,6 +126,123 @@ class Harness {
 }
 
 void main() {
+  for (final scenario in [
+    (type: 'movie', year: '2024', keyword: false, custom: false, seed: null),
+    (
+      type: 'movie',
+      year: '2024',
+      keyword: true,
+      custom: false,
+      seed: 'Title 2024',
+    ),
+    (type: 'movie', year: '', keyword: true, custom: false, seed: 'Title'),
+    (
+      type: 'series',
+      year: '2024',
+      keyword: true,
+      custom: true,
+      seed: 'Title complete',
+    ),
+    (type: 'series', year: '', keyword: false, custom: true, seed: null),
+  ]) {
+    testWidgets(
+      'catalog binding preserves payload and lazy metadata: $scenario',
+      (tester) async {
+        final h = Harness();
+        await h.mount(tester);
+        final addon = StremioAddon(
+          id: 'addon',
+          name: 'Addon',
+          manifestUrl: 'https://fixture.invalid/manifest.json',
+          baseUrl: 'https://fixture.invalid',
+        );
+        final item = StremioMeta(
+          id: 'catalog-id',
+          name: 'Title',
+          type: scenario.type,
+          year: scenario.year,
+          poster: 'poster',
+          sourceAddon: addon,
+        );
+        final id = scenario.custom
+            ? CustomSeriesIdentity(addon.sourceBindingKey, item.id).id
+            : 'tt123';
+        AdvancedSearchSelection? metadataSelection;
+        final action = h.navigation.bindCatalog(
+          h.context,
+          item: item,
+          progressId: id,
+          keyword: scenario.keyword,
+          buildMeta: (selection) {
+            metadataSelection = selection;
+            return h.buildMeta();
+          },
+          isTelevision: () => true,
+          isCurrent: () => h.current,
+          onReturned: h.returned,
+        );
+        expect(h.events, isEmpty);
+        h.metadata = laterMeta;
+        await tester.pumpAndSettle();
+        final selected = h.receivedSelection!;
+        expect(metadataSelection, same(selected));
+        expect(selected.imdbId, id);
+        expect(selected.isSeries, scenario.type == 'series');
+        expect(selected.title, 'Title');
+        expect(selected.year, scenario.year);
+        expect(selected.posterUrl, 'poster');
+        expect(selected.contentType, scenario.type);
+        expect(selected.season, isNull);
+        expect(selected.episode, isNull);
+        expect(selected.stremioAddonId, addon.id);
+        expect(
+          selected.stremioAddonKey,
+          scenario.custom ? addon.sourceBindingKey : null,
+        );
+        expect(selected.stremioCatalogId, scenario.custom ? item.id : null);
+        expect(h.receivedMeta, same(laterMeta));
+        expect(h.keyword, scenario.seed);
+        expect(h.bindMode, isTrue);
+        expect(h.forcePlay, isFalse);
+        h.navigator.currentState!.pop();
+        await tester.pumpAndSettle();
+        expect(h.events.last, 'refresh');
+        h.refresh.complete();
+        await action;
+      },
+    );
+  }
+  testWidgets(
+    'catalog binding rejects retired and missing identities without metadata reads',
+    (tester) async {
+      final h = Harness();
+      await h.mount(tester);
+      Future<void> open() => h.navigation.bindCatalog(
+        h.context,
+        item: const StremioMeta(id: '', name: 'Title', type: 'movie'),
+        progressId: null,
+        keyword: false,
+        buildMeta: (_) => h.buildMeta(),
+        isTelevision: () => true,
+        isCurrent: () => h.current,
+        onReturned: h.returned,
+      );
+      h.current = false;
+      await open();
+      await tester.pump();
+      expect(find.byType(SnackBar), findsNothing);
+      h.current = true;
+      await open();
+      await tester.pump();
+      expect(
+        find.text('No IMDb match to pin a source for "Title".'),
+        findsOneWidget,
+      );
+      expect(h.events, isEmpty);
+      expect(h.navigator.currentState!.canPop(), isFalse);
+    },
+  );
+
   for (final mode in ['browse', 'play', 'bind', 'keyword']) {
     testWidgets(
       '$mode preserves arguments, metadata timing and awaited return',

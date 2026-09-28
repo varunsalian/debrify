@@ -6,6 +6,38 @@ workflow checkpoints, reuse valid evidence, and run broader checks at integratio
 gates. Earlier entries retain their original slice history. No changes are pushed
 to the public repository.
 
+## Batch A checkpoint: detail source binding handoff — 2026-09-28
+
+The existing `HomeSourcesNavigation` now owns the shared whole-title binding
+payload, torrent/keyword dispatch, missing-identity message and editable keyword
+seed. Both former root implementations use one thin composition callback. This
+reuses the existing Riverpod navigation dependency; no new provider, state owner
+or interface was introduced. The bridge is 172 lines and the root shrinks from
+14,525 to 14,486 lines, still under its recorded temporary exception.
+
+Detail menu source editing and the merged page's source button now propagate the
+exact detail-route guard through pending repository reads, the editor, cloud/local
+selection callbacks and binding-route return. A removed detail cannot open a late
+source picker or publish its return effects. The episode screen retains its
+intentional post-pop callback contract and existing Home/profile guard. Source
+identity, custom-addon/catalog keys, metadata/TV evaluation timing, no-episode
+pack binding, three-second error message and keyword seeds remain unchanged.
+Transitive Sources writes/native operations remain batch B's responsibility.
+
+Validation: **83 affected tests pass**, including ten new checks: five complete
+binding payload/seed scenarios, retired/missing identity dispatch, and four actual
+Home detail source-read scenarios (legacy/merged × active/closed). Existing
+navigation/real Sources destinations, source editor/repository, detail-action and
+tracker-menu tests pass. The first command had one incorrect repository-test path;
+the corrected complete group passes. Analyzer identities remain **848** with no
+additions or removals; **468** migrated files pass architecture checks and the diff
+check passes. Only changed root members were formatted. Receipts:
+`.git/refactor-evidence/phase5/source-binding-final-tests.txt` and
+`source-binding-final-analyze.txt`. The preceding full-suite gate belongs to
+`f8e6697e`; this presentation-only workflow uses the planned affected-test gate.
+Remaining batch A work is tracker quick-play/detail composition and mutation/reset
+write boundaries; batches B–E and device/performance acceptance remain open.
+
 ## Batch A checkpoint: Stremio TV catalog picker — 2026-09-28
 
 The reachable Add to Stremio TV workflow now lives under `features/stremio_tv`:

@@ -131,7 +131,7 @@ until the batch ends. This replaces per-helper checkpoints, not incremental safe
 
 | Batch | Current status |
 | --- | --- |
-| A | In progress. Resume/cache, history removal, source editing, catalog play, tracker-menu continuation and Stremio TV picker boundaries have focused evidence. Remaining workflows are listed below. The picker full-suite gate completed with 9,889 passes and unchanged baseline failures/skips; see the evidence log. |
+| A | In progress. Resume/cache, history removal, source editing, catalog play, tracker-menu continuation, Stremio TV picker and detail source-binding handoff have focused evidence. Remaining workflows are listed below. The picker full-suite gate completed with 9,889 passes and unchanged baseline failures/skips; see the evidence log. |
 | B | Pending remaining boundaries; substantial Sources extraction already complete |
 | C | Pending remaining boundaries; substantial layout/search extraction already complete |
 | D | Pending remaining boundaries and facade reduction |
@@ -148,10 +148,9 @@ or provider per entry point. Record destinations and evidence as each row closes
 | --- | --- |
 | Detail mutations: `_handleDetailQuickAction`, `_handleDetailSimklQuickAction`, `_handleDetailMdblistQuickAction`, including rating dialogs and clear-progress | Shared reset confirmation/loader ownership is reviewed (52 affected tests), with originating profile captured before confirmation and exact loader cleanup. Rating/list/collection dialog returns and exact Home detail-route guards are now reviewed (67 affected tests pass), with originating scope retained for accepted work. Finish mutation data boundaries and the reset service's transitive write/deletion audit; preserve the reviewed refresh ordering. |
 | Catalog action composition: `_onCatalogPlay`, tracker quick-play entries and `_openItem` detail callbacks | Exact detail dismissal/return ownership is reviewed through `HomeDetailRoute`; Resume-label policy and local movie reads now use the injected catalog resolver (122 affected tests pass; its cohesive 513-line policy reviewed). Catalog Play/Sources orchestration now uses the 242-line `HomeCatalogPlayAction` with loader cancellation, promised episode, exact launch arguments and detail-route retirement reviewed (53 affected tests pass). `HomeCatalogPlaybackReaders.prepareMovieRewatch`'s reachable Simkl write is now reviewed (124 affected tests pass), including credential barriers, timeout retirement and accepted-response cache ownership. Finish remaining tracker quick-play preparation and `_openItem` callback boundaries. |
-| Remaining detail dispatch: `_addToStremioTvFromDetail` and source/bind callbacks | Stremio TV picker closed: production uses its feature view/editor and Riverpod factory, originating-profile guarded persistence, exact modal cleanup and guarded detail return (122 affected tests pass; adopted 780-line modal responsibility reviewed). Finish source/bind callback handoff; keep transitive Sources binding verification in B without duplicating that work. |
 
-Resume/cache, hold/menu, accepted local deletion, source editor and detail-dispatch
-checkpoints already have evidence; reopen them only for a discovered defect or an
+Resume/cache, hold/menu, accepted local deletion, source editor, Stremio TV picker
+and detail/source-binding dispatch checkpoints already have evidence; reopen them only for a discovered defect or an
 invalidated contract. Shared resource/snapshot teardown remains D, and final
 platform/performance acceptance remains E. Capture relevant device/performance
 baselines before the loading/layout/preview changes that would invalidate them.

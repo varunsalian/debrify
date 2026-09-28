@@ -5,6 +5,9 @@ import 'dart:io';
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:debrify/features/home/application/home_catalog_origin_dependencies.dart';
+import 'package:debrify/features/home/application/home_source_editing_dependencies.dart';
+import 'package:debrify/features/home/data/home_source_editing_repository.dart';
+import 'package:debrify/models/series_source.dart';
 import 'package:debrify/features/home/application/home_local_history_removal_dependencies.dart';
 import 'package:debrify/features/home/data/home_catalog_origin_repository.dart';
 import 'package:debrify/features/home/models/home_catalog_origin.dart';
@@ -47,6 +50,28 @@ class ReadyOrigin extends HomeCatalogOriginRepository {
   }
 }
 
+class WaitingDetailSources extends Fake implements HomeSourceEditingRepository {
+  final release = Completer<List<SeriesSource>?>();
+  bool Function()? current;
+  int providerReads = 0;
+  @override
+  Future<List<SeriesSource>?> load(
+    String id, {
+    required bool Function() isCurrent,
+  }) {
+    current = isCurrent;
+    return release.future;
+  }
+
+  @override
+  Future<HomeSourceProviders?> providers({
+    required bool Function() isCurrent,
+  }) async {
+    providerReads++;
+    return null;
+  }
+}
+
 void main() {
   late Directory images;
   setUpAll(() async {
@@ -61,6 +86,59 @@ void main() {
   });
   tearDownAll(() => images.delete(recursive: true));
   for (final merged in [false, true]) {
+    for (final retire in [false, true]) {
+      testWidgets(
+        'real source editor retires with detail: merged=$merged retired=$retire',
+        (tester) async {
+          final repository = WaitingDetailSources();
+          final home = HomeFixture(tester);
+          await home.mount(
+            initialPreferences: {'merged_series_page_enabled': merged},
+            wrap: (child) => ProviderScope(
+              overrides: [
+                homeCatalogOriginRepositoryProvider.overrideWith(
+                  (ref, owner) => ReadyOrigin(),
+                ),
+                homeSourceEditingRepositoryProvider.overrideWith(
+                  (ref, owner) => repository,
+                ),
+              ],
+              child: child,
+            ),
+          );
+          await home.settle();
+          await home.focusFast();
+          await home.key(LogicalKeyboardKey.enter);
+          await home.settle();
+          await home.drive(() {
+            if (merged) {
+              final detail = tester.widget<MergedDetailScreen>(
+                find.byType(MergedDetailScreen),
+              );
+              unawaited(detail.onSelectSource!(detail.item));
+            } else {
+              tester
+                  .widget<CatalogItemDetailScreen>(
+                    find.byType(CatalogItemDetailScreen),
+                  )
+                  .onTraktAction!(TraktItemMenuAction.selectSource);
+            }
+          });
+          expect(repository.current, isNotNull);
+          expect(repository.current!(), isTrue);
+          if (retire) {
+            home.navigator.currentState!.pop();
+            await home.settle();
+          }
+          expect(repository.current!(), !retire);
+          await home.drive(() => repository.release.complete([]));
+          await home.settle();
+          expect(repository.providerReads, retire ? 0 : 1);
+          await home.dispose();
+        },
+      );
+    }
+
     for (final retire in [false, true]) {
       testWidgets(
         'real detail Play reaches catalog player: merged=$merged retired=$retire',
