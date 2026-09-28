@@ -1,3 +1,4 @@
+import '../features/home/application/home_catalog_playback_resolver_dependencies.dart';
 import '../models/simkl_continue_watching_item.dart';
 import '../features/home/presentation/home_detail_action_bridge.dart';
 import '../features/home/presentation/home_source_editor.dart';
@@ -237,7 +238,6 @@ import '../services/playlist_player_service.dart';
 import '../services/profiles/profile_session_memory.dart';
 import '../services/stremio_iptv_service.dart';
 import '../services/stremio_service.dart';
-import '../services/next_episode_service.dart';
 import '../services/storage_service.dart';
 import '../services/tv_hero_artwork_quality_controller.dart';
 import '../services/tvos_top_shelf_service.dart';
@@ -773,6 +773,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   // this view. Search detours retain the subscription and its cursor.
   late final ProviderSubscription<HomeDefaultView> _homeDefaultViewSubscription;
   HomeDefaultView get _homeDefaultView => _homeDefaultViewSubscription.read();
+  late final HomeCatalogSession _homeCatalogSession;
   late final HomeCatalogController _homeCatalogController;
   late final ProviderSubscription<HomeCatalogState> _homeCatalogSubscription;
   List<HomeCatalogReference> get _boardRefs =>
@@ -1750,6 +1751,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       initiallyRefreshing: !widget.searchMode && !widget.discoverMode &&
           !(restoredHome && keywordSnapshot == null),
     );
+    _homeCatalogSession = homeSession;
     _homeCatalogSubscription = ref.listenManual(
       homeCatalogProvider(homeSession),
       (previous, next) {},
@@ -10873,365 +10875,38 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       // right addon id into meta.addonId (addon-stream resume/next), instead of a
       // stale one left over from a previously-browsed series.
       _activeAddonId = addon.id;
-      // Rewatch is not resume reconciliation: even a cached S1E1 selection
-      // carries stale percentages. Never consult tracker/CW caches here.
-      if (startFromBeginning) {
-        await launch(AdvancedSearchSelection(
-          imdbId: item.progressId ?? item.id,
-          isSeries: item.type == 'series', title: item.name, year: item.year,
-          season: item.type == 'series' ? 1 : null,
-          episode: item.type == 'series' ? 1 : null,
-          contentType: item.type, posterUrl: item.poster,
-          traktSource: isTraktSource, mdblistSource: isMdblistSource,
-          traktProgressPercent: 0, simklProgressPercent: 0, mdblistProgressPercent: 0,
-        ));
-        return;
-      }
-
-      if (isMdblistSource &&
-          trackingPolicy.progressFrom(TrackingSource.mdblist)) {
-        final owned = await _mdblistResumeItemFor(item);
-        if (!mounted || cancelled) return;
-        if (owned != null) {
-          // This fast path skips the reconciler entirely, so it needs its own
-          // promise check — otherwise an in-page watched mutation moves the
-          // label while MDBList still reports the previous continue-watching
-          // coordinate, and Resume replays the episode the label moved past.
-          final p = promisedTarget;
-          final stale =
-              p != null &&
-              (owned.selection.season != p.season ||
-                  owned.selection.episode != p.episode);
-          if (!stale) {
-            await launch(owned.selection);
-            return;
-          }
-          debugPrint(
-            '[SeriesResume] play-mdblist-fastpath-skipped title="${item.name}" '
-            'owned=S${owned.selection.season}E${owned.selection.episode} '
-            'promised=S${p.season}E${p.episode}',
-          );
-          // Fall through to the reconciled/promised path below.
-        }
-      }
-
-      // Series on the detail Resume flow (or Trakt-sourced): the SAME
-      // reconciled answer the label used (cached ~45s), so the pill and the
-      // playback can never land on different episodes — recency across
-      // trackers + local, watched-advance; see _reconcileSeriesResume.
-      if (item.type == 'series' && (preferTraktResume || isTraktSource)) {
-        final r = await _reconcileSeriesResume(
-          item,
-          isTraktSource: isTraktSource,
-          preferBuiltIn: addon.id == NativeSeriesMetadataService.addon.id,
-          catalogItem: item.withSourceAddon(addon),
-        );
-        if (!mounted || cancelled || r == null) return;
-        // The caller's button already promised an episode the reconciler can't
-        // see. Honor it: the label is the promise the user acted on, and a
-        // silent disagreement here replays an episode they already watched.
-        final promised = promisedTarget;
-        final overridden =
-            promised != null &&
-            (promised.season != r.season || promised.episode != r.episode);
-        if (overridden) {
-          debugPrint(
-            '[SeriesResume] play-promise-override title="${item.name}" '
-            'reconciled=S${r.season}E${r.episode}/started=${r.started} '
-            'promised=S${promised.season}E${promised.episode}',
-          );
-        }
-        // Winner's original selection (Trakt or MDBList) — launches with its
-        // own progress percent intact. Unusable once overridden: it points at
-        // the older coordinate, so it would re-open the episode we just moved
-        // past, carrying that episode's resume percent with it.
-        if (!overridden && r.selection != null) {
-          await launch(r.selection!);
-          return;
-        }
-        final rTtId = item.imdbId ?? (item.id.startsWith('tt') ? item.id : '');
-        final rTracker = (r.sourcePrio ?? 3) <= 2;
-        // A promise IS started-evidence — it is what made the button read
-        // "Resume". Without this, the empty-candidates fallback (started=false)
-        // drops through to the S01E01 tail below. Keyed on the promise itself
-        // rather than on [overridden]: when the promised coordinate happens to
-        // MATCH the reconciler's fallback, there is no override, yet the button
-        // still said "Resume" and must not fall through.
-        final started = r.started || (promised?.started ?? false);
-        if (started && (rTtId.isNotEmpty || skipEpisodeFallback || rTracker)) {
-          await launch(
-            AdvancedSearchSelection(
-              imdbId: rTtId.isNotEmpty
-                  ? rTtId
-                  : (item.progressId ?? item.id),
-              isSeries: true,
-              title: item.name,
-              year: item.year,
-              season: overridden ? promised.season : r.season,
-              episode: overridden ? promised.episode : r.episode,
-              contentType: item.type,
-              posterUrl: item.poster,
-              // Source flags from the WINNING provider (advanced or not) so
-              // player scrobbling attribution follows the tracker that owned
-              // the resume — not from how the page happened to be opened.
-              traktSource: isTraktSource || r.sourcePrio == 0,
-              // Belongs to the reconciled coordinate — carrying it onto a
-              // different episode would seek the new one to a stale position.
-              simklProgressPercent: overridden ? null : r.simklProgress,
-              simklSource: r.sourcePrio == 1,
-              // `isMdblistSource ||` mirrors the traktSource term above: when
-              // the MDBList fast path is skipped as stale, the reconciler's
-              // winner is usually the local candidate, and without this the
-              // play would silently stop attributing to MDBList.
-              mdblistSource: isMdblistSource || r.sourcePrio == 2,
-            ),
-          );
-          return;
-        }
-        // Not started (or no usable id): fall through to the shared tail —
-        // episode-picker fallback for id-less shows, default S01E01 otherwise.
-      }
-
-      // Trakt-sourced MOVIE keeps its cached-CW fast path (series resolve
-      // through the reconciler above).
-      if (item.type != 'series' &&
-          isTraktSource &&
-          trackingPolicy.progressFrom(TrackingSource.trakt)) {
-        final cw = _traktByImdb[item.progressId] ?? _traktByImdb[item.id];
-        if (cw != null) {
-          final sel = await TraktContinueWatchingService.instance
-              .selectionForItem(cw);
-          if (!mounted || cancelled) return;
-          if (sel != null) {
-            await launch(sel);
-            return;
-          }
-        }
-      }
-
-      if (item.type != 'series') {
-        // Cross-device movie resume: on the detail-page Play/Resume flow
-        // (preferTraktResume, or a tracker-sourced open), pull the movie's paused
-        // tracker position and carry it on the selection. The player's resume
-        // reconciliation then seeks the furthest of trakt%/simkl%/local — so a
-        // movie paused on another device resumes here even when opened from a
-        // plain catalog result (previously movies started at 00:00). Row
-        // quick-play (no preferTraktResume) keeps its local-only resume.
-        double? traktPct;
-        double? simklPct;
-        double? mdblistPct;
-        if (preferTraktResume || isTraktSource) {
-          // Concurrent and individually time-boxed: the Play press must never
-          // stall behind a degraded tracker API (sequential awaits here could
-          // previously block playback for the full HTTP timeouts). On timeout we
-          // launch with local-only resume — the reconciliation in the player
-          // degrades gracefully to the local position.
-          final lookups = await Future.wait<double?>([
-            trackingPolicy.progressFrom(TrackingSource.trakt) &&
-                    (_isTraktAuthenticated || isTraktSource)
-                ? _traktMoviePercent(
-                    item,
-                  ).timeout(const Duration(seconds: 4), onTimeout: () => null)
-                : Future<double?>.value(null),
-            trackingPolicy.progressFrom(TrackingSource.simkl) &&
-                    _isSimklAuthenticated
-                ? _simklMoviePercent(
-                    item,
-                  ).timeout(const Duration(seconds: 4), onTimeout: () => null)
-                : Future<double?>.value(null),
-            trackingPolicy.progressFrom(TrackingSource.mdblist) &&
-                    _isMdblistAuthenticated
-                ? _mdblistMoviePercent(
-                    item,
-                  ).timeout(const Duration(seconds: 4), onTimeout: () => null)
-                : Future<double?>.value(null),
-          ]);
-          if (!mounted || cancelled) return;
-          traktPct = lookups[0];
-          simklPct = lookups[1];
-          mdblistPct = lookups[2];
-        }
-        // Rewatch (Simkl): a movie already marked `completed` on Simkl has no
-        // resume session, and Simkl won't create one on replay — so it can never
-        // re-enter Continue Watching. On the detail Play/Resume flow (the
-        // "Rewatch" button surface, preferTraktResume), un-mark it watched first
-        // so the upcoming catalog scrobble creates a fresh resume session; the
-        // ≥80% stop re-marks it completed when the rewatch finishes. Gated on the
-        // sync setting + auth so we never un-complete a movie that won't actually
-        // be re-tracked. Row quick-play (no preferTraktResume) is left untouched.
-        // WRITE-side action: gated on auth + the Scrobble master (below), NOT
-        // the Progress source — a This-device user scrobbling to Simkl still
-        // needs the replay session created.
-        if (preferTraktResume && _isSimklAuthenticated) {
-          // Same id resolution the detail screen's status loader uses (_imdbOf),
-          // so the "Rewatch" label and this flip never disagree on the title.
-          final imdb = _imdbOf(item);
-          final scrobblesSimkl = trackingPolicy.scrobbles(TrackingSource.simkl);
-          if (!mounted || cancelled) return;
-          if (imdb != null && scrobblesSimkl) {
-            // Time-boxed like the tracker-percent lookups above: a degraded Simkl
-            // API must never stall the Play press. On timeout we just skip the
-            // flip — worst case the rewatch doesn't surface in Continue Watching,
-            // exactly today's behaviour.
-            final status = await SimklService.instance
-                .fetchTitleStatus(imdb, contentType: item.type)
-                .timeout(const Duration(seconds: 4), onTimeout: () => null);
-            if (!mounted || cancelled) return;
-            if (status?.currentStatus == 'completed') {
-              await SimklService.instance
-                  .markUnwatched(imdb, 'movie')
-                  .timeout(const Duration(seconds: 4), onTimeout: () => false);
-              if (!mounted || cancelled) return;
-            }
-          }
-        }
-        // Keep the detail page underneath — the cinematic loading overlay covers
-        // it, and after playback Back returns to the detail (like Home).
-        await launch(
-          homeCatalogMovieSelection(
-            item,
-            isTraktSource: isTraktSource,
-            isMdblistSource: isMdblistSource,
-            traktProgressPercent: traktPct,
-            simklProgressPercent: simklPct,
-            mdblistProgressPercent: mdblistPct,
-          ),
-        );
-        return;
-      }
-
-      final ttId = item.imdbId ?? (item.id.startsWith('tt') ? item.id : '');
-      // Without an IMDb id we can't search torrents for a specific episode, so
-      // fall back to the manual episode picker — except from the merged page
-      // (episodes are inline there), where we play via the raw id's addon stream.
-      if (ttId.isEmpty && !MediaIdentity.isNative(item.id) && !skipEpisodeFallback) {
-        if (!cancelled) {
-          _openEpisodes(
+      final target = await ref
+          .read(homeCatalogPlaybackResolverProvider(_homeCatalogSession))
+          .resolve(
             item,
             addon,
+            trackingPolicy: trackingPolicy,
+            availability: () => (
+              trakt: _isTraktAuthenticated,
+              simkl: _isSimklAuthenticated,
+              mdblist: _isMdblistAuthenticated,
+            ),
+            cachedTrakt: () =>
+                _traktByImdb[item.progressId] ?? _traktByImdb[item.id],
+            isCurrent: () => current() && !cancelled,
             isTraktSource: isTraktSource,
             isMdblistSource: isMdblistSource,
+            startFromBeginning: startFromBeginning,
+            skipEpisodeFallback: skipEpisodeFallback,
+            preferTraktResume: preferTraktResume,
+            promisedTarget: promisedTarget,
           );
-        }
-        return;
-      }
-      // Play id: the `tt…` id when present (torrent-resolvable); otherwise the raw
-      // catalog id, which playFromSelection routes to the addon /stream endpoint.
-      final playId = ttId.isNotEmpty ? ttId : (item.progressId ?? item.id);
-
-      // Resolve where to resume, mirroring EpisodesScreen's landing logic:
-      // last-played episode for this show (by imdbId, then by title), else S01E01.
-      int? season;
-      int? episode;
-      final byId = trackingPolicy.progressFrom(TrackingSource.local)
-          ? await StorageService.getLastPlayedEpisodeByImdbId(playId)
-          : null;
-      season = byId?['season'] as int?;
-      episode = byId?['episode'] as int?;
-      final lastFinished = byId?['finished'] == true;
-      if (!MediaIdentity.isNative(playId) && !CustomSeriesIdentity.isCustom(playId) && (season == null || episode == null)) {
-        final byTitle = trackingPolicy.progressFrom(TrackingSource.local)
-            ? await StorageService.getLastPlayedEpisode(seriesTitle: item.name)
-            : null;
-        season ??= byTitle?['season'] as int?;
-        episode ??= byTitle?['episode'] as int?;
-      }
-      // No local history — last resort: Simkl's next-to-watch, mirroring the
-      // label (_resolveResumeInfo) so the two agree. Only on the detail Resume
-      // flow, and TIME-BOXED (4s) like the movie branch so a slow Simkl API never
-      // freezes the Play press — on timeout it falls through to S01E01.
-      if ((season == null || episode == null) &&
-          _isSimklAuthenticated &&
-          trackingPolicy.progressFrom(TrackingSource.simkl) &&
-          preferTraktResume) {
-        final next = await _simklNextToWatchFor(
+      if (!current() || cancelled || target == null) return;
+      if (target.openEpisodes) {
+        _openEpisodes(
           item,
-        ).timeout(const Duration(seconds: 4), onTimeout: () => null);
-        if (!mounted || cancelled) return;
-        if (next != null) {
-          season = next.season;
-          episode = next.episode;
-        }
-      }
-      if ((season == null || episode == null) &&
-          _isMdblistAuthenticated &&
-          trackingPolicy.progressFrom(TrackingSource.mdblist) &&
-          preferTraktResume) {
-        final next = await _mdblistResumeItemFor(
-          item,
-        ).timeout(const Duration(seconds: 4), onTimeout: () => null);
-        if (!mounted || cancelled) return;
-        if (next != null) {
-          season = next.selection.season;
-          episode = next.selection.episode;
-        }
-      }
-      season ??= 1;
-      episode ??= 1;
-      // If the last-played episode is finished, resume the NEXT one instead of
-      // re-opening it — parity with the deprecated home's continue-watching
-      // quick-play (only the local, non-Trakt path; Trakt resolves its own next).
-      if (lastFinished) {
-        final ({int season, int episode})? next;
-        final catalogVideoId = await _stremio.episodeVideoIdForLaunch(
-          addon: addon,
-          imdbId: playId,
-          catalogId: item.id,
-          season: season,
-          episode: episode,
+          addon,
+          isTraktSource: isTraktSource,
+          isMdblistSource: isMdblistSource,
         );
-        final usesCustomCatalogIdentity =
-            catalogVideoId != null && catalogVideoId.isNotEmpty
-                ? !StremioService.isCanonicalEpisodeId(
-                    playId, catalogVideoId, season, episode,
-                  )
-                : !StremioService.isCanonicalCatalogAlias(item.id, playId);
-        if (playId.startsWith('tt') && !usesCustomCatalogIdentity) {
-          final resolved = await NextEpisodeService.findNextEpisode(
-            playId,
-            season,
-            episode,
-            preferBuiltIn: addon.id == NativeSeriesMetadataService.addon.id,
-          catalogItem: item.withSourceAddon(addon),
-          );
-          next = resolved == null
-              ? null
-              : (season: resolved.season, episode: resolved.episode);
-        } else {
-          final resolved = await _stremio.resolveAdjacentSeriesEpisode(
-            addonKey: addon.sourceBindingKey,
-            addonId: addon.id,
-            catalogId: item.id,
-            season: season,
-            episode: episode,
-            direction: 1,
-          );
-          next = resolved == null
-              ? null
-              : (season: resolved.season, episode: resolved.episode);
-        }
-        if (!mounted || cancelled) return;
-        if (next != null) {
-          season = next.season;
-          episode = next.episode;
-        }
+      } else {
+        await launch(target.selection!);
       }
-      if (!mounted || cancelled) return;
-
-      await launch(
-        AdvancedSearchSelection(
-          imdbId: playId,
-          isSeries: true,
-          title: item.name,
-          year: item.year,
-          season: season,
-          episode: episode,
-          contentType: item.type,
-          posterUrl: item.poster,
-          traktSource: isTraktSource,
-          mdblistSource: isMdblistSource,
-        ),
-      );
     } finally {
       resolving?.dismiss();
     }
@@ -11273,13 +10948,6 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       cached: _traktByImdb[item.progressId] ?? _traktByImdb[item.id],
       isCurrent: () => mounted,
     );
-  }
-
-  Future<({int season, int episode})?> _simklNextToWatchFor(
-    StremioMeta item,
-  ) async {
-    if (!mounted) return null;
-    return _seriesResumeRepository.simklNext(item, isCurrent: () => mounted);
   }
 
   Future<MdblistContinueWatchingItem?> _mdblistResumeItemFor(

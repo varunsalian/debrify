@@ -6,6 +6,35 @@ workflow checkpoints, reuse valid evidence, and run broader checks at integratio
 gates. Earlier entries retain their original slice history. No changes are pushed
 to the public repository.
 
+## Batch A checkpoint: catalog playback target resolution — 2026-09-28
+
+`HomeCatalogPlaybackResolver` (395 lines) now owns the complete catalog target
+selection workflow: rewatch, tracker-owned selections, promised episode overrides,
+concurrent movie positions, local history and next-episode/manual-picker fallback.
+Its captured-profile readers own legacy storage/metadata calls. A small Riverpod
+factory borrows the existing view session's resume resolver and tracker cache, so
+the detail label and Play retain one answer. The parent retains loader, episode
+picker and player/Sources dispatch; 332 net lines leave the screen (14,685 remain).
+No new mutable cache, persistence format or retry policy is introduced.
+
+Validation: 121 affected tests pass, including 16 new resolver/dependency tests.
+Coverage includes rewatch without reader calls, exact selection identity, promised
+coordinates, concurrent tracker reads and four-second timeout, native/custom IDs,
+partial local coordinates, finished-episode advancement, cancellation, actual
+profile-scoped history reads and shared versus independent view caches. The
+relocated rewatch source guard retains both production callers and now accompanies
+behavior coverage. The final resolver/dependency/rewatch rerun passes all 19 tests. Analyzer identities exactly match the previous 848 diagnostics;
+456 migrated files pass architecture checks. Reviewed production wiring, removal
+of replaced branches and borrowed cache lifetime. Formatting and diff checks pass.
+
+Receipts: `.git/refactor-evidence/phase5/catalog-target-tests.txt`,
+`catalog-target-analyze.txt` and `catalog-target-final.txt`. Full-suite validation
+remains at the planned integration gate; the last full checkpoint is
+`full-local-removal.*`. These host checks do not certify transitive Simkl writes,
+native playback, remaining action composition or final facade acceptance. The
+plan now lists the remaining A workflows explicitly and removes the old per-slice
+verification instruction that conflicted with workflow checkpoints.
+
 ## Batch A checkpoint: detail tracker actions and quick-play — 2026-09-28
 
 The three detail action handlers now share a 102-line presentation bridge for

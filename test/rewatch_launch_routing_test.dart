@@ -62,22 +62,25 @@ void main() {
     }
   });
   test('rewatch exits before cached tracker reconciliation, even for S1E1', () {
-    final source = File('lib/screens/search_screen.dart').readAsStringSync();
-    final start = source.indexOf('Future<void> _onCatalogPlay(');
+    final screen = File('lib/screens/search_screen.dart').readAsStringSync();
+    final source = File(
+      'lib/features/home/data/home_catalog_playback_resolver.dart',
+    ).readAsStringSync();
+    final start = source.indexOf('Future<HomeCatalogPlaybackTarget?> resolve(');
     final branch = source.indexOf('if (startFromBeginning)', start);
-    final end = source.indexOf('\n      }', branch);
+    final end = source.indexOf('\n    }', branch);
     final launch = source.substring(branch, end);
-    expect(launch, contains('await launch(AdvancedSearchSelection('));
+    expect(launch, contains('return HomeCatalogPlaybackTarget.play('));
     expect(launch, contains("season: item.type == 'series' ? 1 : null"));
     expect(launch, contains("episode: item.type == 'series' ? 1 : null"));
     for (final tracker in ['trakt', 'simkl', 'mdblist']) {
       expect(launch, contains('${tracker}ProgressPercent: 0'));
     }
-    expect(launch, contains('return;'));
+    expect(launch, contains('AdvancedSearchSelection('));
     expect(
       branch,
-      lessThan(source.indexOf('await _reconcileSeriesResume(', start)),
+      lessThan(source.indexOf('await seriesResume.resolve(', start)),
     );
-    expect(RegExp('startFromBeginning: true').allMatches(source).length, 2);
+    expect(RegExp('startFromBeginning: true').allMatches(screen).length, 2);
   });
 }

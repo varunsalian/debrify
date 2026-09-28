@@ -128,11 +128,31 @@ until the batch ends. This replaces per-helper checkpoints, not incremental safe
 
 | Batch | Current status |
 | --- | --- |
-| A | In progress; resume resolver ownership/capacity and Continue Watching hold/menu workflow implemented and reviewed (111 and 27 affected tests pass); local history removal implemented with scoped writes/lifecycle drain (31 affected tests pass); source-edit/add workflow implemented and reviewed (36 affected tests pass); detail tracker dispatch/refresh and quick-play wiring reviewed (84 affected tests pass); remaining tracker write/removal and playback orchestration audits pending |
+| A | In progress; resume resolver ownership/capacity and Continue Watching hold/menu workflow implemented and reviewed (111 and 27 affected tests pass); local history removal implemented with scoped writes/lifecycle drain (31 affected tests pass); source-edit/add workflow implemented and reviewed (36 affected tests pass); detail tracker dispatch/refresh and quick-play wiring reviewed (84 affected tests pass); catalog playback target resolution reviewed (121 affected tests pass); remaining action audit is enumerated below |
 | B | Pending remaining boundaries; substantial Sources extraction already complete |
 | C | Pending remaining boundaries; substantial layout/search extraction already complete |
 | D | Pending remaining boundaries and facade reduction |
 | E | Pending final acceptance |
+
+### Batch A remaining action checklist
+
+Close these reachable workflows before calling A complete. Reuse their existing
+owners and fixtures; these are workflow boundaries, not requests for one new class
+or provider per entry point. Record destinations and evidence as each row closes.
+
+| Remaining workflow / production entries | Required closing evidence |
+| --- | --- |
+| Tracker removal: `_removeFromTraktContinueWatching`, `_removeTraktCwItem`, `_removeSimklCwItem`, `_removeMdblistCwItem` | Captured account/profile through accepted operations; retirement prevents follow-up writes, navigation and refresh into another session; retain each provider's removal semantics and failure feedback. |
+| IPTV history removal: `_removeIptvCwItem` | Injected persistence boundary; movie versus whole-series deletion, actual originating-profile writes, retirement and history/sync cleanup covered. |
+| Detail mutations: `_handleDetailQuickAction`, `_handleDetailSimklQuickAction`, `_handleDetailMdblistQuickAction`, including rating dialogs and clear-progress | Audit only actions reachable through these handlers; guarded dialog returns, credential/profile ownership and actual writes; preserve refresh ordering already covered by the dispatch bridge. |
+| Catalog action composition: `_onCatalogPlay`, tracker quick-play entries and `_openItem` detail callbacks | Finish UI/data separation around the reviewed target resolver and existing player/Sources bridges; preserve loader cancellation, promised episode, exact launch arguments and retirement across metadata/dialog awaits. Include `HomeCatalogPlaybackReaders.prepareMovieRewatch`'s reachable Simkl write. |
+| Remaining detail dispatch: `_addToStremioTvFromDetail` and source/bind callbacks | Explicit presentation owner, guarded modal return and dependency handoff; keep transitive Sources binding verification in B without duplicating that work. |
+
+Resume/cache, hold/menu, accepted local deletion, source editor and detail-dispatch
+checkpoints already have evidence; reopen them only for a discovered defect or an
+invalidated contract. Shared resource/snapshot teardown remains D, and final
+platform/performance acceptance remains E. Capture relevant device/performance
+baselines before the loading/layout/preview changes that would invalidate them.
 
 ## Starting point
 
@@ -5866,10 +5886,12 @@ Source-text guards also exist in `home_expanded_card_settings_test.dart`,
 When relocating guarded behavior, update its location or replace the guard with
 equivalent executable coverage. Do not erase an assertion just because a filename changed.
 
-For every slice: format changed Dart files, run `flutter analyze`, run the affected
-existing/new tests, inspect the diff and line counts, and record results. Run the
-full-suite helper at baseline, major integrations, and completion rather than after
-every leaf extraction. Never broaden accepted failures to hide a regression.
+At each completed workflow checkpoint: format changed code, run `flutter analyze`,
+run the affected existing/new tests, inspect the diff and line counts, and record
+results. Use focused checks during implementation. Full-suite runs follow the
+revised A+B, C+D and final gates above, with earlier runs for broad shared changes
+or unexplained failures; do not repeat these gates for every helper extraction.
+Never broaden accepted failures to hide a regression.
 Run the scoped architecture check once introduced. Compare analyzer rule/symbol/
 message identities so moved line numbers are not mistaken for new issues. Preserve
 test collection and assertions; explicitly map renamed/replaced tests to equivalent
