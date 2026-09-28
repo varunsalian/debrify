@@ -106,8 +106,12 @@ void main() {
       );
       expect(
         launch,
-        contains(
-          '_lazySourceCommitter(meta, preferredProvider: resolverProvider)',
+        matches(
+          RegExp(
+            r'_lazySourceCommitter\(\s*meta,\s*'
+            r'preferredProvider:\s*resolverProvider,\s*'
+            r'sourceBindings:\s*sourceBindings,\s*\)',
+          ),
         ),
       );
       expect(

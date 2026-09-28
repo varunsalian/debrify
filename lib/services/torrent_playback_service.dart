@@ -1,3 +1,6 @@
+import '../features/sources/data/automatic_source_bindings.dart';
+import '../features/sources/data/source_binding_committer.dart';
+import '../features/sources/data/source_single_episode.dart';
 import '../features/sources/data/manual_source_preparation.dart';
 import '../features/sources/data/source_magnet.dart';
 import '../features/sources/data/source_acquisition.dart';
@@ -8,7 +11,6 @@ import '../features/sources/presentation/torrent_source_binding.dart';
 import '../features/sources/presentation/local_source_binding.dart';
 import '../features/sources/presentation/iptv_source_binding.dart';
 import '../features/sources/presentation/direct_source_binding.dart';
-import 'durable_source_binding.dart';
 import '../models/playback_meta.dart';
 import '../features/sources/data/pikpak_source_preparation.dart';
 import '../features/sources/data/source_provider_configuration.dart';
@@ -172,7 +174,9 @@ class TorrentPlaybackService {
     List<Torrent>? sources,
     int sourceIndex = 0,
     String searchKeyword = '',
+    AutomaticSourceBindings? sourceBindings,
   }) async {
+    final bindingOwner = sourceBindings ?? AutomaticSourceBindings.capture();
     logSourceSelection(
       'manual_pick',
       source: torrent,
@@ -186,7 +190,7 @@ class TorrentPlaybackService {
         season: meta?.season,
         episode: meta?.episode,
       );
-      if (!context.mounted) return;
+      if (!context.mounted || !bindingOwner.isCurrent) return;
       if (resolution.source == null) {
         final target = meta?.season == null || meta?.episode == null
             ? 'This episode'
@@ -216,7 +220,7 @@ class TorrentPlaybackService {
       }
       return;
     }
-    if (!context.mounted) return;
+    if (!context.mounted || !bindingOwner.isCurrent) return;
     // Direct-URL addon streams bypass debrid entirely. Content metadata and
     // the in-player Sources switcher ride along (matching Home's
     // _playDirectStream) so series streams get Continue Watching, subtitles,
@@ -225,7 +229,7 @@ class TorrentPlaybackService {
     if (torrent.streamType == StreamType.directUrl &&
         (torrent.directUrl?.isNotEmpty ?? false)) {
       final resolverProvider = await _defaultConfiguredProvider();
-      if (!context.mounted) return;
+      if (!context.mounted || !bindingOwner.isCurrent) return;
       final fetcher = meta?.contentType == 'movie'
           ? movieFetcherFor(meta: meta)
           : seriesFetcherFor(meta: meta, episodesFetched: sources != null);
@@ -239,29 +243,40 @@ class TorrentPlaybackService {
       final launchSourceIndex = sources == null || sources.isEmpty
           ? 0
           : sourceIndex.clamp(0, launchSources.length - 1);
-      await VideoPlayerLauncher.push(
-        context,
-        _playerArgs(
-          videoUrl: torrent.directUrl!,
-          httpHeaders: torrent.httpHeaders,
-          title: torrent.displayTitle,
-          subtitle: torrent.source.isNotEmpty ? torrent.source : null,
-          stremioSources: launchSources,
-          stremioCurrentSourceIndex: launchSourceIndex,
-          resolveSourceToPlaylist: (launchSources.length > 1 || fetcher != null)
-              ? _lazyProviderResolver()
-              : null,
-          startupFailoverEnabled: true,
-          startupResolverProvider: resolverProvider,
-          onStremioSourceCommitted: _validatedLaunchCommitter(
-            resolverProvider ?? SeriesSource.addonDirectService,
-            meta,
-          ),
-          seriesSourceFetcher: fetcher,
-          meta: meta,
-        ),
-        onQuickPlayNextEpisode: _nextEpisodeHandlerFor(context, meta),
+      final committer = _validatedLaunchCommitter(
+        resolverProvider ?? SeriesSource.addonDirectService,
+        meta,
+        sourceBindings: bindingOwner,
       );
+      try {
+        await VideoPlayerLauncher.push(
+          context,
+          _playerArgs(
+            videoUrl: torrent.directUrl!,
+            httpHeaders: torrent.httpHeaders,
+            title: torrent.displayTitle,
+            subtitle: torrent.source.isNotEmpty ? torrent.source : null,
+            stremioSources: launchSources,
+            stremioCurrentSourceIndex: launchSourceIndex,
+            resolveSourceToPlaylist:
+                (launchSources.length > 1 || fetcher != null)
+                ? _lazyProviderResolver()
+                : null,
+            startupFailoverEnabled: true,
+            startupResolverProvider: resolverProvider,
+            onStremioSourceCommitted: committer.call,
+            seriesSourceFetcher: fetcher,
+            meta: meta,
+          ),
+          onQuickPlayNextEpisode: _nextEpisodeHandlerFor(
+            context,
+            meta,
+            sourceBindings: bindingOwner,
+          ),
+        );
+      } finally {
+        committer.close();
+      }
       return;
     }
 
@@ -273,7 +288,7 @@ class TorrentPlaybackService {
       final externalAllowed = await ProfilePolicyGuard.allows(
         ProfileFeature.externalPlayers,
       );
-      if (!context.mounted) return;
+      if (!context.mounted || !bindingOwner.isCurrent) return;
       if (!externalAllowed) {
         _snack(context, 'External players are disabled for this profile.');
         return;
@@ -295,20 +310,20 @@ class TorrentPlaybackService {
     }
 
     final provider = await _pickProvider(context);
-    if (!context.mounted) return;
+    if (!context.mounted || !bindingOwner.isCurrent) return;
     if (provider == _cancelled) return; // user dismissed the picker
     if (provider == null) {
       _snack(context, 'No debrid provider configured. Add one in Settings.');
       return;
     }
     final magnet = await sourceMagnet(torrent);
-    if (!context.mounted) return;
+    if (!context.mounted || !bindingOwner.isCurrent) return;
     if (magnet == null) {
       _snack(context, 'This result has no magnet or infohash to play.');
       return;
     }
     final action = forcePlay ? 'play' : await _postAction(provider);
-    if (!context.mounted) return;
+    if (!context.mounted || !bindingOwner.isCurrent) return;
 
     final rootNav = Navigator.of(context, rootNavigator: true);
     _showLoading(context, provider, torrent.displayTitle);
@@ -343,7 +358,7 @@ class TorrentPlaybackService {
       return;
     }
     if (rootNav.canPop()) rootNav.pop();
-    if (!context.mounted) return;
+    if (!context.mounted || !bindingOwner.isCurrent) return;
 
     if (notCached != null) {
       await _handleNotCached(context, notCached, provider, magnet);
@@ -408,6 +423,8 @@ class TorrentPlaybackService {
           sources: sources,
           sourceIndex: sourceIndex,
           searchKeyword: searchKeyword,
+
+          sourceBindings: bindingOwner,
         );
         break;
       case 'play':
@@ -420,6 +437,8 @@ class TorrentPlaybackService {
           meta: meta,
           sources: sources,
           sourceIndex: sourceIndex,
+
+          sourceBindings: bindingOwner,
         );
         break;
     }
@@ -445,7 +464,9 @@ class TorrentPlaybackService {
     // "Load more sources" backend for the player's series source tabs; rides
     // through to the launch untouched. Null ⇒ flat source list (unchanged).
     SeriesSourceFetcher? seriesFetcher,
+    AutomaticSourceBindings? sourceBindings,
   }) async {
+    final bindingOwner = sourceBindings ?? AutomaticSourceBindings.capture();
     if (rules != null) {
       torrents = orderCandidatesForRules(
         torrents,
@@ -492,10 +513,16 @@ class TorrentPlaybackService {
       // owns the dismissal.
       final loader = ov;
       var handedToLauncher = false;
+      SourceBindingCommitter? committer;
       try {
         await DirectSourceAuthorization.authorize(direct);
         final resolverProvider = provider ?? await _defaultConfiguredProvider();
-        if (!context.mounted) return;
+        if (!context.mounted || !bindingOwner.isCurrent) return;
+        committer = _validatedLaunchCommitter(
+          resolverProvider ?? SeriesSource.addonDirectService,
+          meta,
+          sourceBindings: bindingOwner,
+        );
         final args = _playerArgs(
           videoUrl: direct.directUrl!,
           httpHeaders: direct.httpHeaders,
@@ -511,10 +538,7 @@ class TorrentPlaybackService {
               : null,
           startupFailoverEnabled: true,
           startupResolverProvider: resolverProvider,
-          onStremioSourceCommitted: _validatedLaunchCommitter(
-            resolverProvider ?? SeriesSource.addonDirectService,
-            meta,
-          ),
+          onStremioSourceCommitted: committer.call,
           seriesSourceFetcher: seriesFetcher,
           meta: meta,
         );
@@ -522,6 +546,8 @@ class TorrentPlaybackService {
           context,
           meta,
           provider: provider,
+
+          sourceBindings: bindingOwner,
         );
         handedToLauncher = loader != null;
         await VideoPlayerLauncher.push(
@@ -531,6 +557,7 @@ class TorrentPlaybackService {
           onQuickPlayNextEpisode: nextEpisodeHandler,
         );
       } finally {
+        committer?.close();
         if (!handedToLauncher) loader?.dismiss();
       }
     }
@@ -729,7 +756,7 @@ class TorrentPlaybackService {
           continue;
         }
 
-        if (!context.mounted) {
+        if (!context.mounted || !bindingOwner.isCurrent) {
           if (ov != null) closeLoading();
           return;
         }
@@ -738,7 +765,7 @@ class TorrentPlaybackService {
           providerWasChecked = true;
           providerUnavailable = strictProvider == null;
         }
-        if (!context.mounted) {
+        if (!context.mounted || !bindingOwner.isCurrent) {
           if (ov != null) closeLoading();
           return;
         }
@@ -778,7 +805,7 @@ class TorrentPlaybackService {
               rules: rules,
               ladder: ladder,
             );
-            if (!context.mounted) {
+            if (!context.mounted || !bindingOwner.isCurrent) {
               closeLoading();
               return;
             }
@@ -833,7 +860,7 @@ class TorrentPlaybackService {
           rules: rules.copyWith(tryNextOnFailure: false, maxAttempts: 1),
           isCancelled: cancelled,
         );
-        if (!context.mounted) {
+        if (!context.mounted || !bindingOwner.isCurrent) {
           closeLoading();
           return;
         }
@@ -851,6 +878,8 @@ class TorrentPlaybackService {
           seriesFetcher: seriesFetcher,
           overlay: ov,
           startupFailoverEnabled: true,
+
+          sourceBindings: bindingOwner,
         );
         return;
       }
@@ -923,7 +952,7 @@ class TorrentPlaybackService {
     // non-IMDb addon-stream path with only torrent results). Dismiss the
     // caller's overlay on each, or it stays stuck full-screen (both overlays
     // are non-dismissable by the system back button).
-    if (!context.mounted) {
+    if (!context.mounted || !bindingOwner.isCurrent) {
       if (ov != null) closeLoading();
       return;
     }
@@ -975,7 +1004,7 @@ class TorrentPlaybackService {
       } else if (tiered) {
         candidates = ladder.order(candidates);
       }
-      if (!context.mounted) {
+      if (!context.mounted || !bindingOwner.isCurrent) {
         // Screen went away mid cache-check — dismiss so the loader can't get
         // stuck covering the next screen.
         closeLoading();
@@ -1030,7 +1059,7 @@ class TorrentPlaybackService {
     );
     if (cancelled()) return; // dismissed by the Cancel tap; nothing more to do
     loader.setStage(PlayLoadStage.starting);
-    if (!context.mounted) {
+    if (!context.mounted || !bindingOwner.isCurrent) {
       closeLoading();
       return;
     }
@@ -1058,6 +1087,8 @@ class TorrentPlaybackService {
       seriesFetcher: seriesFetcher,
       overlay: loader,
       startupFailoverEnabled: true,
+
+      sourceBindings: bindingOwner,
     );
   }
 
@@ -1339,7 +1370,9 @@ class TorrentPlaybackService {
     // only a real Play press passes an opener, so binge auto-advance and
     // post-failure recovery keep their existing no-prompt contract for free.
     VoidCallback? openSourcePicker,
+    AutomaticSourceBindings? sourceBindings,
   }) async {
+    final bindingOwner = sourceBindings ?? AutomaticSourceBindings.capture();
     logSourceSelection(
       'play_selection_start',
       season: season,
@@ -1400,7 +1433,7 @@ class TorrentPlaybackService {
     }
 
     var activeRules = rules;
-    if (!context.mounted || cancelled) {
+    if ((!context.mounted || !bindingOwner.isCurrent) || cancelled) {
       resolving.dismiss();
       return;
     }
@@ -1444,6 +1477,8 @@ class TorrentPlaybackService {
         label: label,
         rules: rules,
         forceAddonOnly: true,
+
+        sourceBindings: bindingOwner,
       );
       return;
     }
@@ -1454,14 +1489,14 @@ class TorrentPlaybackService {
     if (!skipBound) {
       late final List<SeriesSource> bound;
       try {
-        bound = (await SeriesSourceService.getSources(imdbId))
-            .where((source) => _bindingMatchesMeta(source, meta))
-            .toList();
+        bound = (await SeriesSourceService.getSources(
+          imdbId,
+        )).where((source) => _bindingMatchesMeta(source, meta)).toList();
       } catch (_) {
         resolving.dismiss();
         rethrow;
       }
-      if (!context.mounted || cancelled) {
+      if ((!context.mounted || !bindingOwner.isCurrent) || cancelled) {
         resolving.dismiss();
         return;
       }
@@ -1480,9 +1515,11 @@ class TorrentPlaybackService {
           label: label,
           meta: meta,
           preferredProvider: preferredProvider,
+
+          sourceBindings: bindingOwner,
         );
         if (played) return;
-        if (!context.mounted) return;
+        if (!context.mounted || !bindingOwner.isCurrent) return;
         // Bound source unplayable → fall through to a normal search below.
       }
     }
@@ -1512,6 +1549,8 @@ class TorrentPlaybackService {
         label: label,
         rules: rules,
         forceAddonOnly: true,
+
+        sourceBindings: bindingOwner,
       );
       return;
     }
@@ -1541,8 +1580,10 @@ class TorrentPlaybackService {
         rules: rules,
         forceAddonOnly: true,
         fallbackWhenEmpty: fallBackToEngines,
+
+        sourceBindings: bindingOwner,
       );
-      if (!context.mounted || handled) return;
+      if ((!context.mounted || !bindingOwner.isCurrent) || handled) return;
       addonFallbackAlreadySearched = true;
       // The addon stage has already completed empty. Continue with only the
       // engine half instead of querying the same addons a second time.
@@ -1554,7 +1595,7 @@ class TorrentPlaybackService {
 
     resolving.dismiss();
     final provider = preferredProvider ?? await _pickProvider(context);
-    if (!context.mounted) return;
+    if (!context.mounted || !bindingOwner.isCurrent) return;
     if (provider == _cancelled) return;
     if (provider == null) {
       if (addonFallbackAlreadySearched) {
@@ -1584,6 +1625,8 @@ class TorrentPlaybackService {
         label: label,
         noProvider: true,
         rules: activeRules,
+
+        sourceBindings: bindingOwner,
       );
       return;
     }
@@ -1606,7 +1649,7 @@ class TorrentPlaybackService {
     // movie-only (pack sizes are per-episode), so they're stripped for series.
     final ladder = await loadLadder(includeSize: isMovie, rules: activeRules);
     if (cancel.cancelled) return; // Cancel during the prefs read
-    if (!context.mounted) {
+    if (!context.mounted || !bindingOwner.isCurrent) {
       closeLoading();
       return;
     }
@@ -1644,13 +1687,13 @@ class TorrentPlaybackService {
       final searchOk = packResult != null;
       final packs = packResult ?? const <Torrent>[];
       if (cancel.cancelled) return null;
-      if (!context.mounted) {
+      if (!context.mounted || !bindingOwner.isCurrent) {
         closeLoading();
         return null;
       }
       _applyLadderNote(overlay, ladder, packs);
       if (cancel.cancelled) return null;
-      if (!context.mounted) {
+      if (!context.mounted || !bindingOwner.isCurrent) {
         closeLoading();
         return null;
       }
@@ -1665,7 +1708,7 @@ class TorrentPlaybackService {
           isCancelled: () => cancel.cancelled,
         );
         if (cancel.cancelled) return null;
-        if (!context.mounted) {
+        if (!context.mounted || !bindingOwner.isCurrent) {
           closeLoading();
           return null;
         }
@@ -1689,6 +1732,8 @@ class TorrentPlaybackService {
             ),
             overlay: overlay,
             startupFailoverEnabled: true,
+
+            sourceBindings: bindingOwner,
           );
           return true;
         }
@@ -1767,7 +1812,9 @@ class TorrentPlaybackService {
         for (final descriptor in prioritized.take(
           directValidationBudgetForRules(activeRules),
         )) {
-          if (cancel.cancelled || !context.mounted) return;
+          if (cancel.cancelled || (!context.mounted || !bindingOwner.isCurrent)) {
+            return;
+            }
           try {
             var source = descriptor;
             if (IptvSourceSearch.isDeferredXtreamSeries(source)) {
@@ -1808,7 +1855,10 @@ class TorrentPlaybackService {
               );
               continue;
             }
-            if (cancel.cancelled || !context.mounted) return;
+            if (cancel.cancelled ||
+                (!context.mounted || !bindingOwner.isCurrent)) {
+              return;
+              }
             logIptvSourceEvent(
               'quick_play_candidate_selected',
               source: source,
@@ -1827,6 +1877,8 @@ class TorrentPlaybackService {
               ladder: ladder,
               rules: activeRules.copyWith(validateDirectLinks: false),
               seriesFetcher: seriesFetcherFor(meta: meta, provider: provider),
+
+              sourceBindings: bindingOwner,
             );
             return;
           } catch (error) {
@@ -1843,7 +1895,9 @@ class TorrentPlaybackService {
           }
         }
       }
-      if (cancel.cancelled || !context.mounted) return;
+      if (cancel.cancelled || (!context.mounted || !bindingOwner.isCurrent)) {
+        return;
+        }
       final packed = await tryPackRoute();
       if (packed != false) return;
     }
@@ -1871,7 +1925,7 @@ class TorrentPlaybackService {
       return;
     }
     if (cancel.cancelled) return;
-    if (!context.mounted) {
+    if (!context.mounted || !bindingOwner.isCurrent) {
       closeLoading();
       return;
     }
@@ -1894,7 +1948,7 @@ class TorrentPlaybackService {
         isCancelled: () => cancel.cancelled,
       );
       if (cancel.cancelled) return;
-      if (!context.mounted) {
+      if (!context.mounted || !bindingOwner.isCurrent) {
         closeLoading();
         return;
       }
@@ -1941,6 +1995,8 @@ class TorrentPlaybackService {
         provider: provider,
         episodesFetched: true,
       ),
+
+      sourceBindings: bindingOwner,
     );
   }
 
@@ -3800,6 +3856,7 @@ class TorrentPlaybackService {
     // the neutral loader and continue into its engine fallback.
     bool forceAddonOnly = false,
     bool fallbackWhenEmpty = false,
+    required AutomaticSourceBindings sourceBindings,
   }) async {
     final cancel = _PlaybackCancelToken();
     // Direct addon/IPTV stream — the loader dismisses as soon as playBest opens
@@ -3856,7 +3913,7 @@ class TorrentPlaybackService {
         // Optional fast path: ordinary search still owns errors/retries.
       }
     }
-    if (cancel.cancelled || !context.mounted) {
+    if (cancel.cancelled || (!context.mounted || !sourceBindings.isCurrent)) {
       closeLoading();
       return true;
     }
@@ -3954,7 +4011,8 @@ class TorrentPlaybackService {
           (result['addonErrors'] as Map?)?.cast<String, String>() ?? const {},
         );
         addonStatuses.addAll(
-          (result['addonStatuses'] as List?)?.cast<AddonSearchStatus>() ?? const [],
+          (result['addonStatuses'] as List?)?.cast<AddonSearchStatus>() ??
+              const [],
         );
         // Forced/no-provider searches are addon-only; mixed provider searches
         // are a single combined stage. Keep this guard for explicit one-stage
@@ -3999,7 +4057,7 @@ class TorrentPlaybackService {
             headers: selected.httpHeaders,
           );
       if (cancel.cancelled ||
-          !context.mounted ||
+          (!context.mounted || !sourceBindings.isCurrent) ||
           ProfileRuntime.scope.value != earlyScope) {
         closeLoading();
         return true;
@@ -4037,7 +4095,7 @@ class TorrentPlaybackService {
               failed: selected,
               rules: rules,
             );
-            if (!context.mounted ||
+            if ((!context.mounted || !sourceBindings.isCurrent) ||
                 cancel.cancelled ||
                 ProfileRuntime.scope.value != earlyScope)
               return;
@@ -4049,8 +4107,12 @@ class TorrentPlaybackService {
               rules: recovery.rules,
               ladder: earlyLadder,
               seriesFetcher: fetcher,
+
+              sourceBindings: sourceBindings,
             );
           },
+
+          sourceBindings: sourceBindings,
         );
         return true;
       }
@@ -4068,7 +4130,7 @@ class TorrentPlaybackService {
       };
     }
     if (cancel.cancelled) return true;
-    if (!context.mounted) {
+    if (!context.mounted || !sourceBindings.isCurrent) {
       closeLoading();
       return true;
     }
@@ -4109,7 +4171,7 @@ class TorrentPlaybackService {
         // Keep the first attempt's (empty) result — reported below.
       }
       if (cancel.cancelled) return true;
-      if (!context.mounted) {
+      if (!context.mounted || !sourceBindings.isCurrent) {
         closeLoading();
         return true;
       }
@@ -4125,9 +4187,12 @@ class TorrentPlaybackService {
             .where((entry) => entry.key.startsWith('mediaserver:'))
             .map((entry) => entry.value)
             .toSet();
-        _snack(context, nativeErrors.isEmpty
-            ? '$failed didn\'t respond for "$label" — try again.'
-            : '$failed: ${nativeErrors.join(' ')}');
+        _snack(
+          context,
+          nativeErrors.isEmpty
+              ? '$failed didn\'t respond for "$label" — try again.'
+              : '$failed: ${nativeErrors.join(' ')}',
+        );
       } else {
         // noProvider: addons searched fine and returned nothing directly
         // playable. Torrent engines were skipped (they need a provider), so the
@@ -4145,7 +4210,7 @@ class TorrentPlaybackService {
     // Reuse the same preference snapshot used for the early candidate.
     final ladder = earlyLadder;
     if (cancel.cancelled) return true; // Cancel during the prefs read
-    if (!context.mounted) {
+    if (!context.mounted || !sourceBindings.isCurrent) {
       closeLoading();
       return true;
     }
@@ -4158,7 +4223,7 @@ class TorrentPlaybackService {
         isCancelled: () => cancel.cancelled,
       );
       if (cancel.cancelled) return true;
-      if (!context.mounted) {
+      if (!context.mounted || !sourceBindings.isCurrent) {
         closeLoading();
         return true;
       }
@@ -4182,6 +4247,8 @@ class TorrentPlaybackService {
       seriesFetcher: isMovie
           ? movieFetcherFor(meta: meta)
           : seriesFetcherFor(meta: meta, episodesFetched: true),
+
+      sourceBindings: sourceBindings,
     );
     return true;
   }
@@ -4203,7 +4270,7 @@ class TorrentPlaybackService {
   }
 
   static String storedProviderKey(String provider) =>
-      provider == 'debrid' ? 'rd' : provider;
+      AutomaticSourceBindings.storedProviderKey(provider);
 
   /// Providers whose bound sources this isolated engine can replay — the five
   /// debrid providers plus 'local' (on-device file/folder).
@@ -4383,40 +4450,6 @@ class TorrentPlaybackService {
   /// cheap-skip below never drops a binding that genuinely contains the
   /// requested episode. When null, the source falls through to the normal
   /// resolve + [_resolvedHasEpisode] check (always correct, just not free).
-  static (int, int)? _singleEpisodeOf(String name) {
-    final normalized = name.replaceAll(RegExp(r'[._]+'), ' ');
-    final matches = RegExp(
-      r's(\d{1,2})e(\d{1,3})',
-      caseSensitive: false,
-    ).allMatches(normalized).toList();
-    if (matches.length != 1) return null; // 0, or several distinct episodes
-    // Reject anything that could span more than one episode. Kept greedy on
-    // purpose: a false positive here just returns null (→ normal resolve,
-    // always correct), whereas MISSING a range would wrongly skip a valid
-    // multi-episode binding. Covers "E01-E10", "E01 to E10", "E01 & E02",
-    // "E01,E02", and the adjacent double "E01E02".
-    if (RegExp(
-          r'e\d{1,3}\s*(?:-|–|to|thru|through|and|&|,)\s*e?\d{1,3}',
-          caseSensitive: false,
-        ).hasMatch(normalized) ||
-        RegExp(
-          r'e\d{1,3}\s*e\d{1,3}',
-          caseSensitive: false,
-        ).hasMatch(normalized)) {
-      return null;
-    }
-    // Final cross-check against the coverage classifier.
-    if (TorrentCoverageDetector.detectCoverage(title: name).coverageType !=
-        CoverageType.singleEpisode) {
-      return null;
-    }
-    final m = matches.first;
-    final s = int.tryParse(m.group(1)!);
-    final e = int.tryParse(m.group(2)!);
-    if (s == null || e == null) return null;
-    return (s, e);
-  }
-
   static bool _resolvedHasEpisode(_Resolved r, int season, int episode) {
     final List<String> names;
     if (r.playlist != null && r.playlist!.length > 1) {
@@ -4789,6 +4822,7 @@ class TorrentPlaybackService {
     required PlaybackMeta meta,
     String? preferredProvider,
     bool skipLinkCache = false,
+    required AutomaticSourceBindings sourceBindings,
   }) async {
     final usable = sources
         .where((s) => _boundProviderSupported(s.debridService))
@@ -4842,14 +4876,18 @@ class TorrentPlaybackService {
         );
         try {
           final fresh = source.isMediaServer
-              ? await MediaServerService.resolvePinned(source, season: meta.season, episode: meta.episode)
+              ? await MediaServerService.resolvePinned(
+                  source,
+                  season: meta.season,
+                  episode: meta.episode,
+                )
               : await IptvSourceSearch.resolvePinned(
-            source,
-            title: meta.title ?? label,
-            year: meta.year,
-            season: meta.season,
-            episode: meta.episode,
-          );
+                  source,
+                  title: meta.title ?? label,
+                  year: meta.year,
+                  season: meta.season,
+                  episode: meta.episode,
+                );
           if (cancel.cancelled) return true;
           final freshUrl = fresh?.directUrl;
           if (fresh != null && freshUrl != null && freshUrl.isNotEmpty) {
@@ -4881,7 +4919,7 @@ class TorrentPlaybackService {
               continue;
             }
             overlay.setStage(PlayLoadStage.starting);
-            if (!context.mounted) {
+            if (!context.mounted || !sourceBindings.isCurrent) {
               closeLoading();
               return false;
             }
@@ -4902,7 +4940,9 @@ class TorrentPlaybackService {
                 httpHeaders: fresh.httpHeaders,
               ),
               fresh.displayTitle,
-              provider: source.isMediaServer ? SeriesSource.mediaServerService : SeriesSource.iptvDirectService,
+              provider: source.isMediaServer
+                  ? SeriesSource.mediaServerService
+                  : SeriesSource.iptvDirectService,
               recoveryProvider: preferredProvider,
               startupHasRemainingSavedSources: remainingSources.isNotEmpty,
               meta: meta,
@@ -4918,7 +4958,7 @@ class TorrentPlaybackService {
                   removePin: () =>
                       SeriesSourceService.removeSourceEntry(imdbId, source),
                 );
-                if (!context.mounted) return;
+                if (!context.mounted || !sourceBindings.isCurrent) return;
                 await _recoverAfterBoundStartupFailure(
                   context,
                   imdbId,
@@ -4926,8 +4966,12 @@ class TorrentPlaybackService {
                   label: label,
                   meta: meta,
                   preferredProvider: preferredProvider,
+
+                  sourceBindings: sourceBindings,
                 );
               },
+
+              sourceBindings: sourceBindings,
             );
             return true;
           }
@@ -4935,7 +4979,7 @@ class TorrentPlaybackService {
           // A stale/temporarily unavailable catalog falls through to other
           // pins and normal search without deleting the durable descriptor.
         }
-        if (!context.mounted) {
+        if (!context.mounted || !sourceBindings.isCurrent) {
           closeLoading();
           return false;
         }
@@ -5068,7 +5112,7 @@ class TorrentPlaybackService {
               }
             }
             overlay.setStage(PlayLoadStage.starting);
-            if (!context.mounted) {
+            if (!context.mounted || !sourceBindings.isCurrent) {
               closeLoading();
               return false;
             }
@@ -5105,7 +5149,7 @@ class TorrentPlaybackService {
                     pin: source,
                   ),
                 );
-                if (!context.mounted) return;
+                if (!context.mounted || !sourceBindings.isCurrent) return;
                 await _recoverAfterBoundStartupFailure(
                   context,
                   imdbId,
@@ -5113,15 +5157,19 @@ class TorrentPlaybackService {
                   label: label,
                   meta: meta,
                   preferredProvider: preferredProvider,
+
+                  sourceBindings: sourceBindings,
                 );
               },
+
+              sourceBindings: sourceBindings,
             );
             return true;
           }
         } catch (_) {
           // Fail soft and continue through lower-priority pins/search.
         }
-        if (!context.mounted) {
+        if (!context.mounted || !sourceBindings.isCurrent) {
           closeLoading();
           return false;
         }
@@ -5138,7 +5186,7 @@ class TorrentPlaybackService {
       if (season != null &&
           episode != null &&
           source.debridService != SeriesSource.localService) {
-        final se = _singleEpisodeOf(source.torrentName);
+        final se = singleSourceEpisode(source.torrentName);
         if (se != null && (se.$1 != season || se.$2 != episode)) {
           continue;
         }
@@ -5150,7 +5198,7 @@ class TorrentPlaybackService {
         if (cancel.cancelled) return true;
         if (r != null) {
           overlay.setStage(PlayLoadStage.starting);
-          if (!context.mounted) {
+          if (!context.mounted || !sourceBindings.isCurrent) {
             closeLoading();
             return false;
           }
@@ -5177,12 +5225,16 @@ class TorrentPlaybackService {
                 label: label,
                 meta: meta,
                 preferredProvider: preferredProvider,
+
+                sourceBindings: sourceBindings,
               );
             },
+
+            sourceBindings: sourceBindings,
           );
           return true;
         }
-        if (!context.mounted) {
+        if (!context.mounted || !sourceBindings.isCurrent) {
           closeLoading();
           return false;
         }
@@ -5266,7 +5318,7 @@ class TorrentPlaybackService {
       if (cancel.cancelled) return true;
       if (res != null) {
         overlay.setStage(PlayLoadStage.starting);
-        if (!context.mounted) {
+        if (!context.mounted || !sourceBindings.isCurrent) {
           closeLoading();
           return false;
         }
@@ -5302,12 +5354,16 @@ class TorrentPlaybackService {
               label: label,
               meta: meta,
               preferredProvider: preferredProvider,
+
+              sourceBindings: sourceBindings,
             );
           },
+
+          sourceBindings: sourceBindings,
         );
         return true;
       }
-      if (!context.mounted) {
+      if (!context.mounted || !sourceBindings.isCurrent) {
         closeLoading();
         return false;
       }
@@ -5332,8 +5388,9 @@ class TorrentPlaybackService {
     required PlaybackMeta meta,
     String? preferredProvider,
     bool skipLinkCache = false,
+    required AutomaticSourceBindings sourceBindings,
   }) async {
-    if (!context.mounted) return;
+    if (!context.mounted || !sourceBindings.isCurrent) return;
     if (remainingSources.isNotEmpty) {
       final played = await _playViaBound(
         context,
@@ -5343,8 +5400,10 @@ class TorrentPlaybackService {
         meta: meta,
         preferredProvider: preferredProvider,
         skipLinkCache: skipLinkCache,
+
+        sourceBindings: sourceBindings,
       );
-      if (played || !context.mounted) return;
+      if (played || (!context.mounted || !sourceBindings.isCurrent)) return;
     }
     await playFromSelection(
       context,
@@ -5355,6 +5414,8 @@ class TorrentPlaybackService {
       meta: meta,
       preferredProvider: preferredProvider,
       skipBoundSources: true,
+
+      sourceBindings: sourceBindings,
     );
   }
 
@@ -5421,7 +5482,7 @@ class TorrentPlaybackService {
     imdbId: imdbId,
     canContinue: canContinue,
     authorize: DirectSourceAuthorization.authorize,
-    describe: (source) => _durableBindingForSource(
+    describe: (source) => AutomaticSourceBindings.describe(
       source,
       SeriesSource.addonDirectService,
       addonCatalogId: addonCatalogId,
@@ -5452,7 +5513,7 @@ class TorrentPlaybackService {
     canContinue: canContinue,
     authorize: DirectSourceAuthorization.authorize,
     describe: (source) =>
-        _durableBindingForSource(source, SeriesSource.iptvDirectService),
+        AutomaticSourceBindings.describe(source, SeriesSource.iptvDirectService),
     save: (source) => _persistManualBinding(
       source,
       imdbId: imdbId,
@@ -5581,6 +5642,7 @@ class TorrentPlaybackService {
     PlaybackMeta? meta,
     List<Torrent>? sources,
     int sourceIndex = 0,
+    required AutomaticSourceBindings sourceBindings,
   }) async {
     if (r.playUrl == null || r.playUrl!.isEmpty) {
       _snack(context, 'No playable link for this source.');
@@ -5620,6 +5682,8 @@ class TorrentPlaybackService {
       meta: meta,
       sources: sources ?? [torrent],
       sourceIndex: sourceIndex,
+
+      sourceBindings: sourceBindings,
     );
   }
 
@@ -5638,6 +5702,7 @@ class TorrentPlaybackService {
     BuildContext context,
     PlaybackMeta? meta, {
     String? provider,
+    required AutomaticSourceBindings sourceBindings,
   }) {
     final imdbId = meta?.imdbId;
     if (meta == null ||
@@ -5685,13 +5750,15 @@ class TorrentPlaybackService {
       // awaited re-entry would nest one full search+play chain per episode,
       // retaining every prior episode's scopes across a binge.
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!context.mounted) return;
+        if (!context.mounted || !sourceBindings.isCurrent) return;
         unawaited(
           _advanceToNextEpisode(
             context,
             imdbId: imdbId,
             meta: nextMeta,
             provider: provider,
+
+            sourceBindings: sourceBindings,
           ),
         );
       });
@@ -5708,6 +5775,7 @@ class TorrentPlaybackService {
     required String imdbId,
     required PlaybackMeta meta,
     String? provider,
+    required AutomaticSourceBindings sourceBindings,
   }) async {
     logSourceSelection(
       'next_episode_start',
@@ -5724,13 +5792,15 @@ class TorrentPlaybackService {
         episode: meta.episode,
         meta: meta,
         preferredProvider: provider,
+
+        sourceBindings: sourceBindings,
       );
       return;
     }
-    final bound = (await SeriesSourceService.getSources(imdbId))
-        .where((source) => _bindingMatchesMeta(source, meta))
-        .toList();
-    if (!context.mounted) return;
+    final bound = (await SeriesSourceService.getSources(
+      imdbId,
+    )).where((source) => _bindingMatchesMeta(source, meta)).toList();
+    if (!context.mounted || !sourceBindings.isCurrent) return;
     if (bound.isNotEmpty && meta.season != null && meta.episode != null) {
       final played = await _playViaBound(
         context,
@@ -5738,12 +5808,14 @@ class TorrentPlaybackService {
         bound,
         label: label,
         meta: meta,
+
+        sourceBindings: sourceBindings,
       );
       if (played) return;
-      if (!context.mounted) return;
+      if (!context.mounted || !sourceBindings.isCurrent) return;
     }
     final rules = await StorageService.getQuickPlayRules(isMovie: false);
-    if (!context.mounted) return;
+    if (!context.mounted || !sourceBindings.isCurrent) return;
     await _playAddonStream(
       context,
       imdbId,
@@ -5753,6 +5825,8 @@ class TorrentPlaybackService {
       meta: meta,
       label: label,
       rules: rules,
+
+      sourceBindings: sourceBindings,
     );
   }
 
@@ -5850,8 +5924,10 @@ class TorrentPlaybackService {
   /// _pickProvider precedence (Premiumize before PikPak) — deliberately NOT
   /// Home's resolver order, which prefers PikPak; a silent PikPak fallback
   /// would queue real downloads on the account.
-  static Future<String?> _defaultConfiguredProvider() async {
-    final configuration = await _configuredProviders();
+  static Future<String?> _defaultConfiguredProvider({
+    bool Function()? canContinue,
+  }) async {
+    final configuration = await _configuredProviders(canContinue: canContinue);
     if (configuration == null) return null;
     final (configured, def) = configuration;
     if (configured.isEmpty) return null;
@@ -5898,207 +5974,6 @@ class TorrentPlaybackService {
     };
   }
 
-  /// Old-screen parity: playing a catalog MOVIE remembers the just-played
-  /// validated source as that title's single bound source (override), so the
-  /// catalog flips "Select Source" → "Edit Source" and the next play reuses
-  /// it.
-  /// Series use the accumulating path below; keyword play (meta == null) and
-  /// non-IMDb / on-device plays don't bind either. Best-effort — a storage
-  /// hiccup must never break playback.
-  static Future<void> _autoBindMovieOnPlay(
-    PlaybackMeta? meta,
-    Torrent? winner,
-    String provider,
-  ) async {
-    if (meta == null ||
-        meta.contentType != 'movie' ||
-        meta.imdbId == null ||
-        meta.imdbId!.isEmpty ||
-        winner == null) {
-      return;
-    }
-    final source = _durableBindingForSource(winner, provider);
-    if (source == null) return;
-    final isIptv = IptvSourceSearch.owns(winner);
-    try {
-      await SeriesSourceService.setSources(meta.imdbId!, [source]);
-      if (isIptv) {
-        logIptvSourceEvent(
-          'automatic_pin_completed',
-          source: winner,
-          outcome: 'saved',
-        );
-      }
-    } catch (error) {
-      if (isIptv) {
-        logIptvSourceEvent(
-          'automatic_pin_completed',
-          source: winner,
-          outcome: 'storage_failed',
-          error: error,
-        );
-      }
-    }
-  }
-
-  /// Series counterpart of [_autoBindMovieOnPlay] (on by default via the
-  /// series auto-pin setting): pin whatever source a series play resolved to
-  /// — a pack from the pack-first search or a single episode from the fallback
-  /// — so subsequent plays go straight through the bound path. A replayed
-  /// binding is refreshed and promoted to primary; a new single-episode
-  /// binding is capped so a pack-less show binged over time can't grow the
-  /// list without bound (older singles are evicted; packs are never touched).
-  /// Refreshable addon-direct sources participate without persisting their
-  /// signed/temporary URL, and count toward that cap like any other single —
-  /// exempting them left the list unbounded. A manually pinned SINGLE is
-  /// therefore evictable once 20 accumulate for one series; there is no stored
-  /// manual/auto flag to tell them apart, and an unbounded list is the worse
-  /// failure. Local sources stay opt-in.
-  ///
-  /// Gated on [StorageService.getSeriesAutoPinOnPlay] — which is NOT the
-  /// "Prefer season packs" toggle. The two shared a preference key until it was
-  /// split; turning packs off used to disable pinning here, which left Smart
-  /// mode permanently unable to find a pin.
-  static const int _maxAutoBoundSingles = 20;
-
-  static Future<void> _autoBindSeriesOnPlay(
-    PlaybackMeta? meta,
-    Torrent? winner,
-    String provider,
-  ) async {
-    // Any non-movie episode play (contentType 'series' or a custom series-like
-    // type such as anime) — movies are handled by _autoBindMovieOnPlay.
-    // Scoped to episode plays (season+episode set) to match the pack-first
-    // gate and skip whole-series/no-episode plays.
-    if (meta == null ||
-        meta.contentType == 'movie' ||
-        (meta.imdbId ?? meta.stremioCatalogId)?.isEmpty != false ||
-        meta.season == null ||
-        meta.episode == null ||
-        winner == null ||
-        // Consistent with the pack-first block: the whole auto-pin feature is
-        // off for PikPak (its bindings re-queue real downloads on each replay),
-        // so a stale-true pref after switching default to PikPak stays inert.
-        (winner.streamType == StreamType.torrent && provider == 'pikpak')) {
-      return;
-    }
-    final source = _durableBindingForSource(
-      winner,
-      provider,
-      addonCatalogId: meta.stremioCatalogId,
-      addonCatalogKey: meta.stremioAddonKey,
-    );
-    if (source == null) return;
-    final isIptv = IptvSourceSearch.owns(winner);
-    try {
-      if (!await StorageService.getSeriesAutoPinOnPlay()) {
-        if (isIptv) {
-          logIptvSourceEvent(
-            'automatic_pin_completed',
-            source: winner,
-            outcome: 'disabled',
-            season: meta.season,
-            episode: meta.episode,
-          );
-        }
-        return;
-      }
-      final imdbId = meta.imdbId ?? meta.stremioCatalogId!;
-      final list = List<SeriesSource>.from(
-        await SeriesSourceService.getSources(imdbId),
-      );
-      final existingIdx = list.indexWhere(
-        (s) =>
-            s.bindingKey == source.bindingKey ||
-            (s.isAddonDirect &&
-                source.isAddonDirect &&
-                s.addonCatalogId == source.addonCatalogId &&
-                s.addonCatalogKey == source.addonCatalogKey &&
-                s.addonKey == source.addonKey &&
-                s.streamKey == source.streamKey),
-      );
-      if (existingIdx >= 0) {
-        // The source that actually rendered becomes primary, while every
-        // other series fallback remains available.
-        list.removeAt(existingIdx);
-      } else {
-        // A NEW single-episode binding: bound how many auto-accumulate so a
-        // pack-less show doesn't grow the list forever. Packs and anything else
-        // that isn't a single episode are never evicted.
-        //
-        // Addon-direct singles count here too. Exempting them left the list
-        // unbounded, and an unstable identity (see SeriesSource.bindingKey)
-        // appended a fresh one on every play. The identity is fixed now; this
-        // cap is the backstop for whatever destabilises it next. The cost is
-        // that a manually pinned single is evictable once 20 accumulate —
-        // there is no stored manual/auto flag to separate them.
-        if (_singleEpisodeOf(source.torrentName) != null) {
-          final singles =
-              list
-                  .where(
-                    (s) =>
-                        s.addonCatalogId == source.addonCatalogId &&
-                        s.addonCatalogKey == source.addonCatalogKey &&
-                        _singleEpisodeOf(s.torrentName) != null,
-                  )
-                  .toList()
-                ..sort((a, b) => a.boundAt.compareTo(b.boundAt));
-          final overflow = singles.length + 1 - _maxAutoBoundSingles;
-          if (overflow > 0) {
-            final drop = singles
-                .take(overflow)
-                .map((s) => s.bindingKey)
-                .toSet();
-            list.removeWhere((s) => drop.contains(s.bindingKey));
-          }
-        }
-      }
-      list.insert(0, source);
-      await SeriesSourceService.setSources(imdbId, list);
-      if (isIptv) {
-        logIptvSourceEvent(
-          'automatic_pin_completed',
-          source: winner,
-          outcome: 'saved',
-          season: meta.season,
-          episode: meta.episode,
-        );
-      }
-    } catch (error) {
-      if (isIptv) {
-        logIptvSourceEvent(
-          'automatic_pin_completed',
-          source: winner,
-          outcome: 'storage_failed',
-          season: meta.season,
-          episode: meta.episode,
-          error: error,
-        );
-      }
-    }
-  }
-
-  /// Converts an eligible playback source into its durable binding. Automatic
-  /// callers invoke this only after decoder validation. Direct streams keep
-  /// only opaque addon provenance so the next play re-queries a fresh URL;
-  /// arbitrary/external links and local rows cannot be auto-bound.
-  static SeriesSource? _durableBindingForSource(
-    Torrent source,
-    String provider, {
-    String? addonCatalogId,
-    String? addonCatalogKey,
-  }) => durableSourceBinding(
-    source,
-    provider,
-    now: DateTime.now().millisecondsSinceEpoch,
-    isMediaServer: MediaServerService.owns,
-    mediaServerBinding: MediaServerService.bindingFor,
-    isIptv: IptvSourceSearch.owns,
-    storedProviderKey: storedProviderKey,
-    addonCatalogId: addonCatalogId,
-    addonCatalogKey: addonCatalogKey,
-  );
-
   /// Launch the player. Passes the full source list + a resolver (so the player
   /// shows the in-player "Sources" switcher) and content metadata (so Continue
   /// Watching, subtitles and the Episodes button work) — matching Home.
@@ -6123,11 +5998,13 @@ class TorrentPlaybackService {
     bool startupFailoverEnabled = false,
     Future<void> Function()? onStartupSourcesExhausted,
     bool startupHasRemainingSavedSources = false,
+    required AutomaticSourceBindings sourceBindings,
   }) async {
     // Once push() takes the handoff callback the LAUNCHER owns the dismissal
     // (player-visible time, or its own always-fires safety net); the finally
     // here only covers exits before that point. dismiss() is idempotent.
     var loaderHandedToLauncher = false;
+    SourceBindingCommitter? committer;
     try {
       // Secondary metadata line (file size / source / file count), matching Home.
       final winner =
@@ -6171,7 +6048,7 @@ class TorrentPlaybackService {
       if (meta == null && !r.hasPlaylist && await _shouldUseDeoVR(title)) {
         // DeoVR runs its own dialog flow — drop the loader before it.
         overlay?.dismiss();
-        if (!context.mounted) return;
+        if (!context.mounted || !sourceBindings.isCurrent) return;
         await _launchWithDeoVR(context, videoUrl: r.playUrl!, filename: title);
         return;
       }
@@ -6183,7 +6060,18 @@ class TorrentPlaybackService {
       final resolverProvider = _isNonDebridLaunchProvider(provider)
           ? recoveryProvider ?? await _defaultConfiguredProvider()
           : provider;
-      if (!context.mounted) return;
+      if (!context.mounted || !sourceBindings.isCurrent) return;
+      committer = _isNonDebridLaunchProvider(provider)
+          ? _lazySourceCommitter(
+              meta,
+              preferredProvider: resolverProvider,
+              sourceBindings: sourceBindings,
+            )
+          : _validatedLaunchCommitter(
+              provider,
+              meta,
+              sourceBindings: sourceBindings,
+            );
       final args = _playerArgs(
         videoUrl: r.playUrl!,
         httpHeaders: r.httpHeaders,
@@ -6207,9 +6095,7 @@ class TorrentPlaybackService {
             : null,
         startupFailoverEnabled: startupFailoverEnabled,
         startupResolverProvider: resolverProvider,
-        onStremioSourceCommitted: _isNonDebridLaunchProvider(provider)
-            ? _lazySourceCommitter(meta, preferredProvider: resolverProvider)
-            : _validatedLaunchCommitter(provider, meta),
+        onStremioSourceCommitted: committer.call,
         onStartupSourcesExhausted: onStartupSourcesExhausted,
         startupHasRemainingSavedSources: startupHasRemainingSavedSources,
         seriesSourceFetcher: seriesFetcher,
@@ -6224,6 +6110,8 @@ class TorrentPlaybackService {
         context,
         meta,
         provider: _isNonDebridLaunchProvider(provider) ? null : provider,
+
+        sourceBindings: sourceBindings,
       );
       loaderHandedToLauncher = overlay != null;
       await VideoPlayerLauncher.push(
@@ -6233,6 +6121,7 @@ class TorrentPlaybackService {
         onQuickPlayNextEpisode: nextEpisodeHandler,
       );
     } finally {
+      committer?.close();
       if (!loaderHandedToLauncher) overlay?.dismiss();
     }
   }
@@ -6499,84 +6388,38 @@ class TorrentPlaybackService {
     };
   }
 
-  /// The first validated candidate owns the normal play-time auto-binding;
-  /// later commits are explicit in-player switches. Commits are serialized so
-  /// rapid successful switches cannot let an older SharedPreferences write
-  /// land after a newer one. Movies replace their sole binding; series retain
-  /// prior bindings and promote the newly validated source.
-  static Future<void> Function(Torrent) _validatedLaunchCommitter(
+  static SourceBindingCommitter _validatedLaunchCommitter(
     String provider,
-    PlaybackMeta? meta,
-  ) {
-    var initialCommitPending = true;
-    var tail = Future<void>.value();
-    return (Torrent t) {
-      final isInitial = initialCommitPending;
-      if (initialCommitPending) {
-        initialCommitPending = false;
-      }
-      final commit = tail.then((_) async {
-        logSourceSelection(
-          'validated_source',
-          source: t,
-          season: meta?.season,
-          episode: meta?.episode,
-          reason: isInitial ? 'initial_playback' : 'player_switch',
-        );
-        await _cacheValidatedDirect(meta, t);
-        var bindingProvider = provider;
-        if (t.streamType == StreamType.torrent &&
-            (bindingProvider == SeriesSource.addonDirectService ||
-                bindingProvider == SeriesSource.mediaServerService ||
-                bindingProvider == SeriesSource.iptvDirectService)) {
-          bindingProvider =
-              await _defaultConfiguredProvider() ?? bindingProvider;
-        }
-        if (isInitial) {
-          await _autoBindMovieOnPlay(meta, t, bindingProvider);
-          await _autoBindSeriesOnPlay(meta, t, bindingProvider);
-          return;
-        }
-        await _rebindOnSourceSwitch(meta, t, bindingProvider);
-      });
-      // Keep the chain usable even though persistence is deliberately
-      // best-effort. Return the original task so the bridge still observes a
-      // failure if a future implementation stops swallowing storage errors.
-      tail = commit.catchError((_) {});
-      return commit;
-    };
-  }
+    PlaybackMeta? meta, {
+    required AutomaticSourceBindings sourceBindings,
+  }) => SourceBindingCommitter(
+    bindings: sourceBindings,
+    meta: meta,
+    provider: provider,
+    chooseProvider: (active) => _defaultConfiguredProvider(canContinue: active),
+  );
 
-  /// Public only for persistence regression tests; production players receive
-  /// the same callback through [_validatedLaunchCommitter].
   @visibleForTesting
   static Future<void> Function(Torrent) validatedSourceCommitterForTesting(
     String provider,
     PlaybackMeta? meta,
-  ) => _validatedLaunchCommitter(provider, meta);
+  ) => _validatedLaunchCommitter(
+    provider,
+    meta,
+    sourceBindings: AutomaticSourceBindings.capture(),
+  ).call;
 
-  /// Commit hook for launches whose resolver chooses a provider lazily.
-  static Future<void> Function(Torrent) _lazySourceCommitter(
+  static SourceBindingCommitter _lazySourceCommitter(
     PlaybackMeta? meta, {
     String? preferredProvider,
-  }) {
-    var tail = Future<void>.value();
-    return (Torrent t) {
-      final commit = tail.then((_) async {
-        if (t.streamType == StreamType.directUrl) {
-          await _cacheValidatedDirect(meta, t);
-          await _rebindOnSourceSwitch(meta, t, SeriesSource.addonDirectService);
-          return;
-        }
-        final provider =
-            preferredProvider ?? await _defaultConfiguredProvider();
-        if (provider == null) return;
-        await _rebindOnSourceSwitch(meta, t, provider);
-      });
-      tail = commit.catchError((_) {});
-      return commit;
-    };
-  }
+    required AutomaticSourceBindings sourceBindings,
+  }) => SourceBindingCommitter(
+    bindings: sourceBindings,
+    meta: meta,
+    provider: preferredProvider,
+    lazy: true,
+    chooseProvider: (active) => _defaultConfiguredProvider(canContinue: active),
+  );
 
   static String _directValidationKey(Torrent source) {
     final keys = source.httpHeaders?.keys.toList() ?? <String>[];
@@ -6585,144 +6428,6 @@ class TorrentPlaybackService {
       source.directUrl,
       {for (final key in keys) key: source.httpHeaders![key]},
     ]);
-  }
-
-  static Future<void> _cacheValidatedDirect(
-    PlaybackMeta? meta,
-    Torrent source,
-  ) async {
-    if (meta?.hasStremioEpisodeIdentity == true) return;
-    if (meta?.imdbId == null || source.streamType != StreamType.directUrl)
-      return;
-    // The player can advance while its launch callback retains old metadata.
-    // Use the addon's actual request identity, never a filename guess.
-    final parts = source.stremioVideoId?.split(':');
-    final isMovie = meta!.contentType == 'movie';
-    if (parts == null || parts.first != meta.imdbId) return;
-    final season = !isMovie && parts.length == 3
-        ? int.tryParse(parts[1])
-        : null;
-    final episode = !isMovie && parts.length == 3
-        ? int.tryParse(parts[2])
-        : null;
-    if (!isMovie && (season == null || episode == null)) return;
-    try {
-      await ResolvedPlaybackLinkCache.save(
-        id: meta.imdbId!,
-        type: meta.contentType ?? 'series',
-        season: season,
-        episode: episode,
-        source: source,
-      );
-    } catch (_) {
-      // Optional cache persistence must never prevent a durable pin commit.
-    }
-  }
-
-  /// Keep a title's pinned source in sync when the user switches sources in
-  /// the player. A validated switch can update or create the binding; local and
-  /// non-refreshable sources are skipped.
-  ///
-  /// A movie has a single bound source, so it's a straight replace (matching
-  /// [_autoBindMovieOnPlay]). A series keeps ALL other fallbacks and promotes
-  /// the chosen source to primary; switching never replaces a series pin.
-  /// PikPak torrents are excluded for series
-  /// (matching the series auto-pin feature) but allowed for movies (matching
-  /// [_autoBindMovieOnPlay]).
-  static Future<void> _rebindOnSourceSwitch(
-    PlaybackMeta? meta,
-    Torrent switched,
-    String provider,
-  ) async {
-    if (meta == null ||
-        (meta.imdbId ?? meta.stremioCatalogId)?.isEmpty != false ||
-        switched.streamType == StreamType.externalUrl) {
-      return;
-    }
-    final isMovie = meta.contentType == 'movie';
-    // A series needs a concrete episode, and its auto-pin feature is off for
-    // PikPak; movies have neither constraint.
-    if (!isMovie &&
-        (meta.season == null ||
-            meta.episode == null ||
-            (switched.streamType == StreamType.torrent &&
-                provider == 'pikpak'))) {
-      return;
-    }
-    final source = _durableBindingForSource(
-      switched,
-      provider,
-      addonCatalogId: meta.stremioCatalogId,
-      addonCatalogKey: meta.stremioAddonKey,
-    );
-    if (source == null) return;
-    final isIptv = IptvSourceSearch.owns(switched);
-    try {
-      final imdbId = meta.imdbId ?? meta.stremioCatalogId!;
-      final existing = await SeriesSourceService.getSources(imdbId);
-      if (isMovie) {
-        // Single bound source — replace it with the chosen one.
-        await SeriesSourceService.setSources(imdbId, [source]);
-        if (isIptv) {
-          logIptvSourceEvent(
-            'source_switch_pin_completed',
-            source: switched,
-            outcome: 'saved',
-          );
-        }
-        return;
-      }
-      // A switch after an unpersistable initial row can be the first bind. The
-      // existing series auto-pin preference still owns that opt-in boundary;
-      // once a list exists, a successful switch keeps it in sync regardless.
-      if (existing.isEmpty && !await StorageService.getSeriesAutoPinOnPlay()) {
-        if (isIptv) {
-          logIptvSourceEvent(
-            'source_switch_pin_completed',
-            source: switched,
-            outcome: 'disabled',
-            season: meta.season,
-            episode: meta.episode,
-          );
-        }
-        return;
-      }
-      // Series: promote the winner but retain the previous primary and every
-      // other fallback. Re-selecting an existing entry just moves/refreshes it.
-      final list = List<SeriesSource>.from(existing)
-        ..removeWhere(
-          (s) =>
-              s.bindingKey == source.bindingKey ||
-              (s.isAddonDirect &&
-                  source.isAddonDirect &&
-                  s.addonCatalogId == source.addonCatalogId &&
-                  s.addonCatalogKey == source.addonCatalogKey &&
-                  s.addonKey == source.addonKey &&
-                  s.streamKey == source.streamKey),
-        );
-      list.insert(0, source);
-      await SeriesSourceService.setSources(imdbId, list);
-      if (isIptv) {
-        logIptvSourceEvent(
-          'source_switch_pin_completed',
-          source: switched,
-          outcome: 'saved',
-          season: meta.season,
-          episode: meta.episode,
-        );
-      }
-    } catch (error) {
-      if (isIptv) {
-        logIptvSourceEvent(
-          'source_switch_pin_completed',
-          source: switched,
-          outcome: 'storage_failed',
-          season: meta.season,
-          episode: meta.episode,
-          error: error,
-        );
-      }
-    }
   }
 
   /// Native media-server streams need credential-aware background downloads,
@@ -7145,6 +6850,7 @@ class TorrentPlaybackService {
     List<Torrent>? sources,
     int sourceIndex = 0,
     String searchKeyword = '',
+    required AutomaticSourceBindings sourceBindings,
   }) async {
     final hasVideo = r.playUrl != null && r.playUrl!.isNotEmpty;
     final name = torrent.displayTitle;
@@ -7174,6 +6880,8 @@ class TorrentPlaybackService {
               meta: meta,
               sources: sources,
               sourceIndex: sourceIndex,
+
+              sourceBindings: sourceBindings,
             ),
           ),
         ),

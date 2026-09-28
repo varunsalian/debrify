@@ -132,7 +132,7 @@ until the batch ends. This replaces per-helper checkpoints, not incremental safe
 | Batch | Current status |
 | --- | --- |
 | A | Implemented and reviewed. Home actions, resume, detail mutation/reset boundaries and accepted local writes are wired and checked. Full gate: 10,058 passes, unchanged historical failures/errors, no missing or newly skipped tests. |
-| B | Shared acquisition/manual-pin DI and reachable manual provider ownership reviewed. Latest full gate: 10,103 passes, unchanged historical failures/errors/skips, 28 added passing cases. Automatic binding writes and native handoff/device acceptance remain pending. |
+| B | Shared acquisition/manual-pin DI, manual provider ownership and automatic binding writes reviewed. Latest full run adds seven passing ownership cases; one old-signature assertion was updated and passes its focused rerun. Historical failures/errors remain; no missing tests or new skips. Automatic provider preparation, download/native handoff and device acceptance remain pending. |
 | C | Pending remaining boundaries; substantial layout/search extraction already complete |
 | D | Pending remaining boundaries and facade reduction |
 | E | Pending final acceptance |
@@ -216,10 +216,23 @@ logic is moved into them. The B exit is verified acquisition/binding ownership,
 not an unrelated rewrite of these services; their other responsibilities remain
 separately scoped debt.
 
-Next, finish automatic binding writes and their originating playback action owner,
-then native handoff/remaining device checks in the checklist. Preserve precedence,
-source-switch behavior and accepted writes. Do not re-extract these completed data
-operations or reopen provider internals absent a specific uncovered contract.
+Automatic binding policies now live in `AutomaticSourceBindings` (407 lines),
+with one `SourceBindingCommitter` (100 lines) per player. Riverpod supplies the
+originating owner factory to the Sources playback bridge. Selection, recovery and
+next-episode paths retain that owner; queued commits reject profile retirement and
+player closure through the actual cache/pin write barriers. Existing automatic
+binding contracts and seven real-profile retirement cases pass. The shared
+189-line `ResolvedPlaybackLinkCache` retains its existing storage responsibility;
+only its optional actual-write guard changed. The workflow is reviewed: the full comparison and focused signature-assertion
+correction are recorded in the evidence log.
+
+Next, finish provider preparation and download/native handoff ownership, then the
+remaining device checks in the checklist. Concrete gaps: automatic `_add` and
+in-player resolvers still omit the available acquisition guard; direct downloads
+can reach queue authorization after an asynchronous URL resolution. Preserve
+request order, source-switch behavior and accepted download ownership while
+closing those gaps. Do not re-extract completed binding/data operations or reopen
+unrelated provider internals. Ordered native teardown remains D.
 
 ## Starting point
 

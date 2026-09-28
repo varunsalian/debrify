@@ -74,14 +74,18 @@ class ResolvedPlaybackLinkCache {
     int? season,
     int? episode,
     required Torrent source,
+    bool Function()? canContinue,
   }) async {
+    if (canContinue?.call() == false) return;
     if (source.directUrl == null ||
         source.stremioAddonKey == null ||
         source.stremioStreamKey == null)
       return;
     if (type != 'movie' && (season == null || episode == null)) return;
     final prefs = await ProfilePreferences.instance();
+    if (canContinue?.call() == false) return;
     await _lock.synchronized(() async {
+      if (canContinue?.call() == false) return;
       final now = DateTime.now();
       var expiry = expiresAt(source.directUrl!, now);
       if (!expiry.isAfter(now)) return;
@@ -114,10 +118,15 @@ class ResolvedPlaybackLinkCache {
       while (entries.length > 64) {
         entries.remove(entries.keys.first);
       }
-      await prefs.setString(
-        preferenceKey,
-        await SecretVault.seal(jsonEncode(entries)),
-      );
+      final sealed = await SecretVault.seal(jsonEncode(entries));
+      if (canContinue == null) {
+        await prefs.setString(preferenceKey, sealed);
+      } else {
+        await ProfilePreferences.synchronizeExternalMutation(() async {
+          if (!canContinue()) return;
+          await prefs.setString(preferenceKey, sealed);
+        }, marksMutation: false);
+      }
     });
   }
 

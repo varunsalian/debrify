@@ -6,6 +6,45 @@ workflow checkpoints, reuse valid evidence, and run broader checks at integratio
 gates. Earlier entries retain their original slice history. No changes are pushed
 to the public repository.
 
+## Batch B checkpoint: automatic binding ownership — 2026-09-28
+
+Base revision: `9d1ec429`. Automatic movie/series pins, switch promotion, durable
+source descriptors and resolved-link caching now live in the plain
+`AutomaticSourceBindings` operation. The Sources playback bridge obtains its
+owner factory through Riverpod. Legacy selection, saved-source recovery and
+next-episode paths retain the original owner instead of capturing a later profile.
+Each launch has a `SourceBindingCommitter` queue and close signal; callbacks run
+inside the originating scope and recheck retirement across provider selection,
+cache encryption and actual preference writes. The existing Android TV persistence
+drain precedes launcher return; external handoff still awaits its commit. This
+does not replace native teardown or change player payloads.
+
+The 407-line policy and 100-line committer replace the old UI-service policies.
+Series caps, scoped addon identities, movie replacement, fallback retention,
+PikPak exclusions and optional cache failure semantics are preserved. Shared
+`ResolvedPlaybackLinkCache.save` accepts an optional write guard; unguarded callers
+retain their existing behavior. No schema, engine or dependency upgrade is included.
+
+Checks so far: all 64 existing binding/playback tests and seven new real-profile
+ownership tests pass. New cases cover foreign captured scopes, retirement during
+provider selection, queued callbacks, encryption/write barriers, delayed tombstones
+and independent players. Analyzer: 844 diagnostics, no added identities (one
+existing brace lint removed); architecture: 490 files pass. Receipts in
+`.git/refactor-evidence/phase5/`: `automatic-bindings-existing-tests.txt`,
+`automatic-bindings-owner-tests.txt`, `automatic-bindings-analyze-final.txt`.
+The shared callback/cache full run (`full-automatic-bindings-c4.jsonl`) finishes
+with 10,109 passes / 23 failures / 29 errors / 20 skips: seven added passing tests,
+no missing tests or new skips, and one newly failing source-text assertion that
+expected the old `_lazySourceCommitter` signature. Updated that assertion to verify
+both the preserved preferred provider and the new originating owner. Its focused
+rerun passes (`automatic-bindings-signature-test.txt`); the remaining 22 failures
+and 29 errors match the preceding full run by identity. The full log remains
+unaltered. Only that test assertion and method-header formatting changed afterward;
+no application behavior changed and a second full suite was unnecessary. Format,
+diff and architecture checks pass. No failure allowances changed.
+Provider preparation, download queue ownership and native handoff checks remain
+in B. C–E, device/performance acceptance and facade reduction remain pending.
+
 ## Batch B checkpoint: manual provider operation ownership — 2026-09-28
 
 Manual preparation now captures the live originating profile/session and runs its

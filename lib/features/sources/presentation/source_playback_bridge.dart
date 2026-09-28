@@ -1,3 +1,5 @@
+import '../application/source_playback_dependencies.dart';
+import '../data/automatic_source_bindings.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -9,11 +11,19 @@ import '../../../services/torrent_playback_service.dart'
 /// Context-dependent legacy playback remains behind this presentation boundary.
 /// The caller supplies the rendered list and its matching selected-row index.
 final sourcePlaybackBridgeProvider = Provider<SourcePlaybackBridge>(
-  (ref) => const SourcePlaybackBridge(),
+  (ref) => SourcePlaybackBridge(
+    bindings: ref.watch(automaticSourceBindingsFactoryProvider),
+  ),
+  dependencies: [automaticSourceBindingsFactoryProvider],
 );
 
 class SourcePlaybackBridge {
-  const SourcePlaybackBridge();
+  const SourcePlaybackBridge({
+    AutomaticSourceBindings Function() bindings =
+        AutomaticSourceBindings.capture,
+  }) : _bindings = bindings;
+
+  final AutomaticSourceBindings Function() _bindings;
 
   Future<void> play(
     BuildContext context,
@@ -31,6 +41,7 @@ class SourcePlaybackBridge {
     sources: sources,
     sourceIndex: sourceIndex,
     searchKeyword: searchKeyword,
+    sourceBindings: _bindings(),
   );
 
   bool supportsDownload(Torrent torrent) =>
