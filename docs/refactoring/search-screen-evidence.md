@@ -6,6 +6,31 @@ workflow checkpoints, reuse valid evidence, and run broader checks at integratio
 gates. Earlier entries retain their original slice history. No changes are pushed
 to the public repository.
 
+## Batch C checkpoint: Atrium and Mosaic board composition — 2026-09-28
+
+Base: `974a5e22`. Atrium (156 lines) and Mosaic (81 lines) now compose their
+boards in Home presentation. Production uses both. Atrium owns its adaptive wall
+budget, dossier, focused rail label and one/two-row rendering; Mosaic owns its
+poster-grid geometry, identity and rail hint. Shared media remains borrowed.
+Root: **12,693 → 12,555 lines**.
+
+Review preserves captured rail/count timing, lazy visual settings, host-context
+labels, scaled caption/identity constraints, Atrium's second-row eligibility and
+Mosaic's live-only surface. Geometry still reaches the existing cell/navigation
+callbacks; no new focus resources or data operations were introduced.
+
+**29 tests pass**: 14 Atrium layout/row/identity checks, four Atrium real-screen
+checks, and 11 Mosaic layout/real-screen checks. Integration uses
+`test/home_progressive_screen_test.dart` and
+`test/home_progressive_pagination_test.dart` filtered to each layout, covering late
+catalogs, covered routes, pagination and deferred Down focus. Receipts in
+`.git/refactor-evidence/phase5/`: `atrium-board-tests.txt`,
+`atrium-board-integration.txt`, `mosaic-board-tests.txt`,
+`atrium-mosaic-analyze-final.txt`. Analysis retains **838 identical diagnostic
+identities**. Architecture passes **524 files**; formatting and
+diff checks pass. No emulator used. Remaining layouts, resource ownership and
+final acceptance stay open.
+
 ## Batch C checkpoint: Deck board composition — 2026-09-28
 
 Base: `c8752712`. `home_deck_board.dart` (124 lines) owns Deck's rail-first

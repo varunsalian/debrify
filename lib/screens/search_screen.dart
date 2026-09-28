@@ -47,11 +47,10 @@ import '../features/home/presentation/spotlight_iptv_card_preview.dart';
 export '../features/home/presentation/spotlight_iptv_card_preview.dart' show SpotlightIptvCardPreview;
 import '../features/home/presentation/home_hero_trailer_indicators.dart';
 import '../features/home/presentation/home_spotlight_search_button.dart';
-import '../features/home/presentation/home_stage_rail_label.dart';
 import '../features/home/presentation/home_promenade_board.dart';
-import '../features/home/presentation/home_atrium_layout.dart';
+import '../features/home/presentation/home_atrium_board.dart';
 import '../features/home/presentation/home_atrium_row.dart';
-import '../features/home/presentation/home_mosaic_layout.dart';
+import '../features/home/presentation/home_mosaic_board.dart';
 import '../features/home/presentation/home_deck_board.dart';
 import '../features/home/presentation/home_stage_row_label.dart';
 import '../features/home/presentation/home_tonight_layout.dart';
@@ -375,13 +374,7 @@ const double _kStageMinPosterH = 56;
 
 // ATRIUM metrics. The wall's height is DERIVED from these (never guessed),
 // so the dossier column beside it can't be crowded by a taller row.
-const double _kAtriumSplit = 0.38;
 const double _kAtriumLabelGap = 10;
-
-/// The share of the board Atrium's two-row wall may occupy. The row box is
-/// derived from what fits inside this, so scaled labels shrink the posters
-/// rather than pushing the wall off the bottom.
-const double _kAtriumWallBudget = 0.64;
 
 double _atriumLabelHeight(BuildContext context) =>
     MediaQuery.textScalerOf(context).scale(homeStageRowLabelFontSize) * 1.35;
@@ -7565,120 +7558,28 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       return BrandLoadingStage(isTelevision: widget.isTelevision);
     }
     _seedStageFocusOnce();
-    final rails = view.rails;
-    final active = view.index;
-    final hasSecondRow = active + 1 < rails.length;
-
-    return LayoutBuilder(
-      builder: (context, cons) {
-        final boardH = cons.maxHeight;
-        final boardW = cons.maxWidth;
-        final double splitX = boardW * _kAtriumSplit;
-        // ONE row height for every rail kind, filled two ways — reserving the
-        // caption band on catalog rows too would cost 45px PER ROW here and
-        // push the wall over three quarters of the art.
-        //
-        // The wall gets a BUDGET (a share of the board) and the row box is
-        // derived from what fits inside it, so two scaled labels and a large
-        // text scale can shrink the rows instead of running off the board.
-        final labelH = _atriumLabelHeight(context);
-        // The wall gets a BUDGET. If two rows at the accessibility floor
-        // (scaled caption + a recognisable poster) don't fit inside it, show
-        // ONE row rather than two clipped ones — the second rail is still one
-        // DOWN away.
-        final floorH = _homeArtPosterCaptionBand + _kStageMinPosterH;
-        double chromeFor(int rows) =>
-            rows * (labelH + _kAtriumLabelGap) +
-            (rows - 1) * homeAtriumRowGap +
-            homeAtriumWallTail;
-        final wallBudget = boardH * _kAtriumWallBudget;
-        final twoRowsFit =
-            hasSecondRow && wallBudget - chromeFor(2) >= floorH * 2;
-        final showSecondRow = hasSecondRow && twoRowsFit;
-        final rows = showSecondRow ? 2 : 1;
-        final budget = wallBudget - chromeFor(rows);
-        final rowBoxH = _stageRailBoxH(
-          context,
-          min(boardH * 0.22, budget / rows),
-          maxH: max(budget / rows, floorH),
-        );
-        final rowUnit = labelH + _kAtriumLabelGap + rowBoxH;
-        final wallH =
-            (showSecondRow ? rowUnit * 2 + homeAtriumRowGap : rowUnit) +
-            homeAtriumWallTail;
-
-        return buildHomeAtriumLayout(
-          splitX: splitX,
-          wallH: wallH,
-          panelColor: app.home.bg,
-          seamColor: app.fade(app.core.tx, 0.09),
-          artwork: _boardMedia.artwork(),
-          trailer: _heroTrailerActive
-              ? _boardMedia.trailerLayer(boardH, fullBleed: true)
-              : null,
-          live: _heroTrailerActive
-              ? _boardMedia.liveLayer(boardH, fullBleed: true)
-              : null,
-          railLabel: ValueListenableBuilder<String?>(
-            valueListenable: _atriumFocusedRailKey,
-            builder: (context, key, _) {
-              final i = key == null
-                  ? active
-                  : rails.indexWhere((r) => _canvasRailKeyOf(r) == key);
-              final title = _canvasTabTitle(rails, i < 0 ? active : i);
-              return Text(
-                title.toUpperCase(),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 2.6,
-                  color: kCardFocusRing,
-                ),
-              );
-            },
+    return buildHomeAtriumBoard(
+      view: view,
+      media: () => _boardMedia,
+      trailerActive: () => _heroTrailerActive,
+      focusedRailKey: _atriumFocusedRailKey,
+      trailerShowing: _heroTrailerShowing,
+      panelColor: app.home.bg,
+      seamColor: app.fade(app.core.tx, 0.09),
+      labelHeight: _atriumLabelHeight,
+      labelGap: _kAtriumLabelGap,
+      minimumRowHeight: () => _homeArtPosterCaptionBand + _kStageMinPosterH,
+      railBoxHeight: _stageRailBoxH,
+      railKeyOf: _canvasRailKeyOf,
+      railTitle: (index) => _canvasTabTitle(view.rails, index),
+      rowBuilder: (index, height, {required isTopRow, required hasRowBelow}) =>
+          _atriumRow(
+            view.rails,
+            index,
+            height,
+            isTopRow: isTopRow,
+            hasRowBelow: hasRowBelow,
           ),
-          identity: ValueListenableBuilder<HomeFavoriteFocus?>(
-            valueListenable: _canvasFavFocus,
-            builder: (context, fav, _) => fav != null
-                ? HomeStageFavoriteIdentity(fav: fav)
-                : HomeStageIdentity(
-                    item: _heroItem,
-                    enriched: _heroEnriched,
-                    trailerShowing: _heroTrailerShowing,
-                    // Drop the synopsis rather than clip it when
-                    // the column is short (small board / large
-                    // text scale).
-                    variant:
-                        boardH - 64 >=
-                            homeStageNarrowIdentityHeight(context) + 90
-                        ? HomeStageIdentityVariant.narrow
-                        : HomeStageIdentityVariant.headline,
-                    maxWidth: (splitX - homeAtriumPanelPadding * 2).clamp(
-                      120.0,
-                      520.0,
-                    ),
-                  ),
-          ),
-          topRow: _atriumRow(
-            rails,
-            active,
-            rowBoxH,
-            isTopRow: true,
-            hasRowBelow: showSecondRow,
-          ),
-          bottomRow: showSecondRow
-              ? _atriumRow(
-                  rails,
-                  active + 1,
-                  rowBoxH,
-                  isTopRow: false,
-                  hasRowBelow: false,
-                )
-              : null,
-        );
-      },
     );
   }
 
@@ -7838,69 +7739,30 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       return BrandLoadingStage(isTelevision: widget.isTelevision);
     }
     _seedStageFocusOnce();
-    final rail = view.rail;
-    final railKey = view.key;
-    final favRail = rail.favKind != null;
-    final items = view.items;
-    final nodes = view.nodes;
-    final count = favRail ? _canvasFavItemCount(rail.favKind!) : items.length;
-
-    return LayoutBuilder(
-      builder: (context, cons) {
-        final boardW = cons.maxWidth;
-        final boardH = cons.maxHeight;
-        final geometry = HomeMosaicGeometry(
-          boardW: boardW,
-          boardH: boardH,
-          cellAspect: favRail ? 2 / 3 : _stageCardAspect(rail),
-          captionBandHeight: favRail ? _homeArtPosterCaptionBand : 0,
-        );
-        return buildHomeMosaicLayout(
-          context: context,
-          geometry: geometry,
-          railKey: railKey,
-          itemCount: count,
-          liveChannel: _heroLiveChannel,
-          showRailHint: view.rails.length > 1,
-          hintColor: app.fade(app.core.tx, 0.34),
-          artwork: _boardMedia.artwork(),
-          liveSurface: _heroTrailerActive
-              ? _boardMedia.liveLayer(boardH, fullBleed: true)
-              : null,
-          identity: ValueListenableBuilder<HomeFavoriteFocus?>(
-            valueListenable: _canvasFavFocus,
-            builder: (context, fav, _) => Align(
-              alignment: Alignment.bottomLeft,
-              child: fav != null
-                  ? HomeStageFavoriteIdentity(fav: fav)
-                  : HomeStageIdentity(
-                      item: _heroItem,
-                      enriched: _heroEnriched,
-                      trailerShowing: _heroTrailerShowing,
-                      variant: HomeStageIdentityVariant.headline,
-                      maxWidth: max(1.0, geometry.gridW * 0.5),
-                    ),
-            ),
-          ),
-          railLabel: buildHomeStageRailLabel(
-            context: this.context,
-            title: _canvasTabTitle(view.rails, view.index),
-            railIndex: view.index,
-            railCount: view.rails.length,
-            align: MainAxisAlignment.end,
-          ),
-          itemBuilder: (context, col) => _mosaicCell(
-            rail,
-            railKey,
-            items,
-            nodes,
-            col,
-            count,
-            geometry.perRow,
-            geometry.cellW,
-          ),
-        );
-      },
+    final count = view.rail.favKind != null
+        ? _canvasFavItemCount(view.rail.favKind!)
+        : view.items.length;
+    return buildHomeMosaicBoard(
+      hostContext: context,
+      view: view,
+      itemCount: count,
+      media: () => _boardMedia,
+      trailerActive: () => _heroTrailerActive,
+      trailerShowing: _heroTrailerShowing,
+      cardAspect: () => _stageCardAspect(view.rail),
+      captionBandHeight: () => _homeArtPosterCaptionBand,
+      hintColor: app.fade(app.core.tx, 0.34),
+      railTitle: () => _canvasTabTitle(view.rails, view.index),
+      itemBuilder: (col, perRow, cellWidth) => _mosaicCell(
+        view.rail,
+        view.key,
+        view.items,
+        view.nodes,
+        col,
+        count,
+        perRow,
+        cellWidth,
+      ),
     );
   }
 
