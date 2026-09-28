@@ -71,7 +71,7 @@ import '../features/home/presentation/home_hero_swap.dart';
 import '../features/home/presentation/home_hero_spotlight.dart';
 export '../features/home/presentation/spotlight_iptv_card_preview.dart' show SpotlightIptvCardPreview;
 import '../features/home/presentation/home_hero_trailer_indicators.dart';
-import '../features/home/presentation/home_spotlight_search_button.dart';
+import '../features/search/presentation/search_page_shell.dart';
 import '../features/home/presentation/home_promenade_board.dart';
 import '../features/home/presentation/home_atrium_board.dart';
 import '../features/home/presentation/home_atrium_row.dart';
@@ -9034,120 +9034,41 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   // ── Build ──────────────────────────────────────────────────────────────────
 
   @override
-  Widget build(BuildContext context) {
-    // The TV Home board is TRANSPARENT down to the app shell: the glass stage
-    // (TvAmbientArtStage, painted BEHIND the sidebar rail in main.dart) is the
-    // real background, so the focused title's blurred art fills the whole
-    // screen — rail strip included. Every other mode keeps the opaque indigo
-    // bloom below.
-    final glassHome = _heroTrailerActive;
-    final app = AppThemeScope.of(context);
-    return Scaffold(
-      backgroundColor: glassHome ? Colors.transparent : app.home.bg,
-      // A restrained indigo bloom near the top fading fast into near-black —
-      // toned down from a saturated purple so the posters carry the colour
-      // (Stremio's home grid is nearly monochrome).
-      body: Container(
-        decoration: glassHome ? null : BoxDecoration(gradient: app.home.wash),
-        // Four layouts:
-        //  • Dedicated Search tab (searchMode) — the field + Catalog/Keyword
-        //    toggle over a blank prompt until the user types (TV only).
-        //  • Home-New board on TV — chrome-free hero + rows, no search bar
-        //    (search lives in its own tab).
-        //  • Off-TV Home with Spotlight selected — the full-bleed shell with
-        //    search behind a button (see _buildSpotlightShell). The hero owns
-        //    the status-bar region, so SafeArea's top inset is the shell's to
-        //    manage.
-        //  • Home-New board on desktop/mobile classic — keeps a persistent
-        //    search bar above the board; the separate Search tab is an
-        //    additional way in on TV and sidebar layouts, not a replacement.
-        child: widget.discoverMode
-            ? SafeArea(child: _buildDiscover())
-            : (widget.isTelevision && !widget.searchMode)
-            ? SafeArea(child: _buildBoard())
-            : _spotlightShellActive
-            ? _buildSpotlightShell()
-            : SafeArea(
-                child: Column(
-                  children: [
-                    _buildHeader(),
-                    _buildUnifiedCatalogSourcesBar(),
-                    Expanded(child: _buildBody()),
-                  ],
-                ),
-              ),
-      ),
-    );
-  }
+  Widget build(BuildContext context) => buildSearchPageShell(
+    context: context,
+    glassHome: _heroTrailerActive,
+    discoverMode: widget.discoverMode,
+    isTelevision: widget.isTelevision,
+    dedicatedSearch: widget.searchMode,
+    spotlightActive: () => _spotlightShellActive,
+    discover: _buildDiscover,
+    board: _buildBoard,
+    spotlight: _buildSpotlightShell,
+    header: _buildHeader,
+    sourcesBar: _buildUnifiedCatalogSourcesBar,
+    body: _buildBody,
+  );
 
-  /// Off-TV Home while Spotlight is selected: one branch, two states.
-  ///
-  /// Sheet hidden — the board is full-bleed (the hero owns the status-bar
-  /// region, like the detail page already does) with a search button floating
-  /// top-right. Sheet open — today's search layout exactly: the same
-  /// `_buildHeader()` + Sources bar + `_buildBody()` the classic branch
-  /// renders, so nothing about search is a copy. `_buildBody` (never
-  /// `_buildBoard` directly): Keyword-mode routing lives there.
-  ///
-  /// The latch line below is the belt to the focus-listener's braces: any
-  /// build that observes a force condition (keyword mode, committed query,
-  /// in-flight search) pins the sheet open, so a state that arrives without
-  /// the field ever being touched — the async keyword-default restore — still
-  /// opens it. Plain field write, deliberately not setState: we are already
-  /// inside build, and the value participates in this very frame.
   Widget _buildSpotlightShell() {
+    // Preserve the build-time latch for async default-mode/query restoration.
     if (_sheetForced) _searchSheetOpen = true;
-    if (_searchSheetOpen) {
-      return SafeArea(
-        child: Column(
-          children: [
-            // Close affordance: only on the blank catalog prompt — with any
-            // query or keyword state active, Back (hardware or gesture) is
-            // the way out, and it resets atomically via _closeSearchSheet.
-            if (!_sheetForced && _searchController.text.isEmpty)
-              Align(
-                alignment: Alignment.centerRight,
-                child: Padding(
-                  padding: const EdgeInsets.only(right: 8, top: 4),
-                  child: IconButton(
-                    icon: const Icon(Icons.close_rounded),
-                    tooltip: 'Hide search',
-                    onPressed: _closeSearchSheet,
-                  ),
-                ),
-              ),
-            _buildHeader(),
-            _buildUnifiedCatalogSourcesBar(),
-            Expanded(child: _buildBody()),
-          ],
-        ),
-      );
-    }
-    final topInset = MediaQuery.viewPaddingOf(context).top;
-    return SafeArea(
-      top: false,
-      child: Stack(
-        children: [
-          Positioned.fill(child: _buildBody()),
-          Positioned(
-            top: topInset + 10,
-            right: HomeSpotlightSearchButton.rightInset,
-            child: HomeSpotlightSearchButton(
-              onTap: () => setState(() {
-                _searchSheetOpen = true;
-                // Focus the field once the sheet's frame exists, so the
-                // keyboard comes up in the same gesture.
-                WidgetsBinding.instance.addPostFrameCallback((_) {
-                  if (mounted) _searchFocusNode.requestFocus();
-                });
-              }),
-            ),
-          ),
-        ],
-      ),
+    return buildSpotlightSearchShell(
+      context: context,
+      sheetOpen: _searchSheetOpen,
+      canClose: !_sheetForced && _searchController.text.isEmpty,
+      onClose: _closeSearchSheet,
+      onOpen: () => setState(() {
+        _searchSheetOpen = true;
+        // Focus after the sheet mounts, in the same gesture.
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _searchFocusNode.requestFocus();
+        });
+      }),
+      header: _buildHeader,
+      sourcesBar: _buildUnifiedCatalogSourcesBar,
+      body: _buildBody,
     );
   }
-
   /// Show/hide the unified catalog Sources bar as the search field gains/loses
   /// focus. The hide is DELAYED: clicking the Sources button blurs the field,
   /// and hiding synchronously would unmount the button before its onTap fires
@@ -9155,37 +9076,12 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   /// long enough for the tap; a re-focus within the window cancels the hide.
   void _onSearchFocusForSources() => _searchFocus.onFieldFocusForSources();
 
-  /// On the unified (non-TV) layout there's no dedicated Search tab, so the
-  /// catalog Sources button lives just under the search field and appears while
-  /// that field is focused (clicked into) in Catalog mode — click away and it
-  /// hides. TV keeps it in the dedicated Search tab's prompt instead, so this
-  /// renders nothing there.
-  Widget _buildUnifiedCatalogSourcesBar() {
-    if (widget.isTelevision || widget.searchMode) {
-      return const SizedBox.shrink();
-    }
-    final show = _catalogSourcesBarShown && _mode == SearchMode.catalog;
-    return AnimatedSize(
-      duration: const Duration(milliseconds: 160),
-      curve: Curves.easeOut,
-      alignment: Alignment.topCenter,
-      child: !show
-          ? const SizedBox(width: double.infinity)
-          : Padding(
-              padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
-              child: Center(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 680),
-                  child: Align(
-                    alignment: Alignment.centerLeft,
-                    child: _catalogSourcesButton(),
-                  ),
-                ),
-              ),
-            ),
-    );
-  }
-
+  Widget _buildUnifiedCatalogSourcesBar() => buildUnifiedCatalogSourcesBar(
+    isTelevision: widget.isTelevision,
+    dedicatedSearch: widget.searchMode,
+    show: _catalogSourcesBarShown && _mode == SearchMode.catalog,
+    sourcesButton: _catalogSourcesButton,
+  );
   Widget _buildHeader() {
     final tv = widget.isTelevision;
     // On narrow phones the search box + mode selector crowd each other in one
@@ -9258,22 +9154,17 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     onFocusSidebar: () => MainPageBridge.focusTvSidebar?.call(),
   );
 
-  Widget _buildBody() {
-    if (_mode == SearchMode.keyword) return _buildKeyword();
-    if (_mode == SearchMode.lists) return _buildListsSearch();
-    // Full-screen spinner only until the FIRST result row streams in — after
-    // that the board renders and late rows append beneath it (a slim progress
-    // strip in _buildBoard signals the search is still running).
-    if (_catalogSearching && _sections.isEmpty) {
-      return const Center(child: CircularProgressIndicator());
-    }
-    // Dedicated Search tab: blank prompt until there's a query (no hero/board).
-    if (widget.searchMode && _catalogQuery.isEmpty) {
-      return _buildSearchPrompt();
-    }
-    return _buildBoard();
-  }
-
+  Widget _buildBody() => buildSearchModeContent(
+    mode: _mode,
+    catalogSearching: _catalogSearching,
+    catalogEmpty: _sections.isEmpty,
+    dedicatedSearch: widget.searchMode,
+    queryEmpty: _catalogQuery.isEmpty,
+    keyword: _buildKeyword,
+    lists: _buildListsSearch,
+    prompt: _buildSearchPrompt,
+    board: _buildBoard,
+  );
   late final _listsNavigation = ListsNavigation(
     isTelevision: () => widget.isTelevision,
     pikpakOnly: () => _pikpakOnly,

@@ -6,6 +6,26 @@ workflow checkpoints, reuse valid evidence, and run broader checks at integratio
 gates. Earlier entries retain their original slice history. No changes are pushed
 to the public repository.
 
+## Batch C checkpoint: page shell composition — 2026-09-28
+
+Base: `d710827f`. `search_page_shell.dart` (175 lines) composes the route shell,
+Spotlight search sheet, unified Sources bar and mode content routing. Existing
+feature builders remain lazy; the root retains sheet state and focus/lifecycle
+callbacks. Root: **10,558 → 10,449 lines**. This is page composition, not yet
+complete Home/Search/Discover state and action ownership.
+
+Review preserves Discover/TV Home/Spotlight/standard branch priority, transparent
+TV background, SafeArea/inset geometry, sheet latch timing, close eligibility,
+post-frame field focus, Sources animation and streamed-row spinner transition.
+Spotlight eligibility stays lazy on routes that cannot render it. **121 affected
+tests pass**: 66 Search presentation/focus cases plus 55 Home progressive-loading
+and pagination cases. Four shell tests were rerun after the lazy-eligibility
+refinement and pass. Final analysis retains **836 identical diagnostic identities**;
+architecture passes **556 files**; changed-code formatting/diff checks pass.
+Receipts: `.git/refactor-evidence/phase5/search-page-shell-{tests,home-tests,
+focused,analyze-final}.txt`. No emulator used. C/D feature ownership/facade work,
+integration gate and final device/performance acceptance remain pending.
+
 ## Batch D checkpoint: Home refresh queue — 2026-09-28
 
 Base: `fe25a05c`. `HomeRefreshQueue` owns pending row/addon invalidations and
