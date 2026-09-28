@@ -112,10 +112,12 @@ Future<int?> showTraktRatingDialog(BuildContext context) {
 
 /// Shows a custom list picker dialog. Returns the selected list or null.
 Future<Map<String, dynamic>?> showTraktCustomListPickerDialog(
-  BuildContext context,
-) async {
+  BuildContext context, {
+  bool Function()? isCurrent,
+}) async {
+  if (!context.mounted || !(isCurrent?.call() ?? true)) return null;
   final lists = await TraktService.instance.fetchCustomLists();
-  if (!context.mounted) return null;
+  if (!context.mounted || !(isCurrent?.call() ?? true)) return null;
   if (lists.isEmpty) {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
@@ -219,141 +221,161 @@ Future<void> handleTraktMenuAction(
   /// detail sheet's inline 1–10 strip). Omit it and the dialog behaves as
   /// before.
   int? presetRating,
+  bool Function()? isCurrent,
 }) async {
-  final traktService = TraktService.instance;
-  final imdbId = item.effectiveImdbId ?? item.id;
-  final type = item.type;
-  bool success = false;
-  String actionLabel = '';
+  final owner = ProfileSessionMemory.captureOwner();
+  bool current() =>
+      context.mounted &&
+      owner == ProfileSessionMemory.captureOwner() &&
+      (isCurrent?.call() ?? true);
+  if (!current()) return;
+  Future<void> run() async {
+    final traktService = TraktService.instance;
+    final imdbId = item.effectiveImdbId ?? item.id;
+    final type = item.type;
+    bool success = false;
+    String actionLabel = '';
 
-  switch (action) {
-    case TraktItemMenuAction.clearTraktProgress:
-      await showClearProviderProgressDialog(context, item, TrackingSource.trakt);
-      return;
-    case TraktItemMenuAction.addToWatchlist:
-      actionLabel = 'Added to Trakt Watchlist';
-      success = await traktService.addToWatchlist(imdbId, type);
-    case TraktItemMenuAction.addToCollection:
-      actionLabel = 'Added to Trakt Collection';
-      success = await traktService.addToCollection(imdbId, type);
-    case TraktItemMenuAction.markWatched:
-      actionLabel = 'Marked as Watched';
-      success = (await WatchedActionCoordinator.setTitleWatched(
-        imdbId: imdbId,
-        contentType: type,
-        watched: true,
-        // Trakt-branded surface: writes to Trakt even when Trakt is unticked
-        // in Scrobble. See WatchedActionCoordinator.forceTargets.
-        forceTargets: const {TrackingSource.trakt},
-      )).success;
-    case TraktItemMenuAction.rate:
-      if (!context.mounted) return;
-      final rating = presetRating ?? await showTraktRatingDialog(context);
-      if (rating == null) return;
-      actionLabel = 'Rated $rating/10 on Trakt';
-      success = await traktService.rateItem(imdbId, type, rating);
-    case TraktItemMenuAction.addToList:
-      if (!context.mounted) return;
-      final list = await showTraktCustomListPickerDialog(context);
-      if (list == null) return;
-      final listSlug =
-          list['ids']?['slug'] as String? ?? list['ids']?['trakt']?.toString();
-      if (listSlug == null || listSlug.isEmpty) return;
-      actionLabel = 'Added to Trakt list "${list['name']}"';
-      success = await traktService.addToCustomList(listSlug, imdbId, type);
-    // Remove actions — not used by add-only menu but handled for completeness
-    case TraktItemMenuAction.removeFromWatchlist:
-      actionLabel = 'Removed from Watchlist';
-      success = await traktService.removeFromWatchlist(imdbId, type);
-    case TraktItemMenuAction.removeFromCollection:
-      actionLabel = 'Removed from Collection';
-      success = await traktService.removeFromCollection(imdbId, type);
-    case TraktItemMenuAction.markUnwatched:
-      actionLabel = 'Marked as Unwatched';
-      success = (await WatchedActionCoordinator.setTitleWatched(
-        imdbId: imdbId,
-        contentType: type,
-        watched: false,
-        forceTargets: const {TrackingSource.trakt},
-      )).success;
-    case TraktItemMenuAction.removeRating:
-      actionLabel = 'Rating Removed';
-      success = await traktService.removeRating(imdbId, type);
-    case TraktItemMenuAction.removeFromList:
-      return; // No context for which list to remove from
-    case TraktItemMenuAction.removeFromPlayback:
-      return; // Only handled in TraktResultsView which has playback IDs
-    case TraktItemMenuAction.clearWatchProgress:
-      final owner = ProfileSessionMemory.captureOwner();
-      await runProgressResetDialog(
-        context: context,
-        isCurrent: () => owner == ProfileSessionMemory.captureOwner(),
-        confirmation: (ctx) => AlertDialog(
-          title: const Text('Clear watch progress?'),
-          content: Text(
-            CustomSeriesIdentity.isCustom(imdbId)
-                ? 'Clear watched history and resume progress for ${item.name} on this device?\n\nSaved sources are kept. This cannot be undone.'
-                : 'Clear ${item.type == 'movie' ? 'watched history and resume progress' : 'every episode’s watched history and resume progress'} for ${item.name} on this device and all connected Trakt, Simkl and MDBList accounts?\n\nSaved sources are kept. This cannot be undone.'
-                      '${item.type == 'movie' ? '\n\nIf Simkl is connected, its movie reset also removes the movie from its library and permanently deletes its saved rating.' : '\n\nRatings and library entries are kept.'}',
+    switch (action) {
+      case TraktItemMenuAction.clearTraktProgress:
+        await showClearProviderProgressDialog(
+          context,
+          item,
+          TrackingSource.trakt,
+          isCurrent: current,
+        );
+        return;
+      case TraktItemMenuAction.addToWatchlist:
+        actionLabel = 'Added to Trakt Watchlist';
+        success = await traktService.addToWatchlist(imdbId, type);
+      case TraktItemMenuAction.addToCollection:
+        actionLabel = 'Added to Trakt Collection';
+        success = await traktService.addToCollection(imdbId, type);
+      case TraktItemMenuAction.markWatched:
+        actionLabel = 'Marked as Watched';
+        success = (await WatchedActionCoordinator.setTitleWatched(
+          imdbId: imdbId,
+          contentType: type,
+          watched: true,
+          // Trakt-branded surface: writes to Trakt even when Trakt is unticked
+          // in Scrobble. See WatchedActionCoordinator.forceTargets.
+          forceTargets: const {TrackingSource.trakt},
+        )).success;
+      case TraktItemMenuAction.rate:
+        if (!context.mounted || !current()) return;
+        final rating = presetRating ?? await showTraktRatingDialog(context);
+        if (rating == null || !current()) return;
+        actionLabel = 'Rated $rating/10 on Trakt';
+        success = await traktService.rateItem(imdbId, type, rating);
+      case TraktItemMenuAction.addToList:
+        if (!context.mounted || !current()) return;
+        final list = await showTraktCustomListPickerDialog(
+          context,
+          isCurrent: current,
+        );
+        if (list == null || !current()) return;
+        final listSlug =
+            list['ids']?['slug'] as String? ??
+            list['ids']?['trakt']?.toString();
+        if (listSlug == null || listSlug.isEmpty) return;
+        actionLabel = 'Added to Trakt list "${list['name']}"';
+        success = await traktService.addToCustomList(listSlug, imdbId, type);
+      // Remove actions — not used by add-only menu but handled for completeness
+      case TraktItemMenuAction.removeFromWatchlist:
+        actionLabel = 'Removed from Watchlist';
+        success = await traktService.removeFromWatchlist(imdbId, type);
+      case TraktItemMenuAction.removeFromCollection:
+        actionLabel = 'Removed from Collection';
+        success = await traktService.removeFromCollection(imdbId, type);
+      case TraktItemMenuAction.markUnwatched:
+        actionLabel = 'Marked as Unwatched';
+        success = (await WatchedActionCoordinator.setTitleWatched(
+          imdbId: imdbId,
+          contentType: type,
+          watched: false,
+          forceTargets: const {TrackingSource.trakt},
+        )).success;
+      case TraktItemMenuAction.removeRating:
+        actionLabel = 'Rating Removed';
+        success = await traktService.removeRating(imdbId, type);
+      case TraktItemMenuAction.removeFromList:
+        return; // No context for which list to remove from
+      case TraktItemMenuAction.removeFromPlayback:
+        return; // Only handled in TraktResultsView which has playback IDs
+      case TraktItemMenuAction.clearWatchProgress:
+        await runProgressResetDialog(
+          context: context,
+          isCurrent: current,
+          confirmation: (ctx) => AlertDialog(
+            title: const Text('Clear watch progress?'),
+            content: Text(
+              CustomSeriesIdentity.isCustom(imdbId)
+                  ? 'Clear watched history and resume progress for ${item.name} on this device?\n\nSaved sources are kept. This cannot be undone.'
+                  : 'Clear ${item.type == 'movie' ? 'watched history and resume progress' : 'every episode’s watched history and resume progress'} for ${item.name} on this device and all connected Trakt, Simkl and MDBList accounts?\n\nSaved sources are kept. This cannot be undone.'
+                        '${item.type == 'movie' ? '\n\nIf Simkl is connected, its movie reset also removes the movie from its library and permanently deletes its saved rating.' : '\n\nRatings and library entries are kept.'}',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Cancel'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('Clear progress'),
+              ),
+            ],
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancel'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Clear progress'),
-            ),
-          ],
-        ),
-        reset: () {
-          Future<List<String>> run() => SeriesProgressResetService.clear(
-            imdbId,
-            item.name,
-            isMovie: item.type == 'movie',
-          );
-          final scope = owner.scope;
-          return scope == null
-              ? run()
-              : ProfileRuntime.withCapturedScope(scope, run);
-        },
-        message: (failures) => failures.isEmpty
-            ? 'Watch progress cleared.'
-            : 'Could not fully clear: ${failures.join(', ')}. Please retry.',
-      );
-      return;
-    case TraktItemMenuAction.removeFromTraktPlayback:
-      return; // Handled by callers that hold the TraktContinueWatchingItem
-    case TraktItemMenuAction.addToStremioTv:
-      await onAddToStremioTv?.call(item);
-      return;
-    case TraktItemMenuAction.selectSource:
-      if (onEditSource != null) {
-        // Caller handles edit-vs-select logic
-        onEditSource.call(item);
-      } else {
-        onSelectSource?.call(item);
-      }
-      return;
-    case TraktItemMenuAction.playRandomEpisode:
-      await onPlayRandomEpisode?.call(item);
-      return;
-    case TraktItemMenuAction.searchPacks:
-      onSearchPacks?.call(item);
-      return;
+          reset: () {
+            Future<List<String>> run() => SeriesProgressResetService.clear(
+              imdbId,
+              item.name,
+              isMovie: item.type == 'movie',
+            );
+            final scope = owner.scope;
+            return scope == null
+                ? run()
+                : ProfileRuntime.withCapturedScope(scope, run);
+          },
+          message: (failures) => failures.isEmpty
+              ? 'Watch progress cleared.'
+              : 'Could not fully clear: ${failures.join(', ')}. Please retry.',
+        );
+        return;
+      case TraktItemMenuAction.removeFromTraktPlayback:
+        return; // Handled by callers that hold the TraktContinueWatchingItem
+      case TraktItemMenuAction.addToStremioTv:
+        await onAddToStremioTv?.call(item);
+        return;
+      case TraktItemMenuAction.selectSource:
+        if (onEditSource != null) {
+          // Caller handles edit-vs-select logic
+          onEditSource.call(item);
+        } else {
+          onSelectSource?.call(item);
+        }
+        return;
+      case TraktItemMenuAction.playRandomEpisode:
+        await onPlayRandomEpisode?.call(item);
+        return;
+      case TraktItemMenuAction.searchPacks:
+        onSearchPacks?.call(item);
+        return;
+    }
+
+    if (!context.mounted || !current()) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(success ? actionLabel : 'Failed: $actionLabel'),
+        backgroundColor: success
+            ? const Color(0xFF34D399)
+            : const Color(0xFFEF4444),
+        duration: const Duration(seconds: 2),
+      ),
+    );
   }
 
-  if (!context.mounted) return;
-  ScaffoldMessenger.of(context).showSnackBar(
-    SnackBar(
-      content: Text(success ? actionLabel : 'Failed: $actionLabel'),
-      backgroundColor: success
-          ? const Color(0xFF34D399)
-          : const Color(0xFFEF4444),
-      duration: const Duration(seconds: 2),
-    ),
-  );
+  final scope = owner.scope;
+  return scope == null ? run() : ProfileRuntime.withCapturedScope(scope, run);
 }
 
 // ── Quick actions ───────────────────────────────────────────────────────────

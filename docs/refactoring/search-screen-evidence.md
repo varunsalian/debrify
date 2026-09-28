@@ -6,6 +6,41 @@ workflow checkpoints, reuse valid evidence, and run broader checks at integratio
 gates. Earlier entries retain their original slice history. No changes are pushed
 to the public repository.
 
+## Batch A checkpoint: tracker menu continuation ownership — 2026-09-28
+
+Trakt, Simkl and MDBList menu handlers capture the originating session before any
+await and run accepted operations inside that captured profile scope. Optional
+view guards now cover Trakt/MDBList as well as Simkl. Rating, Trakt custom-list and
+MDBList series-collection dialogs reject retired returns; late Trakt list loading
+cannot open a picker or publish its empty-list message after retirement. Provider
+reset confirmations inherit the same guard. Retired completions suppress menu
+feedback and MDBList watched-status activation.
+
+Both Home detail constructors and their inline rating callbacks pass their exact
+`HomeDetailRoute` lifetime to the existing action bridge and menu handlers. An
+active detail route remains valid beneath its own dialogs; a removed/replaced
+route cannot dispatch another action or publish action-return refreshes. Existing
+removal routing and tracker-specific refresh ordering are retained. No new
+provider, state owner, retry policy or dependency was introduced.
+
+Validation: **67 affected tests pass**, including sixteen new cases. Real mocked
+HTTP verifies current versus retired rating submissions for all three trackers,
+Trakt list selection and MDBList collection confirmation. A held accepted Simkl
+operation verifies captured scope before/after profile publication and suppressed
+retired feedback. Existing actual Home detail-route, dispatch, provider reset and
+reset-service checks pass. The initial new fixture stalled by awaiting real async
+work inside fake widget time; corrected interaction scheduling completes normally.
+Final analyzer identities remain **848**; **461** migrated files pass architecture
+checks. Only changed legacy functions/members were formatted.
+
+Receipts: `.git/refactor-evidence/phase5/detail-menu-final-tests.txt` and
+`detail-menu-final-analyze.txt`. Full-suite comparison remains at the preceding
+integration checkpoint; these focused checks do not replace final acceptance.
+This closes the menu presentation continuation review, not transitive mutation
+safety: tracker/coordinator writes, reset deletion/drain behavior, remaining
+catalog action composition and Stremio TV/source dispatch still need their
+recorded audits and separation. Batch A and the migration remain in progress.
+
 ## Batch A checkpoint: progress-reset dialog ownership — 2026-09-28
 
 Provider-only and all-provider resets now share `runProgressResetDialog`, a

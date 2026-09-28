@@ -10490,6 +10490,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
             onSimklRate: (r) => _handleDetailSimklQuickAction(
               item,
               SimklItemMenuAction.rate,
+              detailRoute: detailRoute,
               presetRating: r,
             ),
             simklMenuOptions: simklOptions,
@@ -10502,7 +10503,11 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
                     contentType: item.type,
                   )
                 : null,
-            onSimklAction: (a) => _handleDetailSimklQuickAction(item, a),
+            onSimklAction: (a) => _handleDetailSimklQuickAction(
+              item,
+              a,
+              detailRoute: detailRoute,
+            ),
             mdblistMenuOptions: mdblistOptions,
             mdblistMenuBuilder: buildMdblistOptions,
             mdblistStatusLoader:
@@ -10512,10 +10517,15 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
                 ? () =>
                       MdblistService.instance.fetchTitleStatus(imdb, item.type)
                 : null,
-            onMdblistAction: (a) => _handleDetailMdblistQuickAction(item, a),
+            onMdblistAction: (a) => _handleDetailMdblistQuickAction(
+              item,
+              a,
+              detailRoute: detailRoute,
+            ),
             onMdblistRate: (rating) => _handleDetailMdblistQuickAction(
               item,
               MdblistItemMenuAction.rate,
+              detailRoute: detailRoute,
               presetRating: rating,
             ),
             recommendationsLoader: imdb != null && MediaIdentity.isImdb(imdb)
@@ -10599,9 +10609,14 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
             imdb: imdb,
           ),
           simklMenuOptions: simklOptions,
-          onSimklAction: (a) => _handleDetailSimklQuickAction(item, a),
+          onSimklAction: (a) =>
+              _handleDetailSimklQuickAction(item, a, detailRoute: detailRoute),
           mdblistMenuOptions: mdblistOptions,
-          onMdblistAction: (a) => _handleDetailMdblistQuickAction(item, a),
+          onMdblistAction: (a) => _handleDetailMdblistQuickAction(
+            item,
+            a,
+            detailRoute: detailRoute,
+          ),
           // Live Simkl status — relabels Play → "Rewatch" for a completed
           // movie (matches the merged detail page's simklStatusLoader).
           simklStatusLoader: (_isSimklAuthenticated && imdb != null)
@@ -10625,15 +10640,16 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     );
   }
 
-  HomeDetailActionBridge get _detailActionBridge => HomeDetailActionBridge(
-    isCurrent: _catalogNavigationCurrent,
-    isSearch: () => widget.searchMode,
-    clearResume: _clearSeriesResume,
-    refreshLocal: _loadContinueWatching,
-    refreshTrakt: () => _loadTraktContinueWatching(refreshBound: false),
-    refreshSimkl: () => _loadSimklContinueWatching(refreshBound: false),
-    refreshMdblist: () => _loadMdblistContinueWatching(refreshBound: false),
-  );
+  HomeDetailActionBridge _detailActionBridge(HomeDetailRoute route) =>
+      HomeDetailActionBridge(
+        isCurrent: () => _catalogNavigationCurrent() && route.isActive,
+        isSearch: () => widget.searchMode,
+        clearResume: _clearSeriesResume,
+        refreshLocal: _loadContinueWatching,
+        refreshTrakt: () => _loadTraktContinueWatching(refreshBound: false),
+        refreshSimkl: () => _loadSimklContinueWatching(refreshBound: false),
+        refreshMdblist: () => _loadMdblistContinueWatching(refreshBound: false),
+      );
 
   Future<void> _handleDetailQuickAction(
     StremioMeta item,
@@ -10643,7 +10659,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     required HomeDetailRoute detailRoute,
     String? imdb,
     int? presetRating,
-  }) => _detailActionBridge.trakt(
+  }) => _detailActionBridge(detailRoute).trakt(
     action,
     removeLocal: () async {
       if (imdb != null) {
@@ -10657,7 +10673,12 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     },
     invoke: (clearOnly) async {
       if (clearOnly) {
-        await handleTraktMenuAction(context, item, action);
+        await handleTraktMenuAction(
+          context,
+          item,
+          action,
+          isCurrent: () => _catalogNavigationCurrent() && detailRoute.isActive,
+        );
         return;
       }
       _activeAddonId = addon.id;
@@ -10671,6 +10692,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         onSearchPacks: _searchPacksFromDetail,
         onAddToStremioTv: _addToStremioTvFromDetail,
         presetRating: presetRating,
+        isCurrent: () => _catalogNavigationCurrent() && detailRoute.isActive,
       );
     },
   );
@@ -10678,21 +10700,23 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   Future<void> _handleDetailSimklQuickAction(
     StremioMeta item,
     SimklItemMenuAction action, {
+    required HomeDetailRoute detailRoute,
     int? presetRating,
-  }) => _detailActionBridge.simkl(
+  }) => _detailActionBridge(detailRoute).simkl(
     action,
     invoke: () => handleSimklMenuAction(
       context,
       item,
       action,
       presetRating: presetRating,
-      isCurrent: _catalogNavigationCurrent,
+      isCurrent: () => _catalogNavigationCurrent() && detailRoute.isActive,
       removeContinueWatching: () => ref
           .read(homeSimklHistoryRemovalProvider(_profileSessionOwner))
           .remove(
             item.progressId ?? item.id,
             item.type,
-            isCurrent: _catalogNavigationCurrent,
+            isCurrent: () =>
+                _catalogNavigationCurrent() && detailRoute.isActive,
           ),
     ),
   );
@@ -10700,8 +10724,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   Future<void> _handleDetailMdblistQuickAction(
     StremioMeta item,
     MdblistItemMenuAction action, {
+    required HomeDetailRoute detailRoute,
     int? presetRating,
-  }) => _detailActionBridge.mdblist(
+  }) => _detailActionBridge(detailRoute).mdblist(
     action,
     remove: () => _removeMdblistCwItem(item),
     invoke: () => handleMdblistMenuAction(
@@ -10709,6 +10734,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       item,
       action,
       presetRating: presetRating,
+      isCurrent: () => _catalogNavigationCurrent() && detailRoute.isActive,
     ),
   );
 

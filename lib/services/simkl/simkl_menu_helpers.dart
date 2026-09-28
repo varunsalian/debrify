@@ -1,3 +1,4 @@
+import '../profiles/profile_runtime.dart';
 import 'package:flutter/material.dart';
 import '../../models/stremio_addon.dart';
 import '../../models/tracking_source.dart';
@@ -152,94 +153,104 @@ Future<void> handleSimklMenuAction(
   bool Function()? isCurrent,
   Future<bool?> Function()? removeContinueWatching,
 }) async {
-  bool current() => context.mounted && (isCurrent?.call() ?? true);
+  final owner = ProfileSessionMemory.captureOwner();
+  bool current() =>
+      context.mounted &&
+      owner == ProfileSessionMemory.captureOwner() &&
+      (isCurrent?.call() ?? true);
   if (!current()) return;
-  final simklService = SimklService.instance;
-  final imdbId = item.progressId ?? item.id;
-  final type = item.type;
-  bool success = false;
-  String actionLabel = '';
+  Future<void> run() async {
+    final simklService = SimklService.instance;
+    final imdbId = item.progressId ?? item.id;
+    final type = item.type;
+    bool success = false;
+    String actionLabel = '';
 
-  switch (action) {
-    case SimklItemMenuAction.clearWatchProgress:
-      await showClearProviderProgressDialog(
-        context,
-        item,
-        TrackingSource.simkl,
-      );
-      return;
-    case SimklItemMenuAction.moveToPlanToWatch:
-      actionLabel = 'Moved to Plan to Watch on Simkl';
-      success = await simklService.addToList(imdbId, type, 'plantowatch');
-    case SimklItemMenuAction.moveToWatching:
-      actionLabel = 'Moved to Watching on Simkl';
-      success = await simklService.addToList(imdbId, type, 'watching');
-    case SimklItemMenuAction.moveToOnHold:
-      actionLabel = 'Moved to On Hold on Simkl';
-      success = await simklService.addToList(imdbId, type, 'hold');
-    case SimklItemMenuAction.moveToCompleted:
-      actionLabel = 'Marked Completed';
-      // The coordinator owns the Simkl history write AND the paused-session
-      // clear — no direct Simkl write here, or the two would race. This is a
-      // Simkl-branded surface, so it forces the Simkl target: "Mark Completed"
-      // under a Simkl heading must land on Simkl even when Simkl is unticked
-      // in Scrobble.
-      success = (await WatchedActionCoordinator.setTitleWatched(
-        imdbId: imdbId,
-        contentType: type,
-        watched: true,
-        forceTargets: const {TrackingSource.simkl},
-      )).success;
-    case SimklItemMenuAction.moveToDropped:
-      actionLabel = 'Marked Dropped on Simkl';
-      success = await simklService.addToList(imdbId, type, 'dropped');
-      // As above — the session-clear is what removes it, so fold the result in.
-      if (success) {
-        success = await simklService.deletePlaybackForImdb(
-          imdbId,
-          contentType: type,
+    switch (action) {
+      case SimklItemMenuAction.clearWatchProgress:
+        await showClearProviderProgressDialog(
+          context,
+          item,
+          TrackingSource.simkl,
+          isCurrent: current,
         );
-      }
-    case SimklItemMenuAction.removeFromList:
-      if (!context.mounted ||
-          !await confirmSimklTitleRemoval(context, item.name)) {
         return;
-      }
-      if (!current()) return;
-      actionLabel = 'Removed from Simkl';
-      success = await simklService.removeFromListAndPlayback(imdbId, type);
-    case SimklItemMenuAction.removeFromContinueWatching:
-      actionLabel = type == 'series'
-          ? 'Removed — moved to On Hold on Simkl'
-          : 'Removed from Continue Watching';
-      final removed =
-          await (removeContinueWatching?.call() ??
-              SimklContinueWatchingRemoval(
-                ProfileSessionMemory.captureOwner(),
-              ).remove(imdbId, type, isCurrent: current));
-      if (removed == null) return;
-      success = removed;
-    case SimklItemMenuAction.rate:
-      if (!context.mounted) return;
-      final rating = presetRating ?? await showSimklRatingDialog(context);
-      if (rating == null || !current()) return;
-      actionLabel = 'Rated $rating/10 on Simkl';
-      success = await simklService.rateItem(imdbId, type, rating);
-    case SimklItemMenuAction.removeRating:
-      actionLabel = 'Simkl Rating Removed';
-      success = await simklService.removeRating(imdbId, type);
+      case SimklItemMenuAction.moveToPlanToWatch:
+        actionLabel = 'Moved to Plan to Watch on Simkl';
+        success = await simklService.addToList(imdbId, type, 'plantowatch');
+      case SimklItemMenuAction.moveToWatching:
+        actionLabel = 'Moved to Watching on Simkl';
+        success = await simklService.addToList(imdbId, type, 'watching');
+      case SimklItemMenuAction.moveToOnHold:
+        actionLabel = 'Moved to On Hold on Simkl';
+        success = await simklService.addToList(imdbId, type, 'hold');
+      case SimklItemMenuAction.moveToCompleted:
+        actionLabel = 'Marked Completed';
+        // The coordinator owns the Simkl history write AND the paused-session
+        // clear — no direct Simkl write here, or the two would race. This is a
+        // Simkl-branded surface, so it forces the Simkl target: "Mark Completed"
+        // under a Simkl heading must land on Simkl even when Simkl is unticked
+        // in Scrobble.
+        success = (await WatchedActionCoordinator.setTitleWatched(
+          imdbId: imdbId,
+          contentType: type,
+          watched: true,
+          forceTargets: const {TrackingSource.simkl},
+        )).success;
+      case SimklItemMenuAction.moveToDropped:
+        actionLabel = 'Marked Dropped on Simkl';
+        success = await simklService.addToList(imdbId, type, 'dropped');
+        // As above — the session-clear is what removes it, so fold the result in.
+        if (success) {
+          success = await simklService.deletePlaybackForImdb(
+            imdbId,
+            contentType: type,
+          );
+        }
+      case SimklItemMenuAction.removeFromList:
+        if (!context.mounted ||
+            !await confirmSimklTitleRemoval(context, item.name)) {
+          return;
+        }
+        if (!current()) return;
+        actionLabel = 'Removed from Simkl';
+        success = await simklService.removeFromListAndPlayback(imdbId, type);
+      case SimklItemMenuAction.removeFromContinueWatching:
+        actionLabel = type == 'series'
+            ? 'Removed — moved to On Hold on Simkl'
+            : 'Removed from Continue Watching';
+        final removed =
+            await (removeContinueWatching?.call() ??
+                SimklContinueWatchingRemoval(
+                  ProfileSessionMemory.captureOwner(),
+                ).remove(imdbId, type, isCurrent: current));
+        if (removed == null) return;
+        success = removed;
+      case SimklItemMenuAction.rate:
+        if (!context.mounted || !current()) return;
+        final rating = presetRating ?? await showSimklRatingDialog(context);
+        if (rating == null || !current()) return;
+        actionLabel = 'Rated $rating/10 on Simkl';
+        success = await simklService.rateItem(imdbId, type, rating);
+      case SimklItemMenuAction.removeRating:
+        actionLabel = 'Simkl Rating Removed';
+        success = await simklService.removeRating(imdbId, type);
+    }
+
+    if (!context.mounted || !current()) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(success ? actionLabel : 'Failed: $actionLabel'),
+        backgroundColor: success
+            ? const Color(0xFF34D399)
+            : const Color(0xFFEF4444),
+        duration: const Duration(seconds: 2),
+      ),
+    );
   }
 
-  if (!context.mounted || !current()) return;
-  ScaffoldMessenger.of(context).showSnackBar(
-    SnackBar(
-      content: Text(success ? actionLabel : 'Failed: $actionLabel'),
-      backgroundColor: success
-          ? const Color(0xFF34D399)
-          : const Color(0xFFEF4444),
-      duration: const Duration(seconds: 2),
-    ),
-  );
+  final scope = owner.scope;
+  return scope == null ? run() : ProfileRuntime.withCapturedScope(scope, run);
 }
 
 // ── Quick actions ───────────────────────────────────────────────────────────

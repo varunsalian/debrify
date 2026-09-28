@@ -1,3 +1,5 @@
+import '../profiles/profile_session_memory.dart';
+import '../profiles/profile_runtime.dart';
 import 'package:flutter/material.dart';
 
 import '../../models/stremio_addon.dart';
@@ -158,106 +160,124 @@ Future<void> handleMdblistMenuAction(
   StremioMeta item,
   MdblistItemMenuAction action, {
   int? presetRating,
+  bool Function()? isCurrent,
 }) async {
-  final imdb = item.effectiveImdbId ?? item.id;
-  if (!imdb.startsWith('tt')) return;
-  final ids = MdblistMediaIds(imdb: imdb);
-  final type = item.type == 'series' ? 'show' : 'movie';
-  final service = MdblistService.instance;
-  bool success;
-  String label;
-  switch (action) {
-    case MdblistItemMenuAction.clearWatchProgress:
-      await showClearProviderProgressDialog(context, item, TrackingSource.mdblist);
-      return;
-    case MdblistItemMenuAction.addToWatchlist:
-      success = await service.addToWatchlist(ids, type);
-      label = 'Added to MDBList Watchlist';
-    case MdblistItemMenuAction.removeFromWatchlist:
-      success = await service.removeFromWatchlist(ids, type);
-      label = 'Removed from MDBList Watchlist';
-    case MdblistItemMenuAction.markWatched:
-      success = (await WatchedActionCoordinator.setTitleWatched(
-        imdbId: imdb,
-        contentType: item.type,
-        watched: true,
-        // MDBList-branded menu — writes to MDBList regardless of Scrobble.
-        forceTargets: const {TrackingSource.mdblist},
-      )).success;
-      label = 'Marked watched';
-    case MdblistItemMenuAction.markUnwatched:
-      success = (await WatchedActionCoordinator.setTitleWatched(
-        imdbId: imdb,
-        contentType: item.type,
-        watched: false,
-        forceTargets: const {TrackingSource.mdblist},
-      )).success;
-      label = 'Marked unwatched';
-    case MdblistItemMenuAction.rate:
-      if (!context.mounted) return;
-      final rating = presetRating ?? await showMdblistRatingDialog(context);
-      if (rating == null) return;
-      success = await service.rateTitle(ids, type, rating);
-      label = 'Rated $rating/10 on MDBList';
-    case MdblistItemMenuAction.removeRating:
-      success = await service.removeRating(ids, type);
-      label = 'Removed MDBList rating';
-    case MdblistItemMenuAction.addToCollection:
-      if (item.type == 'series') {
-        if (!context.mounted) return;
-        final confirmed = await showDialog<bool>(
-          context: context,
-          builder: (ctx) => AlertDialog(
-            title: const Text('Collect this show?'),
-            content: const Text(
-              'MDBList will add every aired episode to your collection.',
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx, false),
-                child: const Text('Cancel'),
-              ),
-              FilledButton(
-                onPressed: () => Navigator.pop(ctx, true),
-                child: const Text('Collect'),
-              ),
-            ],
-          ),
+  final owner = ProfileSessionMemory.captureOwner();
+  bool current() =>
+      context.mounted &&
+      owner == ProfileSessionMemory.captureOwner() &&
+      (isCurrent?.call() ?? true);
+  if (!current()) return;
+  Future<void> run() async {
+    final imdb = item.effectiveImdbId ?? item.id;
+    if (!imdb.startsWith('tt')) return;
+    final ids = MdblistMediaIds(imdb: imdb);
+    final type = item.type == 'series' ? 'show' : 'movie';
+    final service = MdblistService.instance;
+    bool success;
+    String label;
+    switch (action) {
+      case MdblistItemMenuAction.clearWatchProgress:
+        await showClearProviderProgressDialog(
+          context,
+          item,
+          TrackingSource.mdblist,
+          isCurrent: current,
         );
-        if (confirmed != true) return;
-      }
-      success = await service.addToCollection(ids, type);
-      label = 'Added to MDBList Collection';
-    case MdblistItemMenuAction.removeFromCollection:
-      success = await service.removeFromCollection(ids, type);
-      label = 'Removed from MDBList Collection';
-    case MdblistItemMenuAction.drop:
-      success = await service.setDropped(ids, dropped: true);
-      label = 'Dropped on MDBList';
-    case MdblistItemMenuAction.restore:
-      success = await service.setDropped(ids, dropped: false);
-      label = 'Restored on MDBList';
-    case MdblistItemMenuAction.removeFromContinueWatching:
-      // The generic menu helper does not carry a paused episode's season and
-      // episode coordinates. Surfaces that expose this context-only action
-      // intercept it and route through MdblistContinueWatchingService.clear.
-      return;
+        return;
+      case MdblistItemMenuAction.addToWatchlist:
+        success = await service.addToWatchlist(ids, type);
+        label = 'Added to MDBList Watchlist';
+      case MdblistItemMenuAction.removeFromWatchlist:
+        success = await service.removeFromWatchlist(ids, type);
+        label = 'Removed from MDBList Watchlist';
+      case MdblistItemMenuAction.markWatched:
+        success = (await WatchedActionCoordinator.setTitleWatched(
+          imdbId: imdb,
+          contentType: item.type,
+          watched: true,
+          // MDBList-branded menu — writes to MDBList regardless of Scrobble.
+          forceTargets: const {TrackingSource.mdblist},
+        )).success;
+        label = 'Marked watched';
+      case MdblistItemMenuAction.markUnwatched:
+        success = (await WatchedActionCoordinator.setTitleWatched(
+          imdbId: imdb,
+          contentType: item.type,
+          watched: false,
+          forceTargets: const {TrackingSource.mdblist},
+        )).success;
+        label = 'Marked unwatched';
+      case MdblistItemMenuAction.rate:
+        if (!context.mounted || !current()) return;
+        final rating = presetRating ?? await showMdblistRatingDialog(context);
+        if (rating == null || !current()) return;
+        success = await service.rateTitle(ids, type, rating);
+        label = 'Rated $rating/10 on MDBList';
+      case MdblistItemMenuAction.removeRating:
+        success = await service.removeRating(ids, type);
+        label = 'Removed MDBList rating';
+      case MdblistItemMenuAction.addToCollection:
+        if (item.type == 'series') {
+          if (!context.mounted || !current()) return;
+          final confirmed = await showDialog<bool>(
+            context: context,
+            builder: (ctx) => AlertDialog(
+              title: const Text('Collect this show?'),
+              content: const Text(
+                'MDBList will add every aired episode to your collection.',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx, false),
+                  child: const Text('Cancel'),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.pop(ctx, true),
+                  child: const Text('Collect'),
+                ),
+              ],
+            ),
+          );
+          if (confirmed != true || !current()) return;
+        }
+        success = await service.addToCollection(ids, type);
+        label = 'Added to MDBList Collection';
+      case MdblistItemMenuAction.removeFromCollection:
+        success = await service.removeFromCollection(ids, type);
+        label = 'Removed from MDBList Collection';
+      case MdblistItemMenuAction.drop:
+        success = await service.setDropped(ids, dropped: true);
+        label = 'Dropped on MDBList';
+      case MdblistItemMenuAction.restore:
+        success = await service.setDropped(ids, dropped: false);
+        label = 'Restored on MDBList';
+      case MdblistItemMenuAction.removeFromContinueWatching:
+        // The generic menu helper does not carry a paused episode's season and
+        // episode coordinates. Surfaces that expose this context-only action
+        // intercept it and route through MdblistContinueWatchingService.clear.
+        return;
+    }
+    if (!context.mounted || !current()) return;
+    if (success &&
+        (action == MdblistItemMenuAction.markWatched ||
+            action == MdblistItemMenuAction.markUnwatched)) {
+      // This action is already on an active UI surface, so consume the dirty
+      // watched-state marker now. Playback scrobbles remain deferred until Home
+      // is revealed.
+      WatchedStatusService.instance.ensureStarted();
+    }
+    if (!context.mounted || !current()) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(success ? label : 'Failed: $label'),
+        backgroundColor: success
+            ? const Color(0xFF34D399)
+            : const Color(0xFFEF4444),
+      ),
+    );
   }
-  if (success &&
-      (action == MdblistItemMenuAction.markWatched ||
-          action == MdblistItemMenuAction.markUnwatched)) {
-    // This action is already on an active UI surface, so consume the dirty
-    // watched-state marker now. Playback scrobbles remain deferred until Home
-    // is revealed.
-    WatchedStatusService.instance.ensureStarted();
-  }
-  if (!context.mounted) return;
-  ScaffoldMessenger.of(context).showSnackBar(
-    SnackBar(
-      content: Text(success ? label : 'Failed: $label'),
-      backgroundColor: success
-          ? const Color(0xFF34D399)
-          : const Color(0xFFEF4444),
-    ),
-  );
+
+  final scope = owner.scope;
+  return scope == null ? run() : ProfileRuntime.withCapturedScope(scope, run);
 }
