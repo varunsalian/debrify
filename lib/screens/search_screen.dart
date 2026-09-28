@@ -27,13 +27,12 @@ import '../features/home/presentation/home_catalog_row.dart';
 import '../features/home/presentation/home_catalog_row_header.dart';
 import '../features/home/presentation/home_favorite_row.dart';
 import '../features/home/application/home_post_playback_refresh_controller.dart';
-import '../features/discover/presentation/discover_source_panel.dart';
+import '../features/discover/presentation/discover_panels.dart';
 import '../features/discover/presentation/discover_content.dart';
 import '../features/discover/application/discover_card_settings_controller.dart';
 import '../features/discover/models/discover_card_settings.dart';
 import '../features/discover/application/discover_layout_controller.dart';
 import '../features/discover/presentation/discover_preview.dart';
-import '../features/discover/presentation/discover_source_picker.dart';
 import '../features/home/presentation/home_stage_theater.dart';
 import '../features/home/presentation/home_hero_shell_bridge.dart';
 import '../features/home/application/home_hero_tint_loader.dart';
@@ -199,7 +198,6 @@ import '../features/home/data/home_tracker_resume_repository.dart';
 import '../features/home/data/home_catalog_playback_payload.dart';
 import '../features/home/presentation/home_catalog_playback_bridge.dart';
 import '../services/profiles/profile_runtime.dart';
-import 'metadata_explore_page.dart';
 import '../models/metadata_preferences.dart';
 import '../services/metadata_preferences_service.dart';
 import '../widgets/see_all/discover_browsing_input.dart';
@@ -211,8 +209,6 @@ import '../features/home/presentation/home_catalog_continuation_footer.dart';
 import '../services/home_row_refresh.dart';
 import '../services/profiles/connection_resource_service.dart';
 import 'dart:async';
-import '../models/media_server.dart';
-import 'media_server_library_panel.dart';
 import 'dart:convert';
 import 'dart:developer' as developer;
 import 'dart:math';
@@ -11812,140 +11808,43 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     }
   }
 
-  Widget _buildDiscoverPanel() {
-    final source = buildDiscoverSourcePicker(
-      selected: _discSource,
-      isTelevision: widget.isTelevision,
-      focusNode: _discSourceNode,
-      discoveryEnabled:
-          _metadataFeaturePolicy?.features.contains(
-            MetadataFeature.discovery,
-          ) ==
-          true,
-      mdblistEnabled: kMdblistEnabled,
-      mdblistAuthenticated: kMdblistEnabled && _isMdblistAuthenticated,
-      addons: _discAddons,
-      onSelected: _selectDiscoverSource,
-    );
-
-    return buildDiscoverSourcePanel(
-      selected: _discSource,
-      mediaServer: (selected) => MediaServerLibraryPanel(
-        key: ValueKey(selected),
-        kind: selected == _discJellyfin
-            ? MediaServerKind.jellyfin
-            : MediaServerKind.emby,
-        leading: source,
-        isTelevision: widget.isTelevision,
-      ),
-      tmdb: _metadataFeaturePolicy == null
-          ? null
-          : () => MetadataBrowsePage(
-              key: const ValueKey('disc_tmdb'),
-              title: 'TMDB',
-              kind: 'discover',
-              preferences: _metadataFeaturePolicy!,
-              onOpen: (item) =>
-                  _openItem(item, item.sourceAddon ?? _addonForContinue(null)),
-              onItemFocused: _onDiscFocused,
-              isBound: _isBound,
-              isTelevision: widget.isTelevision,
-              embedded: true,
-              leading: source,
-              leadingNode: _discSourceNode,
-            ),
-      trakt: () => TraktSeeAllScreen(
-        key: const ValueKey('disc_trakt'),
-        cwItems: _traktAll,
-        cwProgress: _cwCardMaps(HomeContinuationKind.trakt).progress,
-        onOpen: _openTraktItem,
-        onQuickPlay: _pikpakOnly ? null : _playTraktItem,
-        onItemFocused: _onDiscFocused,
-        isBound: _isBound,
-        isTelevision: widget.isTelevision,
-        embedded: true,
-        leading: source,
-        leadingNode: _discSourceNode,
-      ),
-      simkl: () => SimklSeeAllScreen(
-        key: const ValueKey('disc_simkl'),
-        // CW is folded in as the leading "List" option (like the Trakt source).
-        // Plain open/play for the browse lists; the CW-aware handlers (resume at
-        // the paused/up-next episode) apply ONLY while the CW list is showing.
-        cwItems: _simklAll,
-        cwProgress: _simklProgress,
-        onOpen: _openSimklItem,
-        onQuickPlay: _pikpakOnly ? null : _playSimklItem,
-        cwOnOpen: _openSimklCwItem,
-        cwOnQuickPlay: _pikpakOnly ? null : _playSimklCwItem,
-        onItemFocused: _onDiscFocused,
-        isBound: _isBound,
-        isTelevision: widget.isTelevision,
-        embedded: true,
-        leading: source,
-        leadingNode: _discSourceNode,
-      ),
-      // MDBList items are plain catalog titles (StremioMeta w/ imdb id), so they
-      // open and quick-play through the same generic catalog paths as an addon
-      // catalog item — no MDBList-specific handlers needed.
-      mdblist: () => MdblistSeeAllScreen(
-        key: const ValueKey('disc_mdblist'),
-        initialList: _discMdblistList,
-        onOpen: (item) => _openItem(
-          item,
-          _addonForContinue(item.sourceAddon?.id),
-          isMdblistSource: true,
-        ),
-        onQuickPlay: _pikpakOnly
-            ? null
-            : (item) => _onCatalogPlay(
-                item,
-                _addonForContinue(item.sourceAddon?.id),
-                isMdblistSource: true,
-              ),
-        onItemFocused: _onDiscFocused,
-        isBound: _isBound,
-        isTelevision: widget.isTelevision,
-        embedded: true,
-        leading: source,
-        leadingNode: _discSourceNode,
-      ),
-      findAddon: (id) => _addonsById[id],
-      catalog: (addon, catalog) => CatalogSeeAllScreen(
-        key: ValueKey('disc_${addon.id}'),
-        addon: addon,
-        initialCatalog: catalog,
-        isTelevision: widget.isTelevision,
-        onOpenItem: (item) => _openItem(item, addon),
-        onQuickPlay: _pikpakOnly ? null : (item) => _onCatalogPlay(item, addon),
-        onItemFocused: _onDiscFocused,
-        embedded: true,
-        leading: source,
-        leadingNode: _discSourceNode,
-      ),
-      continueWatching: () => ContinueWatchingSeeAllScreen(
-        key: const ValueKey('disc_cw'),
-        title: 'Continue Watching',
-        items: _cwAll,
-        progressOf: (m) => _cwCardProgress(HomeContinuationKind.local, m),
-        onOpen: _openContinueItem,
-        onQuickPlay: _pikpakOnly ? null : _onContinuePlay,
-        onItemFocused: _onDiscFocused,
-        isBound: _isBound,
-        isTelevision: widget.isTelevision,
-        embedded: true,
-        leading: source,
-        leadingNode: _discSourceNode,
-        // Re-fetch when a detail/player route pops back so finished titles drop out
-        // (the quick-play path doesn't reload _cwAll on its own).
-        onReload: () async {
-          await _loadContinueWatching();
-          if (!mounted) return const <StremioMeta>[];
-          return List<StremioMeta>.of(_cwAll);
-        },
-      ),
-    );
-  }
+  Widget _buildDiscoverPanel() => buildDiscoverPanels(
+    selected: _discSource,
+    isTelevision: widget.isTelevision,
+    sourceNode: _discSourceNode,
+    preferences: _metadataFeaturePolicy,
+    mdblistEnabled: kMdblistEnabled,
+    mdblistAuthenticated: _isMdblistAuthenticated,
+    addons: _discAddons,
+    onSelectSource: _selectDiscoverSource,
+    pikpakOnly: _pikpakOnly,
+    onItemFocused: _onDiscFocused,
+    isBound: _isBound,
+    findAddon: (id) => _addonsById[id],
+    addonForContinue: _addonForContinue,
+    onOpenCatalog: _openItem,
+    onPlayCatalog: _onCatalogPlay,
+    traktItems: _traktAll,
+    traktProgress: () => _cwCardMaps(HomeContinuationKind.trakt).progress,
+    onOpenTrakt: _openTraktItem,
+    onPlayTrakt: _playTraktItem,
+    simklItems: _simklAll,
+    simklProgress: _simklProgress,
+    onOpenSimkl: _openSimklItem,
+    onPlaySimkl: _playSimklItem,
+    onOpenSimklContinuation: _openSimklCwItem,
+    onPlaySimklContinuation: _playSimklCwItem,
+    mdblistList: _discMdblistList,
+    localItems: _cwAll,
+    localProgress: (m) => _cwCardProgress(HomeContinuationKind.local, m),
+    onOpenLocal: _openContinueItem,
+    onPlayLocal: _onContinuePlay,
+    reloadLocal: () async {
+      await _loadContinueWatching();
+      if (!mounted) return const <StremioMeta>[];
+      return List<StremioMeta>.of(_cwAll);
+    },
+  );
 
   bool _focusCatalogContinuation() {
     final target = [_catalogContinueNode, _catalogMoreNode]

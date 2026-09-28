@@ -6,6 +6,34 @@ workflow checkpoints, reuse valid evidence, and run broader checks at integratio
 gates. Earlier entries retain their original slice history. No changes are pushed
 to the public repository.
 
+## Batch C checkpoint: Discover panel composition — 2026-09-28
+
+Base revision: `646b274e`. `buildDiscoverPanels` (180 lines) composes the actual
+embedded media-server, metadata, tracker, addon and local-continuation panels.
+The route supplies current data/actions; the feature owns the Source picker and
+panel wiring. Selection remains lazy, with unchanged keys and element ancestry.
+SearchScreen shrinks **13,144 → 13,043 lines**. This is a presentation checkpoint;
+Home composition, Discover resource ownership and route lifecycle remain pending.
+
+Review preserves source-specific open/play behavior (including Simkl browse vs
+resume and MDBList's source flag), restricted quick-play suppression, bound/focus
+callbacks, shared leading node, fallback selection and local reload-after-return.
+Trakt progress projection is still evaluated only for its selected panel.
+`MdblistListChoice` moved unchanged into a 59-line shared model with a compatibility
+export from the original service; this avoids importing a service into the view.
+The architecture guard registers the moved model without adding an exception.
+
+**389 tests pass** across `test/features/discover`, `test/features/search`,
+`test/services/mdblist/mdblist_discover_source_test.dart` and
+`test/services/mdblist/mdblist_service_test.dart`. A new panel contract test covers
+callback distinctions, quick-play gating, fallback/reload and lazy progress;
+existing Discover screen tests cover production integration. Analysis retains
+**838 identical diagnostic identities**; architecture passes **516 files**.
+Formatting and `git diff --check` pass. Final receipts:
+`.git/refactor-evidence/phase5/discover-panels-{tests,analyze}-final.txt`.
+No emulator used; full C+D integration and device/performance acceptance remain
+pending. The existing legacy panels' internal service ownership was not expanded.
+
 ## Batch C checkpoint: shared Search focus/navigation — 2026-09-28
 
 Base revision: `c031fb5f`. `SearchFocusController` (130 lines) now owns the
