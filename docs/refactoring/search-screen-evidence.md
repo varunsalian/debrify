@@ -6,6 +6,24 @@ workflow checkpoints, reuse valid evidence, and run broader checks at integratio
 gates. Earlier entries retain their original slice history. No changes are pushed
 to the public repository.
 
+## Batch C checkpoint: Continue Watching family composition — 2026-09-28
+
+Base: `0e5c0146`. The existing `home_stage_rows.dart` (176 lines) now builds the
+shared movie/merged and series row pair. All five provider families use this
+projection; the host supplies provider-specific lists, nodes, metadata and actions.
+The root is now **10,810 lines**.
+
+Review preserves family order, disabled/enabled gates, movie-slot identity for
+merged rows, split movie metadata suppression, live See-All merge preference,
+MDBList removal eligibility and IPTV synthetic-id metadata/action handling.
+**104 tests pass**: 103 provider-screen/row/action/progressive/pagination cases
+plus a new merged-row identity/metadata/node/disabled-state test. Analysis retains
+**836 identical diagnostic identities**; architecture passes **550 files**;
+formatting/diff checks pass. Receipts:
+`.git/refactor-evidence/phase5/cw-family-{tests,focused,analyze-final}.txt`.
+No emulator used. Remaining feature/navigation composition, lifecycle/facade
+reduction and final acceptance remain pending.
+
 ## Batch D checkpoint: title suggestion presentation ownership — 2026-09-28
 
 Base: `9a16a635`. `TitleSuggestionPresentation` (55 lines) owns the published

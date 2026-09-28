@@ -1116,219 +1116,123 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   /// non-empty groups are included. Each row carries its own progress lookup
   /// and open / quick-play handlers so local and Trakt sources coexist.
   List<HomeContinuationRow> get _cwRows => [
-    // Merged providers ship their combined list through the MOVIES slot (same
-    // row id, same node list — see the merge-pref field comment); the episode
-    // and artwork lookups are imdbId-keyed maps that only hold series entries,
-    // so passing movies through them is a harmless miss.
-    if (_cwEnabled &&
-        (_cwMergeLocal ? _cwAll : _cwMovies).isNotEmpty &&
-        !_homeDisabled.contains('cw:movies'))
-      HomeContinuationRow(
-        rowId: 'cw:movies',
-        title: 'Continue Watching',
-        tag: _cwMergeLocal ? null : 'Movies',
-        kind: HomeContinuationKind.local,
-        items: _cwMergeLocal ? _cwAll : _cwMovies,
-        nodes: _cwMovieNodes,
-        progressOf: (m) => _cwCardProgress(HomeContinuationKind.local, m),
-        episodeOf: _cwMergeLocal
-            ? (m) => _cwCardEpisode(HomeContinuationKind.local, m)
-            : (_) => null,
-        remainingMinutesOf: (m) => _cwCardRemainingMinutes(HomeContinuationKind.local, m),
-        episodeArtworkOf: _cwMergeLocal
-            ? (m) => _cwEpisodeArtwork[m.imdbId]
-            : (_) => null,
-        onOpen: _openContinueItem,
-        onQuickPlay: _onContinuePlay,
-        onRemove: _removeLocalCwItem,
-        onSeeAll: () =>
-            _openContinueWatchingSeeAll(_cwMergeLocal ? 'all' : 'movie'),
-      ),
-    if (!_cwMergeLocal &&
-        _cwEnabled &&
-        _cwSeries.isNotEmpty &&
-        !_homeDisabled.contains('cw:series'))
-      HomeContinuationRow(
-        rowId: 'cw:series',
-        title: 'Continue Watching',
-        tag: 'Series',
-        kind: HomeContinuationKind.local,
-        items: _cwSeries,
-        nodes: _cwSeriesNodes,
-        progressOf: (m) => _cwCardProgress(HomeContinuationKind.local, m),
-        episodeOf: (m) => _cwCardEpisode(HomeContinuationKind.local, m),
-        remainingMinutesOf: (m) => _cwCardRemainingMinutes(HomeContinuationKind.local, m),
-        episodeArtworkOf: (m) => _cwEpisodeArtwork[m.imdbId],
-        onOpen: _openContinueItem,
-        onQuickPlay: _onContinuePlay,
-        onRemove: _removeLocalCwItem,
-        onSeeAll: () => _openContinueWatchingSeeAll('series'),
-      ),
-    if ((_cwMergeTrakt ? _traktAll : _traktMovies).isNotEmpty &&
-        !_homeDisabled.contains('trakt:movies'))
-      HomeContinuationRow(
-        rowId: 'trakt:movies',
-        title: 'Trakt Continue Watching',
-        tag: _cwMergeTrakt ? null : 'Movies',
-        kind: HomeContinuationKind.trakt,
-        items: _cwMergeTrakt ? _traktAll : _traktMovies,
-        nodes: _traktMovieNodes,
-        progressOf: (m) => _cwCardProgress(HomeContinuationKind.trakt, m),
-        episodeOf: _cwMergeTrakt
-            ? (m) => _cwCardEpisode(HomeContinuationKind.trakt, m)
-            : (_) => null,
-        remainingMinutesOf: (m) => _cwCardRemainingMinutes(HomeContinuationKind.trakt, m),
-        episodeArtworkOf: _cwMergeTrakt
-            ? (m) => _traktEpisodeArtwork[m.imdbId]
-            : (_) => null,
-        onOpen: _openTraktItem,
-        onQuickPlay: _playTraktItem,
-        onRemove: _removeTraktCwItem,
-        onSeeAll: () => _openTraktSeeAll(_cwMergeTrakt ? 'all' : 'movie'),
-      ),
-    if (!_cwMergeTrakt &&
-        _traktSeries.isNotEmpty &&
-        !_homeDisabled.contains('trakt:shows'))
-      HomeContinuationRow(
-        rowId: 'trakt:shows',
-        title: 'Trakt Continue Watching',
-        tag: 'Shows',
-        kind: HomeContinuationKind.trakt,
-        items: _traktSeries,
-        nodes: _traktSeriesNodes,
-        progressOf: (m) => _cwCardProgress(HomeContinuationKind.trakt, m),
-        episodeOf: (m) => _cwCardEpisode(HomeContinuationKind.trakt, m),
-        remainingMinutesOf: (m) => _cwCardRemainingMinutes(HomeContinuationKind.trakt, m),
-        episodeArtworkOf: (m) => _traktEpisodeArtwork[m.imdbId],
-        onOpen: _openTraktItem,
-        onQuickPlay: _playTraktItem,
-        onRemove: _removeTraktCwItem,
-        onSeeAll: () => _openTraktSeeAll('series'),
-      ),
-    // Simkl rows come after the Trakt rows. Both trackers fetch over the network
-    // on a cold start (Simkl's playback/library caches are only warmed by a
-    // scrobble or a prior read, not pre-warmed at launch), but only Trakt holds
-    // its slot open with skeletons — so when the Simkl rows land they settle in
-    // once, like any other content row. (A dedicated Simkl skeleton could make
-    // that zero-shift too, but it isn't worth the board index-math complexity.)
-    if ((_cwMergeSimkl ? _simklAll : _simklMovies).isNotEmpty &&
-        !_homeDisabled.contains('simkl:movies'))
-      HomeContinuationRow(
-        rowId: 'simkl:movies',
-        title: 'Simkl Continue Watching',
-        tag: _cwMergeSimkl ? null : 'Movies',
-        kind: HomeContinuationKind.simkl,
-        items: _cwMergeSimkl ? _simklAll : _simklMovies,
-        nodes: _simklMovieNodes,
-        progressOf: (m) => _cwCardProgress(HomeContinuationKind.simkl, m),
-        episodeOf: _cwMergeSimkl
-            ? (m) => _cwCardEpisode(HomeContinuationKind.simkl, m)
-            : (_) => null,
-        remainingMinutesOf: (m) => _cwCardRemainingMinutes(HomeContinuationKind.simkl, m),
-        episodeArtworkOf: _cwMergeSimkl
-            ? (m) => _simklEpisodeArtwork[m.progressId]
-            : (_) => null,
-        onOpen: _openSimklCwItem,
-        onQuickPlay: _playSimklCwItem,
-        onRemove: _removeSimklCwItem,
-        onSeeAll: () => _openSimklCwSeeAll(_cwMergeSimkl ? 'all' : 'movie'),
-      ),
-    if (!_cwMergeSimkl &&
-        _simklSeries.isNotEmpty &&
-        !_homeDisabled.contains('simkl:shows'))
-      HomeContinuationRow(
-        rowId: 'simkl:shows',
-        title: 'Simkl Continue Watching',
-        tag: 'Shows',
-        kind: HomeContinuationKind.simkl,
-        items: _simklSeries,
-        nodes: _simklSeriesNodes,
-        progressOf: (m) => _cwCardProgress(HomeContinuationKind.simkl, m),
-        episodeOf: (m) => _cwCardEpisode(HomeContinuationKind.simkl, m),
-        remainingMinutesOf: (m) => _cwCardRemainingMinutes(HomeContinuationKind.simkl, m),
-        episodeArtworkOf: (m) => _simklEpisodeArtwork[m.progressId],
-        onOpen: _openSimklCwItem,
-        onQuickPlay: _playSimklCwItem,
-        onRemove: _removeSimklCwItem,
-        onSeeAll: () => _openSimklCwSeeAll('series'),
-      ),
-    if ((_cwMergeMdblist ? _mdblistAll : _mdblistMovies).isNotEmpty &&
-        !_homeDisabled.contains('mdblist:movies'))
-      HomeContinuationRow(
-        rowId: 'mdblist:movies',
-        title: 'MDBList Continue Watching',
-        tag: _cwMergeMdblist ? null : 'Movies',
-        kind: HomeContinuationKind.mdblist,
-        items: _cwMergeMdblist ? _mdblistAll : _mdblistMovies,
-        nodes: _mdblistMovieNodes,
-        progressOf: (m) => _cwCardProgress(HomeContinuationKind.mdblist, m),
-        episodeOf: _cwMergeMdblist
-            ? (m) => _cwCardEpisode(HomeContinuationKind.mdblist, m)
-            : (_) => null,
-        remainingMinutesOf: (m) => _cwCardRemainingMinutes(HomeContinuationKind.mdblist, m),
-        episodeArtworkOf: (_) => null,
-        onOpen: _openMdblistCwItem,
-        onQuickPlay: _playMdblistCwItem,
-        onRemove: _removeMdblistCwItem,
-        canRemove: _canRemoveMdblistCwItem,
-        onSeeAll: () => _openMdblistCwSeeAll(_cwMergeMdblist ? 'all' : 'movie'),
-      ),
-    if (!_cwMergeMdblist &&
-        _mdblistSeries.isNotEmpty &&
-        !_homeDisabled.contains('mdblist:shows'))
-      HomeContinuationRow(
-        rowId: 'mdblist:shows',
-        title: 'MDBList Continue Watching',
-        tag: 'Shows',
-        kind: HomeContinuationKind.mdblist,
-        items: _mdblistSeries,
-        nodes: _mdblistSeriesNodes,
-        progressOf: (m) => _cwCardProgress(HomeContinuationKind.mdblist, m),
-        episodeOf: (m) => _cwCardEpisode(HomeContinuationKind.mdblist, m),
-        remainingMinutesOf: (m) => _cwCardRemainingMinutes(HomeContinuationKind.mdblist, m),
-        episodeArtworkOf: (_) => null,
-        onOpen: _openMdblistCwItem,
-        onQuickPlay: _playMdblistCwItem,
-        onRemove: _removeMdblistCwItem,
-        canRemove: _canRemoveMdblistCwItem,
-        onSeeAll: () => _openMdblistCwSeeAll('series'),
-      ),
-    // IPTV Continue Watching (Xtream VOD). Routes through [IptvCwRouter], not
-    // the addon/tracker pipeline — a movie resumes playback, a series opens the
-    // merged Xtream series page. Progress/episode key off the synthetic meta id
-    // (routeKey) since these metas carry no imdbId.
-    if (_iptvCwMovies.isNotEmpty && !_homeDisabled.contains('iptv:movies'))
-      HomeContinuationRow(
-        rowId: 'iptv:movies',
-        title: 'IPTV Continue Watching',
-        tag: 'Movies',
-        kind: HomeContinuationKind.iptv,
-        items: _iptvCwMovies,
-        nodes: _iptvCwMovieNodes,
-        progressOf: (m) => _iptvCwProgress[m.id],
-        episodeOf: (_) => null,
-        remainingMinutesOf: (m) => _iptvRemainingMinutes(m.id),
-        episodeArtworkOf: (_) => null,
-        onOpen: _openIptvCwItem,
-        onQuickPlay: _openIptvCwItem,
-        onRemove: _removeIptvCwItem,
-      ),
-    if (_iptvCwSeries.isNotEmpty && !_homeDisabled.contains('iptv:series'))
-      HomeContinuationRow(
-        rowId: 'iptv:series',
-        title: 'IPTV Continue Watching',
-        tag: 'Series',
-        kind: HomeContinuationKind.iptv,
-        items: _iptvCwSeries,
-        nodes: _iptvCwSeriesNodes,
-        progressOf: (m) => _iptvCwProgress[m.id],
-        episodeOf: (m) => _iptvCwEpisode[m.id],
-        remainingMinutesOf: (m) => _iptvRemainingMinutes(m.id),
-        episodeArtworkOf: (m) => _iptvCwByKey[m.id]?.posterUrl,
-        onOpen: _openIptvCwItem,
-        onQuickPlay: _openIptvCwItem,
-        onRemove: _removeIptvCwItem,
-      ),
+    ...buildHomeContinuationFamily(
+      movieId: 'cw:movies',
+      seriesId: 'cw:series',
+      title: 'Continue Watching',
+      seriesTag: 'Series',
+      kind: HomeContinuationKind.local,
+      enabled: _cwEnabled,
+      merged: _cwMergeLocal,
+      disabled: _homeDisabled,
+      movieItems: _cwMergeLocal ? _cwAll : _cwMovies,
+      seriesItems: _cwSeries,
+      movieNodes: _cwMovieNodes,
+      seriesNodes: _cwSeriesNodes,
+      progress: (m) => _cwCardProgress(HomeContinuationKind.local, m),
+      episode: (m) => _cwCardEpisode(HomeContinuationKind.local, m),
+      remaining: (m) => _cwCardRemainingMinutes(HomeContinuationKind.local, m),
+      artwork: (m) => _cwEpisodeArtwork[m.imdbId],
+      onOpen: _openContinueItem,
+      onQuickPlay: _onContinuePlay,
+      onRemove: _removeLocalCwItem,
+      movieSeeAll: () =>
+          _openContinueWatchingSeeAll(_cwMergeLocal ? 'all' : 'movie'),
+      seriesSeeAll: () => _openContinueWatchingSeeAll('series'),
+    ),
+    ...buildHomeContinuationFamily(
+      movieId: 'trakt:movies',
+      seriesId: 'trakt:shows',
+      title: 'Trakt Continue Watching',
+      seriesTag: 'Shows',
+      kind: HomeContinuationKind.trakt,
+      enabled: true,
+      merged: _cwMergeTrakt,
+      disabled: _homeDisabled,
+      movieItems: _cwMergeTrakt ? _traktAll : _traktMovies,
+      seriesItems: _traktSeries,
+      movieNodes: _traktMovieNodes,
+      seriesNodes: _traktSeriesNodes,
+      progress: (m) => _cwCardProgress(HomeContinuationKind.trakt, m),
+      episode: (m) => _cwCardEpisode(HomeContinuationKind.trakt, m),
+      remaining: (m) => _cwCardRemainingMinutes(HomeContinuationKind.trakt, m),
+      artwork: (m) => _traktEpisodeArtwork[m.imdbId],
+      onOpen: _openTraktItem,
+      onQuickPlay: _playTraktItem,
+      onRemove: _removeTraktCwItem,
+      movieSeeAll: () => _openTraktSeeAll(_cwMergeTrakt ? 'all' : 'movie'),
+      seriesSeeAll: () => _openTraktSeeAll('series'),
+    ),
+    ...buildHomeContinuationFamily(
+      movieId: 'simkl:movies',
+      seriesId: 'simkl:shows',
+      title: 'Simkl Continue Watching',
+      seriesTag: 'Shows',
+      kind: HomeContinuationKind.simkl,
+      enabled: true,
+      merged: _cwMergeSimkl,
+      disabled: _homeDisabled,
+      movieItems: _cwMergeSimkl ? _simklAll : _simklMovies,
+      seriesItems: _simklSeries,
+      movieNodes: _simklMovieNodes,
+      seriesNodes: _simklSeriesNodes,
+      progress: (m) => _cwCardProgress(HomeContinuationKind.simkl, m),
+      episode: (m) => _cwCardEpisode(HomeContinuationKind.simkl, m),
+      remaining: (m) => _cwCardRemainingMinutes(HomeContinuationKind.simkl, m),
+      artwork: (m) => _simklEpisodeArtwork[m.progressId],
+      onOpen: _openSimklCwItem,
+      onQuickPlay: _playSimklCwItem,
+      onRemove: _removeSimklCwItem,
+      movieSeeAll: () => _openSimklCwSeeAll(_cwMergeSimkl ? 'all' : 'movie'),
+      seriesSeeAll: () => _openSimklCwSeeAll('series'),
+    ),
+    ...buildHomeContinuationFamily(
+      movieId: 'mdblist:movies',
+      seriesId: 'mdblist:shows',
+      title: 'MDBList Continue Watching',
+      seriesTag: 'Shows',
+      kind: HomeContinuationKind.mdblist,
+      enabled: true,
+      merged: _cwMergeMdblist,
+      disabled: _homeDisabled,
+      movieItems: _cwMergeMdblist ? _mdblistAll : _mdblistMovies,
+      seriesItems: _mdblistSeries,
+      movieNodes: _mdblistMovieNodes,
+      seriesNodes: _mdblistSeriesNodes,
+      progress: (m) => _cwCardProgress(HomeContinuationKind.mdblist, m),
+      episode: (m) => _cwCardEpisode(HomeContinuationKind.mdblist, m),
+      remaining: (m) =>
+          _cwCardRemainingMinutes(HomeContinuationKind.mdblist, m),
+      artwork: (m) => null,
+      onOpen: _openMdblistCwItem,
+      onQuickPlay: _playMdblistCwItem,
+      onRemove: _removeMdblistCwItem,
+      canRemove: _canRemoveMdblistCwItem,
+      movieSeeAll: () =>
+          _openMdblistCwSeeAll(_cwMergeMdblist ? 'all' : 'movie'),
+      seriesSeeAll: () => _openMdblistCwSeeAll('series'),
+    ),
+    ...buildHomeContinuationFamily(
+      movieId: 'iptv:movies',
+      seriesId: 'iptv:series',
+      title: 'IPTV Continue Watching',
+      seriesTag: 'Series',
+      kind: HomeContinuationKind.iptv,
+      enabled: true,
+      merged: false,
+      disabled: _homeDisabled,
+      movieItems: _iptvCwMovies,
+      seriesItems: _iptvCwSeries,
+      movieNodes: _iptvCwMovieNodes,
+      seriesNodes: _iptvCwSeriesNodes,
+      progress: (m) => _iptvCwProgress[m.id],
+      episode: (m) => _iptvCwEpisode[m.id],
+      remaining: (m) => _iptvRemainingMinutes(m.id),
+      artwork: (m) => _iptvCwByKey[m.id]?.posterUrl,
+      onOpen: _openIptvCwItem,
+      onQuickPlay: _openIptvCwItem,
+      onRemove: _removeIptvCwItem,
+    ),
   ];
 
   /// Whether any Continue Watching row is currently on-screen (drives focus

@@ -107,3 +107,70 @@ class HomeTonightQueueEntry {
   final int col;
   const HomeTonightQueueEntry({required this.rail, required this.col});
 }
+
+/// Build a provider's movie/merged row and optional series row. The merged row
+/// retains the movie slot's id/nodes; item lists and metadata callbacks are borrowed.
+List<HomeContinuationRow> buildHomeContinuationFamily({
+  required String movieId,
+  required String seriesId,
+  required String title,
+  required String seriesTag,
+  required HomeContinuationKind kind,
+  required bool enabled,
+  required bool merged,
+  required Set<String> disabled,
+  required List<StremioMeta> movieItems,
+  required List<StremioMeta> seriesItems,
+  required List<FocusNode> movieNodes,
+  required List<FocusNode> seriesNodes,
+  required double? Function(StremioMeta) progress,
+  required String? Function(StremioMeta) episode,
+  required int? Function(StremioMeta) remaining,
+  required String? Function(StremioMeta) artwork,
+  required ValueChanged<StremioMeta> onOpen,
+  required ValueChanged<StremioMeta> onQuickPlay,
+  required Future<void> Function(StremioMeta) onRemove,
+  bool Function(StremioMeta)? canRemove,
+  VoidCallback? movieSeeAll,
+  VoidCallback? seriesSeeAll,
+}) => [
+  if (enabled && movieItems.isNotEmpty && !disabled.contains(movieId))
+    HomeContinuationRow(
+      rowId: movieId,
+      title: title,
+      tag: merged ? null : 'Movies',
+      kind: kind,
+      items: movieItems,
+      nodes: movieNodes,
+      progressOf: progress,
+      episodeOf: merged ? episode : (_) => null,
+      remainingMinutesOf: remaining,
+      episodeArtworkOf: merged ? artwork : (_) => null,
+      onOpen: onOpen,
+      onQuickPlay: onQuickPlay,
+      onRemove: onRemove,
+      canRemove: canRemove,
+      onSeeAll: movieSeeAll,
+    ),
+  if (!merged &&
+      enabled &&
+      seriesItems.isNotEmpty &&
+      !disabled.contains(seriesId))
+    HomeContinuationRow(
+      rowId: seriesId,
+      title: title,
+      tag: seriesTag,
+      kind: kind,
+      items: seriesItems,
+      nodes: seriesNodes,
+      progressOf: progress,
+      episodeOf: episode,
+      remainingMinutesOf: remaining,
+      episodeArtworkOf: artwork,
+      onOpen: onOpen,
+      onQuickPlay: onQuickPlay,
+      onRemove: onRemove,
+      canRemove: canRemove,
+      onSeeAll: seriesSeeAll,
+    ),
+];
