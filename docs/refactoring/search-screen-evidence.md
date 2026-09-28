@@ -6,6 +6,37 @@ workflow checkpoints, reuse valid evidence, and run broader checks at integratio
 gates. Earlier entries retain their original slice history. No changes are pushed
 to the public repository.
 
+## Batch A checkpoint: detail menu ownership — 2026-09-28
+
+The 106-line `HomeDetailMenus` now owns all three detail-menu builders and their
+opening-time snapshots. The feature detail builder accepts this single cohesive
+menu dependency instead of six separate option/builder parameters. Production
+constructs it at the original opening point. Local/Trakt/MDBList membership and
+theme color retain their snapshot timing; authentication, bound-source status and
+Simkl paused-session eligibility remain live reads when a status rebuilds a menu.
+The root shrinks from 14,334 to 14,259 lines, including removal of one obsolete import.
+
+App actions, tracker identity gates, independent Simkl/MDBList strips, local versus
+remote removal ordering/colors, status-aware toggles and legacy initial menus are
+preserved. No provider, mutable application state or service action was introduced.
+The architecture guard permits only the named legacy presentation factories and
+status/menu declarations; negative controls reject service classes and mutation
+handlers. These are UI factories, not new data/platform access from presentation.
+
+Validation: **76 affected tests pass**, including seven new scenarios covering
+identity gates (missing/custom/native/IMDb), app-action preservation, removal
+ordering/theme, movie/series distinctions, fixed initial snapshots and live
+status/auth/binding/pause updates. Existing layout composition, actual Home detail
+routes, Play/source retirement, targeted removal and tracker-menu tests pass.
+An obsolete root model import was removed after analysis flagged it; final analyzer
+identities remain **848**. **470** migrated files pass architecture checks, and
+diff checks pass. Receipts: `.git/refactor-evidence/phase5/detail-menus-final-tests.txt`
+and `detail-menus-final-analyze.txt`.
+
+Detail status/recommendation-reader wiring and opening orchestration remain in A,
+along with mutation/reset write contracts. Later feature composition, integration,
+lifecycle, CI and native/device/performance acceptance remain open.
+
 ## Batch A checkpoint: shared detail-layout composition — 2026-09-28
 
 The two production detail routes now use `home_detail_presentation.dart`, a

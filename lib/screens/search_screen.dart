@@ -1,3 +1,4 @@
+import '../features/home/presentation/home_detail_menus.dart';
 import '../features/home/presentation/home_detail_presentation.dart';
 import '../features/home/presentation/home_catalog_play_action.dart';
 import '../features/home/presentation/home_detail_route.dart';
@@ -295,7 +296,6 @@ import '../widgets/see_all/mdblist_list_card.dart';
 import '../services/mdblist/mdblist_list_source.dart';
 import '../services/mdblist/mdblist_service.dart';
 import '../models/mdblist_continue_watching.dart';
-import '../services/mdblist/mdblist_models.dart';
 import '../services/mdblist/mdblist_menu_helpers.dart';
 import '../widgets/see_all/discover_card_settings_scope.dart';
 import '../widgets/trakt/trakt_menu_helpers.dart';
@@ -10276,89 +10276,19 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     final inTraktCw = imdb != null && _traktByImdb.containsKey(imdb);
     final inMdblistCw = imdb != null && _mdblistByImdb[imdb]?.paused == true;
 
-    // Full quick-actions menu, mirroring the catalog/aggregated detail screens:
-    // app actions (Select Source, Add to Stremio TV, Search Packs, Random
-    // Episode) always, Trakt-syncing actions only when connected — plus Remove
-    // for Continue Watching titles.
-    // Build the quick-actions strip against a (possibly still-unknown) Trakt
-    // status. Called with null for the initial/legacy add-only strip, then
-    // rebuilt by the merged page once `traktStatusLoader` resolves — so
-    // watchlist/collection/rating entries flip to their Remove form when the
-    // title is already there.
-    final app = AppThemeScope.of(context);
-    List<TraktMenuOption> buildMenuOptions(
-      TraktTitleStatus? status,
-    ) => <TraktMenuOption>[
-      ...buildTraktAddOnlyMenuOptions(
-        isSeries: item.type == 'series',
-        isMovie: item.type == 'movie',
-        hasBoundSource: _isBound(item),
-        // The Trakt-syncing actions key off the IMDb id, so only offer them
-        // for titles that have one (else the sync call fails with an error).
-        isTraktAuthenticated:
-            _isTraktAuthenticated &&
-            imdb != null &&
-            MediaIdentity.isImdb(imdb) &&
-            !CustomSeriesIdentity.isCustom(imdb),
-        status: status,
-      ),
-      if (inCw)
-        TraktMenuOption(
-          action: TraktItemMenuAction.removeFromPlayback,
-          icon: Icons.delete_sweep_rounded,
-          color: app.home.danger,
-          label: 'Remove from Continue Watching',
-          caption: 'Remove',
-        ),
-      if (inTraktCw)
-        TraktMenuOption(
-          action: TraktItemMenuAction.removeFromTraktPlayback,
-          icon: Icons.remove_circle_outline_rounded,
-          color: app.home.danger,
-          label: 'Remove from Trakt Continue Watching',
-          caption: 'Remove',
-          isTrakt: true,
-        ),
-    ];
-    // Static (status-unknown) strip — the fallback for the merged page until its
-    // status loads, and the only strip the legacy CatalogItemDetailScreen uses.
-    final options = buildMenuOptions(null);
-
-    // Simkl's own strip — built and rendered entirely separately from Trakt's
-    // above (see the Simkl integration plan: parallel, not merged). Gated on
-    // connection state the same way the Trakt strip is (isTraktAuthenticated
-    // above) — buildSimklMenuOptions itself returns empty when disconnected.
-    List<SimklMenuOption> buildSimklOptions(SimklTitleStatus? status) =>
-        buildSimklMenuOptions(
-          isSeries: item.type == 'series',
-          isSimklAuthenticated:
-              _isSimklAuthenticated &&
-              imdb != null &&
-              !CustomSeriesIdentity.isCustom(imdb),
-          // Offer "Remove from Continue Watching" for a paused entry (movie or
-          // series) — it has a session to delete. Not for "up next" entries
-          // (progress null, no session; they leave via a status change). For a
-          // series the remove also moves it to On Hold so it doesn't re-surface
-          // as an up-next card (see handleSimklMenuAction).
-          inContinueWatching:
-              imdb != null &&
-              (_simklByImdb[_simklCardKey(item)]?.progress != null),
-          status: status,
-        );
-    final simklOptions = buildSimklOptions(null);
-
-    List<MdblistMenuOption> buildMdblistOptions(MdblistTitleStatus? status) =>
-        buildMdblistMenuOptions(
-          authenticated:
-              _isMdblistAuthenticated &&
-              imdb != null &&
-              MediaIdentity.isImdb(imdb) &&
-              !CustomSeriesIdentity.isCustom(imdb),
-          isSeries: item.type == 'series',
-          inContinueWatching: inMdblistCw,
-          status: status,
-        );
-    final mdblistOptions = buildMdblistOptions(null);
+    final menus = HomeDetailMenus(
+      type: item.type,
+      identity: imdb,
+      removalColor: AppThemeScope.of(context).home.danger,
+      inLocalContinueWatching: inCw,
+      inTraktContinueWatching: inTraktCw,
+      inMdblistContinueWatching: inMdblistCw,
+      hasBoundSource: () => _isBound(item),
+      traktAuthenticated: () => _isTraktAuthenticated,
+      simklAuthenticated: () => _isSimklAuthenticated,
+      mdblistAuthenticated: () => _isMdblistAuthenticated,
+      hasSimklPause: () => _simklByImdb[_simklCardKey(item)]?.progress != null,
+    );
 
     final detailRoute = HomeDetailRoute(
       name: kCatalogDetailRouteName,
@@ -10442,8 +10372,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
             );
           },
           adoptArtwork: (art) => _playbackArtwork.adopt(item, art),
-          traktOptions: options,
-          traktMenu: buildMenuOptions,
+          menus: menus,
           traktAction: (action, {rating}) => _handleDetailQuickAction(
             item,
             addon,
@@ -10459,8 +10388,6 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
                   MediaIdentity.isImdb(imdb))
               ? () => TraktService.instance.fetchTitleStatus(imdb, item.type)
               : null,
-          simklOptions: simklOptions,
-          simklMenu: buildSimklOptions,
           simklAction: (action, {rating}) => _handleDetailSimklQuickAction(
             item,
             action,
@@ -10473,8 +10400,6 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
                   contentType: item.type,
                 )
               : null,
-          mdblistOptions: mdblistOptions,
-          mdblistMenu: buildMdblistOptions,
           mdblistAction: (action, {rating}) => _handleDetailMdblistQuickAction(
             item,
             action,

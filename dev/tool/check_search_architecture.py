@@ -70,6 +70,19 @@ EXTRACTED_ELSEWHERE: tuple[str, ...] = (
 # Context-dependent legacy actions are allowed only through these named bridges.
 # Phase 4C owns binding preparation; phase 7 retains playback lifecycle review.
 PRESENTATION_BRIDGE_IMPORTS = {
+    # Named legacy menu factories perform presentation only; action handlers and
+    # service classes remain forbidden by the explicit show-declaration guard.
+    "lib/features/home/presentation/home_detail_menus.dart": {
+        "lib/services/trakt/trakt_service.dart": {"TraktTitleStatus"},
+        "lib/services/simkl/simkl_service.dart": {"SimklTitleStatus"},
+        "lib/services/mdblist/mdblist_models.dart": {"MdblistTitleStatus"},
+        "lib/services/simkl/simkl_menu_helpers.dart": {
+            "SimklMenuOption", "buildSimklMenuOptions",
+        },
+        "lib/services/mdblist/mdblist_menu_helpers.dart": {
+            "MdblistMenuOption", "buildMdblistMenuOptions",
+        },
+    },
     # Legacy DTO/menu declarations only; this composition performs no service IO.
     "lib/features/home/presentation/home_detail_presentation.dart": {
         "lib/services/trakt/trakt_service.dart": {"TraktTitleStatus"},
@@ -159,7 +172,7 @@ def violations(path: Path) -> list[str]:
                 shown = re.search(r"\bshow\s+([\w,\s]+)$", declaration)
                 names = set(re.findall(r"\w+", shown.group(1))) if shown else set()
                 if not names or not names <= bridge[target]:
-                    problems.append(f"legacy DTO import must show only allowed types: {uri}")
+                    problems.append(f"legacy presentation import must show only allowed declarations: {uri}")
             if layer == "presentation" and target.startswith((
                     "lib/services/", "package:http/", "package:shared_preferences/",
                     "package:sqflite")) and target not in (

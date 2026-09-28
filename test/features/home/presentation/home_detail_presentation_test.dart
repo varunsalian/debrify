@@ -1,3 +1,5 @@
+import 'package:debrify/features/home/presentation/home_detail_menus.dart';
+import 'package:flutter/material.dart';
 import 'package:debrify/features/home/presentation/home_detail_presentation.dart';
 import 'package:debrify/models/advanced_search_selection.dart';
 import 'package:debrify/models/stremio_addon.dart';
@@ -78,24 +80,31 @@ void main() {
               calls.add('source');
             },
             adoptArtwork: (_) => calls.add('art'),
-            traktOptions: const [],
-            traktMenu: (_) => const [],
+            menus: HomeDetailMenus(
+              type: type,
+              identity: item.id,
+              removalColor: Colors.red,
+              inLocalContinueWatching: false,
+              inTraktContinueWatching: false,
+              inMdblistContinueWatching: false,
+              hasBoundSource: () => false,
+              traktAuthenticated: () => false,
+              simklAuthenticated: () => false,
+              mdblistAuthenticated: () => false,
+              hasSimklPause: () => false,
+            ),
             traktAction: (action, {rating}) async =>
                 calls.add('trakt:${action.name}:$rating'),
             traktStatus: () async {
               calls.add('trakt-status');
               return null;
             },
-            simklOptions: const [],
-            simklMenu: (_) => const [],
             simklAction: (action, {rating}) async =>
                 calls.add('simkl:${action.name}:$rating'),
             simklStatus: () async {
               calls.add('simkl-status');
               return null;
             },
-            mdblistOptions: const [],
-            mdblistMenu: (_) => const [],
             mdblistAction: (action, {rating}) async =>
                 calls.add('mdblist:${action.name}:$rating'),
             mdblistStatus: () async {

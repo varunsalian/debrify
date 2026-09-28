@@ -1,3 +1,4 @@
+import 'home_detail_menus.dart';
 import 'package:flutter/widgets.dart';
 
 import '../../../models/advanced_search_selection.dart';
@@ -9,11 +10,11 @@ import '../../../services/trakt/trakt_service.dart' show TraktTitleStatus;
 import '../../../services/simkl/simkl_service.dart' show SimklTitleStatus;
 import '../../../services/mdblist/mdblist_models.dart' show MdblistTitleStatus;
 import '../../../services/simkl/simkl_menu_helpers.dart'
-    show SimklMenuOption, SimklItemMenuAction;
+    show SimklItemMenuAction;
 import '../../../services/mdblist/mdblist_menu_helpers.dart'
-    show MdblistMenuOption, MdblistItemMenuAction;
+    show MdblistItemMenuAction;
 import '../../../widgets/trakt/trakt_menu_helpers.dart'
-    show TraktMenuOption, TraktItemMenuAction;
+    show TraktItemMenuAction;
 
 typedef HomeDetailPromise = ({bool started, int season, int episode});
 typedef HomeDetailPlay =
@@ -48,18 +49,13 @@ Widget buildHomeDetail({
   required int Function(StremioMeta) boundSourceCount,
   required Future<void> Function(StremioMeta) selectSource,
   required ValueChanged<PlayLoaderArt> adoptArtwork,
-  required List<TraktMenuOption> traktOptions,
-  required List<TraktMenuOption> Function(TraktTitleStatus?) traktMenu,
+  required HomeDetailMenus menus,
   required Future<void> Function(TraktItemMenuAction, {int? rating})
   traktAction,
   Future<TraktTitleStatus?> Function()? traktStatus,
-  required List<SimklMenuOption> simklOptions,
-  required List<SimklMenuOption> Function(SimklTitleStatus?) simklMenu,
   required Future<void> Function(SimklItemMenuAction, {int? rating})
   simklAction,
   Future<SimklTitleStatus?> Function()? simklStatus,
-  required List<MdblistMenuOption> mdblistOptions,
-  required List<MdblistMenuOption> Function(MdblistTitleStatus?) mdblistMenu,
   required Future<void> Function(MdblistItemMenuAction, {int? rating})
   mdblistAction,
   Future<MdblistTitleStatus?> Function()? mdblistStatus,
@@ -98,20 +94,20 @@ Widget buildHomeDetail({
       ),
       boundSourceCount: boundSourceCount,
       onSelectSource: selectSource,
-      traktMenuOptions: traktOptions,
-      traktMenuBuilder: traktMenu,
+      traktMenuOptions: menus.initialTrakt,
+      traktMenuBuilder: menus.trakt,
       traktStatusLoader: traktStatus,
       onTraktAction: (action) => traktAction(action),
       onTraktRate: (rating) =>
           traktAction(TraktItemMenuAction.rate, rating: rating),
-      simklMenuOptions: simklOptions,
-      simklMenuBuilder: simklMenu,
+      simklMenuOptions: menus.initialSimkl,
+      simklMenuBuilder: menus.simkl,
       simklStatusLoader: simklStatus,
       onSimklAction: (action) => simklAction(action),
       onSimklRate: (rating) =>
           simklAction(SimklItemMenuAction.rate, rating: rating),
-      mdblistMenuOptions: mdblistOptions,
-      mdblistMenuBuilder: mdblistMenu,
+      mdblistMenuOptions: menus.initialMdblist,
+      mdblistMenuBuilder: menus.mdblist,
       mdblistStatusLoader: mdblistStatus,
       onMdblistAction: (action) => mdblistAction(action),
       onMdblistRate: (rating) =>
@@ -140,11 +136,11 @@ Widget buildHomeDetail({
             browseSourcesOnly: true,
           )
         : null,
-    traktMenuOptions: traktOptions,
+    traktMenuOptions: menus.initialTrakt,
     onTraktAction: (action) => traktAction(action),
-    simklMenuOptions: simklOptions,
+    simklMenuOptions: menus.initialSimkl,
     onSimklAction: (action) => simklAction(action),
-    mdblistMenuOptions: mdblistOptions,
+    mdblistMenuOptions: menus.initialMdblist,
     onMdblistAction: (action) => mdblistAction(action),
     simklStatusLoader: simklStatus,
     recommendationsLoader: recommendations,
