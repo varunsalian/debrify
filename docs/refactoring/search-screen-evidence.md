@@ -6,6 +6,22 @@ workflow checkpoints, reuse valid evidence, and run broader checks at integratio
 gates. Earlier entries retain their original slice history. No changes are pushed
 to the public repository.
 
+## Batch D checkpoint: Lists result focus ownership — 2026-09-28
+
+Base: `a79ae587`. `ListsFocus` owns result-node resizing/cleanup and deferred
+return focus. The screen delegates existing reset/arrival/route-return paths.
+Review preserves node identity while growing/shrinking, original clear points,
+frame-time identity lookup and mounted checks before scheduling and execution.
+
+**23 tests pass**, including production Lists screens, controller races/profile
+isolation, and a new resource/return-focus test. The initial command also named a
+nonexistent submit-focus test; the corrected complete group passed. Analysis
+retains **836 identical diagnostic identities**; architecture passes **544 files**;
+formatting/diff checks pass. Receipts:
+`.git/refactor-evidence/phase5/lists-focus-{tests-final,analyze-final}.txt`.
+No emulator used. Remaining presentation/navigation, screen lifecycle/facade
+reduction and final acceptance remain pending.
+
 ## Batch D checkpoint: Discover shell lifecycle — 2026-09-28
 
 Base: `82cc9955`. `DiscoverShellBridge` owns app-shell settings slots, preview

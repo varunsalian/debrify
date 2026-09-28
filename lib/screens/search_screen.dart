@@ -1,3 +1,4 @@
+import '../features/search/presentation/lists_focus.dart';
 import '../features/discover/presentation/discover_shell_bridge.dart';
 import '../features/discover/presentation/discover_bindings.dart';
 import '../features/discover/presentation/discover_focus.dart';
@@ -430,7 +431,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   List<MdblistListChoice> get _listsResults => _listsState.results;
   bool get _listsSearching => _listsState.searching;
   String? get _listsError => _listsState.error;
-  final List<FocusNode> _listsNodes = [];
+  final _listsFocus = ListsFocus();
+  List<FocusNode> get _listsNodes => _listsFocus.nodes;
   // Debounce for opening a list from the rail — one fast double-press must not
   // stack two pushed item screens (TV) / double-fire the handoff.
   DateTime? _lastListOpenAt;
@@ -8021,12 +8023,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     );
   }
 
-  void _disposeListsNodes() {
-    for (final n in _listsNodes) {
-      n.dispose();
-    }
-    _listsNodes.clear();
-  }
+  void _disposeListsNodes() => _listsFocus.clear();
 
   void _onSearchProfileChanged() {
     _cancelTitleSuggestions();
@@ -8047,14 +8044,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   }
 
   /// One focus node per result row, rebuilt to match the current result set.
-  void _ensureListsNodes() {
-    while (_listsNodes.length < _listsResults.length) {
-      _listsNodes.add(FocusNode(debugLabel: 'lists_row_${_listsNodes.length}'));
-    }
-    while (_listsNodes.length > _listsResults.length) {
-      _listsNodes.removeLast().dispose();
-    }
-  }
+  void _ensureListsNodes() => _listsFocus.resize(_listsResults.length);
 
   /// Keep route/focus effects in presentation; the notifier owns requests,
   /// results, errors and stale-completion checks.
@@ -8104,18 +8094,11 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       _openMdblistListItems(
         context,
         choice,
-        onReturn: () {
-          if (!mounted) return;
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (!mounted) return;
-            // Re-find by id at return time, so a rail that changed while it was
-            // covered still focuses the card that now holds this list.
-            final i = _listsResults.indexWhere((l) => l.id == choice.id);
-            if (i >= 0 && i < _listsNodes.length) {
-              _listsNodes[i].requestFocus();
-            }
-          });
-        },
+        onReturn: () => _listsFocus.restore(
+          isCurrent: () => mounted,
+          indexOfResult: () =>
+              _listsResults.indexWhere((l) => l.id == choice.id),
+        ),
       );
       return;
     }
